@@ -47,7 +47,7 @@ import {NavigationComponent} from './sidenav/navigation/navigation.component';
 import {SidenavSearchComponent, SidenavSearchRightDirective} from './sidenav/sidenav-search/sidenav-search.component';
 import {ZoomHandlesComponent} from './map/zoom-handles/zoom-handles.component';
 import {MapContainerComponent} from './map/map-container/map-container.component';
-import {OlRasterLayerComponent, OlVectorLayerComponent} from './map/map-layer.component';
+import {OlOgcApiMapTileLayerComponent, OlRasterLayerComponent, OlVectorLayerComponent} from './map/map-layer.component';
 import {RenameLayerComponent} from './layers/rename-layer/rename-layer.component';
 import {VectorLegendComponent} from './layers/legend/legend-vector/vector-legend.component';
 import {LayerListComponent} from './layers/layer-list/layer-list.component';
@@ -218,6 +218,7 @@ const CORE_COMPONENTS = [
     NotFoundPageComponent,
     NotificationsComponent,
     OidcComponent,
+    OlOgcApiMapTileLayerComponent,
     OlRasterLayerComponent,
     OlVectorLayerComponent,
     OperatorListComponent,

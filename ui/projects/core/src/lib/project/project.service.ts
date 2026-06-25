@@ -924,7 +924,7 @@ export class ProjectService implements OnDestroy {
     /**
      * Get a stream of LayerChanges for a specified layer.
      */
-    getLayerChangesStream(layer: Layer): Observable<Layer> {
+    getLayerChangesStream(layer: HasLayerId): Observable<Layer> {
         const changes = this.layers.get(layer.id);
 
         if (!changes) {
