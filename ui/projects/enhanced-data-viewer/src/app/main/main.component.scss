@@ -61,19 +61,26 @@ mat-drawer {
             }
 
             .data-sources {
-                // display: flex;
-                // flex-direction: row;
-                // flex-wrap: wrap;
-                /* Use gap to create consistent spacing between buttons */
-                // gap: 0.5rem;
+                display: flex;
+                flex-direction: column;
+                gap: 0.25rem;
 
-                // width: 100%;
-                // width: 10rem;
-                // display: block;
+                .data-source-group-label {
+                    font-size: 0.75rem;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                    color: var(--geoengine-primary-color, #2f6dff);
+                    margin-top: 0.5rem;
+                    margin-bottom: 0.125rem;
+
+                    &:first-child {
+                        margin-top: 0;
+                    }
+                }
 
                 mat-radio-button {
                     display: inline-block;
-                    // display: block;
                 }
             }
 

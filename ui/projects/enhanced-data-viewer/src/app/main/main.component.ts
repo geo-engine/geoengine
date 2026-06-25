@@ -54,12 +54,12 @@ const VISUALIZATION_PRESETS = [
     },
 ] as const;
 
-type DataSourceType = 'sentinel2L2a' | 'sentinel1';
+type DataSourceType = 'sentinel2L2a' | 'sentinel1' | 'sentinel1Static' | 'sentinel2Static';
 
 type VisualizationPreset = (typeof VISUALIZATION_PRESETS)[number]['preset'];
 type EnabledVisualizationPreset = Extract<(typeof VISUALIZATION_PRESETS)[number], {enabled: true}>['preset'];
 const DEFAULT_VISUALIZATION_PRESET: EnabledVisualizationPreset = 'raw';
-const DEFAULT_DATA_SOURCE: DataSourceType = 'sentinel2L2a';
+const DEFAULT_DATA_SOURCE: DataSourceType = 'sentinel1Static';
 
 @Component({
     selector: 'geoengine-main',
@@ -150,6 +150,9 @@ export class MainComponent implements OnInit {
         this.onToolbarResize();
         const topToolbarObserver = new ResizeObserver(() => this.onToolbarResize());
         topToolbarObserver.observe(this.topToolbar().nativeElement);
+
+        const defaultTimeUtc = new Date(Date.UTC(2026, 3, 1));
+        void this.projectService.setTime(new Time(defaultTimeUtc));
 
         void this.activatePreset(DEFAULT_VISUALIZATION_PRESET);
     }
@@ -468,9 +471,81 @@ const RAW_SENTINEL1_SYMBOLOGY = RasterSymbology.fromRasterSymbologyDict({
     },
 });
 
+const RAW_SENTINEL1_STATIC_WORKFLOW: Workflow = {
+    type: 'Raster',
+    operator: {
+        type: 'GdalSource',
+        params: {
+            data: 'sentinel-1-global-mosaics',
+        },
+    },
+};
+
+const RAW_SENTINEL1_STATIC_SYMBOLOGY = RasterSymbology.fromRasterSymbologyDict({
+    type: 'raster',
+    opacity: 1.0,
+    rasterColorizer: {
+        type: 'singleBand',
+        band: 0,
+        bandColorizer: {
+            type: 'linearGradient',
+            breakpoints: [
+                {
+                    value: 0,
+                    color: [0, 0, 0, 255],
+                },
+                {
+                    value: 1,
+                    color: [255, 255, 255, 255],
+                },
+            ],
+            noDataColor: [0, 0, 0, 0],
+            overColor: [255, 255, 255, 255],
+            underColor: [0, 0, 0, 255],
+        },
+    },
+});
+
+const RAW_SENTINEL2_STATIC_WORKFLOW: Workflow = {
+    type: 'Raster',
+    operator: {
+        type: 'GdalSource',
+        params: {
+            data: 'sentinel-2-l2a-tile-32umb',
+        },
+    },
+};
+
+const RAW_SENTINEL2_STATIC_SYMBOLOGY = RasterSymbology.fromRasterSymbologyDict({
+    type: 'raster',
+    opacity: 1.0,
+    rasterColorizer: {
+        type: 'singleBand',
+        band: 0,
+        bandColorizer: {
+            type: 'linearGradient',
+            breakpoints: [
+                {
+                    value: 0,
+                    color: [0, 0, 0, 255],
+                },
+                {
+                    value: 2000,
+                    color: [255, 255, 255, 255],
+                },
+            ],
+            noDataColor: [0, 0, 0, 0],
+            overColor: [255, 255, 255, 255],
+            underColor: [0, 0, 0, 255],
+        },
+    },
+});
+
 const PRESETS_BY_DATA_SOURCE: Record<DataSourceType, readonly VisualizationPreset[]> = {
     sentinel2L2a: ['raw', 'rgb', 'ndvi', 'false-color', 'swi'],
     sentinel1: ['raw'],
+    sentinel1Static: ['raw'],
+    sentinel2Static: ['raw'],
 };
 
 const PRESET_DEFINITIONS: Record<
@@ -495,6 +570,18 @@ const PRESET_DEFINITIONS: Record<
         raw: {
             workflow: RAW_SENTINEL1_WORKFLOW,
             symbology: RAW_SENTINEL1_SYMBOLOGY,
+        },
+    },
+    sentinel1Static: {
+        raw: {
+            workflow: RAW_SENTINEL1_STATIC_WORKFLOW,
+            symbology: RAW_SENTINEL1_STATIC_SYMBOLOGY,
+        },
+    },
+    sentinel2Static: {
+        raw: {
+            workflow: RAW_SENTINEL2_STATIC_WORKFLOW,
+            symbology: RAW_SENTINEL2_STATIC_SYMBOLOGY,
         },
     },
 };

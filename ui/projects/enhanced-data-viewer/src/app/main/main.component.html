@@ -79,6 +79,11 @@
                 <div>
                     <h4>Data Source</h4>
                     <mat-radio-group class="data-sources" [value]="activeDataSource()" (change)="onDataSourceChange($event.value)">
+                        <span class="data-source-group-label">Static Datasets</span>
+                        <mat-radio-button value="sentinel1Static">Sentinel-1 Static</mat-radio-button>
+                        <mat-radio-button value="sentinel2Static">Sentinel-2 Static</mat-radio-button>
+
+                        <span class="data-source-group-label">STAC Providers</span>
                         <mat-radio-button value="sentinel1">Sentinel-1</mat-radio-button>
                         <mat-radio-button value="sentinel2L2a">Sentinel-2 L2A</mat-radio-button>
                         <mat-radio-button disabled>Sentinel-3 L2</mat-radio-button>
