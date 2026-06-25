@@ -78,9 +78,9 @@
             <div class="drawer-main">
                 <div>
                     <h4>Data Source</h4>
-                    <mat-radio-group class="data-sources" value="sentinel-2-l2a">
-                        <mat-radio-button disabled>Sentinel-1</mat-radio-button>
-                        <mat-radio-button value="sentinel-2-l2a">Sentinel-2 L2A</mat-radio-button>
+                    <mat-radio-group class="data-sources" [value]="activeDataSource()" (change)="onDataSourceChange($event.value)">
+                        <mat-radio-button value="sentinel1">Sentinel-1</mat-radio-button>
+                        <mat-radio-button value="sentinel2L2a">Sentinel-2 L2A</mat-radio-button>
                         <mat-radio-button disabled>Sentinel-3 L2</mat-radio-button>
                         <mat-radio-button disabled>Landsat 8</mat-radio-button>
                     </mat-radio-group>
@@ -114,7 +114,7 @@
                 <div>
                     <h4>Vizualization Presets</h4>
                     <mat-nav-list class="visualization-presets">
-                        @for (preset of visualizationPresets; track preset.preset) {
+                        @for (preset of availablePresets(); track preset.preset) {
                             <mat-list-item
                                 [activated]="preset.enabled && activePreset() === preset.preset"
                                 [class.preset-active]="preset.enabled && activePreset() === preset.preset"

@@ -18,6 +18,13 @@ import {Workflow} from '@geoengine/api-client';
 
 const VISUALIZATION_PRESETS = [
     {
+        preset: 'raw',
+        label: 'Raw',
+        imageSrc: 'assets/rgb.jpg',
+        altText: 'Raw',
+        enabled: true,
+    },
+    {
         preset: 'rgb',
         label: 'RGB',
         imageSrc: 'assets/rgb.jpg',
@@ -47,9 +54,12 @@ const VISUALIZATION_PRESETS = [
     },
 ] as const;
 
+type DataSourceType = 'sentinel2L2a' | 'sentinel1';
+
 type VisualizationPreset = (typeof VISUALIZATION_PRESETS)[number]['preset'];
 type EnabledVisualizationPreset = Extract<(typeof VISUALIZATION_PRESETS)[number], {enabled: true}>['preset'];
-const DEFAULT_VISUALIZATION_PRESET: EnabledVisualizationPreset = 'rgb';
+const DEFAULT_VISUALIZATION_PRESET: EnabledVisualizationPreset = 'raw';
+const DEFAULT_DATA_SOURCE: DataSourceType = 'sentinel2L2a';
 
 @Component({
     selector: 'geoengine-main',
@@ -123,7 +133,12 @@ export class MainComponent implements OnInit {
         return time.start.toDate();
     });
 
-    readonly visualizationPresets = VISUALIZATION_PRESETS;
+    readonly activeDataSource = signal<DataSourceType>(DEFAULT_DATA_SOURCE);
+
+    readonly availablePresets = computed(() =>
+        VISUALIZATION_PRESETS.filter((p) => PRESETS_BY_DATA_SOURCE[this.activeDataSource()].includes(p.preset)),
+    );
+
     readonly activePreset = signal<VisualizationPreset>(DEFAULT_VISUALIZATION_PRESET);
 
     private readonly presetWorkflowIds = new Map<EnabledVisualizationPreset, string>();
@@ -152,7 +167,7 @@ export class MainComponent implements OnInit {
     }
 
     isPresetEnabled(preset: VisualizationPreset): preset is EnabledVisualizationPreset {
-        return preset in PRESET_DEFINITIONS;
+        return preset in PRESET_DEFINITIONS[this.activeDataSource()];
     }
 
     async activatePreset(preset: VisualizationPreset): Promise<void> {
@@ -171,7 +186,7 @@ export class MainComponent implements OnInit {
                 workflowId,
                 isVisible: true,
                 isLegendVisible: false,
-                symbology: PRESET_DEFINITIONS[preset].symbology,
+                symbology: PRESET_DEFINITIONS[this.activeDataSource()][preset]!.symbology,
             });
 
             await this.replaceActiveLayer(layer);
@@ -188,7 +203,9 @@ export class MainComponent implements OnInit {
             return existingWorkflowId;
         }
 
-        const workflowId = await firstValueFrom(this.projectService.registerWorkflow(PRESET_DEFINITIONS[preset].workflow));
+        const workflowId = await firstValueFrom(
+            this.projectService.registerWorkflow(PRESET_DEFINITIONS[this.activeDataSource()][preset]!.workflow),
+        );
         this.presetWorkflowIds.set(preset, workflowId);
         return workflowId;
     }
@@ -198,6 +215,15 @@ export class MainComponent implements OnInit {
 
         await firstValueFrom(this.projectService.addLayer(nextLayer));
         this.activeLayer = nextLayer;
+    }
+
+    async onDataSourceChange(dataSource: DataSourceType): Promise<void> {
+        if (this.activeDataSource() === dataSource) return;
+        this.activeDataSource.set(dataSource);
+        this.presetWorkflowIds.clear();
+        this.activeLayer = undefined;
+        this.activePreset.set(DEFAULT_VISUALIZATION_PRESET);
+        await this.activatePreset(DEFAULT_VISUALIZATION_PRESET);
     }
 
     async timeForward(): Promise<void> {
@@ -229,14 +255,36 @@ export class MainComponent implements OnInit {
     }
 }
 
-const STAC_PROVIDER_ID = 'b274275c-373d-4a3f-8b45-9b48e9614329';
+const STAC_PROVIDER_ID_SENTNEL_2 = 'b274275c-373d-4a3f-8b45-9b48e9614329';
+
+const STAC_PROVIDER_ID_SENTINEL1 = '452a4ca2-306c-4ab2-a6e2-ffe42d5c49c8';
+
+const RAW_SENTINEL2_WORKFLOW: Workflow = {
+    type: 'Raster',
+    operator: {
+        type: 'MultiBandGdalSource',
+        params: {
+            data: `_:${STAC_PROVIDER_ID_SENTNEL_2}:\`dataset/epsg32632_u16_10\``,
+        },
+    },
+};
+
+const RAW_SENTINEL1_WORKFLOW: Workflow = {
+    type: 'Raster',
+    operator: {
+        type: 'MultiBandGdalSource',
+        params: {
+            data: `_:${STAC_PROVIDER_ID_SENTINEL1}:\`dataset/epsg32632_f32_20\``,
+        },
+    },
+};
 
 const RGB_WORKFLOW: Workflow = {
     type: 'Raster',
     operator: {
         type: 'MultiBandGdalSource',
         params: {
-            data: `_:${STAC_PROVIDER_ID}:\`dataset/epsg32632_u8_10\``,
+            data: `_:${STAC_PROVIDER_ID_SENTNEL_2}:\`dataset/epsg32632_u8_10\``,
         },
     },
 };
@@ -294,7 +342,7 @@ const NDVI_WORKFLOW: Workflow = {
                                                 raster: {
                                                     type: 'MultiBandGdalSource',
                                                     params: {
-                                                        data: `_:${STAC_PROVIDER_ID}:\`dataset/epsg32632_u8_20\``,
+                                                        data: `_:${STAC_PROVIDER_ID_SENTNEL_2}:\`dataset/epsg32632_u8_20\``,
                                                     },
                                                 },
                                             },
@@ -312,7 +360,7 @@ const NDVI_WORKFLOW: Workflow = {
                                 raster: {
                                     type: 'MultiBandGdalSource',
                                     params: {
-                                        data: `_:${STAC_PROVIDER_ID}:\`dataset/epsg32632_u16_10\``,
+                                        data: `_:${STAC_PROVIDER_ID_SENTNEL_2}:\`dataset/epsg32632_u16_10\``,
                                     },
                                 },
                             },
@@ -370,13 +418,83 @@ const NDVI_SYMBOLOGY = RasterSymbology.fromRasterSymbologyDict({
     },
 });
 
-const PRESET_DEFINITIONS: Record<EnabledVisualizationPreset, {workflow: Workflow; symbology: RasterSymbology}> = {
-    rgb: {
-        workflow: RGB_WORKFLOW,
-        symbology: RGB_SYMBOLOGY,
+const RAW_SENTINEL2_SYMBOLOGY = RasterSymbology.fromRasterSymbologyDict({
+    type: 'raster',
+    opacity: 1.0,
+    rasterColorizer: {
+        type: 'singleBand',
+        band: 0,
+        bandColorizer: {
+            type: 'linearGradient',
+            breakpoints: [
+                {
+                    value: 0,
+                    color: [0, 0, 0, 255],
+                },
+                {
+                    value: 2000,
+                    color: [255, 255, 255, 255],
+                },
+            ],
+            noDataColor: [0, 0, 0, 0],
+            overColor: [255, 255, 255, 255],
+            underColor: [0, 0, 0, 255],
+        },
     },
-    ndvi: {
-        workflow: NDVI_WORKFLOW,
-        symbology: NDVI_SYMBOLOGY,
+});
+
+const RAW_SENTINEL1_SYMBOLOGY = RasterSymbology.fromRasterSymbologyDict({
+    type: 'raster',
+    opacity: 1.0,
+    rasterColorizer: {
+        type: 'singleBand',
+        band: 0,
+        bandColorizer: {
+            type: 'linearGradient',
+            breakpoints: [
+                {
+                    value: 0,
+                    color: [0, 0, 0, 255],
+                },
+                {
+                    value: 0.3,
+                    color: [255, 255, 255, 255],
+                },
+            ],
+            noDataColor: [0, 0, 0, 0],
+            overColor: [255, 255, 255, 255],
+            underColor: [0, 0, 0, 255],
+        },
+    },
+});
+
+const PRESETS_BY_DATA_SOURCE: Record<DataSourceType, readonly VisualizationPreset[]> = {
+    sentinel2L2a: ['raw', 'rgb', 'ndvi', 'false-color', 'swi'],
+    sentinel1: ['raw'],
+};
+
+const PRESET_DEFINITIONS: Record<
+    DataSourceType,
+    Partial<Record<EnabledVisualizationPreset, {workflow: Workflow; symbology: RasterSymbology}>>
+> = {
+    sentinel2L2a: {
+        raw: {
+            workflow: RAW_SENTINEL2_WORKFLOW,
+            symbology: RAW_SENTINEL2_SYMBOLOGY,
+        },
+        rgb: {
+            workflow: RGB_WORKFLOW,
+            symbology: RGB_SYMBOLOGY,
+        },
+        ndvi: {
+            workflow: NDVI_WORKFLOW,
+            symbology: NDVI_SYMBOLOGY,
+        },
+    },
+    sentinel1: {
+        raw: {
+            workflow: RAW_SENTINEL1_WORKFLOW,
+            symbology: RAW_SENTINEL1_SYMBOLOGY,
+        },
     },
 };
