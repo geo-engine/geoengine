@@ -56,6 +56,13 @@ impl<'de> Deserialize<'de> for VolumeName {
 
 impl AdjustFilePath for Volume {
     fn adjust_file_path(&self, file_path: &Path) -> Result<PathBuf> {
+        if self.name.0 == "external" {
+            // external data file path must not be adjusted
+            // TODO: remove this once we have proper volume management
+            // TODO: ensure the file path actually points to external data
+            return Ok(file_path.to_path_buf());
+        }
+
         let _file_name = file_path.file_name().ok_or(error::Error::PathIsNotAFile)?;
 
         path_with_base_path(&self.path, file_path)
