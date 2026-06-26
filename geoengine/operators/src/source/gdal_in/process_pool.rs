@@ -841,7 +841,7 @@ impl GdalPoolWorkerInstance {
 
         match role {
             TileReadRole::Follower(mut rx) => {
-                tracing::debug!("Follower: {tile_key}");
+                tracing::trace!("Follower: {tile_key}");
 
                 // We can now safely .await; the compiler knows we hold no locks.
                 while rx.borrow().is_none() {
@@ -866,7 +866,7 @@ impl GdalPoolWorkerInstance {
                     tile_key,
                 };
 
-                tracing::debug!("Leader: {tile_key}");
+                tracing::trace!("Leader: {tile_key}");
 
                 let mut s_routing = rustc_hash::FxHasher::default();
                 request.0.dataset_params.partial_hash(&mut s_routing);

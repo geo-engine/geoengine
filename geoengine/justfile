@@ -38,7 +38,9 @@ lint-sql: common::_clear
 [arg('mode', pattern='|--release')]
 [group("build")]
 build mode="":
-    cargo build --locked {{ mode }} --verbose
+    cargo build --bin geoengine-server --locked {{ mode }} --verbose
+    cargo build --bin geoengine-cli --locked {{ mode }} --verbose    
+    cargo build --bin gdalsource-process --locked {{ mode }} --verbose
 
 # Build gdalsource-process in dev or release mode.
 [arg('mode', pattern='|--release')]
