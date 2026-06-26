@@ -398,6 +398,7 @@ mod tests {
 
     use crate::collections::{BuilderProvider, FeatureCollectionModifications};
     use crate::primitives::{FeatureData, FeatureDataRef, TimeInterval};
+    use crate::spatial_reference::CoordinateProjection;
 
     #[test]
     fn single_line() {
@@ -642,7 +643,7 @@ mod tests {
 
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let projector = DefaultCoordinateProjector::new(from, to).unwrap();
+        let projector = DefaultCoordinateProjector::from_known_srs(from, to).unwrap();
 
         let collection = MultiLineStringCollection::from_slices(
             &[

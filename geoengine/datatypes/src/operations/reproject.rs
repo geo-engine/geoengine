@@ -655,7 +655,7 @@ mod tests {
     fn new_proj() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = CoordinateProjector::new(from, to);
+        let p = CoordinateProjector::from_known_srs(from, to);
         assert!(p.is_ok());
     }
 
@@ -663,7 +663,7 @@ mod tests {
     fn new_proj_fail() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 8_008_135);
-        let p = CoordinateProjector::new(from, to);
+        let p = CoordinateProjector::from_known_srs(from, to);
         assert!(p.is_err());
     }
 
@@ -671,7 +671,7 @@ mod tests {
     fn proj_coordinate_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = CoordinateProjector::new(from, to).unwrap();
+        let p = CoordinateProjector::from_known_srs(from, to).unwrap();
         let rp = p.project_coordinate(MARBURG_EPSG_4326).unwrap();
 
         assert!(approx_eq!(f64, rp.x, MARBURG_EPSG_3857.x));
@@ -682,7 +682,7 @@ mod tests {
     fn reproject_coordinate_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = CoordinateProjector::new(from, to).unwrap();
+        let p = CoordinateProjector::from_known_srs(from, to).unwrap();
         let rp = MARBURG_EPSG_4326.reproject(&p).unwrap();
 
         assert!(approx_eq!(f64, rp.x, MARBURG_EPSG_3857.x));
@@ -693,7 +693,7 @@ mod tests {
     fn reproject_line_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = CoordinateProjector::new(from, to).unwrap();
+        let p = CoordinateProjector::from_known_srs(from, to).unwrap();
 
         let l = Line {
             start: MARBURG_EPSG_4326,
@@ -711,7 +711,7 @@ mod tests {
     fn reproject_bounding_box_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = CoordinateProjector::new(from, to).unwrap();
+        let p = CoordinateProjector::from_known_srs(from, to).unwrap();
 
         let bbox =
             BoundingBox2D::from_coord_ref_iter(&[MARBURG_EPSG_4326, COLOGNE_EPSG_4326]).unwrap();
@@ -728,7 +728,7 @@ mod tests {
     fn reproject_multi_point_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = CoordinateProjector::new(from, to).unwrap();
+        let p = CoordinateProjector::from_known_srs(from, to).unwrap();
 
         let cs = vec![MARBURG_EPSG_4326, COLOGNE_EPSG_4326];
 
@@ -745,7 +745,7 @@ mod tests {
     fn reproject_multi_line_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = CoordinateProjector::new(from, to).unwrap();
+        let p = CoordinateProjector::from_known_srs(from, to).unwrap();
 
         let cs = vec![vec![
             MARBURG_EPSG_4326,
@@ -768,7 +768,7 @@ mod tests {
     fn reproject_multi_polygon_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = CoordinateProjector::new(from, to).unwrap();
+        let p = CoordinateProjector::from_known_srs(from, to).unwrap();
 
         let cs = vec![vec![vec![
             MARBURG_EPSG_4326,
@@ -815,7 +815,7 @@ mod tests {
     #[test]
     fn reproject_clipped_bbox_4326_3857() {
         let bbox = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
-        let p = CoordinateProjector::new(
+        let p = CoordinateProjector::from_known_srs(
             SpatialReference::epsg_4326(),
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
         )
@@ -841,7 +841,7 @@ mod tests {
             (-20_037_508.342_789_244, -20_048_966.104_014_6).into(),
             (20_037_508.342_789_244, 20_048_966.104_014_594).into(),
         );
-        let p = CoordinateProjector::new(
+        let p = CoordinateProjector::from_known_srs(
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913),
         )
@@ -887,7 +887,7 @@ mod tests {
             epsilon = 0.000_000_1
         ));
 
-        let projector = CoordinateProjector::new(
+        let projector = CoordinateProjector::from_known_srs(
             SpatialReference::epsg_4326(),
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632), //EPSG4326 --> UTM 32 N
         )
@@ -931,7 +931,7 @@ mod tests {
             epsilon = 0.000_000_1
         ));
 
-        let projector = CoordinateProjector::new(
+        let projector = CoordinateProjector::from_known_srs(
             SpatialReference::epsg_4326(),
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632), //EPSG4326 --> UTM 32 N
         )

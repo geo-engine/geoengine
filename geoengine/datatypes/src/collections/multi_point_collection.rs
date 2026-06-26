@@ -344,6 +344,7 @@ mod tests {
         DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, MultiPointAccess,
         TimeInstance, TimeInterval,
     };
+    use crate::spatial_reference::CoordinateProjection;
     use float_cmp::approx_eq;
     use serde_json::{from_str, json};
     use std::collections::HashMap;
@@ -1264,7 +1265,7 @@ mod tests {
 
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let projector = DefaultCoordinateProjector::new(from, to).unwrap();
+        let projector = DefaultCoordinateProjector::from_known_srs(from, to).unwrap();
 
         let pc = MultiPointCollection::from_data(
             MultiPoint::many(vec![
@@ -1318,7 +1319,7 @@ mod tests {
 
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let projector = DefaultCoordinateProjector::new(from, to).unwrap();
+        let projector = DefaultCoordinateProjector::from_known_srs(from, to).unwrap();
 
         let pc = MultiPointCollection::from_data(
             MultiPoint::many(vec![

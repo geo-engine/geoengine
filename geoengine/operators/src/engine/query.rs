@@ -4,6 +4,7 @@ use std::{
     task::{Context, Poll},
 };
 
+use crate::cache::new_raster_cache::NewRasterCacheEnum;
 use crate::{
     cache::shared_cache::SharedCache,
     error,
@@ -64,6 +65,7 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
     fn quota_checker(&self) -> Option<&QuotaChecker>;
 
     fn cache(&self) -> Option<Arc<SharedCache>>;
+    fn new_raster_cache(&self) -> Option<Arc<NewRasterCacheEnum>>;
 
     fn abort_registration(&self) -> &QueryAbortRegistration;
     fn abort_trigger(&mut self) -> Result<QueryAbortTrigger>;
@@ -130,6 +132,7 @@ pub struct MockQueryContext {
     pub thread_pool: Arc<ThreadPool>,
 
     pub cache: Option<Arc<SharedCache>>,
+    pub new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     pub quota_tracking: Option<QuotaTracking>,
     pub quota_checker: Option<QuotaChecker>,
 
@@ -151,6 +154,7 @@ impl MockQueryContext {
             tiling_specification,
             thread_pool: create_rayon_thread_pool(0),
             cache: None,
+            new_raster_cache: None,
             quota_checker: None,
             quota_tracking: None,
             abort_registration,
@@ -164,6 +168,7 @@ impl MockQueryContext {
         tiling_specification: TilingSpecification,
         gdal_process_pool: Arc<GdalProcessPool>,
         cache: Option<Arc<SharedCache>>,
+        new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
         quota_tracking: Option<QuotaTracking>,
         quota_checker: Option<QuotaChecker>,
     ) -> Self {
@@ -173,6 +178,7 @@ impl MockQueryContext {
             tiling_specification,
             thread_pool: create_rayon_thread_pool(0),
             cache,
+            new_raster_cache,
             quota_checker,
             quota_tracking,
             abort_registration,
@@ -194,6 +200,7 @@ impl MockQueryContext {
             thread_pool: create_rayon_thread_pool(num_threads),
             gdal_process_pool,
             cache: None,
+            new_raster_cache: None,
             quota_checker: None,
             quota_tracking: None,
             abort_registration,
@@ -235,6 +242,10 @@ impl QueryContext for MockQueryContext {
 
     fn cache(&self) -> Option<Arc<SharedCache>> {
         self.cache.clone()
+    }
+
+    fn new_raster_cache(&self) -> Option<Arc<NewRasterCacheEnum>> {
+        self.new_raster_cache.clone()
     }
 }
 

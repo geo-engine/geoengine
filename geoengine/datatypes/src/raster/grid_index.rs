@@ -8,7 +8,7 @@ use super::GridShape2D;
 ///
 /// The grid index struct. This is a wrapper for arrays with added methods and traits, e.g. Add, Sub...
 ///
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Serialize, Deserialize, Hash)]
 pub struct GridIdx<A>(pub A)
 where
     A: AsRef<[isize]>;

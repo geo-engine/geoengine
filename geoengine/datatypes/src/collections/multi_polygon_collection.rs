@@ -525,6 +525,7 @@ mod tests {
     use crate::collections::{BuilderProvider, FeatureCollectionModifications};
     use crate::primitives::CacheHint;
     use crate::primitives::{FeatureData, FeatureDataRef, TimeInterval};
+use crate::spatial_reference::CoordinateProjection;
 
     #[test]
     fn single_polygons() {
@@ -931,7 +932,7 @@ mod tests {
 
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let projector = DefaultCoordinateProjector::new(from, to).unwrap();
+        let projector = DefaultCoordinateProjector::from_known_srs(from, to).unwrap();
 
         let collection = MultiPolygonCollection::from_slices(
             &[
