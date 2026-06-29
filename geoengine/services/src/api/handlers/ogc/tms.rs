@@ -979,4 +979,142 @@ mod tests {
         // Verify against actual operator initialization
         assert_tiles_match_operators(&ctx, &layer, &tiles_with_levels).await;
     }
+
+    #[test]
+    fn it_calculates_scale_denominator_correctly() {
+        // Test with standard Web Mercator (EPSG:3857)
+        // Cell size = 10 meters, meters per unit = 1
+        // Expected: 10 * 1 / 0.00028 ≈ 35,714.29
+        let scale_denom = scale_denominator(10.0, 1.0);
+        approx_eq!(f64, scale_denom, 35_714.285_714_285_7);
+
+        // Test with zero cell size
+        let scale_denom = scale_denominator(0.0, 1.0);
+        approx_eq!(f64, scale_denom, 0.0);
+
+        // Test with different meters per unit
+        let scale_denom = scale_denominator(1.0, 1.0);
+        approx_eq!(f64, scale_denom, 3_571.428_571_428_571);
+
+        let scale_denom = scale_denominator(1.0, 10.0);
+        approx_eq!(f64, scale_denom, 35_714.285_714_285_7);
+    }
+
+    #[test]
+    fn it_converts_values_to_non_zero_u16() {
+        // Normal cases
+        assert_eq!(to_non_zero_u16(1), 1u16.try_into().unwrap());
+        assert_eq!(to_non_zero_u16(512), 512u16.try_into().unwrap());
+        assert_eq!(to_non_zero_u16(65535), 65535u16.try_into().unwrap());
+
+        // Edge case: zero becomes 1
+        assert_eq!(to_non_zero_u16(0), 1u16.try_into().unwrap());
+
+        // Edge case: overflow wraps to u16::MAX
+        let result = to_non_zero_u16(usize::MAX);
+        assert!(result.get() > 0);
+
+        // Common tile size
+        assert_eq!(to_non_zero_u16(256), 256u16.try_into().unwrap());
+    }
+
+    #[test]
+    fn it_converts_values_to_non_zero_u64() {
+        // Normal cases
+        assert_eq!(to_non_zero_u64(1), 1u64.try_into().unwrap());
+        assert_eq!(to_non_zero_u64(1024), 1024u64.try_into().unwrap());
+
+        // Edge case: zero becomes 1
+        let result = to_non_zero_u64(0);
+        assert_eq!(result.get(), 1);
+
+        // Large value
+        assert_eq!(to_non_zero_u64(1_000_000), 1_000_000u64.try_into().unwrap());
+
+        // Common grid dimensions
+        assert_eq!(to_non_zero_u64(2048), 2048u64.try_into().unwrap());
+    }
+
+    #[ge_context::test]
+    async fn it_calculates_tiles_for_individual_zoom_levels_4326(app_ctx: PostgresContext<NoTls>) {
+        let (session_id, _data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
+        let session = app_ctx.session_by_id(session_id).await.unwrap();
+        let ctx = app_ctx.session_context(session);
+        let execution_context = ctx.execution_context().unwrap();
+        let layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
+        let descriptor =
+            raster_workflow_metadata::<crate::contexts::PostgresSessionContext<NoTls>>(
+                layer.workflow.clone(),
+                execution_context,
+            )
+            .await
+            .unwrap();
+
+        let tiling_spec = ctx.execution_context().unwrap().tiling_specification();
+        let max_zoom = calculate_number_of_zoom_levels(&descriptor, &tiling_spec) - 1;
+
+        // Test individual zoom levels using calculate_tiles_for_zoom_level
+        // Zoom level 0 (native resolution)
+        let (tiles_z0, origin_z0) = calculate_tiles_for_zoom_level(&descriptor, &tiling_spec, 0);
+        assert_eq!(tiles_z0, GridShape2D::new_2d(4, 8)); // From integration test
+        assert!(origin_z0.x.is_finite());
+        assert!(origin_z0.y.is_finite());
+
+        // Zoom level 1 (2x downsampled)
+        let (tiles_z1, origin_z1) = calculate_tiles_for_zoom_level(&descriptor, &tiling_spec, 1);
+        assert_eq!(tiles_z1, GridShape2D::new_2d(2, 4));
+        assert!(origin_z1.x.is_finite());
+        assert!(origin_z1.y.is_finite());
+
+        // Zoom level 2 (4x downsampled)
+        let (tiles_z2, origin_z2) = calculate_tiles_for_zoom_level(&descriptor, &tiling_spec, 2);
+        assert_eq!(tiles_z2, GridShape2D::new_2d(2, 2));
+        assert!(origin_z2.x.is_finite());
+        assert!(origin_z2.y.is_finite());
+
+        // Verify consistency with calculate_tiles_for_zoom_levels
+        let all_tiles = calculate_tiles_for_zoom_levels(&descriptor, &tiling_spec, max_zoom);
+        assert_eq!(all_tiles[0].0, tiles_z0);
+        assert_eq!(all_tiles[1].0, tiles_z1);
+        assert_eq!(all_tiles[2].0, tiles_z2);
+    }
+
+    #[ge_context::test]
+    async fn it_calculates_tiles_for_individual_zoom_levels_3857(app_ctx: PostgresContext<NoTls>) {
+        let (session_id, _data_connector_id, layer_id) = session_and_3857_layer_id(&app_ctx).await;
+        let session = app_ctx.session_by_id(session_id).await.unwrap();
+        let ctx = app_ctx.session_context(session);
+        let execution_context = ctx.execution_context().unwrap();
+        let layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
+        let descriptor =
+            raster_workflow_metadata::<crate::contexts::PostgresSessionContext<NoTls>>(
+                layer.workflow.clone(),
+                execution_context,
+            )
+            .await
+            .unwrap();
+
+        let tiling_spec = ctx.execution_context().unwrap().tiling_specification();
+        let max_zoom = calculate_number_of_zoom_levels(&descriptor, &tiling_spec) - 1;
+
+        // Test individual zoom levels
+        let (tiles_z0, _origin_z0) = calculate_tiles_for_zoom_level(&descriptor, &tiling_spec, 0);
+        assert_eq!(tiles_z0, GridShape2D::new_2d(6, 6));
+
+        let (tiles_z1, _origin_z1) = calculate_tiles_for_zoom_level(&descriptor, &tiling_spec, 1);
+        assert_eq!(tiles_z1, GridShape2D::new_2d(4, 4));
+
+        let (tiles_z2, _origin_z2) = calculate_tiles_for_zoom_level(&descriptor, &tiling_spec, 2);
+        assert_eq!(tiles_z2, GridShape2D::new_2d(2, 2));
+
+        let (tiles_z3, _origin_z3) = calculate_tiles_for_zoom_level(&descriptor, &tiling_spec, 3);
+        assert_eq!(tiles_z3, GridShape2D::new_2d(2, 2));
+
+        // Verify consistency with calculate_tiles_for_zoom_levels
+        let all_tiles = calculate_tiles_for_zoom_levels(&descriptor, &tiling_spec, max_zoom);
+        assert_eq!(all_tiles[0].0, tiles_z0);
+        assert_eq!(all_tiles[1].0, tiles_z1);
+        assert_eq!(all_tiles[2].0, tiles_z2);
+        assert_eq!(all_tiles[3].0, tiles_z3);
+    }
 }

@@ -132,3 +132,80 @@ impl actix_web::error::ResponseError for OgcApiError {
         actix_web::HttpResponse::build(self.status_code()).json(&exception)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use actix_web::ResponseError;
+
+    use super::*;
+
+    #[test]
+    fn it_returns_correct_status_codes_for_ogc_api_errors() {
+        // Test 404 errors
+        assert_eq!(
+            OgcApiError::CollectionNotFound {
+                collection_id: LayerId("test_collection".into()),
+            }
+            .status_code(),
+            StatusCode::NOT_FOUND
+        );
+
+        assert_eq!(
+            OgcApiError::TileMatrixSetNotFound {
+                tile_matrix_set_id: "UnknownTMS".to_string(),
+            }
+            .status_code(),
+            StatusCode::NOT_FOUND
+        );
+
+        // Test 400 errors
+        assert_eq!(
+            OgcApiError::ExpectedRaster {
+                found: "vector".to_string(),
+            }
+            .status_code(),
+            StatusCode::BAD_REQUEST
+        );
+
+        assert_eq!(
+            OgcApiError::MissingSpatialReference.status_code(),
+            StatusCode::BAD_REQUEST
+        );
+
+        // Test 500 errors
+        assert_eq!(
+            OgcApiError::Internal {
+                source: crate::error::Error::InvalidUuid,
+            }
+            .status_code(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+
+        assert_eq!(
+            OgcApiError::UnsupportedSpatialReferenceAuthority {
+                from: SpatialReferenceAuthority::Epsg,
+            }
+            .status_code(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[test]
+    fn it_generates_valid_exception_response_with_correct_json_structure() {
+        let error = OgcApiError::TileMatrixSetNotFound {
+            tile_matrix_set_id: "TestTMS".to_string(),
+        };
+
+        let response = error.error_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        // Verify Exception structure
+        let exception = Exception::from(&error);
+        let json = serde_json::to_value(&exception).expect("Failed to serialize exception");
+
+        assert_eq!(json["status"], 404);
+        assert_eq!(json["title"], "Tile matrix set not found");
+        assert!(json["detail"].is_string());
+        assert!(json["detail"].as_str().unwrap().contains("TestTMS"));
+    }
+}

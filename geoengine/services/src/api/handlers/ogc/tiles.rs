@@ -662,7 +662,7 @@ mod tests {
             add_ndvi_to_layers, admin_login, ndvi_255_symbology, read_body_json, send_test_request,
         },
     };
-    use actix_web::{http::header, test};
+    use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::{
         test_data,
@@ -717,7 +717,7 @@ mod tests {
         let server_url = "http://127.0.0.1:3030";
         let (session_id, data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
 
-        let req = test::TestRequest::get()
+        let req = actix_web::test::TestRequest::get()
             .uri(&format!(
                 "/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles"
             ))
@@ -766,7 +766,7 @@ mod tests {
         let server_url = "http://127.0.0.1:3030";
         let (session_id, data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
 
-        let req = test::TestRequest::get()
+        let req = actix_web::test::TestRequest::get()
             .uri(&format!(
                 "/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}"
             ))
@@ -823,7 +823,7 @@ mod tests {
     async fn it_renders_tile_png_with_datetime(app_ctx: PostgresContext<NoTls>) {
         let (session_id, data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
 
-        let req = test::TestRequest::get()
+        let req = actix_web::test::TestRequest::get()
 			.uri(&format!(
 				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/2/1/4?datetime=2014-04-01T00:00:00Z"
 			))
@@ -851,7 +851,7 @@ mod tests {
     async fn it_renders_overview_tile_png_with_datetime(app_ctx: PostgresContext<NoTls>) {
         let (session_id, data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
 
-        let req = test::TestRequest::get()
+        let req = actix_web::test::TestRequest::get()
 			.uri(&format!(
 				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-04-01T00:00:00Z"
 			))
@@ -879,7 +879,7 @@ mod tests {
     async fn it_renders_3857_overview_tile_png_with_datetime(app_ctx: PostgresContext<NoTls>) {
         let (session_id, data_connector_id, layer_id) = session_and_3857_layer_id(&app_ctx).await;
 
-        let req = test::TestRequest::get()
+        let req = actix_web::test::TestRequest::get()
 			.uri(&format!(
 				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-04-01T00:00:00Z"
 			))
@@ -910,7 +910,7 @@ mod tests {
         let (session_id, data_connector_id, layer_id) =
             session_and_native_3857_layer_id(&app_ctx).await;
 
-        let req = test::TestRequest::get()
+        let req = actix_web::test::TestRequest::get()
 			.uri(&format!(
 				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-04-01T00:00:00Z"
 			))
@@ -1102,5 +1102,31 @@ mod tests {
         }
 
         assert_eq!(num_tiles, actual_width * actual_height);
+    }
+
+    #[test]
+    fn it_retrieves_query_time_from_datetime() {
+        use chrono::{TimeZone, Utc};
+        use geoengine_datatypes::primitives::{DateTime, TimeInstance, TimeInterval};
+
+        assert_eq!(
+            query_time_from_datetime(Some(OgcDatetime::Datetime(
+                Utc.with_ymd_and_hms(2026, 4, 1, 12, 30, 45).unwrap()
+            )))
+            .unwrap(),
+            TimeInterval::new_instant(DateTime::new_utc_checked(2026, 4, 1, 12, 30, 45).unwrap())
+                .unwrap()
+        );
+
+        assert_eq!(
+            query_time_from_datetime(Some(OgcDatetime::Interval {
+                from: IntervalDatetime::Open,
+                to: IntervalDatetime::Open
+            }))
+            .unwrap(),
+            TimeInterval::new(TimeInstance::MIN, TimeInstance::MAX).unwrap()
+        );
+
+        assert!(query_time_from_datetime(None).is_err());
     }
 }

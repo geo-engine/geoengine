@@ -5,9 +5,9 @@ use crate::{
                 OgcApiResult,
                 error::{self, OgcApiError},
                 util::{
-                    LinkCreator, crs_from_spatial_reference_option, link_creator, load_layer,
-                    parse_bbox_option, parse_datetime_option, raster_workflow_metadata,
-                    to_ogc_bbox,
+                    LinkCreator, crs_from_spatial_reference_option,
+                    get_initialized_raster_operator, link_creator, load_layer, parse_bbox_option,
+                    parse_datetime_option, raster_workflow_metadata, to_ogc_bbox,
                 },
             },
             workflows::{ProvenanceEntry, workflow_provenance},
@@ -15,7 +15,8 @@ use crate::{
         model::datatypes::{DataProviderId, LayerId},
     },
     contexts::{ApplicationContext, SessionContext},
-    workflows::{registry::WorkflowRegistry, workflow::Workflow},
+    layers::layer::Layer,
+    workflows::registry::WorkflowRegistry,
 };
 use actix_web::web;
 use chrono::{DateTime, Utc};
@@ -26,10 +27,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     call_on_generic_raster_processor,
-    engine::{
-        RasterQueryProcessor, RasterResultDescriptor, TypedOperator, TypedRasterQueryProcessor,
-        WorkflowOperatorPath,
-    },
+    engine::{RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor},
 };
 use itertools::Itertools;
 use ogcapi_types::common::{
@@ -353,11 +351,8 @@ pub async fn collection<C: ApplicationContext>(
     )
     .await?;
 
-    let raster_query_processor = raster_query_processor::<C::SessionContext>(
-        layer.workflow.clone(),
-        ctx.execution_context()?,
-    )
-    .await?;
+    let raster_query_processor =
+        raster_query_processor::<C::SessionContext>(&layer, ctx.execution_context()?).await?;
 
     let create_link = link_creator(data_connector_id, layer_id.clone());
 
@@ -381,26 +376,11 @@ pub async fn collection<C: ApplicationContext>(
 }
 
 async fn raster_query_processor<C: SessionContext>(
-    processing_graph: Workflow,
+    layer: &Layer,
     execution_context: C::ExecutionContext,
 ) -> OgcApiResult<TypedRasterQueryProcessor> {
-    let operator = match processing_graph.operator()? {
-        TypedOperator::Raster(operator) => operator,
-        TypedOperator::Vector(_) => {
-            return Err(OgcApiError::ExpectedRaster {
-                found: "vector".to_string(),
-            })?;
-        }
-        TypedOperator::Plot(_) => {
-            return Err(OgcApiError::ExpectedRaster {
-                found: "plot".to_string(),
-            })?;
-        }
-    };
-    let initialized_operator = operator
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
-        .await
-        .boxed_context(error::InitializingProcessingGraph)?;
+    let initialized_operator =
+        get_initialized_raster_operator::<C>(layer, &execution_context).await?;
 
     initialized_operator
         .query_processor()

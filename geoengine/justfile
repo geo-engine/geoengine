@@ -51,6 +51,16 @@ test-coverage output_path="lcov.info":
     	--lcov \
     	--output-path {{ output_path }}
 
+[group("ci")]
+test-coverage-services filter="": common::_clear
+    cargo llvm-cov \
+    	--locked \
+    	--all-features \
+        --package geoengine-services \
+    	--profile ci \
+    	--html \
+        -- {{ filter }}
+
 # Run the application.
 [group("run")]
 run: common::_clear
