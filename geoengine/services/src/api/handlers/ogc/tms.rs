@@ -18,9 +18,8 @@ use crate::{
 use actix_web::web;
 use float_cmp::approx_eq;
 use geoengine_datatypes::{
-    raster::{
-        GridBounds, GridShape2D, GridShapeAccess, TilingSpatialGridDefinition, TilingSpecification,
-    },
+    primitives::{Coordinate2D, SpatialResolution},
+    raster::{GridBounds, GridShape2D, GridShapeAccess, GridSize, TilingSpecification},
     spatial_reference::SpatialReference,
 };
 use geoengine_operators::engine::{ExecutionContext, RasterResultDescriptor};
@@ -148,11 +147,7 @@ pub async fn tile_matrix_set<C: ApplicationContext>(
         ordered_axes: ordered_axes(spatial_reference)?,
         well_known_scale_set: None,
         bounding_box: None, // TODO: BBox of layer?
-        tile_matrices: build_tile_matrices(
-            descriptor.tiling_grid_definition(tiling_specification),
-            tiling_specification,
-            spatial_reference,
-        )?,
+        tile_matrices: build_tile_matrices(&descriptor, tiling_specification, spatial_reference)?,
     }))
 }
 
@@ -166,7 +161,7 @@ fn ordered_axes(spatial_reference: SpatialReference) -> OgcApiResult<Vec<String>
 }
 
 pub fn build_tile_matrices(
-    tiling_spatial_grid_definition: TilingSpatialGridDefinition,
+    result_descriptor: &RasterResultDescriptor,
     tiling_specification: TilingSpecification,
     spatial_reference: SpatialReference,
 ) -> OgcApiResult<Vec<TileMatrix>> {
@@ -174,7 +169,8 @@ pub fn build_tile_matrices(
     let tile_width = to_non_zero_u16(tile_width);
     let tile_height = to_non_zero_u16(tile_height);
 
-    let grid_bounds = tiling_spatial_grid_definition.tiling_grid_bounds();
+    let tiling_spatial_grid_definition =
+        result_descriptor.tiling_grid_definition(tiling_specification);
     let tiling_geo_transform = tiling_spatial_grid_definition.tiling_geo_transform();
     let (x_resolution, y_resolution) = (
         tiling_geo_transform.x_pixel_size(),
@@ -196,67 +192,47 @@ pub fn build_tile_matrices(
         }
     })?;
 
-    let original_x_size = to_non_zero_u64((grid_bounds.x_max() - grid_bounds.x_min() + 1) as u64);
-    let original_y_size = to_non_zero_u64((grid_bounds.y_max() - grid_bounds.y_min() + 1) as u64);
+    let max_zoom_level =
+        calculate_number_of_zoom_levels(result_descriptor, &tiling_specification) - 1;
+    let base_scale_denominator = scale_denominator(resolution, meters_per_unit);
 
-    let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
-    let tile_grid_bounds = tiling_strategy.raster_spatial_query_to_tiling_grid_box(grid_bounds);
-    let min_pixel_index =
-        tiling_strategy.tile_idx_to_global_pixel_idx(tile_grid_bounds.min_index());
-
-    let min_coordinate =
-        tiling_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(min_pixel_index);
-
-    let best_resolution_tile_matrix = TileMatrix {
-        id: 0.to_string(),
-        title: None,
-        description: None,
-        keywords: Vec::new(),
-        scale_denominator: scale_denominator(resolution, meters_per_unit),
-        cell_size: resolution,
-        corner_of_origin: CornerOfOrigin::TopLeft,
-        point_of_origin: [min_coordinate.x, min_coordinate.y],
-        tile_width,
-        tile_height,
-        matrix_width: original_x_size.div_ceil(NonZeroU64::from(tile_width)),
-        matrix_height: original_y_size.div_ceil(NonZeroU64::from(tile_height)),
-        variable_matrix_widths: Vec::new(),
-    };
-
-    let mut tile_matrices = vec![best_resolution_tile_matrix.clone()];
-    let mut stop;
-
-    // we start with the original resolution of the raster and then create levels with exponentially decreasing
-    // resolution (i.e. increasing zoom level) until one dimension of the tile matrix is smaller than the tile size.
-
-    for factor in 1.. {
-        let multiple = NonZeroU64::new(2)
-            .expect("2 is non-zero")
-            .saturating_pow(factor);
-        let mut tile_matrix = best_resolution_tile_matrix.clone();
-        tile_matrix.cell_size *= multiple.get() as f64;
-        tile_matrix.scale_denominator *= multiple.get() as f64;
-        tile_matrix.matrix_width = tile_matrix.matrix_width.div_ceil(multiple);
-        tile_matrix.matrix_height = tile_matrix.matrix_height.div_ceil(multiple);
-
-        stop = tile_matrix.matrix_width == NonZeroU64::MIN
-            || tile_matrix.matrix_height == NonZeroU64::MIN; // any reaches 1
-
-        tile_matrices.push(tile_matrix);
-
-        if stop {
-            break;
-        }
-    }
-
-    tile_matrices.reverse(); // reverse to have the highest zoom level (smallest resolution) first
-
-    // assign ids to tile matrices based on position in the vector (starting with 0 for the highest zoom level)
-    for (id, tile_matrix) in tile_matrices.iter_mut().enumerate() {
-        tile_matrix.id = id.to_string();
-    }
-
-    Ok(tile_matrices)
+    Ok((0_u32..=max_zoom_level)
+        .rev()
+        .zip(
+            calculate_tiles_for_zoom_levels(
+                result_descriptor,
+                &tiling_specification,
+                max_zoom_level,
+            )
+            .into_iter()
+            .rev(),
+        )
+        .map(|(zoom_level, (grid_shape, origin_coordinate))| {
+            (
+                zoom_level,
+                2_u64.saturating_pow(zoom_level) as f64,
+                grid_shape,
+                origin_coordinate,
+            )
+        })
+        .map(
+            |(zoom_level, multiple, grid_shape, origin_coordinate)| TileMatrix {
+                id: (max_zoom_level - zoom_level).to_string(),
+                title: None,
+                description: None,
+                keywords: Vec::new(),
+                scale_denominator: multiple * base_scale_denominator,
+                cell_size: multiple * resolution,
+                corner_of_origin: CornerOfOrigin::TopLeft,
+                point_of_origin: [origin_coordinate.x, origin_coordinate.y],
+                tile_width,
+                tile_height,
+                matrix_width: to_non_zero_u64(grid_shape.x()),
+                matrix_height: to_non_zero_u64(grid_shape.y()),
+                variable_matrix_widths: Vec::new(),
+            },
+        )
+        .collect::<Vec<_>>())
 }
 
 fn to_non_zero_u16(value: usize) -> NonZeroU16 {
@@ -264,8 +240,8 @@ fn to_non_zero_u16(value: usize) -> NonZeroU16 {
     NonZeroU16::new(value.max(1)).unwrap_or(NonZeroU16::MIN)
 }
 
-fn to_non_zero_u64(value: u64) -> NonZeroU64 {
-    NonZeroU64::new(value.max(1)).unwrap_or(NonZeroU64::MIN)
+fn to_non_zero_u64(value: usize) -> NonZeroU64 {
+    NonZeroU64::try_from(value as u64).unwrap_or(NonZeroU64::MIN)
 }
 
 /// The documentation (<https://docs.ogc.org/is/17-083r4/17-083r4.html#6-1-1-1-%C2%A0-tile-matrix-in-a-two-dimensional-space>) says:
@@ -308,49 +284,121 @@ pub fn calculate_number_of_zoom_levels(
     )
 }
 
-/// Calculates the number of tiles [columns, rows] for a specific zoom level.
+/// Calculates the actual number of tiles and origin coordinate for a specific zoom level accounting for origin alignment.
+/// This method computes tiles without creating operators by using
+/// `SpatialGridDefinition::with_changed_resolution` and tiling definitions.
+///
 /// Zoom level 0 corresponds to the original resolution of the raster.
-pub fn calculate_tiles_at_zoom_level(
+///
+/// Returns a tuple of (`grid_shape`, `origin_coordinate`) where `origin_coordinate` is the upper-left coordinate of the first tile.
+pub fn calculate_tiles_for_zoom_level(
     result_descriptor: &RasterResultDescriptor,
-    tile_size: &TilingSpecification,
+    tiling_specification: &TilingSpecification,
     zoom_level: u32,
-) -> GridShape2D {
-    if zoom_level > usize::BITS {
-        // we cannot shift more than 64 bits, so we return 1 tile in this case (which is the minimum)
-        return GridShape2D::new_2d(1, 1);
+) -> (GridShape2D, Coordinate2D) {
+    let original_spatial_grid = result_descriptor.spatial_grid_descriptor();
+    let original_resolution = original_spatial_grid.geo_transform().spatial_resolution();
+
+    let zoom_factor = 2u32.pow(zoom_level);
+
+    // Compute downsampled resolution
+    let downsampled_resolution = SpatialResolution {
+        x: original_resolution.x * f64::from(zoom_factor),
+        y: original_resolution.y * f64::from(zoom_factor),
+    };
+
+    // Create the spatial grid at this zoom level's resolution
+    let downsampled_grid = original_spatial_grid.with_changed_resolution(downsampled_resolution);
+
+    // Create the tiling definition for this resolution
+    let tiling_def = downsampled_grid.tiling_grid_definition(*tiling_specification);
+
+    // Calculate actual tiles (accounts for origin alignment)
+    let grid_bounds = tiling_def.tiling_grid_bounds();
+    let tiling_geo_transform = tiling_def.tiling_geo_transform();
+    let tiling_strategy = tiling_def.generate_data_tiling_strategy();
+    let tile_bounds = tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
+    let grid_shape = GridShape2D::new(tile_bounds.axis_size());
+
+    // Calculate the origin coordinate of the first tile
+    let min_pixel_index = tiling_strategy.tile_idx_to_global_pixel_idx(tile_bounds.min_index());
+    let origin_coordinate =
+        tiling_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(min_pixel_index);
+
+    (grid_shape, origin_coordinate)
+}
+
+/// Calculates the actual number of tiles and origin coordinate at each zoom level accounting for origin alignment.
+/// This method computes tiles for all zoom levels without creating operators by using
+/// `SpatialGridDefinition::with_changed_resolution` and tiling definitions.
+///
+/// Returns a vector where index 0 corresponds to `zoom_level` 0 (native resolution).
+/// Each element contains the grid shape (tile count) and the upper-left coordinate of the first tile.
+pub fn calculate_tiles_for_zoom_levels(
+    result_descriptor: &RasterResultDescriptor,
+    tiling_specification: &TilingSpecification,
+    max_zoom_level: u32,
+) -> Vec<(GridShape2D, Coordinate2D)> {
+    let original_spatial_grid = result_descriptor.spatial_grid_descriptor();
+    let original_resolution = original_spatial_grid.geo_transform().spatial_resolution();
+
+    let mut tiles_at_each_level = Vec::new();
+
+    for zoom_level in 0..=max_zoom_level {
+        let zoom_factor = 2u32.pow(zoom_level);
+
+        // Compute downsampled resolution
+        let downsampled_resolution = SpatialResolution {
+            x: original_resolution.x * f64::from(zoom_factor),
+            y: original_resolution.y * f64::from(zoom_factor),
+        };
+
+        // Create the spatial grid at this zoom level's resolution
+        let downsampled_grid =
+            original_spatial_grid.with_changed_resolution(downsampled_resolution);
+
+        // Create the tiling definition for this resolution
+        let tiling_def = downsampled_grid.tiling_grid_definition(*tiling_specification);
+
+        // Calculate actual tiles (accounts for origin alignment)
+        let grid_bounds = tiling_def.tiling_grid_bounds();
+        let tiling_geo_transform = tiling_def.tiling_geo_transform();
+        let tiling_strategy = tiling_def.generate_data_tiling_strategy();
+        let tile_bounds = tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
+        let actual_tiles = GridShape2D::new(tile_bounds.axis_size());
+
+        // Calculate the origin coordinate of the first tile
+        let min_pixel_index = tiling_strategy.tile_idx_to_global_pixel_idx(tile_bounds.min_index());
+        let origin_coordinate =
+            tiling_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(min_pixel_index);
+
+        tiles_at_each_level.push((actual_tiles, origin_coordinate));
     }
 
-    let grid_shape = result_descriptor.spatial_grid_descriptor().grid_shape();
-
-    // 1. Calculate the tile count at the maximum (native) resolution
-    let tiles_at_max_resolution = grid_shape.div_ceil(&tile_size.grid_shape());
-
-    // 2. Scale down the tile counts by 2^(steps_down)
-    let divisor = GridShape2D::new_2d(
-        1usize << zoom_level, // equivalent to 2^zoom_level
-        1usize << zoom_level, // equivalent to 2^zoom_level
-    );
-
-    tiles_at_max_resolution.div_ceil(&divisor)
+    tiles_at_each_level
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
+        api::handlers::ogc::util::{
+            get_initialized_raster_operator, raster_operator_in_fitting_resolution,
+        },
         contexts::{
-            ApplicationContext, ExecutionContextImpl, PostgresContext, PostgresDb, Session,
-            SessionContext, SessionId,
+            ApplicationContext, ExecutionContextImpl, PostgresContext, PostgresDb,
+            PostgresSessionContext, Session, SessionContext, SessionId,
         },
         ge_context,
-        layers::listing::LayerCollectionProvider,
+        layers::{layer::Layer, listing::LayerCollectionProvider},
         util::tests::{
-            add_ndvi_3857_to_layers, add_ndvi_to_layers, admin_login, read_body_json,
-            send_test_request,
+            add_file_definition_to_datasets_and_return_layer, add_ndvi_3857_to_layers,
+            add_ndvi_to_layers, admin_login, ndvi_255_symbology, read_body_json, send_test_request,
         },
     };
     use actix_web::{http::header, test::TestRequest};
     use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::test_data;
     use geoengine_operators::engine::RasterResultDescriptor;
     use ogcapi_types::common::Crs;
     use pretty_assertions::assert_eq;
@@ -377,6 +425,23 @@ mod tests {
 
         let session_id = ctx.session().id();
         let (data_connector_id, layer_id) = add_ndvi_3857_to_layers(app_ctx).await;
+
+        (session_id, data_connector_id.into(), layer_id.into())
+    }
+
+    async fn session_and_native_3857_layer_id(
+        app_ctx: &PostgresContext<NoTls>,
+    ) -> (SessionId, DataProviderId, LayerId) {
+        let session = admin_login(app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = ctx.session().id();
+        let (data_connector_id, layer_id) = add_file_definition_to_datasets_and_return_layer(
+            &ctx.db(),
+            test_data!("dataset_defs/ndvi (3587).json"),
+            Some(ndvi_255_symbology()),
+        )
+        .await;
 
         (session_id, data_connector_id.into(), layer_id.into())
     }
@@ -497,11 +562,11 @@ mod tests {
                         scale_denominator: 159_027_844.000_000_03,
                         cell_size: 0.4,
                         corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-204.8, 102.4],
+                        point_of_origin: [-204.8, 204.8],
                         tile_width: 512.try_into().unwrap(),
                         tile_height: 512.try_into().unwrap(),
                         matrix_width: 2.try_into().unwrap(),
-                        matrix_height: 1.try_into().unwrap(),
+                        matrix_height: 2.try_into().unwrap(),
                         variable_matrix_widths: vec![],
                     },
                     TileMatrix {
@@ -550,24 +615,24 @@ mod tests {
             3
         );
 
-        for tile_matrix in &tile_matrix_set.tile_matrices {
-            let zoom_level = tile_matrix_set.tile_matrices.len() as u32
-                - tile_matrix.id.parse::<u32>().unwrap()
-                - 1;
-            let expected_tiles = calculate_tiles_at_zoom_level(
-                &descriptor,
-                &execution_context.tiling_specification(),
-                zoom_level,
-            );
-            let actual_tiles = GridShape2D::new_2d(
-                tile_matrix.matrix_height.get() as usize,
-                tile_matrix.matrix_width.get() as usize,
-            );
-            assert_eq!(
-                expected_tiles, actual_tiles,
-                "Tile count at zoom level {zoom_level} does not match expected value"
-            );
-        }
+        // for tile_matrix in &tile_matrix_set.tile_matrices {
+        //     let zoom_level = tile_matrix_set.tile_matrices.len() as u32
+        //         - tile_matrix.id.parse::<u32>().unwrap()
+        //         - 1;
+        //     let expected_tiles = calculate_tiles_at_zoom_level(
+        //         &descriptor,
+        //         &execution_context.tiling_specification(),
+        //         zoom_level,
+        //     );
+        //     let actual_tiles = GridShape2D::new_2d(
+        //         tile_matrix.matrix_height.get() as usize,
+        //         tile_matrix.matrix_width.get() as usize,
+        //     );
+        //     assert_eq!(
+        //         expected_tiles, actual_tiles,
+        //         "Tile count at zoom level {zoom_level} does not match expected value"
+        //     );
+        // }
     }
 
     #[allow(
@@ -623,11 +688,11 @@ mod tests {
                         scale_denominator: 407_286_157.394_767_2,
                         cell_size: 114_040.124_070_534_8,
                         corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-21_890_660.358_935_43, 21_897_016.897_822_894],
+                        point_of_origin: [-58_354_990.030_488_94, 58_418_366.631_411_66],
                         tile_width: 512.try_into().unwrap(),
                         tile_height: 512.try_into().unwrap(),
-                        matrix_width: 1.try_into().unwrap(),
-                        matrix_height: 1.try_into().unwrap(),
+                        matrix_width: 2.try_into().unwrap(),
+                        matrix_height: 2.try_into().unwrap(),
                         variable_matrix_widths: vec![],
                     },
                     TileMatrix {
@@ -638,7 +703,7 @@ mod tests {
                         scale_denominator: 203_643_078.697_383_6,
                         cell_size: 57_020.062_035_267_394,
                         corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-21_890_660.358_935_43, 21_897_016.897_822_894],
+                        point_of_origin: [-29_217_738.330_467_295, 29_167_074.807_319_485],
                         tile_width: 512.try_into().unwrap(),
                         tile_height: 512.try_into().unwrap(),
                         matrix_width: 2.try_into().unwrap(),
@@ -653,11 +718,11 @@ mod tests {
                         scale_denominator: 101_821_539.348_691_8,
                         cell_size: 28_510.031_017_633_697,
                         corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-21_890_660.358_935_43, 21_897_016.897_822_894],
+                        point_of_origin: [-29_189_228.299_449_66, 29_195_584.838_337_12],
                         tile_width: 512.try_into().unwrap(),
                         tile_height: 512.try_into().unwrap(),
-                        matrix_width: 3.try_into().unwrap(),
-                        matrix_height: 3.try_into().unwrap(),
+                        matrix_width: 4.try_into().unwrap(),
+                        matrix_height: 4.try_into().unwrap(),
                         variable_matrix_widths: vec![],
                     },
                     TileMatrix {
@@ -691,24 +756,24 @@ mod tests {
             4
         );
 
-        for tile_matrix in &tile_matrix_set.tile_matrices {
-            let zoom_level = tile_matrix_set.tile_matrices.len() as u32
-                - tile_matrix.id.parse::<u32>().unwrap()
-                - 1;
-            let expected_tiles = calculate_tiles_at_zoom_level(
-                &descriptor,
-                &execution_context.tiling_specification(),
-                zoom_level,
-            );
-            let actual_tiles = GridShape2D::new_2d(
-                tile_matrix.matrix_height.get() as usize,
-                tile_matrix.matrix_width.get() as usize,
-            );
-            assert_eq!(
-                expected_tiles, actual_tiles,
-                "Tile count at zoom level {zoom_level} does not match expected value"
-            );
-        }
+        // for tile_matrix in &tile_matrix_set.tile_matrices {
+        //     let zoom_level = tile_matrix_set.tile_matrices.len() as u32
+        //         - tile_matrix.id.parse::<u32>().unwrap()
+        //         - 1;
+        //     let expected_tiles = calculate_tiles_at_zoom_level(
+        //         &descriptor,
+        //         &execution_context.tiling_specification(),
+        //         zoom_level,
+        //     );
+        //     let actual_tiles = GridShape2D::new_2d(
+        //         tile_matrix.matrix_height.get() as usize,
+        //         tile_matrix.matrix_width.get() as usize,
+        //     );
+        //     assert_eq!(
+        //         expected_tiles, actual_tiles,
+        //         "Tile count at zoom level {zoom_level} does not match expected value"
+        //     );
+        // }
     }
 
     #[ge_context::test]
@@ -755,5 +820,163 @@ mod tests {
             ordered_axes(SpatialReference::web_mercator()).unwrap(),
             vec!["x".to_string(), "y".to_string()]
         );
+    }
+
+    /// Test helper: computes tiles at each zoom level for a given layer.
+    /// Returns a vector where index corresponds to `zoom_level`, with clear visibility of zoom levels.
+    fn get_tiles_for_all_zoom_levels_with_details(
+        ctx: &crate::contexts::PostgresSessionContext<NoTls>,
+        descriptor: &RasterResultDescriptor,
+    ) -> Vec<(u32, GridShape2D)> {
+        let execution_context = ctx.execution_context().unwrap();
+        let tiling_spec = execution_context.tiling_specification();
+        let max_zoom_level = calculate_number_of_zoom_levels(descriptor, &tiling_spec) - 1;
+
+        let tiles = calculate_tiles_for_zoom_levels(descriptor, &tiling_spec, max_zoom_level);
+
+        // Return tuples of (zoom_level, tiles) for clear visibility
+        (0..=max_zoom_level)
+            .map(|zoom_level| (zoom_level, tiles[zoom_level as usize].0))
+            .collect()
+    }
+
+    /// Test helper: verifies tiles computed by the method match actual operator initialization.
+    async fn assert_tiles_match_operators(
+        ctx: &crate::contexts::PostgresSessionContext<NoTls>,
+        layer: &Layer,
+        tiles_from_method: &[(u32, GridShape2D)],
+    ) {
+        let execution_context = ctx.execution_context().unwrap();
+        let tiling_spec = execution_context.tiling_specification();
+
+        for (zoom_level, expected_tiles) in tiles_from_method {
+            let zoom_factor = 2u32.pow(*zoom_level);
+
+            // Initialize operator and resample to the target resolution
+            let mut initialized_operator = get_initialized_raster_operator::<
+                PostgresSessionContext<NoTls>,
+            >(layer, &execution_context)
+            .await
+            .expect("Failed to initialize operator");
+
+            initialized_operator = raster_operator_in_fitting_resolution::<
+                PostgresSessionContext<NoTls>,
+            >(
+                initialized_operator, &execution_context, zoom_factor
+            )
+            .await
+            .expect("Failed to resample operator to fitting resolution");
+
+            // Calculate actual tiles from the initialized operator's descriptor
+            let resampled_descriptor = initialized_operator.result_descriptor();
+            let resampled_tiling_def = resampled_descriptor.tiling_grid_definition(tiling_spec);
+            let resampled_grid_bounds = resampled_tiling_def.tiling_grid_bounds();
+            let resampled_tiling_strategy = resampled_tiling_def.generate_data_tiling_strategy();
+            let resampled_tile_bounds = resampled_tiling_strategy
+                .global_pixel_grid_bounds_to_tile_grid_bounds(resampled_grid_bounds);
+            let actual_from_operator = GridShape2D::new(resampled_tile_bounds.axis_size());
+
+            // Compare: tiles from method should match tiles from initialized operator
+            assert_eq!(
+                expected_tiles, &actual_from_operator,
+                "Zoom level {}: expected tiles {:?}, but operator returned {:?}",
+                zoom_level, expected_tiles, actual_from_operator
+            );
+        }
+    }
+
+    #[ge_context::test]
+    async fn it_calculates_tiles_for_4326_layer_with_zoom_levels(app_ctx: PostgresContext<NoTls>) {
+        let (session_id, _data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
+        let session = app_ctx.session_by_id(session_id).await.unwrap();
+        let ctx = app_ctx.session_context(session);
+        let execution_context = ctx.execution_context().unwrap();
+        let layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
+        let descriptor =
+            raster_workflow_metadata::<crate::contexts::PostgresSessionContext<NoTls>>(
+                layer.workflow.clone(),
+                execution_context,
+            )
+            .await
+            .unwrap();
+
+        let tiles_with_levels = get_tiles_for_all_zoom_levels_with_details(&ctx, &descriptor);
+
+        assert_eq!(
+            tiles_with_levels,
+            vec![
+                (0, GridShape2D::new_2d(4, 8)),
+                (1, GridShape2D::new_2d(2, 4)),
+                (2, GridShape2D::new_2d(2, 2)),
+            ]
+        );
+
+        // Verify against actual operator initialization
+        assert_tiles_match_operators(&ctx, &layer, &tiles_with_levels).await;
+    }
+
+    #[ge_context::test]
+    async fn it_calculates_tiles_for_3857_layer_with_zoom_levels(app_ctx: PostgresContext<NoTls>) {
+        let (session_id, _data_connector_id, layer_id) = session_and_3857_layer_id(&app_ctx).await;
+        let session = app_ctx.session_by_id(session_id).await.unwrap();
+        let ctx = app_ctx.session_context(session);
+        let execution_context = ctx.execution_context().unwrap();
+        let layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
+        let descriptor =
+            raster_workflow_metadata::<crate::contexts::PostgresSessionContext<NoTls>>(
+                layer.workflow.clone(),
+                execution_context,
+            )
+            .await
+            .unwrap();
+
+        let tiles_with_levels = get_tiles_for_all_zoom_levels_with_details(&ctx, &descriptor);
+
+        assert_eq!(
+            tiles_with_levels,
+            vec![
+                (0, GridShape2D::new_2d(6, 6)),
+                (1, GridShape2D::new_2d(4, 4)),
+                (2, GridShape2D::new_2d(2, 2)),
+                (3, GridShape2D::new_2d(2, 2)),
+            ]
+        );
+
+        // Verify against actual operator initialization
+        assert_tiles_match_operators(&ctx, &layer, &tiles_with_levels).await;
+    }
+
+    #[ge_context::test]
+    async fn it_calculates_tiles_for_native_3857_layer_with_zoom_levels(
+        app_ctx: PostgresContext<NoTls>,
+    ) {
+        let (session_id, _data_connector_id, layer_id) =
+            session_and_native_3857_layer_id(&app_ctx).await;
+        let session = app_ctx.session_by_id(session_id).await.unwrap();
+        let ctx = app_ctx.session_context(session);
+        let execution_context = ctx.execution_context().unwrap();
+        let layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
+        let descriptor =
+            raster_workflow_metadata::<crate::contexts::PostgresSessionContext<NoTls>>(
+                layer.workflow.clone(),
+                execution_context,
+            )
+            .await
+            .unwrap();
+
+        let tiles_with_levels = get_tiles_for_all_zoom_levels_with_details(&ctx, &descriptor);
+
+        assert_eq!(
+            tiles_with_levels,
+            vec![
+                (0, GridShape2D::new_2d(6, 6)),
+                (1, GridShape2D::new_2d(4, 4)),
+                (2, GridShape2D::new_2d(2, 2)),
+                (3, GridShape2D::new_2d(2, 2)),
+            ]
+        );
+
+        // Verify against actual operator initialization
+        assert_tiles_match_operators(&ctx, &layer, &tiles_with_levels).await;
     }
 }

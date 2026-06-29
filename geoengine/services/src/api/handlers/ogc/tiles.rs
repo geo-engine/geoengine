@@ -7,10 +7,11 @@ use crate::{
             error::{self, OgcApiError},
             tms::{
                 CUSTOM_TILE_MATRIX_SET_ID, calculate_number_of_zoom_levels,
-                calculate_tiles_at_zoom_level,
+                calculate_tiles_for_zoom_level,
             },
             util::{
-                crs_from_spatial_reference_option, link_creator, load_layer, parse_datetime_option,
+                crs_from_spatial_reference_option, get_initialized_raster_operator, link_creator,
+                load_layer, parse_datetime_option, raster_operator_in_fitting_resolution,
                 raster_workflow_metadata,
             },
         },
@@ -31,15 +32,15 @@ use geoengine_datatypes::{
     },
     raster::{
         GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
-        TilingSpatialGridDefinition, TilingSpecification,
+        TilingSpatialGridDefinition,
     },
     util::Identifier,
 };
 use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{
-        ExecutionContext, InitializedRasterOperator, RasterResultDescriptor, TypedOperator,
-        TypedRasterQueryProcessor, WorkflowOperatorPath,
+        ExecutionContext, InitializedRasterOperator, RasterResultDescriptor,
+        TypedRasterQueryProcessor,
     },
     util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
@@ -54,7 +55,6 @@ use ogcapi_types::{
         TileSets, TilesCrs,
     },
 };
-use tracing::debug;
 use utoipa::IntoParams;
 use uuid::Uuid;
 
@@ -390,13 +390,18 @@ pub async fn tile<C: ApplicationContext>(
     let zoom_level = query.zoom_level(max_zoom_level)?;
     let multiple_of_resolution = 2u32.pow(zoom_level);
 
-    let expected_number_of_tiles_at_zoom_level = {
-        calculate_tiles_at_zoom_level(
-            initialized_operator.result_descriptor(),
-            &tiling_specification,
-            zoom_level,
-        )
-    };
+    // let expected_number_of_tiles_at_zoom_level = {
+    //     calculate_tiles_at_zoom_level(
+    //         initialized_operator.result_descriptor(),
+    //         &tiling_specification,
+    //         zoom_level,
+    //     )
+    // };
+    let (expected_number_of_tiles_at_zoom_level, _) = calculate_tiles_for_zoom_level(
+        initialized_operator.result_descriptor(),
+        &tiling_specification,
+        zoom_level,
+    );
 
     query.check_inside_bounds(expected_number_of_tiles_at_zoom_level)?;
 
@@ -409,6 +414,15 @@ pub async fn tile<C: ApplicationContext>(
         multiple_of_resolution,
     )
     .await?;
+
+    debug_assert_eq!(
+        calculate_actual_number_of_tiles_at_zoom_level(
+            &initialized_operator
+                .result_descriptor()
+                .tiling_grid_definition(tiling_specification)
+        ),
+        expected_number_of_tiles_at_zoom_level
+    );
 
     #[cfg(debug_assertions)]
     assert_multiple_of_original_resolution(
@@ -427,20 +441,7 @@ pub async fn tile<C: ApplicationContext>(
         .spatial_grid
         .tiling_grid_definition(tiling_specification);
 
-    let mut query_rect = calculate_query_rectangle(
-        &query,
-        &tiling_spatial_grid_definition,
-        // initialized_operator.result_descriptor(),
-        // tiling_specification,
-    )?;
-
-    adjust_tile_grid_bbox_if_more_tiles_than_expected(
-        query_rect.spatial_bounds_mut(),
-        expected_number_of_tiles_at_zoom_level,
-        &tiling_spatial_grid_definition,
-        &tiling_specification,
-        zoom_level,
-    )?;
+    let query_rect = calculate_query_rectangle(&query, &tiling_spatial_grid_definition)?;
 
     let (processor, query_ctx) =
         create_query_processor_and_query_context(&layer, &initialized_operator, &ctx).await?;
@@ -489,78 +490,6 @@ fn calculate_query_rectangle(
         query.time_interval,
         BandSelection::first(),
     ))
-}
-
-async fn raster_operator_in_fitting_resolution<C: SessionContext>(
-    initialized_operator: Box<dyn InitializedRasterOperator>,
-    execution_context: &C::ExecutionContext,
-    multiple_of_resolution: u32,
-) -> OgcApiResult<Box<dyn InitializedRasterOperator>> {
-    if multiple_of_resolution <= 1 {
-        return Ok(initialized_operator);
-    }
-
-    let new_resolution = initialized_operator
-        .result_descriptor()
-        .spatial_grid
-        .spatial_resolution()
-        * f64::from(multiple_of_resolution);
-
-    initialized_operator
-        .optimize_and_reinitialize(new_resolution, execution_context)
-        .await
-        .boxed_context(error::InitializingProcessingGraph)
-}
-
-/// Adjusts the tile grid bounding box if the actual number of tiles at the requested zoom level is greater
-/// than the expected number of tiles at that zoom level.
-///
-/// This means, the data we are looking at is in between two zoom levels of the tiling scheme.
-/// In this case, we adjust the tile grid bounding box to lie in the center of the expected 2 (one axis)
-/// or 4 (two axes) tile grid.
-fn adjust_tile_grid_bbox_if_more_tiles_than_expected(
-    spatial_bounds: &mut GridBoundingBox2D,
-    expected_number_of_tiles_at_zoom_level: GridShape2D,
-    tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
-    tile_size: &TilingSpecification,
-    zoom_level: u32,
-) -> OgcApiResult<()> {
-    let actual_number_of_tiles_at_zoom_level =
-        calculate_actual_number_of_tiles_at_zoom_level(tiling_spatial_grid_definition);
-
-    let is_greater_on_x_axis =
-        actual_number_of_tiles_at_zoom_level.x() > expected_number_of_tiles_at_zoom_level.x();
-    let is_greater_on_y_axis =
-        actual_number_of_tiles_at_zoom_level.y() > expected_number_of_tiles_at_zoom_level.y();
-
-    if !is_greater_on_x_axis && !is_greater_on_y_axis {
-        return Ok(());
-    }
-
-    let shift = GridIdx2D::new([
-        if is_greater_on_y_axis {
-            tile_size.grid_shape().x() as isize / 2 // TODO: validate axis swap
-        } else {
-            0
-        },
-        if is_greater_on_x_axis {
-            tile_size.grid_shape().y() as isize / 2 // TODO: validate axis swap
-        } else {
-            0
-        },
-    ]);
-
-    *spatial_bounds = GridBoundingBox2D::new(
-        spatial_bounds.min_index() + shift,
-        spatial_bounds.max_index() + shift,
-    )
-    .map_err(crate::error::Error::from)?;
-
-    debug!(
-        "Expected {expected_number_of_tiles_at_zoom_level:?} tiles, but got: {actual_number_of_tiles_at_zoom_level:?}. Adjusted tile grid bounding box to {spatial_bounds:?} to match expected number of tiles at zoom level {zoom_level}",
-    );
-
-    Ok(())
 }
 
 fn calculate_actual_number_of_tiles_at_zoom_level(
@@ -702,30 +631,6 @@ fn interval_end_to_time_instance(endpoint: &IntervalDatetime) -> TimeInstance {
         }
         IntervalDatetime::Open => TimeInstance::MAX,
     }
-}
-
-async fn get_initialized_raster_operator<C: SessionContext>(
-    layer: &Layer,
-    execution_context: &C::ExecutionContext,
-) -> OgcApiResult<Box<dyn InitializedRasterOperator>> {
-    let operator = match layer.workflow.operator()? {
-        TypedOperator::Raster(operator) => operator,
-        TypedOperator::Vector(_) => {
-            return Err(OgcApiError::ExpectedRaster {
-                found: "vector".to_string(),
-            });
-        }
-        TypedOperator::Plot(_) => {
-            return Err(OgcApiError::ExpectedRaster {
-                found: "plot".to_string(),
-            });
-        }
-    };
-
-    operator
-        .initialize(WorkflowOperatorPath::initialize_root(), execution_context)
-        .await
-        .boxed_context(error::InitializingProcessingGraph)
 }
 
 async fn create_query_processor_and_query_context<C: SessionContext>(

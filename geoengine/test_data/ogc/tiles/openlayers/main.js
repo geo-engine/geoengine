@@ -90,6 +90,7 @@ async function addWgs84TileLayer(map, sessionToken) {
         },
         wrapX: false, // CRITICAL: Stops OpenLayers from forcing standard world-wrapping math
         tileLoadFunction: tileLoadFunction(sessionToken),
+        interpolate: false,
       }),
     }),
   );
@@ -103,6 +104,7 @@ async function addWgs84TileLayer(map, sessionToken) {
           },
           wrapX: false, // CRITICAL: Stops OpenLayers from forcing standard world-wrapping math
           tileLoadFunction: tileLoadFunction(sessionToken),
+          interpolate: false,
         }),
       }),
     }),
@@ -138,6 +140,7 @@ async function addWebMercatorTileLayer(map, sessionToken) {
         },
         wrapX: false, // CRITICAL: Stops OpenLayers from forcing standard world-wrapping math
         tileLoadFunction: tileLoadFunction(sessionToken),
+        interpolate: false,
       }),
     }),
   );
@@ -151,6 +154,7 @@ async function addWebMercatorTileLayer(map, sessionToken) {
           },
           wrapX: false, // CRITICAL: Stops OpenLayers from forcing standard world-wrapping math
           tileLoadFunction: tileLoadFunction(sessionToken),
+          interpolate: false,
         }),
       }),
     }),

@@ -456,6 +456,7 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
                     datetime: this.time().asRequestString(),
                 },
                 wrapX: false, // wrapping does not work with our implementation
+                interpolate: false, // Stops blurry tiles when zooming in.
                 tileLoadFunction: (olTile, src): void => {
                     (async (): Promise<void> => {
                         try {

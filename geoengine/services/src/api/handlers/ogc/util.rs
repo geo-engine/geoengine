@@ -16,10 +16,14 @@ use crate::{
     workflows::workflow::Workflow,
 };
 use geoengine_datatypes::{
+    error::BoxedResultExt,
     primitives::{AxisAlignedRectangle, SpatialPartition2D},
     spatial_reference::{SpatialReferenceAuthority, SpatialReferenceOption},
 };
-use geoengine_operators::engine::{RasterResultDescriptor, TypedResultDescriptor};
+use geoengine_operators::engine::{
+    InitializedRasterOperator, RasterResultDescriptor, TypedOperator, TypedResultDescriptor,
+    WorkflowOperatorPath,
+};
 use ogcapi_types::common::{Authority, Bbox as OgcBbox, Crs, Datetime as OgcDatetime, Link};
 use serde::{Deserialize, de::Error as _};
 use snafu::ResultExt;
@@ -166,4 +170,49 @@ pub async fn load_layer<C: ApplicationContext>(
             data_connector_id,
             layer_id,
         })
+}
+
+pub async fn get_initialized_raster_operator<C: SessionContext>(
+    layer: &Layer,
+    execution_context: &C::ExecutionContext,
+) -> OgcApiResult<Box<dyn InitializedRasterOperator>> {
+    let operator = match layer.workflow.operator()? {
+        TypedOperator::Raster(operator) => operator,
+        TypedOperator::Vector(_) => {
+            return Err(OgcApiError::ExpectedRaster {
+                found: "vector".to_string(),
+            });
+        }
+        TypedOperator::Plot(_) => {
+            return Err(OgcApiError::ExpectedRaster {
+                found: "plot".to_string(),
+            });
+        }
+    };
+
+    operator
+        .initialize(WorkflowOperatorPath::initialize_root(), execution_context)
+        .await
+        .boxed_context(error::InitializingProcessingGraph)
+}
+
+pub async fn raster_operator_in_fitting_resolution<C: SessionContext>(
+    initialized_operator: Box<dyn InitializedRasterOperator>,
+    execution_context: &C::ExecutionContext,
+    multiple_of_resolution: u32,
+) -> OgcApiResult<Box<dyn InitializedRasterOperator>> {
+    if multiple_of_resolution <= 1 {
+        return Ok(initialized_operator);
+    }
+
+    let new_resolution = initialized_operator
+        .result_descriptor()
+        .spatial_grid
+        .spatial_resolution()
+        * f64::from(multiple_of_resolution);
+
+    initialized_operator
+        .optimize_and_reinitialize(new_resolution, execution_context)
+        .await
+        .boxed_context(error::InitializingProcessingGraph)
 }
