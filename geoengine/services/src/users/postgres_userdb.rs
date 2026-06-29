@@ -131,7 +131,6 @@ where
         tx.execute(&stmt, &[&user_id, &Role::anonymous_role_id()])
             .await?;
 
-        // Short-circuit if a fixed session ID is configured, e.g. for testing purposes
         // Normal mode, a new session ID is generated for each anonymous session
         let session_id = SessionId::new();
 
