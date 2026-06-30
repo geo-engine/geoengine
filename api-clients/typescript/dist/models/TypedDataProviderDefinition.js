@@ -27,6 +27,7 @@ const GfbioCollectionsDataProviderDefinition_1 = require("./GfbioCollectionsData
 const NetCdfCfDataProviderDefinition_1 = require("./NetCdfCfDataProviderDefinition");
 const PangaeaDataProviderDefinition_1 = require("./PangaeaDataProviderDefinition");
 const SentinelS2L2ACogsProviderDefinition_1 = require("./SentinelS2L2ACogsProviderDefinition");
+const StacDataProviderDefinition_1 = require("./StacDataProviderDefinition");
 const WildliveDataConnectorDefinition_1 = require("./WildliveDataConnectorDefinition");
 function TypedDataProviderDefinitionFromJSON(json) {
     return TypedDataProviderDefinitionFromJSONTyped(json, false);
@@ -58,6 +59,8 @@ function TypedDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, (0, PangaeaDataProviderDefinition_1.PangaeaDataProviderDefinitionFromJSONTyped)(json, true), { type: 'Pangaea' });
         case 'SentinelS2L2ACogs':
             return Object.assign({}, (0, SentinelS2L2ACogsProviderDefinition_1.SentinelS2L2ACogsProviderDefinitionFromJSONTyped)(json, true), { type: 'SentinelS2L2ACogs' });
+        case 'StacProviderDefinition':
+            return Object.assign({}, (0, StacDataProviderDefinition_1.StacDataProviderDefinitionFromJSONTyped)(json, true), { type: 'StacProviderDefinition' });
         case 'WildLIVE!':
             return Object.assign({}, (0, WildliveDataConnectorDefinition_1.WildliveDataConnectorDefinitionFromJSONTyped)(json, true), { type: 'WildLIVE!' });
         default:
@@ -94,6 +97,8 @@ function TypedDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator = fal
             return Object.assign({}, (0, PangaeaDataProviderDefinition_1.PangaeaDataProviderDefinitionToJSON)(value), { type: 'Pangaea' });
         case 'SentinelS2L2ACogs':
             return Object.assign({}, (0, SentinelS2L2ACogsProviderDefinition_1.SentinelS2L2ACogsProviderDefinitionToJSON)(value), { type: 'SentinelS2L2ACogs' });
+        case 'StacProviderDefinition':
+            return Object.assign({}, (0, StacDataProviderDefinition_1.StacDataProviderDefinitionToJSON)(value), { type: 'StacProviderDefinition' });
         case 'WildLIVE!':
             return Object.assign({}, (0, WildliveDataConnectorDefinition_1.WildliveDataConnectorDefinitionToJSON)(value), { type: 'WildLIVE!' });
         default:

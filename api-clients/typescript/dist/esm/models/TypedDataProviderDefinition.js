@@ -21,6 +21,7 @@ import { GfbioCollectionsDataProviderDefinitionFromJSONTyped, GfbioCollectionsDa
 import { NetCdfCfDataProviderDefinitionFromJSONTyped, NetCdfCfDataProviderDefinitionToJSON, } from './NetCdfCfDataProviderDefinition';
 import { PangaeaDataProviderDefinitionFromJSONTyped, PangaeaDataProviderDefinitionToJSON, } from './PangaeaDataProviderDefinition';
 import { SentinelS2L2ACogsProviderDefinitionFromJSONTyped, SentinelS2L2ACogsProviderDefinitionToJSON, } from './SentinelS2L2ACogsProviderDefinition';
+import { StacDataProviderDefinitionFromJSONTyped, StacDataProviderDefinitionToJSON, } from './StacDataProviderDefinition';
 import { WildliveDataConnectorDefinitionFromJSONTyped, WildliveDataConnectorDefinitionToJSON, } from './WildliveDataConnectorDefinition';
 export function TypedDataProviderDefinitionFromJSON(json) {
     return TypedDataProviderDefinitionFromJSONTyped(json, false);
@@ -52,6 +53,8 @@ export function TypedDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminat
             return Object.assign({}, PangaeaDataProviderDefinitionFromJSONTyped(json, true), { type: 'Pangaea' });
         case 'SentinelS2L2ACogs':
             return Object.assign({}, SentinelS2L2ACogsProviderDefinitionFromJSONTyped(json, true), { type: 'SentinelS2L2ACogs' });
+        case 'StacProviderDefinition':
+            return Object.assign({}, StacDataProviderDefinitionFromJSONTyped(json, true), { type: 'StacProviderDefinition' });
         case 'WildLIVE!':
             return Object.assign({}, WildliveDataConnectorDefinitionFromJSONTyped(json, true), { type: 'WildLIVE!' });
         default:
@@ -88,6 +91,8 @@ export function TypedDataProviderDefinitionToJSONTyped(value, ignoreDiscriminato
             return Object.assign({}, PangaeaDataProviderDefinitionToJSON(value), { type: 'Pangaea' });
         case 'SentinelS2L2ACogs':
             return Object.assign({}, SentinelS2L2ACogsProviderDefinitionToJSON(value), { type: 'SentinelS2L2ACogs' });
+        case 'StacProviderDefinition':
+            return Object.assign({}, StacDataProviderDefinitionToJSON(value), { type: 'StacProviderDefinition' });
         case 'WildLIVE!':
             return Object.assign({}, WildliveDataConnectorDefinitionToJSON(value), { type: 'WildLIVE!' });
         default:

@@ -47,7 +47,8 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoTemporalSlice,
-    GdalLoadingInfoTemporalSliceIterator, GdalSource, GdalSourceParameters, OgrSource,
+    GdalLoadingInfoTemporalSliceIterator, GdalSource, GdalSourceParameters,
+    MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, OgrSource,
     OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
     OgrSourceErrorSpec, OgrSourceParameters, OgrSourceTimeFormat,
 };
@@ -781,6 +782,30 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 expected: "SingleRasterFile".to_string(),
             }),
         }
+    }
+}
+
+#[async_trait::async_trait]
+impl
+    MetaDataProvider<
+        MultiBandGdalLoadingInfo,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    > for ArunaDataProvider
+{
+    async fn meta_data(
+        &self,
+        _id: &geoengine_datatypes::dataset::DataId,
+    ) -> geoengine_operators::util::Result<
+        Box<
+            dyn MetaData<
+                    MultiBandGdalLoadingInfo,
+                    RasterResultDescriptor,
+                    MultiBandGdalLoadingInfoQueryRectangle,
+                >,
+        >,
+    > {
+        Err(geoengine_operators::error::Error::NotYetImplemented)
     }
 }
 

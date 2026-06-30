@@ -9,7 +9,6 @@ import {
     Validators,
 } from '@angular/forms';
 import {
-    WildliveDataConnectorDefinition,
     TypedDataProviderDefinition,
     instanceOfWildliveDataConnectorDefinition,
     WildliveDataConnectorDefinitionTypeEnum,
@@ -41,12 +40,6 @@ interface WildLiveForm {
     priority: FormControl<number | undefined>;
 }
 type WildLiveFormRaw = ReturnType<WildLiveComponent['form']['getRawValue']>;
-
-interface OidcAuthToken {
-    code: string;
-    pkceVerifier: string;
-    redirectUri: string;
-}
 
 @Component({
     selector: 'geoengine-manager-wildlive-editor-form',
@@ -248,24 +241,23 @@ export class WildLiveComponent implements ControlValueAccessor {
                 code,
                 pkceVerifier: verifier,
                 redirectUri,
-            } as OidcAuthToken),
+            }),
             expiryDate: new Date(), // TODO: set real expiry date
             user: '', // TODO: set real user
         });
     }
 }
 
-const definitionFromForm = (form: WildLiveFormRaw): TypedDataProviderDefinition =>
-    ({
-        type: WildliveDataConnectorDefinitionTypeEnum.WildLive,
-        id: form.id,
-        name: form.name,
-        description: form.description,
-        refreshToken: form.auth?.refreshToken,
-        expiryDate: form.auth?.expiryDate,
-        user: form.auth?.user,
-        priority: form.priority,
-    }) as WildliveDataConnectorDefinition;
+const definitionFromForm = (form: WildLiveFormRaw): TypedDataProviderDefinition => ({
+    type: WildliveDataConnectorDefinitionTypeEnum.WildLive,
+    id: form.id,
+    name: form.name,
+    description: form.description,
+    refreshToken: form.auth?.refreshToken,
+    expiryDate: form.auth?.expiryDate,
+    user: form.auth?.user,
+    priority: form.priority,
+});
 
 const generatePkcePair = async (): Promise<{verifier: string; challenge: string}> => {
     const array = crypto.getRandomValues(new Uint8Array(32));

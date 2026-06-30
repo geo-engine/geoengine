@@ -17,8 +17,6 @@ import {LayerCollectionSearch} from '../layer-collection.model';
 import {
     CollectionItem as LayerCollectionItemDict,
     ProviderLayerCollectionId as ProviderLayerCollectionIdDict,
-    LayerListing as LayerCollectionLayerDict,
-    LayerCollectionListing as LayerCollectionListingDict,
     LayerListing,
     LayerCollectionListing,
 } from '@geoengine/api-client';
@@ -139,10 +137,10 @@ export class LayerCollectionListComponent implements OnChanges {
 
     trackById(_index: number, item: LayerCollectionItemDict): string {
         if (item.type === 'collection') {
-            const collection = item as LayerCollectionListingDict;
+            const collection = item;
             return collection.id.providerId + collection.id.collectionId;
         } else if (item.type === 'layer') {
-            const layer = item as LayerCollectionLayerDict;
+            const layer = item;
             return layer.id.providerId + layer.id.layerId;
         }
 

@@ -45,9 +45,9 @@ use geoengine_operators::{
     mock::MockDatasetDataSourceLoadingInfo,
     processing::{VectorExpression, VectorExpressionParams},
     source::{
-        GdalLoadingInfo, OgrSource, OgrSourceColumnSpec, OgrSourceDataset,
-        OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceParameters,
-        OgrSourceTimeFormat,
+        GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
+        OgrSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
+        OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceParameters, OgrSourceTimeFormat,
     },
 };
 use oauth2::AccessToken;
@@ -618,6 +618,31 @@ impl<D: GeoEngineDb> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, R
         _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+        geoengine_operators::error::Error,
+    > {
+        Err(geoengine_operators::error::Error::NotYetImplemented)
+    }
+}
+
+#[async_trait]
+impl<D: GeoEngineDb>
+    MetaDataProvider<
+        MultiBandGdalLoadingInfo,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    > for WildliveDataConnector<D>
+{
+    async fn meta_data(
+        &self,
+        _id: &geoengine_datatypes::dataset::DataId,
+    ) -> Result<
+        Box<
+            dyn MetaData<
+                    MultiBandGdalLoadingInfo,
+                    RasterResultDescriptor,
+                    MultiBandGdalLoadingInfoQueryRectangle,
+                >,
+        >,
         geoengine_operators::error::Error,
     > {
         Err(geoengine_operators::error::Error::NotYetImplemented)

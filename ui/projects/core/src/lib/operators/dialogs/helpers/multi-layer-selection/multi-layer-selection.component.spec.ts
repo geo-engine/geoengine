@@ -24,8 +24,6 @@ import {
     ResultTypes,
     UnitlessMeasurement,
 } from '@geoengine/common';
-import {RasterBandDescriptor} from '@geoengine/api-client';
-
 describe('MultiLayerSelectionComponent', () => {
     let component: MultiLayerSelectionComponent;
     let fixture: ComponentFixture<MultiLayerSelectionComponent>;
@@ -119,9 +117,6 @@ describe('MultiLayerSelectionComponent', () => {
         projectServiceSpy = {
             getLayerStream: vi.fn().mockName('ProjectService.getLayerStream'),
             getLayerMetadata: vi.fn().mockName('ProjectService.getLayerMetadata'),
-        } as {
-            getLayerStream: Mock;
-            getLayerMetadata: Mock;
         };
 
         /** ProjectService returns Mock Layers **/
@@ -131,7 +126,7 @@ describe('MultiLayerSelectionComponent', () => {
                 new RasterLayerMetadata(
                     RasterDataTypes.Byte,
                     WGS_84.spatialReference,
-                    [{name: 'band', measurement: new UnitlessMeasurement().toDict()} as RasterBandDescriptor],
+                    [{name: 'band', measurement: new UnitlessMeasurement().toDict()}],
                     new SpatialGridDescriptor(
                         new SpatialGridDefinition(
                             new GeoTransform(new Coordinate2D([0.0, 0.0]), 1.0, -1.0),

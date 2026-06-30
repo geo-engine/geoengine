@@ -20,7 +20,6 @@ import {DataSelectionService, DataRange} from '../data-selection.service';
 import {ActivatedRoute} from '@angular/router';
 import {countryDatasetName} from '../country-selector/country-data.model';
 import {
-    ExpressionDict,
     LayersService,
     MeanRasterPixelValuesOverTimeDict,
     NotificationService,
@@ -451,7 +450,7 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
                                 },
                             } as RasterStackerDict,
                         },
-                    } as ExpressionDict,
+                    },
                 },
             } as MeanRasterPixelValuesOverTimeDict,
         });

@@ -874,6 +874,39 @@ CREATE TYPE "WildliveDataConnectorDefinition" AS (
     auth "WildliveDataConnectorAuth"
 );
 
+CREATE TYPE "StacProviderS3Config" AS (
+    endpoint text,
+    access_key text,
+    secret_key text
+);
+
+CREATE TYPE "StacProviderDatasetBand" AS (
+    asset_title text,
+    band_name text
+);
+
+CREATE TYPE "StacProviderDataset" AS (
+    "name" text,
+    description text,
+    data_type "RasterDataType",
+    resolution "SpatialResolution",
+    projection "SpatialReference",
+    spatial_grid "SpatialGridDescriptor",
+    bands "StacProviderDatasetBand" []
+);
+
+CREATE TYPE "StacDataProviderDefinition" AS (
+    "name" text,
+    id uuid,
+    description text,
+    priority smallint,
+    api_url text,
+    collection_name text,
+    s3_config "StacProviderS3Config",
+    time_dimension "TimeDimension",
+    datasets "StacProviderDataset" []
+);
+
 CREATE TYPE "DataProviderDefinition" AS (
     -- one of
     aruna_data_provider_definition "ArunaDataProviderDefinition",
@@ -891,7 +924,8 @@ CREATE TYPE "DataProviderDefinition" AS (
     "SentinelS2L2ACogsProviderDefinition",
     copernicus_dataspace_provider_definition
     "CopernicusDataspaceDataProviderDefinition",
-    wildlive_data_connector_definition "WildliveDataConnectorDefinition"
+    wildlive_data_connector_definition "WildliveDataConnectorDefinition",
+    stac_data_provider_definition "StacDataProviderDefinition"
 );
 
 CREATE TABLE layer_providers (
