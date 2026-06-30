@@ -20,8 +20,7 @@ import {ColorTableEditorComponent} from '../../colors/color-table-editor/color-t
 import {UUID} from '../../datasets/dataset.model';
 import {VegaChartData} from '../../plots/plot.model';
 import {WorkflowsService} from '../../workflows/workflows.service';
-import {HistogramDict, HistogramParams} from '../../operators/operator.model';
-import {Workflow} from '@geoengine/api-client';
+import {HistogramDict} from '../../operators/operator.model';
 import {PlotsService} from '../../plots/plots.service';
 import {SymbologyQueryParams} from '../symbology.model';
 import {PercentileBreakpointSelectorComponent} from '../../colors/percentile-breakpoint-selector/percentile-breakpoint-selector.component';
@@ -302,12 +301,12 @@ export class RasterGradientSymbologyEditorComponent {
                         },
                         bounds: 'data',
                         interactive: true,
-                    } as HistogramParams,
+                    },
                     sources: {
                         source: workflow.operator,
                     },
                 } as HistogramDict,
-            } as Workflow),
+            }),
         );
     }
 }

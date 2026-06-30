@@ -175,7 +175,7 @@ export class RasterizationComponent implements OnDestroy {
                                 vector: points,
                             },
                         } as RasterizationDict,
-                    } as WorkflowDict;
+                    };
                     return this.projectService.registerWorkflow(workflow);
                 }),
                 mergeMap((workflowId: UUID) => {
@@ -226,6 +226,7 @@ export class RasterizationComponent implements OnDestroy {
         let rasterization = this.form.controls.rasterization;
 
         if (this.selected.value === 0) {
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- needed for TS to narrow the union type
             rasterization = this.form.controls.rasterization as FormGroup<GridForm>;
 
             return (params = {
@@ -243,6 +244,7 @@ export class RasterizationComponent implements OnDestroy {
         }
 
         if (this.selected.value === 1) {
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- needed for TS to narrow the union type
             rasterization = this.form.controls.rasterization as FormGroup<DensityForm>;
 
             return (params = {

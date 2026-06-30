@@ -11,7 +11,7 @@ use crate::machine_learning::MlModelLoadingInfo;
 use crate::meta::quota::{QuotaChecker, QuotaTracking};
 use crate::meta::wrapper::InitializedOperatorWrapper;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
-use crate::source::gdal_source::{GdalProcessPool, GdalProcessPoolAccess};
+use crate::source::gdal_in::{GdalProcessPool, GdalProcessPoolAccess};
 use crate::source::{
     GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
     OgrSourceDataset,
@@ -119,7 +119,7 @@ impl TestDefault for MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification: TilingSpecification::test_default(),
-            gdal_process_pool: GdalProcessPool::new(8, 4, 2, None),
+            gdal_process_pool: GdalProcessPool::new(2, 2, 2, None),
         }
     }
 }
@@ -135,7 +135,7 @@ impl MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification,
-            gdal_process_pool: GdalProcessPool::new_with_tokio_handle(handle, 8, 4, 2, None),
+            gdal_process_pool: GdalProcessPool::new_with_tokio_handle(handle, 2, 2, 2, None),
         }
     }
 
@@ -146,7 +146,7 @@ impl MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification,
-            gdal_process_pool: GdalProcessPool::new(8, 4, 2, None), // TODO: GdalProcessPool defaults!
+            gdal_process_pool: GdalProcessPool::new(2, 2, 2, None), // TODO: GdalProcessPool defaults!
         }
     }
 
@@ -160,7 +160,7 @@ impl MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification,
-            gdal_process_pool: GdalProcessPool::new(8, 4, 2, None),
+            gdal_process_pool: GdalProcessPool::new(2, 2, 2, None),
         }
     }
 

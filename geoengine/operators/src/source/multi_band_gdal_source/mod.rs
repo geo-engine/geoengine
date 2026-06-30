@@ -2,18 +2,10 @@ use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryContext, QueryProcessor,
     SpatialGridDescriptor, WorkflowOperatorPath,
 };
+use crate::error::Error;
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
-use crate::source::gdal_source::reader::{
-    GdalReadAdvise as PoolGdalReadAdvise, GdalReadWindow as PoolGdalReadWindow,
-};
-use crate::source::gdal_source::{
-    GdalPoolWorkerInstance, GdalProcessPoolError, process::GdalErrorKind,
-};
-use crate::source::multi_band_gdal_source::reader::GdalReadAdvise;
-use crate::source::{
-    FileNotFoundHandling, GdalDatasetParameters, IpcChannelMessage, IpcChannelMessagePayload,
-    IpcProcessError,
-};
+use crate::source::GdalDatasetParameters;
+use crate::source::multi_band_gdal_source::reader::GdalPoolReader;
 use crate::{
     engine::{
         InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
@@ -23,8 +15,8 @@ use crate::{
 };
 use async_trait::async_trait;
 pub use error::GdalSourceError;
+use futures::TryFutureExt;
 use futures::stream::{self, BoxStream, StreamExt};
-use gdal::raster::GdalType;
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
@@ -32,15 +24,13 @@ use geoengine_datatypes::{
         TimeInterval, find_next_best_overview_level,
     },
     raster::{
-        ChangeGridBounds, EmptyGrid, GeoTransform, GridBlit, GridBoundingBox2D, GridIdx2D,
-        GridOrEmpty, GridShape2D, MaskedGrid, Pixel, RasterDataType, RasterProperties,
-        RasterTile2D, SpatialGridDefinition, TileInformation, TilingSpatialGridDefinition,
-        TilingSpecification,
+        GeoTransform, GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D,
+        SpatialGridDefinition, TilingSpatialGridDefinition, TilingSpecification,
     },
 };
 pub use loading_info::{GdalMultiBand, MultiBandGdalLoadingInfo, TileFile};
 use num::{FromPrimitive, integer::div_ceil, integer::div_floor};
-use reader::{GdalReaderMode, GridAndProperties, OverviewReaderState, ReaderState};
+use reader_mode::{GdalReaderMode, OverviewReaderState, ReaderState};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
@@ -50,6 +40,7 @@ use tracing::{debug, trace};
 mod error;
 mod loading_info;
 mod reader;
+mod reader_mode;
 
 /// Parameters for the GDAL Source Operator
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -158,170 +149,6 @@ where
     pub _phantom_data: PhantomData<T>,
 }
 
-struct GdalRasterLoader {}
-
-impl GdalRasterLoader {
-    /// Loads a tile using the separate process and the provided parameters and read advise.
-    /// This is the method where the source operator attaches to the process pool.
-    /// The method sends a message to the process pool and waits for the response. The response is then converted to a `RasterTile2D` and returned.
-    /// The method also handles the case where the file is not found and the `file_not_found_handling` is set to `NoData` by returning a tile filled with nodata values.
-    /// # Errors
-    /// Returns a `GdalSourceError` if the process returns an error, or if the response cannot be converted to a `RasterTile2D`.
-    ///
-    /// # Panics
-    /// Panics if the response from the process is not in the expected format, or if the grid blitting fails (which should not happen if the bounds are correct).
-    pub async fn load_tile_data_process<T: Pixel + GdalType + FromPrimitive>(
-        dataset_params: GdalDatasetParameters,
-        local_read_advise: GdalReadAdvise,
-        gdal_worker: GdalPoolWorkerInstance,
-    ) -> Result<Option<GridAndProperties<T, GridBoundingBox2D>>, GdalSourceError> {
-        let file_not_found_as_no_data =
-            dataset_params.file_not_found_handling == FileNotFoundHandling::NoData;
-
-        let (start_x, start_y) = local_read_advise.gdal_read_widow.gdal_window_start();
-        let (size_x, size_y) = local_read_advise.gdal_read_widow.gdal_window_size();
-        let read_advise = PoolGdalReadAdvise {
-            gdal_read_widow: PoolGdalReadWindow::new(
-                GridIdx2D::new_y_x(start_y, start_x),
-                GridShape2D::new_2d(size_y, size_x),
-            ),
-            read_window_bounds: local_read_advise.read_window_bounds,
-            bounds_of_target: local_read_advise.bounds_of_target,
-            flip_y: local_read_advise.flip_y,
-        };
-
-        let message = IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
-            dataset_params,
-            read_advise,
-            data_type: T::TYPE,
-            span_context: Default::default(),
-        });
-
-        let res: Result<_, _> = gdal_worker.read_data(message).await;
-
-        let res = match res {
-            Ok(t) => {
-                // Here we need to handle edges!
-                // First, convert response to GridAndProperties
-                let super::gdal_source::reader::GridAndProperties { grid, properties }: super::gdal_source::reader::GridAndProperties<
-                    T,
-                    GridBoundingBox2D,
-                > = t.into();
-                // Second, flip y-axis if necessary
-                let grid = if read_advise.flip_y {
-                    match grid {
-                        GridOrEmpty::Grid(MaskedGrid {
-                            inner_grid,
-                            validity_mask,
-                        }) => GridOrEmpty::new_grid(
-                            MaskedGrid::new(
-                                inner_grid.reversed_y_axis_grid(),
-                                validity_mask.reversed_y_axis_grid(),
-                            )
-                            .expect("The bounds of the input grid should be the same after reversing the y axis, so this should never fail"),
-                        ),
-                        GridOrEmpty::Empty(e) => GridOrEmpty::new_empty(e),
-                    }
-                } else {
-                    grid
-                };
-
-                Ok(Some(GridAndProperties { grid, properties }))
-            }
-            Err(GdalProcessPoolError::IpcProcessError {
-                source:
-                    IpcProcessError::GdalError {
-                        kind: GdalErrorKind::FileNotFound,
-                        details: _details,
-                    },
-            }) if file_not_found_as_no_data => Ok(None),
-            Err(other_err) => Err(other_err),
-        }?;
-
-        Ok(res)
-    }
-
-    async fn load_tile_grid_props<T: Pixel + GdalType + FromPrimitive>(
-        dataset_params: GdalDatasetParameters,
-        reader_mode: GdalReaderMode,
-        tile_information: TileInformation,
-        gdal_worker: GdalPoolWorkerInstance,
-    ) -> Result<Option<GridAndProperties<T>>> {
-        let ds_spatial_grid = dataset_params.spatial_grid_definition();
-        let tile_spatial_grid = tile_information.spatial_grid_definition();
-        let Some(local_read_advise) =
-            reader_mode.tiling_to_dataset_read_advise(&ds_spatial_grid, &tile_spatial_grid)
-        else {
-            trace!(
-                "no read advise returned for tile {:?}, skipping file.",
-                tile_information.global_tile_position,
-            );
-            return Ok(None);
-        };
-
-        let file_tile =
-            Self::load_tile_data_process::<T>(dataset_params, local_read_advise, gdal_worker)
-                .await?;
-
-        Ok(file_tile)
-    }
-
-    async fn load_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
-        loading_info: MultiBandGdalLoadingInfo,
-        reader_mode: GdalReaderMode,
-        tile_information: TileInformation,
-        time: TimeInterval,
-        band: u32,
-        gdal_worker: GdalPoolWorkerInstance,
-    ) -> Result<RasterTile2D<T>> {
-        debug!(
-            "loading tile {:?} for time: {}, band: {band}",
-            tile_information.global_tile_position.inner(),
-            time.to_string()
-        );
-        let tile_files = loading_info.tile_files(time, tile_information, band);
-
-        debug!(
-            "tile_files: {}",
-            tile_files
-                .iter()
-                .map(|tf| tf.file_path.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-
-        let mut tile_raster: GridOrEmpty<GridBoundingBox2D, T> =
-            GridOrEmpty::from(EmptyGrid::new(tile_information.global_pixel_bounds()));
-
-        let mut properties = RasterProperties::default();
-        let cache_hint = loading_info.cache_hint();
-
-        for dataset_params in tile_files {
-            if let Some(file_tile) = Self::load_tile_grid_props(
-                dataset_params,
-                reader_mode,
-                tile_information,
-                gdal_worker.clone(),
-            )
-            .await?
-            {
-                tile_raster.grid_blit_from(&file_tile.grid);
-                properties = file_tile.properties;
-            }
-        }
-
-        Ok(RasterTile2D::new_with_properties(
-            time,
-            tile_information.global_tile_position,
-            band,
-            tile_information.global_geo_transform,
-            tile_raster.unbounded(),
-            properties,
-            cache_hint,
-        ))
-    }
-}
-
 impl<T> GdalSourceProcessor<T> where T: gdal::raster::GdalType + Pixel {}
 
 #[async_trait]
@@ -385,7 +212,7 @@ where
             }
         };
 
-        let loading_info_start = Instant::now();
+        let loading_info_start = tracing::enabled!(tracing::Level::TRACE).then(Instant::now);
         let loading_info = self
             .meta_data
             .loading_info(raster_query_rectangle_to_loading_info_query_rectangle(
@@ -394,8 +221,10 @@ where
                 true,
             ))
             .await?;
-        let loading_info_ms = loading_info_start.elapsed().as_millis();
-        debug!(loading_info_ms, "loading_info timing");
+        if let Some(loading_info_start) = loading_info_start {
+            let loading_info_ms = loading_info_start.elapsed().as_millis();
+            trace!(loading_info_ms, "loading_info timing");
+        }
 
         let gdal_worker = ctx.get_gdal_worker();
         let time_steps = loading_info.time_steps().to_vec();
@@ -420,7 +249,7 @@ where
 
         let stream = stream::iter(time_tile_band_iter)
             .map(move |(time_interval, tile_info, band_idx)| {
-                GdalRasterLoader::load_tile_from_files_async::<P>(
+                GdalPoolReader::load_tile_from_files_async::<P>(
                     loading_info.clone(),
                     reader_mode,
                     tile_info,
@@ -428,6 +257,7 @@ where
                     band_idx,
                     gdal_worker.clone(),
                 )
+                .map_err(Error::from)
             })
             .buffered(16) // TODO: make configurable
             .boxed();
@@ -818,7 +648,9 @@ mod tests {
     use geoengine_datatypes::primitives::{
         CacheHint, Measurement, SpatialPartition2D, TimeInstance,
     };
-    use geoengine_datatypes::raster::{GridBounds, GridIdx2D, GridSize};
+    use geoengine_datatypes::raster::{
+        GridBoundingBox2D, GridBounds, GridIdx2D, GridSize, RasterDataType,
+    };
     use geoengine_datatypes::raster::{RasterPropertiesEntryType, RasterPropertiesKey};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
     use geoengine_datatypes::spatial_reference::SpatialReference;

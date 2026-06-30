@@ -5,13 +5,11 @@ import {DataSelectionService} from '../data-selection.service';
 import {BehaviorSubject, combineLatest, Observable, of} from 'rxjs';
 import {COUNTRY_METADATA, countryDatasetName} from './country-data.model';
 import {
-    ExpressionDict,
     HistogramDict,
     HistogramParams,
     PolygonSymbology,
     RasterDataTypes,
     RasterLayer,
-    RasterStackerDict,
     ReprojectionDict,
     UserService,
     VectorLayer,
@@ -230,9 +228,9 @@ export class AnalysisComponent {
                                                     countryRasterWorkflow,
                                                 ],
                                             },
-                                        } as RasterStackerDict,
+                                        },
                                     },
-                                } as ExpressionDict,
+                                },
                             },
                         } as HistogramDict,
                     }),

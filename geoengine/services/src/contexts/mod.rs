@@ -27,7 +27,7 @@ use geoengine_operators::machine_learning::MlModelLoadingInfo;
 use geoengine_operators::meta::quota::{QuotaCheck, QuotaChecker, QuotaTracking};
 use geoengine_operators::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
-use geoengine_operators::source::gdal_source::{GdalProcessPool, GdalProcessPoolAccess};
+use geoengine_operators::source::gdal_in::{GdalProcessPool, GdalProcessPoolAccess};
 use geoengine_operators::source::{
     GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
     OgrSourceDataset,

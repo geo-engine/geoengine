@@ -14,7 +14,6 @@ import {ProjectService} from '../../../project/project.service';
 import {map, mergeMap, tap} from 'rxjs/operators';
 import {
     ClassHistogramDict,
-    ClassHistogramParams,
     ClassificationMeasurement,
     Layer,
     NotificationService,
@@ -185,7 +184,7 @@ export class ClassHistogramOperatorComponent implements AfterViewInit, OnDestroy
                             type: 'ClassHistogram',
                             params: {
                                 columnName: attributeName,
-                            } as ClassHistogramParams,
+                            },
                             sources: {
                                 source: inputWorkflow.operator,
                             },

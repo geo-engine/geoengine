@@ -3,11 +3,12 @@ use std::{fmt::Display, str::FromStr};
 
 use gdal::raster::GdalType;
 use geoengine_datatypes::raster::Pixel;
-use geoengine_operators::source::{
-    GdalDatasetCache, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
+use geoengine_operators::source::gdal_in::process_common::{
+    GdalIpcBytePayload, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
     IpcProcessRasterResult,
-    gdal_source::{GdalRasterLoader, process::GdalIpcBytePayload},
-    setup_client,
+};
+use geoengine_operators::source::gdal_in::process_impl::{
+    GdalDatasetHolder, GdalHandling, setup_client,
 };
 use ipc_channel::ipc::IpcSender;
 use num::FromPrimitive;
@@ -16,8 +17,6 @@ use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::trace::SdkTracerProvider;
-
-use tracing::Level;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::prelude::*;
@@ -25,6 +24,43 @@ use tracing_subscriber::prelude::*;
 fn exit_with_error(msg: impl Display) -> ! {
     tracing::error!("Error: {msg}");
     std::process::exit(1);
+}
+
+#[derive(Clone)]
+#[allow(clippy::upper_case_acronyms)]
+enum Level {
+    TRACE,
+    DEBUG,
+    INFO,
+    WARN,
+    ERROR,
+}
+
+impl FromStr for Level {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Trace" | "trace" => Ok(Level::TRACE),
+            "Debug" | "debug" => Ok(Level::DEBUG),
+            "Info" | "info" => Ok(Level::INFO),
+            "Warn" | "warn" => Ok(Level::WARN),
+            "Error" | "error" => Ok(Level::ERROR),
+            _ => Err("unknown level".to_string()),
+        }
+    }
+}
+
+impl From<Level> for tracing_subscriber::filter::LevelFilter {
+    fn from(level: Level) -> Self {
+        match level {
+            Level::TRACE => Self::TRACE,
+            Level::DEBUG => Self::DEBUG,
+            Level::INFO => Self::INFO,
+            Level::WARN => Self::WARN,
+            Level::ERROR => Self::ERROR,
+        }
+    }
 }
 
 type Token = String;
@@ -68,6 +104,7 @@ struct TelemetryGuard {
 /// Builds a target-based filter that shows high-level GDAL worker logs
 /// while suppressing internal noise from OpenTelemetry / gRPC libraries.
 fn make_fmt_filter(level: Level) -> Targets {
+    let level = level; // silence unused_mut warnings
     Targets::new()
         // Our custom spans — show at the configured level (typically DEBUG)
         .with_target("gdalsource-process", level)
@@ -92,6 +129,7 @@ fn make_fmt_filter(level: Level) -> Targets {
 
 /// Filter for the OpenTelemetry layer: only export our high-level spans.
 fn make_otel_filter(level: Level) -> Targets {
+    let level = level; // silence unused_mut warnings
     Targets::new()
         // Our custom GDAL worker spans
         .with_target("gdalsource-process", level)
@@ -135,7 +173,7 @@ fn init_telemetry(level: Level, otlp_endpoint: Option<&str>) -> Option<Telemetry
         Err(e) => {
             tracing::warn!("Failed to create tokio runtime for OTLP exporter: {e}");
             // Initialise the subscriber with just the fmt layer
-            let fmt_filter = make_fmt_filter(level);
+            let fmt_filter = make_fmt_filter(level.clone());
             let fmt_layer = tracing_subscriber::fmt::layer()
                 .with_writer(std::io::stderr)
                 .with_target(true)
@@ -158,7 +196,7 @@ fn init_telemetry(level: Level, otlp_endpoint: Option<&str>) -> Option<Telemetry
         Ok(exporter) => exporter,
         Err(e) => {
             tracing::warn!("Failed to build OTLP span exporter: {e}. Tracing disabled.");
-            let fmt_filter = make_fmt_filter(level);
+            let fmt_filter = make_fmt_filter(level.clone());
             let fmt_layer = tracing_subscriber::fmt::layer()
                 .with_writer(std::io::stderr)
                 .with_target(true)
@@ -189,7 +227,7 @@ fn init_telemetry(level: Level, otlp_endpoint: Option<&str>) -> Option<Telemetry
     let tracer = provider.tracer("Geo Engine GDAL Worker");
     let otel_layer = tracing_opentelemetry::layer()
         .with_tracer(tracer)
-        .with_filter(make_otel_filter(level));
+        .with_filter(make_otel_filter(level.clone()));
 
     let fmt_layer = tracing_subscriber::fmt::layer()
         .with_writer(std::io::stderr)
@@ -257,7 +295,7 @@ fn main() {
 
 fn raster_type_dispatch(
     payload: IpcChannelMessagePayload,
-    dataset_cache: &mut GdalDatasetCache,
+    dataset_cache: &mut GdalDatasetHolder,
     sender: &IpcSender<IpcProcessRasterResult>,
 ) -> Result<(), IpcProcessError> {
     match payload.data_type {
@@ -304,7 +342,7 @@ fn run(token: Token) {
         Err(err) => exit_with_error(err),
     };
 
-    let mut dataset_cache = GdalDatasetCache::new();
+    let mut dataset_cache = GdalDatasetHolder::new();
 
     // Loop runs indefinitely, reusing the process and its GDAL dataset cache
     while let Ok(message) = receiver.recv() {
@@ -327,11 +365,17 @@ fn run(token: Token) {
         // Create a root tracing span that inherits the parent trace context.
         // The `tracing-opentelemetry` bridge will translate this into an
         // OpenTelemetry span whose parent is correctly set.
+        let role = if payload.is_follower {
+            "follower"
+        } else {
+            "leader"
+        };
         let root_span = tracing::info_span!(
             target: "gdalsource-process",
             "gdal.request",
             file_path = %payload.dataset_params.file_path.display(),
             band = payload.dataset_params.rasterband_channel,
+            role,
         );
         let _ = root_span.set_parent(parent_cx);
         let _guard = root_span.enter();
@@ -350,8 +394,9 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
         read_advise,
         data_type: _,
         span_context: _,
+        is_follower: _,
     }: IpcChannelMessagePayload,
-    dataset_cache: &mut GdalDatasetCache,
+    dataset_cache: &mut GdalDatasetHolder,
     sender: &IpcSender<IpcProcessRasterResult>,
 ) -> Result<(), IpcProcessError> {
     // Span for the dataset open + read operation.
@@ -364,12 +409,11 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
     );
     let _read_guard = read_span.enter();
 
-    let gp = GdalRasterLoader::load_tile_data_with_dataset_retry::<T>(
+    let gp = GdalHandling::load_tile_data_with_dataset_retry::<T>(
         dataset_cache,
         &dataset_params,
         read_advise,
-    )
-    .map_err(IpcProcessError::from);
+    );
 
     // Drop the read span guard before sending the result
     drop(_read_guard);

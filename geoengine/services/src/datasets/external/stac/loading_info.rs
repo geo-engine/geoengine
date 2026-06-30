@@ -28,149 +28,10 @@ use stac::Item;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
+use tracing::debug;
 use url::Url;
 
-/// Maximum number of characters to log from a failed STAC API response body.
-const STAC_RESPONSE_BODY_LOG_PREVIEW_LEN: usize = 1_000;
-
 const STAC_QUERY_TIMEOUT_SECS: u64 = 60;
-
-/// Maximum number of retry attempts for STAC API requests.
-const STAC_RETRY_MAX_ATTEMPTS: u32 = 5;
-
-/// Base delay in milliseconds for exponential backoff.
-const STAC_RETRY_BASE_DELAY_MS: u64 = 1_000;
-
-/// Maximum delay in milliseconds between retries.
-const STAC_RETRY_MAX_DELAY_MS: u64 = 30_000;
-
-/// Fraction of the current delay used as random jitter: delay += random(0, delay * JITTER_FRACTION)
-const STAC_RETRY_JITTER_FRACTION: f64 = 0.5;
-
-/// HTTP status codes for which the STAC API request should be retried.
-fn is_stac_retryable_status(status: reqwest::StatusCode) -> bool {
-    status == reqwest::StatusCode::TOO_MANY_REQUESTS // 429
-        || status.is_server_error()                    // 5xx
-}
-
-/// Determine the delay before the next retry, respecting the `Retry-After` header
-/// and falling back to exponential backoff with jitter.
-fn stac_retry_delay(
-    response: &reqwest::Response,
-    attempt: u32,
-) -> Duration {
-    // Prefer the Retry-After header
-    if let Some(retry_after) = response.headers().get(reqwest::header::RETRY_AFTER) {
-        if let Some(secs) = retry_after
-            .to_str()
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-        {
-            let delay = Duration::from_secs(secs);
-            // Cap at max delay
-            return if delay.as_millis() as u64 > STAC_RETRY_MAX_DELAY_MS {
-                Duration::from_millis(STAC_RETRY_MAX_DELAY_MS)
-            } else {
-                delay
-            };
-        }
-    }
-
-    // Exponential backoff: base_delay * 2^attempt + jitter
-    let delay_ms = STAC_RETRY_BASE_DELAY_MS.saturating_mul(1 << attempt);
-    let delay_ms = delay_ms.min(STAC_RETRY_MAX_DELAY_MS);
-
-    let jitter = (delay_ms as f64 * STAC_RETRY_JITTER_FRACTION * rand::random::<f64>()) as u64;
-
-    Duration::from_millis(delay_ms + jitter)
-}
-
-/// Perform a STAC API request with retry logic for transient failures.
-///
-/// Retries on HTTP 429, 5xx, and connection-level errors.
-/// Does **not** retry on JSON decode failures (the body was received successfully).
-async fn stac_request_with_retry(
-    client: &reqwest::Client,
-    build_request: impl Fn(&reqwest::Client) -> reqwest::RequestBuilder,
-) -> geoengine_operators::util::Result<(reqwest::StatusCode, String)> {
-    let mut last_error: Option<Box<dyn std::error::Error + Send + Sync>> = None;
-
-    for attempt in 1..=STAC_RETRY_MAX_ATTEMPTS {
-        // Build and send
-        let response_result = build_request(client).send().await;
-
-        let response = match response_result {
-            Ok(r) => r,
-            Err(e) => {
-                // Connection-level error — retryable
-                tracing::warn!(
-                    "STAC API send failed (attempt {attempt}/{STAC_RETRY_MAX_ATTEMPTS}): {e:?}"
-                );
-                last_error = Some(Box::new(e));
-                let delay = Duration::from_millis(STAC_RETRY_BASE_DELAY_MS);
-                tokio::time::sleep(delay).await;
-                continue;
-            }
-        };
-
-        let status = response.status();
-
-        if status.is_success() {
-            // Read body
-            let body = match response.text().await {
-                Ok(b) => b,
-                Err(e) => {
-                    tracing::warn!(
-                        "STAC API read body failed (attempt {attempt}/{STAC_RETRY_MAX_ATTEMPTS}): {e:?}"
-                    );
-                    last_error = Some(Box::new(e) as Box<dyn std::error::Error + Send + Sync>);
-                    let delay = Duration::from_millis(STAC_RETRY_BASE_DELAY_MS);
-                    tokio::time::sleep(delay).await;
-                    continue;
-                }
-            };
-
-            return Ok((status, body));
-        }
-
-        if is_stac_retryable_status(status) {
-            let delay = stac_retry_delay(&response, attempt);
-            tracing::warn!(
-                "STAC API returned {status} (attempt {attempt}/{STAC_RETRY_MAX_ATTEMPTS}), \
-                 retrying in {delay:?}"
-            );
-            last_error = Some(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("HTTP {status}"),
-            )) as Box<dyn std::error::Error + Send + Sync>);
-            tokio::time::sleep(delay).await;
-            continue;
-        }
-
-        // Non-retryable error — read body for diagnostics and fail immediately
-        let body = response.text().await.unwrap_or_default();
-        let body_preview = &body[..body.len().min(STAC_RESPONSE_BODY_LOG_PREVIEW_LEN)];
-        tracing::warn!(
-            "STAC API returned non-retryable status {status}: body_preview={body_preview}"
-        );
-        return Err(geoengine_operators::error::Error::QueryingProcessorFailed {
-            source: Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("HTTP {status}"),
-            )),
-        });
-    }
-
-    Err(geoengine_operators::error::Error::QueryingProcessorFailed {
-        source: Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!(
-                "STAC API request failed after {STAC_RETRY_MAX_ATTEMPTS} attempts: {:?}",
-                last_error
-            ),
-        )),
-    })
-}
 
 #[derive(Debug, Clone)]
 struct StacMultiBandMetaData {
@@ -179,8 +40,6 @@ struct StacMultiBandMetaData {
     s3_config: Option<StacProviderS3Config>,
     time_dimension: TimeDimension,
     dataset: StacProviderDataset,
-    gdal_open_options: Option<Vec<String>>,
-    gdal_config_options: Option<Vec<geoengine_datatypes::util::StringPair>>,
 }
 
 #[derive(Debug, Clone)]
@@ -204,41 +63,32 @@ async fn query_stac_item_collection(
             query_url,
             query_params,
         } => {
-            let span = tracing::info_span!(
-                "stac.query.first_page",
-                url = %query_url,
-                params = ?query_params,
+            debug!("STAC query first page with parameters: {:?}", query_params);
+
+            let request_started = std::time::Instant::now();
+
+            let item_collection: stac::ItemCollection = client
+                .get(query_url.clone())
+                .query(query_params)
+                .send()
+                .await
+                .map_err(
+                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
+                        source: Box::new(e),
+                    },
+                )?
+                .json()
+                .await
+                .map_err(
+                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
+                        source: Box::new(e),
+                    },
+                )?;
+
+            debug!(
+                "STAC response received in {:?} s",
+                request_started.elapsed().as_secs_f64()
             );
-
-            let item_collection: stac::ItemCollection = tracing::Instrument::instrument(
-                async {
-                    let url = query_url.clone();
-                    let params = query_params.clone();
-
-                    let (status, body) = stac_request_with_retry(
-                        client,
-                        |c| c.get(url.clone()).query(&params),
-                    )
-                    .await?;
-
-                    serde_json::from_str::<stac::ItemCollection>(&body).map_err(|e| {
-                        tracing::warn!(
-                            "STAC API JSON decode failed for first page: \
-                             status={status}, \
-                             body_preview={}, \
-                             error={e:?}",
-                            &body[..body
-                                .len()
-                                .min(STAC_RESPONSE_BODY_LOG_PREVIEW_LEN)]
-                        );
-                        geoengine_operators::error::Error::QueryingProcessorFailed {
-                            source: Box::new(e),
-                        }
-                    })
-                },
-                span,
-            )
-            .await?;
 
             let next_state = item_collection
                 .links
@@ -252,39 +102,31 @@ async fn query_stac_item_collection(
             Ok((item_collection, next_state))
         }
         StacQueryState::NextPage { next_url } => {
-            let span = tracing::info_span!(
-                "stac.query.next_page",
-                url = %next_url,
+            debug!("STAC query next page with url: {}", next_url);
+
+            let request_started = std::time::Instant::now();
+
+            let item_collection: stac::ItemCollection = client
+                .get(next_url.clone())
+                .send()
+                .await
+                .map_err(
+                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
+                        source: Box::new(e),
+                    },
+                )?
+                .json()
+                .await
+                .map_err(
+                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
+                        source: Box::new(e),
+                    },
+                )?;
+
+            debug!(
+                "STAC response received in {:?} s",
+                request_started.elapsed().as_secs_f64()
             );
-
-            let item_collection: stac::ItemCollection = tracing::Instrument::instrument(
-                async {
-                    let url = next_url.clone();
-
-                    let (status, body) = stac_request_with_retry(
-                        client,
-                        |c| c.get(url.clone()),
-                    )
-                    .await?;
-
-                    serde_json::from_str::<stac::ItemCollection>(&body).map_err(|e| {
-                        tracing::warn!(
-                            "STAC API JSON decode failed for next page: \
-                             status={status}, \
-                             body_preview={}, \
-                             error={e:?}",
-                            &body[..body
-                                .len()
-                                .min(STAC_RESPONSE_BODY_LOG_PREVIEW_LEN)]
-                        );
-                        geoengine_operators::error::Error::QueryingProcessorFailed {
-                            source: Box::new(e),
-                        }
-                    })
-                },
-                span,
-            )
-            .await?;
 
             let next_state = item_collection
                 .links
@@ -522,17 +364,39 @@ impl StacMultiBandMetaData {
         files: &mut Vec<TileFile>,
         fetch_tiles: bool,
     ) -> Result<()> {
+        let Some((time, z_index)) = self.item_time_and_z_index(item)? else {
+            return Ok(());
+        };
+
+        time_steps.push(time);
+
+        if !fetch_tiles {
+            tracing::trace!(
+                "STAC query does not require fetching tiles, skipping item with id: {}",
+                item.id
+            );
+            return Ok(());
+        }
+
+        for asset in item.assets.values() {
+            self.process_stac_asset(asset, time, z_index, files)?;
+        }
+
+        Ok(())
+    }
+
+    fn item_time_and_z_index(&self, item: &Item) -> Result<Option<(TimeInterval, i64)>> {
         if item.version != stac::Version::v1_1_0 {
             tracing::warn!(
                 "Skipping STAC item with unsupported version: {:?}",
                 item.version
             );
-            return Ok(());
+            return Ok(None);
         }
 
         let Some(item_datetime) = item.properties.datetime else {
             tracing::warn!("Skipping STAC item without datetime: {}", item.id);
-            return Ok(());
+            return Ok(None);
         };
 
         let z_index = item
@@ -564,133 +428,144 @@ impl StacMultiBandMetaData {
             }
         };
 
-        time_steps.push(time);
+        Ok(Some((time, z_index)))
+    }
 
-        if !fetch_tiles {
-            tracing::trace!(
-                "STAC query does not require fetching tiles, skipping item with id: {}",
-                item.id
-            );
+    fn process_stac_asset(
+        &self,
+        asset: &stac::Asset,
+        time: TimeInterval,
+        z_index: i64,
+        files: &mut Vec<TileFile>,
+    ) -> Result<()> {
+        if data_type_from_asset_v1_1_0(asset) != Some(self.dataset.data_type) {
             return Ok(());
         }
 
-        for (_asset_key, asset) in &item.assets {
-            if data_type_from_asset_v1_1_0(&asset) != Some(self.dataset.data_type) {
+        if !proj_code_matches_dataset(&asset.additional_fields, self.dataset.projection) {
+            return Ok(());
+        }
+
+        let Some(geo_transform) = geo_transform_from_fields(&asset.additional_fields) else {
+            tracing::warn!(
+                "Skipping asset with href {} due to missing geo transform",
+                asset.href
+            );
+            return Ok(());
+        };
+
+        let Some((height, width)) = proj_shape_from_fields(&asset.additional_fields) else {
+            tracing::warn!(
+                "Skipping asset with href {} due to missing projection shape",
+                asset.href
+            );
+            return Ok(());
+        };
+
+        if (geo_transform.x_pixel_size().abs() - self.dataset.resolution.x).abs() > 1e-9
+            || (geo_transform.y_pixel_size().abs() - self.dataset.resolution.y).abs() > 1e-9
+        {
+            return Ok(());
+        }
+
+        let Some(asset_title) = asset.title.as_deref() else {
+            tracing::warn!(
+                "Skipping asset with href {} due to missing title",
+                asset.href
+            );
+            return Ok(());
+        };
+
+        let grid_bounds = GridBoundingBox2D::new(
+            GridIdx2D::new([0, 0]),
+            GridIdx2D::new([(width as isize) - 1, (height as isize) - 1]),
+        )
+        .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+        let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
+
+        let file_path = gdal_file_path(&asset.href)
+            .ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+
+        let gdal_config_options = self.gdal_config_options_for_file_path(&file_path);
+
+        for (dataset_band_idx, dataset_band) in self.dataset.bands.iter().enumerate() {
+            if dataset_band.asset_title != asset_title {
                 continue;
             }
 
-            if !proj_code_matches_dataset(&asset.additional_fields, self.dataset.projection) {
-                continue;
-            }
-
-            let Some(geo_transform) = geo_transform_from_fields(&asset.additional_fields) else {
-                tracing::warn!(
-                    "Skipping asset with href {} due to missing geo transform",
-                    asset.href
-                );
+            let Some(rasterband_channel) =
+                Self::rasterband_channel_for_dataset_band(asset, dataset_band.band_name.as_deref())
+            else {
                 continue;
             };
 
-            let Some((height, width)) = proj_shape_from_fields(&asset.additional_fields) else {
-                tracing::warn!(
-                    "Skipping asset with href {} due to missing projection shape",
-                    asset.href
-                );
-                continue;
-            };
-
-            if (geo_transform.x_pixel_size().abs() - self.dataset.resolution.x).abs() > 1e-9
-                || (geo_transform.y_pixel_size().abs() - self.dataset.resolution.y).abs() > 1e-9
-            {
-                continue;
-            }
-
-            let Some(asset_title) = asset.title.as_deref() else {
-                tracing::warn!(
-                    "Skipping asset with href {} due to missing title",
-                    asset.href
-                );
-                continue;
-            };
-
-            let grid_bounds = GridBoundingBox2D::new(
-                GridIdx2D::new([0, 0]),
-                GridIdx2D::new([(width as isize) - 1, (height as isize) - 1]),
-            )
-            .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
-            let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
-
-            let file_path = gdal_file_path(&asset.href)
-                .ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?;
-
-            let gdal_config_options = self.gdal_config_options_for_file_path(&file_path);
-
-            for (dataset_band_idx, dataset_band) in self.dataset.bands.iter().enumerate() {
-                if dataset_band.asset_title != asset_title {
-                    continue;
-                }
-
-                let rasterband_channel = if asset.bands.is_empty() {
-                    if dataset_band.band_name.is_some() {
-                        tracing::warn!(
-                            "STAC asset with href {} does not include bands, but dataset configuration requires a band name. Skipping asset.",
-                            asset.href
-                        );
-                        continue;
-                    }
-
-                    1
-                } else {
-                    let Some(required_band_name) = dataset_band.band_name.as_deref() else {
-                        tracing::warn!(
-                            "STAC asset with href {} includes bands, but dataset configuration does not specify a band name. Skipping asset.",
-                            asset.href
-                        );
-                        continue;
-                    };
-
-                    let Some(asset_band_idx) = asset.bands.iter().position(|asset_band| {
-                        asset_band.name.as_deref() == Some(required_band_name)
-                    }) else {
-                        tracing::debug!(
-                            "Skipping asset with href {} due to missing required band {}",
-                            asset.href,
-                            required_band_name
-                        );
-                        continue;
-                    };
-
-                    asset_band_idx + 1
-                };
-
-                files.push(TileFile {
-                    time,
-                    spatial_partition,
-                    band: dataset_band_idx as u32,
-                    z_index,
-                    params: GdalDatasetParameters {
-                        file_path: file_path.clone(),
-                        rasterband_channel,
-                        geo_transform: GdalDatasetGeoTransform {
-                            origin_coordinate: geo_transform.origin_coordinate(),
-                            x_pixel_size: geo_transform.x_pixel_size(),
-                            y_pixel_size: geo_transform.y_pixel_size(),
-                        },
-                        width,
-                        height,
-                        file_not_found_handling: FileNotFoundHandling::Error,
-                        no_data_value: None,
-                        properties_mapping: None,
-                        gdal_open_options: self.gdal_open_options.clone(),
-                        gdal_config_options: gdal_config_options.clone(),
-                        allow_alphaband_as_mask: false,
-                        retry: Some(GdalRetryOptions { max_retries: 99 }), // TODO: make configurable?
+            files.push(TileFile {
+                time,
+                spatial_partition,
+                band: dataset_band_idx as u32,
+                z_index,
+                params: GdalDatasetParameters {
+                    file_path: file_path.clone(),
+                    rasterband_channel,
+                    geo_transform: GdalDatasetGeoTransform {
+                        origin_coordinate: geo_transform.origin_coordinate(),
+                        x_pixel_size: geo_transform.x_pixel_size(),
+                        y_pixel_size: geo_transform.y_pixel_size(),
                     },
-                });
-            }
+                    width,
+                    height,
+                    file_not_found_handling: FileNotFoundHandling::Error,
+                    no_data_value: None,
+                    properties_mapping: None,
+                    gdal_open_options: None,
+                    gdal_config_options: gdal_config_options.clone(),
+                    allow_alphaband_as_mask: false,
+                    retry: Some(GdalRetryOptions { max_retries: 99 }), // TODO: make configurable?
+                },
+            });
         }
 
         Ok(())
+    }
+
+    fn rasterband_channel_for_dataset_band(
+        asset: &stac::Asset,
+        required_band_name: Option<&str>,
+    ) -> Option<usize> {
+        if asset.bands.is_empty() {
+            if required_band_name.is_some() {
+                tracing::warn!(
+                    "STAC asset with href {} does not include bands, but dataset configuration requires a band name. Skipping asset.",
+                    asset.href
+                );
+                return None;
+            }
+
+            return Some(1);
+        }
+
+        let Some(required_band_name) = required_band_name else {
+            tracing::warn!(
+                "STAC asset with href {} includes bands, but dataset configuration does not specify a band name. Skipping asset.",
+                asset.href
+            );
+            return None;
+        };
+
+        let Some(asset_band_idx) = asset
+            .bands
+            .iter()
+            .position(|asset_band| asset_band.name.as_deref() == Some(required_band_name))
+        else {
+            tracing::debug!(
+                "Skipping asset with href {} due to missing required band {}",
+                asset.href,
+                required_band_name
+            );
+            return None;
+        };
+
+        Some(asset_band_idx + 1)
     }
 
     fn gdal_config_options_for_file_path(&self, file_path: &Path) -> Option<Vec<(String, String)>> {
@@ -698,42 +573,35 @@ impl StacMultiBandMetaData {
         let is_vsi_s3 = file_path_str.starts_with("/vsis3/");
         let is_vsi_curl = file_path_str.starts_with("/vsicurl/");
 
-        if !is_vsi_s3 && !is_vsi_curl && self.gdal_config_options.is_none() {
+        if !is_vsi_s3 && !is_vsi_curl {
             return None;
         }
 
-        let mut options = Vec::new();
+        let mut options = vec![
+            (
+                "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
+                "EMPTY_DIR".to_owned(),
+            ),
+            (
+                "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
+                ".tif,.tiff,.jp2".to_owned(),
+            ),
+        ];
 
-        // Add provider-level static config options first (as base)
-        if let Some(provider_options) = &self.gdal_config_options {
-            for pair in provider_options {
-                let (key, value) = pair.clone().into_inner();
-                options.push((key, value));
-            }
+        if !is_vsi_s3 {
+            return Some(options);
         }
 
-        // Add auto-generated options (these may override provider-level options with same keys)
-        options.push((
-            "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
-            "EMPTY_DIR".to_owned(),
-        ));
-        options.push((
-            "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
-            ".tif,.tiff,.jp2".to_owned(),
-        ));
+        if let Some(config) = self.s3_config.as_ref() {
+            options.push(("AWS_S3_ENDPOINT".to_owned(), config.endpoint.clone()));
+            options.push(("AWS_VIRTUAL_HOSTING".to_owned(), "FALSE".to_owned())); // TODO: make configurable?
 
-        if is_vsi_s3 {
-            if let Some(config) = self.s3_config.as_ref() {
-                options.push(("AWS_S3_ENDPOINT".to_owned(), config.endpoint.clone()));
-                options.push(("AWS_VIRTUAL_HOSTING".to_owned(), "FALSE".to_owned())); // TODO: make configurable?
+            if let Some(access_key) = &config.access_key {
+                options.push(("AWS_ACCESS_KEY_ID".to_owned(), access_key.clone()));
+            }
 
-                if let Some(access_key) = &config.access_key {
-                    options.push(("AWS_ACCESS_KEY_ID".to_owned(), access_key.clone()));
-                }
-
-                if let Some(secret_key) = &config.secret_key {
-                    options.push(("AWS_SECRET_ACCESS_KEY".to_owned(), secret_key.clone()));
-                }
+            if let Some(secret_key) = &config.secret_key {
+                options.push(("AWS_SECRET_ACCESS_KEY".to_owned(), secret_key.clone()));
             }
         }
 
@@ -910,8 +778,6 @@ impl
             s3_config: self.s3_config.clone(),
             time_dimension: self.time_dimension,
             dataset: dataset.clone(),
-            gdal_open_options: self.gdal_open_options.clone(),
-            gdal_config_options: self.gdal_config_options.clone(),
         }))
     }
 }
@@ -982,8 +848,6 @@ mod tests {
                     },
                 ],
             }],
-            gdal_open_options: None,
-            gdal_config_options: None,
         }
     }
 
@@ -1219,8 +1083,6 @@ mod tests {
                     ],
                 },
             ],
-            gdal_open_options: None,
-            gdal_config_options: None,
         };
 
         admin_ctx

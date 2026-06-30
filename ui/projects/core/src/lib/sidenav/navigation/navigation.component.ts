@@ -149,7 +149,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
                             return observableOf([isGuest, undefined]);
                         }
                     },
-                    [true, 'accent' as ThemePalette],
+                    [true, 'accent'],
                 ),
                 map(([_wasGuest, state]) => state as ThemePalette),
             ),

@@ -277,7 +277,7 @@ export class ExpressionOperatorComponent implements AfterViewInit {
                                 raster: inputWorkflow.operator,
                             },
                         } as ExpressionDict,
-                    } as WorkflowDict;
+                    };
 
                     return this.projectService.registerWorkflow(workflow);
                 }),

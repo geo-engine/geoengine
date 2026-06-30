@@ -28,16 +28,7 @@ import {
     AsyncValueDefault,
     CodeEditorComponent,
 } from '@geoengine/common';
-import {
-    Dataset,
-    DatasetListing,
-    GdalMetaDataList,
-    MetaDataDefinition,
-    OgrMetaData,
-    TypedRasterResultDescriptor,
-    TypedResultDescriptor,
-    TypedVectorResultDescriptor,
-} from '@geoengine/api-client';
+import {Dataset, DatasetListing, GdalMetaDataList, MetaDataDefinition, OgrMetaData, TypedResultDescriptor} from '@geoengine/api-client';
 import {BehaviorSubject, firstValueFrom} from 'rxjs';
 import {ProvenanceComponent} from '../../provenance/provenance.component';
 import {AppConfig} from '../../app-config.service';
@@ -410,11 +401,11 @@ export class DatasetEditorComponent {
 
     private dataTypeFromResultDescriptor(rd: TypedResultDescriptor): string {
         if (rd.type === 'raster') {
-            return (rd as TypedRasterResultDescriptor).dataType;
+            return rd.dataType;
         }
 
         if (rd.type === 'vector') {
-            return (rd as TypedVectorResultDescriptor).dataType;
+            return rd.dataType;
         }
 
         // There are no plot datasets so this should never happen

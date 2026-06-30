@@ -6,7 +6,7 @@ import {Session} from '../users/session.model';
 import {User} from '../users/user.model';
 import {firstValueFrom, NEVER, of} from 'rxjs';
 import {CoreConfig, DEFAULT_CORE_CONFIG} from '../config.service';
-import {CreateProjectResponseDict, STRectangleDict, TimeStepDict, UUID} from '../backend/backend.model';
+import {CreateProjectResponseDict, TimeStepDict, UUID} from '../backend/backend.model';
 import {MapService} from '../map/map.service';
 import {BackendService} from '../backend/backend.service';
 import {SpatialReferenceService, WGS_84} from '../spatial-references/spatial-reference.service';
@@ -187,7 +187,7 @@ describe('test project methods in projectService', () => {
                     },
                     spatialReference: 'EPSG:4326',
                     timeInterval: {start: 1396353600000, end: 1396353600000},
-                } as STRectangleDict,
+                },
                 timeStep: {
                     step: 1,
                     granularity: 'months',

@@ -1,7 +1,9 @@
 use snafu::Snafu;
 use std::collections::VecDeque;
-use std::hash::{BuildHasherDefault, DefaultHasher, Hasher};
+use std::hash::{BuildHasherDefault, Hasher};
 use std::sync::Arc;
+#[cfg(feature = "gdalpool_dedup_requests")]
+use std::sync::Mutex;
 use std::time::Instant;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Duration;
@@ -10,10 +12,14 @@ use geoengine_datatypes::raster::{GridBoundingBox2D, GridBounds, Pixel};
 use ipc_channel::ipc::{IpcReceiver, IpcSender};
 use rustc_hash::FxHasher;
 
-use crate::source::gdal_source::GdalProcessPoolAccess;
-use crate::source::gdal_source::process::{GdalIpcPayload, spawn_ipc_server_process};
-use crate::source::{IpcChannelMessage, gdal_source::process::ChildProcessGuard};
-use crate::source::{IpcProcessError, IpcProcessRasterResult};
+#[cfg(feature = "gdalpool_dedup_requests")]
+use crate::source::gdal_in::process_common::GdalIpcBytePayload;
+
+use super::{
+    GdalProcessPoolAccess,
+    process_common::{GdalIpcPayload, IpcChannelMessage, IpcProcessError, IpcProcessRasterResult},
+    process_impl::{ChildProcessGuard, spawn_ipc_server_process},
+};
 
 use opentelemetry::global;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -60,19 +66,24 @@ const SCORE_FRESH_WORKER_DEFAULT: f64 = 0.5;
 
 /// High-affinity immediate dispatch cutoff threshold. If a candidate worker's affinity score
 /// matches or exceeds this, we short-circuit the matrix evaluation instantly.
-const IMMEDIATE_DISPATCH_THRESHOLD: f64 = 11000.0;
+const IMMEDIATE_DISPATCH_THRESHOLD: f64 = SCORE_DATASET_MATCH + SCORE_BAND_MATCH;
 
 /// Max lookahead horizontal threshold for sweeps over unique datasets.
 const MAX_ELIGIBLE_SCAN_DEPTH: usize = 16;
 
 type FastHashMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
-#[derive(Debug, Snafu)]
+#[derive(Debug, Snafu, Clone)]
 #[snafu(visibility(pub))]
 pub enum GdalProcessPoolError {
-    IpcProcessError { source: IpcProcessError },
+    IpcProcessError {
+        source: IpcProcessError,
+    },
 
-    IpcError { source: ipc_channel::IpcError },
+    #[snafu(display("IpcError caused by: {error_str}"))]
+    IpcError {
+        error_str: String,
+    },
 
     WorkerPanic,
 }
@@ -85,7 +96,9 @@ impl From<IpcProcessError> for GdalProcessPoolError {
 
 impl From<ipc_channel::IpcError> for GdalProcessPoolError {
     fn from(source: ipc_channel::IpcError) -> Self {
-        GdalProcessPoolError::IpcError { source }
+        GdalProcessPoolError::IpcError {
+            error_str: source.to_string(),
+        }
     }
 }
 
@@ -220,8 +233,14 @@ enum BrokerCommand {
     },
 }
 
+#[cfg(feature = "gdalpool_dedup_requests")]
+type SharedResult = Option<Arc<Result<GdalIpcBytePayload, GdalProcessPoolError>>>;
+
 pub struct GdalProcessPool {
     broker_tx: mpsc::Sender<BrokerCommand>,
+
+    #[cfg(feature = "gdalpool_dedup_requests")]
+    in_flight_tiles: Mutex<FastHashMap<u64, tokio::sync::watch::Receiver<SharedResult>>>,
 }
 
 impl GdalProcessPool {
@@ -242,9 +261,9 @@ impl GdalProcessPool {
     /// This function will panic if any of the worker processes fail to spawn successfully.
     pub fn new_with_tokio_handle(
         handle: &tokio::runtime::Handle,
-        max_total: usize,
-        max_active_global: usize,
-        max_parallel_per_dataset: usize,
+        number_of_processes: usize,
+        max_active_processes: usize,
+        max_dataset_processes: usize,
         otlp_endpoint: Option<String>,
     ) -> Arc<Self> {
         let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
@@ -254,28 +273,16 @@ impl GdalProcessPool {
             let b_tx_clone_2 = b_tx_clone.clone();
             let endpoint = otlp_endpoint.clone();
             let workers = tokio::task::spawn_blocking(move || {
-                let mut w = Vec::with_capacity(max_total);
-                for id in 0..max_total {
-                    let (guard, tx, rx) = spawn_ipc_server_process::<
-                        IpcChannelMessage,
-                        IpcProcessRasterResult,
-                    >(endpoint.clone())
-                    .expect("Error while spawning GDAL worker process");
-
-                    let (job_tx, mut job_rx) = mpsc::unbounded_channel();
-                    let b_tx_worker = b_tx_clone_2.clone();
-
-                    std::thread::Builder::new()
-                        .name(format!("gdal-worker-companion-{id}"))
-                        .spawn(move || {
-                            Self::worker_companion_loop(id, &tx, &rx, &mut job_rx, &b_tx_worker);
-                        })
-                        .expect("Failed to spawn persistent GDAL companion thread");
+                let mut w = Vec::with_capacity(number_of_processes);
+                for id in 0..number_of_processes {
+                    let (child_guard, _join_handle, job_tx) =
+                        Self::create_worker_with_id(id, b_tx_clone_2.clone(), endpoint.clone())
+                            .expect("Failed to create worker");
 
                     w.push(WorkerProcess {
                         _id: id,
                         job_tx,
-                        child_guard: guard,
+                        child_guard,
                         affinity: None,
                     });
                     std::thread::sleep(Duration::from_millis(INITIAL_SPAWN_DELAY_MS));
@@ -288,15 +295,19 @@ impl GdalProcessPool {
             Self::broker_loop(
                 broker_rx,
                 workers,
-                max_active_global,
-                max_parallel_per_dataset,
+                max_active_processes,
+                max_dataset_processes,
                 b_tx_clone,
                 otlp_endpoint.clone(),
             )
             .await;
         });
 
-        Arc::new(Self { broker_tx })
+        Arc::new(Self {
+            broker_tx,
+            #[cfg(feature = "gdalpool_dedup_requests")]
+            in_flight_tiles: Mutex::new(FastHashMap::default()),
+        })
     }
 
     /// Initializes the GDAL process pool and spawns the broker loop in a dedicated Tokio task.
@@ -306,9 +317,9 @@ impl GdalProcessPool {
     /// Returns an `Arc` to the initialized `GdalProcessPool`, which can be cloned and shared across the application for submitting read requests.
     ///
     /// # Parameters
-    /// - `max_total`: The total number of GDAL worker processes to spawn and maintain in the pool.
-    /// - `max_active_global`: The maximum number of active (in-flight) requests allowed across all datasets at any given time.
-    /// - `max_parallel_per_dataset`: The maximum number of active requests allowed concurrently for the same dataset, enforcing per-dataset concurrency limits.
+    /// - `number_of_processes`: The total number of GDAL worker processes to spawn and maintain in the pool.
+    /// - `max_active_processes`: The maximum number of active (in-flight) requests allowed across all datasets at any given time.
+    /// - `max_dataset_processes`: The maximum number of active requests allowed concurrently for the same dataset, enforcing per-dataset concurrency limits.
     /// - `otlp_endpoint`: Optional OpenTelemetry OTLP/gRPC endpoint (e.g. `http://jaeger:4317`).
     ///   When set, the child processes will initialize OpenTelemetry tracing and connect to this endpoint.
     ///
@@ -317,9 +328,9 @@ impl GdalProcessPool {
     /// It is designed to be called during application initialization, and assumes that the system has sufficient resources to spawn the specified number of worker processes.
     ///
     pub fn new(
-        max_total: usize,
-        max_active_global: usize,
-        max_parallel_per_dataset: usize,
+        number_of_processes: usize,
+        max_active_processes: usize,
+        max_dataset_processes: usize,
         otlp_endpoint: Option<String>,
     ) -> Arc<Self> {
         let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
@@ -329,28 +340,16 @@ impl GdalProcessPool {
             let b_tx_clone_2 = b_tx_clone.clone();
             let endpoint = otlp_endpoint.clone();
             let workers = tokio::task::spawn_blocking(move || {
-                let mut w = Vec::with_capacity(max_total);
-                for id in 0..max_total {
-                    let (guard, tx, rx) = spawn_ipc_server_process::<
-                        IpcChannelMessage,
-                        IpcProcessRasterResult,
-                    >(endpoint.clone())
-                    .expect("Error while spawning GDAL worker process");
-
-                    let (job_tx, mut job_rx) = mpsc::unbounded_channel();
-                    let b_tx_worker = b_tx_clone_2.clone();
-
-                    std::thread::Builder::new()
-                        .name(format!("gdal-worker-companion-{id}"))
-                        .spawn(move || {
-                            Self::worker_companion_loop(id, &tx, &rx, &mut job_rx, &b_tx_worker);
-                        })
-                        .expect("Failed to spawn persistent GDAL companion thread");
+                let mut w = Vec::with_capacity(number_of_processes);
+                for id in 0..number_of_processes {
+                    let (child_guard, _join_handle, job_tx) =
+                        Self::create_worker_with_id(id, b_tx_clone_2.clone(), endpoint.clone())
+                            .expect("Failed to create worker");
 
                     w.push(WorkerProcess {
                         _id: id,
                         job_tx,
-                        child_guard: guard,
+                        child_guard,
                         affinity: None,
                     });
                     std::thread::sleep(Duration::from_millis(INITIAL_SPAWN_DELAY_MS));
@@ -363,15 +362,46 @@ impl GdalProcessPool {
             Self::broker_loop(
                 broker_rx,
                 workers,
-                max_active_global,
-                max_parallel_per_dataset,
+                max_active_processes,
+                max_dataset_processes,
                 b_tx_clone,
                 otlp_endpoint.clone(),
             )
             .await;
         });
 
-        Arc::new(Self { broker_tx })
+        Arc::new(Self {
+            broker_tx,
+            #[cfg(feature = "gdalpool_dedup_requests")]
+            in_flight_tiles: Mutex::new(FastHashMap::default()),
+        })
+    }
+
+    fn create_worker_with_id(
+        worker_id: usize,
+        broker_tx: mpsc::Sender<BrokerCommand>,
+        otlp_endpoint: Option<String>,
+    ) -> Result<
+        (
+            ChildProcessGuard,
+            std::thread::JoinHandle<()>,
+            mpsc::UnboundedSender<WorkerJob>,
+        ),
+        GdalProcessPoolError,
+    > {
+        let (guard, tx, rx) =
+            spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>(otlp_endpoint)?;
+
+        let (job_tx, mut job_rx) = mpsc::unbounded_channel();
+
+        let handle = std::thread::Builder::new()
+            .name(format!("gdal-worker-companion-{worker_id}"))
+            .spawn(move || {
+                Self::worker_companion_loop(worker_id, &tx, &rx, &mut job_rx, &broker_tx);
+            })
+            .map_err(|_| GdalProcessPoolError::WorkerPanic)?;
+
+        Ok((guard, handle, job_tx))
     }
 
     fn worker_companion_loop(
@@ -388,12 +418,8 @@ impl GdalProcessPool {
 
             let res = sender
                 .send(job.request)
-                .map_err(|e| GdalProcessPoolError::IpcError { source: e })
-                .and_then(|()| {
-                    receiver
-                        .recv()
-                        .map_err(|e| GdalProcessPoolError::IpcError { source: e })
-                });
+                .map_err(GdalProcessPoolError::from)
+                .and_then(|()| receiver.recv().map_err(GdalProcessPoolError::from));
 
             let is_dead = res.is_err();
             let _ = job.respond_to.send(res);
@@ -417,15 +443,15 @@ impl GdalProcessPool {
     async fn broker_loop(
         mut rx: mpsc::Receiver<BrokerCommand>,
         workers: Vec<WorkerProcess>,
-        max_active_global: usize,
-        max_parallel_per_dataset: usize,
+        max_active_processes: usize,
+        max_dataset_processes: usize,
         broker_tx: mpsc::Sender<BrokerCommand>,
         otlp_endpoint: Option<String>,
     ) {
         let mut state = BrokerState::new(
             workers,
-            max_parallel_per_dataset,
-            max_active_global,
+            max_dataset_processes,
+            max_active_processes,
             Self::STRATEGY,
             otlp_endpoint,
         );
@@ -458,6 +484,10 @@ impl GdalProcessPool {
                         worker_id,
                         dataset_hash,
                     } => {
+                        tracing::error!(
+                            "GDAL Worker {} died unexpectedly! Initiating respawn...",
+                            worker_id
+                        );
                         if let Some(slot) = state.dataset_registry.get_mut(&dataset_hash) {
                             slot.active_count = slot.active_count.saturating_sub(1);
                         }
@@ -466,32 +496,30 @@ impl GdalProcessPool {
                         let b_tx = broker_tx.clone();
                         let otlp = state.otlp_endpoint.clone();
                         tokio::task::spawn_blocking(move || {
-                            if let Ok((guard, tx, rx)) = spawn_ipc_server_process::<
-                                IpcChannelMessage,
-                                IpcProcessRasterResult,
-                            >(otlp)
-                            {
-                                let (job_tx, mut job_rx) = mpsc::unbounded_channel();
-                                let b_tx_worker = b_tx.clone();
+                            std::thread::sleep(std::time::Duration::from_millis(
+                                INITIAL_SPAWN_DELAY_MS,
+                            ));
 
-                                std::thread::Builder::new()
-                                    .name(format!("gdal-worker-recovered-{worker_id}"))
-                                    .spawn(move || {
-                                        Self::worker_companion_loop(
-                                            worker_id,
-                                            &tx,
-                                            &rx,
-                                            &mut job_rx,
-                                            &b_tx_worker,
-                                        );
-                                    })
-                                    .expect("Failed to spawn replacement companion thread");
-
-                                let _ = b_tx.blocking_send(BrokerCommand::WorkerReplaced {
-                                    worker_id,
-                                    child_guard: guard,
-                                    job_tx,
-                                });
+                            match Self::create_worker_with_id(worker_id, b_tx.clone(), otlp) {
+                                Ok((child_guard, _join_handle, job_tx)) => {
+                                    tracing::info!(
+                                        "Successfully respawned GDAL Worker {}",
+                                        worker_id
+                                    );
+                                    let _ = b_tx.blocking_send(BrokerCommand::WorkerReplaced {
+                                        worker_id,
+                                        child_guard,
+                                        job_tx,
+                                    });
+                                }
+                                Err(e) => {
+                                    // Prevent silent failures if the respawn itself crashes
+                                    tracing::error!(
+                                        "FATAL: Failed to respawn GDAL Worker {}: {:?}",
+                                        worker_id,
+                                        e
+                                    );
+                                }
                             }
                         });
                     }
@@ -533,8 +561,8 @@ struct BrokerState {
     dataset_registry: FastHashMap<u64, DatasetSlot>,
     active_datasets: VecDeque<u64>,
     global_active_count: usize,
-    max_parallel_per_dataset: usize,
-    max_active_global: usize,
+    max_dataset_processes: usize,
+    max_active_processes: usize,
     strategy: SchedulingStrategy,
     otlp_endpoint: Option<String>,
 }
@@ -542,8 +570,8 @@ struct BrokerState {
 impl BrokerState {
     pub fn new(
         workers: Vec<WorkerProcess>,
-        max_parallel_per_dataset: usize,
-        max_active_global: usize,
+        max_dataset_processes: usize,
+        max_active_processes: usize,
         strategy: SchedulingStrategy,
         otlp_endpoint: Option<String>,
     ) -> Self {
@@ -554,8 +582,8 @@ impl BrokerState {
             dataset_registry: FastHashMap::default(),
             active_datasets: VecDeque::new(),
             global_active_count: 0,
-            max_parallel_per_dataset,
-            max_active_global,
+            max_dataset_processes,
+            max_active_processes,
             strategy,
             otlp_endpoint,
         }
@@ -630,7 +658,7 @@ impl BrokerState {
         let now = Instant::now();
 
         while !self.idle_workers.is_empty() && !self.active_datasets.is_empty() {
-            if self.global_active_count >= self.max_active_global {
+            if self.global_active_count >= self.max_active_processes {
                 break;
             }
 
@@ -640,13 +668,12 @@ impl BrokerState {
             let mut best_dataset_active_idx = 0;
             let mut datasets_scanned = 0;
 
-            // Inlined, highly optimized single pass across eligible datasets
             for (idx, &hash) in self.active_datasets.iter().enumerate() {
                 let slot = self
                     .dataset_registry
                     .get(&hash)
                     .expect("Active dataset missing from registry - invariant broken");
-                if slot.active_count >= self.max_parallel_per_dataset {
+                if slot.active_count >= self.max_dataset_processes {
                     continue;
                 }
 
@@ -711,6 +738,9 @@ impl BrokerState {
                 .dataset_registry
                 .get_mut(&best_dataset_hash)
                 .expect("Selected dataset missing from registry - invariant broken");
+
+            slot.clean_canceled_front();
+
             let req = slot
                 .queue
                 .pop_front()
@@ -753,11 +783,29 @@ pub struct GdalPoolWorkerInstance {
     pool: Arc<GdalProcessPool>,
 }
 
+#[cfg(feature = "gdalpool_dedup_requests")]
+struct LeaderCleanupGuard {
+    pool: std::sync::Arc<GdalProcessPool>,
+    tile_key: u64,
+}
+
+#[cfg(feature = "gdalpool_dedup_requests")]
+impl Drop for LeaderCleanupGuard {
+    fn drop(&mut self) {
+        // This is guaranteed to run whether the function succeeds, errors,
+        // panics, or is abruptly cancelled by Tokio.
+        if let Ok(mut lock) = self.pool.in_flight_tiles.lock() {
+            lock.remove(&self.tile_key);
+        }
+    }
+}
+
 impl GdalPoolWorkerInstance {
     pub fn new(pool: Arc<GdalProcessPool>) -> Self {
         Self { pool }
     }
 
+    #[cfg(not(feature = "gdalpool_dedup_requests"))]
     pub async fn read_data<P: Pixel>(
         &self,
         mut request: IpcChannelMessage,
@@ -769,7 +817,12 @@ impl GdalPoolWorkerInstance {
             propagator.inject_context(&current_cx, &mut request.0.span_context);
         });
 
-        let mut s = DefaultHasher::new();
+        tracing::debug!(
+            target: "geoengine_operators::source::gdal_in::process_pool",
+            "read.direct",
+        );
+
+        let mut s = rustc_hash::FxHasher::default();
         request.0.dataset_params.partial_hash(&mut s);
         let hash = s.finish();
 
@@ -788,10 +841,142 @@ impl GdalPoolWorkerInstance {
         let res = rx
             .await
             .map_err(|_| GdalProcessPoolError::WorkerPanic)??
-            .map_err(|e| GdalProcessPoolError::IpcProcessError { source: e })
+            .map_err(|e| GdalProcessPoolError::from(e))
             .inspect_err(|e| tracing::error!("Ipc response error: {e}"))?;
 
-        let payload: GdalIpcPayload<P> = res.into();
+        let payload: GdalIpcPayload<P> =
+            (&res).try_into().map_err(|e: bytemuck::PodCastError| {
+                GdalProcessPoolError::IpcProcessError {
+                    source: IpcProcessError::PocCastError {
+                        error: e.to_string(),
+                    },
+                }
+            })?;
+        Ok(payload)
+    }
+
+    #[cfg(feature = "gdalpool_dedup_requests")]
+    /// Read gdal tiles with leader & follower feature.
+    ///
+    /// # Panics
+    /// This function will panic if watch channel fails    
+    pub async fn read_data<P: Pixel>(
+        &self,
+        mut request: IpcChannelMessage,
+    ) -> Result<GdalIpcPayload<P>, GdalProcessPoolError> {
+        // Inject the current OpenTelemetry tracing context into the IPC message
+        // so the GDAL subprocess can attach its spans to the correct parent trace.
+        let current_cx = tracing::Span::current().context();
+        global::get_text_map_propagator(|propagator| {
+            propagator.inject_context(&current_cx, &mut request.0.span_context);
+        });
+
+        let mut s = rustc_hash::FxHasher::default();
+        request.full_hash(&mut s);
+        let tile_key = s.finish();
+
+        let mut rx = {
+            let mut lock = self
+                .pool
+                .in_flight_tiles
+                .lock()
+                .map_err(|_| GdalProcessPoolError::WorkerPanic)?;
+
+            // test if data is already read
+            if let Some(rx) = lock.get(&tile_key) {
+                tracing::debug!(
+                    target: "geoengine_operators::source::gdal_in::process_pool",
+                    tile_key,
+                    "read.follower",
+                );
+                rx.clone()
+            } else {
+                tracing::debug!(
+                    target: "geoengine_operators::source::gdal_in::process_pool",
+                    tile_key,
+                    "read.leader",
+                );
+                request.0.is_follower = false;
+                let (tx, rx) = tokio::sync::watch::channel(None);
+                lock.insert(tile_key, rx.clone());
+
+                let pool_clone = self.pool.clone();
+                let request_clone = request.clone();
+
+                // DETACHED LEADER: Guaranteed to run to completion even if the parent stream is suspended or dropped!
+                tokio::spawn(async move {
+                    let _cleanup_guard = LeaderCleanupGuard {
+                        pool: pool_clone.clone(),
+                        tile_key,
+                    };
+
+                    let mut s_routing = rustc_hash::FxHasher::default();
+                    request_clone.0.dataset_params.partial_hash(&mut s_routing);
+                    let routing_hash = s_routing.finish();
+
+                    let (oneshot_tx, oneshot_rx) = tokio::sync::oneshot::channel();
+
+                    let dispatched = pool_clone
+                        .broker_tx
+                        .send(BrokerCommand::Read(Box::new(QueuedRequest {
+                            dataset_hash: routing_hash,
+                            request: request_clone,
+                            respond_to: oneshot_tx,
+                        })))
+                        .await;
+
+                    let leader_res = if dispatched.is_ok() {
+                        oneshot_rx
+                            .await
+                            .map_err(|_| GdalProcessPoolError::WorkerPanic)
+                            .flatten()
+                            .and_then(|ipc_res| ipc_res.map_err(GdalProcessPoolError::from))
+                    } else {
+                        Err(GdalProcessPoolError::WorkerPanic)
+                    };
+
+                    // Broadcast to all waiting tasks. (Arc preserves perfect memory alignment)
+                    let _ = tx.send(Some(std::sync::Arc::new(leader_res)));
+                });
+
+                rx
+            }
+        };
+
+        // ALL requests (including the one that spawned the background task) waits for the task.
+        while rx.borrow().is_none() {
+            if rx.changed().await.is_err() {
+                // Background task panicked before sending
+                return Err(GdalProcessPoolError::WorkerPanic);
+            }
+        }
+
+        let shared_res = rx
+            .borrow()
+            .as_ref()
+            .expect("Watch channel must contain a value after changed() yields")
+            .clone();
+
+        let byte_payload_ref =
+            shared_res
+                .as_ref()
+                .as_ref()
+                .map_err(|e| GdalProcessPoolError::IpcProcessError {
+                    source: IpcProcessError::IpcOther { msg: e.to_string() },
+                })?;
+
+        let payload: GdalIpcPayload<P> =
+            byte_payload_ref
+                .try_into()
+                .map_err(|e: bytemuck::PodCastError| {
+                    tracing::error!("DEBUG: Failed to cast payload: {:?}", e);
+                    GdalProcessPoolError::IpcProcessError {
+                        source: IpcProcessError::PocCastError {
+                            error: e.to_string(),
+                        },
+                    }
+                })?;
+
         Ok(payload)
     }
 }

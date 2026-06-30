@@ -33,7 +33,7 @@ use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::cache::shared_cache::SharedCache;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::meta::quota::QuotaChecker;
-use geoengine_operators::source::gdal_source::{GdalProcessPool, GdalProcessPoolAccess};
+use geoengine_operators::source::gdal_in::{GdalProcessPool, GdalProcessPoolAccess};
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
 use snafu::ResultExt;
@@ -97,9 +97,9 @@ where
         );
 
         let gdal_process_pool: Arc<GdalProcessPool> = GdalProcessPool::new(
-            gdal_process_pool_config.max_processes as usize,
-            gdal_process_pool_config.global_active_worker as usize,
-            gdal_process_pool_config.worker_per_dataset as usize,
+            gdal_process_pool_config.number_of_processes as usize,
+            gdal_process_pool_config.max_active_processes as usize,
+            gdal_process_pool_config.max_dataset_processes as usize,
             gdal_process_pool_config.otlp_endpoint.clone(),
         );
 
@@ -141,9 +141,9 @@ where
         );
 
         let gdal_process_pool: Arc<GdalProcessPool> = GdalProcessPool::new(
-            gdal_process_pool_config.max_processes as usize,
-            gdal_process_pool_config.global_active_worker as usize,
-            gdal_process_pool_config.worker_per_dataset as usize,
+            gdal_process_pool_config.number_of_processes as usize,
+            gdal_process_pool_config.max_active_processes as usize,
+            gdal_process_pool_config.max_dataset_processes as usize,
             gdal_process_pool_config.otlp_endpoint.clone(),
         );
 
@@ -195,9 +195,9 @@ where
         );
 
         let gdal_process_pool: Arc<GdalProcessPool> = GdalProcessPool::new(
-            gdal_process_pool_config.max_processes as usize,
-            gdal_process_pool_config.global_active_worker as usize,
-            gdal_process_pool_config.worker_per_dataset as usize,
+            gdal_process_pool_config.number_of_processes as usize,
+            gdal_process_pool_config.max_active_processes as usize,
+            gdal_process_pool_config.max_dataset_processes as usize,
             gdal_process_pool_config.otlp_endpoint.clone(),
         );
 

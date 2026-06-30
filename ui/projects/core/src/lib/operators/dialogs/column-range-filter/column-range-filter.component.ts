@@ -10,7 +10,6 @@ import {BackendService} from '../../../backend/backend.service';
 import {
     ColumnRangeFilterDict,
     HistogramDict,
-    HistogramParams,
     Layer,
     RandomColorService,
     ResultTypes,
@@ -259,7 +258,7 @@ export class ColumnRangeFilterComponent implements OnDestroy {
      * creates a new layer with the filtered values
      */
     add(): void {
-        const name = this.form.get('name')?.value ?? ('Filtered Layer' as string);
+        const name = this.form.get('name')?.value ?? 'Filtered Layer';
         const inputLayer = this.form.controls['layer'].value!;
         const filterValues = this.filters.value;
 
@@ -303,7 +302,7 @@ export class ColumnRangeFilterComponent implements OnDestroy {
                     vector: this.createWorkflow(filterValues, ++index, inputWorkflow).operator,
                 },
             } as ColumnRangeFilterDict,
-        } as WorkflowDict;
+        };
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -401,7 +400,7 @@ export class ColumnRangeFilterComponent implements OnDestroy {
                                     maxNumberOfBuckets: 100,
                                 },
                                 interactive: true,
-                            } as HistogramParams,
+                            },
                             sources: {
                                 source: workflow.operator,
                             },

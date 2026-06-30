@@ -40,9 +40,9 @@ export abstract class LayerMetadata implements HasLayerType {
     ): RasterLayerMetadata | VectorLayerMetadata {
         switch (dict.type) {
             case 'raster':
-                return RasterLayerMetadata.fromDict(dict as RasterResultDescriptorDict);
+                return RasterLayerMetadata.fromDict(dict);
             case 'vector':
-                return VectorLayerMetadata.fromDict(dict as VectorResultDescriptorDict);
+                return VectorLayerMetadata.fromDict(dict);
             default:
                 throw Error(`Unknown result type: ${dict.type}`);
         }

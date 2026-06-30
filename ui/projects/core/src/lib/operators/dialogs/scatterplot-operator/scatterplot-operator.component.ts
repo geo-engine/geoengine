@@ -10,7 +10,6 @@ import {
     Plot,
     ResultTypes,
     ScatterPlotDict,
-    ScatterPlotParams,
     VectorColumnDataTypes,
     VectorLayer,
     VectorLayerMetadata,
@@ -134,7 +133,7 @@ export class ScatterplotOperatorComponent implements AfterViewInit, OnDestroy {
                             params: {
                                 columnX,
                                 columnY,
-                            } as ScatterPlotParams,
+                            },
                             sources: {
                                 vector: inputWorkflow.operator,
                             },

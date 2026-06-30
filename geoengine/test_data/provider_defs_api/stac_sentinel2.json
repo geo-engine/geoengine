@@ -8,8 +8,8 @@
   "collectionName": "sentinel-2-l2a",
   "s3Config": {
     "endpoint": "eodata.nsiscloud.polsa.gov.pl",
-    "accessKey": "XXX",
-    "secretKey": "XXX"
+    "accessKey": "NSGQM1ZOKIGB7GD78RYB",
+    "secretKey": "hJoBLKSIPzJ6tJ0EdraiCoa1tnE2vGvQvK8l4HmD"
   },
   "timeDimension": {
     "type": "regular",

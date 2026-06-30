@@ -895,16 +895,16 @@ impl From<crate::datasets::external::sentinel_s2_l2a_cogs::SentinelS2L2ACogsProv
 #[serde(rename_all = "camelCase")]
 pub struct StacProviderS3Config {
     pub endpoint: String,
-    pub access_key: Option<String>,
-    pub secret_key: Option<String>,
+    pub access_key: Option<Secret<String>>,
+    pub secret_key: Option<Secret<String>>,
 }
 
 impl From<StacProviderS3Config> for crate::datasets::external::stac::StacProviderS3Config {
     fn from(value: StacProviderS3Config) -> Self {
         Self {
             endpoint: value.endpoint,
-            access_key: value.access_key,
-            secret_key: value.secret_key,
+            access_key: value.access_key.map(|v| v.0),
+            secret_key: value.secret_key.map(|v| v.0),
         }
     }
 }
@@ -913,8 +913,8 @@ impl From<crate::datasets::external::stac::StacProviderS3Config> for StacProvide
     fn from(value: crate::datasets::external::stac::StacProviderS3Config) -> Self {
         Self {
             endpoint: value.endpoint,
-            access_key: value.access_key.map(|_| SECRET_REPLACEMENT.to_string()),
-            secret_key: value.secret_key.map(|_| SECRET_REPLACEMENT.to_string()),
+            access_key: value.access_key.map(Secret),
+            secret_key: value.secret_key.map(Secret),
         }
     }
 }
@@ -1054,12 +1054,6 @@ pub struct StacDataProviderDefinition {
     pub s3_config: Option<StacProviderS3Config>,
     pub time_dimension: TimeDimension,
     pub datasets: Vec<StacProviderDataset>,
-    // GDAL dataset open options, e.g. `["UserPwd=geoengine:pwd", "HttpAuth=BASIC"]`
-    #[serde(default)]
-    pub gdal_open_options: Option<Vec<String>>,
-    // GDAL config options as key-value pairs, e.g. `[["AWS_REGION", "eu-central-1"]]`
-    #[serde(default)]
-    pub gdal_config_options: Option<Vec<GdalConfigOption>>,
 }
 
 impl From<StacDataProviderDefinition>
@@ -1076,10 +1070,6 @@ impl From<StacDataProviderDefinition>
             s3_config: value.s3_config.map(Into::into),
             time_dimension: api_time_dimension_to_datatypes(value.time_dimension),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
-            gdal_open_options: value.gdal_open_options,
-            gdal_config_options: value
-                .gdal_config_options
-                .map(|opts| opts.into_iter().map(Into::into).collect()),
         }
     }
 }
@@ -1099,10 +1089,6 @@ impl From<crate::datasets::external::stac::StacDataProviderDefinition>
             s3_config: value.s3_config.map(Into::into),
             time_dimension: datatypes_time_dimension_to_api(value.time_dimension),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
-            gdal_open_options: value.gdal_open_options,
-            gdal_config_options: value
-                .gdal_config_options
-                .map(|opts| opts.into_iter().map(Into::into).collect()),
         }
     }
 }
@@ -1449,8 +1435,15 @@ mod tests {
 
         let api: StacProviderS3Config = internal.into();
 
-        assert_eq!(api.endpoint, "https://example-s3.local");
-        assert_eq!(api.access_key.as_deref(), Some(SECRET_REPLACEMENT));
-        assert_eq!(api.secret_key.as_deref(), Some(SECRET_REPLACEMENT));
+        let api_json = serde_json::to_value(&api).expect("api config must serialize to json");
+
+        assert_eq!(
+            api_json,
+            serde_json::json!({
+                "endpoint":"https://example-s3.local",
+                "accessKey": SECRET_REPLACEMENT,
+                "secretKey": SECRET_REPLACEMENT
+            })
+        );
     }
 }
