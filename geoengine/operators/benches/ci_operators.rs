@@ -61,7 +61,13 @@ async fn raster_vector_join(
 }
 
 fn raster_vector_join_benchmark(c: &mut Criterion) {
-    let mut execution_context = MockExecutionContext::test_default();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let _guard = runtime.enter();
+
+    let mut execution_context = MockExecutionContext::new_with_tiling_spec_and_tokio_handle(
+        geoengine_datatypes::raster::TilingSpecification::test_default(),
+        runtime.handle(),
+    );
     let query_context = execution_context.mock_query_context_test_default();
 
     let ndvi_dataset = add_ndvi_dataset(&mut execution_context);
@@ -91,9 +97,11 @@ fn raster_vector_join_benchmark(c: &mut Criterion) {
     .boxed();
 
     c.bench_function("raster_vector_join", |b| {
-        b.to_async(tokio::runtime::Runtime::new().unwrap())
+        b.to_async(&runtime)
             .iter(|| raster_vector_join(&execution_context, &query_context, operator.clone()));
     });
+
+    drop(_guard)
 }
 
 criterion_group!(operators, raster_vector_join_benchmark);

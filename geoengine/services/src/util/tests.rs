@@ -1004,6 +1004,7 @@ where
         get_config_element::<Quota>().unwrap(),
         OidcManager::default,
         f,
+        get_config_element::<crate::config::GdalProcessPool>().unwrap(),
     )
     .await
 }
@@ -1020,6 +1021,7 @@ pub async fn with_temp_context_from_spec<F, Fut, R>(
     quota_config: Quota,
     oidc_db: impl FnOnce() -> OidcManager + std::panic::UnwindSafe + Send + 'static,
     f: F,
+    gdal_process_pool_config: crate::config::GdalProcessPool,
 ) -> R
 where
     F: FnOnce(PostgresContext<NoTls>, DatabaseConnectionConfig) -> Fut
@@ -1043,6 +1045,7 @@ where
                         query_ctx_chunk_size,
                         quota_config,
                         oidc_db(),
+                        gdal_process_pool_config,
                     )
                     .await
                     .unwrap();

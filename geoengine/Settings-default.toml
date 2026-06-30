@@ -98,6 +98,11 @@ provider_defs_path = "./test_data/provider_defs"
 layer_defs_path = "./test_data/layer_defs"
 layer_collection_defs_path = "./test_data/layer_collection_defs"
 
+[gdal_process_pool]
+number_of_processes = 32
+max_active_processes = 16
+max_dataset_processes = 8
+
 [gdal]
 # TODO: find good default
 # Use 0 for `ALL_CPUS` option or a number >0 for a specific number of threads.

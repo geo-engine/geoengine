@@ -46,6 +46,7 @@ pub trait Pixel:
     + TypedRasterConversion<GridShape2D>
     + TypedRasterConversion<GridShape3D>
     + SaturatingOps
+    + bytemuck::Pod
 {
 }
 

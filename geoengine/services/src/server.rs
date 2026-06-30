@@ -130,6 +130,7 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let open_telemetry: crate::config::OpenTelemetry = get_config_element()?;
     let cache_config: crate::config::Cache = get_config_element()?;
     let quota_config: crate::config::Quota = get_config_element()?;
+    let gdal_process_pool_config: crate::config::GdalProcessPool = get_config_element()?;
 
     if user_config.registration {
         info!("User Registration: enabled");
@@ -180,6 +181,7 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         web_config,
         cache_config,
         quota_config,
+        gdal_process_pool_config,
     )
     .await
 }
@@ -194,6 +196,7 @@ async fn start_postgres(
     web_config: config::Web,
     cache_config: crate::config::Cache,
     quota_config: crate::config::Quota,
+    gdal_process_pool_config: crate::config::GdalProcessPool,
 ) -> Result<()> {
     {
         let db_config: DatabaseConnectionConfig =
@@ -211,6 +214,7 @@ async fn start_postgres(
             oidc_config,
             cache_config,
             quota_config,
+            gdal_process_pool_config,
         )
         .await?;
 

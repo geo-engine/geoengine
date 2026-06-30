@@ -66,10 +66,13 @@ mod test_util {
     use crate::processing::meteosat::{
         new_channel_key, new_offset_key, new_satellite_key, new_slope_key,
     };
+    use crate::source::gdal_source::GdalMetaDataRegular;
     use crate::source::{
-        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataRegular,
-        GdalMetadataMapping, GdalSource, GdalSourceParameters, GdalSourceTimePlaceholder,
-        TimeReference,
+        GdalSource, GdalSourceParameters,
+        gdal_in::{
+            FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+            GdalMetadataMapping, GdalSourceTimePlaceholder, TimeReference,
+        },
     };
     use crate::test_data;
     use crate::util::Result;

@@ -359,9 +359,9 @@ mod tests {
         util::test::TestDefault,
     };
 
-    #[test]
+    #[tokio::test]
     #[allow(clippy::float_cmp)]
-    fn test_create_enlarged_tile() {
+    async fn test_create_enlarged_tile() {
         let execution_context =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::test_default());
 

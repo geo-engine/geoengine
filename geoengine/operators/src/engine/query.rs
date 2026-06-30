@@ -1,10 +1,14 @@
 use std::{
+    pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
-    {pin::Pin, sync::Arc},
 };
 
 use crate::{
-    cache::shared_cache::SharedCache, error, meta::quota::QuotaChecker,
+    cache::shared_cache::SharedCache,
+    error,
+    meta::quota::QuotaChecker,
+    source::gdal_in::{GdalProcessPool, GdalProcessPoolAccess},
     util::create_rayon_thread_pool,
 };
 use crate::{meta::quota::QuotaTracking, util::Result};
@@ -50,7 +54,7 @@ impl TestDefault for ChunkByteSize {
     }
 }
 
-pub trait QueryContext: Send + Sync {
+pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
     fn chunk_byte_size(&self) -> ChunkByteSize;
     fn tiling_specification(&self) -> TilingSpecification;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
@@ -63,6 +67,10 @@ pub trait QueryContext: Send + Sync {
 
     fn abort_registration(&self) -> &QueryAbortRegistration;
     fn abort_trigger(&mut self) -> Result<QueryAbortTrigger>;
+
+    fn gdal_process_pool(&self) -> &Arc<GdalProcessPool> {
+        self.get_gdal_pool()
+    }
 }
 
 /// This type allow wrapping multiple streams with `QueryAbortWrapper`s that
@@ -127,12 +135,15 @@ pub struct MockQueryContext {
 
     pub abort_registration: QueryAbortRegistration,
     pub abort_trigger: Option<QueryAbortTrigger>,
+
+    gdal_process_pool: Arc<GdalProcessPool>,
 }
 
 impl MockQueryContext {
     pub(super) fn new(
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
+        gdal_process_pool: Arc<GdalProcessPool>,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
@@ -144,12 +155,14 @@ impl MockQueryContext {
             quota_tracking: None,
             abort_registration,
             abort_trigger: Some(abort_trigger),
+            gdal_process_pool,
         }
     }
 
     pub(super) fn new_with_query_extensions(
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
+        gdal_process_pool: Arc<GdalProcessPool>,
         cache: Option<Arc<SharedCache>>,
         quota_tracking: Option<QuotaTracking>,
         quota_checker: Option<QuotaChecker>,
@@ -164,6 +177,7 @@ impl MockQueryContext {
             quota_tracking,
             abort_registration,
             abort_trigger: Some(abort_trigger),
+            gdal_process_pool,
         }
     }
 
@@ -171,12 +185,14 @@ impl MockQueryContext {
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
         num_threads: usize,
+        gdal_process_pool: Arc<GdalProcessPool>,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
             chunk_byte_size,
             tiling_specification,
             thread_pool: create_rayon_thread_pool(num_threads),
+            gdal_process_pool,
             cache: None,
             quota_checker: None,
             quota_tracking: None,
@@ -219,5 +235,11 @@ impl QueryContext for MockQueryContext {
 
     fn cache(&self) -> Option<Arc<SharedCache>> {
         self.cache.clone()
+    }
+}
+
+impl GdalProcessPoolAccess for MockQueryContext {
+    fn get_gdal_pool(&self) -> &Arc<GdalProcessPool> {
+        &self.gdal_process_pool
     }
 }
