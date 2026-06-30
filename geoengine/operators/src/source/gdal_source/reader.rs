@@ -221,7 +221,7 @@ mod tests {
         let tile_information =
             tile_information_with_partition_and_shape(output_bounds, output_shape);
 
-        let gpp = GdalProcessPool::new(8, 4, 2);
+        let gpp = GdalProcessPool::new(2, 2, 2);
         let gw = gpp.get_gdal_worker();
 
         let RasterTile2D {
@@ -256,7 +256,6 @@ mod tests {
 
         assert!((properties.scale_option()).is_none());
         assert!(properties.offset_option().is_none());
-        dbg!("properties: {:?}", &properties);
         assert_eq!(
             properties.get_property(&RasterPropertiesKey {
                 domain: Some("IMAGE_STRUCTURE_INFO".to_string()),

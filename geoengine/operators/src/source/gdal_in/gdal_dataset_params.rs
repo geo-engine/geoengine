@@ -75,7 +75,10 @@ impl GdalDatasetParameters {
     pub fn gdal_config_options_vsi_curl() -> &'static [(&'static str, &'static str)] {
         &[
             ("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR"),
-            ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS", ".tif,.tiff,.jp2,.ovr"),
+            (
+                "CPL_VSIL_CURL_ALLOWED_EXTENSIONS",
+                ".tif,.tiff,.TIF,.jp2,.ovr",
+            ),
             ("CPL_VSIL_CURL_CHUNK_SIZE", "1048576"), // 1mb TODO: need to tune this!
             ("VSI_CACHE", "TRUE"),
             ("VSI_CACHE_SIZE", "67108864 "), // 64mb per worker! TODO: need to tune this!
@@ -118,6 +121,21 @@ impl GdalDatasetParameters {
 
         // 3. Hash gdal_config_options
         self.gdal_config_options.hash(state);
+    }
+
+    pub fn full_hash<H: Hasher>(&self, state: &mut H) {
+        self.partial_hash(state);
+
+        self.rasterband_channel.hash(state);
+        self.width.hash(state);
+        self.height.hash(state);
+        //self.file_not_found_handling.hash(state); // TODO: is this required?
+        self.allow_alphaband_as_mask.hash(state);
+
+        // Hash f64 safely using bits
+        if let Some(nd) = self.no_data_value {
+            nd.to_bits().hash(state);
+        }
     }
 }
 

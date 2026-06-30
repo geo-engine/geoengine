@@ -11,11 +11,29 @@ use geoengine_operators::source::gdal_in::process_impl::{
 };
 use ipc_channel::ipc::IpcSender;
 use num::FromPrimitive;
-use tracing::Level;
 
 fn exit_with_error(msg: impl Display) -> ! {
     tracing::error!("Error: {msg}");
     std::process::exit(1);
+}
+
+/// placeholder for logging implementation
+#[allow(clippy::upper_case_acronyms)]
+enum Level {
+    INFO,
+    DEBUG,
+}
+
+impl FromStr for Level {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Info" | "info" => Ok(Level::INFO),
+            "Debug" | "debug" => Ok(Level::DEBUG),
+            _ => Err("unknown level".to_string()),
+        }
+    }
 }
 
 type Token = String;
@@ -34,6 +52,8 @@ fn setup() -> (Token, Level) {
     }
 }
 
+// TODO: when we add a logger to the process, we should re-route gdal logs, too.
+/*
 /// We install a GDAL error handler that logs all messages with our log macros.
 fn reroute_gdal_logging() {
     gdal::config::set_error_handler(|error_type, error_num, error_msg| {
@@ -58,13 +78,12 @@ fn reroute_gdal_logging() {
         }
     });
 }
+*/
 
 fn main() {
     let (token, _debug_lvl) = setup();
-    reroute_gdal_logging();
-
     // TODO: add a logger?
-
+    //reroute_gdal_logging();
     run(token);
 }
 

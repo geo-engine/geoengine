@@ -1255,7 +1255,7 @@ mod tests {
             ),
         });
 
-        let gpp = GdalProcessPool::new(8, 4, 2);
+        let gpp = GdalProcessPool::new(2, 2, 2);
         let gw: GdalPoolWorkerInstance = gpp.get_gdal_worker();
 
         let tile = GdalRasterLoader::load_tile_async::<f64>(
@@ -1426,7 +1426,7 @@ mod tests {
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_391_212_800_000); // 2014-01-01 - 2014-01-15
         let params = None;
 
-        let gpp = GdalProcessPool::new(8, 4, 2);
+        let gpp = GdalProcessPool::new(2, 2, 2);
         let gw: GdalPoolWorkerInstance = gpp.get_gdal_worker();
 
         let tile = GdalRasterLoader::load_tile_async::<f64>(
