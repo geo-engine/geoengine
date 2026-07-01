@@ -870,6 +870,7 @@ mod tests {
                     },
                 ],
             }],
+            query_timeout_secs: 60,
         }
     }
 
@@ -1105,6 +1106,7 @@ mod tests {
                     ],
                 },
             ],
+            query_timeout_secs: 60,
         };
 
         admin_ctx

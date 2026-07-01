@@ -480,6 +480,31 @@ impl ConfigElement for Cache {
     const KEY: &'static str = "cache";
 }
 
+#[derive(Debug, Deserialize, Clone, Copy)]
+pub struct StacCache {
+    /// Maximum total number of `TileFile` entries held in the STAC query cache
+    /// across all datasets.
+    pub max_tile_files: usize,
+    /// TTL in seconds for STAC query cache entries.
+    pub ttl_secs: u64,
+}
+
+impl ConfigElement for StacCache {
+    const KEY: &'static str = "stac_cache";
+}
+
+#[derive(Debug, Deserialize, Clone, Copy)]
+pub struct ProviderCache {
+    /// Maximum number of cached provider instances in the provider registry.
+    pub max_entries: usize,
+    /// Maximum idle time in seconds before a cached provider is evicted.
+    pub max_idle_secs: u64,
+}
+
+impl ConfigElement for ProviderCache {
+    const KEY: &'static str = "provider_cache";
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct Wildlive {
     pub api_endpoint: Url,

@@ -1,4 +1,5 @@
 use super::external::DataProvider;
+use crate::config::{ProviderCache, get_config_element};
 use crate::error::Result;
 use geoengine_datatypes::dataset::DataProviderId;
 use std::collections::HashMap;
@@ -9,6 +10,13 @@ use tokio::sync::Mutex;
 const DEFAULT_MAX_ENTRIES: usize = 256;
 const DEFAULT_MAX_IDLE_SECS: u64 = 30 * 60;
 
+// TODO: the cache key includes `user_id` to verify the caller has permission
+//       to access the provider (the DB query in `load_layer_provider` filters
+//       by user permissions).  However, once a provider is initialised it is
+//       identical for all users, so the same instance is cached once per user.
+//       Under many concurrent users this wastes memory.  A future optimisation
+//       could cache by `DataProviderId` only, and keep a separate permission
+//       check outside the hot path.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProviderCacheKey {
     pub user_id: String,
@@ -30,15 +38,37 @@ pub struct DataProviderRegistry {
 
 impl Default for DataProviderRegistry {
     fn default() -> Self {
+        let config = get_config_element::<ProviderCache>().ok();
+        let max_entries = config
+            .map_or(DEFAULT_MAX_ENTRIES, |c| c.max_entries);
+        let max_idle = Duration::from_secs(
+            config.map_or(DEFAULT_MAX_IDLE_SECS, |c| c.max_idle_secs),
+        );
         Self {
             entries: Mutex::new(HashMap::default()),
-            max_entries: DEFAULT_MAX_ENTRIES,
-            max_idle: Duration::from_secs(DEFAULT_MAX_IDLE_SECS),
+            max_entries,
+            max_idle,
         }
     }
 }
 
 impl DataProviderRegistry {
+    /// Get a cached provider, or initialise one and cache it.
+    ///
+    /// # TOCTOU race (known, acceptable)
+    ///
+    /// The lock is released between the first cache check and the call to
+    /// `initialize()`.  If two concurrent requests arrive for the same key,
+    /// both will miss the cache, both will call `initialize()` (expensive:
+    /// DB query + provider construction), and the second one to re-acquire
+    /// the lock will discard its freshly-built provider in favour of the
+    /// one the first request already stored.  This wastes work under high
+    /// concurrency but does **not** corrupt state because the double-check
+    /// inside the lock guarantees only one result is stored.
+    ///
+    /// A future optimisation could serialise initialisation per key with a
+    /// secondary `Mutex` or a `tokio::sync::OnceCell`, but for the expected
+    /// call volume the current design is adequate.
     pub async fn get_or_try_insert_with<F, Fut>(
         &self,
         key: ProviderCacheKey,
