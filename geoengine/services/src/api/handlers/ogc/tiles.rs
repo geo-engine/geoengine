@@ -390,13 +390,6 @@ pub async fn tile<C: ApplicationContext>(
     let zoom_level = query.zoom_level(max_zoom_level)?;
     let multiple_of_resolution = 2u32.pow(zoom_level);
 
-    // let expected_number_of_tiles_at_zoom_level = {
-    //     calculate_tiles_at_zoom_level(
-    //         initialized_operator.result_descriptor(),
-    //         &tiling_specification,
-    //         zoom_level,
-    //     )
-    // };
     let (expected_number_of_tiles_at_zoom_level, _) = calculate_tiles_for_zoom_level(
         initialized_operator.result_descriptor(),
         &tiling_specification,

@@ -42,7 +42,7 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 // TODO: add to [`ogcapi_types::common::link_rel`] and use from there
-const TILESETS_REL: &str = "http://www.opengis.net/def/rel/ogc/1.0/tilesets";
+const MAP_TILESETS_REL: &str = "http://www.opengis.net/def/rel/ogc/1.0/tilesets-map";
 
 const MAX_NUMBER_OF_TIME_INTERVALS: usize = 256;
 
@@ -459,8 +459,8 @@ async fn build_collection(
         links: vec![
             create_link(&format!("collections/{collection_id}"), SELF, JSON)?,
             create_link(
-                &format!("collections/{collection_id}/tiles"),
-                TILESETS_REL,
+                &format!("collections/{collection_id}/map/tiles"),
+                MAP_TILESETS_REL,
                 JSON,
             )?,
         ],
@@ -659,8 +659,8 @@ mod tests {
                             "type": "application/json"
                         },
                         {
-                            "href": format!("{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/tiles"),
-                            "rel": TILESETS_REL,
+                            "href": format!("{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles"),
+                            "rel": MAP_TILESETS_REL,
                             "type": "application/json"
                         }
                     ]
@@ -720,8 +720,8 @@ mod tests {
                         "type": "application/json"
                     },
                     {
-                        "href": format!("{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/tiles"),
-                        "rel": TILESETS_REL,
+                        "href": format!("{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles"),
+                        "rel": MAP_TILESETS_REL,
                         "type": "application/json"
                     }
                 ]
