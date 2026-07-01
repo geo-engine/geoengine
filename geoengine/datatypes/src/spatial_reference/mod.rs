@@ -1,15 +1,11 @@
 use crate::{
-    error,
-    operations::reproject::{CoordinateProjection, CoordinateProjector, Reproject},
-    primitives::AxisAlignedRectangle,
-    util::Result,
+    error, operations::reproject::Reproject, primitives::AxisAlignedRectangle, util::Result,
 };
 use gdal::spatial_ref::SpatialRef;
 
 use postgres_types::private::BytesMut;
 
 use postgres_types::{FromSql, IsNull, ToSql, Type};
-use proj::Proj;
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -17,6 +13,30 @@ use snafu::Error;
 use snafu::ResultExt;
 use std::str::FromStr;
 use std::{convert::TryFrom, fmt::Formatter};
+
+mod area_of_use_provider;
+pub use area_of_use_provider::AreaOfUseProvider;
+
+mod proj_projector;
+pub use proj_projector::{ProjAreaOfUseProvider, ProjCoordinateProjector};
+
+mod geodesy_projector;
+pub use geodesy_projector::{Error as GeodesyProjectorError, GeodesyCoordinateProjector};
+
+mod static_epsg_area_provider;
+pub use static_epsg_area_provider::StaticEpsgAreaProvider;
+
+mod projection_provider;
+pub use projection_provider::CoordinateProjection;
+
+mod mixed_area_of_use_provider;
+pub use mixed_area_of_use_provider::MixedAreaOfUseProvider;
+
+mod mixed_projector;
+use mixed_projector::MixedCoordinateProjector;
+
+pub type DefaultCoordinateProjector = MixedCoordinateProjector;
+pub type DefaultAreaOfUseProvider = MixedAreaOfUseProvider;
 
 /// A spatial reference authority that is part of a spatial reference definition
 #[derive(
@@ -73,7 +93,7 @@ impl SpatialReference {
     pub fn proj_string(self) -> Result<String> {
         match self.authority {
             SpatialReferenceAuthority::Epsg | SpatialReferenceAuthority::Iau2000 | SpatialReferenceAuthority::Esri => {
-                Ok(format!("{}:{}", self.authority, self.code))
+                Ok(self.srs_string())
             }
             // poor-mans integration of Meteosat Second Generation 
             SpatialReferenceAuthority::SrOrg if self.code == 81 => Ok("+proj=geos +lon_0=0 +h=35785831 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs +type=crs".to_owned()),
@@ -86,20 +106,8 @@ impl SpatialReference {
 
     /// Return the area of use in EPSG:4326 projection
     pub fn area_of_use<A: AxisAlignedRectangle>(self) -> Result<A> {
-        let proj_string = self.proj_string()?;
-
-        let proj = Proj::new(&proj_string).map_err(|_| error::Error::InvalidProjDefinition {
-            proj_definition: proj_string.clone(),
-        })?;
-        let area = proj
-            .area_of_use()
-            .context(error::ProjInternal)?
-            .0
-            .ok_or(error::Error::NoAreaOfUseDefined { proj_string })?;
-        A::from_min_max(
-            (area.west, area.south).into(),
-            (area.east, area.north).into(),
-        )
+        let provider = DefaultAreaOfUseProvider::new_known_crs(self)?;
+        provider.area_of_use()
     }
 
     /// Return the area of use in current projection
@@ -107,8 +115,8 @@ impl SpatialReference {
         if self == Self::epsg_4326() {
             return self.area_of_use();
         }
-        let p = CoordinateProjector::from_known_srs(Self::epsg_4326(), self)?;
-        self.area_of_use::<A>()?.reproject(&p)
+        let provider = DefaultAreaOfUseProvider::new_known_crs(self)?;
+        provider.area_of_use_projected()
     }
 
     /// Return the srs-string "authority:code"
@@ -125,7 +133,7 @@ impl SpatialReference {
     {
         // generate a projector which transforms wgs84 into the projection we want to produce.
         let valid_bounds_proj =
-            CoordinateProjector::from_known_srs(SpatialReference::epsg_4326(), *self)?;
+            DefaultCoordinateProjector::from_known_srs(SpatialReference::epsg_4326(), *self)?;
 
         // transform the bounds of the input srs (coordinates are in wgs84) into the output projection.
         // TODO check if  there is a better / smarter way to check if the coordinates are valid.

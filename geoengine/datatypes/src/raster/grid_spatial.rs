@@ -3,13 +3,12 @@ use super::{
     GridBounds, GridIdx, GridIdx2D, GridIntersection, TilingSpecification, TilingStrategy,
 };
 use crate::{
-    operations::reproject::{
-        CoordinateProjection, Reproject, ReprojectClipped, suggest_output_spatial_grid_like_gdal,
-    },
+    operations::reproject::{Reproject, ReprojectClipped, suggest_output_spatial_grid_like_gdal},
     primitives::{
         AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialPartitioned,
         SpatialResolution,
     },
+    spatial_reference::CoordinateProjection,
     util::Result,
 };
 use float_cmp::{ApproxEq, approx_eq};
@@ -401,7 +400,9 @@ mod tests {
         operations::reproject::suggest_output_spatial_grid_like_gdal_helper,
         primitives::AxisAlignedRectangle,
         raster::{BoundedGrid, GridShape},
-        spatial_reference::{SpatialReference, SpatialReferenceAuthority},
+        spatial_reference::{
+            DefaultCoordinateProjector, SpatialReference, SpatialReferenceAuthority,
+        },
         test_data,
         util::gdal::gdal_open_dataset,
     };
@@ -518,9 +519,14 @@ mod tests {
                 .bounding_box(),
         );
 
+        // NOTE: this uses the `DefaultCoordinateProjector` which might change.`
         let result_res =
-            suggest_output_spatial_grid_like_gdal_helper(&spatial_grid_3857, epsg_3857, epsg_4326)
-                .unwrap();
+            suggest_output_spatial_grid_like_gdal_helper::<DefaultCoordinateProjector>(
+                &spatial_grid_3857,
+                epsg_3857,
+                epsg_4326,
+            )
+            .unwrap();
 
         assert!(1. - (result_res.geo_transform().x_pixel_size() / res_4326.x).abs() < 0.02);
         assert!(1. - (result_res.geo_transform().y_pixel_size() / res_4326.y).abs() < 0.02);

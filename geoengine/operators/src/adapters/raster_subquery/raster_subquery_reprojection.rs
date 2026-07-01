@@ -16,14 +16,12 @@ use geoengine_datatypes::raster::{
     UpdateIndexedElementsParallel,
 };
 use geoengine_datatypes::{
-    operations::reproject::{CoordinateProjection, CoordinateProjector},
-    primitives::TimeInterval,
-    raster::EmptyGrid,
-    spatial_reference::SpatialReference,
-};
-use geoengine_datatypes::{
     primitives::Coordinate2D,
     raster::{CoordinatePixelAccess, GridIdx2D, Pixel, RasterTile2D, TileInformation},
+};
+use geoengine_datatypes::{
+    primitives::TimeInterval, raster::EmptyGrid, spatial_reference::CoordinateProjection,
+    spatial_reference::DefaultCoordinateProjector, spatial_reference::SpatialReference,
 };
 use num;
 use rayon::ThreadPool;
@@ -110,7 +108,7 @@ where
         });
 
         if let Some(bounds) = valid_spatial_bounds {
-            let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
+            let proj = DefaultCoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
             let projected_bounds = bounds.reproject(&proj);
 
             match projected_bounds {
@@ -240,7 +238,7 @@ fn projected_coordinate_grid_parallel(
                 let chunk_bounds = chunk_bounds.expect("checked above");
                 let valid_out_area = valid_out_area.as_bbox();
 
-                let proj = CoordinateProjector::from_known_srs(out_srs, in_srs)?;
+                let proj = DefaultCoordinateProjector::from_known_srs(out_srs, in_srs)?;
 
                 if valid_out_area.contains_bbox(&chunk_bounds) {
                     debug!("reproject whole tile chunk");

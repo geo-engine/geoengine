@@ -14,6 +14,7 @@ bench = false
 [features]
 
 [dependencies]
+geodesy = { workspace = true }
 arrow = { workspace = true }
 arrow-array = { workspace = true }
 arrow-ord = { workspace = true }
@@ -43,6 +44,9 @@ uuid = { workspace = true }
 wkt = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
+tracing = { workspace = true }
+crs-bounds = { path = "../crs-bounds", features = [] }
+crs-definitions = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
@@ -61,6 +65,14 @@ harness = false
 
 [[bench]]
 name = "masked_grid_mapping"
+harness = false
+
+[[bench]]
+name = "projection_benchmarks"
+harness = false
+
+[[bench]]
+name = "area_of_use_benchmarks"
 harness = false
 
 [lints]
