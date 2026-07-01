@@ -77,6 +77,7 @@ fn setup_contexts() -> (StatisticsWrappingMockExecutionContext, MockQueryContext
     let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
         ChunkByteSize::test_default(),
         None,
+        None,
         Some(QuotaTracking::new(
             tokio::sync::mpsc::unbounded_channel().0,
             user,

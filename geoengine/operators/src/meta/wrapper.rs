@@ -31,7 +31,7 @@ impl<S> InitializedOperatorWrapper<S> {
 
 impl InitializedRasterOperator for InitializedOperatorWrapper<Box<dyn InitializedRasterOperator>> {
     fn result_descriptor(&self) -> &RasterResultDescriptor {
-        tracing::debug!(
+        tracing::trace!(
             event = "raster result descriptor",
             path = self.source.path().to_string()
         );
@@ -138,7 +138,7 @@ impl InitializedRasterOperator for InitializedOperatorWrapper<Box<dyn Initialize
                         )))
                     }
                 };
-                tracing::debug!(event = "query processor created");
+                tracing::trace!(event = "query processor created");
                 Ok(res_processor)
             }
             Err(err) => {

@@ -8,13 +8,22 @@ license-file.workspace = true
 documentation.workspace = true
 repository.workspace = true
 
+[features]
+default = ["gdalpool_dedup_requests"]
+gdalpool_dedup_requests = []
+
 [lib]
 bench = false
+
+[[bin]]
+name = "gdalsource-process"
+path = "src/bin/gdalsource_process_main.rs"
 
 [dependencies]
 arrow = { workspace = true }
 async-trait = { workspace = true }
 bb8-postgres = { workspace = true }
+bytemuck = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 csv = { workspace = true }
@@ -26,6 +35,7 @@ geo = { workspace = true }
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-expression = { path = "../expression" }
 itertools = { workspace = true }
+ipc-channel = { workspace = true }
 libloading = { workspace = true }
 tracing = { workspace = true }
 lru = { workspace = true }
@@ -43,7 +53,9 @@ postgres-types = { workspace = true }
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 serde_json = { workspace = true }
+serial_test = { workspace = true }
 snafu = { workspace = true }
 stream-cancel = { workspace = true }
 tempfile = { workspace = true }
@@ -52,17 +64,23 @@ tokio-postgres = { workspace = true }
 typetag = { workspace = true }
 uuid = { workspace = true }
 strum = { workspace = true }
+ge = "0.2.0"
+lazy_static = "1.5.0"
 
 [dev-dependencies]
 async-stream = { workspace = true }
 approx = { workspace = true }
-criterion = { workspace = true }
 httptest = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["json"] }
 rand = { workspace = true }
+criterion = { version = "0.8.2", features = ["html_reports", "plotters", "cargo_bench_support", "async_tokio"], default-features = false }
 
 [[bench]]
 name = "ci_operators"
+harness = false
+
+[[bench]]
+name = "new_raster_cache"
 harness = false
 
 [lints]

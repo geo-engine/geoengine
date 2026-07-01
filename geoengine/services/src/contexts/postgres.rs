@@ -30,9 +30,11 @@ use bb8_postgres::{
 use geoengine_datatypes::machine_learning::MlModelName;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
+use geoengine_operators::cache::new_raster_cache::NewRasterCacheEnum;
 use geoengine_operators::cache::shared_cache::SharedCache;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::meta::quota::QuotaChecker;
+use geoengine_operators::source::gdal_in::{GdalProcessPool, GdalProcessPoolAccess};
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
 use snafu::ResultExt;
@@ -41,7 +43,6 @@ use std::sync::Arc;
 use tokio_postgres::error::SqlState;
 use tracing::info;
 use uuid::Uuid;
-
 // TODO: do not report postgres error details to user
 
 /// A contex with references to Postgres backends of the dbs. Automatically migrates schema on instantiation
@@ -62,6 +63,8 @@ where
     pub(crate) pool: Pool<PostgresConnectionManager<Tls>>,
     volumes: Volumes,
     tile_cache: Arc<SharedCache>,
+    gdal_process_pool: Arc<GdalProcessPool>,
+    new_raster_cache: Arc<NewRasterCacheEnum>,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -78,6 +81,7 @@ where
         query_ctx_chunk_size: ChunkByteSize,
         quota_config: Quota,
         oidc_db: OidcManager,
+        gdal_process_pool_config: crate::config::GdalProcessPool,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
@@ -93,6 +97,12 @@ where
             quota_config.increment_quota_buffer_timeout_seconds,
         );
 
+        let gdal_process_pool: Arc<GdalProcessPool> = GdalProcessPool::new(
+            gdal_process_pool_config.number_of_processes as usize,
+            gdal_process_pool_config.max_active_processes as usize,
+            gdal_process_pool_config.max_dataset_processes as usize,
+        );
+
         Ok(PostgresContext {
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
@@ -103,6 +113,8 @@ where
             pool,
             volumes: Default::default(),
             tile_cache: Arc::new(SharedCache::test_default()),
+            gdal_process_pool,
+            new_raster_cache: Arc::new(NewRasterCacheEnum::test_default()),
         })
     }
 
@@ -113,6 +125,7 @@ where
         oidc_db: OidcManager,
         cache_config: Cache,
         quota_config: Quota,
+        gdal_process_pool_config: crate::config::GdalProcessPool,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
@@ -126,6 +139,12 @@ where
             db,
             quota_config.increment_quota_buffer_size,
             quota_config.increment_quota_buffer_timeout_seconds,
+        );
+
+        let gdal_process_pool: Arc<GdalProcessPool> = GdalProcessPool::new(
+            gdal_process_pool_config.number_of_processes as usize,
+            gdal_process_pool_config.max_active_processes as usize,
+            gdal_process_pool_config.max_dataset_processes as usize,
         );
 
         Ok(PostgresContext {
@@ -141,6 +160,8 @@ where
                 SharedCache::new(cache_config.size_in_mb, cache_config.landing_zone_ratio)
                     .expect("tile cache creation should work because the config is valid"),
             ),
+            gdal_process_pool,
+            new_raster_cache: Arc::new(NewRasterCacheEnum::test_default()),
         })
     }
 
@@ -158,6 +179,7 @@ where
         oidc_config: Oidc,
         cache_config: Cache,
         quota_config: Quota,
+        gdal_process_pool_config: crate::config::GdalProcessPool,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
@@ -173,6 +195,12 @@ where
             quota_config.increment_quota_buffer_timeout_seconds,
         );
 
+        let gdal_process_pool: Arc<GdalProcessPool> = GdalProcessPool::new(
+            gdal_process_pool_config.number_of_processes as usize,
+            gdal_process_pool_config.max_active_processes as usize,
+            gdal_process_pool_config.max_dataset_processes as usize,
+        );
+
         let app_ctx = PostgresContext {
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
@@ -186,6 +214,8 @@ where
                 SharedCache::new(cache_config.size_in_mb, cache_config.landing_zone_ratio)
                     .expect("tile cache creation should work because the config is valid"),
             ),
+            gdal_process_pool,
+            new_raster_cache: Arc::new(NewRasterCacheEnum::test_default()),
         };
 
         if created_schema {
@@ -277,6 +307,18 @@ where
     }
 }
 
+impl<Tls> GdalProcessPoolAccess for PostgresContext<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    fn get_gdal_pool(&self) -> &Arc<GdalProcessPool> {
+        &self.gdal_process_pool
+    }
+}
+
 enum DatabaseStatus {
     Unitialized,
     InitializedClearDatabase,
@@ -356,7 +398,9 @@ where
             self.context.query_ctx_chunk_size,
             self.context.exe_ctx_tiling_spec,
             self.context.thread_pool.clone(),
+            self.context.gdal_process_pool.clone(),
             Some(self.context.tile_cache.clone()),
+            Some(self.context.new_raster_cache.clone()),
             Some(
                 self.context
                     .quota
@@ -371,6 +415,7 @@ where
             self.db(),
             self.context.thread_pool.clone(),
             self.context.exe_ctx_tiling_spec,
+            self.context.gdal_process_pool.clone(),
         ))
     }
 

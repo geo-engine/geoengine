@@ -60,6 +60,7 @@ async fn main() {
         Some(tile_cache),
         None,
         None,
+        None,
     );
 
     let start = std::time::Instant::now();

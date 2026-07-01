@@ -54,7 +54,11 @@ pub mod float {
     where
         D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_any(FloatOrStringVisitor)
+        if deserializer.is_human_readable() {
+            deserializer.deserialize_any(FloatOrStringVisitor)
+        } else {
+            deserializer.deserialize_f64(FloatOrStringVisitor)
+        }
     }
 
     /// write no data as either number or "nan"
@@ -63,8 +67,12 @@ pub mod float {
     where
         S: Serializer,
     {
-        if x.is_nan() {
-            s.serialize_str("nan")
+        if s.is_human_readable() {
+            if x.is_nan() {
+                s.serialize_str("nan")
+            } else {
+                s.serialize_f64(*x)
+            }
         } else {
             s.serialize_f64(*x)
         }
@@ -73,6 +81,8 @@ pub mod float {
 
 /// Serialize and deserialize float options with special treatment of NaN
 pub mod float_option {
+    use core::f64;
+
     use super::*;
 
     struct FloatOrStringOptionVisitor;
@@ -113,7 +123,13 @@ pub mod float_option {
     where
         D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_option(FloatOrStringOptionVisitor)
+        if deserializer.is_human_readable() {
+            deserializer.deserialize_option(FloatOrStringOptionVisitor)
+        } else {
+            // For binary formats: deserialize f64, then convert NaN → None
+            let f = deserializer.deserialize_f64(float::FloatOrStringVisitor)?;
+            if f.is_nan() { Ok(None) } else { Ok(Some(f)) }
+        }
     }
 
     /// write no data as either number or "nan"
@@ -123,10 +139,11 @@ pub mod float_option {
     where
         S: Serializer,
     {
-        if let Some(x) = x {
-            float::serialize(x, s)
-        } else {
-            s.serialize_none()
+        match x {
+            Some(f) if !s.is_human_readable() => s.serialize_f64(*f),
+            None if !s.is_human_readable() => s.serialize_f64(f64::NAN),
+            Some(f) => float::serialize(f, s),
+            None => s.serialize_none(),
         }
     }
 }

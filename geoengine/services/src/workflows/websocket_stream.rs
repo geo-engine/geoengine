@@ -5,7 +5,7 @@ use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt, stream::BoxStrea
 use geoengine_datatypes::{
     collections::FeatureCollectionIpc,
     primitives::{RasterQueryRectangle, VectorQueryRectangle},
-    raster::raster_tile_2d_to_arrow_ipc_file,
+    raster::arrow_conversion::raster_tile_2d_to_arrow_ipc_file,
 };
 use geoengine_operators::{
     call_on_generic_raster_processor, call_on_generic_vector_processor,

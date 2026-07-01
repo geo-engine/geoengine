@@ -37,6 +37,7 @@ pub fn test(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, syn::E
     let expect_panic = test_config.expect_panic();
     let quota_config = test_config.quota_config();
     let oidc_db = test_config.oidc_db();
+    let gdal_process_pool_config = test_config.gdal_process_pool_config();
 
     let output = quote! {
         #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -49,6 +50,7 @@ pub fn test(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, syn::E
             let query_ctx_chunk_size = #query_ctx_chunk_size;
             let quota_config = #quota_config;
             let (server, oidc_db) = #oidc_db;
+            let gdal_process_pool_config = #gdal_process_pool_config;
 
             #before;
 
@@ -63,6 +65,7 @@ pub fn test(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, syn::E
                     #[warn(clippy::used_underscore_binding)]
                     #test_name ( #call_params ).await
                 },
+                gdal_process_pool_config,
             ).await
         }
     };
@@ -79,6 +82,7 @@ pub struct TestConfig {
     quota_config: Option<TokenStream>,
     oidc_db: Option<TokenStream>,
     user: UserConfig,
+    gdal_process_pool_config: Option<TokenStream>,
 }
 
 impl TestConfig {
@@ -92,6 +96,7 @@ impl TestConfig {
             quota_config: None,
             oidc_db: None,
             user: UserConfig::Anonymous,
+            gdal_process_pool_config: None,
         };
 
         if let Some(lit) = args.remove("tiling_spec") {
@@ -152,6 +157,10 @@ impl TestConfig {
         if let Some(lit) = args.remove("oidc_db") {
             let oidc_db_fn = literal_to_fn(&lit)?;
             this.oidc_db = Some(quote!(#oidc_db_fn));
+        }
+
+        if let Some(lit) = args.remove("gdal_process_pool_config") {
+            this.gdal_process_pool_config = Some(literal_to_fn(&lit)?);
         }
 
         Ok(this)
@@ -218,6 +227,12 @@ impl TestConfig {
                 };
             },
         }
+    }
+
+    pub fn gdal_process_pool_config(&self) -> TokenStream {
+        self.gdal_process_pool_config.clone().unwrap_or_else(|| {
+            quote!(crate::config::get_config_element::<crate::config::GdalProcessPool>().unwrap())
+        })
     }
 }
 
@@ -412,6 +427,8 @@ mod tests {
                 let quota_config = crate::config::get_config_element::<crate::config::Quota>()
                     .unwrap();
                 let (server, oidc_db) = ((), crate::users::OidcManager::default);
+                let gdal_process_pool_config = crate::config::get_config_element::<crate::config::GdalProcessPool>()
+                    .unwrap();
 
                 (|| {})();
 
@@ -425,6 +442,7 @@ mod tests {
                         #[warn(clippy::used_underscore_binding)]
                         it_works(app_ctx).await
                     },
+                    gdal_process_pool_config,
                 ).await
             }
         };
@@ -456,6 +474,8 @@ mod tests {
                 let quota_config = crate::config::get_config_element::<crate::config::Quota>()
                     .unwrap();
                 let (server, oidc_db) = ((), crate::users::OidcManager::default);
+                let gdal_process_pool_config = crate::config::get_config_element::<crate::config::GdalProcessPool>()
+                    .unwrap();
 
                 (|| {})();
 
@@ -475,6 +495,7 @@ mod tests {
                         #[warn(clippy::used_underscore_binding)]
                         it_works(app_ctx, ctx).await
                     },
+                    gdal_process_pool_config,
                 ).await
             }
         };
@@ -508,6 +529,8 @@ mod tests {
                 let quota_config = crate::config::get_config_element::<crate::config::Quota>()
                     .unwrap();
                 let (server, oidc_db) = ((), crate::users::OidcManager::default);
+                let gdal_process_pool_config = crate::config::get_config_element::<crate::config::GdalProcessPool>()
+                    .unwrap();
 
                 (|| {})();
 
@@ -526,6 +549,7 @@ mod tests {
                         #[warn(clippy::used_underscore_binding)]
                         it_works(db_config, ctx).await
                     },
+                    gdal_process_pool_config,
                 ).await
             }
         };
@@ -550,6 +574,7 @@ mod tests {
             expect_panic = "panic!!!",
             quota_config = "baz",
             oidc_db = "qux",
+            gdal_process_pool_config = "gwup",
         };
 
         let expected = quote! {
@@ -565,6 +590,7 @@ mod tests {
                 let query_ctx_chunk_size = bar();
                 let quota_config = baz();
                 let (server, oidc_db) = qux();
+                let gdal_process_pool_config = gwup();
 
                 before_fn();
 
@@ -578,6 +604,7 @@ mod tests {
                         #[warn(clippy::used_underscore_binding)]
                         it_works(app_ctx).await
                     },
+                    gdal_process_pool_config,
                 ).await
             }
         };
