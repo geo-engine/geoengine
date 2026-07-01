@@ -56,13 +56,13 @@ where
 {
     let mut result = f();
     let mut sleep_delay = initial_delay_ms as f64;
-    while result.is_err() && max_retries > 0 {
+    'retryloop: while result.is_err() && max_retries > 0 {
         std::thread::sleep(Duration::from_millis(sleep_delay as u64));
         result = f();
         if let Err(e) = &result
             && break_early_f(e)
         {
-            break;
+            break 'retryloop;
         }
         max_retries -= 1;
         sleep_delay *= exponential_backoff_factor;

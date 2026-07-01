@@ -2848,6 +2848,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
+ "serial_test",
  "snafu",
  "stream-cancel",
  "strum",

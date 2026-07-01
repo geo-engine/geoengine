@@ -119,6 +119,21 @@ impl GdalDatasetParameters {
         // 3. Hash gdal_config_options
         self.gdal_config_options.hash(state);
     }
+
+    pub fn full_hash<H: Hasher>(&self, state: &mut H) {
+        self.partial_hash(state);
+
+        self.rasterband_channel.hash(state);
+        self.width.hash(state);
+        self.height.hash(state);
+        //self.file_not_found_handling.hash(state); // TODO: is this required?
+        self.allow_alphaband_as_mask.hash(state);
+
+        // Hash f64 safely using bits
+        if let Some(nd) = self.no_data_value {
+            nd.to_bits().hash(state);
+        }
+    }
 }
 
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone, Copy)]

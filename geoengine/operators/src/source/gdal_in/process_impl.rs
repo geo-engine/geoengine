@@ -630,6 +630,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn ipc_process_error_ipc_channel_roundtrip() {
         let error = IpcProcessError::GdalError {
             kind: IpcProcessGdalErrorKind::FileNotFound,
@@ -644,6 +645,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_sending_gdal_dataset_parameters_via_string() {
         let msg = get_params();
 
@@ -657,6 +659,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_sending_gdal_dataset_parameters() {
         let msg = get_params();
 
@@ -670,6 +673,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_sending_tile_information() {
         let output_shape: GridShape2D = [8, 8].into();
         let output_bounds =
@@ -685,6 +689,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_sending_time() {
         let msg = TimeInstance::from_millis(10).unwrap();
 
@@ -696,6 +701,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_sending_time_interval() {
         let msg = TimeInterval::default();
 
@@ -707,6 +713,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_sending_request_tile_data() {
         let output_shape: GridShape2D = [8, 8].into();
 
@@ -774,6 +781,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_ipc_channel_roundtrip_tile() {
         let output_shape: GridShape2D = [8, 8].into();
 
@@ -846,7 +854,7 @@ mod tests {
             Err(e) => panic!("Error receiving from IPC process: {:?}", e),
         };
 
-        let result_2: GdalIpcPayload<u8> = payload.into();
+        let result_2: GdalIpcPayload<u8> = (&payload).try_into().unwrap();
 
         let grid_and_props: GridAndProperties<u8, GridBoundingBox2D> = result_2.into();
 
@@ -908,6 +916,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial]
     async fn test_load_tile_data_top_left() {
         let gdal_read_advice = GdalReadAdvise {
             gdal_read_widow: GdalReadWindow::new([0, 0].into(), [8, 8].into()),
@@ -959,6 +968,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_load_tile_data_overlaps_dataset_bounds_top_left_out1() {
         // shift world bbox one pixel up and to the left
         let gdal_read_advice = GdalReadAdvise {
@@ -1002,6 +1012,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn it_creates_no_data_only_for_missing_files() {
         hide_gdal_errors();
 
@@ -1072,6 +1083,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn it_creates_no_data_only_for_http_404() {
         let server = Server::run();
 
@@ -1169,6 +1181,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn it_retries_only_after_clearing_vsi_cache() {
         hide_gdal_errors();
 
@@ -1252,6 +1265,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     #[allow(clippy::too_many_lines)]
     fn read_up_side_down_raster() {
         let up_side_down_params = GdalDatasetParameters {
@@ -1371,6 +1385,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn read_raster_and_offset_scale() {
         let up_side_down_params = GdalDatasetParameters {
             file_path: test_data!("raster/modis_ndvi/cropped/MOD13A2_M_NDVI_2014-04-01_30x30.tif")

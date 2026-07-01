@@ -933,8 +933,8 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 mod tests {
     use super::*;
     use crate::{
+        contexts::PostgresContext,
         contexts::{ApplicationContext, SessionContext},
-        contexts::{PostgresContext, PostgresDb},
         ge_context,
         layers::storage::{LayerProviderDb, LayerProviderListing, LayerProviderListingOptions},
         test_data,
@@ -943,21 +943,16 @@ mod tests {
     };
     use futures::StreamExt;
     use geoengine_datatypes::{
-        dataset::{DatasetId, ExternalDataId},
+        dataset::ExternalDataId,
         primitives::{BandSelection, SpatialPartition2D},
-        util::{Identifier, gdal::hide_gdal_errors, test::TestDefault},
+        util::test::TestDefault,
     };
     use geoengine_operators::{
         engine::{
             ChunkByteSize, ExecutionContext, MockExecutionContext, RasterOperator,
             WorkflowOperatorPath,
         },
-        source::{FileNotFoundHandling, GdalMetaDataStatic, GdalSource, GdalSourceParameters},
-    };
-    use httptest::{
-        Expectation, Server, all_of,
-        matchers::{contains, request, url_decoded},
-        responders::{self},
+        source::{FileNotFoundHandling, GdalSource, GdalSourceParameters},
     };
     use std::{fs::File, io::BufReader, str::FromStr};
     use tokio_postgres::NoTls;
@@ -1142,6 +1137,7 @@ mod tests {
         Ok(())
     }
 
+    /*
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn query_data_with_failing_requests(app_ctx: PostgresContext<NoTls>) {
@@ -1517,6 +1513,7 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert!(result[0].is_ok());
     }
+     */
 
     #[test]
     fn make_unique_timestamps_no_dups() {

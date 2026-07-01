@@ -211,19 +211,6 @@ pub enum GdalDataGridVariant<T> {
     },
 }
 
-impl<T> From<GdalIpcBytePayload> for GdalIpcPayload<T>
-where
-    T: bytemuck::AnyBitPattern,
-{
-    fn from(value: GdalIpcBytePayload) -> Self {
-        Self {
-            dimensions: value.dimensions,
-            properties: value.properties.into(),
-            data_variant: value.data_variant.into(),
-        }
-    }
-}
-
 impl<T> TryFrom<GdalIpcPayload<T>> for GdalIpcBytePayload
 where
     T: bytemuck::NoUninit,
@@ -277,31 +264,56 @@ where
     }
 }
 
-impl<T> From<GdalDataGridByteVariant> for GdalDataGridVariant<T>
+impl<T> TryFrom<&GdalDataGridByteVariant> for GdalDataGridVariant<T>
 where
     T: AnyBitPattern,
 {
-    fn from(value: GdalDataGridByteVariant) -> Self {
+    type Error = bytemuck::PodCastError;
+
+    fn try_from(value: &GdalDataGridByteVariant) -> Result<Self, Self::Error> {
         match value {
-            GdalDataGridByteVariant::Empty => GdalDataGridVariant::Empty,
-            GdalDataGridByteVariant::AllValid { raw_bytes } => GdalDataGridVariant::AllValid {
-                data: bytemuck::cast_slice::<u8, T>(&raw_bytes).to_vec(),
-            },
+            GdalDataGridByteVariant::Empty => Ok(GdalDataGridVariant::Empty),
+            GdalDataGridByteVariant::AllValid { raw_bytes } => {
+                // We borrow the well-aligned bytes from the Arc, cast them, and allocate Vec<T>
+                let data = bytemuck::try_cast_slice::<u8, T>(raw_bytes)?.to_vec();
+                Ok(GdalDataGridVariant::AllValid { data })
+            }
             GdalDataGridByteVariant::WithNoData {
                 raw_bytes,
                 no_data_value,
-            } => GdalDataGridVariant::WithNoData {
-                data: bytemuck::cast_slice::<u8, T>(&raw_bytes).to_vec(),
-                no_data_value,
-            },
+            } => {
+                let data = bytemuck::try_cast_slice::<u8, T>(raw_bytes)?.to_vec();
+                Ok(GdalDataGridVariant::WithNoData {
+                    data,
+                    no_data_value: *no_data_value,
+                })
+            }
             GdalDataGridByteVariant::WithExplicitMask {
                 raw_bytes,
                 validity_mask,
-            } => GdalDataGridVariant::WithExplicitMask {
-                data: bytemuck::cast_slice::<u8, T>(&raw_bytes).to_vec(),
-                validity_mask,
-            },
+            } => {
+                let data = bytemuck::try_cast_slice::<u8, T>(raw_bytes)?.to_vec();
+                Ok(GdalDataGridVariant::WithExplicitMask {
+                    data,
+                    validity_mask: validity_mask.clone(), // Mask is u8, so clone is cheap and safe
+                })
+            }
         }
+    }
+}
+
+impl<T> TryFrom<&GdalIpcBytePayload> for GdalIpcPayload<T>
+where
+    T: bytemuck::AnyBitPattern,
+{
+    type Error = bytemuck::PodCastError;
+
+    fn try_from(value: &GdalIpcBytePayload) -> Result<Self, Self::Error> {
+        Ok(Self {
+            dimensions: value.dimensions,
+            properties: value.properties.clone().into(),
+            data_variant: (&value.data_variant).try_into()?,
+        })
     }
 }
 
@@ -525,9 +537,10 @@ impl IpcChannelMessage {
     }
 
     pub fn full_hash<H: Hasher>(&self, state: &mut H) {
-        self.0.dataset_params.partial_hash(state);
+        self.0.dataset_params.full_hash(state);
 
         // Hash read advise
         self.0.read_advise.hash(state);
+        self.0.data_type.hash(state);
     }
 }

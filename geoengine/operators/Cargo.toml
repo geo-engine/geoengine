@@ -55,6 +55,7 @@ rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
+serial_test = { workspace = true }
 snafu = { workspace = true }
 stream-cancel = { workspace = true }
 tempfile = { workspace = true }
