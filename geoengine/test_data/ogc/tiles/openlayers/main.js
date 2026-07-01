@@ -14,11 +14,12 @@ import Fill from "ol/style/Fill.js";
 import Text from "ol/style/Text.js";
 import Stroke from "ol/style/Stroke.js";
 
-const SERVER_URL = "http://localhost:3030";
+const SERVER_URL = `${window.location.protocol}//${window.location.hostname}:${window.location.port}`; // proxied by vite
+const ACTUAL_SERVER_URL = "http://localhost:3030";
 
 async function getSessionToken() {
   try {
-    const response = await fetch("http://localhost:3030/api/anonymous", {
+    const response = await fetch("/api/anonymous", {
       method: "POST",
     });
     const data = await response.json();
@@ -36,6 +37,12 @@ async function tmsBlobUrl(dataConnectorId, layerId, tms, sessionToken) {
   return await urlToBlobUrl(tmsUrl, sessionToken, async (metadata) => {
     for (const link of metadata.links) {
       console.log("TMS link:", link.rel, link.href, link.type);
+
+      // replace urls
+      if (link.href.startsWith(ACTUAL_SERVER_URL)) {
+        link.href = link.href.replace(ACTUAL_SERVER_URL, SERVER_URL);
+      }
+
       if (link.rel === "http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme") {
         link.href = await urlToBlobUrl(link.href, sessionToken);
       }
@@ -44,6 +51,12 @@ async function tmsBlobUrl(dataConnectorId, layerId, tms, sessionToken) {
 }
 
 async function urlToBlobUrl(url, sessionToken, interceptor) {
+  // console.log("URL before: ", url);
+  // if (url.startsWith(ACTUAL_SERVER_URL)) {
+  //   url = url.replace(ACTUAL_SERVER_URL, SERVER_URL);
+  // }
+  // console.log("URL after: ", url);
+
   const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${sessionToken}`,
