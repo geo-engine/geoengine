@@ -71,6 +71,24 @@ impl NewRasterCacheEnum {
             }
         }
     }
+
+    /// Number of entries currently stored in the cache.
+    pub async fn len(&self) -> usize {
+        match self {
+            NewRasterCacheEnum::InMemoryCompressedRasterTile2DFifo(cache) => {
+                cache.store.len().await
+            }
+        }
+    }
+
+    /// Total byte size of all entries currently stored in the cache.
+    pub async fn byte_size(&self) -> usize {
+        match self {
+            NewRasterCacheEnum::InMemoryCompressedRasterTile2DFifo(cache) => {
+                cache.store.byte_size().await
+            }
+        }
+    }
 }
 
 #[async_trait]
@@ -81,12 +99,17 @@ trait CacheStore: Send + Sync + 'static {
     async fn get(&self, key: &CacheKey) -> Result<Arc<Self::SF>>;
 
     async fn insert(&self, key: CacheKey, tile: TypedRasterTile2D) -> Result<()>;
+
+    async fn len(&self) -> usize;
+
+    async fn byte_size(&self) -> usize;
 }
 
 trait EvictionStrategy: Send + Sync + 'static {
     fn record_access(&mut self, key: &CacheKey, weight: f64, size: usize);
     fn record_hit(&mut self, key: &CacheKey);
     fn record_removal(&mut self, key: &CacheKey);
+    fn current_size(&self) -> usize;
 
     fn plan_eviction<F>(
         &self,
@@ -126,6 +149,10 @@ impl FifoEvictionStrategy {
 }
 
 impl EvictionStrategy for FifoEvictionStrategy {
+    fn current_size(&self) -> usize {
+        self.size
+    }
+
     fn record_access(&mut self, key: &CacheKey, weight: f64, size: usize) {
         self.queue.push(EvictionStrategyItem {
             key: key.clone(),
@@ -245,6 +272,14 @@ impl<SF: StorageFormat, ES: EvictionStrategy> CacheStore for MockOnDiskCacheStor
             .await
             .insert(key, Arc::new(SF::store(tile)?));
         Ok(())
+    }
+
+    async fn len(&self) -> usize {
+        self.cache.read().await.len()
+    }
+
+    async fn byte_size(&self) -> usize {
+        0
     }
 }
 
@@ -399,14 +434,21 @@ where
     type ES = ES;
 
     async fn get(&self, key: &CacheKey) -> Result<Arc<Self::SF>> {
-        self.cache
-            .read()
-            .await
-            .get(key)
-            .map(Arc::clone)
-            .ok_or(crate::error::Error::Cache {
-                source: CacheError::Unspecified,
-            })
+        let cache_len = self.cache.read().await.len();
+        let result = self.cache.read().await.get(key).map(Arc::clone);
+
+        match &result {
+            Some(_) => {
+                tracing::debug!(event = "new_raster_cache_hit", cache.len = cache_len,);
+            }
+            None => {
+                tracing::debug!(event = "new_raster_cache_miss", cache.len = cache_len,);
+            }
+        }
+
+        result.ok_or(crate::error::Error::Cache {
+            source: CacheError::Unspecified,
+        })
     }
 
     async fn insert(&self, key: CacheKey, tile: TypedRasterTile2D) -> Result<()> {
@@ -419,6 +461,8 @@ where
             cache.get(key).map_or(true, |sf| Arc::strong_count(sf) > 1)
         })?;
 
+        let evicted_count = eviction_plan.keys_to_remove.len();
+
         if eviction_plan.freed_bytes < required_space {
             return Err(crate::error::Error::Cache {
                 source: CacheError::Unspecified,
@@ -430,8 +474,25 @@ where
             eviction_strategy.record_removal(&key);
         }
 
+        let entries = cache.len();
         cache.insert(key, stored_tile);
+
+        tracing::debug!(
+            event = "new_raster_cache_insert",
+            size_bytes = required_space,
+            entries = entries,
+            evicted = evicted_count,
+        );
+
         Ok(())
+    }
+
+    async fn len(&self) -> usize {
+        self.cache.read().await.len()
+    }
+
+    async fn byte_size(&self) -> usize {
+        self.eviction_strategy.read().await.current_size()
     }
 }
 
@@ -608,27 +669,38 @@ where
                             (work, idx + 1),
                         ))
                     } else {
-                        //println!("Cache miss for key {hash_key:?}!");
-
                         let source_query = self.source.query(
                             RasterQueryRectangle::new(job.tile_info.global_pixel_bounds(), time_interval, BandSelection::new_single(job.band)),
                             ctx,
                         ).await;
 
+                        match source_query {
+                            Ok(mut stream) => {
+                                match stream.next().await {
+                                    Some(Ok(tile)) => {
+                                        // TODO tokio::spawn
+                                        let _ = cache_store.insert(key, T::map_tile_to_enum(tile.clone())).await;
 
-                        if let Ok(mut stream) = source_query {
-                            if let Some(Ok(tile)) = stream.next().await {
-                                // TODO tokio::spawn
-                                let _ = cache_store.insert(key, T::map_tile_to_enum(tile.clone())).await;
-
-                                return Some((Ok(tile), (work, idx + 1)));
+                                        return Some((Ok(tile), (work, idx + 1)));
+                                    }
+                                    Some(Err(err)) => {
+                                        return Some((Err(err), (work, idx + 1)));
+                                    }
+                                    None => {
+                                        // stream was empty
+                                        return Some((
+                                            Err(crate::error::Error::Cache {
+                                                source: CacheError::Unspecified,
+                                            }),
+                                            (work, idx + 1),
+                                        ));
+                                    }
+                                }
+                            }
+                            Err(err) => {
+                                return Some((Err(err), (work, idx + 1)));
                             }
                         }
-
-                        Some((
-                            Err(crate::error::Error::Cache { source: CacheError::Unspecified }),
-                            (work, idx + 1),
-                        ))
                     }
                 }))
             },
