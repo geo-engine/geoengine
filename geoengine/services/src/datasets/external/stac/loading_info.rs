@@ -1,4 +1,4 @@
-use super::{StacDataProvider, StacProviderDataset, StacProviderS3Config};
+use super::{StacDataProvider, StacProviderDataset, StacProviderS3Config, cache::StacQueryCache};
 use crate::error::Result;
 use crate::util::join_base_url_and_path;
 use async_trait::async_trait;
@@ -27,11 +27,9 @@ use serde_json::Value;
 use stac::Item;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::time::Duration;
+use std::sync::Arc;
 use tracing::debug;
 use url::Url;
-
-const STAC_QUERY_TIMEOUT_SECS: u64 = 60;
 
 #[derive(Debug, Clone)]
 struct StacMultiBandMetaData {
@@ -40,6 +38,9 @@ struct StacMultiBandMetaData {
     s3_config: Option<StacProviderS3Config>,
     time_dimension: TimeDimension,
     dataset: StacProviderDataset,
+    client: reqwest::Client,
+    /// Shared query-result cache from the provider.
+    query_cache: Arc<StacQueryCache>,
 }
 
 #[derive(Debug, Clone)]
@@ -167,15 +168,31 @@ impl
         )
         .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
 
+        let spatial_bounds = query.query_rectangle.spatial_bounds();
         let time_interval =
             stac_query_time_interval(query.query_rectangle.time_interval(), self.time_dimension)?;
 
-        let query_params = self.create_stac_query_params(&query, time_interval)?;
+        // --- Cache lookup -------------------------------------------------
+        if let Some((cached_time_steps, cached_files)) = self
+            .query_cache
+            .lookup(&self.dataset, &spatial_bounds, time_interval)
+            .await
+        {
+            tracing::trace!(
+                "STAC cache hit for dataset '{}' spatial={:?} time={:?}",
+                self.dataset.name,
+                spatial_bounds,
+                time_interval,
+            );
+            return Ok(MultiBandGdalLoadingInfo::new(
+                cached_time_steps,
+                cached_files,
+                CacheHint::default(),
+            ));
+        }
+        // ------------------------------------------------------------------
 
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(STAC_QUERY_TIMEOUT_SECS))
-            .build()
-            .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+        let query_params = self.create_stac_query_params(&query, time_interval)?;
 
         let mut query_state = StacQueryState::FirstPage {
             query_url: items_url,
@@ -187,10 +204,10 @@ impl
 
         while !matches!(query_state, StacQueryState::Finished) {
             let (item_collection, next_state) =
-                query_stac_item_collection(&client, &query_state).await?;
+                query_stac_item_collection(&self.client, &query_state).await?;
 
             for item in item_collection.items {
-                self.process_stac_item(&item, &mut time_steps, &mut files, query.fetch_tiles)
+                self.process_stac_item(&item, &mut time_steps, &mut files)
                     .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                         source: Box::new(e),
                     })?;
@@ -222,6 +239,18 @@ impl
                 .then(a.band.cmp(&b.band))
                 .then(a.z_index.cmp(&b.z_index))
         });
+
+        // --- Cache store --------------------------------------------------
+        self.query_cache
+            .insert(
+                &self.dataset,
+                spatial_bounds,
+                time_interval,
+                time_steps.clone(),
+                files.clone(),
+            )
+            .await;
+        // ------------------------------------------------------------------
 
         Ok(MultiBandGdalLoadingInfo::new(
             time_steps,
@@ -362,21 +391,12 @@ impl StacMultiBandMetaData {
         item: &Item,
         time_steps: &mut Vec<TimeInterval>,
         files: &mut Vec<TileFile>,
-        fetch_tiles: bool,
     ) -> Result<()> {
         let Some((time, z_index)) = self.item_time_and_z_index(item)? else {
             return Ok(());
         };
 
         time_steps.push(time);
-
-        if !fetch_tiles {
-            tracing::trace!(
-                "STAC query does not require fetching tiles, skipping item with id: {}",
-                item.id
-            );
-            return Ok(());
-        }
 
         for asset in item.assets.values() {
             self.process_stac_asset(asset, time, z_index, files)?;
@@ -778,6 +798,8 @@ impl
             s3_config: self.s3_config.clone(),
             time_dimension: self.time_dimension,
             dataset: dataset.clone(),
+            client: self.client.clone(),
+            query_cache: self.query_cache.clone(),
         }))
     }
 }
@@ -848,6 +870,7 @@ mod tests {
                     },
                 ],
             }],
+            query_timeout_secs: 60,
         }
     }
 
@@ -1083,6 +1106,7 @@ mod tests {
                     ],
                 },
             ],
+            query_timeout_secs: 60,
         };
 
         admin_ctx

@@ -206,6 +206,7 @@ pub mod tests {
     };
     use bb8_postgres::{PostgresConnectionManager, bb8::Pool};
     use geoengine_datatypes::{primitives::DateTime, test_data};
+    use std::sync::Arc;
     use tokio_postgres::NoTls;
 
     pub async fn create_migration_0015_snapshot<Tls>(
@@ -383,6 +384,7 @@ pub mod tests {
                 view: None,
                 roles: vec![RoleId::from_u128(0xb589a590_9c0c_4b55_9aa2_d178a5f42a78)],
             },
+            Arc::new(crate::layers::provider_registry::DataProviderRegistry::default()),
         );
 
         let projects = db

@@ -3,6 +3,7 @@ use crate::contexts::GeoEngineDb;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::layers::external::{DataProvider, DataProviderDefinition, TypedDataProviderDefinition};
 use async_trait::async_trait;
+use cache::StacQueryCache;
 use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::primitives::{SpatialResolution, TimeDimension};
 use geoengine_datatypes::raster::RasterDataType;
@@ -10,9 +11,13 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::SpatialGridDescriptor;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
+mod cache;
 mod listing;
 mod loading_info;
+
+const DEFAULT_QUERY_TIMEOUT_SECS: i64 = 60;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
 #[postgres(name = "StacDataProviderDefinition")]
@@ -28,6 +33,13 @@ pub struct StacDataProviderDefinition {
     pub time_dimension: TimeDimension, // TODO: should this be on dataset level?
     pub datasets: Vec<StacProviderDataset>,
     // TODO: page limit(?)
+    /// Timeout in seconds for outgoing STAC API HTTP requests.
+    #[serde(default = "default_query_timeout")]
+    pub query_timeout_secs: i64,
+}
+
+fn default_query_timeout() -> i64 {
+    DEFAULT_QUERY_TIMEOUT_SECS
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
@@ -81,6 +93,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
             self.s3_config,
             self.time_dimension,
             self.datasets,
+            self.query_timeout_secs,
         )))
     }
 
@@ -136,6 +149,11 @@ pub struct StacDataProvider {
     s3_config: Option<StacProviderS3Config>,
     time_dimension: TimeDimension,
     datasets: Vec<StacProviderDataset>,
+    /// Shared HTTP client, reused across all requests for this provider.
+    client: reqwest::Client,
+    /// In-memory cache for STAC query results (tile files), keyed by dataset
+    /// name and spatial/temporal query bounds.
+    query_cache: Arc<StacQueryCache>,
 }
 
 impl StacDataProvider {
@@ -149,7 +167,12 @@ impl StacDataProvider {
         s3_config: Option<StacProviderS3Config>,
         time_dimension: TimeDimension,
         datasets: Vec<StacProviderDataset>,
+        query_timeout_secs: i64,
     ) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(query_timeout_secs as u64))
+            .build()
+            .unwrap_or_default();
         Self {
             id,
             name,
@@ -159,6 +182,8 @@ impl StacDataProvider {
             s3_config,
             time_dimension,
             datasets,
+            client,
+            query_cache: Arc::new(StacQueryCache::default()),
         }
     }
 }

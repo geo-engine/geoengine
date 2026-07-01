@@ -14,6 +14,7 @@ use crate::layers::add_from_directory::{
     add_datasets_from_directory, add_layer_collections_from_directory, add_layers_from_directory,
     add_providers_from_directory,
 };
+use crate::layers::provider_registry::DataProviderRegistry;
 use crate::machine_learning::error::MachineLearningError;
 use crate::quota::{QuotaTrackingFactory, initialize_quota_tracking};
 use crate::tasks::SimpleTaskManagerContext;
@@ -62,6 +63,7 @@ where
     pub(crate) pool: Pool<PostgresConnectionManager<Tls>>,
     volumes: Volumes,
     tile_cache: Arc<SharedCache>,
+    provider_registry: Arc<DataProviderRegistry>,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -85,7 +87,12 @@ where
 
         Self::create_pro_database(pool.get().await?).await?;
 
-        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
+        let provider_registry = Arc::new(DataProviderRegistry::default());
+        let db = PostgresDb::new(
+            pool.clone(),
+            UserSession::admin_session(),
+            provider_registry.clone(),
+        );
         let quota = initialize_quota_tracking(
             quota_config.mode,
             db,
@@ -103,6 +110,7 @@ where
             pool,
             volumes: Default::default(),
             tile_cache: Arc::new(SharedCache::test_default()),
+            provider_registry,
         })
     }
 
@@ -120,7 +128,12 @@ where
 
         Self::create_pro_database(pool.get().await?).await?;
 
-        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
+        let provider_registry = Arc::new(DataProviderRegistry::default());
+        let db = PostgresDb::new(
+            pool.clone(),
+            UserSession::admin_session(),
+            provider_registry.clone(),
+        );
         let quota = initialize_quota_tracking(
             quota_config.mode,
             db,
@@ -141,6 +154,7 @@ where
                 SharedCache::new(cache_config.size_in_mb, cache_config.landing_zone_ratio)
                     .expect("tile cache creation should work because the config is valid"),
             ),
+            provider_registry,
         })
     }
 
@@ -165,7 +179,12 @@ where
 
         let created_schema = Self::create_pro_database(pool.get().await?).await?;
 
-        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
+        let provider_registry = Arc::new(DataProviderRegistry::default());
+        let db = PostgresDb::new(
+            pool.clone(),
+            UserSession::admin_session(),
+            provider_registry.clone(),
+        );
         let quota = initialize_quota_tracking(
             quota_config.mode,
             db,
@@ -186,6 +205,7 @@ where
                 SharedCache::new(cache_config.size_in_mb, cache_config.landing_zone_ratio)
                     .expect("tile cache creation should work because the config is valid"),
             ),
+            provider_registry,
         };
 
         if created_schema {
@@ -342,7 +362,11 @@ where
     type ExecutionContext = ExecutionContextImpl<Self::GeoEngineDB>;
 
     fn db(&self) -> Self::GeoEngineDB {
-        PostgresDb::new(self.context.pool.clone(), self.session.clone())
+        PostgresDb::new(
+            self.context.pool.clone(),
+            self.session.clone(),
+            self.context.provider_registry.clone(),
+        )
     }
 
     fn tasks(&self) -> Self::TaskManager {
@@ -406,6 +430,7 @@ where
 {
     pub(crate) conn_pool: Pool<PostgresConnectionManager<Tls>>,
     pub(crate) session: UserSession,
+    pub(crate) provider_registry: Arc<DataProviderRegistry>,
 }
 
 impl<Tls> PostgresDb<Tls>
@@ -415,8 +440,16 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>, session: UserSession) -> Self {
-        Self { conn_pool, session }
+    pub fn new(
+        conn_pool: Pool<PostgresConnectionManager<Tls>>,
+        session: UserSession,
+        provider_registry: Arc<DataProviderRegistry>,
+    ) -> Self {
+        Self {
+            conn_pool,
+            session,
+            provider_registry,
+        }
     }
 
     /// Check whether the namepsace of the given dataset is allowed for insertion

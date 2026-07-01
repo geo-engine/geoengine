@@ -1,4 +1,4 @@
-use super::external::{DataProvider, TypedDataProviderDefinition};
+use super::external::{DataProvider, SharedDataProvider, TypedDataProviderDefinition};
 use super::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerCollectionListing,
     LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId, UpdateLayer,
@@ -8,6 +8,7 @@ use super::listing::{
     LayerCollectionProvider, ProviderCapabilities, SearchCapabilities, SearchParameters,
     SearchType, SearchTypes,
 };
+use super::provider_registry::ProviderCacheKey;
 use super::storage::{
     INTERNAL_PROVIDER_ID, LayerDb, LayerProviderDb, LayerProviderListing,
     LayerProviderListingOptions,
@@ -39,6 +40,7 @@ use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::util::HashMapTextTextDbType;
 use snafu::ResultExt;
 use std::str::FromStr;
+use std::sync::Arc;
 use tokio_postgres::Transaction;
 use tonic::async_trait;
 use uuid::Uuid;
@@ -917,14 +919,29 @@ where
     }
 
     async fn load_layer_provider(&self, id: DataProviderId) -> Result<Box<dyn DataProvider>> {
-        let definition = self.get_layer_provider_definition(id).await?;
+        let provider_key = ProviderCacheKey {
+            user_id: self.session.user.id.to_string(),
+            provider_id: id,
+        };
 
-        return Box::new(definition)
-            .initialize(PostgresDb {
-                conn_pool: self.conn_pool.clone(),
-                session: self.session.clone(),
+        let provider = self
+            .provider_registry
+            .get_or_try_insert_with(provider_key, || {
+                let db = Self {
+                    conn_pool: self.conn_pool.clone(),
+                    session: self.session.clone(),
+                    provider_registry: self.provider_registry.clone(),
+                };
+
+                async move {
+                    let definition = db.get_layer_provider_definition(id).await?;
+
+                    Box::new(definition).initialize(db).await.map(Arc::from)
+                }
             })
-            .await;
+            .await?;
+
+        Ok(Box::new(SharedDataProvider(provider)))
     }
 
     async fn get_layer_provider_definition(
@@ -1013,6 +1030,8 @@ where
 
         tx.commit().await?;
 
+        self.provider_registry.invalidate_provider(id).await;
+
         Ok(())
     }
 
@@ -1036,6 +1055,8 @@ where
         tx.execute(&stmt, &[&id]).await?;
 
         tx.commit().await?;
+
+        self.provider_registry.invalidate_provider(id).await;
 
         Ok(())
     }
