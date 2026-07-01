@@ -39,6 +39,11 @@ Authorization: Bearer {{token}}
 
 ###
 
+HEAD {{endpoint}}
+Authorization: Bearer {{token}}
+
+###
+
 # Conformance Classes
 GET {{endpoint}}/conformance
 Authorization: Bearer {{token}}

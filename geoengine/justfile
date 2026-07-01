@@ -9,6 +9,7 @@ install:
     cargo install --locked cargo-llvm-cov
     cargo install --locked cargo-edit
     cargo install --locked git-cliff
+    cargo install --locked request-logging-proxy
 
 # Generate OpenAPI specification as JSON file. The file is generated in the current directory.
 [group("build")]
@@ -101,37 +102,66 @@ test-doc:
 expand-macro crate macro_path:
     cargo expand --locked -p {{ crate }} --lib {{ macro_path }}
 
+[arg("requests-log-file", long="requests-log-file", help="Path to the file where the requests will be logged.")]
 [group("run")]
 [script("bash")]
-validate-ogc-compliance: common::_clear
+validate-ogc-compliance requests-log-file="": common::_clear
+    # 0. Setup environment variables for the Rust server and proxy server
+    SERVER_PORT=3030
+    PROXY_PORT=8123
+    SERVER_URL="http://localhost:$SERVER_PORT"
+    PROXY_URL="http://localhost:$PROXY_PORT"
+
     # 1. Start the cargo server in the background
-    GEOENGINE__SESSION__FIXED_SESSION_ID=00000000-0000-0000-a000-000000000000 \
-    cargo run & CARGO_PID=$!
+    GEOENGINE__WEB__EXTERNAL_ADDRESS="$PROXY_URL/api" \
+    cargo run & SERVER_PID=$!
 
     # 2. Trap exits (success or failure) to kill the server process
-    trap 'kill $CARGO_PID 2>/dev/null || true' EXIT
+    trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
 
-    # 3. Poll the port until it is active (Change 8080 to your actual port)
+    # 3. Poll the port until it is active
     echo "Waiting for Rust server to spin up..."
-    while ! nc -z localhost 3030; do 
+    while ! nc -z localhost $SERVER_PORT; do 
         sleep 0.5
     done
-    echo "Server is up! Starting compliance validation..."
+    echo "Server is up! Fetching session and layer information..."
 
-    # 4. Get session and register processing graph
-    SESSION_TOKEN=$(curl -s -X POST http://localhost:3030/api/anonymous | jq -r '.id')
-    PROCESSING_GRAPH_ID=$(curl -s -X POST http://localhost:3030/api/workflow \
-        -H "Authorization: Bearer $SESSION_TOKEN" \
-        -H "Content-Type: application/json" \
-        -d '{ "type": "Raster", "operator": { "type": "GdalSource", "params": {"data": "ndvi"} } }' | jq -r '.id')
+    # 3. Get session and register processing graph
+    SESSION_TOKEN=$(curl -s -X POST $SERVER_URL/api/anonymous | jq -r '.id')
+    DATA_CONNECTOR_ID=cbb21ee3-d15d-45c5-a175-66964adf4e85
+    LAYER_ID=$(curl -s \
+        --header "Accept: application/json" \
+        --header "Authorization: Bearer $SESSION_TOKEN" \
+        "$SERVER_URL/api/layers/collections/$DATA_CONNECTOR_ID/tags%3A%2A?offset=0&limit=20" \
+        | jq -r '.items[] | select(.name == "NDVI") | .id.layerId')
     echo "Got session token: $SESSION_TOKEN"
-    echo "Registered processing graph with ID: $PROCESSING_GRAPH_ID"
+    echo "Using data connector ID: $DATA_CONNECTOR_ID"
+    echo "Using layer ID: $LAYER_ID"
 
-    # 5. Run the OGC compliance validation action
+    # 4. Start proxy server in the background
+    request-logging-proxy \
+        --target-url $SERVER_URL \
+        --port $PROXY_PORT \
+        --override-bearer-auth $SESSION_TOKEN \
+        {{ if requests-log-file == "" { "--logger dev-null" } else { "--logger vscode > " + requests-log-file } }} \
+        & PROXY_PID=$!
+
+    # 5. Trap exits also for proxy process (replaces previous trap)
+    trap 'kill $SERVER_PID $PROXY_PID 2>/dev/null || true' EXIT
+
+    # 6. Poll the proxy port until it is active
+    echo "Waiting for proxy server to spin up..."
+    while ! nc -z localhost $PROXY_PORT; do 
+        sleep 0.5
+    done
+    echo "Proxy server is up! Starting compliance validation..."
+
+    # 7. Run the OGC compliance validation action
     cd ../.ogc-validator
 
     cp .env.template .env
-    sed -i "s|\$PROCESSING_GRAPH_ID|$PROCESSING_GRAPH_ID|g" .env
-
+    sed -i "s|\$DATA_CONNECTOR_ID|$DATA_CONNECTOR_ID|g" .env
+    sed -i "s|\$LAYER_ID|$LAYER_ID|g" .env
+    touch step_summary.md
     npm install
     npx @github/local-action ./node_modules/ogc-validator src/main.ts .env

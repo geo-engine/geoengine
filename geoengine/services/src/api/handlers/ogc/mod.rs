@@ -23,26 +23,30 @@ where
     let mut scope = web::scope("/ogc/{dataConnectorId}/{layerId}");
 
     macro_rules! bind_routes {
-        ($($path:literal -> $handler:expr),* $(,)? ) => {
-            $( scope = scope.route($path, web::get().to($handler)); )*
+        ($($method:ident $path:literal -> $handler:expr),* $(,)? ) => {
+            $(paste::item! {
+                scope = scope.route($path, web::[<$method:lower>]().to($handler));
+            })*
         };
     }
 
     bind_routes!(
-        "" -> common::landing_page::<C>,
-        "/" -> common::landing_page::<C>,
-        "/conformance" -> common::conformance::<C>,
-        "/collections" -> common::collections::<C>,
-        "/collections/" -> common::collections::<C>,
-        "/collections/{collectionId}" -> common::collection::<C>,
-        "/collections/{collectionId}/" -> common::collection::<C>,
-        "/collections/{collectionId}/map/tiles" -> tiles::collection_tilesets::<C>,
-        "/collections/{collectionId}/map/tiles/" -> tiles::collection_tilesets::<C>,
-        "/collections/{collectionId}/map/tiles/{tileMatrixSetId}" -> tiles::collection_tileset::<C>,
-        "/collections/{collectionId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}" -> tiles::tile::<C>,
-        "/tileMatrixSets" -> tms::tile_matrix_sets::<C>,
-        "/tileMatrixSets/" -> tms::tile_matrix_sets::<C>,
-        "/tileMatrixSets/{tileMatrixSetId}" -> tms::tile_matrix_set::<C>,
+        HEAD "" -> common::landing_page_head::<C>,
+        HEAD "/" -> common::landing_page_head::<C>,
+        GET "" -> common::landing_page::<C>,
+        GET "/" -> common::landing_page::<C>,
+        GET "/conformance" -> common::conformance::<C>,
+        GET "/collections" -> common::collections::<C>,
+        GET "/collections/" -> common::collections::<C>,
+        GET "/collections/{collectionId}" -> common::collection::<C>,
+        GET "/collections/{collectionId}/" -> common::collection::<C>,
+        GET "/collections/{collectionId}/map/tiles" -> tiles::collection_tilesets::<C>,
+        GET "/collections/{collectionId}/map/tiles/" -> tiles::collection_tilesets::<C>,
+        GET "/collections/{collectionId}/map/tiles/{tileMatrixSetId}" -> tiles::collection_tileset::<C>,
+        GET "/collections/{collectionId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}" -> tiles::tile::<C>,
+        GET "/tileMatrixSets" -> tms::tile_matrix_sets::<C>,
+        GET "/tileMatrixSets/" -> tms::tile_matrix_sets::<C>,
+        GET "/tileMatrixSets/{tileMatrixSetId}" -> tms::tile_matrix_set::<C>,
     );
 
     cfg.service(scope);
