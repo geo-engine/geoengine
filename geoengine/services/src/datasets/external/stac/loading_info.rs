@@ -31,6 +31,11 @@ use std::time::Duration;
 use tracing::debug;
 use url::Url;
 
+const STAC_QUERY_MAX_RETRIES: usize = 3;
+const STAC_QUERY_INITIAL_DELAY_MS: u64 = 500;
+const STAC_QUERY_BACKOFF_FACTOR: f64 = 2.0;
+const STAC_QUERY_MAX_DELAY_MS: u64 = 10_000;
+
 const STAC_QUERY_TIMEOUT_SECS: u64 = 60;
 
 #[derive(Debug, Clone)]
@@ -54,6 +59,51 @@ enum StacQueryState {
     Finished,
 }
 
+async fn fetch_stac_with_retry(
+    client: &reqwest::Client,
+    url: Url,
+    query_params: Option<&Vec<(String, String)>>,
+) -> geoengine_operators::util::Result<stac::ItemCollection> {
+    let client = std::sync::Arc::new(client.clone());
+    let query_params = query_params.cloned();
+
+    geoengine_operators::util::retry::retry(
+        STAC_QUERY_MAX_RETRIES,
+        STAC_QUERY_INITIAL_DELAY_MS,
+        STAC_QUERY_BACKOFF_FACTOR,
+        Some(STAC_QUERY_MAX_DELAY_MS),
+        move || {
+            let client = client.clone();
+            let url = url.clone();
+            let query_params = query_params.clone();
+            async move {
+                let mut request = client.get(url.clone());
+
+                if let Some(ref params) = query_params {
+                    request = request.query(params);
+                }
+
+                let response = request.send().await.map_err(|e| {
+                    tracing::warn!("STAC query request failed (will retry): {e}");
+                    geoengine_operators::error::Error::QueryingProcessorFailed {
+                        source: Box::new(e),
+                    }
+                })?;
+
+                let item_collection: stac::ItemCollection = response.json().await.map_err(|e| {
+                    tracing::warn!("STAC query response decode failed (will retry): {e}");
+                    geoengine_operators::error::Error::QueryingProcessorFailed {
+                        source: Box::new(e),
+                    }
+                })?;
+
+                Ok(item_collection)
+            }
+        },
+    )
+    .await
+}
+
 async fn query_stac_item_collection(
     client: &reqwest::Client,
     query_state: &StacQueryState,
@@ -67,23 +117,8 @@ async fn query_stac_item_collection(
 
             let request_started = std::time::Instant::now();
 
-            let item_collection: stac::ItemCollection = client
-                .get(query_url.clone())
-                .query(query_params)
-                .send()
-                .await
-                .map_err(
-                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                        source: Box::new(e),
-                    },
-                )?
-                .json()
-                .await
-                .map_err(
-                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                        source: Box::new(e),
-                    },
-                )?;
+            let item_collection =
+                fetch_stac_with_retry(client, query_url.clone(), Some(query_params)).await?;
 
             debug!(
                 "STAC response received in {:?} s",
@@ -106,22 +141,8 @@ async fn query_stac_item_collection(
 
             let request_started = std::time::Instant::now();
 
-            let item_collection: stac::ItemCollection = client
-                .get(next_url.clone())
-                .send()
-                .await
-                .map_err(
-                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                        source: Box::new(e),
-                    },
-                )?
-                .json()
-                .await
-                .map_err(
-                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                        source: Box::new(e),
-                    },
-                )?;
+            let item_collection =
+                fetch_stac_with_retry(client, next_url.clone(), None).await?;
 
             debug!(
                 "STAC response received in {:?} s",
