@@ -1,9 +1,10 @@
 use super::StacProviderDataset;
+use crate::config::{StacCache, get_config_element};
 use geoengine_datatypes::primitives::{SpatialPartition2D, TimeInterval};
 use geoengine_operators::source::TileFile;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
-use tracing::debug;
+use tracing::trace;
 
 /// Maximum total number of `TileFile` entries held in memory across all datasets.
 const DEFAULT_MAX_TILE_FILES: usize = 10_000;
@@ -63,7 +64,13 @@ impl std::fmt::Debug for StacQueryCacheInner {
 
 impl Default for StacQueryCache {
     fn default() -> Self {
-        Self::new(DEFAULT_MAX_TILE_FILES, Duration::from_secs(DEFAULT_TTL_SECS))
+        let config = get_config_element::<StacCache>().ok();
+        let max_tile_files = config
+            .map_or(DEFAULT_MAX_TILE_FILES, |c| c.max_tile_files);
+        let ttl = Duration::from_secs(
+            config.map_or(DEFAULT_TTL_SECS, |c| c.ttl_secs),
+        );
+        Self::new(max_tile_files, ttl)
     }
 }
 
@@ -92,7 +99,7 @@ impl StacQueryCache {
         let mut inner = self.inner.lock().await;
         Self::evict_expired(&mut inner, self.ttl);
 
-        debug!(
+        trace!(
             dataset = %dataset.name,
             spatial_bounds = ?spatial_bounds,
             time_interval = ?time_interval,
@@ -113,7 +120,7 @@ impl StacQueryCache {
             if spatial_match && time_match {
                 entry.last_used = Instant::now();
 
-                debug!(
+                trace!(
                     dataset = %dataset.name,
                     entry_spatial_bounds = ?entry.spatial_bounds,
                     entry_time_interval = ?entry.time_interval,
@@ -142,7 +149,7 @@ impl StacQueryCache {
                 return Some((time_steps, tile_files));
             }
 
-            debug!(
+            trace!(
                 dataset = %dataset.name,
                 entry_spatial_bounds = ?entry.spatial_bounds,
                 entry_time_interval = ?entry.time_interval,
@@ -154,7 +161,7 @@ impl StacQueryCache {
             );
         }
 
-        debug!(dataset = %dataset.name, "STAC cache miss");
+        trace!(dataset = %dataset.name, "STAC cache miss");
         None
     }
 
@@ -174,12 +181,13 @@ impl StacQueryCache {
         time_steps: Vec<TimeInterval>,
         tile_files: Vec<TileFile>,
     ) {
-        let new_count = tile_files.len();
+        // Count empty entries as 1 so they are not exempt from LRU eviction.
+        let new_count = std::cmp::max(1, tile_files.len());
         let mut inner = self.inner.lock().await;
 
         Self::evict_expired(&mut inner, self.ttl);
 
-        debug!(
+        trace!(
             dataset = %dataset.name,
             spatial_bounds = ?spatial_bounds,
             time_interval = ?time_interval,
@@ -197,7 +205,7 @@ impl StacQueryCache {
                 && time_interval.contains(&entry.time_interval);
 
             if evict {
-                debug!(
+                trace!(
                     dataset = %dataset.name,
                     entry_spatial_bounds = ?entry.spatial_bounds,
                     entry_time_interval = ?entry.time_interval,
@@ -214,7 +222,8 @@ impl StacQueryCache {
         inner.total_tile_files -= freed;
 
         // Enforce the memory cap by evicting LRU entries across all datasets.
-        while new_count > 0 && inner.total_tile_files + new_count > self.max_tile_files {
+        // (`new_count` is at least 1 even for empty entries, see above.)
+        while inner.total_tile_files + new_count > self.max_tile_files {
             if !Self::evict_lru_one(&mut inner) {
                 break;
             }
@@ -229,7 +238,7 @@ impl StacQueryCache {
                 inserted_at: now,
                 last_used: now,
             };
-        debug!(
+        trace!(
             dataset = %dataset.name,
             inserted_spatial_bounds = ?inserted_entry.spatial_bounds,
             inserted_time_interval = ?inserted_entry.time_interval,
@@ -238,8 +247,9 @@ impl StacQueryCache {
             total_tile_files = inner.total_tile_files + inserted_entry.tile_files.len(),
             "STAC cache stored entry"
         );
+        let actual_new_tile_files = inserted_entry.tile_files.len();
         Self::dataset_entries_mut(&mut inner, dataset).push(inserted_entry);
-        inner.total_tile_files += new_count;
+        inner.total_tile_files += actual_new_tile_files;
     }
 
     fn dataset_entries_mut<'a>(
@@ -273,7 +283,7 @@ impl StacQueryCache {
         for dataset_entries in &mut inner.by_dataset {
             dataset_entries.entries.retain(|e| {
                 if e.inserted_at.elapsed() > ttl {
-                    debug!(
+                    trace!(
                         dataset = %dataset_entries.dataset.name,
                         expired_spatial_bounds = ?e.spatial_bounds,
                         expired_time_interval = ?e.time_interval,
@@ -307,19 +317,19 @@ impl StacQueryCache {
             })
             .min_by_key(|(_, _, last_used)| *last_used);
 
-        if let Some((dataset_idx, entry_idx, _)) = oldest {
-            if let Some(dataset_entries) = inner.by_dataset.get_mut(dataset_idx) {
-                let removed = dataset_entries.entries.swap_remove(entry_idx);
-                debug!(
-                    dataset = %dataset_entries.dataset.name,
-                    evicted_spatial_bounds = ?removed.spatial_bounds,
-                    evicted_time_interval = ?removed.time_interval,
-                    evicted_tile_files = removed.tile_files.len(),
-                    "STAC cache evict LRU entry"
-                );
-                inner.total_tile_files -= removed.tile_files.len();
-                return true;
-            }
+        if let Some((dataset_idx, entry_idx, _)) = oldest
+            && let Some(dataset_entries) = inner.by_dataset.get_mut(dataset_idx)
+        {
+            let removed = dataset_entries.entries.swap_remove(entry_idx);
+            trace!(
+                dataset = %dataset_entries.dataset.name,
+                evicted_spatial_bounds = ?removed.spatial_bounds,
+                evicted_time_interval = ?removed.time_interval,
+                evicted_tile_files = removed.tile_files.len(),
+                "STAC cache evict LRU entry"
+            );
+            inner.total_tile_files -= removed.tile_files.len();
+            return true;
         }
         false
     }

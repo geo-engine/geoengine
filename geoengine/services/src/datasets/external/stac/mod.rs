@@ -17,7 +17,7 @@ mod cache;
 mod listing;
 mod loading_info;
 
-const STAC_QUERY_TIMEOUT_SECS: u64 = 60;
+const DEFAULT_QUERY_TIMEOUT_SECS: i64 = 60;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
 #[postgres(name = "StacDataProviderDefinition")]
@@ -33,6 +33,13 @@ pub struct StacDataProviderDefinition {
     pub time_dimension: TimeDimension, // TODO: should this be on dataset level?
     pub datasets: Vec<StacProviderDataset>,
     // TODO: page limit(?)
+    /// Timeout in seconds for outgoing STAC API HTTP requests.
+    #[serde(default = "default_query_timeout")]
+    pub query_timeout_secs: i64,
+}
+
+fn default_query_timeout() -> i64 {
+    DEFAULT_QUERY_TIMEOUT_SECS
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
@@ -86,6 +93,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
             self.s3_config,
             self.time_dimension,
             self.datasets,
+            self.query_timeout_secs,
         )))
     }
 
@@ -159,9 +167,10 @@ impl StacDataProvider {
         s3_config: Option<StacProviderS3Config>,
         time_dimension: TimeDimension,
         datasets: Vec<StacProviderDataset>,
+        query_timeout_secs: i64,
     ) -> Self {
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(STAC_QUERY_TIMEOUT_SECS))
+            .timeout(std::time::Duration::from_secs(query_timeout_secs as u64))
             .build()
             .unwrap_or_default();
         Self {
