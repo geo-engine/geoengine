@@ -787,6 +787,30 @@ where
         clamp_prio
     }
 
+    /// Verify that the current session's user has permission to access the
+    /// given provider.  Returns `Err` when the provider does not exist or
+    /// the user is not permitted.
+    async fn check_provider_permission(&self, id: DataProviderId) -> Result<()> {
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "
+                SELECT 1
+                FROM
+                    user_permitted_providers p
+                    JOIN layer_providers l ON (p.provider_id = l.id)
+                WHERE
+                    id = $1 AND p.user_id = $2
+                ",
+            )
+            .await?;
+
+        conn.query_one(&stmt, &[&id, &self.session.user.id]).await?;
+
+        Ok(())
+    }
+
     async fn id_exists(tx: &Transaction<'_>, id: &DataProviderId) -> Result<bool> {
         Ok(tx
             .query_one(
@@ -919,10 +943,12 @@ where
     }
 
     async fn load_layer_provider(&self, id: DataProviderId) -> Result<Box<dyn DataProvider>> {
-        let provider_key = ProviderCacheKey {
-            user_id: self.session.user.id.to_string(),
-            provider_id: id,
-        };
+        // Check permission *before* cache lookup so the cache can be keyed by
+        // `provider_id` alone, sharing the same provider (and its STAC query
+        // cache) across all users.
+        self.check_provider_permission(id).await?;
+
+        let provider_key = ProviderCacheKey { provider_id: id };
 
         let provider = self
             .provider_registry

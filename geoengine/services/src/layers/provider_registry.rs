@@ -10,16 +10,13 @@ use tokio::sync::Mutex;
 const DEFAULT_MAX_ENTRIES: usize = 256;
 const DEFAULT_MAX_IDLE_SECS: u64 = 30 * 60;
 
-// TODO: the cache key includes `user_id` to verify the caller has permission
-//       to access the provider (the DB query in `load_layer_provider` filters
-//       by user permissions).  However, once a provider is initialised it is
-//       identical for all users, so the same instance is cached once per user.
-//       Under many concurrent users this wastes memory.  A future optimisation
-//       could cache by `DataProviderId` only, and keep a separate permission
-//       check outside the hot path.
+/// Cache key using only `provider_id` so that the same provider instance
+/// (including its STAC query cache) is shared across all users.
+///
+/// Permission checks are performed *before* the cache lookup in
+/// `load_layer_provider`, so there is no need to scope the cache per user.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProviderCacheKey {
-    pub user_id: String,
     pub provider_id: DataProviderId,
 }
 
