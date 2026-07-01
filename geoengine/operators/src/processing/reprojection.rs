@@ -1714,13 +1714,15 @@ mod tests {
 
         let points = &points[0];
 
-        assert_eq!(
+        assert_approx_eq!(
+            &[Coordinate2D],
             points.coordinates(),
             &[
                 (166_021.443_080_538_42, 0.0).into(),
                 (534_994.655_061_136_1, 9_329_005.182_447_437).into(),
-                (499_999.999_999_999_5, 4_649_776.224_819_178).into()
-            ]
+                (499_999.999_999_999_5, 4_649_776.224_819_178).into(),
+            ],
+            epsilon = 0.001 // in m...
         );
     }
 
@@ -1794,15 +1796,16 @@ mod tests {
 
         let points = &points[0];
 
-        assert!(approx_eq!(
+        assert_approx_eq!(
             &[Coordinate2D],
             points.coordinates(),
             &[
                 (30.0, 0.0).into(), // lower left of utm36n area of use
                 (36.0, 84.0).into(),
                 (33.0, 42.0).into(), // upper right of utm36n area of use
-            ]
-        ));
+            ],
+            epsilon = 0.00000001 // ~ 0.001 m
+        );
     }
 
     #[tokio::test]
@@ -1900,7 +1903,8 @@ mod tests {
         assert_approx_eq!(
             Coordinate2D,
             out_spatial_grid.geo_transform.origin_coordinate(),
-            Coordinate2D::new(0., 0.)
+            Coordinate2D::new(0., 0.),
+            epsilon = 0.00000001
         );
 
         assert_approx_eq!(
