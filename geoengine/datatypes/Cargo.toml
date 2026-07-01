@@ -67,5 +67,13 @@ harness = false
 name = "masked_grid_mapping"
 harness = false
 
+[[bench]]
+name = "projection_benchmarks"
+harness = false
+
+[[bench]]
+name = "area_of_use_benchmarks"
+harness = false
+
 [lints]
 workspace = true

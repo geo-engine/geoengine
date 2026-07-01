@@ -18,19 +18,19 @@ mod area_of_use_provider;
 pub use area_of_use_provider::AreaOfUseProvider;
 
 mod proj_projector;
-use proj_projector::{ProjAreaOfUseProvider, ProjCoordinateProjector};
+pub use proj_projector::{ProjAreaOfUseProvider, ProjCoordinateProjector};
 
 mod geodesy_projector;
 pub use geodesy_projector::{Error as GeodesyProjectorError, GeodesyCoordinateProjector};
 
 mod static_epsg_area_provider;
-use static_epsg_area_provider::StaticEpsgAreaProvider;
+pub use static_epsg_area_provider::StaticEpsgAreaProvider;
 
 mod projection_provider;
 pub use projection_provider::CoordinateProjection;
 
 mod mixed_area_of_use_provider;
-use mixed_area_of_use_provider::MixedAreaOfUseProvider;
+pub use mixed_area_of_use_provider::MixedAreaOfUseProvider;
 
 mod mixed_projector;
 use mixed_projector::MixedCoordinateProjector;
