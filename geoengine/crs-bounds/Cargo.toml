@@ -1,0 +1,21 @@
+[package]
+name = "crs-bounds"
+description = "A library for static bounding boxes of coordinate reference systems (CRS). Constants are generated from Projs database."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+publish.workspace = true
+license-file.workspace = true
+documentation.workspace = true
+repository.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true
+
+[features]
+default = ["metadata"]
+code = []
+name = []
+metadata = ["code", "name"]

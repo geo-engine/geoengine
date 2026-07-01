@@ -1,4 +1,5 @@
 use crate::adapters::SimpleRasterStackerError;
+use crate::cache::error::CacheError;
 use crate::engine::SpatialGridDescriptor;
 use crate::optimization::OptimizationError;
 use crate::processing::BandNeighborhoodAggregateError;
@@ -536,6 +537,10 @@ pub enum Error {
     Optimization {
         source: OptimizationError,
     },
+    #[snafu(display("CacheError: {source}"))]
+    Cache {
+        source: CacheError,
+    },
 
     #[snafu(display("Error in the SimpleRasterStacker: {source}"))]
     SimpleRasterStacker {
@@ -601,5 +606,11 @@ impl From<crate::util::statistics::StatisticsError> for Error {
 impl From<ordered_float::FloatIsNan> for Error {
     fn from(source: FloatIsNan) -> Self {
         Error::InvalidNotNanFloatKey { source }
+    }
+}
+
+impl From<CacheError> for Error {
+    fn from(source: CacheError) -> Self {
+        Error::Cache { source }
     }
 }

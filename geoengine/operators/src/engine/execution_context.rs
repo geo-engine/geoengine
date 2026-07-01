@@ -2,6 +2,7 @@ use super::{
     CreateSpan, InitializedPlotOperator, InitializedRasterOperator, InitializedVectorOperator,
     MockQueryContext,
 };
+use crate::cache::new_raster_cache::NewRasterCacheEnum;
 use crate::cache::shared_cache::SharedCache;
 use crate::engine::{
     ChunkByteSize, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
@@ -209,6 +210,7 @@ impl MockExecutionContext {
         &self,
         chunk_byte_size: ChunkByteSize,
         cache: Option<Arc<SharedCache>>,
+        new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
         quota_tracking: Option<QuotaTracking>,
         quota_checker: Option<QuotaChecker>,
     ) -> MockQueryContext {
@@ -217,6 +219,7 @@ impl MockExecutionContext {
             self.tiling_specification,
             self.gdal_process_pool.clone(),
             cache,
+            new_raster_cache,
             quota_tracking,
             quota_checker,
         )
@@ -439,12 +442,14 @@ impl StatisticsWrappingMockExecutionContext {
         &self,
         chunk_byte_size: ChunkByteSize,
         cache: Option<Arc<SharedCache>>,
+        new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
         quota_tracking: Option<QuotaTracking>,
         quota_checker: Option<QuotaChecker>,
     ) -> MockQueryContext {
         self.inner.mock_query_context_with_query_extensions(
             chunk_byte_size,
             cache,
+            new_raster_cache,
             quota_tracking,
             quota_checker,
         )

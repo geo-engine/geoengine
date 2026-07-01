@@ -515,6 +515,7 @@ mod tests {
             Some(tile_cache),
             None,
             None,
+            None,
         );
 
         let stream = processor
@@ -615,6 +616,7 @@ mod tests {
             Some(tile_cache),
             None,
             None,
+            None,
         );
 
         // query the first two bands
@@ -712,6 +714,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
             ChunkByteSize::test_default(),
             Some(tile_cache),
+            None,
             None,
             None,
         );

@@ -75,13 +75,10 @@ impl GdalDatasetParameters {
     pub fn gdal_config_options_vsi_curl() -> &'static [(&'static str, &'static str)] {
         &[
             ("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR"),
-            (
-                "CPL_VSIL_CURL_ALLOWED_EXTENSIONS",
-                ".tif,.tiff,.TIF,.jp2,.ovr",
-            ),
-            ("CPL_VSIL_CURL_CHUNK_SIZE", "1048576"), // 1mb TODO: need to tune this!
+            ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS", ".tif,.tiff,.jp2,.ovr"),
+            ("CPL_VSIL_CURL_CHUNK_SIZE", "2097152"), // 2mb TODO: need to tune this!
             ("VSI_CACHE", "TRUE"),
-            ("VSI_CACHE_SIZE", "67108864 "), // 64mb per worker! TODO: need to tune this!
+            ("VSI_CACHE_SIZE", "134217728"), // 128mb per worker! TODO: need to tune this!
         ]
     }
 

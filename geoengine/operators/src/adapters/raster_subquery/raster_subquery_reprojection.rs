@@ -16,14 +16,12 @@ use geoengine_datatypes::raster::{
     UpdateIndexedElementsParallel,
 };
 use geoengine_datatypes::{
-    operations::reproject::{CoordinateProjection, CoordinateProjector},
-    primitives::TimeInterval,
-    raster::EmptyGrid,
-    spatial_reference::SpatialReference,
-};
-use geoengine_datatypes::{
     primitives::Coordinate2D,
     raster::{CoordinatePixelAccess, GridIdx2D, Pixel, RasterTile2D, TileInformation},
+};
+use geoengine_datatypes::{
+    primitives::TimeInterval, raster::EmptyGrid, spatial_reference::CoordinateProjection,
+    spatial_reference::DefaultCoordinateProjector, spatial_reference::SpatialReference,
 };
 use num;
 use rayon::ThreadPool;
@@ -120,7 +118,7 @@ where
             );
             let start = std::time::Instant::now();
             let _guard = span.entered();
-            let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
+            let proj = DefaultCoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
             let projected_bounds = bounds.reproject(&proj);
 
             let result = match projected_bounds {
@@ -279,7 +277,7 @@ fn projected_coordinate_grid_parallel(
 
                     // --- PROJ context creation ---
                     let proj_start = std::time::Instant::now();
-                    let proj = CoordinateProjector::from_known_srs(out_srs, in_srs)?;
+                    let proj = DefaultCoordinateProjector::from_known_srs(out_srs, in_srs)?;
                     proj_create_ns.fetch_add(
                         proj_start.elapsed().as_nanos() as u64,
                         std::sync::atomic::Ordering::Relaxed,

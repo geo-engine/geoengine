@@ -36,4 +36,5 @@ pub enum CacheError {
     CouldNotReadElementFromBytes {
         source: arrow::error::ArrowError,
     },
+    Unspecified,
 }
