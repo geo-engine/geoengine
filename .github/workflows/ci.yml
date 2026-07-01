@@ -123,6 +123,57 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Build
         run: just backend build "${{ matrix.build }}"
+      - name: Prepare service for validation
+        id: prepare-service
+        env:
+          SERVER_PORT: 3030
+          PROXY_PORT: 8123
+          SERVER_URL: "http://localhost:3030"
+          PROXY_URL: "http://localhost:8123"
+        run: |
+          service postgresql start
+          
+          GEOENGINE__WEB__EXTERNAL_ADDRESS="$PROXY_URL/api" \
+            cargo run &
+          just common wait-for-port $SERVER_PORT
+
+          SESSION_TOKEN=$(curl -s -X POST $SERVER_URL/api/anonymous | jq -r '.id')
+          DATA_CONNECTOR_ID=cbb21ee3-d15d-45c5-a175-66964adf4e85
+          LAYER_ID=$(curl -s \
+              --header "Accept: application/json" \
+              --header "Authorization: Bearer $SESSION_TOKEN" \
+              "$SERVER_URL/api/layers/collections/$DATA_CONNECTOR_ID/tags%3A%2A?offset=0&limit=20" \
+              | jq -r '.items[] | select(.name == "NDVI") | .id.layerId')
+          
+          request-logging-proxy \
+            --target-url $SERVER_URL \
+            --port $PROXY_PORT \
+            --override-bearer-auth $SESSION_TOKEN \
+            --logger dev-null \
+            &
+          
+          just common wait-for-port $PROXY_PORT
+
+          # set outputs for the next steps
+          echo "DATA_CONNECTOR_ID=$DATA_CONNECTOR_ID" >> $GITHUB_OUTPUT
+          echo "LAYER_ID=$LAYER_ID" >> $GITHUB_OUTPUT
+      - name: Validate service
+        uses: geo-engine/ogc-validator@v3
+        with:
+          ogc-api-processes: false
+          ogc-api-features: false
+          ogc-api-tiles: true
+          service-url: ${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}
+          ogc-api-tiles-tilematrixsetdefinitionurl: "http://www.opengis.net/def/tilematrixset/OGC/1.0/WebMercatorQuad"
+          ogc-api-tiles-urltemplatefortiles: "${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}/collections/${{ steps.prepare-service.outputs.LAYER_ID }}/map/tiles/GeoEngineCustomTMS/{tileMatrix}/{tileRow}/{tileCol}?datetime=2014-04-01T00:00:00Z"
+          ogc-api-tiles-tilematrix: "0"
+          ogc-api-tiles-mintilerow: "0"
+          ogc-api-tiles-maxtilerow: "1"
+          ogc-api-tiles-mintilecol: "0"
+          ogc-api-tiles-maxtilecol: "1"
+          ogc-api-tiles-ignore: "verifyMinimalConformance"
+        env:
+          PROXY_URL: "http://localhost:8123"
   
   python:
     runs-on: ubuntu-24.04

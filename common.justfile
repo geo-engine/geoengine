@@ -16,3 +16,12 @@ check-no-changes-in-git-repo:
     else
       echo "No uncommitted changes found in git repository."
     fi
+
+[arg("port", help="Port to wait for.")]
+[arg("sleep", long="sleep", help="Time in seconds to sleep between checks.")]
+[group('ci')]
+[script("bash")]
+wait-for-port port sleep="0.5":
+    while ! nc -z localhost {{ port }}; do
+      sleep {{ sleep }}
+    done
