@@ -27,13 +27,13 @@ class PangaeaDataProviderDefinition(BaseModel):
     """
     PangaeaDataProviderDefinition
     """ # noqa: E501
+    type: StrictStr
+    name: StrictStr
+    description: StrictStr
+    priority: Optional[StrictInt] = None
     base_url: StrictStr = Field(alias="baseUrl")
     cache_ttl: Annotated[int, Field(strict=True, ge=0)] = Field(alias="cacheTtl")
-    description: StrictStr
-    name: StrictStr
-    priority: Optional[StrictInt] = None
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["baseUrl", "cacheTtl", "description", "name", "priority", "type"]
+    __properties: ClassVar[List[str]] = ["type", "name", "description", "priority", "baseUrl", "cacheTtl"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -98,12 +98,12 @@ class PangaeaDataProviderDefinition(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "baseUrl": obj.get("baseUrl"),
-            "cacheTtl": obj.get("cacheTtl"),
-            "description": obj.get("description"),
+            "type": obj.get("type"),
             "name": obj.get("name"),
+            "description": obj.get("description"),
             "priority": obj.get("priority"),
-            "type": obj.get("type")
+            "baseUrl": obj.get("baseUrl"),
+            "cacheTtl": obj.get("cacheTtl")
         })
         return _obj
 

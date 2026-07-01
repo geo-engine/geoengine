@@ -28,11 +28,11 @@ class HistogramParameters(BaseModel):
     """
     The parameter spec for `Histogram`
     """ # noqa: E501
+    column_name: StrictStr = Field(description="Name of the (numeric) vector attribute or raster band to compute the histogram on.", alias="columnName")
     bounds: HistogramBounds = Field(description="If `data`, it computes the bounds of the underlying data. If `{ \"min\": ..., \"max\": ... }`, one can specify custom bounds.")
     buckets: HistogramBuckets = Field(description="The number of buckets. The value can be specified or calculated.")
-    column_name: StrictStr = Field(description="Name of the (numeric) vector attribute or raster band to compute the histogram on.", alias="columnName")
     interactive: Optional[StrictBool] = Field(default=None, description="Flag, if the histogram should have user interactions for a range selection. It is `false` by default.")
-    __properties: ClassVar[List[str]] = ["bounds", "buckets", "columnName", "interactive"]
+    __properties: ClassVar[List[str]] = ["columnName", "bounds", "buckets", "interactive"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -91,9 +91,9 @@ class HistogramParameters(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "columnName": obj.get("columnName"),
             "bounds": HistogramBounds.from_dict(obj["bounds"]) if obj.get("bounds") is not None else None,
             "buckets": HistogramBuckets.from_dict(obj["buckets"]) if obj.get("buckets") is not None else None,
-            "columnName": obj.get("columnName"),
             "interactive": obj.get("interactive")
         })
         return _obj

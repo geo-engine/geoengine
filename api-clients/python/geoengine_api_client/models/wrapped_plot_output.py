@@ -27,10 +27,10 @@ class WrappedPlotOutput(BaseModel):
     """
     WrappedPlotOutput
     """ # noqa: E501
-    data: Dict[str, Any]
     output_format: PlotOutputFormat = Field(alias="outputFormat")
     plot_type: StrictStr = Field(alias="plotType")
-    __properties: ClassVar[List[str]] = ["data", "outputFormat", "plotType"]
+    data: Dict[str, Any]
+    __properties: ClassVar[List[str]] = ["outputFormat", "plotType", "data"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -83,9 +83,9 @@ class WrappedPlotOutput(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "data": obj.get("data"),
             "outputFormat": obj.get("outputFormat"),
-            "plotType": obj.get("plotType")
+            "plotType": obj.get("plotType"),
+            "data": obj.get("data")
         })
         return _obj
 

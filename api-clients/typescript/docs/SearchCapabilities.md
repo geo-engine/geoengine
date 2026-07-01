@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
+`searchTypes` | [SearchTypes](SearchTypes.md)
 `autocomplete` | boolean
 `filters` | Array&lt;string&gt;
-`searchTypes` | [SearchTypes](SearchTypes.md)
 
 ## Example
 
@@ -17,9 +17,9 @@ import type { SearchCapabilities } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "searchTypes": null,
   "autocomplete": null,
   "filters": null,
-  "searchTypes": null,
 } satisfies SearchCapabilities
 
 console.log(example)

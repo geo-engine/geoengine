@@ -16,16 +16,16 @@
 export interface DatasetResource {
     /**
      *
-     * @type {string}
-     * @memberof DatasetResource
-     */
-    id: string;
-    /**
-     *
      * @type {DatasetResourceTypeEnum}
      * @memberof DatasetResource
      */
     type: DatasetResourceTypeEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof DatasetResource
+     */
+    id: string;
 }
 /**
  * @export

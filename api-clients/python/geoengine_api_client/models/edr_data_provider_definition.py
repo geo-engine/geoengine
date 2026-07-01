@@ -30,17 +30,17 @@ class EdrDataProviderDefinition(BaseModel):
     """
     EdrDataProviderDefinition
     """ # noqa: E501
-    base_url: StrictStr = Field(alias="baseUrl")
-    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
-    description: StrictStr
-    discrete_vrs: Optional[List[StrictStr]] = Field(default=None, description="List of vertical reference systems with a discrete scale", alias="discreteVrs")
-    id: UUID
-    name: StrictStr
-    priority: Optional[StrictInt] = None
-    provenance: Optional[List[Provenance]] = None
     type: StrictStr
+    name: StrictStr
+    description: StrictStr
+    priority: Optional[StrictInt] = None
+    id: UUID
+    base_url: StrictStr = Field(alias="baseUrl")
     vector_spec: Optional[EdrVectorSpec] = Field(default=None, alias="vectorSpec")
-    __properties: ClassVar[List[str]] = ["baseUrl", "cacheTtl", "description", "discreteVrs", "id", "name", "priority", "provenance", "type", "vectorSpec"]
+    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
+    discrete_vrs: Optional[List[StrictStr]] = Field(default=None, description="List of vertical reference systems with a discrete scale", alias="discreteVrs")
+    provenance: Optional[List[Provenance]] = None
+    __properties: ClassVar[List[str]] = ["type", "name", "description", "priority", "id", "baseUrl", "vectorSpec", "cacheTtl", "discreteVrs", "provenance"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -88,6 +88,9 @@ class EdrDataProviderDefinition(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of vector_spec
+        if self.vector_spec:
+            _dict['vectorSpec'] = self.vector_spec.to_dict()
         # override the default output from pydantic by calling `to_dict()` of each item in provenance (list)
         _items = []
         if self.provenance:
@@ -95,23 +98,20 @@ class EdrDataProviderDefinition(BaseModel):
                 if _item_provenance:
                     _items.append(_item_provenance.to_dict())
             _dict['provenance'] = _items
-        # override the default output from pydantic by calling `to_dict()` of vector_spec
-        if self.vector_spec:
-            _dict['vectorSpec'] = self.vector_spec.to_dict()
         # set to None if priority (nullable) is None
         # and model_fields_set contains the field
         if self.priority is None and "priority" in self.model_fields_set:
             _dict['priority'] = None
 
-        # set to None if provenance (nullable) is None
-        # and model_fields_set contains the field
-        if self.provenance is None and "provenance" in self.model_fields_set:
-            _dict['provenance'] = None
-
         # set to None if vector_spec (nullable) is None
         # and model_fields_set contains the field
         if self.vector_spec is None and "vector_spec" in self.model_fields_set:
             _dict['vectorSpec'] = None
+
+        # set to None if provenance (nullable) is None
+        # and model_fields_set contains the field
+        if self.provenance is None and "provenance" in self.model_fields_set:
+            _dict['provenance'] = None
 
         return _dict
 
@@ -125,16 +125,16 @@ class EdrDataProviderDefinition(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "baseUrl": obj.get("baseUrl"),
-            "cacheTtl": obj.get("cacheTtl"),
-            "description": obj.get("description"),
-            "discreteVrs": obj.get("discreteVrs"),
-            "id": obj.get("id"),
-            "name": obj.get("name"),
-            "priority": obj.get("priority"),
-            "provenance": [Provenance.from_dict(_item) for _item in obj["provenance"]] if obj.get("provenance") is not None else None,
             "type": obj.get("type"),
-            "vectorSpec": EdrVectorSpec.from_dict(obj["vectorSpec"]) if obj.get("vectorSpec") is not None else None
+            "name": obj.get("name"),
+            "description": obj.get("description"),
+            "priority": obj.get("priority"),
+            "id": obj.get("id"),
+            "baseUrl": obj.get("baseUrl"),
+            "vectorSpec": EdrVectorSpec.from_dict(obj["vectorSpec"]) if obj.get("vectorSpec") is not None else None,
+            "cacheTtl": obj.get("cacheTtl"),
+            "discreteVrs": obj.get("discreteVrs"),
+            "provenance": [Provenance.from_dict(_item) for _item in obj["provenance"]] if obj.get("provenance") is not None else None
         })
         return _obj
 

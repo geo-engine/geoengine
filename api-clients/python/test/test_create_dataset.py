@@ -37,43 +37,43 @@ class TestCreateDataset(unittest.TestCase):
             return CreateDataset(
                 data_path = None,
                 definition = geoengine_api_client.models.dataset_definition.DatasetDefinition(
-                    meta_data = null, 
                     properties = geoengine_api_client.models.add_dataset.AddDataset(
-                        description = '', 
-                        display_name = '', 
                         name = null, 
+                        display_name = '', 
+                        description = '', 
+                        source_operator = '', 
+                        symbology = null, 
                         provenance = [
                             geoengine_api_client.models.provenance.Provenance(
                                 citation = '', 
                                 license = '', 
                                 uri = '', )
                             ], 
-                        source_operator = '', 
-                        symbology = null, 
                         tags = [
                             ''
-                            ], ), )
+                            ], ), 
+                    meta_data = null, )
             )
         else:
             return CreateDataset(
                 data_path = None,
                 definition = geoengine_api_client.models.dataset_definition.DatasetDefinition(
-                    meta_data = null, 
                     properties = geoengine_api_client.models.add_dataset.AddDataset(
-                        description = '', 
-                        display_name = '', 
                         name = null, 
+                        display_name = '', 
+                        description = '', 
+                        source_operator = '', 
+                        symbology = null, 
                         provenance = [
                             geoengine_api_client.models.provenance.Provenance(
                                 citation = '', 
                                 license = '', 
                                 uri = '', )
                             ], 
-                        source_operator = '', 
-                        symbology = null, 
                         tags = [
                             ''
-                            ], ), ),
+                            ], ), 
+                    meta_data = null, ),
         )
         """
 

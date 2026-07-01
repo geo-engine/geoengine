@@ -23,13 +23,13 @@ export interface DatasetLayerListingCollection {
      * @type {string}
      * @memberof DatasetLayerListingCollection
      */
-    description: string;
+    name: string;
     /**
      * 
      * @type {string}
      * @memberof DatasetLayerListingCollection
      */
-    name: string;
+    description: string;
     /**
      * 
      * @type {Array<string>}
@@ -42,8 +42,8 @@ export interface DatasetLayerListingCollection {
  * Check if a given object implements the DatasetLayerListingCollection interface.
  */
 export function instanceOfDatasetLayerListingCollection(value: object): value is DatasetLayerListingCollection {
-    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('tags' in value) || value['tags'] === undefined) return false;
     return true;
 }
@@ -58,8 +58,8 @@ export function DatasetLayerListingCollectionFromJSONTyped(json: any, ignoreDisc
     }
     return {
         
-        'description': json['description'],
         'name': json['name'],
+        'description': json['description'],
         'tags': json['tags'],
     };
 }
@@ -75,8 +75,8 @@ export function DatasetLayerListingCollectionToJSONTyped(value?: DatasetLayerLis
 
     return {
         
-        'description': value['description'],
         'name': value['name'],
+        'description': value['description'],
         'tags': value['tags'],
     };
 }

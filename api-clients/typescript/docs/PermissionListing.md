@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
-`permission` | [Permission](Permission.md)
 `resource` | [Resource](Resource.md)
 `role` | [Role](Role.md)
+`permission` | [Permission](Permission.md)
 
 ## Example
 
@@ -17,9 +17,9 @@ import type { PermissionListing } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "permission": null,
   "resource": null,
   "role": null,
+  "permission": null,
 } satisfies PermissionListing
 
 console.log(example)

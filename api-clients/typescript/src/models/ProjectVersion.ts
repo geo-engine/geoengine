@@ -20,24 +20,24 @@ import { mapValues } from '../runtime';
 export interface ProjectVersion {
     /**
      * 
-     * @type {Date}
-     * @memberof ProjectVersion
-     */
-    changed: Date;
-    /**
-     * 
      * @type {string}
      * @memberof ProjectVersion
      */
     id: string;
+    /**
+     * 
+     * @type {Date}
+     * @memberof ProjectVersion
+     */
+    changed: Date;
 }
 
 /**
  * Check if a given object implements the ProjectVersion interface.
  */
 export function instanceOfProjectVersion(value: object): value is ProjectVersion {
-    if (!('changed' in value) || value['changed'] === undefined) return false;
     if (!('id' in value) || value['id'] === undefined) return false;
+    if (!('changed' in value) || value['changed'] === undefined) return false;
     return true;
 }
 
@@ -51,8 +51,8 @@ export function ProjectVersionFromJSONTyped(json: any, ignoreDiscriminator: bool
     }
     return {
         
-        'changed': (new Date(json['changed'])),
         'id': json['id'],
+        'changed': (new Date(json['changed'])),
     };
 }
 
@@ -67,8 +67,8 @@ export function ProjectVersionToJSONTyped(value?: ProjectVersion | null, ignoreD
 
     return {
         
-        'changed': value['changed'].toISOString(),
         'id': value['id'],
+        'changed': value['changed'].toISOString(),
     };
 }
 

@@ -18,16 +18,16 @@ import type { SpatialGridDescriptorState } from './SpatialGridDescriptorState';
 export interface SpatialGridDescriptor {
     /**
      *
-     * @type {SpatialGridDescriptorState}
-     * @memberof SpatialGridDescriptor
-     */
-    descriptor: SpatialGridDescriptorState;
-    /**
-     *
      * @type {SpatialGridDefinition}
      * @memberof SpatialGridDescriptor
      */
     spatialGrid: SpatialGridDefinition;
+    /**
+     *
+     * @type {SpatialGridDescriptorState}
+     * @memberof SpatialGridDescriptor
+     */
+    descriptor: SpatialGridDescriptorState;
 }
 /**
  * Check if a given object implements the SpatialGridDescriptor interface.

@@ -50,12 +50,6 @@ export interface TemporalRasterAggregationParameters {
      */
     aggregation: Aggregation;
     /**
-     * Optional output raster data type.
-     * @type {RasterDataType}
-     * @memberof TemporalRasterAggregationParameters
-     */
-    outputType?: RasterDataType | null;
-    /**
      * Window size and granularity for the output time series.
      * @type {TimeStep}
      * @memberof TemporalRasterAggregationParameters
@@ -69,6 +63,12 @@ export interface TemporalRasterAggregationParameters {
      * @memberof TemporalRasterAggregationParameters
      */
     windowReference?: number | null;
+    /**
+     * Optional output raster data type.
+     * @type {RasterDataType}
+     * @memberof TemporalRasterAggregationParameters
+     */
+    outputType?: RasterDataType | null;
 }
 
 
@@ -93,9 +93,9 @@ export function TemporalRasterAggregationParametersFromJSONTyped(json: any, igno
     return {
         
         'aggregation': AggregationFromJSON(json['aggregation']),
-        'outputType': json['outputType'] == null ? undefined : RasterDataTypeFromJSON(json['outputType']),
         'window': TimeStepFromJSON(json['window']),
         'windowReference': json['windowReference'] == null ? undefined : json['windowReference'],
+        'outputType': json['outputType'] == null ? undefined : RasterDataTypeFromJSON(json['outputType']),
     };
 }
 
@@ -111,9 +111,9 @@ export function TemporalRasterAggregationParametersToJSONTyped(value?: TemporalR
     return {
         
         'aggregation': AggregationToJSON(value['aggregation']),
-        'outputType': RasterDataTypeToJSON(value['outputType']),
         'window': TimeStepToJSON(value['window']),
         'windowReference': value['windowReference'],
+        'outputType': RasterDataTypeToJSON(value['outputType']),
     };
 }
 

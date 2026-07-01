@@ -19,13 +19,13 @@ export interface GridIdx2D {
      * @type {number}
      * @memberof GridIdx2D
      */
-    xIdx: number;
+    yIdx: number;
     /**
      *
      * @type {number}
      * @memberof GridIdx2D
      */
-    yIdx: number;
+    xIdx: number;
 }
 /**
  * Check if a given object implements the GridIdx2D interface.

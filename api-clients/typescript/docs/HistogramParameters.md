@@ -7,9 +7,9 @@ The parameter spec for `Histogram`
 
 Name | Type
 ------------ | -------------
+`columnName` | string
 `bounds` | [HistogramBounds](HistogramBounds.md)
 `buckets` | [HistogramBuckets](HistogramBuckets.md)
-`columnName` | string
 `interactive` | boolean
 
 ## Example
@@ -19,9 +19,9 @@ import type { HistogramParameters } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "columnName": null,
   "bounds": null,
   "buckets": null,
-  "columnName": null,
   "interactive": null,
 } satisfies HistogramParameters
 

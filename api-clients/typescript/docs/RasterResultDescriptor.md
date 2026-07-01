@@ -7,11 +7,11 @@ A `ResultDescriptor` for raster queries
 
 Name | Type
 ------------ | -------------
-`bands` | [Array&lt;RasterBandDescriptor&gt;](RasterBandDescriptor.md)
 `dataType` | [RasterDataType](RasterDataType.md)
-`spatialGrid` | [SpatialGridDescriptor](SpatialGridDescriptor.md)
 `spatialReference` | string
 `time` | [TimeDescriptor](TimeDescriptor.md)
+`spatialGrid` | [SpatialGridDescriptor](SpatialGridDescriptor.md)
+`bands` | [Array&lt;RasterBandDescriptor&gt;](RasterBandDescriptor.md)
 
 ## Example
 
@@ -20,11 +20,11 @@ import type { RasterResultDescriptor } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "bands": null,
   "dataType": null,
-  "spatialGrid": null,
   "spatialReference": null,
   "time": null,
+  "spatialGrid": null,
+  "bands": null,
 } satisfies RasterResultDescriptor
 
 console.log(example)

@@ -28,13 +28,13 @@ exports.TaskStatusRunningStatusEnum = {
  * Check if a given object implements the TaskStatusRunning interface.
  */
 function instanceOfTaskStatusRunning(value) {
-    if (!('estimatedTimeRemaining' in value) || value['estimatedTimeRemaining'] === undefined)
-        return false;
-    if (!('pctComplete' in value) || value['pctComplete'] === undefined)
-        return false;
     if (!('status' in value) || value['status'] === undefined)
         return false;
     if (!('taskType' in value) || value['taskType'] === undefined)
+        return false;
+    if (!('pctComplete' in value) || value['pctComplete'] === undefined)
+        return false;
+    if (!('estimatedTimeRemaining' in value) || value['estimatedTimeRemaining'] === undefined)
         return false;
     if (!('timeStarted' in value) || value['timeStarted'] === undefined)
         return false;
@@ -48,12 +48,12 @@ function TaskStatusRunningFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'description': json['description'] == null ? undefined : json['description'],
-        'estimatedTimeRemaining': json['estimatedTimeRemaining'],
-        'info': json['info'] == null ? undefined : json['info'],
-        'pctComplete': json['pctComplete'],
         'status': json['status'],
         'taskType': json['taskType'],
+        'description': json['description'] == null ? undefined : json['description'],
+        'info': json['info'] == null ? undefined : json['info'],
+        'pctComplete': json['pctComplete'],
+        'estimatedTimeRemaining': json['estimatedTimeRemaining'],
         'timeStarted': json['timeStarted'],
     };
 }
@@ -65,12 +65,12 @@ function TaskStatusRunningToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'description': value['description'],
-        'estimatedTimeRemaining': value['estimatedTimeRemaining'],
-        'info': value['info'],
-        'pctComplete': value['pctComplete'],
         'status': value['status'],
         'taskType': value['taskType'],
+        'description': value['description'],
+        'info': value['info'],
+        'pctComplete': value['pctComplete'],
+        'estimatedTimeRemaining': value['estimatedTimeRemaining'],
         'timeStarted': value['timeStarted'],
     };
 }

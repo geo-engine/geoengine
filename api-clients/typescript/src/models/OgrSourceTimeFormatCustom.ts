@@ -20,16 +20,16 @@ import { mapValues } from '../runtime';
 export interface OgrSourceTimeFormatCustom {
     /**
      * 
-     * @type {string}
-     * @memberof OgrSourceTimeFormatCustom
-     */
-    customFormat: string;
-    /**
-     * 
      * @type {OgrSourceTimeFormatCustomFormatEnum}
      * @memberof OgrSourceTimeFormatCustom
      */
     format: OgrSourceTimeFormatCustomFormatEnum;
+    /**
+     * 
+     * @type {string}
+     * @memberof OgrSourceTimeFormatCustom
+     */
+    customFormat: string;
 }
 
 
@@ -46,8 +46,8 @@ export type OgrSourceTimeFormatCustomFormatEnum = typeof OgrSourceTimeFormatCust
  * Check if a given object implements the OgrSourceTimeFormatCustom interface.
  */
 export function instanceOfOgrSourceTimeFormatCustom(value: object): value is OgrSourceTimeFormatCustom {
-    if (!('customFormat' in value) || value['customFormat'] === undefined) return false;
     if (!('format' in value) || value['format'] === undefined) return false;
+    if (!('customFormat' in value) || value['customFormat'] === undefined) return false;
     return true;
 }
 
@@ -61,8 +61,8 @@ export function OgrSourceTimeFormatCustomFromJSONTyped(json: any, ignoreDiscrimi
     }
     return {
         
-        'customFormat': json['customFormat'],
         'format': json['format'],
+        'customFormat': json['customFormat'],
     };
 }
 
@@ -77,8 +77,8 @@ export function OgrSourceTimeFormatCustomToJSONTyped(value?: OgrSourceTimeFormat
 
     return {
         
-        'customFormat': value['customFormat'],
         'format': value['format'],
+        'customFormat': value['customFormat'],
     };
 }
 

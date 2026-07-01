@@ -23,21 +23,21 @@ export interface ProviderLayerCollectionId {
      * @type {string}
      * @memberof ProviderLayerCollectionId
      */
-    collectionId: string;
+    providerId: string;
     /**
      * 
      * @type {string}
      * @memberof ProviderLayerCollectionId
      */
-    providerId: string;
+    collectionId: string;
 }
 
 /**
  * Check if a given object implements the ProviderLayerCollectionId interface.
  */
 export function instanceOfProviderLayerCollectionId(value: object): value is ProviderLayerCollectionId {
-    if (!('collectionId' in value) || value['collectionId'] === undefined) return false;
     if (!('providerId' in value) || value['providerId'] === undefined) return false;
+    if (!('collectionId' in value) || value['collectionId'] === undefined) return false;
     return true;
 }
 
@@ -51,8 +51,8 @@ export function ProviderLayerCollectionIdFromJSONTyped(json: any, ignoreDiscrimi
     }
     return {
         
-        'collectionId': json['collectionId'],
         'providerId': json['providerId'],
+        'collectionId': json['collectionId'],
     };
 }
 
@@ -67,8 +67,8 @@ export function ProviderLayerCollectionIdToJSONTyped(value?: ProviderLayerCollec
 
     return {
         
-        'collectionId': value['collectionId'],
         'providerId': value['providerId'],
+        'collectionId': value['collectionId'],
     };
 }
 

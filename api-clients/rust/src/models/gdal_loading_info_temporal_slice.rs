@@ -13,21 +13,21 @@ use serde::{Deserialize, Serialize};
 /// GdalLoadingInfoTemporalSlice : one temporal slice of the dataset that requires reading from exactly one Gdal dataset
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GdalLoadingInfoTemporalSlice {
-    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
-    pub cache_ttl: Option<i32>,
-    #[serde(rename = "params", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub params: Option<Option<Box<models::GdalDatasetParameters>>>,
     #[serde(rename = "time")]
     pub time: Box<models::TimeInterval>,
+    #[serde(rename = "params", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub params: Option<Option<Box<models::GdalDatasetParameters>>>,
+    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<i32>,
 }
 
 impl GdalLoadingInfoTemporalSlice {
     /// one temporal slice of the dataset that requires reading from exactly one Gdal dataset
     pub fn new(time: models::TimeInterval) -> GdalLoadingInfoTemporalSlice {
         GdalLoadingInfoTemporalSlice {
-            cache_ttl: None,
-            params: None,
             time: Box::new(time),
+            params: None,
+            cache_ttl: None,
         }
     }
 }

@@ -6,11 +6,11 @@
 
 Name | Type
 ------------ | -------------
-`bbox` | [BoundingBox2D](BoundingBox2D.md)
-`columns` | [{ [key: string]: VectorColumnInfo; }](VectorColumnInfo.md)
 `dataType` | [VectorDataType](VectorDataType.md)
 `spatialReference` | string
+`columns` | [{ [key: string]: VectorColumnInfo; }](VectorColumnInfo.md)
 `time` | [TimeInterval](TimeInterval.md)
+`bbox` | [BoundingBox2D](BoundingBox2D.md)
 
 ## Example
 
@@ -19,11 +19,11 @@ import type { VectorResultDescriptor } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "bbox": null,
-  "columns": null,
   "dataType": null,
   "spatialReference": null,
+  "columns": null,
   "time": null,
+  "bbox": null,
 } satisfies VectorResultDescriptor
 
 console.log(example)

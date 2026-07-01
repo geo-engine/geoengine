@@ -35,8 +35,8 @@ class TestUserInfo(unittest.TestCase):
         model = UserInfo()
         if include_optional:
             return UserInfo(
-                email = '',
                 id = '',
+                email = '',
                 real_name = ''
             )
         else:

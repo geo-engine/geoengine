@@ -35,24 +35,28 @@ class TestStacDataProviderDefinition(unittest.TestCase):
         model = StacDataProviderDefinition()
         if include_optional:
             return StacDataProviderDefinition(
+                type = 'StacProviderDefinition',
+                name = '',
+                id = '',
+                description = '',
+                priority = 56,
                 api_url = '',
                 collection_name = '',
+                s3_config = geoengine_api_client.models.stac_provider_s3_config.StacProviderS3Config(
+                    endpoint = '', 
+                    access_key = null, 
+                    secret_key = null, ),
+                time_dimension = None,
                 datasets = [
                     geoengine_api_client.models.stac_provider_dataset.StacProviderDataset(
-                        bands = [
-                            geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
-                                asset_title = '', 
-                                band_name = '', )
-                            ], 
-                        data_type = 'U8', 
-                        description = '', 
                         name = '', 
-                        projection = '', 
+                        description = '', 
+                        data_type = 'U8', 
                         resolution = geoengine_api_client.models.spatial_resolution.SpatialResolution(
                             x = 1.337, 
                             y = 1.337, ), 
+                        projection = '', 
                         spatial_grid = geoengine_api_client.models.spatial_grid_descriptor.SpatialGridDescriptor(
-                            descriptor = 'source', 
                             spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(
                                 geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
                                     origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
@@ -61,44 +65,39 @@ class TestStacDataProviderDefinition(unittest.TestCase):
                                     x_pixel_size = 1.337, 
                                     y_pixel_size = 1.337, ), 
                                 grid_bounds = geoengine_api_client.models.grid_bounding_box2_d.GridBoundingBox2D(
-                                    bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                        x_idx = 56, 
-                                        y_idx = 56, ), 
                                     top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                        x_idx = 56, 
-                                        y_idx = 56, ), ), ), ), )
-                    ],
-                description = '',
-                id = '',
-                name = '',
-                priority = 56,
-                s3_config = geoengine_api_client.models.stac_provider_s3_config.StacProviderS3Config(
-                    access_key = '', 
-                    endpoint = '', 
-                    secret_key = '', ),
-                time_dimension = None,
-                type = 'StacProviderDefinition'
+                                        y_idx = 56, 
+                                        x_idx = 56, ), 
+                                    bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                                        y_idx = 56, 
+                                        x_idx = 56, ), ), ), 
+                            descriptor = 'source', ), 
+                        bands = [
+                            geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
+                                asset_title = '', 
+                                band_name = '', )
+                            ], )
+                    ]
             )
         else:
             return StacDataProviderDefinition(
+                type = 'StacProviderDefinition',
+                name = '',
+                id = '',
+                description = '',
                 api_url = '',
                 collection_name = '',
+                time_dimension = None,
                 datasets = [
                     geoengine_api_client.models.stac_provider_dataset.StacProviderDataset(
-                        bands = [
-                            geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
-                                asset_title = '', 
-                                band_name = '', )
-                            ], 
-                        data_type = 'U8', 
-                        description = '', 
                         name = '', 
-                        projection = '', 
+                        description = '', 
+                        data_type = 'U8', 
                         resolution = geoengine_api_client.models.spatial_resolution.SpatialResolution(
                             x = 1.337, 
                             y = 1.337, ), 
+                        projection = '', 
                         spatial_grid = geoengine_api_client.models.spatial_grid_descriptor.SpatialGridDescriptor(
-                            descriptor = 'source', 
                             spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(
                                 geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
                                     origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
@@ -107,18 +106,19 @@ class TestStacDataProviderDefinition(unittest.TestCase):
                                     x_pixel_size = 1.337, 
                                     y_pixel_size = 1.337, ), 
                                 grid_bounds = geoengine_api_client.models.grid_bounding_box2_d.GridBoundingBox2D(
-                                    bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                        x_idx = 56, 
-                                        y_idx = 56, ), 
                                     top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                        x_idx = 56, 
-                                        y_idx = 56, ), ), ), ), )
+                                        y_idx = 56, 
+                                        x_idx = 56, ), 
+                                    bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                                        y_idx = 56, 
+                                        x_idx = 56, ), ), ), 
+                            descriptor = 'source', ), 
+                        bands = [
+                            geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
+                                asset_title = '', 
+                                band_name = '', )
+                            ], )
                     ],
-                description = '',
-                id = '',
-                name = '',
-                time_dimension = None,
-                type = 'StacProviderDefinition',
         )
         """
 

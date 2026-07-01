@@ -18,16 +18,16 @@ import type { EdrVectorSpec } from './EdrVectorSpec';
 export interface EdrDataProviderDefinition {
     /**
      *
+     * @type {EdrDataProviderDefinitionTypeEnum}
+     * @memberof EdrDataProviderDefinition
+     */
+    type: EdrDataProviderDefinitionTypeEnum;
+    /**
+     *
      * @type {string}
      * @memberof EdrDataProviderDefinition
      */
-    baseUrl: string;
-    /**
-     *
-     * @type {number}
-     * @memberof EdrDataProviderDefinition
-     */
-    cacheTtl?: number;
+    name: string;
     /**
      *
      * @type {string}
@@ -35,11 +35,11 @@ export interface EdrDataProviderDefinition {
      */
     description: string;
     /**
-     * List of vertical reference systems with a discrete scale
-     * @type {Array<string>}
+     *
+     * @type {number}
      * @memberof EdrDataProviderDefinition
      */
-    discreteVrs?: Array<string>;
+    priority?: number | null;
     /**
      *
      * @type {string}
@@ -51,31 +51,31 @@ export interface EdrDataProviderDefinition {
      * @type {string}
      * @memberof EdrDataProviderDefinition
      */
-    name: string;
-    /**
-     *
-     * @type {number}
-     * @memberof EdrDataProviderDefinition
-     */
-    priority?: number | null;
-    /**
-     *
-     * @type {Array<Provenance>}
-     * @memberof EdrDataProviderDefinition
-     */
-    provenance?: Array<Provenance> | null;
-    /**
-     *
-     * @type {EdrDataProviderDefinitionTypeEnum}
-     * @memberof EdrDataProviderDefinition
-     */
-    type: EdrDataProviderDefinitionTypeEnum;
+    baseUrl: string;
     /**
      *
      * @type {EdrVectorSpec}
      * @memberof EdrDataProviderDefinition
      */
     vectorSpec?: EdrVectorSpec | null;
+    /**
+     *
+     * @type {number}
+     * @memberof EdrDataProviderDefinition
+     */
+    cacheTtl?: number;
+    /**
+     * List of vertical reference systems with a discrete scale
+     * @type {Array<string>}
+     * @memberof EdrDataProviderDefinition
+     */
+    discreteVrs?: Array<string>;
+    /**
+     *
+     * @type {Array<Provenance>}
+     * @memberof EdrDataProviderDefinition
+     */
+    provenance?: Array<Provenance> | null;
 }
 /**
  * @export

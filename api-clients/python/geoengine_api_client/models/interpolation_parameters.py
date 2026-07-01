@@ -30,9 +30,9 @@ class InterpolationParameters(BaseModel):
     Parameters for the `Interpolation` operator.
     """ # noqa: E501
     interpolation: InterpolationMethod = Field(description="Interpolation method.")
-    output_origin_reference: Optional[Coordinate2D] = Field(default=None, description="Optional reference point used to align the output grid origin.", alias="outputOriginReference")
     output_resolution: InterpolationResolution = Field(description="Target output resolution.", alias="outputResolution")
-    __properties: ClassVar[List[str]] = ["interpolation", "outputOriginReference", "outputResolution"]
+    output_origin_reference: Optional[Coordinate2D] = Field(default=None, description="Optional reference point used to align the output grid origin.", alias="outputOriginReference")
+    __properties: ClassVar[List[str]] = ["interpolation", "outputResolution", "outputOriginReference"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -73,12 +73,12 @@ class InterpolationParameters(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of output_origin_reference
-        if self.output_origin_reference:
-            _dict['outputOriginReference'] = self.output_origin_reference.to_dict()
         # override the default output from pydantic by calling `to_dict()` of output_resolution
         if self.output_resolution:
             _dict['outputResolution'] = self.output_resolution.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of output_origin_reference
+        if self.output_origin_reference:
+            _dict['outputOriginReference'] = self.output_origin_reference.to_dict()
         # set to None if output_origin_reference (nullable) is None
         # and model_fields_set contains the field
         if self.output_origin_reference is None and "output_origin_reference" in self.model_fields_set:
@@ -97,8 +97,8 @@ class InterpolationParameters(BaseModel):
 
         _obj = cls.model_validate({
             "interpolation": obj.get("interpolation"),
-            "outputOriginReference": Coordinate2D.from_dict(obj["outputOriginReference"]) if obj.get("outputOriginReference") is not None else None,
-            "outputResolution": InterpolationResolution.from_dict(obj["outputResolution"]) if obj.get("outputResolution") is not None else None
+            "outputResolution": InterpolationResolution.from_dict(obj["outputResolution"]) if obj.get("outputResolution") is not None else None,
+            "outputOriginReference": Coordinate2D.from_dict(obj["outputOriginReference"]) if obj.get("outputOriginReference") is not None else None
         })
         return _obj
 

@@ -47,17 +47,17 @@ export interface InterpolationParameters {
      */
     interpolation: InterpolationMethod;
     /**
-     * Optional reference point used to align the output grid origin.
-     * @type {Coordinate2D}
-     * @memberof InterpolationParameters
-     */
-    outputOriginReference?: Coordinate2D | null;
-    /**
      * Target output resolution.
      * @type {InterpolationResolution}
      * @memberof InterpolationParameters
      */
     outputResolution: InterpolationResolution;
+    /**
+     * Optional reference point used to align the output grid origin.
+     * @type {Coordinate2D}
+     * @memberof InterpolationParameters
+     */
+    outputOriginReference?: Coordinate2D | null;
 }
 
 
@@ -82,8 +82,8 @@ export function InterpolationParametersFromJSONTyped(json: any, ignoreDiscrimina
     return {
         
         'interpolation': InterpolationMethodFromJSON(json['interpolation']),
-        'outputOriginReference': json['outputOriginReference'] == null ? undefined : Coordinate2DFromJSON(json['outputOriginReference']),
         'outputResolution': InterpolationResolutionFromJSON(json['outputResolution']),
+        'outputOriginReference': json['outputOriginReference'] == null ? undefined : Coordinate2DFromJSON(json['outputOriginReference']),
     };
 }
 
@@ -99,8 +99,8 @@ export function InterpolationParametersToJSONTyped(value?: InterpolationParamete
     return {
         
         'interpolation': InterpolationMethodToJSON(value['interpolation']),
-        'outputOriginReference': Coordinate2DToJSON(value['outputOriginReference']),
         'outputResolution': InterpolationResolutionToJSON(value['outputResolution']),
+        'outputOriginReference': Coordinate2DToJSON(value['outputOriginReference']),
     };
 }
 

@@ -35,25 +35,25 @@ class TestLineSymbology(unittest.TestCase):
         model = LineSymbology()
         if include_optional:
             return LineSymbology(
-                auto_simplified = True,
+                type = 'line',
                 stroke = geoengine_api_client.models.stroke_param.StrokeParam(
-                    color = null, 
-                    width = null, ),
+                    width = null, 
+                    color = null, ),
                 text = geoengine_api_client.models.text_symbology.TextSymbology(
                     attribute = '', 
                     fill_color = null, 
                     stroke = geoengine_api_client.models.stroke_param.StrokeParam(
-                        color = null, 
-                        width = null, ), ),
-                type = 'line'
+                        width = null, 
+                        color = null, ), ),
+                auto_simplified = True
             )
         else:
             return LineSymbology(
-                auto_simplified = True,
-                stroke = geoengine_api_client.models.stroke_param.StrokeParam(
-                    color = null, 
-                    width = null, ),
                 type = 'line',
+                stroke = geoengine_api_client.models.stroke_param.StrokeParam(
+                    width = null, 
+                    color = null, ),
+                auto_simplified = True,
         )
         """
 

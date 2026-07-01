@@ -19,13 +19,13 @@ export interface StacQueryBuffer {
      * @type {number}
      * @memberof StacQueryBuffer
      */
-    endSeconds: number;
+    startSeconds: number;
     /**
      *
      * @type {number}
      * @memberof StacQueryBuffer
      */
-    startSeconds: number;
+    endSeconds: number;
 }
 /**
  * Check if a given object implements the StacQueryBuffer interface.

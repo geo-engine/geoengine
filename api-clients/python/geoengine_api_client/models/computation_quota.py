@@ -29,11 +29,11 @@ class ComputationQuota(BaseModel):
     """
     ComputationQuota
     """ # noqa: E501
-    computation_id: UUID = Field(alias="computationId")
-    count: Annotated[int, Field(strict=True, ge=0)]
     timestamp: datetime
+    computation_id: UUID = Field(alias="computationId")
     workflow_id: UUID = Field(alias="workflowId")
-    __properties: ClassVar[List[str]] = ["computationId", "count", "timestamp", "workflowId"]
+    count: Annotated[int, Field(strict=True, ge=0)]
+    __properties: ClassVar[List[str]] = ["timestamp", "computationId", "workflowId", "count"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -86,10 +86,10 @@ class ComputationQuota(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "computationId": obj.get("computationId"),
-            "count": obj.get("count"),
             "timestamp": obj.get("timestamp"),
-            "workflowId": obj.get("workflowId")
+            "computationId": obj.get("computationId"),
+            "workflowId": obj.get("workflowId"),
+            "count": obj.get("count")
         })
         return _obj
 

@@ -19,7 +19,7 @@ export interface MlTensorShape3D {
      * @type {number}
      * @memberof MlTensorShape3D
      */
-    bands: number;
+    y: number;
     /**
      *
      * @type {number}
@@ -31,7 +31,7 @@ export interface MlTensorShape3D {
      * @type {number}
      * @memberof MlTensorShape3D
      */
-    y: number;
+    bands: number;
 }
 /**
  * Check if a given object implements the MlTensorShape3D interface.

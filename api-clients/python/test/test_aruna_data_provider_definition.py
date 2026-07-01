@@ -35,27 +35,27 @@ class TestArunaDataProviderDefinition(unittest.TestCase):
         model = ArunaDataProviderDefinition()
         if include_optional:
             return ArunaDataProviderDefinition(
-                api_token = '',
-                api_url = '',
-                cache_ttl = 0,
-                description = '',
-                filter_label = '',
+                type = 'Aruna',
                 id = '',
                 name = '',
+                description = '',
                 priority = 56,
+                api_url = '',
                 project_id = '',
-                type = 'Aruna'
+                api_token = '',
+                filter_label = '',
+                cache_ttl = 0
             )
         else:
             return ArunaDataProviderDefinition(
-                api_token = '',
-                api_url = '',
-                description = '',
-                filter_label = '',
+                type = 'Aruna',
                 id = '',
                 name = '',
+                description = '',
+                api_url = '',
                 project_id = '',
-                type = 'Aruna',
+                api_token = '',
+                filter_label = '',
         )
         """
 

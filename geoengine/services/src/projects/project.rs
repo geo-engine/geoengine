@@ -260,6 +260,15 @@ pub enum Symbology {
     Polygon(PolygonSymbology),
 }
 
+impl Symbology {
+    pub fn into_raster_symbology(self) -> Option<RasterSymbology> {
+        match self {
+            Symbology::Raster(raster) => Some(raster),
+            _ => None,
+        }
+    }
+}
+
 #[type_tag(value = "raster")]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]

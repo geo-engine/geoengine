@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`cleanUp` | any
 `status` | string
+`cleanUp` | any
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { TaskStatusAborted } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "cleanUp": null,
   "status": null,
+  "cleanUp": null,
 } satisfies TaskStatusAborted
 
 console.log(example)

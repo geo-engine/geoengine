@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`email` | string
 `id` | string
+`email` | string
 `realName` | string
 
 ## Example
@@ -17,8 +17,8 @@ import type { UserInfo } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "email": null,
   "id": null,
+  "email": null,
   "realName": null,
 } satisfies UserInfo
 

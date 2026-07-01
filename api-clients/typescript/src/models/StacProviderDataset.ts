@@ -49,24 +49,6 @@ import {
 export interface StacProviderDataset {
     /**
      * 
-     * @type {Array<StacProviderDatasetBand>}
-     * @memberof StacProviderDataset
-     */
-    bands: Array<StacProviderDatasetBand>;
-    /**
-     * 
-     * @type {RasterDataType}
-     * @memberof StacProviderDataset
-     */
-    dataType: RasterDataType;
-    /**
-     * 
-     * @type {string}
-     * @memberof StacProviderDataset
-     */
-    description: string;
-    /**
-     * 
      * @type {string}
      * @memberof StacProviderDataset
      */
@@ -76,7 +58,13 @@ export interface StacProviderDataset {
      * @type {string}
      * @memberof StacProviderDataset
      */
-    projection: string;
+    description: string;
+    /**
+     * 
+     * @type {RasterDataType}
+     * @memberof StacProviderDataset
+     */
+    dataType: RasterDataType;
     /**
      * 
      * @type {SpatialResolution}
@@ -85,10 +73,22 @@ export interface StacProviderDataset {
     resolution: SpatialResolution;
     /**
      * 
+     * @type {string}
+     * @memberof StacProviderDataset
+     */
+    projection: string;
+    /**
+     * 
      * @type {SpatialGridDescriptor}
      * @memberof StacProviderDataset
      */
     spatialGrid: SpatialGridDescriptor;
+    /**
+     * 
+     * @type {Array<StacProviderDatasetBand>}
+     * @memberof StacProviderDataset
+     */
+    bands: Array<StacProviderDatasetBand>;
 }
 
 
@@ -97,13 +97,13 @@ export interface StacProviderDataset {
  * Check if a given object implements the StacProviderDataset interface.
  */
 export function instanceOfStacProviderDataset(value: object): value is StacProviderDataset {
-    if (!('bands' in value) || value['bands'] === undefined) return false;
-    if (!('dataType' in value) || value['dataType'] === undefined) return false;
-    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
-    if (!('projection' in value) || value['projection'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
+    if (!('dataType' in value) || value['dataType'] === undefined) return false;
     if (!('resolution' in value) || value['resolution'] === undefined) return false;
+    if (!('projection' in value) || value['projection'] === undefined) return false;
     if (!('spatialGrid' in value) || value['spatialGrid'] === undefined) return false;
+    if (!('bands' in value) || value['bands'] === undefined) return false;
     return true;
 }
 
@@ -117,13 +117,13 @@ export function StacProviderDatasetFromJSONTyped(json: any, ignoreDiscriminator:
     }
     return {
         
-        'bands': ((json['bands'] as Array<any>).map(StacProviderDatasetBandFromJSON)),
-        'dataType': RasterDataTypeFromJSON(json['dataType']),
-        'description': json['description'],
         'name': json['name'],
-        'projection': json['projection'],
+        'description': json['description'],
+        'dataType': RasterDataTypeFromJSON(json['dataType']),
         'resolution': SpatialResolutionFromJSON(json['resolution']),
+        'projection': json['projection'],
         'spatialGrid': SpatialGridDescriptorFromJSON(json['spatialGrid']),
+        'bands': ((json['bands'] as Array<any>).map(StacProviderDatasetBandFromJSON)),
     };
 }
 
@@ -138,13 +138,13 @@ export function StacProviderDatasetToJSONTyped(value?: StacProviderDataset | nul
 
     return {
         
-        'bands': ((value['bands'] as Array<any>).map(StacProviderDatasetBandToJSON)),
-        'dataType': RasterDataTypeToJSON(value['dataType']),
-        'description': value['description'],
         'name': value['name'],
-        'projection': value['projection'],
+        'description': value['description'],
+        'dataType': RasterDataTypeToJSON(value['dataType']),
         'resolution': SpatialResolutionToJSON(value['resolution']),
+        'projection': value['projection'],
         'spatialGrid': SpatialGridDescriptorToJSON(value['spatialGrid']),
+        'bands': ((value['bands'] as Array<any>).map(StacProviderDatasetBandToJSON)),
     };
 }
 

@@ -4,12 +4,12 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**collections** | [**Vec<models::DatasetLayerListingCollection>**](DatasetLayerListingCollection.md) |  | 
-**description** | **String** |  | 
+**r#type** | **Type** |  (enum: DatasetLayerListing) | 
 **id** | **uuid::Uuid** |  | 
 **name** | **String** |  | 
+**description** | **String** |  | 
 **priority** | Option<**i32**> |  | [optional]
-**r#type** | **Type** |  (enum: DatasetLayerListing) | 
+**collections** | [**Vec<models::DatasetLayerListingCollection>**](DatasetLayerListingCollection.md) |  | 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

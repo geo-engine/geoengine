@@ -20,28 +20,10 @@ import { mapValues } from '../runtime';
 export interface ProjectListing {
     /**
      * 
-     * @type {Date}
-     * @memberof ProjectListing
-     */
-    changed: Date;
-    /**
-     * 
-     * @type {string}
-     * @memberof ProjectListing
-     */
-    description: string;
-    /**
-     * 
      * @type {string}
      * @memberof ProjectListing
      */
     id: string;
-    /**
-     * 
-     * @type {Array<string>}
-     * @memberof ProjectListing
-     */
-    layerNames: Array<string>;
     /**
      * 
      * @type {string}
@@ -50,22 +32,40 @@ export interface ProjectListing {
     name: string;
     /**
      * 
+     * @type {string}
+     * @memberof ProjectListing
+     */
+    description: string;
+    /**
+     * 
+     * @type {Array<string>}
+     * @memberof ProjectListing
+     */
+    layerNames: Array<string>;
+    /**
+     * 
      * @type {Array<string>}
      * @memberof ProjectListing
      */
     plotNames: Array<string>;
+    /**
+     * 
+     * @type {Date}
+     * @memberof ProjectListing
+     */
+    changed: Date;
 }
 
 /**
  * Check if a given object implements the ProjectListing interface.
  */
 export function instanceOfProjectListing(value: object): value is ProjectListing {
-    if (!('changed' in value) || value['changed'] === undefined) return false;
-    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('id' in value) || value['id'] === undefined) return false;
-    if (!('layerNames' in value) || value['layerNames'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
+    if (!('layerNames' in value) || value['layerNames'] === undefined) return false;
     if (!('plotNames' in value) || value['plotNames'] === undefined) return false;
+    if (!('changed' in value) || value['changed'] === undefined) return false;
     return true;
 }
 
@@ -79,12 +79,12 @@ export function ProjectListingFromJSONTyped(json: any, ignoreDiscriminator: bool
     }
     return {
         
-        'changed': (new Date(json['changed'])),
-        'description': json['description'],
         'id': json['id'],
-        'layerNames': json['layerNames'],
         'name': json['name'],
+        'description': json['description'],
+        'layerNames': json['layerNames'],
         'plotNames': json['plotNames'],
+        'changed': (new Date(json['changed'])),
     };
 }
 
@@ -99,12 +99,12 @@ export function ProjectListingToJSONTyped(value?: ProjectListing | null, ignoreD
 
     return {
         
-        'changed': value['changed'].toISOString(),
-        'description': value['description'],
         'id': value['id'],
-        'layerNames': value['layerNames'],
         'name': value['name'],
+        'description': value['description'],
+        'layerNames': value['layerNames'],
         'plotNames': value['plotNames'],
+        'changed': value['changed'].toISOString(),
     };
 }
 

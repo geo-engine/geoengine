@@ -35,13 +35,13 @@ class TestStrokeParam(unittest.TestCase):
         model = StrokeParam()
         if include_optional:
             return StrokeParam(
-                color = None,
-                width = None
+                width = None,
+                color = None
             )
         else:
             return StrokeParam(
-                color = None,
                 width = None,
+                color = None,
         )
         """
 

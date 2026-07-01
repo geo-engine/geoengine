@@ -35,13 +35,13 @@ class TestProviderLayerId(unittest.TestCase):
         model = ProviderLayerId()
         if include_optional:
             return ProviderLayerId(
-                layer_id = '',
-                provider_id = ''
+                provider_id = '',
+                layer_id = ''
             )
         else:
             return ProviderLayerId(
-                layer_id = '',
                 provider_id = '',
+                layer_id = '',
         )
         """
 

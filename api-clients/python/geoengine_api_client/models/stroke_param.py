@@ -28,9 +28,9 @@ class StrokeParam(BaseModel):
     """
     StrokeParam
     """ # noqa: E501
-    color: ColorParam
     width: NumberParam
-    __properties: ClassVar[List[str]] = ["color", "width"]
+    color: ColorParam
+    __properties: ClassVar[List[str]] = ["width", "color"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -71,12 +71,12 @@ class StrokeParam(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of color
-        if self.color:
-            _dict['color'] = self.color.to_dict()
         # override the default output from pydantic by calling `to_dict()` of width
         if self.width:
             _dict['width'] = self.width.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of color
+        if self.color:
+            _dict['color'] = self.color.to_dict()
         return _dict
 
     @classmethod
@@ -89,8 +89,8 @@ class StrokeParam(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "color": ColorParam.from_dict(obj["color"]) if obj.get("color") is not None else None,
-            "width": NumberParam.from_dict(obj["width"]) if obj.get("width") is not None else None
+            "width": NumberParam.from_dict(obj["width"]) if obj.get("width") is not None else None,
+            "color": ColorParam.from_dict(obj["color"]) if obj.get("color") is not None else None
         })
         return _obj
 

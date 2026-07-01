@@ -21,13 +21,13 @@ export const GfbioAbcdDataProviderDefinitionTypeEnum = {
  * Check if a given object implements the GfbioAbcdDataProviderDefinition interface.
  */
 export function instanceOfGfbioAbcdDataProviderDefinition(value) {
-    if (!('dbConfig' in value) || value['dbConfig'] === undefined)
-        return false;
-    if (!('description' in value) || value['description'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('description' in value) || value['description'] === undefined)
+        return false;
+    if (!('dbConfig' in value) || value['dbConfig'] === undefined)
         return false;
     return true;
 }
@@ -39,12 +39,12 @@ export function GfbioAbcdDataProviderDefinitionFromJSONTyped(json, ignoreDiscrim
         return json;
     }
     return {
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
-        'dbConfig': DatabaseConnectionConfigFromJSON(json['dbConfig']),
-        'description': json['description'],
-        'name': json['name'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
         'type': json['type'],
+        'name': json['name'],
+        'description': json['description'],
+        'priority': json['priority'] == null ? undefined : json['priority'],
+        'dbConfig': DatabaseConnectionConfigFromJSON(json['dbConfig']),
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 export function GfbioAbcdDataProviderDefinitionToJSON(json) {
@@ -55,11 +55,11 @@ export function GfbioAbcdDataProviderDefinitionToJSONTyped(value, ignoreDiscrimi
         return value;
     }
     return {
-        'cacheTtl': value['cacheTtl'],
-        'dbConfig': DatabaseConnectionConfigToJSON(value['dbConfig']),
-        'description': value['description'],
-        'name': value['name'],
-        'priority': value['priority'],
         'type': value['type'],
+        'name': value['name'],
+        'description': value['description'],
+        'priority': value['priority'],
+        'dbConfig': DatabaseConnectionConfigToJSON(value['dbConfig']),
+        'cacheTtl': value['cacheTtl'],
     };
 }

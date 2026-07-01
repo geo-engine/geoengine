@@ -23,21 +23,21 @@ export interface Plot {
      * @type {string}
      * @memberof Plot
      */
-    name: string;
+    workflow: string;
     /**
      * 
      * @type {string}
      * @memberof Plot
      */
-    workflow: string;
+    name: string;
 }
 
 /**
  * Check if a given object implements the Plot interface.
  */
 export function instanceOfPlot(value: object): value is Plot {
-    if (!('name' in value) || value['name'] === undefined) return false;
     if (!('workflow' in value) || value['workflow'] === undefined) return false;
+    if (!('name' in value) || value['name'] === undefined) return false;
     return true;
 }
 
@@ -51,8 +51,8 @@ export function PlotFromJSONTyped(json: any, ignoreDiscriminator: boolean): Plot
     }
     return {
         
-        'name': json['name'],
         'workflow': json['workflow'],
+        'name': json['name'],
     };
 }
 
@@ -67,8 +67,8 @@ export function PlotToJSONTyped(value?: Plot | null, ignoreDiscriminator: boolea
 
     return {
         
-        'name': value['name'],
         'workflow': value['workflow'],
+        'name': value['name'],
     };
 }
 

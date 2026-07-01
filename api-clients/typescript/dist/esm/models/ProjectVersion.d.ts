@@ -16,16 +16,16 @@
 export interface ProjectVersion {
     /**
      *
-     * @type {Date}
-     * @memberof ProjectVersion
-     */
-    changed: Date;
-    /**
-     *
      * @type {string}
      * @memberof ProjectVersion
      */
     id: string;
+    /**
+     *
+     * @type {Date}
+     * @memberof ProjectVersion
+     */
+    changed: Date;
 }
 /**
  * Check if a given object implements the ProjectVersion interface.

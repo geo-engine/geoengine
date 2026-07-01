@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
-`description` | string
-`displayName` | string
 `name` | string
+`displayName` | string
+`description` | string
 `tags` | Array&lt;string&gt;
 
 ## Example
@@ -18,9 +18,9 @@ import type { UpdateDataset } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "description": null,
-  "displayName": null,
   "name": null,
+  "displayName": null,
+  "description": null,
   "tags": null,
 } satisfies UpdateDataset
 

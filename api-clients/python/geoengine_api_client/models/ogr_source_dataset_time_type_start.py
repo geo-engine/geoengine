@@ -28,11 +28,11 @@ class OgrSourceDatasetTimeTypeStart(BaseModel):
     """
     OgrSourceDatasetTimeTypeStart
     """ # noqa: E501
-    duration: OgrSourceDurationSpec
+    type: StrictStr
     start_field: StrictStr = Field(alias="startField")
     start_format: OgrSourceTimeFormat = Field(alias="startFormat")
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["duration", "startField", "startFormat", "type"]
+    duration: OgrSourceDurationSpec
+    __properties: ClassVar[List[str]] = ["type", "startField", "startFormat", "duration"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -80,12 +80,12 @@ class OgrSourceDatasetTimeTypeStart(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of duration
-        if self.duration:
-            _dict['duration'] = self.duration.to_dict()
         # override the default output from pydantic by calling `to_dict()` of start_format
         if self.start_format:
             _dict['startFormat'] = self.start_format.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of duration
+        if self.duration:
+            _dict['duration'] = self.duration.to_dict()
         return _dict
 
     @classmethod
@@ -98,10 +98,10 @@ class OgrSourceDatasetTimeTypeStart(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "duration": OgrSourceDurationSpec.from_dict(obj["duration"]) if obj.get("duration") is not None else None,
+            "type": obj.get("type"),
             "startField": obj.get("startField"),
             "startFormat": OgrSourceTimeFormat.from_dict(obj["startFormat"]) if obj.get("startFormat") is not None else None,
-            "type": obj.get("type")
+            "duration": OgrSourceDurationSpec.from_dict(obj["duration"]) if obj.get("duration") is not None else None
         })
         return _obj
 

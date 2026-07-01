@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`metaData` | [MetaDataDefinition](MetaDataDefinition.md)
 `properties` | [AddDataset](AddDataset.md)
+`metaData` | [MetaDataDefinition](MetaDataDefinition.md)
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { DatasetDefinition } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "metaData": null,
   "properties": null,
+  "metaData": null,
 } satisfies DatasetDefinition
 
 console.log(example)

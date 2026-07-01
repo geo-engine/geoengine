@@ -19,13 +19,13 @@ export interface AuthCodeResponse {
      * @type {string}
      * @memberof AuthCodeResponse
      */
-    code: string;
+    sessionState: string;
     /**
      *
      * @type {string}
      * @memberof AuthCodeResponse
      */
-    sessionState: string;
+    code: string;
     /**
      *
      * @type {string}

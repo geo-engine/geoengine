@@ -24,17 +24,17 @@ export interface InterpolationParameters {
      */
     interpolation: InterpolationMethod;
     /**
-     * Optional reference point used to align the output grid origin.
-     * @type {Coordinate2D}
-     * @memberof InterpolationParameters
-     */
-    outputOriginReference?: Coordinate2D | null;
-    /**
      * Target output resolution.
      * @type {InterpolationResolution}
      * @memberof InterpolationParameters
      */
     outputResolution: InterpolationResolution;
+    /**
+     * Optional reference point used to align the output grid origin.
+     * @type {Coordinate2D}
+     * @memberof InterpolationParameters
+     */
+    outputOriginReference?: Coordinate2D | null;
 }
 /**
  * Check if a given object implements the InterpolationParameters interface.

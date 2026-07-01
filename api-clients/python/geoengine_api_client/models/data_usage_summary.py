@@ -28,10 +28,10 @@ class DataUsageSummary(BaseModel):
     """
     DataUsageSummary
     """ # noqa: E501
-    count: Annotated[int, Field(strict=True, ge=0)]
-    data: StrictStr
     timestamp: datetime
-    __properties: ClassVar[List[str]] = ["count", "data", "timestamp"]
+    data: StrictStr
+    count: Annotated[int, Field(strict=True, ge=0)]
+    __properties: ClassVar[List[str]] = ["timestamp", "data", "count"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -84,9 +84,9 @@ class DataUsageSummary(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "count": obj.get("count"),
+            "timestamp": obj.get("timestamp"),
             "data": obj.get("data"),
-            "timestamp": obj.get("timestamp")
+            "count": obj.get("count")
         })
         return _obj
 

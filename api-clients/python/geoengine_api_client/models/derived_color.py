@@ -27,10 +27,10 @@ class DerivedColor(BaseModel):
     """
     DerivedColor
     """ # noqa: E501
+    type: StrictStr
     attribute: StrictStr
     colorizer: Colorizer
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["attribute", "colorizer", "type"]
+    __properties: ClassVar[List[str]] = ["type", "attribute", "colorizer"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -93,9 +93,9 @@ class DerivedColor(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "type": obj.get("type"),
             "attribute": obj.get("attribute"),
-            "colorizer": Colorizer.from_dict(obj["colorizer"]) if obj.get("colorizer") is not None else None,
-            "type": obj.get("type")
+            "colorizer": Colorizer.from_dict(obj["colorizer"]) if obj.get("colorizer") is not None else None
         })
         return _obj
 

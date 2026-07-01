@@ -20,10 +20,10 @@ import { mapValues } from '../runtime';
 export interface ExternalDataId {
     /**
      * 
-     * @type {string}
+     * @type {ExternalDataIdTypeEnum}
      * @memberof ExternalDataId
      */
-    layerId: string;
+    type: ExternalDataIdTypeEnum;
     /**
      * 
      * @type {string}
@@ -32,10 +32,10 @@ export interface ExternalDataId {
     providerId: string;
     /**
      * 
-     * @type {ExternalDataIdTypeEnum}
+     * @type {string}
      * @memberof ExternalDataId
      */
-    type: ExternalDataIdTypeEnum;
+    layerId: string;
 }
 
 
@@ -52,9 +52,9 @@ export type ExternalDataIdTypeEnum = typeof ExternalDataIdTypeEnum[keyof typeof 
  * Check if a given object implements the ExternalDataId interface.
  */
 export function instanceOfExternalDataId(value: object): value is ExternalDataId {
-    if (!('layerId' in value) || value['layerId'] === undefined) return false;
-    if (!('providerId' in value) || value['providerId'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('providerId' in value) || value['providerId'] === undefined) return false;
+    if (!('layerId' in value) || value['layerId'] === undefined) return false;
     return true;
 }
 
@@ -68,9 +68,9 @@ export function ExternalDataIdFromJSONTyped(json: any, ignoreDiscriminator: bool
     }
     return {
         
-        'layerId': json['layerId'],
-        'providerId': json['providerId'],
         'type': json['type'],
+        'providerId': json['providerId'],
+        'layerId': json['layerId'],
     };
 }
 
@@ -85,9 +85,9 @@ export function ExternalDataIdToJSONTyped(value?: ExternalDataId | null, ignoreD
 
     return {
         
-        'layerId': value['layerId'],
-        'providerId': value['providerId'],
         'type': value['type'],
+        'providerId': value['providerId'],
+        'layerId': value['layerId'],
     };
 }
 

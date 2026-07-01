@@ -26,9 +26,9 @@ class OgrSourceTimeFormatCustom(BaseModel):
     """
     OgrSourceTimeFormatCustom
     """ # noqa: E501
-    custom_format: StrictStr = Field(alias="customFormat")
     format: StrictStr
-    __properties: ClassVar[List[str]] = ["customFormat", "format"]
+    custom_format: StrictStr = Field(alias="customFormat")
+    __properties: ClassVar[List[str]] = ["format", "customFormat"]
 
     @field_validator('format')
     def format_validate_enum(cls, value):
@@ -88,8 +88,8 @@ class OgrSourceTimeFormatCustom(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "customFormat": obj.get("customFormat"),
-            "format": obj.get("format")
+            "format": obj.get("format"),
+            "customFormat": obj.get("customFormat")
         })
         return _obj
 

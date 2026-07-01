@@ -20,16 +20,16 @@ import { mapValues } from '../runtime';
 export interface Names {
     /**
      * 
-     * @type {NamesTypeEnum}
-     * @memberof Names
-     */
-    type: NamesTypeEnum;
-    /**
-     * 
      * @type {Array<string>}
      * @memberof Names
      */
     values: Array<string>;
+    /**
+     * 
+     * @type {NamesTypeEnum}
+     * @memberof Names
+     */
+    type: NamesTypeEnum;
 }
 
 
@@ -46,8 +46,8 @@ export type NamesTypeEnum = typeof NamesTypeEnum[keyof typeof NamesTypeEnum];
  * Check if a given object implements the Names interface.
  */
 export function instanceOfNames(value: object): value is Names {
-    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('values' in value) || value['values'] === undefined) return false;
+    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -61,8 +61,8 @@ export function NamesFromJSONTyped(json: any, ignoreDiscriminator: boolean): Nam
     }
     return {
         
-        'type': json['type'],
         'values': json['values'],
+        'type': json['type'],
     };
 }
 
@@ -77,8 +77,8 @@ export function NamesToJSONTyped(value?: Names | null, ignoreDiscriminator: bool
 
     return {
         
-        'type': value['type'],
         'values': value['values'],
+        'type': value['type'],
     };
 }
 

@@ -6,14 +6,14 @@
 
 Name | Type
 ------------ | -------------
-`description` | string
-`expiryDate` | Date
+`type` | string
 `id` | string
 `name` | string
-`priority` | number
-`refreshToken` | string
-`type` | string
+`description` | string
 `user` | string
+`refreshToken` | string
+`expiryDate` | Date
+`priority` | number
 
 ## Example
 
@@ -22,14 +22,14 @@ import type { WildliveDataConnectorDefinition } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "description": null,
-  "expiryDate": null,
+  "type": null,
   "id": null,
   "name": null,
-  "priority": null,
-  "refreshToken": null,
-  "type": null,
+  "description": null,
   "user": null,
+  "refreshToken": null,
+  "expiryDate": null,
+  "priority": null,
 } satisfies WildliveDataConnectorDefinition
 
 console.log(example)

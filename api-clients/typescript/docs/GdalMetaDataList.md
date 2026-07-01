@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
-`params` | [Array&lt;GdalLoadingInfoTemporalSlice&gt;](GdalLoadingInfoTemporalSlice.md)
-`resultDescriptor` | [RasterResultDescriptor](RasterResultDescriptor.md)
 `type` | string
+`resultDescriptor` | [RasterResultDescriptor](RasterResultDescriptor.md)
+`params` | [Array&lt;GdalLoadingInfoTemporalSlice&gt;](GdalLoadingInfoTemporalSlice.md)
 
 ## Example
 
@@ -17,9 +17,9 @@ import type { GdalMetaDataList } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "params": null,
-  "resultDescriptor": null,
   "type": null,
+  "resultDescriptor": null,
+  "params": null,
 } satisfies GdalMetaDataList
 
 console.log(example)

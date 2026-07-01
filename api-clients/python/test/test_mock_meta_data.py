@@ -35,6 +35,7 @@ class TestMockMetaData(unittest.TestCase):
         model = MockMetaData()
         if include_optional:
             return MockMetaData(
+                type = 'MockMetaData',
                 loading_info = geoengine_api_client.models.mock_dataset_data_source_loading_info.MockDatasetDataSourceLoadingInfo(
                     points = [
                         geoengine_api_client.models.coordinate2_d.Coordinate2D(
@@ -42,19 +43,19 @@ class TestMockMetaData(unittest.TestCase):
                             y = 1.337, )
                         ], ),
                 result_descriptor = geoengine_api_client.models.vector_result_descriptor.VectorResultDescriptor(
-                    bbox = null, 
+                    data_type = 'Data', 
+                    spatial_reference = '', 
                     columns = {
                         'key' : geoengine_api_client.models.vector_column_info.VectorColumnInfo(
                             data_type = 'category', 
                             measurement = null, )
                         }, 
-                    data_type = 'Data', 
-                    spatial_reference = '', 
-                    time = null, ),
-                type = 'MockMetaData'
+                    time = null, 
+                    bbox = null, )
             )
         else:
             return MockMetaData(
+                type = 'MockMetaData',
                 loading_info = geoengine_api_client.models.mock_dataset_data_source_loading_info.MockDatasetDataSourceLoadingInfo(
                     points = [
                         geoengine_api_client.models.coordinate2_d.Coordinate2D(
@@ -62,16 +63,15 @@ class TestMockMetaData(unittest.TestCase):
                             y = 1.337, )
                         ], ),
                 result_descriptor = geoengine_api_client.models.vector_result_descriptor.VectorResultDescriptor(
-                    bbox = null, 
+                    data_type = 'Data', 
+                    spatial_reference = '', 
                     columns = {
                         'key' : geoengine_api_client.models.vector_column_info.VectorColumnInfo(
                             data_type = 'category', 
                             measurement = null, )
                         }, 
-                    data_type = 'Data', 
-                    spatial_reference = '', 
-                    time = null, ),
-                type = 'MockMetaData',
+                    time = null, 
+                    bbox = null, ),
         )
         """
 

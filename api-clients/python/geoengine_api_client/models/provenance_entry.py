@@ -28,9 +28,9 @@ class ProvenanceEntry(BaseModel):
     """
     ProvenanceEntry
     """ # noqa: E501
-    data: List[DataId]
     provenance: Provenance
-    __properties: ClassVar[List[str]] = ["data", "provenance"]
+    data: List[DataId]
+    __properties: ClassVar[List[str]] = ["provenance", "data"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -71,6 +71,9 @@ class ProvenanceEntry(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of provenance
+        if self.provenance:
+            _dict['provenance'] = self.provenance.to_dict()
         # override the default output from pydantic by calling `to_dict()` of each item in data (list)
         _items = []
         if self.data:
@@ -78,9 +81,6 @@ class ProvenanceEntry(BaseModel):
                 if _item_data:
                     _items.append(_item_data.to_dict())
             _dict['data'] = _items
-        # override the default output from pydantic by calling `to_dict()` of provenance
-        if self.provenance:
-            _dict['provenance'] = self.provenance.to_dict()
         return _dict
 
     @classmethod
@@ -93,8 +93,8 @@ class ProvenanceEntry(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "data": [DataId.from_dict(_item) for _item in obj["data"]] if obj.get("data") is not None else None,
-            "provenance": Provenance.from_dict(obj["provenance"]) if obj.get("provenance") is not None else None
+            "provenance": Provenance.from_dict(obj["provenance"]) if obj.get("provenance") is not None else None,
+            "data": [DataId.from_dict(_item) for _item in obj["data"]] if obj.get("data") is not None else None
         })
         return _obj
 

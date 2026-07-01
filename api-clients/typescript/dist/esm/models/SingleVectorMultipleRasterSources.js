@@ -16,9 +16,9 @@ import { VectorOperatorFromJSON, VectorOperatorToJSON, } from './VectorOperator'
  * Check if a given object implements the SingleVectorMultipleRasterSources interface.
  */
 export function instanceOfSingleVectorMultipleRasterSources(value) {
-    if (!('rasters' in value) || value['rasters'] === undefined)
-        return false;
     if (!('vector' in value) || value['vector'] === undefined)
+        return false;
+    if (!('rasters' in value) || value['rasters'] === undefined)
         return false;
     return true;
 }
@@ -30,8 +30,8 @@ export function SingleVectorMultipleRasterSourcesFromJSONTyped(json, ignoreDiscr
         return json;
     }
     return {
-        'rasters': (json['rasters'].map(RasterOperatorFromJSON)),
         'vector': VectorOperatorFromJSON(json['vector']),
+        'rasters': (json['rasters'].map(RasterOperatorFromJSON)),
     };
 }
 export function SingleVectorMultipleRasterSourcesToJSON(json) {
@@ -42,7 +42,7 @@ export function SingleVectorMultipleRasterSourcesToJSONTyped(value, ignoreDiscri
         return value;
     }
     return {
-        'rasters': (value['rasters'].map(RasterOperatorToJSON)),
         'vector': VectorOperatorToJSON(value['vector']),
+        'rasters': (value['rasters'].map(RasterOperatorToJSON)),
     };
 }

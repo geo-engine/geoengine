@@ -22,9 +22,9 @@ const MetaDataDefinition_1 = require("./MetaDataDefinition");
  * Check if a given object implements the MetaDataSuggestion interface.
  */
 function instanceOfMetaDataSuggestion(value) {
-    if (!('layerName' in value) || value['layerName'] === undefined)
-        return false;
     if (!('mainFile' in value) || value['mainFile'] === undefined)
+        return false;
+    if (!('layerName' in value) || value['layerName'] === undefined)
         return false;
     if (!('metaData' in value) || value['metaData'] === undefined)
         return false;
@@ -38,8 +38,8 @@ function MetaDataSuggestionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'layerName': json['layerName'],
         'mainFile': json['mainFile'],
+        'layerName': json['layerName'],
         'metaData': (0, MetaDataDefinition_1.MetaDataDefinitionFromJSON)(json['metaData']),
     };
 }
@@ -51,8 +51,8 @@ function MetaDataSuggestionToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'layerName': value['layerName'],
         'mainFile': value['mainFile'],
+        'layerName': value['layerName'],
         'metaData': (0, MetaDataDefinition_1.MetaDataDefinitionToJSON)(value['metaData']),
     };
 }

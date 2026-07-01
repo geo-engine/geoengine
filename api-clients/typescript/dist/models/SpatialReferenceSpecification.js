@@ -23,13 +23,13 @@ const AxisOrder_1 = require("./AxisOrder");
  * Check if a given object implements the SpatialReferenceSpecification interface.
  */
 function instanceOfSpatialReferenceSpecification(value) {
-    if (!('extent' in value) || value['extent'] === undefined)
-        return false;
     if (!('name' in value) || value['name'] === undefined)
+        return false;
+    if (!('spatialReference' in value) || value['spatialReference'] === undefined)
         return false;
     if (!('projString' in value) || value['projString'] === undefined)
         return false;
-    if (!('spatialReference' in value) || value['spatialReference'] === undefined)
+    if (!('extent' in value) || value['extent'] === undefined)
         return false;
     return true;
 }
@@ -41,12 +41,12 @@ function SpatialReferenceSpecificationFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'name': json['name'],
+        'spatialReference': json['spatialReference'],
+        'projString': json['projString'],
+        'extent': (0, BoundingBox2D_1.BoundingBox2DFromJSON)(json['extent']),
         'axisLabels': json['axisLabels'] == null ? undefined : json['axisLabels'],
         'axisOrder': json['axisOrder'] == null ? undefined : (0, AxisOrder_1.AxisOrderFromJSON)(json['axisOrder']),
-        'extent': (0, BoundingBox2D_1.BoundingBox2DFromJSON)(json['extent']),
-        'name': json['name'],
-        'projString': json['projString'],
-        'spatialReference': json['spatialReference'],
     };
 }
 function SpatialReferenceSpecificationToJSON(json) {
@@ -57,11 +57,11 @@ function SpatialReferenceSpecificationToJSONTyped(value, ignoreDiscriminator = f
         return value;
     }
     return {
+        'name': value['name'],
+        'spatialReference': value['spatialReference'],
+        'projString': value['projString'],
+        'extent': (0, BoundingBox2D_1.BoundingBox2DToJSON)(value['extent']),
         'axisLabels': value['axisLabels'],
         'axisOrder': (0, AxisOrder_1.AxisOrderToJSON)(value['axisOrder']),
-        'extent': (0, BoundingBox2D_1.BoundingBox2DToJSON)(value['extent']),
-        'name': value['name'],
-        'projString': value['projString'],
-        'spatialReference': value['spatialReference'],
     };
 }

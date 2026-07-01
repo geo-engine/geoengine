@@ -26,9 +26,9 @@ class HistogramBoundsValues(BaseModel):
     """
     HistogramBoundsValues
     """ # noqa: E501
-    max: Union[StrictFloat, StrictInt]
     min: Union[StrictFloat, StrictInt]
-    __properties: ClassVar[List[str]] = ["max", "min"]
+    max: Union[StrictFloat, StrictInt]
+    __properties: ClassVar[List[str]] = ["min", "max"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -81,8 +81,8 @@ class HistogramBoundsValues(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "max": obj.get("max"),
-            "min": obj.get("min")
+            "min": obj.get("min"),
+            "max": obj.get("max")
         })
         return _obj
 

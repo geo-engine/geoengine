@@ -35,35 +35,35 @@ class TestMultiBandRasterColorizer(unittest.TestCase):
         model = MultiBandRasterColorizer()
         if include_optional:
             return MultiBandRasterColorizer(
-                blue_band = 0,
-                blue_max = 1.337,
-                blue_min = 1.337,
-                blue_scale = 1.337,
+                type = 'multiBand',
+                red_band = 0,
+                red_min = 1.337,
+                red_max = 1.337,
+                red_scale = 1.337,
                 green_band = 0,
-                green_max = 1.337,
                 green_min = 1.337,
+                green_max = 1.337,
                 green_scale = 1.337,
+                blue_band = 0,
+                blue_min = 1.337,
+                blue_max = 1.337,
+                blue_scale = 1.337,
                 no_data_color = [
                     56
-                    ],
-                red_band = 0,
-                red_max = 1.337,
-                red_min = 1.337,
-                red_scale = 1.337,
-                type = 'multiBand'
+                    ]
             )
         else:
             return MultiBandRasterColorizer(
-                blue_band = 0,
-                blue_max = 1.337,
-                blue_min = 1.337,
-                green_band = 0,
-                green_max = 1.337,
-                green_min = 1.337,
-                red_band = 0,
-                red_max = 1.337,
-                red_min = 1.337,
                 type = 'multiBand',
+                red_band = 0,
+                red_min = 1.337,
+                red_max = 1.337,
+                green_band = 0,
+                green_min = 1.337,
+                green_max = 1.337,
+                blue_band = 0,
+                blue_min = 1.337,
+                blue_max = 1.337,
         )
         """
 

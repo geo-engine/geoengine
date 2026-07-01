@@ -21,9 +21,9 @@ exports.HistogramBoundsValuesToJSONTyped = HistogramBoundsValuesToJSONTyped;
  * Check if a given object implements the HistogramBoundsValues interface.
  */
 function instanceOfHistogramBoundsValues(value) {
-    if (!('max' in value) || value['max'] === undefined)
-        return false;
     if (!('min' in value) || value['min'] === undefined)
+        return false;
+    if (!('max' in value) || value['max'] === undefined)
         return false;
     return true;
 }
@@ -35,8 +35,8 @@ function HistogramBoundsValuesFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'max': json['max'],
         'min': json['min'],
+        'max': json['max'],
     };
 }
 function HistogramBoundsValuesToJSON(json) {
@@ -47,7 +47,7 @@ function HistogramBoundsValuesToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'max': value['max'],
         'min': value['min'],
+        'max': value['max'],
     };
 }

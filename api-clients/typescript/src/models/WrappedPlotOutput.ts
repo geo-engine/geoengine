@@ -28,12 +28,6 @@ import {
 export interface WrappedPlotOutput {
     /**
      * 
-     * @type {object}
-     * @memberof WrappedPlotOutput
-     */
-    data: object;
-    /**
-     * 
      * @type {PlotOutputFormat}
      * @memberof WrappedPlotOutput
      */
@@ -44,6 +38,12 @@ export interface WrappedPlotOutput {
      * @memberof WrappedPlotOutput
      */
     plotType: string;
+    /**
+     * 
+     * @type {object}
+     * @memberof WrappedPlotOutput
+     */
+    data: object;
 }
 
 
@@ -52,9 +52,9 @@ export interface WrappedPlotOutput {
  * Check if a given object implements the WrappedPlotOutput interface.
  */
 export function instanceOfWrappedPlotOutput(value: object): value is WrappedPlotOutput {
-    if (!('data' in value) || value['data'] === undefined) return false;
     if (!('outputFormat' in value) || value['outputFormat'] === undefined) return false;
     if (!('plotType' in value) || value['plotType'] === undefined) return false;
+    if (!('data' in value) || value['data'] === undefined) return false;
     return true;
 }
 
@@ -68,9 +68,9 @@ export function WrappedPlotOutputFromJSONTyped(json: any, ignoreDiscriminator: b
     }
     return {
         
-        'data': json['data'],
         'outputFormat': PlotOutputFormatFromJSON(json['outputFormat']),
         'plotType': json['plotType'],
+        'data': json['data'],
     };
 }
 
@@ -85,9 +85,9 @@ export function WrappedPlotOutputToJSONTyped(value?: WrappedPlotOutput | null, i
 
     return {
         
-        'data': value['data'],
         'outputFormat': PlotOutputFormatToJSON(value['outputFormat']),
         'plotType': value['plotType'],
+        'data': value['data'],
     };
 }
 

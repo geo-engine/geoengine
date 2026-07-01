@@ -17,16 +17,16 @@ import type { RasterResultDescriptor } from './RasterResultDescriptor';
 export interface GdalMultiBand {
     /**
      *
-     * @type {RasterResultDescriptor}
-     * @memberof GdalMultiBand
-     */
-    resultDescriptor: RasterResultDescriptor;
-    /**
-     *
      * @type {GdalMultiBandTypeEnum}
      * @memberof GdalMultiBand
      */
     type: GdalMultiBandTypeEnum;
+    /**
+     *
+     * @type {RasterResultDescriptor}
+     * @memberof GdalMultiBand
+     */
+    resultDescriptor: RasterResultDescriptor;
 }
 /**
  * @export

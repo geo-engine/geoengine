@@ -23,13 +23,13 @@ const ProviderLayerCollectionId_1 = require("./ProviderLayerCollectionId");
  * Check if a given object implements the LayerCollection interface.
  */
 function instanceOfLayerCollection(value) {
-    if (!('description' in value) || value['description'] === undefined)
-        return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;
-    if (!('items' in value) || value['items'] === undefined)
-        return false;
     if (!('name' in value) || value['name'] === undefined)
+        return false;
+    if (!('description' in value) || value['description'] === undefined)
+        return false;
+    if (!('items' in value) || value['items'] === undefined)
         return false;
     if (!('properties' in value) || value['properties'] === undefined)
         return false;
@@ -43,11 +43,11 @@ function LayerCollectionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'description': json['description'],
-        'entryLabel': json['entryLabel'] == null ? undefined : json['entryLabel'],
         'id': (0, ProviderLayerCollectionId_1.ProviderLayerCollectionIdFromJSON)(json['id']),
-        'items': (json['items'].map(CollectionItem_1.CollectionItemFromJSON)),
         'name': json['name'],
+        'description': json['description'],
+        'items': (json['items'].map(CollectionItem_1.CollectionItemFromJSON)),
+        'entryLabel': json['entryLabel'] == null ? undefined : json['entryLabel'],
         'properties': json['properties'],
     };
 }
@@ -59,11 +59,11 @@ function LayerCollectionToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'description': value['description'],
-        'entryLabel': value['entryLabel'],
         'id': (0, ProviderLayerCollectionId_1.ProviderLayerCollectionIdToJSON)(value['id']),
-        'items': (value['items'].map(CollectionItem_1.CollectionItemToJSON)),
         'name': value['name'],
+        'description': value['description'],
+        'items': (value['items'].map(CollectionItem_1.CollectionItemToJSON)),
+        'entryLabel': value['entryLabel'],
         'properties': value['properties'],
     };
 }

@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
-`count` | number
-`data` | string
 `timestamp` | Date
+`data` | string
+`count` | number
 
 ## Example
 
@@ -17,9 +17,9 @@ import type { DataUsageSummary } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "count": null,
-  "data": null,
   "timestamp": null,
+  "data": null,
+  "count": null,
 } satisfies DataUsageSummary
 
 console.log(example)

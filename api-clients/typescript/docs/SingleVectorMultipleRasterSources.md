@@ -7,8 +7,8 @@ A single vector operator and one or more raster operators as source for this ope
 
 Name | Type
 ------------ | -------------
-`rasters` | [Array&lt;RasterOperator&gt;](RasterOperator.md)
 `vector` | [VectorOperator](VectorOperator.md)
+`rasters` | [Array&lt;RasterOperator&gt;](RasterOperator.md)
 
 ## Example
 
@@ -17,8 +17,8 @@ import type { SingleVectorMultipleRasterSources } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "rasters": null,
   "vector": null,
+  "rasters": null,
 } satisfies SingleVectorMultipleRasterSources
 
 console.log(example)

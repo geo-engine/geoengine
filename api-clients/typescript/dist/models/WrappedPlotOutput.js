@@ -22,11 +22,11 @@ const PlotOutputFormat_1 = require("./PlotOutputFormat");
  * Check if a given object implements the WrappedPlotOutput interface.
  */
 function instanceOfWrappedPlotOutput(value) {
-    if (!('data' in value) || value['data'] === undefined)
-        return false;
     if (!('outputFormat' in value) || value['outputFormat'] === undefined)
         return false;
     if (!('plotType' in value) || value['plotType'] === undefined)
+        return false;
+    if (!('data' in value) || value['data'] === undefined)
         return false;
     return true;
 }
@@ -38,9 +38,9 @@ function WrappedPlotOutputFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'data': json['data'],
         'outputFormat': (0, PlotOutputFormat_1.PlotOutputFormatFromJSON)(json['outputFormat']),
         'plotType': json['plotType'],
+        'data': json['data'],
     };
 }
 function WrappedPlotOutputToJSON(json) {
@@ -51,8 +51,8 @@ function WrappedPlotOutputToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'data': value['data'],
         'outputFormat': (0, PlotOutputFormat_1.PlotOutputFormatToJSON)(value['outputFormat']),
         'plotType': value['plotType'],
+        'data': value['data'],
     };
 }

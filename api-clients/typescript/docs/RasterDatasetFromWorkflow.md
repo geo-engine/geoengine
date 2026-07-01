@@ -7,11 +7,11 @@ parameter for the dataset from workflow handler (body)
 
 Name | Type
 ------------ | -------------
-`asCog` | boolean
-`description` | string
-`displayName` | string
 `name` | string
+`displayName` | string
+`description` | string
 `query` | [RasterToDatasetQueryRectangle](RasterToDatasetQueryRectangle.md)
+`asCog` | boolean
 
 ## Example
 
@@ -20,11 +20,11 @@ import type { RasterDatasetFromWorkflow } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "asCog": null,
-  "description": null,
-  "displayName": null,
   "name": null,
+  "displayName": null,
+  "description": null,
   "query": null,
+  "asCog": null,
 } satisfies RasterDatasetFromWorkflow
 
 console.log(example)

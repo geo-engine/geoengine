@@ -35,29 +35,29 @@ class TestOgrSourceColumnSpec(unittest.TestCase):
         model = OgrSourceColumnSpec()
         if include_optional:
             return OgrSourceColumnSpec(
+                format_specifics = geoengine_api_client.models.format_specifics.FormatSpecifics(
+                    csv = geoengine_api_client.models.format_specifics_csv.FormatSpecifics_csv(
+                        header = 'yes', ), ),
+                x = '',
+                y = '',
+                int = [
+                    ''
+                    ],
+                var_float = [
+                    ''
+                    ],
+                text = [
+                    ''
+                    ],
                 bool = [
                     ''
                     ],
                 datetime = [
                     ''
                     ],
-                var_float = [
-                    ''
-                    ],
-                format_specifics = geoengine_api_client.models.format_specifics.FormatSpecifics(
-                    csv = geoengine_api_client.models.format_specifics_csv.FormatSpecifics_csv(
-                        header = 'yes', ), ),
-                int = [
-                    ''
-                    ],
                 rename = {
                     'key' : ''
-                    },
-                text = [
-                    ''
-                    ],
-                x = '',
-                y = ''
+                    }
             )
         else:
             return OgrSourceColumnSpec(

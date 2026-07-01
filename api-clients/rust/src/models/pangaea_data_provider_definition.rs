@@ -12,29 +12,29 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PangaeaDataProviderDefinition {
+    #[serde(rename = "type")]
+    pub r#type: Type,
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "description")]
+    pub description: String,
+    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Option<i32>>,
     #[serde(rename = "baseUrl")]
     pub base_url: String,
     #[serde(rename = "cacheTtl")]
     pub cache_ttl: i32,
-    #[serde(rename = "description")]
-    pub description: String,
-    #[serde(rename = "name")]
-    pub name: String,
-    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub priority: Option<Option<i32>>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
 }
 
 impl PangaeaDataProviderDefinition {
-    pub fn new(base_url: String, cache_ttl: i32, description: String, name: String, r#type: Type) -> PangaeaDataProviderDefinition {
+    pub fn new(r#type: Type, name: String, description: String, base_url: String, cache_ttl: i32) -> PangaeaDataProviderDefinition {
         PangaeaDataProviderDefinition {
+            r#type,
+            name,
+            description,
+            priority: None,
             base_url,
             cache_ttl,
-            description,
-            name,
-            priority: None,
-            r#type,
         }
     }
 }

@@ -12,19 +12,19 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ContinuousMeasurement {
-    #[serde(rename = "measurement")]
-    pub measurement: String,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "measurement")]
+    pub measurement: String,
     #[serde(rename = "unit", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub unit: Option<Option<String>>,
 }
 
 impl ContinuousMeasurement {
-    pub fn new(measurement: String, r#type: Type) -> ContinuousMeasurement {
+    pub fn new(r#type: Type, measurement: String) -> ContinuousMeasurement {
         ContinuousMeasurement {
-            measurement,
             r#type,
+            measurement,
             unit: None,
         }
     }

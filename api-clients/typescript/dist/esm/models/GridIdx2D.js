@@ -14,9 +14,9 @@
  * Check if a given object implements the GridIdx2D interface.
  */
 export function instanceOfGridIdx2D(value) {
-    if (!('xIdx' in value) || value['xIdx'] === undefined)
-        return false;
     if (!('yIdx' in value) || value['yIdx'] === undefined)
+        return false;
+    if (!('xIdx' in value) || value['xIdx'] === undefined)
         return false;
     return true;
 }
@@ -28,8 +28,8 @@ export function GridIdx2DFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'xIdx': json['xIdx'],
         'yIdx': json['yIdx'],
+        'xIdx': json['xIdx'],
     };
 }
 export function GridIdx2DToJSON(json) {
@@ -40,7 +40,7 @@ export function GridIdx2DToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'xIdx': value['xIdx'],
         'yIdx': value['yIdx'],
+        'xIdx': value['xIdx'],
     };
 }

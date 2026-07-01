@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct HistogramBoundsValues {
-    #[serde(rename = "max")]
-    pub max: f64,
     #[serde(rename = "min")]
     pub min: f64,
+    #[serde(rename = "max")]
+    pub max: f64,
 }
 
 impl HistogramBoundsValues {
-    pub fn new(max: f64, min: f64) -> HistogramBoundsValues {
+    pub fn new(min: f64, max: f64) -> HistogramBoundsValues {
         HistogramBoundsValues {
-            max,
             min,
+            max,
         }
     }
 }

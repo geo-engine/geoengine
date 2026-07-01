@@ -28,13 +28,13 @@ class MlModel(BaseModel):
     """
     MlModel
     """ # noqa: E501
-    description: StrictStr
-    display_name: StrictStr = Field(alias="displayName")
-    file_name: StrictStr = Field(alias="fileName")
-    metadata: MlModelMetadata
     name: StrictStr
+    display_name: StrictStr = Field(alias="displayName")
+    description: StrictStr
     upload: UUID
-    __properties: ClassVar[List[str]] = ["description", "displayName", "fileName", "metadata", "name", "upload"]
+    metadata: MlModelMetadata
+    file_name: StrictStr = Field(alias="fileName")
+    __properties: ClassVar[List[str]] = ["name", "displayName", "description", "upload", "metadata", "fileName"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -90,12 +90,12 @@ class MlModel(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "description": obj.get("description"),
-            "displayName": obj.get("displayName"),
-            "fileName": obj.get("fileName"),
-            "metadata": MlModelMetadata.from_dict(obj["metadata"]) if obj.get("metadata") is not None else None,
             "name": obj.get("name"),
-            "upload": obj.get("upload")
+            "displayName": obj.get("displayName"),
+            "description": obj.get("description"),
+            "upload": obj.get("upload"),
+            "metadata": MlModelMetadata.from_dict(obj["metadata"]) if obj.get("metadata") is not None else None,
+            "fileName": obj.get("fileName")
         })
         return _obj
 

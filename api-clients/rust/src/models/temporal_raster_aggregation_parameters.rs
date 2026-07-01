@@ -16,15 +16,15 @@ pub struct TemporalRasterAggregationParameters {
     /// Aggregation method for values within each time window.  Encountering NO DATA makes the aggregation result NO DATA unless `ignoreNoData` is `true` for the selected aggregation variant.
     #[serde(rename = "aggregation")]
     pub aggregation: Box<models::Aggregation>,
-    /// Optional output raster data type.
-    #[serde(rename = "outputType", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub output_type: Option<Option<models::RasterDataType>>,
     /// Window size and granularity for the output time series.
     #[serde(rename = "window")]
     pub window: Box<models::TimeStep>,
     /// Optional reference timestamp used as the anchor for window boundaries.  If omitted, windows are anchored at `1970-01-01T00:00:00Z`.
     #[serde(rename = "windowReference", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub window_reference: Option<Option<i64>>,
+    /// Optional output raster data type.
+    #[serde(rename = "outputType", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub output_type: Option<Option<models::RasterDataType>>,
 }
 
 impl TemporalRasterAggregationParameters {
@@ -32,9 +32,9 @@ impl TemporalRasterAggregationParameters {
     pub fn new(aggregation: models::Aggregation, window: models::TimeStep) -> TemporalRasterAggregationParameters {
         TemporalRasterAggregationParameters {
             aggregation: Box::new(aggregation),
-            output_type: None,
             window: Box::new(window),
             window_reference: None,
+            output_type: None,
         }
     }
 }

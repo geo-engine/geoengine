@@ -20,16 +20,16 @@ import { mapValues } from '../runtime';
 export interface DatasetResource {
     /**
      * 
-     * @type {string}
-     * @memberof DatasetResource
-     */
-    id: string;
-    /**
-     * 
      * @type {DatasetResourceTypeEnum}
      * @memberof DatasetResource
      */
     type: DatasetResourceTypeEnum;
+    /**
+     * 
+     * @type {string}
+     * @memberof DatasetResource
+     */
+    id: string;
 }
 
 
@@ -46,8 +46,8 @@ export type DatasetResourceTypeEnum = typeof DatasetResourceTypeEnum[keyof typeo
  * Check if a given object implements the DatasetResource interface.
  */
 export function instanceOfDatasetResource(value: object): value is DatasetResource {
-    if (!('id' in value) || value['id'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('id' in value) || value['id'] === undefined) return false;
     return true;
 }
 
@@ -61,8 +61,8 @@ export function DatasetResourceFromJSONTyped(json: any, ignoreDiscriminator: boo
     }
     return {
         
-        'id': json['id'],
         'type': json['type'],
+        'id': json['id'],
     };
 }
 
@@ -77,8 +77,8 @@ export function DatasetResourceToJSONTyped(value?: DatasetResource | null, ignor
 
     return {
         
-        'id': value['id'],
         'type': value['type'],
+        'id': value['id'],
     };
 }
 

@@ -30,11 +30,11 @@ exports.TemporalRasterAggregationTypeEnum = {
  * Check if a given object implements the TemporalRasterAggregation interface.
  */
 function instanceOfTemporalRasterAggregation(value) {
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;
     if (!('sources' in value) || value['sources'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -46,9 +46,9 @@ function TemporalRasterAggregationFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'type': json['type'],
         'params': (0, TemporalRasterAggregationParameters_1.TemporalRasterAggregationParametersFromJSON)(json['params']),
         'sources': (0, SingleRasterSource_1.SingleRasterSourceFromJSON)(json['sources']),
-        'type': json['type'],
     };
 }
 function TemporalRasterAggregationToJSON(json) {
@@ -59,8 +59,8 @@ function TemporalRasterAggregationToJSONTyped(value, ignoreDiscriminator = false
         return value;
     }
     return {
+        'type': value['type'],
         'params': (0, TemporalRasterAggregationParameters_1.TemporalRasterAggregationParametersToJSON)(value['params']),
         'sources': (0, SingleRasterSource_1.SingleRasterSourceToJSON)(value['sources']),
-        'type': value['type'],
     };
 }

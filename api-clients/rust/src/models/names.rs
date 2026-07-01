@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Names {
-    #[serde(rename = "type")]
-    pub r#type: Type,
     #[serde(rename = "values")]
     pub values: Vec<String>,
+    #[serde(rename = "type")]
+    pub r#type: Type,
 }
 
 impl Names {
-    pub fn new(r#type: Type, values: Vec<String>) -> Names {
+    pub fn new(values: Vec<String>, r#type: Type) -> Names {
         Names {
-            r#type,
             values,
+            r#type,
         }
     }
 }

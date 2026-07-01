@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`color` | Array&lt;number&gt;
 `value` | number
+`color` | Array&lt;number&gt;
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { Breakpoint } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "color": null,
   "value": null,
+  "color": null,
 } satisfies Breakpoint
 
 console.log(example)

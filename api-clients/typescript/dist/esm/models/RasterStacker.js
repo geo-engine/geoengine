@@ -22,11 +22,11 @@ export const RasterStackerTypeEnum = {
  * Check if a given object implements the RasterStacker interface.
  */
 export function instanceOfRasterStacker(value) {
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;
     if (!('sources' in value) || value['sources'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -38,9 +38,9 @@ export function RasterStackerFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'type': json['type'],
         'params': RasterStackerParametersFromJSON(json['params']),
         'sources': MultipleRasterSourcesFromJSON(json['sources']),
-        'type': json['type'],
     };
 }
 export function RasterStackerToJSON(json) {
@@ -51,8 +51,8 @@ export function RasterStackerToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
+        'type': value['type'],
         'params': RasterStackerParametersToJSON(value['params']),
         'sources': MultipleRasterSourcesToJSON(value['sources']),
-        'type': value['type'],
     };
 }

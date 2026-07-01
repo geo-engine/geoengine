@@ -28,16 +28,10 @@ import {
 export interface DatasetLayerListingProviderDefinition {
     /**
      * 
-     * @type {Array<DatasetLayerListingCollection>}
+     * @type {DatasetLayerListingProviderDefinitionTypeEnum}
      * @memberof DatasetLayerListingProviderDefinition
      */
-    collections: Array<DatasetLayerListingCollection>;
-    /**
-     * 
-     * @type {string}
-     * @memberof DatasetLayerListingProviderDefinition
-     */
-    description: string;
+    type: DatasetLayerListingProviderDefinitionTypeEnum;
     /**
      * 
      * @type {string}
@@ -52,16 +46,22 @@ export interface DatasetLayerListingProviderDefinition {
     name: string;
     /**
      * 
+     * @type {string}
+     * @memberof DatasetLayerListingProviderDefinition
+     */
+    description: string;
+    /**
+     * 
      * @type {number}
      * @memberof DatasetLayerListingProviderDefinition
      */
     priority?: number | null;
     /**
      * 
-     * @type {DatasetLayerListingProviderDefinitionTypeEnum}
+     * @type {Array<DatasetLayerListingCollection>}
      * @memberof DatasetLayerListingProviderDefinition
      */
-    type: DatasetLayerListingProviderDefinitionTypeEnum;
+    collections: Array<DatasetLayerListingCollection>;
 }
 
 
@@ -78,11 +78,11 @@ export type DatasetLayerListingProviderDefinitionTypeEnum = typeof DatasetLayerL
  * Check if a given object implements the DatasetLayerListingProviderDefinition interface.
  */
 export function instanceOfDatasetLayerListingProviderDefinition(value: object): value is DatasetLayerListingProviderDefinition {
-    if (!('collections' in value) || value['collections'] === undefined) return false;
-    if (!('description' in value) || value['description'] === undefined) return false;
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
+    if (!('collections' in value) || value['collections'] === undefined) return false;
     return true;
 }
 
@@ -96,12 +96,12 @@ export function DatasetLayerListingProviderDefinitionFromJSONTyped(json: any, ig
     }
     return {
         
-        'collections': ((json['collections'] as Array<any>).map(DatasetLayerListingCollectionFromJSON)),
-        'description': json['description'],
+        'type': json['type'],
         'id': json['id'],
         'name': json['name'],
+        'description': json['description'],
         'priority': json['priority'] == null ? undefined : json['priority'],
-        'type': json['type'],
+        'collections': ((json['collections'] as Array<any>).map(DatasetLayerListingCollectionFromJSON)),
     };
 }
 
@@ -116,12 +116,12 @@ export function DatasetLayerListingProviderDefinitionToJSONTyped(value?: Dataset
 
     return {
         
-        'collections': ((value['collections'] as Array<any>).map(DatasetLayerListingCollectionToJSON)),
-        'description': value['description'],
+        'type': value['type'],
         'id': value['id'],
         'name': value['name'],
+        'description': value['description'],
         'priority': value['priority'],
-        'type': value['type'],
+        'collections': ((value['collections'] as Array<any>).map(DatasetLayerListingCollectionToJSON)),
     };
 }
 

@@ -18,19 +18,19 @@ import { RasterDataTypeFromJSON, RasterDataTypeToJSON, } from './RasterDataType'
  * Check if a given object implements the StacProviderDataset interface.
  */
 export function instanceOfStacProviderDataset(value) {
-    if (!('bands' in value) || value['bands'] === undefined)
-        return false;
-    if (!('dataType' in value) || value['dataType'] === undefined)
+    if (!('name' in value) || value['name'] === undefined)
         return false;
     if (!('description' in value) || value['description'] === undefined)
         return false;
-    if (!('name' in value) || value['name'] === undefined)
-        return false;
-    if (!('projection' in value) || value['projection'] === undefined)
+    if (!('dataType' in value) || value['dataType'] === undefined)
         return false;
     if (!('resolution' in value) || value['resolution'] === undefined)
         return false;
+    if (!('projection' in value) || value['projection'] === undefined)
+        return false;
     if (!('spatialGrid' in value) || value['spatialGrid'] === undefined)
+        return false;
+    if (!('bands' in value) || value['bands'] === undefined)
         return false;
     return true;
 }
@@ -42,13 +42,13 @@ export function StacProviderDatasetFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'bands': (json['bands'].map(StacProviderDatasetBandFromJSON)),
-        'dataType': RasterDataTypeFromJSON(json['dataType']),
-        'description': json['description'],
         'name': json['name'],
-        'projection': json['projection'],
+        'description': json['description'],
+        'dataType': RasterDataTypeFromJSON(json['dataType']),
         'resolution': SpatialResolutionFromJSON(json['resolution']),
+        'projection': json['projection'],
         'spatialGrid': SpatialGridDescriptorFromJSON(json['spatialGrid']),
+        'bands': (json['bands'].map(StacProviderDatasetBandFromJSON)),
     };
 }
 export function StacProviderDatasetToJSON(json) {
@@ -59,12 +59,12 @@ export function StacProviderDatasetToJSONTyped(value, ignoreDiscriminator = fals
         return value;
     }
     return {
-        'bands': (value['bands'].map(StacProviderDatasetBandToJSON)),
-        'dataType': RasterDataTypeToJSON(value['dataType']),
-        'description': value['description'],
         'name': value['name'],
-        'projection': value['projection'],
+        'description': value['description'],
+        'dataType': RasterDataTypeToJSON(value['dataType']),
         'resolution': SpatialResolutionToJSON(value['resolution']),
+        'projection': value['projection'],
         'spatialGrid': SpatialGridDescriptorToJSON(value['spatialGrid']),
+        'bands': (value['bands'].map(StacProviderDatasetBandToJSON)),
     };
 }

@@ -12,42 +12,42 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EdrDataProviderDefinition {
-    #[serde(rename = "baseUrl")]
-    pub base_url: String,
-    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
-    pub cache_ttl: Option<i32>,
+    #[serde(rename = "type")]
+    pub r#type: Type,
+    #[serde(rename = "name")]
+    pub name: String,
     #[serde(rename = "description")]
     pub description: String,
+    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Option<i32>>,
+    #[serde(rename = "id")]
+    pub id: uuid::Uuid,
+    #[serde(rename = "baseUrl")]
+    pub base_url: String,
+    #[serde(rename = "vectorSpec", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub vector_spec: Option<Option<Box<models::EdrVectorSpec>>>,
+    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<i32>,
     /// List of vertical reference systems with a discrete scale
     #[serde(rename = "discreteVrs", skip_serializing_if = "Option::is_none")]
     pub discrete_vrs: Option<Vec<String>>,
-    #[serde(rename = "id")]
-    pub id: uuid::Uuid,
-    #[serde(rename = "name")]
-    pub name: String,
-    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub priority: Option<Option<i32>>,
     #[serde(rename = "provenance", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub provenance: Option<Option<Vec<models::Provenance>>>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
-    #[serde(rename = "vectorSpec", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub vector_spec: Option<Option<Box<models::EdrVectorSpec>>>,
 }
 
 impl EdrDataProviderDefinition {
-    pub fn new(base_url: String, description: String, id: uuid::Uuid, name: String, r#type: Type) -> EdrDataProviderDefinition {
+    pub fn new(r#type: Type, name: String, description: String, id: uuid::Uuid, base_url: String) -> EdrDataProviderDefinition {
         EdrDataProviderDefinition {
-            base_url,
-            cache_ttl: None,
-            description,
-            discrete_vrs: None,
-            id,
-            name,
-            priority: None,
-            provenance: None,
             r#type,
+            name,
+            description,
+            priority: None,
+            id,
+            base_url,
             vector_spec: None,
+            cache_ttl: None,
+            discrete_vrs: None,
+            provenance: None,
         }
     }
 }

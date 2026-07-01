@@ -76,7 +76,7 @@ class DataUsageTests(unittest.TestCase):
                 }
             )
 
-            pd.testing.assert_frame_equal(df, expected)
+            pd.testing.assert_frame_equal(df, expected, check_like=True)
 
     def test_data_usage_summary(self):
         with UrllibMocker() as m:
@@ -112,4 +112,4 @@ class DataUsageTests(unittest.TestCase):
                 }
             )
 
-            pd.testing.assert_frame_equal(df, expected)
+            pd.testing.assert_frame_equal(df, expected, check_like=True)

@@ -29,7 +29,7 @@ class TaskStatusWithId(TaskStatus):
     TaskStatusWithId
     """ # noqa: E501
     task_id: UUID = Field(alias="taskId")
-    __properties: ClassVar[List[str]] = ["description", "estimatedTimeRemaining", "info", "pctComplete", "status", "taskType", "timeStarted", "timeTotal", "cleanUp", "error", "taskId"]
+    __properties: ClassVar[List[str]] = ["status", "taskType", "description", "info", "pctComplete", "estimatedTimeRemaining", "timeStarted", "timeTotal", "cleanUp", "error", "taskId"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -107,12 +107,12 @@ class TaskStatusWithId(TaskStatus):
         return _obj
 
         _obj = cls.model_validate({
-            "description": obj.get("description"),
-            "estimatedTimeRemaining": obj.get("estimatedTimeRemaining"),
-            "info": obj.get("info"),
-            "pctComplete": obj.get("pctComplete"),
             "status": obj.get("status"),
             "taskType": obj.get("taskType"),
+            "description": obj.get("description"),
+            "info": obj.get("info"),
+            "pctComplete": obj.get("pctComplete"),
+            "estimatedTimeRemaining": obj.get("estimatedTimeRemaining"),
             "timeStarted": obj.get("timeStarted"),
             "timeTotal": obj.get("timeTotal"),
             "cleanUp": obj.get("cleanUp"),

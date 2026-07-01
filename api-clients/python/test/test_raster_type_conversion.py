@@ -35,19 +35,19 @@ class TestRasterTypeConversion(unittest.TestCase):
         model = RasterTypeConversion()
         if include_optional:
             return RasterTypeConversion(
+                type = 'RasterTypeConversion',
                 params = geoengine_api_client.models.raster_type_conversion_parameters.RasterTypeConversionParameters(
                     output_data_type = null, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
-                    raster = null, ),
-                type = 'RasterTypeConversion'
+                    raster = null, )
             )
         else:
             return RasterTypeConversion(
+                type = 'RasterTypeConversion',
                 params = geoengine_api_client.models.raster_type_conversion_parameters.RasterTypeConversionParameters(
                     output_data_type = null, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
                     raster = null, ),
-                type = 'RasterTypeConversion',
         )
         """
 

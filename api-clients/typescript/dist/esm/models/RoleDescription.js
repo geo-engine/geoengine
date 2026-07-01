@@ -15,9 +15,9 @@ import { RoleFromJSON, RoleToJSON, } from './Role';
  * Check if a given object implements the RoleDescription interface.
  */
 export function instanceOfRoleDescription(value) {
-    if (!('individual' in value) || value['individual'] === undefined)
-        return false;
     if (!('role' in value) || value['role'] === undefined)
+        return false;
+    if (!('individual' in value) || value['individual'] === undefined)
         return false;
     return true;
 }
@@ -29,8 +29,8 @@ export function RoleDescriptionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'individual': json['individual'],
         'role': RoleFromJSON(json['role']),
+        'individual': json['individual'],
     };
 }
 export function RoleDescriptionToJSON(json) {
@@ -41,7 +41,7 @@ export function RoleDescriptionToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'individual': value['individual'],
         'role': RoleToJSON(value['role']),
+        'individual': value['individual'],
     };
 }

@@ -35,21 +35,21 @@ class TestGridBoundingBox2D(unittest.TestCase):
         model = GridBoundingBox2D()
         if include_optional:
             return GridBoundingBox2D(
-                bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                    x_idx = 56, 
-                    y_idx = 56, ),
                 top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                    x_idx = 56, 
-                    y_idx = 56, )
+                    y_idx = 56, 
+                    x_idx = 56, ),
+                bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                    y_idx = 56, 
+                    x_idx = 56, )
             )
         else:
             return GridBoundingBox2D(
-                bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                    x_idx = 56, 
-                    y_idx = 56, ),
                 top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                    x_idx = 56, 
-                    y_idx = 56, ),
+                    y_idx = 56, 
+                    x_idx = 56, ),
+                bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                    y_idx = 56, 
+                    x_idx = 56, ),
         )
         """
 

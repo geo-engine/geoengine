@@ -19,13 +19,13 @@ export interface UserInfo {
      * @type {string}
      * @memberof UserInfo
      */
-    email?: string | null;
+    id: string;
     /**
      *
      * @type {string}
      * @memberof UserInfo
      */
-    id: string;
+    email?: string | null;
     /**
      *
      * @type {string}

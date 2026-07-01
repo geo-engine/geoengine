@@ -7,8 +7,8 @@
 Name | Type
 ------------ | -------------
 `dataPath` | [DataPath](DataPath.md)
-`layerName` | string
 `mainFile` | string
+`layerName` | string
 
 ## Example
 
@@ -18,8 +18,8 @@ import type { SuggestMetaData } from '@geoengine/api-client'
 // TODO: Update the object below with actual values
 const example = {
   "dataPath": null,
-  "layerName": null,
   "mainFile": null,
+  "layerName": null,
 } satisfies SuggestMetaData
 
 console.log(example)

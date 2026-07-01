@@ -12,41 +12,41 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CopernicusDataspaceDataProviderDefinition {
-    #[serde(rename = "description")]
-    pub description: String,
-    #[serde(rename = "gdalConfig")]
-    pub gdal_config: Vec<Vec<String>>,
-    #[serde(rename = "id")]
-    pub id: uuid::Uuid,
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "name")]
     pub name: String,
-    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub priority: Option<Option<i32>>,
+    #[serde(rename = "description")]
+    pub description: String,
+    #[serde(rename = "id")]
+    pub id: uuid::Uuid,
+    #[serde(rename = "stacUrl")]
+    pub stac_url: String,
+    #[serde(rename = "s3Url")]
+    pub s3_url: String,
     #[serde(rename = "s3AccessKey")]
     pub s3_access_key: String,
     #[serde(rename = "s3SecretKey")]
     pub s3_secret_key: String,
-    #[serde(rename = "s3Url")]
-    pub s3_url: String,
-    #[serde(rename = "stacUrl")]
-    pub stac_url: String,
-    #[serde(rename = "type")]
-    pub r#type: Type,
+    #[serde(rename = "gdalConfig")]
+    pub gdal_config: Vec<Vec<String>>,
+    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Option<i32>>,
 }
 
 impl CopernicusDataspaceDataProviderDefinition {
-    pub fn new(description: String, gdal_config: Vec<Vec<String>>, id: uuid::Uuid, name: String, s3_access_key: String, s3_secret_key: String, s3_url: String, stac_url: String, r#type: Type) -> CopernicusDataspaceDataProviderDefinition {
+    pub fn new(r#type: Type, name: String, description: String, id: uuid::Uuid, stac_url: String, s3_url: String, s3_access_key: String, s3_secret_key: String, gdal_config: Vec<Vec<String>>) -> CopernicusDataspaceDataProviderDefinition {
         CopernicusDataspaceDataProviderDefinition {
-            description,
-            gdal_config,
-            id,
+            r#type,
             name,
-            priority: None,
+            description,
+            id,
+            stac_url,
+            s3_url,
             s3_access_key,
             s3_secret_key,
-            s3_url,
-            stac_url,
-            r#type,
+            gdal_config,
+            priority: None,
         }
     }
 }

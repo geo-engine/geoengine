@@ -20,16 +20,16 @@ import { mapValues } from '../runtime';
 export interface MlModelResource {
     /**
      * 
-     * @type {string}
-     * @memberof MlModelResource
-     */
-    id: string;
-    /**
-     * 
      * @type {MlModelResourceTypeEnum}
      * @memberof MlModelResource
      */
     type: MlModelResourceTypeEnum;
+    /**
+     * 
+     * @type {string}
+     * @memberof MlModelResource
+     */
+    id: string;
 }
 
 
@@ -46,8 +46,8 @@ export type MlModelResourceTypeEnum = typeof MlModelResourceTypeEnum[keyof typeo
  * Check if a given object implements the MlModelResource interface.
  */
 export function instanceOfMlModelResource(value: object): value is MlModelResource {
-    if (!('id' in value) || value['id'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('id' in value) || value['id'] === undefined) return false;
     return true;
 }
 
@@ -61,8 +61,8 @@ export function MlModelResourceFromJSONTyped(json: any, ignoreDiscriminator: boo
     }
     return {
         
-        'id': json['id'],
         'type': json['type'],
+        'id': json['id'],
     };
 }
 
@@ -77,8 +77,8 @@ export function MlModelResourceToJSONTyped(value?: MlModelResource | null, ignor
 
     return {
         
-        'id': value['id'],
         'type': value['type'],
+        'id': value['id'],
     };
 }
 

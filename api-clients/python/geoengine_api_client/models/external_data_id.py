@@ -27,10 +27,10 @@ class ExternalDataId(BaseModel):
     """
     ExternalDataId
     """ # noqa: E501
-    layer_id: StrictStr = Field(alias="layerId")
-    provider_id: UUID = Field(alias="providerId")
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["layerId", "providerId", "type"]
+    provider_id: UUID = Field(alias="providerId")
+    layer_id: StrictStr = Field(alias="layerId")
+    __properties: ClassVar[List[str]] = ["type", "providerId", "layerId"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -90,9 +90,9 @@ class ExternalDataId(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "layerId": obj.get("layerId"),
+            "type": obj.get("type"),
             "providerId": obj.get("providerId"),
-            "type": obj.get("type")
+            "layerId": obj.get("layerId")
         })
         return _obj
 

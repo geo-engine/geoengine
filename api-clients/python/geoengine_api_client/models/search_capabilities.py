@@ -27,10 +27,10 @@ class SearchCapabilities(BaseModel):
     """
     SearchCapabilities
     """ # noqa: E501
+    search_types: SearchTypes = Field(alias="searchTypes")
     autocomplete: StrictBool
     filters: Optional[List[StrictStr]] = None
-    search_types: SearchTypes = Field(alias="searchTypes")
-    __properties: ClassVar[List[str]] = ["autocomplete", "filters", "searchTypes"]
+    __properties: ClassVar[List[str]] = ["searchTypes", "autocomplete", "filters"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -91,9 +91,9 @@ class SearchCapabilities(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "searchTypes": SearchTypes.from_dict(obj["searchTypes"]) if obj.get("searchTypes") is not None else None,
             "autocomplete": obj.get("autocomplete"),
-            "filters": obj.get("filters"),
-            "searchTypes": SearchTypes.from_dict(obj["searchTypes"]) if obj.get("searchTypes") is not None else None
+            "filters": obj.get("filters")
         })
         return _obj
 

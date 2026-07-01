@@ -35,8 +35,8 @@ class TestAddLayerCollection(unittest.TestCase):
         model = AddLayerCollection()
         if include_optional:
             return AddLayerCollection(
-                description = 'A description for an example collection',
                 name = 'Example Collection',
+                description = 'A description for an example collection',
                 properties = [
                     [
                         ''
@@ -45,8 +45,8 @@ class TestAddLayerCollection(unittest.TestCase):
             )
         else:
             return AddLayerCollection(
-                description = 'A description for an example collection',
                 name = 'Example Collection',
+                description = 'A description for an example collection',
         )
         """
 

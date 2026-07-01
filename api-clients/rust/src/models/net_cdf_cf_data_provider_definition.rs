@@ -12,34 +12,34 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct NetCdfCfDataProviderDefinition {
-    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
-    pub cache_ttl: Option<i32>,
+    #[serde(rename = "type")]
+    pub r#type: Type,
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "description")]
+    pub description: String,
+    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Option<i32>>,
     /// Path were the `NetCDF` data can be found
     #[serde(rename = "data")]
     pub data: String,
-    #[serde(rename = "description")]
-    pub description: String,
-    #[serde(rename = "name")]
-    pub name: String,
     /// Path were overview files are stored
     #[serde(rename = "overviews")]
     pub overviews: String,
-    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub priority: Option<Option<i32>>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
+    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<i32>,
 }
 
 impl NetCdfCfDataProviderDefinition {
-    pub fn new(data: String, description: String, name: String, overviews: String, r#type: Type) -> NetCdfCfDataProviderDefinition {
+    pub fn new(r#type: Type, name: String, description: String, data: String, overviews: String) -> NetCdfCfDataProviderDefinition {
         NetCdfCfDataProviderDefinition {
-            cache_ttl: None,
-            data,
-            description,
-            name,
-            overviews,
-            priority: None,
             r#type,
+            name,
+            description,
+            priority: None,
+            data,
+            overviews,
+            cache_ttl: None,
         }
     }
 }

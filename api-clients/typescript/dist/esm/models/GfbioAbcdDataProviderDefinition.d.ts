@@ -17,22 +17,10 @@ import type { DatabaseConnectionConfig } from './DatabaseConnectionConfig';
 export interface GfbioAbcdDataProviderDefinition {
     /**
      *
-     * @type {number}
+     * @type {GfbioAbcdDataProviderDefinitionTypeEnum}
      * @memberof GfbioAbcdDataProviderDefinition
      */
-    cacheTtl?: number;
-    /**
-     *
-     * @type {DatabaseConnectionConfig}
-     * @memberof GfbioAbcdDataProviderDefinition
-     */
-    dbConfig: DatabaseConnectionConfig;
-    /**
-     *
-     * @type {string}
-     * @memberof GfbioAbcdDataProviderDefinition
-     */
-    description: string;
+    type: GfbioAbcdDataProviderDefinitionTypeEnum;
     /**
      *
      * @type {string}
@@ -41,16 +29,28 @@ export interface GfbioAbcdDataProviderDefinition {
     name: string;
     /**
      *
+     * @type {string}
+     * @memberof GfbioAbcdDataProviderDefinition
+     */
+    description: string;
+    /**
+     *
      * @type {number}
      * @memberof GfbioAbcdDataProviderDefinition
      */
     priority?: number | null;
     /**
      *
-     * @type {GfbioAbcdDataProviderDefinitionTypeEnum}
+     * @type {DatabaseConnectionConfig}
      * @memberof GfbioAbcdDataProviderDefinition
      */
-    type: GfbioAbcdDataProviderDefinitionTypeEnum;
+    dbConfig: DatabaseConnectionConfig;
+    /**
+     *
+     * @type {number}
+     * @memberof GfbioAbcdDataProviderDefinition
+     */
+    cacheTtl?: number;
 }
 /**
  * @export

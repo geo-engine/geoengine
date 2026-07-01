@@ -35,23 +35,23 @@ class TestRasterStacker(unittest.TestCase):
         model = RasterStacker()
         if include_optional:
             return RasterStacker(
+                type = 'RasterStacker',
                 params = geoengine_api_client.models.raster_stacker_parameters.RasterStackerParameters(
                     rename_bands = null, ),
                 sources = geoengine_api_client.models.multiple_raster_sources.MultipleRasterSources(
                     rasters = [
                         null
-                        ], ),
-                type = 'RasterStacker'
+                        ], )
             )
         else:
             return RasterStacker(
+                type = 'RasterStacker',
                 params = geoengine_api_client.models.raster_stacker_parameters.RasterStackerParameters(
                     rename_bands = null, ),
                 sources = geoengine_api_client.models.multiple_raster_sources.MultipleRasterSources(
                     rasters = [
                         null
                         ], ),
-                type = 'RasterStacker',
         )
         """
 

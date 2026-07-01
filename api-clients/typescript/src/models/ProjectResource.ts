@@ -20,16 +20,16 @@ import { mapValues } from '../runtime';
 export interface ProjectResource {
     /**
      * 
-     * @type {string}
-     * @memberof ProjectResource
-     */
-    id: string;
-    /**
-     * 
      * @type {ProjectResourceTypeEnum}
      * @memberof ProjectResource
      */
     type: ProjectResourceTypeEnum;
+    /**
+     * 
+     * @type {string}
+     * @memberof ProjectResource
+     */
+    id: string;
 }
 
 
@@ -46,8 +46,8 @@ export type ProjectResourceTypeEnum = typeof ProjectResourceTypeEnum[keyof typeo
  * Check if a given object implements the ProjectResource interface.
  */
 export function instanceOfProjectResource(value: object): value is ProjectResource {
-    if (!('id' in value) || value['id'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('id' in value) || value['id'] === undefined) return false;
     return true;
 }
 
@@ -61,8 +61,8 @@ export function ProjectResourceFromJSONTyped(json: any, ignoreDiscriminator: boo
     }
     return {
         
-        'id': json['id'],
         'type': json['type'],
+        'id': json['id'],
     };
 }
 
@@ -77,8 +77,8 @@ export function ProjectResourceToJSONTyped(value?: ProjectResource | null, ignor
 
     return {
         
-        'id': value['id'],
         'type': value['type'],
+        'id': value['id'],
     };
 }
 

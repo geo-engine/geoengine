@@ -35,13 +35,13 @@ class TestHistogramBoundsValues(unittest.TestCase):
         model = HistogramBoundsValues()
         if include_optional:
             return HistogramBoundsValues(
-                max = 1.337,
-                min = 1.337
+                min = 1.337,
+                max = 1.337
             )
         else:
             return HistogramBoundsValues(
-                max = 1.337,
                 min = 1.337,
+                max = 1.337,
         )
         """
 

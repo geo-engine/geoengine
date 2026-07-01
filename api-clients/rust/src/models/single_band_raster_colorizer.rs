@@ -12,20 +12,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SingleBandRasterColorizer {
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "band")]
     pub band: i32,
     #[serde(rename = "bandColorizer")]
     pub band_colorizer: Box<models::Colorizer>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
 }
 
 impl SingleBandRasterColorizer {
-    pub fn new(band: i32, band_colorizer: models::Colorizer, r#type: Type) -> SingleBandRasterColorizer {
+    pub fn new(r#type: Type, band: i32, band_colorizer: models::Colorizer) -> SingleBandRasterColorizer {
         SingleBandRasterColorizer {
+            r#type,
             band,
             band_colorizer: Box::new(band_colorizer),
-            r#type,
         }
     }
 }

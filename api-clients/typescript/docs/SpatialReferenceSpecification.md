@@ -7,12 +7,12 @@ The specification of a spatial reference, where extent and axis labels are given
 
 Name | Type
 ------------ | -------------
+`name` | string
+`spatialReference` | string
+`projString` | string
+`extent` | [BoundingBox2D](BoundingBox2D.md)
 `axisLabels` | Array&lt;string&gt;
 `axisOrder` | [AxisOrder](AxisOrder.md)
-`extent` | [BoundingBox2D](BoundingBox2D.md)
-`name` | string
-`projString` | string
-`spatialReference` | string
 
 ## Example
 
@@ -21,12 +21,12 @@ import type { SpatialReferenceSpecification } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "name": null,
+  "spatialReference": null,
+  "projString": null,
+  "extent": null,
   "axisLabels": null,
   "axisOrder": null,
-  "extent": null,
-  "name": null,
-  "projString": null,
-  "spatialReference": null,
 } satisfies SpatialReferenceSpecification
 
 console.log(example)

@@ -35,18 +35,16 @@ class TestUserSession(unittest.TestCase):
         model = UserSession()
         if include_optional:
             return UserSession(
-                created = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
                 id = '',
-                project = '',
-                roles = [
-                    ''
-                    ],
                 user = geoengine_api_client.models.user_info.UserInfo(
-                    email = '', 
                     id = '', 
+                    email = '', 
                     real_name = '', ),
+                created = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
                 valid_until = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
+                project = '',
                 view = geoengine_api_client.models.st_rectangle.STRectangle(
+                    spatial_reference = '', 
                     bounding_box = geoengine_api_client.models.bounding_box2_d.BoundingBox2D(
                         lower_left_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                             x = 1.337, 
@@ -54,23 +52,25 @@ class TestUserSession(unittest.TestCase):
                         upper_right_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                             x = 1.337, 
                             y = 1.337, ), ), 
-                    spatial_reference = '', 
                     time_interval = geoengine_api_client.models.time_interval.TimeInterval(
-                        end = 56, 
-                        start = 56, ), )
+                        start = 56, 
+                        end = 56, ), ),
+                roles = [
+                    ''
+                    ]
             )
         else:
             return UserSession(
-                created = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
                 id = '',
+                user = geoengine_api_client.models.user_info.UserInfo(
+                    id = '', 
+                    email = '', 
+                    real_name = '', ),
+                created = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
+                valid_until = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
                 roles = [
                     ''
                     ],
-                user = geoengine_api_client.models.user_info.UserInfo(
-                    email = '', 
-                    id = '', 
-                    real_name = '', ),
-                valid_until = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
         )
         """
 

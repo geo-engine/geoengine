@@ -28,24 +28,24 @@ import {
 export interface RoleDescription {
     /**
      * 
-     * @type {boolean}
-     * @memberof RoleDescription
-     */
-    individual: boolean;
-    /**
-     * 
      * @type {Role}
      * @memberof RoleDescription
      */
     role: Role;
+    /**
+     * 
+     * @type {boolean}
+     * @memberof RoleDescription
+     */
+    individual: boolean;
 }
 
 /**
  * Check if a given object implements the RoleDescription interface.
  */
 export function instanceOfRoleDescription(value: object): value is RoleDescription {
-    if (!('individual' in value) || value['individual'] === undefined) return false;
     if (!('role' in value) || value['role'] === undefined) return false;
+    if (!('individual' in value) || value['individual'] === undefined) return false;
     return true;
 }
 
@@ -59,8 +59,8 @@ export function RoleDescriptionFromJSONTyped(json: any, ignoreDiscriminator: boo
     }
     return {
         
-        'individual': json['individual'],
         'role': RoleFromJSON(json['role']),
+        'individual': json['individual'],
     };
 }
 
@@ -75,8 +75,8 @@ export function RoleDescriptionToJSONTyped(value?: RoleDescription | null, ignor
 
     return {
         
-        'individual': value['individual'],
         'role': RoleToJSON(value['role']),
+        'individual': value['individual'],
     };
 }
 

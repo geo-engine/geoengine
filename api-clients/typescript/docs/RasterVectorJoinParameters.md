@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
+`names` | [ColumnNames](ColumnNames.md)
 `featureAggregation` | [FeatureAggregationMethod](FeatureAggregationMethod.md)
 `featureAggregationIgnoreNoData` | boolean
-`names` | [ColumnNames](ColumnNames.md)
 `temporalAggregation` | [TemporalAggregationMethod](TemporalAggregationMethod.md)
 `temporalAggregationIgnoreNoData` | boolean
 
@@ -19,9 +19,9 @@ import type { RasterVectorJoinParameters } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "names": null,
   "featureAggregation": null,
   "featureAggregationIgnoreNoData": null,
-  "names": null,
   "temporalAggregation": null,
   "temporalAggregationIgnoreNoData": null,
 } satisfies RasterVectorJoinParameters

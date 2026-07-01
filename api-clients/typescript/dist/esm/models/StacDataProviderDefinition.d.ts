@@ -19,28 +19,16 @@ import type { TimeDimension } from './TimeDimension';
 export interface StacDataProviderDefinition {
     /**
      *
-     * @type {string}
+     * @type {StacDataProviderDefinitionTypeEnum}
      * @memberof StacDataProviderDefinition
      */
-    apiUrl: string;
+    type: StacDataProviderDefinitionTypeEnum;
     /**
      *
      * @type {string}
      * @memberof StacDataProviderDefinition
      */
-    collectionName: string;
-    /**
-     *
-     * @type {Array<StacProviderDataset>}
-     * @memberof StacDataProviderDefinition
-     */
-    datasets: Array<StacProviderDataset>;
-    /**
-     *
-     * @type {string}
-     * @memberof StacDataProviderDefinition
-     */
-    description: string;
+    name: string;
     /**
      *
      * @type {string}
@@ -52,13 +40,25 @@ export interface StacDataProviderDefinition {
      * @type {string}
      * @memberof StacDataProviderDefinition
      */
-    name: string;
+    description: string;
     /**
      *
      * @type {number}
      * @memberof StacDataProviderDefinition
      */
     priority?: number | null;
+    /**
+     *
+     * @type {string}
+     * @memberof StacDataProviderDefinition
+     */
+    apiUrl: string;
+    /**
+     *
+     * @type {string}
+     * @memberof StacDataProviderDefinition
+     */
+    collectionName: string;
     /**
      *
      * @type {StacProviderS3Config}
@@ -73,10 +73,10 @@ export interface StacDataProviderDefinition {
     timeDimension: TimeDimension;
     /**
      *
-     * @type {StacDataProviderDefinitionTypeEnum}
+     * @type {Array<StacProviderDataset>}
      * @memberof StacDataProviderDefinition
      */
-    type: StacDataProviderDefinitionTypeEnum;
+    datasets: Array<StacProviderDataset>;
 }
 /**
  * @export

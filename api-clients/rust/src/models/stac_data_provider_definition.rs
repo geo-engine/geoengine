@@ -12,41 +12,41 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StacDataProviderDefinition {
+    #[serde(rename = "type")]
+    pub r#type: Type,
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "id")]
+    pub id: uuid::Uuid,
+    #[serde(rename = "description")]
+    pub description: String,
+    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Option<i32>>,
     #[serde(rename = "apiUrl")]
     pub api_url: String,
     #[serde(rename = "collectionName")]
     pub collection_name: String,
-    #[serde(rename = "datasets")]
-    pub datasets: Vec<models::StacProviderDataset>,
-    #[serde(rename = "description")]
-    pub description: String,
-    #[serde(rename = "id")]
-    pub id: uuid::Uuid,
-    #[serde(rename = "name")]
-    pub name: String,
-    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub priority: Option<Option<i32>>,
     #[serde(rename = "s3Config", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub s3_config: Option<Option<Box<models::StacProviderS3Config>>>,
     #[serde(rename = "timeDimension")]
     pub time_dimension: Box<models::TimeDimension>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
+    #[serde(rename = "datasets")]
+    pub datasets: Vec<models::StacProviderDataset>,
 }
 
 impl StacDataProviderDefinition {
-    pub fn new(api_url: String, collection_name: String, datasets: Vec<models::StacProviderDataset>, description: String, id: uuid::Uuid, name: String, time_dimension: models::TimeDimension, r#type: Type) -> StacDataProviderDefinition {
+    pub fn new(r#type: Type, name: String, id: uuid::Uuid, description: String, api_url: String, collection_name: String, time_dimension: models::TimeDimension, datasets: Vec<models::StacProviderDataset>) -> StacDataProviderDefinition {
         StacDataProviderDefinition {
+            r#type,
+            name,
+            id,
+            description,
+            priority: None,
             api_url,
             collection_name,
-            datasets,
-            description,
-            id,
-            name,
-            priority: None,
             s3_config: None,
             time_dimension: Box::new(time_dimension),
-            r#type,
+            datasets,
         }
     }
 }

@@ -27,14 +27,14 @@ class NetCdfCfDataProviderDefinition(BaseModel):
     """
     NetCdfCfDataProviderDefinition
     """ # noqa: E501
-    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
-    data: StrictStr = Field(description="Path were the `NetCDF` data can be found")
-    description: StrictStr
-    name: StrictStr
-    overviews: StrictStr = Field(description="Path were overview files are stored")
-    priority: Optional[StrictInt] = None
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["cacheTtl", "data", "description", "name", "overviews", "priority", "type"]
+    name: StrictStr
+    description: StrictStr
+    priority: Optional[StrictInt] = None
+    data: StrictStr = Field(description="Path were the `NetCDF` data can be found")
+    overviews: StrictStr = Field(description="Path were overview files are stored")
+    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
+    __properties: ClassVar[List[str]] = ["type", "name", "description", "priority", "data", "overviews", "cacheTtl"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -99,13 +99,13 @@ class NetCdfCfDataProviderDefinition(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "cacheTtl": obj.get("cacheTtl"),
-            "data": obj.get("data"),
-            "description": obj.get("description"),
+            "type": obj.get("type"),
             "name": obj.get("name"),
-            "overviews": obj.get("overviews"),
+            "description": obj.get("description"),
             "priority": obj.get("priority"),
-            "type": obj.get("type")
+            "data": obj.get("data"),
+            "overviews": obj.get("overviews"),
+            "cacheTtl": obj.get("cacheTtl")
         })
         return _obj
 

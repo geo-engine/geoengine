@@ -26,13 +26,13 @@ export interface SuggestMetaData {
      * @type {string}
      * @memberof SuggestMetaData
      */
-    layerName?: string | null;
+    mainFile?: string | null;
     /**
      *
      * @type {string}
      * @memberof SuggestMetaData
      */
-    mainFile?: string | null;
+    layerName?: string | null;
 }
 /**
  * Check if a given object implements the SuggestMetaData interface.

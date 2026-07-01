@@ -27,21 +27,21 @@ class MultiBandRasterColorizer(BaseModel):
     """
     MultiBandRasterColorizer
     """ # noqa: E501
-    blue_band: Annotated[int, Field(strict=True, ge=0)] = Field(description="The band index of the blue channel.", alias="blueBand")
-    blue_max: Union[StrictFloat, StrictInt] = Field(description="The maximum value for the red channel.", alias="blueMax")
-    blue_min: Union[StrictFloat, StrictInt] = Field(description="The minimum value for the red channel.", alias="blueMin")
-    blue_scale: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, description="A scaling factor for the blue channel between 0 and 1.", alias="blueScale")
-    green_band: Annotated[int, Field(strict=True, ge=0)] = Field(description="The band index of the green channel.", alias="greenBand")
-    green_max: Union[StrictFloat, StrictInt] = Field(description="The maximum value for the red channel.", alias="greenMax")
-    green_min: Union[StrictFloat, StrictInt] = Field(description="The minimum value for the red channel.", alias="greenMin")
-    green_scale: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, description="A scaling factor for the green channel between 0 and 1.", alias="greenScale")
-    no_data_color: Optional[Annotated[List[StrictInt], Field(min_length=4, max_length=4)]] = Field(default=None, description="The color to use for no data values. If not specified, the no data values will be transparent.", alias="noDataColor")
-    red_band: Annotated[int, Field(strict=True, ge=0)] = Field(description="The band index of the red channel.", alias="redBand")
-    red_max: Union[StrictFloat, StrictInt] = Field(description="The maximum value for the red channel.", alias="redMax")
-    red_min: Union[StrictFloat, StrictInt] = Field(description="The minimum value for the red channel.", alias="redMin")
-    red_scale: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, description="A scaling factor for the red channel between 0 and 1.", alias="redScale")
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["blueBand", "blueMax", "blueMin", "blueScale", "greenBand", "greenMax", "greenMin", "greenScale", "noDataColor", "redBand", "redMax", "redMin", "redScale", "type"]
+    red_band: Annotated[int, Field(strict=True, ge=0)] = Field(description="The band index of the red channel.", alias="redBand")
+    red_min: Union[StrictFloat, StrictInt] = Field(description="The minimum value for the red channel.", alias="redMin")
+    red_max: Union[StrictFloat, StrictInt] = Field(description="The maximum value for the red channel.", alias="redMax")
+    red_scale: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, description="A scaling factor for the red channel between 0 and 1.", alias="redScale")
+    green_band: Annotated[int, Field(strict=True, ge=0)] = Field(description="The band index of the green channel.", alias="greenBand")
+    green_min: Union[StrictFloat, StrictInt] = Field(description="The minimum value for the red channel.", alias="greenMin")
+    green_max: Union[StrictFloat, StrictInt] = Field(description="The maximum value for the red channel.", alias="greenMax")
+    green_scale: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, description="A scaling factor for the green channel between 0 and 1.", alias="greenScale")
+    blue_band: Annotated[int, Field(strict=True, ge=0)] = Field(description="The band index of the blue channel.", alias="blueBand")
+    blue_min: Union[StrictFloat, StrictInt] = Field(description="The minimum value for the red channel.", alias="blueMin")
+    blue_max: Union[StrictFloat, StrictInt] = Field(description="The maximum value for the red channel.", alias="blueMax")
+    blue_scale: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, description="A scaling factor for the blue channel between 0 and 1.", alias="blueScale")
+    no_data_color: Optional[Annotated[List[StrictInt], Field(min_length=4, max_length=4)]] = Field(default=None, description="The color to use for no data values. If not specified, the no data values will be transparent.", alias="noDataColor")
+    __properties: ClassVar[List[str]] = ["type", "redBand", "redMin", "redMax", "redScale", "greenBand", "greenMin", "greenMax", "greenScale", "blueBand", "blueMin", "blueMax", "blueScale", "noDataColor"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -101,20 +101,20 @@ class MultiBandRasterColorizer(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "blueBand": obj.get("blueBand"),
-            "blueMax": obj.get("blueMax"),
-            "blueMin": obj.get("blueMin"),
-            "blueScale": obj.get("blueScale"),
-            "greenBand": obj.get("greenBand"),
-            "greenMax": obj.get("greenMax"),
-            "greenMin": obj.get("greenMin"),
-            "greenScale": obj.get("greenScale"),
-            "noDataColor": obj.get("noDataColor"),
+            "type": obj.get("type"),
             "redBand": obj.get("redBand"),
-            "redMax": obj.get("redMax"),
             "redMin": obj.get("redMin"),
+            "redMax": obj.get("redMax"),
             "redScale": obj.get("redScale"),
-            "type": obj.get("type")
+            "greenBand": obj.get("greenBand"),
+            "greenMin": obj.get("greenMin"),
+            "greenMax": obj.get("greenMax"),
+            "greenScale": obj.get("greenScale"),
+            "blueBand": obj.get("blueBand"),
+            "blueMin": obj.get("blueMin"),
+            "blueMax": obj.get("blueMax"),
+            "blueScale": obj.get("blueScale"),
+            "noDataColor": obj.get("noDataColor")
         })
         return _obj
 

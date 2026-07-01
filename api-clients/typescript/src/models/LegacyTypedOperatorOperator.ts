@@ -20,6 +20,12 @@ import { mapValues } from '../runtime';
 export interface LegacyTypedOperatorOperator {
     /**
      * 
+     * @type {string}
+     * @memberof LegacyTypedOperatorOperator
+     */
+    type: string;
+    /**
+     * 
      * @type {object}
      * @memberof LegacyTypedOperatorOperator
      */
@@ -30,12 +36,6 @@ export interface LegacyTypedOperatorOperator {
      * @memberof LegacyTypedOperatorOperator
      */
     sources?: object;
-    /**
-     * 
-     * @type {string}
-     * @memberof LegacyTypedOperatorOperator
-     */
-    type: string;
 }
 
 /**
@@ -56,9 +56,9 @@ export function LegacyTypedOperatorOperatorFromJSONTyped(json: any, ignoreDiscri
     }
     return {
         
+        'type': json['type'],
         'params': json['params'] == null ? undefined : json['params'],
         'sources': json['sources'] == null ? undefined : json['sources'],
-        'type': json['type'],
     };
 }
 
@@ -73,9 +73,9 @@ export function LegacyTypedOperatorOperatorToJSONTyped(value?: LegacyTypedOperat
 
     return {
         
+        'type': value['type'],
         'params': value['params'],
         'sources': value['sources'],
-        'type': value['type'],
     };
 }
 

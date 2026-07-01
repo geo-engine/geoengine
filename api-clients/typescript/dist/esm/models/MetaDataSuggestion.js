@@ -15,9 +15,9 @@ import { MetaDataDefinitionFromJSON, MetaDataDefinitionToJSON, } from './MetaDat
  * Check if a given object implements the MetaDataSuggestion interface.
  */
 export function instanceOfMetaDataSuggestion(value) {
-    if (!('layerName' in value) || value['layerName'] === undefined)
-        return false;
     if (!('mainFile' in value) || value['mainFile'] === undefined)
+        return false;
+    if (!('layerName' in value) || value['layerName'] === undefined)
         return false;
     if (!('metaData' in value) || value['metaData'] === undefined)
         return false;
@@ -31,8 +31,8 @@ export function MetaDataSuggestionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'layerName': json['layerName'],
         'mainFile': json['mainFile'],
+        'layerName': json['layerName'],
         'metaData': MetaDataDefinitionFromJSON(json['metaData']),
     };
 }
@@ -44,8 +44,8 @@ export function MetaDataSuggestionToJSONTyped(value, ignoreDiscriminator = false
         return value;
     }
     return {
-        'layerName': value['layerName'],
         'mainFile': value['mainFile'],
+        'layerName': value['layerName'],
         'metaData': MetaDataDefinitionToJSON(value['metaData']),
     };
 }

@@ -18,9 +18,9 @@ export function instanceOfServerInfo(value) {
         return false;
     if (!('commitHash' in value) || value['commitHash'] === undefined)
         return false;
-    if (!('features' in value) || value['features'] === undefined)
-        return false;
     if (!('version' in value) || value['version'] === undefined)
+        return false;
+    if (!('features' in value) || value['features'] === undefined)
         return false;
     return true;
 }
@@ -34,8 +34,8 @@ export function ServerInfoFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'buildDate': json['buildDate'],
         'commitHash': json['commitHash'],
-        'features': json['features'],
         'version': json['version'],
+        'features': json['features'],
     };
 }
 export function ServerInfoToJSON(json) {
@@ -48,7 +48,7 @@ export function ServerInfoToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'buildDate': value['buildDate'],
         'commitHash': value['commitHash'],
-        'features': value['features'],
         'version': value['version'],
+        'features': value['features'],
     };
 }

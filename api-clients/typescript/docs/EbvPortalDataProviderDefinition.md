@@ -6,14 +6,14 @@
 
 Name | Type
 ------------ | -------------
-`baseUrl` | string
-`cacheTtl` | number
-`data` | string
-`description` | string
-`name` | string
-`overviews` | string
-`priority` | number
 `type` | string
+`name` | string
+`description` | string
+`priority` | number
+`baseUrl` | string
+`data` | string
+`overviews` | string
+`cacheTtl` | number
 
 ## Example
 
@@ -22,14 +22,14 @@ import type { EbvPortalDataProviderDefinition } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "baseUrl": null,
-  "cacheTtl": null,
-  "data": null,
-  "description": null,
-  "name": null,
-  "overviews": null,
-  "priority": null,
   "type": null,
+  "name": null,
+  "description": null,
+  "priority": null,
+  "baseUrl": null,
+  "data": null,
+  "overviews": null,
+  "cacheTtl": null,
 } satisfies EbvPortalDataProviderDefinition
 
 console.log(example)

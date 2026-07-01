@@ -26,9 +26,9 @@ class LayerResource(BaseModel):
     """
     LayerResource
     """ # noqa: E501
-    id: StrictStr
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["id", "type"]
+    id: StrictStr
+    __properties: ClassVar[List[str]] = ["type", "id"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -88,8 +88,8 @@ class LayerResource(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "id": obj.get("id"),
-            "type": obj.get("type")
+            "type": obj.get("type"),
+            "id": obj.get("id")
         })
         return _obj
 

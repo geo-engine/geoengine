@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectVersion {
-    #[serde(rename = "changed")]
-    pub changed: String,
     #[serde(rename = "id")]
     pub id: uuid::Uuid,
+    #[serde(rename = "changed")]
+    pub changed: String,
 }
 
 impl ProjectVersion {
-    pub fn new(changed: String, id: uuid::Uuid) -> ProjectVersion {
+    pub fn new(id: uuid::Uuid, changed: String) -> ProjectVersion {
         ProjectVersion {
-            changed,
             id,
+            changed,
         }
     }
 }

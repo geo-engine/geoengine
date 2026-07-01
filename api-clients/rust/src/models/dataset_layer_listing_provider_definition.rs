@@ -12,29 +12,29 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DatasetLayerListingProviderDefinition {
-    #[serde(rename = "collections")]
-    pub collections: Vec<models::DatasetLayerListingCollection>,
-    #[serde(rename = "description")]
-    pub description: String,
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "id")]
     pub id: uuid::Uuid,
     #[serde(rename = "name")]
     pub name: String,
+    #[serde(rename = "description")]
+    pub description: String,
     #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub priority: Option<Option<i32>>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
+    #[serde(rename = "collections")]
+    pub collections: Vec<models::DatasetLayerListingCollection>,
 }
 
 impl DatasetLayerListingProviderDefinition {
-    pub fn new(collections: Vec<models::DatasetLayerListingCollection>, description: String, id: uuid::Uuid, name: String, r#type: Type) -> DatasetLayerListingProviderDefinition {
+    pub fn new(r#type: Type, id: uuid::Uuid, name: String, description: String, collections: Vec<models::DatasetLayerListingCollection>) -> DatasetLayerListingProviderDefinition {
         DatasetLayerListingProviderDefinition {
-            collections,
-            description,
+            r#type,
             id,
             name,
+            description,
             priority: None,
-            r#type,
+            collections,
         }
     }
 }

@@ -34,15 +34,15 @@ function OgrSourceColumnSpecFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'bool': json['bool'] == null ? undefined : json['bool'],
-        'datetime': json['datetime'] == null ? undefined : json['datetime'],
-        '_float': json['float'] == null ? undefined : json['float'],
         'formatSpecifics': json['formatSpecifics'] == null ? undefined : (0, FormatSpecifics_1.FormatSpecificsFromJSON)(json['formatSpecifics']),
-        '_int': json['int'] == null ? undefined : json['int'],
-        'rename': json['rename'] == null ? undefined : json['rename'],
-        'text': json['text'] == null ? undefined : json['text'],
         'x': json['x'],
         'y': json['y'] == null ? undefined : json['y'],
+        '_int': json['int'] == null ? undefined : json['int'],
+        '_float': json['float'] == null ? undefined : json['float'],
+        'text': json['text'] == null ? undefined : json['text'],
+        'bool': json['bool'] == null ? undefined : json['bool'],
+        'datetime': json['datetime'] == null ? undefined : json['datetime'],
+        'rename': json['rename'] == null ? undefined : json['rename'],
     };
 }
 function OgrSourceColumnSpecToJSON(json) {
@@ -53,14 +53,14 @@ function OgrSourceColumnSpecToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'bool': value['bool'],
-        'datetime': value['datetime'],
-        'float': value['_float'],
         'formatSpecifics': (0, FormatSpecifics_1.FormatSpecificsToJSON)(value['formatSpecifics']),
-        'int': value['_int'],
-        'rename': value['rename'],
-        'text': value['text'],
         'x': value['x'],
         'y': value['y'],
+        'int': value['_int'],
+        'float': value['_float'],
+        'text': value['text'],
+        'bool': value['bool'],
+        'datetime': value['datetime'],
+        'rename': value['rename'],
     };
 }

@@ -29,11 +29,11 @@ class ProjectLayer(BaseModel):
     """
     ProjectLayer
     """ # noqa: E501
-    name: StrictStr
-    symbology: Symbology
-    visibility: LayerVisibility
     workflow: UUID
-    __properties: ClassVar[List[str]] = ["name", "symbology", "visibility", "workflow"]
+    name: StrictStr
+    visibility: LayerVisibility
+    symbology: Symbology
+    __properties: ClassVar[List[str]] = ["workflow", "name", "visibility", "symbology"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -74,12 +74,12 @@ class ProjectLayer(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of symbology
-        if self.symbology:
-            _dict['symbology'] = self.symbology.to_dict()
         # override the default output from pydantic by calling `to_dict()` of visibility
         if self.visibility:
             _dict['visibility'] = self.visibility.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of symbology
+        if self.symbology:
+            _dict['symbology'] = self.symbology.to_dict()
         return _dict
 
     @classmethod
@@ -92,10 +92,10 @@ class ProjectLayer(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "workflow": obj.get("workflow"),
             "name": obj.get("name"),
-            "symbology": Symbology.from_dict(obj["symbology"]) if obj.get("symbology") is not None else None,
             "visibility": LayerVisibility.from_dict(obj["visibility"]) if obj.get("visibility") is not None else None,
-            "workflow": obj.get("workflow")
+            "symbology": Symbology.from_dict(obj["symbology"]) if obj.get("symbology") is not None else None
         })
         return _obj
 

@@ -12,66 +12,66 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MultiBandRasterColorizer {
-    /// The band index of the blue channel.
-    #[serde(rename = "blueBand")]
-    pub blue_band: i32,
-    /// The maximum value for the red channel.
-    #[serde(rename = "blueMax")]
-    pub blue_max: f64,
-    /// The minimum value for the red channel.
-    #[serde(rename = "blueMin")]
-    pub blue_min: f64,
-    /// A scaling factor for the blue channel between 0 and 1.
-    #[serde(rename = "blueScale", skip_serializing_if = "Option::is_none")]
-    pub blue_scale: Option<f64>,
-    /// The band index of the green channel.
-    #[serde(rename = "greenBand")]
-    pub green_band: i32,
-    /// The maximum value for the red channel.
-    #[serde(rename = "greenMax")]
-    pub green_max: f64,
-    /// The minimum value for the red channel.
-    #[serde(rename = "greenMin")]
-    pub green_min: f64,
-    /// A scaling factor for the green channel between 0 and 1.
-    #[serde(rename = "greenScale", skip_serializing_if = "Option::is_none")]
-    pub green_scale: Option<f64>,
-    /// The color to use for no data values. If not specified, the no data values will be transparent.
-    #[serde(rename = "noDataColor", skip_serializing_if = "Option::is_none")]
-    pub no_data_color: Option<Vec<i32>>,
+    #[serde(rename = "type")]
+    pub r#type: Type,
     /// The band index of the red channel.
     #[serde(rename = "redBand")]
     pub red_band: i32,
-    /// The maximum value for the red channel.
-    #[serde(rename = "redMax")]
-    pub red_max: f64,
     /// The minimum value for the red channel.
     #[serde(rename = "redMin")]
     pub red_min: f64,
+    /// The maximum value for the red channel.
+    #[serde(rename = "redMax")]
+    pub red_max: f64,
     /// A scaling factor for the red channel between 0 and 1.
     #[serde(rename = "redScale", skip_serializing_if = "Option::is_none")]
     pub red_scale: Option<f64>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
+    /// The band index of the green channel.
+    #[serde(rename = "greenBand")]
+    pub green_band: i32,
+    /// The minimum value for the red channel.
+    #[serde(rename = "greenMin")]
+    pub green_min: f64,
+    /// The maximum value for the red channel.
+    #[serde(rename = "greenMax")]
+    pub green_max: f64,
+    /// A scaling factor for the green channel between 0 and 1.
+    #[serde(rename = "greenScale", skip_serializing_if = "Option::is_none")]
+    pub green_scale: Option<f64>,
+    /// The band index of the blue channel.
+    #[serde(rename = "blueBand")]
+    pub blue_band: i32,
+    /// The minimum value for the red channel.
+    #[serde(rename = "blueMin")]
+    pub blue_min: f64,
+    /// The maximum value for the red channel.
+    #[serde(rename = "blueMax")]
+    pub blue_max: f64,
+    /// A scaling factor for the blue channel between 0 and 1.
+    #[serde(rename = "blueScale", skip_serializing_if = "Option::is_none")]
+    pub blue_scale: Option<f64>,
+    /// The color to use for no data values. If not specified, the no data values will be transparent.
+    #[serde(rename = "noDataColor", skip_serializing_if = "Option::is_none")]
+    pub no_data_color: Option<Vec<i32>>,
 }
 
 impl MultiBandRasterColorizer {
-    pub fn new(blue_band: i32, blue_max: f64, blue_min: f64, green_band: i32, green_max: f64, green_min: f64, red_band: i32, red_max: f64, red_min: f64, r#type: Type) -> MultiBandRasterColorizer {
+    pub fn new(r#type: Type, red_band: i32, red_min: f64, red_max: f64, green_band: i32, green_min: f64, green_max: f64, blue_band: i32, blue_min: f64, blue_max: f64) -> MultiBandRasterColorizer {
         MultiBandRasterColorizer {
-            blue_band,
-            blue_max,
-            blue_min,
-            blue_scale: None,
-            green_band,
-            green_max,
-            green_min,
-            green_scale: None,
-            no_data_color: None,
-            red_band,
-            red_max,
-            red_min,
-            red_scale: None,
             r#type,
+            red_band,
+            red_min,
+            red_max,
+            red_scale: None,
+            green_band,
+            green_min,
+            green_max,
+            green_scale: None,
+            blue_band,
+            blue_min,
+            blue_max,
+            blue_scale: None,
+            no_data_color: None,
         }
     }
 }

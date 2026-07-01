@@ -35,14 +35,14 @@ class TestMetaDataSuggestion(unittest.TestCase):
         model = MetaDataSuggestion()
         if include_optional:
             return MetaDataSuggestion(
-                layer_name = '',
                 main_file = '',
+                layer_name = '',
                 meta_data = None
             )
         else:
             return MetaDataSuggestion(
-                layer_name = '',
                 main_file = '',
+                layer_name = '',
                 meta_data = None,
         )
         """

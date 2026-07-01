@@ -18,10 +18,10 @@ import type { STRectangle } from './STRectangle';
 export interface CreateProject {
     /**
      *
-     * @type {STRectangle}
+     * @type {string}
      * @memberof CreateProject
      */
-    bounds: STRectangle;
+    name: string;
     /**
      *
      * @type {string}
@@ -30,10 +30,10 @@ export interface CreateProject {
     description: string;
     /**
      *
-     * @type {string}
+     * @type {STRectangle}
      * @memberof CreateProject
      */
-    name: string;
+    bounds: STRectangle;
     /**
      *
      * @type {TimeStep}

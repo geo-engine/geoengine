@@ -12,38 +12,38 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GfbioCollectionsDataProviderDefinition {
-    #[serde(rename = "abcdDbConfig")]
-    pub abcd_db_config: Box<models::DatabaseConnectionConfig>,
-    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
-    pub cache_ttl: Option<i32>,
-    #[serde(rename = "collectionApiAuthToken")]
-    pub collection_api_auth_token: String,
-    #[serde(rename = "collectionApiUrl")]
-    pub collection_api_url: String,
-    #[serde(rename = "description")]
-    pub description: String,
-    #[serde(rename = "name")]
-    pub name: String,
-    #[serde(rename = "pangaeaUrl")]
-    pub pangaea_url: String,
-    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub priority: Option<Option<i32>>,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "description")]
+    pub description: String,
+    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Option<i32>>,
+    #[serde(rename = "collectionApiUrl")]
+    pub collection_api_url: String,
+    #[serde(rename = "collectionApiAuthToken")]
+    pub collection_api_auth_token: String,
+    #[serde(rename = "abcdDbConfig")]
+    pub abcd_db_config: Box<models::DatabaseConnectionConfig>,
+    #[serde(rename = "pangaeaUrl")]
+    pub pangaea_url: String,
+    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<i32>,
 }
 
 impl GfbioCollectionsDataProviderDefinition {
-    pub fn new(abcd_db_config: models::DatabaseConnectionConfig, collection_api_auth_token: String, collection_api_url: String, description: String, name: String, pangaea_url: String, r#type: Type) -> GfbioCollectionsDataProviderDefinition {
+    pub fn new(r#type: Type, name: String, description: String, collection_api_url: String, collection_api_auth_token: String, abcd_db_config: models::DatabaseConnectionConfig, pangaea_url: String) -> GfbioCollectionsDataProviderDefinition {
         GfbioCollectionsDataProviderDefinition {
-            abcd_db_config: Box::new(abcd_db_config),
-            cache_ttl: None,
-            collection_api_auth_token,
-            collection_api_url,
-            description,
-            name,
-            pangaea_url,
-            priority: None,
             r#type,
+            name,
+            description,
+            priority: None,
+            collection_api_url,
+            collection_api_auth_token,
+            abcd_db_config: Box::new(abcd_db_config),
+            pangaea_url,
+            cache_ttl: None,
         }
     }
 }

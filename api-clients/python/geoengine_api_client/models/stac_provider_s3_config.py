@@ -26,10 +26,10 @@ class StacProviderS3Config(BaseModel):
     """
     StacProviderS3Config
     """ # noqa: E501
-    access_key: Optional[StrictStr] = Field(default=None, alias="accessKey")
     endpoint: StrictStr
-    secret_key: Optional[StrictStr] = Field(default=None, alias="secretKey")
-    __properties: ClassVar[List[str]] = ["accessKey", "endpoint", "secretKey"]
+    access_key: Optional[StrictStr] = Field(default=None, description="A wrapper type that serializes to \"*****\" and can be deserialized from any string. If the inner value is \"*****\", it is considered unknown and `as_option` returns `None`. This is useful for secrets that should not be exposed in API responses, but can be set in API requests.", alias="accessKey")
+    secret_key: Optional[StrictStr] = Field(default=None, description="A wrapper type that serializes to \"*****\" and can be deserialized from any string. If the inner value is \"*****\", it is considered unknown and `as_option` returns `None`. This is useful for secrets that should not be exposed in API responses, but can be set in API requests.", alias="secretKey")
+    __properties: ClassVar[List[str]] = ["endpoint", "accessKey", "secretKey"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -92,8 +92,8 @@ class StacProviderS3Config(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "accessKey": obj.get("accessKey"),
             "endpoint": obj.get("endpoint"),
+            "accessKey": obj.get("accessKey"),
             "secretKey": obj.get("secretKey")
         })
         return _obj

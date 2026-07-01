@@ -9,6 +9,7 @@ pub mod datasets;
 pub mod ebv;
 pub mod layers;
 pub mod machine_learning;
+pub mod ogc;
 pub mod permissions;
 pub mod plots;
 pub mod projects;
@@ -22,6 +23,7 @@ pub mod wms;
 pub mod workflows;
 
 pub fn get_token(req: &HttpRequest) -> Result<SessionId> {
+    // Otherwise, extract the session ID from the Authorization header
     let header = req
         .headers()
         .get(header::AUTHORIZATION)

@@ -33,9 +33,9 @@ function LegacyTypedOperatorOperatorFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'type': json['type'],
         'params': json['params'] == null ? undefined : json['params'],
         'sources': json['sources'] == null ? undefined : json['sources'],
-        'type': json['type'],
     };
 }
 function LegacyTypedOperatorOperatorToJSON(json) {
@@ -46,8 +46,8 @@ function LegacyTypedOperatorOperatorToJSONTyped(value, ignoreDiscriminator = fal
         return value;
     }
     return {
+        'type': value['type'],
         'params': value['params'],
         'sources': value['sources'],
-        'type': value['type'],
     };
 }

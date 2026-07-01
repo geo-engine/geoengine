@@ -12,20 +12,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct LegacyTypedOperatorOperator {
+    #[serde(rename = "type")]
+    pub r#type: String,
     #[serde(rename = "params", skip_serializing_if = "Option::is_none")]
     pub params: Option<serde_json::Value>,
     #[serde(rename = "sources", skip_serializing_if = "Option::is_none")]
     pub sources: Option<serde_json::Value>,
-    #[serde(rename = "type")]
-    pub r#type: String,
 }
 
 impl LegacyTypedOperatorOperator {
     pub fn new(r#type: String) -> LegacyTypedOperatorOperator {
         LegacyTypedOperatorOperator {
+            r#type,
             params: None,
             sources: None,
-            r#type,
         }
     }
 }

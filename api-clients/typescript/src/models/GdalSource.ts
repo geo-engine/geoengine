@@ -34,16 +34,16 @@ import {
 export interface GdalSource {
     /**
      * 
-     * @type {GdalSourceParameters}
-     * @memberof GdalSource
-     */
-    params: GdalSourceParameters;
-    /**
-     * 
      * @type {GdalSourceTypeEnum}
      * @memberof GdalSource
      */
     type: GdalSourceTypeEnum;
+    /**
+     * 
+     * @type {GdalSourceParameters}
+     * @memberof GdalSource
+     */
+    params: GdalSourceParameters;
 }
 
 
@@ -60,8 +60,8 @@ export type GdalSourceTypeEnum = typeof GdalSourceTypeEnum[keyof typeof GdalSour
  * Check if a given object implements the GdalSource interface.
  */
 export function instanceOfGdalSource(value: object): value is GdalSource {
-    if (!('params' in value) || value['params'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('params' in value) || value['params'] === undefined) return false;
     return true;
 }
 
@@ -75,8 +75,8 @@ export function GdalSourceFromJSONTyped(json: any, ignoreDiscriminator: boolean)
     }
     return {
         
-        'params': GdalSourceParametersFromJSON(json['params']),
         'type': json['type'],
+        'params': GdalSourceParametersFromJSON(json['params']),
     };
 }
 
@@ -91,8 +91,8 @@ export function GdalSourceToJSONTyped(value?: GdalSource | null, ignoreDiscrimin
 
     return {
         
-        'params': GdalSourceParametersToJSON(value['params']),
         'type': value['type'],
+        'params': GdalSourceParametersToJSON(value['params']),
     };
 }
 

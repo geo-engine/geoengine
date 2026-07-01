@@ -35,13 +35,13 @@ class TestTimeInterval(unittest.TestCase):
         model = TimeInterval()
         if include_optional:
             return TimeInterval(
-                end = 56,
-                start = 56
+                start = 56,
+                end = 56
             )
         else:
             return TimeInterval(
-                end = 56,
                 start = 56,
+                end = 56,
         )
         """
 

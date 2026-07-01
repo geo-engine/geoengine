@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProvenanceEntry {
-    #[serde(rename = "data")]
-    pub data: Vec<models::DataId>,
     #[serde(rename = "provenance")]
     pub provenance: Box<models::Provenance>,
+    #[serde(rename = "data")]
+    pub data: Vec<models::DataId>,
 }
 
 impl ProvenanceEntry {
-    pub fn new(data: Vec<models::DataId>, provenance: models::Provenance) -> ProvenanceEntry {
+    pub fn new(provenance: models::Provenance, data: Vec<models::DataId>) -> ProvenanceEntry {
         ProvenanceEntry {
-            data,
             provenance: Box::new(provenance),
+            data,
         }
     }
 }

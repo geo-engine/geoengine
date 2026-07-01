@@ -6,11 +6,11 @@
 
 Name | Type
 ------------ | -------------
-`description` | string
+`type` | string
 `id` | [ProviderLayerId](ProviderLayerId.md)
 `name` | string
+`description` | string
 `properties` | Array&lt;Array&lt;string&gt;&gt;
-`type` | string
 
 ## Example
 
@@ -19,11 +19,11 @@ import type { CollectionItem } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "description": null,
+  "type": null,
   "id": null,
   "name": null,
+  "description": null,
   "properties": null,
-  "type": null,
 } satisfies CollectionItem
 
 console.log(example)

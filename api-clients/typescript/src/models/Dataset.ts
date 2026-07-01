@@ -49,24 +49,6 @@ import {
 export interface Dataset {
     /**
      * 
-     * @type {DataPath}
-     * @memberof Dataset
-     */
-    dataPath?: DataPath | null;
-    /**
-     * 
-     * @type {string}
-     * @memberof Dataset
-     */
-    description: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof Dataset
-     */
-    displayName: string;
-    /**
-     * 
      * @type {string}
      * @memberof Dataset
      */
@@ -79,10 +61,16 @@ export interface Dataset {
     name: string;
     /**
      * 
-     * @type {Array<Provenance>}
+     * @type {string}
      * @memberof Dataset
      */
-    provenance?: Array<Provenance> | null;
+    displayName: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof Dataset
+     */
+    description: string;
     /**
      * 
      * @type {TypedResultDescriptor}
@@ -103,20 +91,32 @@ export interface Dataset {
     symbology?: Symbology | null;
     /**
      * 
+     * @type {Array<Provenance>}
+     * @memberof Dataset
+     */
+    provenance?: Array<Provenance> | null;
+    /**
+     * 
      * @type {Array<string>}
      * @memberof Dataset
      */
     tags?: Array<string> | null;
+    /**
+     * 
+     * @type {DataPath}
+     * @memberof Dataset
+     */
+    dataPath?: DataPath | null;
 }
 
 /**
  * Check if a given object implements the Dataset interface.
  */
 export function instanceOfDataset(value: object): value is Dataset {
-    if (!('description' in value) || value['description'] === undefined) return false;
-    if (!('displayName' in value) || value['displayName'] === undefined) return false;
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('displayName' in value) || value['displayName'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined) return false;
     if (!('sourceOperator' in value) || value['sourceOperator'] === undefined) return false;
     return true;
@@ -132,16 +132,16 @@ export function DatasetFromJSONTyped(json: any, ignoreDiscriminator: boolean): D
     }
     return {
         
-        'dataPath': json['dataPath'] == null ? undefined : DataPathFromJSON(json['dataPath']),
-        'description': json['description'],
-        'displayName': json['displayName'],
         'id': json['id'],
         'name': json['name'],
-        'provenance': json['provenance'] == null ? undefined : ((json['provenance'] as Array<any>).map(ProvenanceFromJSON)),
+        'displayName': json['displayName'],
+        'description': json['description'],
         'resultDescriptor': TypedResultDescriptorFromJSON(json['resultDescriptor']),
         'sourceOperator': json['sourceOperator'],
         'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
+        'provenance': json['provenance'] == null ? undefined : ((json['provenance'] as Array<any>).map(ProvenanceFromJSON)),
         'tags': json['tags'] == null ? undefined : json['tags'],
+        'dataPath': json['dataPath'] == null ? undefined : DataPathFromJSON(json['dataPath']),
     };
 }
 
@@ -156,16 +156,16 @@ export function DatasetToJSONTyped(value?: Dataset | null, ignoreDiscriminator: 
 
     return {
         
-        'dataPath': DataPathToJSON(value['dataPath']),
-        'description': value['description'],
-        'displayName': value['displayName'],
         'id': value['id'],
         'name': value['name'],
-        'provenance': value['provenance'] == null ? undefined : ((value['provenance'] as Array<any>).map(ProvenanceToJSON)),
+        'displayName': value['displayName'],
+        'description': value['description'],
         'resultDescriptor': TypedResultDescriptorToJSON(value['resultDescriptor']),
         'sourceOperator': value['sourceOperator'],
         'symbology': SymbologyToJSON(value['symbology']),
+        'provenance': value['provenance'] == null ? undefined : ((value['provenance'] as Array<any>).map(ProvenanceToJSON)),
         'tags': value['tags'],
+        'dataPath': DataPathToJSON(value['dataPath']),
     };
 }
 

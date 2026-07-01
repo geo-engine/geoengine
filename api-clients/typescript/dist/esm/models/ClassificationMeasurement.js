@@ -20,11 +20,11 @@ export const ClassificationMeasurementTypeEnum = {
  * Check if a given object implements the ClassificationMeasurement interface.
  */
 export function instanceOfClassificationMeasurement(value) {
-    if (!('classes' in value) || value['classes'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('measurement' in value) || value['measurement'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('classes' in value) || value['classes'] === undefined)
         return false;
     return true;
 }
@@ -36,9 +36,9 @@ export function ClassificationMeasurementFromJSONTyped(json, ignoreDiscriminator
         return json;
     }
     return {
-        'classes': json['classes'],
-        'measurement': json['measurement'],
         'type': json['type'],
+        'measurement': json['measurement'],
+        'classes': json['classes'],
     };
 }
 export function ClassificationMeasurementToJSON(json) {
@@ -49,8 +49,8 @@ export function ClassificationMeasurementToJSONTyped(value, ignoreDiscriminator 
         return value;
     }
     return {
-        'classes': value['classes'],
-        'measurement': value['measurement'],
         'type': value['type'],
+        'measurement': value['measurement'],
+        'classes': value['classes'],
     };
 }

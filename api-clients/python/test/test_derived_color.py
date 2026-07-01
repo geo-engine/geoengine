@@ -35,15 +35,15 @@ class TestDerivedColor(unittest.TestCase):
         model = DerivedColor()
         if include_optional:
             return DerivedColor(
+                type = 'derived',
                 attribute = '',
-                colorizer = None,
-                type = 'derived'
+                colorizer = None
             )
         else:
             return DerivedColor(
+                type = 'derived',
                 attribute = '',
                 colorizer = None,
-                type = 'derived',
         )
         """
 

@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DataProviderResource {
-    #[serde(rename = "id")]
-    pub id: uuid::Uuid,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "id")]
+    pub id: uuid::Uuid,
 }
 
 impl DataProviderResource {
-    pub fn new(id: uuid::Uuid, r#type: Type) -> DataProviderResource {
+    pub fn new(r#type: Type, id: uuid::Uuid) -> DataProviderResource {
         DataProviderResource {
-            id,
             r#type,
+            id,
         }
     }
 }

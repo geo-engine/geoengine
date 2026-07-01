@@ -19,25 +19,19 @@ export interface DatabaseConnectionConfig {
      * @type {string}
      * @memberof DatabaseConnectionConfig
      */
-    database: string;
-    /**
-     *
-     * @type {string}
-     * @memberof DatabaseConnectionConfig
-     */
     host: string;
-    /**
-     *
-     * @type {string}
-     * @memberof DatabaseConnectionConfig
-     */
-    password: string;
     /**
      *
      * @type {number}
      * @memberof DatabaseConnectionConfig
      */
     port: number;
+    /**
+     *
+     * @type {string}
+     * @memberof DatabaseConnectionConfig
+     */
+    database: string;
     /**
      *
      * @type {string}
@@ -50,6 +44,12 @@ export interface DatabaseConnectionConfig {
      * @memberof DatabaseConnectionConfig
      */
     user: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DatabaseConnectionConfig
+     */
+    password: string;
 }
 /**
  * Check if a given object implements the DatabaseConnectionConfig interface.

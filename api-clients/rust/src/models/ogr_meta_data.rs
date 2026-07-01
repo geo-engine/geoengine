@@ -12,20 +12,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct OgrMetaData {
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "loadingInfo")]
     pub loading_info: Box<models::OgrSourceDataset>,
     #[serde(rename = "resultDescriptor")]
     pub result_descriptor: Box<models::VectorResultDescriptor>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
 }
 
 impl OgrMetaData {
-    pub fn new(loading_info: models::OgrSourceDataset, result_descriptor: models::VectorResultDescriptor, r#type: Type) -> OgrMetaData {
+    pub fn new(r#type: Type, loading_info: models::OgrSourceDataset, result_descriptor: models::VectorResultDescriptor) -> OgrMetaData {
         OgrMetaData {
+            r#type,
             loading_info: Box::new(loading_info),
             result_descriptor: Box::new(result_descriptor),
-            r#type,
         }
     }
 }

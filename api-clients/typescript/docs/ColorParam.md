@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`color` | Array&lt;number&gt;
 `type` | string
+`color` | Array&lt;number&gt;
 `attribute` | string
 `colorizer` | [Colorizer](Colorizer.md)
 
@@ -18,8 +18,8 @@ import type { ColorParam } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "color": null,
   "type": null,
+  "color": null,
   "attribute": null,
   "colorizer": null,
 } satisfies ColorParam

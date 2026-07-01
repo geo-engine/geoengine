@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Breakpoint {
-    #[serde(rename = "color")]
-    pub color: Vec<i32>,
     #[serde(rename = "value")]
     pub value: f64,
+    #[serde(rename = "color")]
+    pub color: Vec<i32>,
 }
 
 impl Breakpoint {
-    pub fn new(color: Vec<i32>, value: f64) -> Breakpoint {
+    pub fn new(value: f64, color: Vec<i32>) -> Breakpoint {
         Breakpoint {
-            color,
             value,
+            color,
         }
     }
 }

@@ -28,17 +28,17 @@ exports.EbvPortalDataProviderDefinitionTypeEnum = {
  * Check if a given object implements the EbvPortalDataProviderDefinition interface.
  */
 function instanceOfEbvPortalDataProviderDefinition(value) {
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('name' in value) || value['name'] === undefined)
+        return false;
+    if (!('description' in value) || value['description'] === undefined)
+        return false;
     if (!('baseUrl' in value) || value['baseUrl'] === undefined)
         return false;
     if (!('data' in value) || value['data'] === undefined)
         return false;
-    if (!('description' in value) || value['description'] === undefined)
-        return false;
-    if (!('name' in value) || value['name'] === undefined)
-        return false;
     if (!('overviews' in value) || value['overviews'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -50,14 +50,14 @@ function EbvPortalDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminator)
         return json;
     }
     return {
-        'baseUrl': json['baseUrl'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
-        'data': json['data'],
-        'description': json['description'],
-        'name': json['name'],
-        'overviews': json['overviews'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
         'type': json['type'],
+        'name': json['name'],
+        'description': json['description'],
+        'priority': json['priority'] == null ? undefined : json['priority'],
+        'baseUrl': json['baseUrl'],
+        'data': json['data'],
+        'overviews': json['overviews'],
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 function EbvPortalDataProviderDefinitionToJSON(json) {
@@ -68,13 +68,13 @@ function EbvPortalDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator =
         return value;
     }
     return {
-        'baseUrl': value['baseUrl'],
-        'cacheTtl': value['cacheTtl'],
-        'data': value['data'],
-        'description': value['description'],
-        'name': value['name'],
-        'overviews': value['overviews'],
-        'priority': value['priority'],
         'type': value['type'],
+        'name': value['name'],
+        'description': value['description'],
+        'priority': value['priority'],
+        'baseUrl': value['baseUrl'],
+        'data': value['data'],
+        'overviews': value['overviews'],
+        'cacheTtl': value['cacheTtl'],
     };
 }

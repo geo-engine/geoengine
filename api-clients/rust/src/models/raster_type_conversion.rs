@@ -13,21 +13,21 @@ use serde::{Deserialize, Serialize};
 /// RasterTypeConversion : The `RasterTypeConversion` operator changes the data type of raster pixels.  Applying this conversion may cause precision loss. For example, converting `F32` value `3.1` to `U8` results in `3`.  If a value is outside of the range of the target data type, it is clipped to the valid range of that type. For example, converting `F32` value `300.0` to `U8` results in `255`.  ## Inputs  The `RasterTypeConversion` operator expects exactly one _raster_ input.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RasterTypeConversion {
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "params")]
     pub params: Box<models::RasterTypeConversionParameters>,
     #[serde(rename = "sources")]
     pub sources: Box<models::SingleRasterSource>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
 }
 
 impl RasterTypeConversion {
     /// The `RasterTypeConversion` operator changes the data type of raster pixels.  Applying this conversion may cause precision loss. For example, converting `F32` value `3.1` to `U8` results in `3`.  If a value is outside of the range of the target data type, it is clipped to the valid range of that type. For example, converting `F32` value `300.0` to `U8` results in `255`.  ## Inputs  The `RasterTypeConversion` operator expects exactly one _raster_ input.
-    pub fn new(params: models::RasterTypeConversionParameters, sources: models::SingleRasterSource, r#type: Type) -> RasterTypeConversion {
+    pub fn new(r#type: Type, params: models::RasterTypeConversionParameters, sources: models::SingleRasterSource) -> RasterTypeConversion {
         RasterTypeConversion {
+            r#type,
             params: Box::new(params),
             sources: Box::new(sources),
-            r#type,
         }
     }
 }

@@ -35,25 +35,25 @@ class TestHistogram(unittest.TestCase):
         model = Histogram()
         if include_optional:
             return Histogram(
+                type = 'Histogram',
                 params = geoengine_api_client.models.histogram_parameters.HistogramParameters(
+                    column_name = '', 
                     bounds = null, 
                     buckets = null, 
-                    column_name = '', 
                     interactive = True, ),
                 sources = geoengine_api_client.models.single_vector_or_raster_source.SingleVectorOrRasterSource(
-                    vector = null, ),
-                type = 'Histogram'
+                    vector = null, )
             )
         else:
             return Histogram(
+                type = 'Histogram',
                 params = geoengine_api_client.models.histogram_parameters.HistogramParameters(
+                    column_name = '', 
                     bounds = null, 
                     buckets = null, 
-                    column_name = '', 
                     interactive = True, ),
                 sources = geoengine_api_client.models.single_vector_or_raster_source.SingleVectorOrRasterSource(
                     vector = null, ),
-                type = 'Histogram',
         )
         """
 

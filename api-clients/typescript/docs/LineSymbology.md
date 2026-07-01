@@ -6,10 +6,10 @@
 
 Name | Type
 ------------ | -------------
-`autoSimplified` | boolean
+`type` | string
 `stroke` | [StrokeParam](StrokeParam.md)
 `text` | [TextSymbology](TextSymbology.md)
-`type` | string
+`autoSimplified` | boolean
 
 ## Example
 
@@ -18,10 +18,10 @@ import type { LineSymbology } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "autoSimplified": null,
+  "type": null,
   "stroke": null,
   "text": null,
-  "type": null,
+  "autoSimplified": null,
 } satisfies LineSymbology
 
 console.log(example)

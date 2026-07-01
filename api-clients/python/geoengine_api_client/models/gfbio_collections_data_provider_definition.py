@@ -28,16 +28,16 @@ class GfbioCollectionsDataProviderDefinition(BaseModel):
     """
     GfbioCollectionsDataProviderDefinition
     """ # noqa: E501
-    abcd_db_config: DatabaseConnectionConfig = Field(alias="abcdDbConfig")
-    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
-    collection_api_auth_token: StrictStr = Field(alias="collectionApiAuthToken")
-    collection_api_url: StrictStr = Field(alias="collectionApiUrl")
-    description: StrictStr
-    name: StrictStr
-    pangaea_url: StrictStr = Field(alias="pangaeaUrl")
-    priority: Optional[StrictInt] = None
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["abcdDbConfig", "cacheTtl", "collectionApiAuthToken", "collectionApiUrl", "description", "name", "pangaeaUrl", "priority", "type"]
+    name: StrictStr
+    description: StrictStr
+    priority: Optional[StrictInt] = None
+    collection_api_url: StrictStr = Field(alias="collectionApiUrl")
+    collection_api_auth_token: StrictStr = Field(alias="collectionApiAuthToken")
+    abcd_db_config: DatabaseConnectionConfig = Field(alias="abcdDbConfig")
+    pangaea_url: StrictStr = Field(alias="pangaeaUrl")
+    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
+    __properties: ClassVar[List[str]] = ["type", "name", "description", "priority", "collectionApiUrl", "collectionApiAuthToken", "abcdDbConfig", "pangaeaUrl", "cacheTtl"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -105,15 +105,15 @@ class GfbioCollectionsDataProviderDefinition(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "abcdDbConfig": DatabaseConnectionConfig.from_dict(obj["abcdDbConfig"]) if obj.get("abcdDbConfig") is not None else None,
-            "cacheTtl": obj.get("cacheTtl"),
-            "collectionApiAuthToken": obj.get("collectionApiAuthToken"),
-            "collectionApiUrl": obj.get("collectionApiUrl"),
-            "description": obj.get("description"),
+            "type": obj.get("type"),
             "name": obj.get("name"),
-            "pangaeaUrl": obj.get("pangaeaUrl"),
+            "description": obj.get("description"),
             "priority": obj.get("priority"),
-            "type": obj.get("type")
+            "collectionApiUrl": obj.get("collectionApiUrl"),
+            "collectionApiAuthToken": obj.get("collectionApiAuthToken"),
+            "abcdDbConfig": DatabaseConnectionConfig.from_dict(obj["abcdDbConfig"]) if obj.get("abcdDbConfig") is not None else None,
+            "pangaeaUrl": obj.get("pangaeaUrl"),
+            "cacheTtl": obj.get("cacheTtl")
         })
         return _obj
 

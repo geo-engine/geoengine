@@ -21,9 +21,9 @@ exports.GridIdx2DToJSONTyped = GridIdx2DToJSONTyped;
  * Check if a given object implements the GridIdx2D interface.
  */
 function instanceOfGridIdx2D(value) {
-    if (!('xIdx' in value) || value['xIdx'] === undefined)
-        return false;
     if (!('yIdx' in value) || value['yIdx'] === undefined)
+        return false;
+    if (!('xIdx' in value) || value['xIdx'] === undefined)
         return false;
     return true;
 }
@@ -35,8 +35,8 @@ function GridIdx2DFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'xIdx': json['xIdx'],
         'yIdx': json['yIdx'],
+        'xIdx': json['xIdx'],
     };
 }
 function GridIdx2DToJSON(json) {
@@ -47,7 +47,7 @@ function GridIdx2DToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'xIdx': value['xIdx'],
         'yIdx': value['yIdx'],
+        'xIdx': value['xIdx'],
     };
 }

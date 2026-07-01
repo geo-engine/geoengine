@@ -21,7 +21,31 @@ export interface UpdateLayer {
      * @type {string}
      * @memberof UpdateLayer
      */
+    name: string;
+    /**
+     *
+     * @type {string}
+     * @memberof UpdateLayer
+     */
     description: string;
+    /**
+     *
+     * @type {Workflow}
+     * @memberof UpdateLayer
+     */
+    workflow: Workflow;
+    /**
+     *
+     * @type {Symbology}
+     * @memberof UpdateLayer
+     */
+    symbology?: Symbology | null;
+    /**
+     * properties, for instance, to be rendered in the UI
+     * @type {Array<Array<string>>}
+     * @memberof UpdateLayer
+     */
+    properties?: Array<Array<string>>;
     /**
      * metadata used for loading the data
      * @type {{ [key: string]: string; }}
@@ -30,30 +54,6 @@ export interface UpdateLayer {
     metadata?: {
         [key: string]: string;
     };
-    /**
-     *
-     * @type {string}
-     * @memberof UpdateLayer
-     */
-    name: string;
-    /**
-     * properties, for instance, to be rendered in the UI
-     * @type {Array<Array<string>>}
-     * @memberof UpdateLayer
-     */
-    properties?: Array<Array<string>>;
-    /**
-     *
-     * @type {Symbology}
-     * @memberof UpdateLayer
-     */
-    symbology?: Symbology | null;
-    /**
-     *
-     * @type {Workflow}
-     * @memberof UpdateLayer
-     */
-    workflow: Workflow;
 }
 /**
  * Check if a given object implements the UpdateLayer interface.

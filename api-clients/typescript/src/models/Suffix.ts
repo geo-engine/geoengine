@@ -20,16 +20,16 @@ import { mapValues } from '../runtime';
 export interface Suffix {
     /**
      * 
-     * @type {SuffixTypeEnum}
-     * @memberof Suffix
-     */
-    type: SuffixTypeEnum;
-    /**
-     * 
      * @type {Array<string>}
      * @memberof Suffix
      */
     values: Array<string>;
+    /**
+     * 
+     * @type {SuffixTypeEnum}
+     * @memberof Suffix
+     */
+    type: SuffixTypeEnum;
 }
 
 
@@ -46,8 +46,8 @@ export type SuffixTypeEnum = typeof SuffixTypeEnum[keyof typeof SuffixTypeEnum];
  * Check if a given object implements the Suffix interface.
  */
 export function instanceOfSuffix(value: object): value is Suffix {
-    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('values' in value) || value['values'] === undefined) return false;
+    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -61,8 +61,8 @@ export function SuffixFromJSONTyped(json: any, ignoreDiscriminator: boolean): Su
     }
     return {
         
-        'type': json['type'],
         'values': json['values'],
+        'type': json['type'],
     };
 }
 
@@ -77,8 +77,8 @@ export function SuffixToJSONTyped(value?: Suffix | null, ignoreDiscriminator: bo
 
     return {
         
-        'type': value['type'],
         'values': value['values'],
+        'type': value['type'],
     };
 }
 

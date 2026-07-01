@@ -24,9 +24,9 @@ const FeatureAggregationMethod_1 = require("./FeatureAggregationMethod");
  * Check if a given object implements the RasterVectorJoinParameters interface.
  */
 function instanceOfRasterVectorJoinParameters(value) {
-    if (!('featureAggregation' in value) || value['featureAggregation'] === undefined)
-        return false;
     if (!('names' in value) || value['names'] === undefined)
+        return false;
+    if (!('featureAggregation' in value) || value['featureAggregation'] === undefined)
         return false;
     if (!('temporalAggregation' in value) || value['temporalAggregation'] === undefined)
         return false;
@@ -40,9 +40,9 @@ function RasterVectorJoinParametersFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'names': (0, ColumnNames_1.ColumnNamesFromJSON)(json['names']),
         'featureAggregation': (0, FeatureAggregationMethod_1.FeatureAggregationMethodFromJSON)(json['featureAggregation']),
         'featureAggregationIgnoreNoData': json['featureAggregationIgnoreNoData'] == null ? undefined : json['featureAggregationIgnoreNoData'],
-        'names': (0, ColumnNames_1.ColumnNamesFromJSON)(json['names']),
         'temporalAggregation': (0, TemporalAggregationMethod_1.TemporalAggregationMethodFromJSON)(json['temporalAggregation']),
         'temporalAggregationIgnoreNoData': json['temporalAggregationIgnoreNoData'] == null ? undefined : json['temporalAggregationIgnoreNoData'],
     };
@@ -55,9 +55,9 @@ function RasterVectorJoinParametersToJSONTyped(value, ignoreDiscriminator = fals
         return value;
     }
     return {
+        'names': (0, ColumnNames_1.ColumnNamesToJSON)(value['names']),
         'featureAggregation': (0, FeatureAggregationMethod_1.FeatureAggregationMethodToJSON)(value['featureAggregation']),
         'featureAggregationIgnoreNoData': value['featureAggregationIgnoreNoData'],
-        'names': (0, ColumnNames_1.ColumnNamesToJSON)(value['names']),
         'temporalAggregation': (0, TemporalAggregationMethod_1.TemporalAggregationMethodToJSON)(value['temporalAggregation']),
         'temporalAggregationIgnoreNoData': value['temporalAggregationIgnoreNoData'],
     };

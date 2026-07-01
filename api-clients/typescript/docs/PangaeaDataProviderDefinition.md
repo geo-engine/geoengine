@@ -6,12 +6,12 @@
 
 Name | Type
 ------------ | -------------
+`type` | string
+`name` | string
+`description` | string
+`priority` | number
 `baseUrl` | string
 `cacheTtl` | number
-`description` | string
-`name` | string
-`priority` | number
-`type` | string
 
 ## Example
 
@@ -20,12 +20,12 @@ import type { PangaeaDataProviderDefinition } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
+  "name": null,
+  "description": null,
+  "priority": null,
   "baseUrl": null,
   "cacheTtl": null,
-  "description": null,
-  "name": null,
-  "priority": null,
-  "type": null,
 } satisfies PangaeaDataProviderDefinition
 
 console.log(example)

@@ -13,21 +13,21 @@ use serde::{Deserialize, Serialize};
 /// PlotResultDescriptor : A `ResultDescriptor` for plot queries
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PlotResultDescriptor {
-    #[serde(rename = "bbox", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub bbox: Option<Option<Box<models::BoundingBox2D>>>,
     #[serde(rename = "spatialReference")]
     pub spatial_reference: String,
     #[serde(rename = "time", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub time: Option<Option<Box<models::TimeInterval>>>,
+    #[serde(rename = "bbox", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub bbox: Option<Option<Box<models::BoundingBox2D>>>,
 }
 
 impl PlotResultDescriptor {
     /// A `ResultDescriptor` for plot queries
     pub fn new(spatial_reference: String) -> PlotResultDescriptor {
         PlotResultDescriptor {
-            bbox: None,
             spatial_reference,
             time: None,
+            bbox: None,
         }
     }
 }

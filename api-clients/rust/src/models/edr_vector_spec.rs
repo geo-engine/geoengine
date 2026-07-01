@@ -12,20 +12,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EdrVectorSpec {
-    #[serde(rename = "time")]
-    pub time: String,
     #[serde(rename = "x")]
     pub x: String,
     #[serde(rename = "y", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub y: Option<Option<String>>,
+    #[serde(rename = "time")]
+    pub time: String,
 }
 
 impl EdrVectorSpec {
-    pub fn new(time: String, x: String) -> EdrVectorSpec {
+    pub fn new(x: String, time: String) -> EdrVectorSpec {
         EdrVectorSpec {
-            time,
             x,
             y: None,
+            time,
         }
     }
 }

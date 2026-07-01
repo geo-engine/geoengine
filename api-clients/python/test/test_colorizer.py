@@ -35,12 +35,13 @@ class TestColorizer(unittest.TestCase):
         model = Colorizer()
         if include_optional:
             return Colorizer(
+                type = 'linearGradient',
                 breakpoints = [
                     geoengine_api_client.models.breakpoint.Breakpoint(
+                        value = 1.337, 
                         color = [
                             56
-                            ], 
-                        value = 1.337, )
+                            ], )
                     ],
                 no_data_color = [
                     56
@@ -48,7 +49,6 @@ class TestColorizer(unittest.TestCase):
                 over_color = [
                     56
                     ],
-                type = 'linearGradient',
                 under_color = [
                     56
                     ],
@@ -63,12 +63,13 @@ class TestColorizer(unittest.TestCase):
             )
         else:
             return Colorizer(
+                type = 'linearGradient',
                 breakpoints = [
                     geoengine_api_client.models.breakpoint.Breakpoint(
+                        value = 1.337, 
                         color = [
                             56
-                            ], 
-                        value = 1.337, )
+                            ], )
                     ],
                 no_data_color = [
                     56
@@ -76,7 +77,6 @@ class TestColorizer(unittest.TestCase):
                 over_color = [
                     56
                     ],
-                type = 'linearGradient',
                 under_color = [
                     56
                     ],

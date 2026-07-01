@@ -12,20 +12,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ClassificationMeasurement {
-    #[serde(rename = "classes")]
-    pub classes: std::collections::HashMap<String, String>,
-    #[serde(rename = "measurement")]
-    pub measurement: String,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "measurement")]
+    pub measurement: String,
+    #[serde(rename = "classes")]
+    pub classes: std::collections::HashMap<String, String>,
 }
 
 impl ClassificationMeasurement {
-    pub fn new(classes: std::collections::HashMap<String, String>, measurement: String, r#type: Type) -> ClassificationMeasurement {
+    pub fn new(r#type: Type, measurement: String, classes: std::collections::HashMap<String, String>) -> ClassificationMeasurement {
         ClassificationMeasurement {
-            classes,
-            measurement,
             r#type,
+            measurement,
+            classes,
         }
     }
 }

@@ -35,13 +35,13 @@ class TestProjectResource(unittest.TestCase):
         model = ProjectResource()
         if include_optional:
             return ProjectResource(
-                id = '',
-                type = 'project'
+                type = 'project',
+                id = ''
             )
         else:
             return ProjectResource(
-                id = '',
                 type = 'project',
+                id = '',
         )
         """
 

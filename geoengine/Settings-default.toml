@@ -144,6 +144,7 @@ allowed_drivers = [
 [session]
 # Whether to allow requests to `/anonymous` that return a valid session.
 anonymous_access = true
+# fixed_session_id = "00000000-0000-0000-0000-000000000000" # If set, all requests will use this session ID. Useful for testing.
 
 [user]
 registration = true

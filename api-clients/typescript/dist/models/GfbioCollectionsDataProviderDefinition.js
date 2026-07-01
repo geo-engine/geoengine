@@ -29,19 +29,19 @@ exports.GfbioCollectionsDataProviderDefinitionTypeEnum = {
  * Check if a given object implements the GfbioCollectionsDataProviderDefinition interface.
  */
 function instanceOfGfbioCollectionsDataProviderDefinition(value) {
-    if (!('abcdDbConfig' in value) || value['abcdDbConfig'] === undefined)
-        return false;
-    if (!('collectionApiAuthToken' in value) || value['collectionApiAuthToken'] === undefined)
-        return false;
-    if (!('collectionApiUrl' in value) || value['collectionApiUrl'] === undefined)
-        return false;
-    if (!('description' in value) || value['description'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
-    if (!('pangaeaUrl' in value) || value['pangaeaUrl'] === undefined)
+    if (!('description' in value) || value['description'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('collectionApiUrl' in value) || value['collectionApiUrl'] === undefined)
+        return false;
+    if (!('collectionApiAuthToken' in value) || value['collectionApiAuthToken'] === undefined)
+        return false;
+    if (!('abcdDbConfig' in value) || value['abcdDbConfig'] === undefined)
+        return false;
+    if (!('pangaeaUrl' in value) || value['pangaeaUrl'] === undefined)
         return false;
     return true;
 }
@@ -53,15 +53,15 @@ function GfbioCollectionsDataProviderDefinitionFromJSONTyped(json, ignoreDiscrim
         return json;
     }
     return {
-        'abcdDbConfig': (0, DatabaseConnectionConfig_1.DatabaseConnectionConfigFromJSON)(json['abcdDbConfig']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
-        'collectionApiAuthToken': json['collectionApiAuthToken'],
-        'collectionApiUrl': json['collectionApiUrl'],
-        'description': json['description'],
-        'name': json['name'],
-        'pangaeaUrl': json['pangaeaUrl'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
         'type': json['type'],
+        'name': json['name'],
+        'description': json['description'],
+        'priority': json['priority'] == null ? undefined : json['priority'],
+        'collectionApiUrl': json['collectionApiUrl'],
+        'collectionApiAuthToken': json['collectionApiAuthToken'],
+        'abcdDbConfig': (0, DatabaseConnectionConfig_1.DatabaseConnectionConfigFromJSON)(json['abcdDbConfig']),
+        'pangaeaUrl': json['pangaeaUrl'],
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 function GfbioCollectionsDataProviderDefinitionToJSON(json) {
@@ -72,14 +72,14 @@ function GfbioCollectionsDataProviderDefinitionToJSONTyped(value, ignoreDiscrimi
         return value;
     }
     return {
-        'abcdDbConfig': (0, DatabaseConnectionConfig_1.DatabaseConnectionConfigToJSON)(value['abcdDbConfig']),
-        'cacheTtl': value['cacheTtl'],
-        'collectionApiAuthToken': value['collectionApiAuthToken'],
-        'collectionApiUrl': value['collectionApiUrl'],
-        'description': value['description'],
-        'name': value['name'],
-        'pangaeaUrl': value['pangaeaUrl'],
-        'priority': value['priority'],
         'type': value['type'],
+        'name': value['name'],
+        'description': value['description'],
+        'priority': value['priority'],
+        'collectionApiUrl': value['collectionApiUrl'],
+        'collectionApiAuthToken': value['collectionApiAuthToken'],
+        'abcdDbConfig': (0, DatabaseConnectionConfig_1.DatabaseConnectionConfigToJSON)(value['abcdDbConfig']),
+        'pangaeaUrl': value['pangaeaUrl'],
+        'cacheTtl': value['cacheTtl'],
     };
 }

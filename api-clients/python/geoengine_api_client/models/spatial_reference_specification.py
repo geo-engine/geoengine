@@ -29,13 +29,13 @@ class SpatialReferenceSpecification(BaseModel):
     """
     The specification of a spatial reference, where extent and axis labels are given in natural order (x, y) = (east, north)
     """ # noqa: E501
+    name: StrictStr
+    spatial_reference: StrictStr = Field(alias="spatialReference")
+    proj_string: StrictStr = Field(alias="projString")
+    extent: BoundingBox2D
     axis_labels: Optional[Annotated[List[StrictStr], Field(min_length=2, max_length=2)]] = Field(default=None, alias="axisLabels")
     axis_order: Optional[AxisOrder] = Field(default=None, alias="axisOrder")
-    extent: BoundingBox2D
-    name: StrictStr
-    proj_string: StrictStr = Field(alias="projString")
-    spatial_reference: StrictStr = Field(alias="spatialReference")
-    __properties: ClassVar[List[str]] = ["axisLabels", "axisOrder", "extent", "name", "projString", "spatialReference"]
+    __properties: ClassVar[List[str]] = ["name", "spatialReference", "projString", "extent", "axisLabels", "axisOrder"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -101,12 +101,12 @@ class SpatialReferenceSpecification(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "axisLabels": obj.get("axisLabels"),
-            "axisOrder": obj.get("axisOrder"),
-            "extent": BoundingBox2D.from_dict(obj["extent"]) if obj.get("extent") is not None else None,
             "name": obj.get("name"),
+            "spatialReference": obj.get("spatialReference"),
             "projString": obj.get("projString"),
-            "spatialReference": obj.get("spatialReference")
+            "extent": BoundingBox2D.from_dict(obj["extent"]) if obj.get("extent") is not None else None,
+            "axisLabels": obj.get("axisLabels"),
+            "axisOrder": obj.get("axisOrder")
         })
         return _obj
 

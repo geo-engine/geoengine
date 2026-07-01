@@ -35,24 +35,24 @@ import {
 export interface DatasetDefinition {
     /**
      * 
-     * @type {MetaDataDefinition}
-     * @memberof DatasetDefinition
-     */
-    metaData: MetaDataDefinition;
-    /**
-     * 
      * @type {AddDataset}
      * @memberof DatasetDefinition
      */
     properties: AddDataset;
+    /**
+     * 
+     * @type {MetaDataDefinition}
+     * @memberof DatasetDefinition
+     */
+    metaData: MetaDataDefinition;
 }
 
 /**
  * Check if a given object implements the DatasetDefinition interface.
  */
 export function instanceOfDatasetDefinition(value: object): value is DatasetDefinition {
-    if (!('metaData' in value) || value['metaData'] === undefined) return false;
     if (!('properties' in value) || value['properties'] === undefined) return false;
+    if (!('metaData' in value) || value['metaData'] === undefined) return false;
     return true;
 }
 
@@ -66,8 +66,8 @@ export function DatasetDefinitionFromJSONTyped(json: any, ignoreDiscriminator: b
     }
     return {
         
-        'metaData': MetaDataDefinitionFromJSON(json['metaData']),
         'properties': AddDatasetFromJSON(json['properties']),
+        'metaData': MetaDataDefinitionFromJSON(json['metaData']),
     };
 }
 
@@ -82,8 +82,8 @@ export function DatasetDefinitionToJSONTyped(value?: DatasetDefinition | null, i
 
     return {
         
-        'metaData': MetaDataDefinitionToJSON(value['metaData']),
         'properties': AddDatasetToJSON(value['properties']),
+        'metaData': MetaDataDefinitionToJSON(value['metaData']),
     };
 }
 

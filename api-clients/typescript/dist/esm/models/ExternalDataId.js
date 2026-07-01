@@ -20,11 +20,11 @@ export const ExternalDataIdTypeEnum = {
  * Check if a given object implements the ExternalDataId interface.
  */
 export function instanceOfExternalDataId(value) {
-    if (!('layerId' in value) || value['layerId'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('providerId' in value) || value['providerId'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('layerId' in value) || value['layerId'] === undefined)
         return false;
     return true;
 }
@@ -36,9 +36,9 @@ export function ExternalDataIdFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'layerId': json['layerId'],
-        'providerId': json['providerId'],
         'type': json['type'],
+        'providerId': json['providerId'],
+        'layerId': json['layerId'],
     };
 }
 export function ExternalDataIdToJSON(json) {
@@ -49,8 +49,8 @@ export function ExternalDataIdToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'layerId': value['layerId'],
-        'providerId': value['providerId'],
         'type': value['type'],
+        'providerId': value['providerId'],
+        'layerId': value['layerId'],
     };
 }

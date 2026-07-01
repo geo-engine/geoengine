@@ -35,14 +35,14 @@ class TestAuthCodeResponse(unittest.TestCase):
         model = AuthCodeResponse()
         if include_optional:
             return AuthCodeResponse(
-                code = '',
                 session_state = '',
+                code = '',
                 state = ''
             )
         else:
             return AuthCodeResponse(
-                code = '',
                 session_state = '',
+                code = '',
                 state = '',
         )
         """

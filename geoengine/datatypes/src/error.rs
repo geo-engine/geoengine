@@ -70,6 +70,12 @@ pub enum Error {
     ProjInternal {
         source: proj::ProjError,
     },
+
+    #[snafu(display("ProjInternal error: {source}"))]
+    ProjInternal2 {
+        source: Box<dyn ErrorSource>,
+    },
+
     #[snafu(display("No CoordinateProjector available for: {:?} --> {:?}", from, to))]
     NoCoordinateProjector {
         from: SpatialReference,

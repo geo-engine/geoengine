@@ -18,16 +18,16 @@ import type { AddDataset } from './AddDataset';
 export interface DatasetDefinition {
     /**
      *
-     * @type {MetaDataDefinition}
-     * @memberof DatasetDefinition
-     */
-    metaData: MetaDataDefinition;
-    /**
-     *
      * @type {AddDataset}
      * @memberof DatasetDefinition
      */
     properties: AddDataset;
+    /**
+     *
+     * @type {MetaDataDefinition}
+     * @memberof DatasetDefinition
+     */
+    metaData: MetaDataDefinition;
 }
 /**
  * Check if a given object implements the DatasetDefinition interface.

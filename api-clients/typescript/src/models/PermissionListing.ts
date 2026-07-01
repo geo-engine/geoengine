@@ -42,12 +42,6 @@ import {
 export interface PermissionListing {
     /**
      * 
-     * @type {Permission}
-     * @memberof PermissionListing
-     */
-    permission: Permission;
-    /**
-     * 
      * @type {Resource}
      * @memberof PermissionListing
      */
@@ -58,6 +52,12 @@ export interface PermissionListing {
      * @memberof PermissionListing
      */
     role: Role;
+    /**
+     * 
+     * @type {Permission}
+     * @memberof PermissionListing
+     */
+    permission: Permission;
 }
 
 
@@ -66,9 +66,9 @@ export interface PermissionListing {
  * Check if a given object implements the PermissionListing interface.
  */
 export function instanceOfPermissionListing(value: object): value is PermissionListing {
-    if (!('permission' in value) || value['permission'] === undefined) return false;
     if (!('resource' in value) || value['resource'] === undefined) return false;
     if (!('role' in value) || value['role'] === undefined) return false;
+    if (!('permission' in value) || value['permission'] === undefined) return false;
     return true;
 }
 
@@ -82,9 +82,9 @@ export function PermissionListingFromJSONTyped(json: any, ignoreDiscriminator: b
     }
     return {
         
-        'permission': PermissionFromJSON(json['permission']),
         'resource': ResourceFromJSON(json['resource']),
         'role': RoleFromJSON(json['role']),
+        'permission': PermissionFromJSON(json['permission']),
     };
 }
 
@@ -99,9 +99,9 @@ export function PermissionListingToJSONTyped(value?: PermissionListing | null, i
 
     return {
         
-        'permission': PermissionToJSON(value['permission']),
         'resource': ResourceToJSON(value['resource']),
         'role': RoleToJSON(value['role']),
+        'permission': PermissionToJSON(value['permission']),
     };
 }
 

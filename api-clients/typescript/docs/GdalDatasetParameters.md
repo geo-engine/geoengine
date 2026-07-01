@@ -7,17 +7,17 @@ Parameters for loading data using Gdal
 
 Name | Type
 ------------ | -------------
-`allowAlphabandAsMask` | boolean
-`fileNotFoundHandling` | [FileNotFoundHandling](FileNotFoundHandling.md)
 `filePath` | string
-`gdalConfigOptions` | Array&lt;Array&lt;string&gt;&gt;
-`gdalOpenOptions` | Array&lt;string&gt;
+`rasterbandChannel` | number
 `geoTransform` | [GeoTransform](GeoTransform.md)
+`width` | number
 `height` | number
+`fileNotFoundHandling` | [FileNotFoundHandling](FileNotFoundHandling.md)
 `noDataValue` | number
 `propertiesMapping` | [Array&lt;GdalMetadataMapping&gt;](GdalMetadataMapping.md)
-`rasterbandChannel` | number
-`width` | number
+`gdalOpenOptions` | Array&lt;string&gt;
+`gdalConfigOptions` | Array&lt;Array&lt;string&gt;&gt;
+`allowAlphabandAsMask` | boolean
 
 ## Example
 
@@ -26,17 +26,17 @@ import type { GdalDatasetParameters } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "allowAlphabandAsMask": null,
-  "fileNotFoundHandling": null,
   "filePath": null,
-  "gdalConfigOptions": null,
-  "gdalOpenOptions": null,
+  "rasterbandChannel": null,
   "geoTransform": null,
+  "width": null,
   "height": null,
+  "fileNotFoundHandling": null,
   "noDataValue": null,
   "propertiesMapping": null,
-  "rasterbandChannel": null,
-  "width": null,
+  "gdalOpenOptions": null,
+  "gdalConfigOptions": null,
+  "allowAlphabandAsMask": null,
 } satisfies GdalDatasetParameters
 
 console.log(example)

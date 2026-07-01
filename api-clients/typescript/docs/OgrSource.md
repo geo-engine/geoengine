@@ -7,8 +7,8 @@ The [`OgrSource`] is a source operator that reads vector data using OGR (part of
 
 Name | Type
 ------------ | -------------
-`params` | [OgrSourceParameters](OgrSourceParameters.md)
 `type` | string
+`params` | [OgrSourceParameters](OgrSourceParameters.md)
 
 ## Example
 
@@ -17,8 +17,8 @@ import type { OgrSource } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "params": null,
   "type": null,
+  "params": null,
 } satisfies OgrSource
 
 console.log(example)

@@ -7,8 +7,8 @@ A resource that is affected by a permission.
 
 Name | Type
 ------------ | -------------
-`id` | string
 `type` | string
+`id` | string
 
 ## Example
 
@@ -17,8 +17,8 @@ import type { Resource } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "id": null,
   "type": null,
+  "id": null,
 } satisfies Resource
 
 console.log(example)

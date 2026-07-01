@@ -28,9 +28,9 @@ class DatasetDefinition(BaseModel):
     """
     DatasetDefinition
     """ # noqa: E501
-    meta_data: MetaDataDefinition = Field(alias="metaData")
     properties: AddDataset
-    __properties: ClassVar[List[str]] = ["metaData", "properties"]
+    meta_data: MetaDataDefinition = Field(alias="metaData")
+    __properties: ClassVar[List[str]] = ["properties", "metaData"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -71,12 +71,12 @@ class DatasetDefinition(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of meta_data
-        if self.meta_data:
-            _dict['metaData'] = self.meta_data.to_dict()
         # override the default output from pydantic by calling `to_dict()` of properties
         if self.properties:
             _dict['properties'] = self.properties.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of meta_data
+        if self.meta_data:
+            _dict['metaData'] = self.meta_data.to_dict()
         return _dict
 
     @classmethod
@@ -89,8 +89,8 @@ class DatasetDefinition(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "metaData": MetaDataDefinition.from_dict(obj["metaData"]) if obj.get("metaData") is not None else None,
-            "properties": AddDataset.from_dict(obj["properties"]) if obj.get("properties") is not None else None
+            "properties": AddDataset.from_dict(obj["properties"]) if obj.get("properties") is not None else None,
+            "metaData": MetaDataDefinition.from_dict(obj["metaData"]) if obj.get("metaData") is not None else None
         })
         return _obj
 

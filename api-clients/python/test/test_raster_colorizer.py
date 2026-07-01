@@ -35,39 +35,39 @@ class TestRasterColorizer(unittest.TestCase):
         model = RasterColorizer()
         if include_optional:
             return RasterColorizer(
+                type = 'singleBand',
                 band = 0,
                 band_colorizer = None,
-                type = 'singleBand',
-                blue_band = 0,
-                blue_max = 1.337,
-                blue_min = 1.337,
-                blue_scale = 1.337,
+                red_band = 0,
+                red_min = 1.337,
+                red_max = 1.337,
+                red_scale = 1.337,
                 green_band = 0,
-                green_max = 1.337,
                 green_min = 1.337,
+                green_max = 1.337,
                 green_scale = 1.337,
+                blue_band = 0,
+                blue_min = 1.337,
+                blue_max = 1.337,
+                blue_scale = 1.337,
                 no_data_color = [
                     56
-                    ],
-                red_band = 0,
-                red_max = 1.337,
-                red_min = 1.337,
-                red_scale = 1.337
+                    ]
             )
         else:
             return RasterColorizer(
+                type = 'singleBand',
                 band = 0,
                 band_colorizer = None,
-                type = 'singleBand',
-                blue_band = 0,
-                blue_max = 1.337,
-                blue_min = 1.337,
-                green_band = 0,
-                green_max = 1.337,
-                green_min = 1.337,
                 red_band = 0,
-                red_max = 1.337,
                 red_min = 1.337,
+                red_max = 1.337,
+                green_band = 0,
+                green_min = 1.337,
+                green_max = 1.337,
+                blue_band = 0,
+                blue_min = 1.337,
+                blue_max = 1.337,
         )
         """
 

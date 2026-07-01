@@ -16,8 +16,8 @@ The `Interpolation` operator expects exactly one _raster_ input.
 | Name                  | Type                    | Description               | Examples |
 | --------------------- | ----------------------- | ------------------------- | -------- |
 | interpolation         | InterpolationMethod     | Interpolation method.     |          |
-| outputOriginReference | null or Coordinate2D    |                           |          |
 | outputResolution      | InterpolationResolution | Target output resolution. |          |
+| outputOriginReference | null or Coordinate2D    |                           |          |
 
 ## Sources
 

@@ -12,23 +12,23 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DerivedNumber {
-    #[serde(rename = "attribute")]
-    pub attribute: String,
-    #[serde(rename = "defaultValue")]
-    pub default_value: f64,
-    #[serde(rename = "factor")]
-    pub factor: f64,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "attribute")]
+    pub attribute: String,
+    #[serde(rename = "factor")]
+    pub factor: f64,
+    #[serde(rename = "defaultValue")]
+    pub default_value: f64,
 }
 
 impl DerivedNumber {
-    pub fn new(attribute: String, default_value: f64, factor: f64, r#type: Type) -> DerivedNumber {
+    pub fn new(r#type: Type, attribute: String, factor: f64, default_value: f64) -> DerivedNumber {
         DerivedNumber {
-            attribute,
-            default_value,
-            factor,
             r#type,
+            attribute,
+            factor,
+            default_value,
         }
     }
 }

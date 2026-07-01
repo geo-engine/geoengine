@@ -35,21 +35,21 @@ class TestSingleRasterOrVectorOperator(unittest.TestCase):
         model = SingleRasterOrVectorOperator()
         if include_optional:
             return SingleRasterOrVectorOperator(
+                type = 'TemporalRasterAggregation',
                 params = geoengine_api_client.models.reprojection_parameters.ReprojectionParameters(
-                    derive_out_spec = null, 
-                    target_spatial_reference = '', ),
+                    target_spatial_reference = '', 
+                    derive_out_spec = null, ),
                 sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
-                    source = null, ),
-                type = 'TemporalRasterAggregation'
+                    source = null, )
             )
         else:
             return SingleRasterOrVectorOperator(
+                type = 'TemporalRasterAggregation',
                 params = geoengine_api_client.models.reprojection_parameters.ReprojectionParameters(
-                    derive_out_spec = null, 
-                    target_spatial_reference = '', ),
+                    target_spatial_reference = '', 
+                    derive_out_spec = null, ),
                 sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
                     source = null, ),
-                type = 'TemporalRasterAggregation',
         )
         """
 

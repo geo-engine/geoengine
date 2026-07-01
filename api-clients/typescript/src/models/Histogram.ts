@@ -50,6 +50,12 @@ import {
 export interface Histogram {
     /**
      * 
+     * @type {HistogramTypeEnum}
+     * @memberof Histogram
+     */
+    type: HistogramTypeEnum;
+    /**
+     * 
      * @type {HistogramParameters}
      * @memberof Histogram
      */
@@ -60,12 +66,6 @@ export interface Histogram {
      * @memberof Histogram
      */
     sources: SingleVectorOrRasterSource;
-    /**
-     * 
-     * @type {HistogramTypeEnum}
-     * @memberof Histogram
-     */
-    type: HistogramTypeEnum;
 }
 
 
@@ -82,9 +82,9 @@ export type HistogramTypeEnum = typeof HistogramTypeEnum[keyof typeof HistogramT
  * Check if a given object implements the Histogram interface.
  */
 export function instanceOfHistogram(value: object): value is Histogram {
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -98,9 +98,9 @@ export function HistogramFromJSONTyped(json: any, ignoreDiscriminator: boolean):
     }
     return {
         
+        'type': json['type'],
         'params': HistogramParametersFromJSON(json['params']),
         'sources': SingleVectorOrRasterSourceFromJSON(json['sources']),
-        'type': json['type'],
     };
 }
 
@@ -115,9 +115,9 @@ export function HistogramToJSONTyped(value?: Histogram | null, ignoreDiscriminat
 
     return {
         
+        'type': value['type'],
         'params': HistogramParametersToJSON(value['params']),
         'sources': SingleVectorOrRasterSourceToJSON(value['sources']),
-        'type': value['type'],
     };
 }
 

@@ -19,7 +19,7 @@ export interface AutoCreateDataset {
      * @type {string}
      * @memberof AutoCreateDataset
      */
-    datasetDescription: string;
+    upload: string;
     /**
      *
      * @type {string}
@@ -31,7 +31,7 @@ export interface AutoCreateDataset {
      * @type {string}
      * @memberof AutoCreateDataset
      */
-    layerName?: string | null;
+    datasetDescription: string;
     /**
      *
      * @type {string}
@@ -40,16 +40,16 @@ export interface AutoCreateDataset {
     mainFile: string;
     /**
      *
+     * @type {string}
+     * @memberof AutoCreateDataset
+     */
+    layerName?: string | null;
+    /**
+     *
      * @type {Array<string>}
      * @memberof AutoCreateDataset
      */
     tags?: Array<string> | null;
-    /**
-     *
-     * @type {string}
-     * @memberof AutoCreateDataset
-     */
-    upload: string;
 }
 /**
  * Check if a given object implements the AutoCreateDataset interface.

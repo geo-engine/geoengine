@@ -12,15 +12,15 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RasterVectorJoinParameters {
+    /// Specify how the new column names are derived from the raster band names.  The `ColumnNames` type is used to specify how the new column names are derived from the raster band names.  - **default**: Appends \" (n)\" to the band name with the smallest `n` that avoids a conflict. - **suffix**: Specifies a suffix for each input, to be appended to the band names. - **rename**: A list of names for each new column. 
+    #[serde(rename = "names")]
+    pub names: Box<models::ColumnNames>,
     /// The aggregation function to use for features covering multiple pixels.
     #[serde(rename = "featureAggregation")]
     pub feature_aggregation: models::FeatureAggregationMethod,
     /// Whether to ignore no data values in the aggregation. Defaults to `false`.
     #[serde(rename = "featureAggregationIgnoreNoData", skip_serializing_if = "Option::is_none")]
     pub feature_aggregation_ignore_no_data: Option<bool>,
-    /// Specify how the new column names are derived from the raster band names.  The `ColumnNames` type is used to specify how the new column names are derived from the raster band names.  - **default**: Appends \" (n)\" to the band name with the smallest `n` that avoids a conflict. - **suffix**: Specifies a suffix for each input, to be appended to the band names. - **rename**: A list of names for each new column. 
-    #[serde(rename = "names")]
-    pub names: Box<models::ColumnNames>,
     /// The aggregation function to use for features covering multiple (raster) time steps.
     #[serde(rename = "temporalAggregation")]
     pub temporal_aggregation: models::TemporalAggregationMethod,
@@ -30,11 +30,11 @@ pub struct RasterVectorJoinParameters {
 }
 
 impl RasterVectorJoinParameters {
-    pub fn new(feature_aggregation: models::FeatureAggregationMethod, names: models::ColumnNames, temporal_aggregation: models::TemporalAggregationMethod) -> RasterVectorJoinParameters {
+    pub fn new(names: models::ColumnNames, feature_aggregation: models::FeatureAggregationMethod, temporal_aggregation: models::TemporalAggregationMethod) -> RasterVectorJoinParameters {
         RasterVectorJoinParameters {
+            names: Box::new(names),
             feature_aggregation,
             feature_aggregation_ignore_no_data: None,
-            names: Box::new(names),
             temporal_aggregation,
             temporal_aggregation_ignore_no_data: None,
         }

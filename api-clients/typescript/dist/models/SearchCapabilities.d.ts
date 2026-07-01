@@ -17,6 +17,12 @@ import type { SearchTypes } from './SearchTypes';
 export interface SearchCapabilities {
     /**
      *
+     * @type {SearchTypes}
+     * @memberof SearchCapabilities
+     */
+    searchTypes: SearchTypes;
+    /**
+     *
      * @type {boolean}
      * @memberof SearchCapabilities
      */
@@ -27,12 +33,6 @@ export interface SearchCapabilities {
      * @memberof SearchCapabilities
      */
     filters?: Array<string> | null;
-    /**
-     *
-     * @type {SearchTypes}
-     * @memberof SearchCapabilities
-     */
-    searchTypes: SearchTypes;
 }
 /**
  * Check if a given object implements the SearchCapabilities interface.

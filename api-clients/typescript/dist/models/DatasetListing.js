@@ -23,19 +23,19 @@ const TypedResultDescriptor_1 = require("./TypedResultDescriptor");
  * Check if a given object implements the DatasetListing interface.
  */
 function instanceOfDatasetListing(value) {
-    if (!('description' in value) || value['description'] === undefined)
-        return false;
-    if (!('displayName' in value) || value['displayName'] === undefined)
-        return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
-    if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
+    if (!('displayName' in value) || value['displayName'] === undefined)
+        return false;
+    if (!('description' in value) || value['description'] === undefined)
+        return false;
+    if (!('tags' in value) || value['tags'] === undefined)
         return false;
     if (!('sourceOperator' in value) || value['sourceOperator'] === undefined)
         return false;
-    if (!('tags' in value) || value['tags'] === undefined)
+    if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
         return false;
     return true;
 }
@@ -47,14 +47,14 @@ function DatasetListingFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'description': json['description'],
-        'displayName': json['displayName'],
         'id': json['id'],
         'name': json['name'],
-        'resultDescriptor': (0, TypedResultDescriptor_1.TypedResultDescriptorFromJSON)(json['resultDescriptor']),
-        'sourceOperator': json['sourceOperator'],
-        'symbology': json['symbology'] == null ? undefined : (0, Symbology_1.SymbologyFromJSON)(json['symbology']),
+        'displayName': json['displayName'],
+        'description': json['description'],
         'tags': json['tags'],
+        'sourceOperator': json['sourceOperator'],
+        'resultDescriptor': (0, TypedResultDescriptor_1.TypedResultDescriptorFromJSON)(json['resultDescriptor']),
+        'symbology': json['symbology'] == null ? undefined : (0, Symbology_1.SymbologyFromJSON)(json['symbology']),
     };
 }
 function DatasetListingToJSON(json) {
@@ -65,13 +65,13 @@ function DatasetListingToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'description': value['description'],
-        'displayName': value['displayName'],
         'id': value['id'],
         'name': value['name'],
-        'resultDescriptor': (0, TypedResultDescriptor_1.TypedResultDescriptorToJSON)(value['resultDescriptor']),
-        'sourceOperator': value['sourceOperator'],
-        'symbology': (0, Symbology_1.SymbologyToJSON)(value['symbology']),
+        'displayName': value['displayName'],
+        'description': value['description'],
         'tags': value['tags'],
+        'sourceOperator': value['sourceOperator'],
+        'resultDescriptor': (0, TypedResultDescriptor_1.TypedResultDescriptorToJSON)(value['resultDescriptor']),
+        'symbology': (0, Symbology_1.SymbologyToJSON)(value['symbology']),
     };
 }

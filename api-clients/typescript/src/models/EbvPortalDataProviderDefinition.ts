@@ -20,22 +20,16 @@ import { mapValues } from '../runtime';
 export interface EbvPortalDataProviderDefinition {
     /**
      * 
-     * @type {string}
+     * @type {EbvPortalDataProviderDefinitionTypeEnum}
      * @memberof EbvPortalDataProviderDefinition
      */
-    baseUrl: string;
+    type: EbvPortalDataProviderDefinitionTypeEnum;
     /**
      * 
-     * @type {number}
-     * @memberof EbvPortalDataProviderDefinition
-     */
-    cacheTtl?: number;
-    /**
-     * Path were the `NetCDF` data can be found
      * @type {string}
      * @memberof EbvPortalDataProviderDefinition
      */
-    data: string;
+    name: string;
     /**
      * 
      * @type {string}
@@ -44,10 +38,22 @@ export interface EbvPortalDataProviderDefinition {
     description: string;
     /**
      * 
+     * @type {number}
+     * @memberof EbvPortalDataProviderDefinition
+     */
+    priority?: number | null;
+    /**
+     * 
      * @type {string}
      * @memberof EbvPortalDataProviderDefinition
      */
-    name: string;
+    baseUrl: string;
+    /**
+     * Path were the `NetCDF` data can be found
+     * @type {string}
+     * @memberof EbvPortalDataProviderDefinition
+     */
+    data: string;
     /**
      * Path were overview files are stored
      * @type {string}
@@ -59,13 +65,7 @@ export interface EbvPortalDataProviderDefinition {
      * @type {number}
      * @memberof EbvPortalDataProviderDefinition
      */
-    priority?: number | null;
-    /**
-     * 
-     * @type {EbvPortalDataProviderDefinitionTypeEnum}
-     * @memberof EbvPortalDataProviderDefinition
-     */
-    type: EbvPortalDataProviderDefinitionTypeEnum;
+    cacheTtl?: number;
 }
 
 
@@ -82,12 +82,12 @@ export type EbvPortalDataProviderDefinitionTypeEnum = typeof EbvPortalDataProvid
  * Check if a given object implements the EbvPortalDataProviderDefinition interface.
  */
 export function instanceOfEbvPortalDataProviderDefinition(value: object): value is EbvPortalDataProviderDefinition {
+    if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('baseUrl' in value) || value['baseUrl'] === undefined) return false;
     if (!('data' in value) || value['data'] === undefined) return false;
-    if (!('description' in value) || value['description'] === undefined) return false;
-    if (!('name' in value) || value['name'] === undefined) return false;
     if (!('overviews' in value) || value['overviews'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -101,14 +101,14 @@ export function EbvPortalDataProviderDefinitionFromJSONTyped(json: any, ignoreDi
     }
     return {
         
-        'baseUrl': json['baseUrl'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
-        'data': json['data'],
-        'description': json['description'],
-        'name': json['name'],
-        'overviews': json['overviews'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
         'type': json['type'],
+        'name': json['name'],
+        'description': json['description'],
+        'priority': json['priority'] == null ? undefined : json['priority'],
+        'baseUrl': json['baseUrl'],
+        'data': json['data'],
+        'overviews': json['overviews'],
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 
@@ -123,14 +123,14 @@ export function EbvPortalDataProviderDefinitionToJSONTyped(value?: EbvPortalData
 
     return {
         
-        'baseUrl': value['baseUrl'],
-        'cacheTtl': value['cacheTtl'],
-        'data': value['data'],
-        'description': value['description'],
-        'name': value['name'],
-        'overviews': value['overviews'],
-        'priority': value['priority'],
         'type': value['type'],
+        'name': value['name'],
+        'description': value['description'],
+        'priority': value['priority'],
+        'baseUrl': value['baseUrl'],
+        'data': value['data'],
+        'overviews': value['overviews'],
+        'cacheTtl': value['cacheTtl'],
     };
 }
 

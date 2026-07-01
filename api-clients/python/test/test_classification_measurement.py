@@ -35,19 +35,19 @@ class TestClassificationMeasurement(unittest.TestCase):
         model = ClassificationMeasurement()
         if include_optional:
             return ClassificationMeasurement(
+                type = 'classification',
+                measurement = '',
                 classes = {
                     'key' : ''
-                    },
-                measurement = '',
-                type = 'classification'
+                    }
             )
         else:
             return ClassificationMeasurement(
+                type = 'classification',
+                measurement = '',
                 classes = {
                     'key' : ''
                     },
-                measurement = '',
-                type = 'classification',
         )
         """
 

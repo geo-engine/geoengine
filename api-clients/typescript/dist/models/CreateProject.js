@@ -23,11 +23,11 @@ const STRectangle_1 = require("./STRectangle");
  * Check if a given object implements the CreateProject interface.
  */
 function instanceOfCreateProject(value) {
-    if (!('bounds' in value) || value['bounds'] === undefined)
+    if (!('name' in value) || value['name'] === undefined)
         return false;
     if (!('description' in value) || value['description'] === undefined)
         return false;
-    if (!('name' in value) || value['name'] === undefined)
+    if (!('bounds' in value) || value['bounds'] === undefined)
         return false;
     return true;
 }
@@ -39,9 +39,9 @@ function CreateProjectFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'bounds': (0, STRectangle_1.STRectangleFromJSON)(json['bounds']),
-        'description': json['description'],
         'name': json['name'],
+        'description': json['description'],
+        'bounds': (0, STRectangle_1.STRectangleFromJSON)(json['bounds']),
         'timeStep': json['timeStep'] == null ? undefined : (0, TimeStep_1.TimeStepFromJSON)(json['timeStep']),
     };
 }
@@ -53,9 +53,9 @@ function CreateProjectToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'bounds': (0, STRectangle_1.STRectangleToJSON)(value['bounds']),
-        'description': value['description'],
         'name': value['name'],
+        'description': value['description'],
+        'bounds': (0, STRectangle_1.STRectangleToJSON)(value['bounds']),
         'timeStep': (0, TimeStep_1.TimeStepToJSON)(value['timeStep']),
     };
 }

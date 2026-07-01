@@ -23,13 +23,13 @@ export interface UpdateLayerCollection {
      * @type {string}
      * @memberof UpdateLayerCollection
      */
-    description: string;
+    name: string;
     /**
      * 
      * @type {string}
      * @memberof UpdateLayerCollection
      */
-    name: string;
+    description: string;
     /**
      * 
      * @type {Array<Array<string>>}
@@ -42,8 +42,8 @@ export interface UpdateLayerCollection {
  * Check if a given object implements the UpdateLayerCollection interface.
  */
 export function instanceOfUpdateLayerCollection(value: object): value is UpdateLayerCollection {
-    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
     return true;
 }
 
@@ -57,8 +57,8 @@ export function UpdateLayerCollectionFromJSONTyped(json: any, ignoreDiscriminato
     }
     return {
         
-        'description': json['description'],
         'name': json['name'],
+        'description': json['description'],
         'properties': json['properties'] == null ? undefined : json['properties'],
     };
 }
@@ -74,8 +74,8 @@ export function UpdateLayerCollectionToJSONTyped(value?: UpdateLayerCollection |
 
     return {
         
-        'description': value['description'],
         'name': value['name'],
+        'description': value['description'],
         'properties': value['properties'],
     };
 }

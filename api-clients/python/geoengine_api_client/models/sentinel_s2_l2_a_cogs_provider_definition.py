@@ -30,17 +30,17 @@ class SentinelS2L2ACogsProviderDefinition(BaseModel):
     """
     SentinelS2L2ACogsProviderDefinition
     """ # noqa: E501
-    api_url: StrictStr = Field(alias="apiUrl")
-    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
-    description: StrictStr
-    gdal_retries: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="gdalRetries")
-    id: UUID
-    name: StrictStr
-    priority: Optional[StrictInt] = None
-    query_buffer: Optional[StacQueryBuffer] = Field(default=None, alias="queryBuffer")
-    stac_api_retries: Optional[StacApiRetries] = Field(default=None, alias="stacApiRetries")
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["apiUrl", "cacheTtl", "description", "gdalRetries", "id", "name", "priority", "queryBuffer", "stacApiRetries", "type"]
+    name: StrictStr
+    id: UUID
+    description: StrictStr
+    priority: Optional[StrictInt] = None
+    api_url: StrictStr = Field(alias="apiUrl")
+    stac_api_retries: Optional[StacApiRetries] = Field(default=None, alias="stacApiRetries")
+    gdal_retries: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="gdalRetries")
+    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
+    query_buffer: Optional[StacQueryBuffer] = Field(default=None, alias="queryBuffer")
+    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "stacApiRetries", "gdalRetries", "cacheTtl", "queryBuffer"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -88,12 +88,12 @@ class SentinelS2L2ACogsProviderDefinition(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of query_buffer
-        if self.query_buffer:
-            _dict['queryBuffer'] = self.query_buffer.to_dict()
         # override the default output from pydantic by calling `to_dict()` of stac_api_retries
         if self.stac_api_retries:
             _dict['stacApiRetries'] = self.stac_api_retries.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of query_buffer
+        if self.query_buffer:
+            _dict['queryBuffer'] = self.query_buffer.to_dict()
         # set to None if priority (nullable) is None
         # and model_fields_set contains the field
         if self.priority is None and "priority" in self.model_fields_set:
@@ -111,16 +111,16 @@ class SentinelS2L2ACogsProviderDefinition(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "apiUrl": obj.get("apiUrl"),
-            "cacheTtl": obj.get("cacheTtl"),
-            "description": obj.get("description"),
-            "gdalRetries": obj.get("gdalRetries"),
-            "id": obj.get("id"),
+            "type": obj.get("type"),
             "name": obj.get("name"),
+            "id": obj.get("id"),
+            "description": obj.get("description"),
             "priority": obj.get("priority"),
-            "queryBuffer": StacQueryBuffer.from_dict(obj["queryBuffer"]) if obj.get("queryBuffer") is not None else None,
+            "apiUrl": obj.get("apiUrl"),
             "stacApiRetries": StacApiRetries.from_dict(obj["stacApiRetries"]) if obj.get("stacApiRetries") is not None else None,
-            "type": obj.get("type")
+            "gdalRetries": obj.get("gdalRetries"),
+            "cacheTtl": obj.get("cacheTtl"),
+            "queryBuffer": StacQueryBuffer.from_dict(obj["queryBuffer"]) if obj.get("queryBuffer") is not None else None
         })
         return _obj
 

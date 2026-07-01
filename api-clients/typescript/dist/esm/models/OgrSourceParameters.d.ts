@@ -15,17 +15,17 @@
  */
 export interface OgrSourceParameters {
     /**
-     * *Optional*: list of attributes to include. When `None`, all attributes are included.
-     * @type {Array<string>}
-     * @memberof OgrSourceParameters
-     */
-    attributeProjection?: Array<string> | null;
-    /**
      * Dataset name or identifier to be loaded.
      * @type {string}
      * @memberof OgrSourceParameters
      */
     data: string;
+    /**
+     * *Optional*: list of attributes to include. When `None`, all attributes are included.
+     * @type {Array<string>}
+     * @memberof OgrSourceParameters
+     */
+    attributeProjection?: Array<string> | null;
 }
 /**
  * Check if a given object implements the OgrSourceParameters interface.

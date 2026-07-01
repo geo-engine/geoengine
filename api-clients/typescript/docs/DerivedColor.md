@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
+`type` | string
 `attribute` | string
 `colorizer` | [Colorizer](Colorizer.md)
-`type` | string
 
 ## Example
 
@@ -17,9 +17,9 @@ import type { DerivedColor } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "attribute": null,
   "colorizer": null,
-  "type": null,
 } satisfies DerivedColor
 
 console.log(example)

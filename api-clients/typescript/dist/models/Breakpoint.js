@@ -21,9 +21,9 @@ exports.BreakpointToJSONTyped = BreakpointToJSONTyped;
  * Check if a given object implements the Breakpoint interface.
  */
 function instanceOfBreakpoint(value) {
-    if (!('color' in value) || value['color'] === undefined)
-        return false;
     if (!('value' in value) || value['value'] === undefined)
+        return false;
+    if (!('color' in value) || value['color'] === undefined)
         return false;
     return true;
 }
@@ -35,8 +35,8 @@ function BreakpointFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'color': json['color'],
         'value': json['value'],
+        'color': json['color'],
     };
 }
 function BreakpointToJSON(json) {
@@ -47,7 +47,7 @@ function BreakpointToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'color': value['color'],
         'value': value['value'],
+        'color': value['color'],
     };
 }

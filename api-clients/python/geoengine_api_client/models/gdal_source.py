@@ -27,9 +27,9 @@ class GdalSource(BaseModel):
     """
     The [`GdalSource`] is a source operator that reads raster data using GDAL. The counterpart for vector data is the [`OgrSource`].  ## Errors  If the given dataset does not exist or is not readable, an error is thrown. 
     """ # noqa: E501
-    params: GdalSourceParameters
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["params", "type"]
+    params: GdalSourceParameters
+    __properties: ClassVar[List[str]] = ["type", "params"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -92,8 +92,8 @@ class GdalSource(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "params": GdalSourceParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
-            "type": obj.get("type")
+            "type": obj.get("type"),
+            "params": GdalSourceParameters.from_dict(obj["params"]) if obj.get("params") is not None else None
         })
         return _obj
 

@@ -20,15 +20,15 @@ export const NetCdfCfDataProviderDefinitionTypeEnum = {
  * Check if a given object implements the NetCdfCfDataProviderDefinition interface.
  */
 export function instanceOfNetCdfCfDataProviderDefinition(value) {
-    if (!('data' in value) || value['data'] === undefined)
-        return false;
-    if (!('description' in value) || value['description'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
-    if (!('overviews' in value) || value['overviews'] === undefined)
+    if (!('description' in value) || value['description'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('data' in value) || value['data'] === undefined)
+        return false;
+    if (!('overviews' in value) || value['overviews'] === undefined)
         return false;
     return true;
 }
@@ -40,13 +40,13 @@ export function NetCdfCfDataProviderDefinitionFromJSONTyped(json, ignoreDiscrimi
         return json;
     }
     return {
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
-        'data': json['data'],
-        'description': json['description'],
-        'name': json['name'],
-        'overviews': json['overviews'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
         'type': json['type'],
+        'name': json['name'],
+        'description': json['description'],
+        'priority': json['priority'] == null ? undefined : json['priority'],
+        'data': json['data'],
+        'overviews': json['overviews'],
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 export function NetCdfCfDataProviderDefinitionToJSON(json) {
@@ -57,12 +57,12 @@ export function NetCdfCfDataProviderDefinitionToJSONTyped(value, ignoreDiscrimin
         return value;
     }
     return {
-        'cacheTtl': value['cacheTtl'],
-        'data': value['data'],
-        'description': value['description'],
-        'name': value['name'],
-        'overviews': value['overviews'],
-        'priority': value['priority'],
         'type': value['type'],
+        'name': value['name'],
+        'description': value['description'],
+        'priority': value['priority'],
+        'data': value['data'],
+        'overviews': value['overviews'],
+        'cacheTtl': value['cacheTtl'],
     };
 }

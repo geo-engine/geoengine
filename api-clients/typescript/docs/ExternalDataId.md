@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
-`layerId` | string
-`providerId` | string
 `type` | string
+`providerId` | string
+`layerId` | string
 
 ## Example
 
@@ -17,9 +17,9 @@ import type { ExternalDataId } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "layerId": null,
-  "providerId": null,
   "type": null,
+  "providerId": null,
+  "layerId": null,
 } satisfies ExternalDataId
 
 console.log(example)

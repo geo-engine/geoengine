@@ -20,13 +20,13 @@ export interface GridBoundingBox2D {
      * @type {GridIdx2D}
      * @memberof GridBoundingBox2D
      */
-    bottomRightIdx: GridIdx2D;
+    topLeftIdx: GridIdx2D;
     /**
      *
      * @type {GridIdx2D}
      * @memberof GridBoundingBox2D
      */
-    topLeftIdx: GridIdx2D;
+    bottomRightIdx: GridIdx2D;
 }
 /**
  * Check if a given object implements the GridBoundingBox2D interface.

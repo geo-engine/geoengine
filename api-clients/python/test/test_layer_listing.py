@@ -35,26 +35,26 @@ class TestLayerListing(unittest.TestCase):
         model = LayerListing()
         if include_optional:
             return LayerListing(
-                description = '',
+                type = 'layer',
                 id = geoengine_api_client.models.provider_layer_id.ProviderLayerId(
-                    layer_id = '', 
-                    provider_id = '', ),
+                    provider_id = '', 
+                    layer_id = '', ),
                 name = '',
+                description = '',
                 properties = [
                     [
                         ''
                         ]
-                    ],
-                type = 'layer'
+                    ]
             )
         else:
             return LayerListing(
-                description = '',
-                id = geoengine_api_client.models.provider_layer_id.ProviderLayerId(
-                    layer_id = '', 
-                    provider_id = '', ),
-                name = '',
                 type = 'layer',
+                id = geoengine_api_client.models.provider_layer_id.ProviderLayerId(
+                    provider_id = '', 
+                    layer_id = '', ),
+                name = '',
+                description = '',
         )
         """
 

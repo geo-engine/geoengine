@@ -35,12 +35,12 @@ class TestTaskStatus(unittest.TestCase):
         model = TaskStatus()
         if include_optional:
             return TaskStatus(
-                description = '',
-                estimated_time_remaining = '',
-                info = None,
-                pct_complete = '',
                 status = 'failed',
                 task_type = '',
+                description = '',
+                info = None,
+                pct_complete = '',
+                estimated_time_remaining = '',
                 time_started = '',
                 time_total = '',
                 clean_up = None,
@@ -48,10 +48,10 @@ class TestTaskStatus(unittest.TestCase):
             )
         else:
             return TaskStatus(
-                estimated_time_remaining = '',
-                pct_complete = '',
                 status = 'failed',
                 task_type = '',
+                pct_complete = '',
+                estimated_time_remaining = '',
                 time_started = '',
                 time_total = '',
                 clean_up = None,

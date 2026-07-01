@@ -29,12 +29,12 @@ class RasterVectorJoinParameters(BaseModel):
     """
     RasterVectorJoinParameters
     """ # noqa: E501
+    names: ColumnNames = Field(description="Specify how the new column names are derived from the raster band names.  The `ColumnNames` type is used to specify how the new column names are derived from the raster band names.  - **default**: Appends \" (n)\" to the band name with the smallest `n` that avoids a conflict. - **suffix**: Specifies a suffix for each input, to be appended to the band names. - **rename**: A list of names for each new column. ")
     feature_aggregation: FeatureAggregationMethod = Field(description="The aggregation function to use for features covering multiple pixels.", alias="featureAggregation")
     feature_aggregation_ignore_no_data: Optional[StrictBool] = Field(default=None, description="Whether to ignore no data values in the aggregation. Defaults to `false`.", alias="featureAggregationIgnoreNoData")
-    names: ColumnNames = Field(description="Specify how the new column names are derived from the raster band names.  The `ColumnNames` type is used to specify how the new column names are derived from the raster band names.  - **default**: Appends \" (n)\" to the band name with the smallest `n` that avoids a conflict. - **suffix**: Specifies a suffix for each input, to be appended to the band names. - **rename**: A list of names for each new column. ")
     temporal_aggregation: TemporalAggregationMethod = Field(description="The aggregation function to use for features covering multiple (raster) time steps.", alias="temporalAggregation")
     temporal_aggregation_ignore_no_data: Optional[StrictBool] = Field(default=None, description="Whether to ignore no data values in the aggregation. Defaults to `false`.", alias="temporalAggregationIgnoreNoData")
-    __properties: ClassVar[List[str]] = ["featureAggregation", "featureAggregationIgnoreNoData", "names", "temporalAggregation", "temporalAggregationIgnoreNoData"]
+    __properties: ClassVar[List[str]] = ["names", "featureAggregation", "featureAggregationIgnoreNoData", "temporalAggregation", "temporalAggregationIgnoreNoData"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -90,9 +90,9 @@ class RasterVectorJoinParameters(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "names": ColumnNames.from_dict(obj["names"]) if obj.get("names") is not None else None,
             "featureAggregation": obj.get("featureAggregation"),
             "featureAggregationIgnoreNoData": obj.get("featureAggregationIgnoreNoData"),
-            "names": ColumnNames.from_dict(obj["names"]) if obj.get("names") is not None else None,
             "temporalAggregation": obj.get("temporalAggregation"),
             "temporalAggregationIgnoreNoData": obj.get("temporalAggregationIgnoreNoData")
         })

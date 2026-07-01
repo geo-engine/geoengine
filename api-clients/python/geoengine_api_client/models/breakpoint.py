@@ -27,9 +27,9 @@ class Breakpoint(BaseModel):
     """
     Breakpoint
     """ # noqa: E501
-    color: Annotated[List[StrictInt], Field(min_length=4, max_length=4)]
     value: Union[StrictFloat, StrictInt]
-    __properties: ClassVar[List[str]] = ["color", "value"]
+    color: Annotated[List[StrictInt], Field(min_length=4, max_length=4)]
+    __properties: ClassVar[List[str]] = ["value", "color"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -82,8 +82,8 @@ class Breakpoint(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "color": obj.get("color"),
-            "value": obj.get("value")
+            "value": obj.get("value"),
+            "color": obj.get("color")
         })
         return _obj
 

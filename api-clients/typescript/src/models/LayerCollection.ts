@@ -35,22 +35,22 @@ import {
 export interface LayerCollection {
     /**
      * 
-     * @type {string}
-     * @memberof LayerCollection
-     */
-    description: string;
-    /**
-     * a common label for the collection's entries, if there is any
-     * @type {string}
-     * @memberof LayerCollection
-     */
-    entryLabel?: string | null;
-    /**
-     * 
      * @type {ProviderLayerCollectionId}
      * @memberof LayerCollection
      */
     id: ProviderLayerCollectionId;
+    /**
+     * 
+     * @type {string}
+     * @memberof LayerCollection
+     */
+    name: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof LayerCollection
+     */
+    description: string;
     /**
      * 
      * @type {Array<CollectionItem>}
@@ -58,11 +58,11 @@ export interface LayerCollection {
      */
     items: Array<CollectionItem>;
     /**
-     * 
+     * a common label for the collection's entries, if there is any
      * @type {string}
      * @memberof LayerCollection
      */
-    name: string;
+    entryLabel?: string | null;
     /**
      * 
      * @type {Array<Array<string>>}
@@ -75,10 +75,10 @@ export interface LayerCollection {
  * Check if a given object implements the LayerCollection interface.
  */
 export function instanceOfLayerCollection(value: object): value is LayerCollection {
-    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('id' in value) || value['id'] === undefined) return false;
-    if (!('items' in value) || value['items'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
+    if (!('items' in value) || value['items'] === undefined) return false;
     if (!('properties' in value) || value['properties'] === undefined) return false;
     return true;
 }
@@ -93,11 +93,11 @@ export function LayerCollectionFromJSONTyped(json: any, ignoreDiscriminator: boo
     }
     return {
         
-        'description': json['description'],
-        'entryLabel': json['entryLabel'] == null ? undefined : json['entryLabel'],
         'id': ProviderLayerCollectionIdFromJSON(json['id']),
-        'items': ((json['items'] as Array<any>).map(CollectionItemFromJSON)),
         'name': json['name'],
+        'description': json['description'],
+        'items': ((json['items'] as Array<any>).map(CollectionItemFromJSON)),
+        'entryLabel': json['entryLabel'] == null ? undefined : json['entryLabel'],
         'properties': json['properties'],
     };
 }
@@ -113,11 +113,11 @@ export function LayerCollectionToJSONTyped(value?: LayerCollection | null, ignor
 
     return {
         
-        'description': value['description'],
-        'entryLabel': value['entryLabel'],
         'id': ProviderLayerCollectionIdToJSON(value['id']),
-        'items': ((value['items'] as Array<any>).map(CollectionItemToJSON)),
         'name': value['name'],
+        'description': value['description'],
+        'items': ((value['items'] as Array<any>).map(CollectionItemToJSON)),
+        'entryLabel': value['entryLabel'],
         'properties': value['properties'],
     };
 }

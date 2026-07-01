@@ -23,13 +23,13 @@ const Symbology_1 = require("./Symbology");
  * Check if a given object implements the ProjectLayer interface.
  */
 function instanceOfProjectLayer(value) {
-    if (!('name' in value) || value['name'] === undefined)
+    if (!('workflow' in value) || value['workflow'] === undefined)
         return false;
-    if (!('symbology' in value) || value['symbology'] === undefined)
+    if (!('name' in value) || value['name'] === undefined)
         return false;
     if (!('visibility' in value) || value['visibility'] === undefined)
         return false;
-    if (!('workflow' in value) || value['workflow'] === undefined)
+    if (!('symbology' in value) || value['symbology'] === undefined)
         return false;
     return true;
 }
@@ -41,10 +41,10 @@ function ProjectLayerFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'name': json['name'],
-        'symbology': (0, Symbology_1.SymbologyFromJSON)(json['symbology']),
-        'visibility': (0, LayerVisibility_1.LayerVisibilityFromJSON)(json['visibility']),
         'workflow': json['workflow'],
+        'name': json['name'],
+        'visibility': (0, LayerVisibility_1.LayerVisibilityFromJSON)(json['visibility']),
+        'symbology': (0, Symbology_1.SymbologyFromJSON)(json['symbology']),
     };
 }
 function ProjectLayerToJSON(json) {
@@ -55,9 +55,9 @@ function ProjectLayerToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'name': value['name'],
-        'symbology': (0, Symbology_1.SymbologyToJSON)(value['symbology']),
-        'visibility': (0, LayerVisibility_1.LayerVisibilityToJSON)(value['visibility']),
         'workflow': value['workflow'],
+        'name': value['name'],
+        'visibility': (0, LayerVisibility_1.LayerVisibilityToJSON)(value['visibility']),
+        'symbology': (0, Symbology_1.SymbologyToJSON)(value['symbology']),
     };
 }

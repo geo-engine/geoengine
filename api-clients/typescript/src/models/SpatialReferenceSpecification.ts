@@ -36,6 +36,30 @@ import {
 export interface SpatialReferenceSpecification {
     /**
      * 
+     * @type {string}
+     * @memberof SpatialReferenceSpecification
+     */
+    name: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof SpatialReferenceSpecification
+     */
+    spatialReference: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof SpatialReferenceSpecification
+     */
+    projString: string;
+    /**
+     * 
+     * @type {BoundingBox2D}
+     * @memberof SpatialReferenceSpecification
+     */
+    extent: BoundingBox2D;
+    /**
+     * 
      * @type {Array<string>}
      * @memberof SpatialReferenceSpecification
      */
@@ -46,30 +70,6 @@ export interface SpatialReferenceSpecification {
      * @memberof SpatialReferenceSpecification
      */
     axisOrder?: AxisOrder | null;
-    /**
-     * 
-     * @type {BoundingBox2D}
-     * @memberof SpatialReferenceSpecification
-     */
-    extent: BoundingBox2D;
-    /**
-     * 
-     * @type {string}
-     * @memberof SpatialReferenceSpecification
-     */
-    name: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof SpatialReferenceSpecification
-     */
-    projString: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof SpatialReferenceSpecification
-     */
-    spatialReference: string;
 }
 
 
@@ -78,10 +78,10 @@ export interface SpatialReferenceSpecification {
  * Check if a given object implements the SpatialReferenceSpecification interface.
  */
 export function instanceOfSpatialReferenceSpecification(value: object): value is SpatialReferenceSpecification {
-    if (!('extent' in value) || value['extent'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
-    if (!('projString' in value) || value['projString'] === undefined) return false;
     if (!('spatialReference' in value) || value['spatialReference'] === undefined) return false;
+    if (!('projString' in value) || value['projString'] === undefined) return false;
+    if (!('extent' in value) || value['extent'] === undefined) return false;
     return true;
 }
 
@@ -95,12 +95,12 @@ export function SpatialReferenceSpecificationFromJSONTyped(json: any, ignoreDisc
     }
     return {
         
+        'name': json['name'],
+        'spatialReference': json['spatialReference'],
+        'projString': json['projString'],
+        'extent': BoundingBox2DFromJSON(json['extent']),
         'axisLabels': json['axisLabels'] == null ? undefined : json['axisLabels'],
         'axisOrder': json['axisOrder'] == null ? undefined : AxisOrderFromJSON(json['axisOrder']),
-        'extent': BoundingBox2DFromJSON(json['extent']),
-        'name': json['name'],
-        'projString': json['projString'],
-        'spatialReference': json['spatialReference'],
     };
 }
 
@@ -115,12 +115,12 @@ export function SpatialReferenceSpecificationToJSONTyped(value?: SpatialReferenc
 
     return {
         
+        'name': value['name'],
+        'spatialReference': value['spatialReference'],
+        'projString': value['projString'],
+        'extent': BoundingBox2DToJSON(value['extent']),
         'axisLabels': value['axisLabels'],
         'axisOrder': AxisOrderToJSON(value['axisOrder']),
-        'extent': BoundingBox2DToJSON(value['extent']),
-        'name': value['name'],
-        'projString': value['projString'],
-        'spatialReference': value['spatialReference'],
     };
 }
 

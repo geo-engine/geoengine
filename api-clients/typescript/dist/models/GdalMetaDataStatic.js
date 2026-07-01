@@ -31,11 +31,11 @@ exports.GdalMetaDataStaticTypeEnum = {
  * Check if a given object implements the GdalMetaDataStatic interface.
  */
 function instanceOfGdalMetaDataStatic(value) {
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -47,11 +47,11 @@ function GdalMetaDataStaticFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'type': json['type'],
+        'time': json['time'] == null ? undefined : (0, TimeInterval_1.TimeIntervalFromJSON)(json['time']),
         'params': (0, GdalDatasetParameters_1.GdalDatasetParametersFromJSON)(json['params']),
         'resultDescriptor': (0, RasterResultDescriptor_1.RasterResultDescriptorFromJSON)(json['resultDescriptor']),
-        'time': json['time'] == null ? undefined : (0, TimeInterval_1.TimeIntervalFromJSON)(json['time']),
-        'type': json['type'],
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 function GdalMetaDataStaticToJSON(json) {
@@ -62,10 +62,10 @@ function GdalMetaDataStaticToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'cacheTtl': value['cacheTtl'],
+        'type': value['type'],
+        'time': (0, TimeInterval_1.TimeIntervalToJSON)(value['time']),
         'params': (0, GdalDatasetParameters_1.GdalDatasetParametersToJSON)(value['params']),
         'resultDescriptor': (0, RasterResultDescriptor_1.RasterResultDescriptorToJSON)(value['resultDescriptor']),
-        'time': (0, TimeInterval_1.TimeIntervalToJSON)(value['time']),
-        'type': value['type'],
+        'cacheTtl': value['cacheTtl'],
     };
 }

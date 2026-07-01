@@ -27,15 +27,15 @@ class EbvPortalDataProviderDefinition(BaseModel):
     """
     EbvPortalDataProviderDefinition
     """ # noqa: E501
-    base_url: StrictStr = Field(alias="baseUrl")
-    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
-    data: StrictStr = Field(description="Path were the `NetCDF` data can be found")
-    description: StrictStr
-    name: StrictStr
-    overviews: StrictStr = Field(description="Path were overview files are stored")
-    priority: Optional[StrictInt] = None
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["baseUrl", "cacheTtl", "data", "description", "name", "overviews", "priority", "type"]
+    name: StrictStr
+    description: StrictStr
+    priority: Optional[StrictInt] = None
+    base_url: StrictStr = Field(alias="baseUrl")
+    data: StrictStr = Field(description="Path were the `NetCDF` data can be found")
+    overviews: StrictStr = Field(description="Path were overview files are stored")
+    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
+    __properties: ClassVar[List[str]] = ["type", "name", "description", "priority", "baseUrl", "data", "overviews", "cacheTtl"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -100,14 +100,14 @@ class EbvPortalDataProviderDefinition(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "baseUrl": obj.get("baseUrl"),
-            "cacheTtl": obj.get("cacheTtl"),
-            "data": obj.get("data"),
-            "description": obj.get("description"),
+            "type": obj.get("type"),
             "name": obj.get("name"),
-            "overviews": obj.get("overviews"),
+            "description": obj.get("description"),
             "priority": obj.get("priority"),
-            "type": obj.get("type")
+            "baseUrl": obj.get("baseUrl"),
+            "data": obj.get("data"),
+            "overviews": obj.get("overviews"),
+            "cacheTtl": obj.get("cacheTtl")
         })
         return _obj
 

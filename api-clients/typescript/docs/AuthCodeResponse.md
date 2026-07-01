@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`code` | string
 `sessionState` | string
+`code` | string
 `state` | string
 
 ## Example
@@ -17,8 +17,8 @@ import type { AuthCodeResponse } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "code": null,
   "sessionState": null,
+  "code": null,
   "state": null,
 } satisfies AuthCodeResponse
 

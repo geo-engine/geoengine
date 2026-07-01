@@ -29,10 +29,10 @@ class PermissionRequest(BaseModel):
     """
     Request for adding a new permission to the given role on the given resource
     """ # noqa: E501
-    permission: Permission
     resource: Resource
     role_id: UUID = Field(alias="roleId")
-    __properties: ClassVar[List[str]] = ["permission", "resource", "roleId"]
+    permission: Permission
+    __properties: ClassVar[List[str]] = ["resource", "roleId", "permission"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -88,9 +88,9 @@ class PermissionRequest(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "permission": obj.get("permission"),
             "resource": Resource.from_dict(obj["resource"]) if obj.get("resource") is not None else None,
-            "roleId": obj.get("roleId")
+            "roleId": obj.get("roleId"),
+            "permission": obj.get("permission")
         })
         return _obj
 

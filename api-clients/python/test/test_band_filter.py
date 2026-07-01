@@ -35,19 +35,19 @@ class TestBandFilter(unittest.TestCase):
         model = BandFilter()
         if include_optional:
             return BandFilter(
+                type = 'BandFilter',
                 params = geoengine_api_client.models.band_filter_parameters.BandFilterParameters(
                     bands = null, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
-                    raster = null, ),
-                type = 'BandFilter'
+                    raster = null, )
             )
         else:
             return BandFilter(
+                type = 'BandFilter',
                 params = geoengine_api_client.models.band_filter_parameters.BandFilterParameters(
                     bands = null, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
                     raster = null, ),
-                type = 'BandFilter',
         )
         """
 

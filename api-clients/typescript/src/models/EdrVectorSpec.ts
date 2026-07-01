@@ -23,12 +23,6 @@ export interface EdrVectorSpec {
      * @type {string}
      * @memberof EdrVectorSpec
      */
-    time: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof EdrVectorSpec
-     */
     x: string;
     /**
      * 
@@ -36,14 +30,20 @@ export interface EdrVectorSpec {
      * @memberof EdrVectorSpec
      */
     y?: string | null;
+    /**
+     * 
+     * @type {string}
+     * @memberof EdrVectorSpec
+     */
+    time: string;
 }
 
 /**
  * Check if a given object implements the EdrVectorSpec interface.
  */
 export function instanceOfEdrVectorSpec(value: object): value is EdrVectorSpec {
-    if (!('time' in value) || value['time'] === undefined) return false;
     if (!('x' in value) || value['x'] === undefined) return false;
+    if (!('time' in value) || value['time'] === undefined) return false;
     return true;
 }
 
@@ -57,9 +57,9 @@ export function EdrVectorSpecFromJSONTyped(json: any, ignoreDiscriminator: boole
     }
     return {
         
-        'time': json['time'],
         'x': json['x'],
         'y': json['y'] == null ? undefined : json['y'],
+        'time': json['time'],
     };
 }
 
@@ -74,9 +74,9 @@ export function EdrVectorSpecToJSONTyped(value?: EdrVectorSpec | null, ignoreDis
 
     return {
         
-        'time': value['time'],
         'x': value['x'],
         'y': value['y'],
+        'time': value['time'],
     };
 }
 

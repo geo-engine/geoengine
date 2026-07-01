@@ -12,32 +12,32 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GdalMetaDataRegular {
-    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
-    pub cache_ttl: Option<i32>,
-    #[serde(rename = "dataTime")]
-    pub data_time: Box<models::TimeInterval>,
-    #[serde(rename = "params")]
-    pub params: Box<models::GdalDatasetParameters>,
-    #[serde(rename = "resultDescriptor")]
-    pub result_descriptor: Box<models::RasterResultDescriptor>,
-    #[serde(rename = "step")]
-    pub step: Box<models::TimeStep>,
-    #[serde(rename = "timePlaceholders")]
-    pub time_placeholders: std::collections::HashMap<String, models::GdalSourceTimePlaceholder>,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "resultDescriptor")]
+    pub result_descriptor: Box<models::RasterResultDescriptor>,
+    #[serde(rename = "params")]
+    pub params: Box<models::GdalDatasetParameters>,
+    #[serde(rename = "timePlaceholders")]
+    pub time_placeholders: std::collections::HashMap<String, models::GdalSourceTimePlaceholder>,
+    #[serde(rename = "dataTime")]
+    pub data_time: Box<models::TimeInterval>,
+    #[serde(rename = "step")]
+    pub step: Box<models::TimeStep>,
+    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<i32>,
 }
 
 impl GdalMetaDataRegular {
-    pub fn new(data_time: models::TimeInterval, params: models::GdalDatasetParameters, result_descriptor: models::RasterResultDescriptor, step: models::TimeStep, time_placeholders: std::collections::HashMap<String, models::GdalSourceTimePlaceholder>, r#type: Type) -> GdalMetaDataRegular {
+    pub fn new(r#type: Type, result_descriptor: models::RasterResultDescriptor, params: models::GdalDatasetParameters, time_placeholders: std::collections::HashMap<String, models::GdalSourceTimePlaceholder>, data_time: models::TimeInterval, step: models::TimeStep) -> GdalMetaDataRegular {
         GdalMetaDataRegular {
-            cache_ttl: None,
-            data_time: Box::new(data_time),
-            params: Box::new(params),
-            result_descriptor: Box::new(result_descriptor),
-            step: Box::new(step),
-            time_placeholders,
             r#type,
+            result_descriptor: Box::new(result_descriptor),
+            params: Box::new(params),
+            time_placeholders,
+            data_time: Box::new(data_time),
+            step: Box::new(step),
+            cache_ttl: None,
         }
     }
 }

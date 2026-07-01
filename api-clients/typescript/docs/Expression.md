@@ -7,9 +7,9 @@ The `Expression` operator performs a pixel-wise mathematical expression on one o
 
 Name | Type
 ------------ | -------------
+`type` | string
 `params` | [ExpressionParameters](ExpressionParameters.md)
 `sources` | [SingleRasterSource](SingleRasterSource.md)
-`type` | string
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { Expression } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "params": null,
   "sources": null,
-  "type": null,
 } satisfies Expression
 
 console.log(example)

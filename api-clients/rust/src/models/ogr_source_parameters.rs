@@ -13,20 +13,20 @@ use serde::{Deserialize, Serialize};
 /// OgrSourceParameters : Parameters for the [`OgrSource`] operator.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct OgrSourceParameters {
-    /// *Optional*: list of attributes to include. When `None`, all attributes are included.
-    #[serde(rename = "attributeProjection", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub attribute_projection: Option<Option<Vec<String>>>,
     /// Dataset name or identifier to be loaded.
     #[serde(rename = "data")]
     pub data: String,
+    /// *Optional*: list of attributes to include. When `None`, all attributes are included.
+    #[serde(rename = "attributeProjection", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub attribute_projection: Option<Option<Vec<String>>>,
 }
 
 impl OgrSourceParameters {
     /// Parameters for the [`OgrSource`] operator.
     pub fn new(data: String) -> OgrSourceParameters {
         OgrSourceParameters {
-            attribute_projection: None,
             data,
+            attribute_projection: None,
         }
     }
 }

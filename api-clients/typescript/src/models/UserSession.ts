@@ -35,28 +35,10 @@ import {
 export interface UserSession {
     /**
      * 
-     * @type {Date}
-     * @memberof UserSession
-     */
-    created: Date;
-    /**
-     * 
      * @type {string}
      * @memberof UserSession
      */
     id: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof UserSession
-     */
-    project?: string | null;
-    /**
-     * 
-     * @type {Array<string>}
-     * @memberof UserSession
-     */
-    roles: Array<string>;
     /**
      * 
      * @type {UserInfo}
@@ -68,24 +50,42 @@ export interface UserSession {
      * @type {Date}
      * @memberof UserSession
      */
+    created: Date;
+    /**
+     * 
+     * @type {Date}
+     * @memberof UserSession
+     */
     validUntil: Date;
+    /**
+     * 
+     * @type {string}
+     * @memberof UserSession
+     */
+    project?: string | null;
     /**
      * 
      * @type {STRectangle}
      * @memberof UserSession
      */
     view?: STRectangle | null;
+    /**
+     * 
+     * @type {Array<string>}
+     * @memberof UserSession
+     */
+    roles: Array<string>;
 }
 
 /**
  * Check if a given object implements the UserSession interface.
  */
 export function instanceOfUserSession(value: object): value is UserSession {
-    if (!('created' in value) || value['created'] === undefined) return false;
     if (!('id' in value) || value['id'] === undefined) return false;
-    if (!('roles' in value) || value['roles'] === undefined) return false;
     if (!('user' in value) || value['user'] === undefined) return false;
+    if (!('created' in value) || value['created'] === undefined) return false;
     if (!('validUntil' in value) || value['validUntil'] === undefined) return false;
+    if (!('roles' in value) || value['roles'] === undefined) return false;
     return true;
 }
 
@@ -99,13 +99,13 @@ export function UserSessionFromJSONTyped(json: any, ignoreDiscriminator: boolean
     }
     return {
         
-        'created': (new Date(json['created'])),
         'id': json['id'],
-        'project': json['project'] == null ? undefined : json['project'],
-        'roles': json['roles'],
         'user': UserInfoFromJSON(json['user']),
+        'created': (new Date(json['created'])),
         'validUntil': (new Date(json['validUntil'])),
+        'project': json['project'] == null ? undefined : json['project'],
         'view': json['view'] == null ? undefined : STRectangleFromJSON(json['view']),
+        'roles': json['roles'],
     };
 }
 
@@ -120,13 +120,13 @@ export function UserSessionToJSONTyped(value?: UserSession | null, ignoreDiscrim
 
     return {
         
-        'created': value['created'].toISOString(),
         'id': value['id'],
-        'project': value['project'],
-        'roles': value['roles'],
         'user': UserInfoToJSON(value['user']),
+        'created': value['created'].toISOString(),
         'validUntil': value['validUntil'].toISOString(),
+        'project': value['project'],
         'view': STRectangleToJSON(value['view']),
+        'roles': value['roles'],
     };
 }
 

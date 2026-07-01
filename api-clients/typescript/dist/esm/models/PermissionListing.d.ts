@@ -19,12 +19,6 @@ import type { Resource } from './Resource';
 export interface PermissionListing {
     /**
      *
-     * @type {Permission}
-     * @memberof PermissionListing
-     */
-    permission: Permission;
-    /**
-     *
      * @type {Resource}
      * @memberof PermissionListing
      */
@@ -35,6 +29,12 @@ export interface PermissionListing {
      * @memberof PermissionListing
      */
     role: Role;
+    /**
+     *
+     * @type {Permission}
+     * @memberof PermissionListing
+     */
+    permission: Permission;
 }
 /**
  * Check if a given object implements the PermissionListing interface.

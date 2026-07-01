@@ -27,11 +27,11 @@ class OgrSourceDatasetTimeTypeStartDuration(BaseModel):
     """
     OgrSourceDatasetTimeTypeStartDuration
     """ # noqa: E501
-    duration_field: StrictStr = Field(alias="durationField")
+    type: StrictStr
     start_field: StrictStr = Field(alias="startField")
     start_format: OgrSourceTimeFormat = Field(alias="startFormat")
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["durationField", "startField", "startFormat", "type"]
+    duration_field: StrictStr = Field(alias="durationField")
+    __properties: ClassVar[List[str]] = ["type", "startField", "startFormat", "durationField"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -94,10 +94,10 @@ class OgrSourceDatasetTimeTypeStartDuration(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "durationField": obj.get("durationField"),
+            "type": obj.get("type"),
             "startField": obj.get("startField"),
             "startFormat": OgrSourceTimeFormat.from_dict(obj["startFormat"]) if obj.get("startFormat") is not None else None,
-            "type": obj.get("type")
+            "durationField": obj.get("durationField")
         })
         return _obj
 

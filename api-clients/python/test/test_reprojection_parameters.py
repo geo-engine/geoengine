@@ -35,8 +35,8 @@ class TestReprojectionParameters(unittest.TestCase):
         model = ReprojectionParameters()
         if include_optional:
             return ReprojectionParameters(
-                derive_out_spec = 'dataBounds',
-                target_spatial_reference = ''
+                target_spatial_reference = '',
+                derive_out_spec = 'dataBounds'
             )
         else:
             return ReprojectionParameters(

@@ -35,21 +35,21 @@ class TestNetCdfCfDataProviderDefinition(unittest.TestCase):
         model = NetCdfCfDataProviderDefinition()
         if include_optional:
             return NetCdfCfDataProviderDefinition(
-                cache_ttl = 0,
-                data = '',
-                description = '',
+                type = 'NetCdfCf',
                 name = '',
-                overviews = '',
+                description = '',
                 priority = 56,
-                type = 'NetCdfCf'
+                data = '',
+                overviews = '',
+                cache_ttl = 0
             )
         else:
             return NetCdfCfDataProviderDefinition(
-                data = '',
-                description = '',
-                name = '',
-                overviews = '',
                 type = 'NetCdfCf',
+                name = '',
+                description = '',
+                data = '',
+                overviews = '',
         )
         """
 

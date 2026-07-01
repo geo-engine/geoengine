@@ -13,38 +13,38 @@ use serde::{Deserialize, Serialize};
 /// GdalMetadataNetCdfCf : Meta data for 4D `NetCDF` CF datasets
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GdalMetadataNetCdfCf {
+    #[serde(rename = "type")]
+    pub r#type: Type,
+    #[serde(rename = "resultDescriptor")]
+    pub result_descriptor: Box<models::RasterResultDescriptor>,
+    #[serde(rename = "params")]
+    pub params: Box<models::GdalDatasetParameters>,
+    #[serde(rename = "start")]
+    pub start: i64,
+    /// We use the end to specify the last, non-inclusive valid time point. Queries behind this point return no data. TODO: Alternatively, we could think about using the number of possible time steps in the future.
+    #[serde(rename = "end")]
+    pub end: i64,
+    #[serde(rename = "step")]
+    pub step: Box<models::TimeStep>,
     /// A band offset specifies the first band index to use for the first point in time. All other time steps are added to this offset.
     #[serde(rename = "bandOffset")]
     pub band_offset: i32,
     #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
     pub cache_ttl: Option<i32>,
-    /// We use the end to specify the last, non-inclusive valid time point. Queries behind this point return no data. TODO: Alternatively, we could think about using the number of possible time steps in the future.
-    #[serde(rename = "end")]
-    pub end: i64,
-    #[serde(rename = "params")]
-    pub params: Box<models::GdalDatasetParameters>,
-    #[serde(rename = "resultDescriptor")]
-    pub result_descriptor: Box<models::RasterResultDescriptor>,
-    #[serde(rename = "start")]
-    pub start: i64,
-    #[serde(rename = "step")]
-    pub step: Box<models::TimeStep>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
 }
 
 impl GdalMetadataNetCdfCf {
     /// Meta data for 4D `NetCDF` CF datasets
-    pub fn new(band_offset: i32, end: i64, params: models::GdalDatasetParameters, result_descriptor: models::RasterResultDescriptor, start: i64, step: models::TimeStep, r#type: Type) -> GdalMetadataNetCdfCf {
+    pub fn new(r#type: Type, result_descriptor: models::RasterResultDescriptor, params: models::GdalDatasetParameters, start: i64, end: i64, step: models::TimeStep, band_offset: i32) -> GdalMetadataNetCdfCf {
         GdalMetadataNetCdfCf {
+            r#type,
+            result_descriptor: Box::new(result_descriptor),
+            params: Box::new(params),
+            start,
+            end,
+            step: Box::new(step),
             band_offset,
             cache_ttl: None,
-            end,
-            params: Box::new(params),
-            result_descriptor: Box::new(result_descriptor),
-            start,
-            step: Box::new(step),
-            r#type,
         }
     }
 }

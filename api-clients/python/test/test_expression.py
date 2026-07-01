@@ -35,25 +35,25 @@ class TestExpression(unittest.TestCase):
         model = Expression()
         if include_optional:
             return Expression(
+                type = 'Expression',
                 params = geoengine_api_client.models.expression_parameters.ExpressionParameters(
                     expression = '', 
-                    map_no_data = True, 
+                    output_type = null, 
                     output_band = null, 
-                    output_type = null, ),
+                    map_no_data = True, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
-                    raster = null, ),
-                type = 'Expression'
+                    raster = null, )
             )
         else:
             return Expression(
+                type = 'Expression',
                 params = geoengine_api_client.models.expression_parameters.ExpressionParameters(
                     expression = '', 
-                    map_no_data = True, 
+                    output_type = null, 
                     output_band = null, 
-                    output_type = null, ),
+                    map_no_data = True, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
                     raster = null, ),
-                type = 'Expression',
         )
         """
 

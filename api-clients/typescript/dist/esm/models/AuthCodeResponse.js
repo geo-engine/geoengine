@@ -14,9 +14,9 @@
  * Check if a given object implements the AuthCodeResponse interface.
  */
 export function instanceOfAuthCodeResponse(value) {
-    if (!('code' in value) || value['code'] === undefined)
-        return false;
     if (!('sessionState' in value) || value['sessionState'] === undefined)
+        return false;
+    if (!('code' in value) || value['code'] === undefined)
         return false;
     if (!('state' in value) || value['state'] === undefined)
         return false;
@@ -30,8 +30,8 @@ export function AuthCodeResponseFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'code': json['code'],
         'sessionState': json['sessionState'],
+        'code': json['code'],
         'state': json['state'],
     };
 }
@@ -43,8 +43,8 @@ export function AuthCodeResponseToJSONTyped(value, ignoreDiscriminator = false) 
         return value;
     }
     return {
-        'code': value['code'],
         'sessionState': value['sessionState'],
+        'code': value['code'],
         'state': value['state'],
     };
 }

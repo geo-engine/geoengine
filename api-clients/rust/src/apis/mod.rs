@@ -115,6 +115,7 @@ pub mod datasets_api;
 pub mod general_api;
 pub mod layers_api;
 pub mod ml_api;
+pub mod ogcapi_api;
 pub mod ogcwcs_api;
 pub mod ogcwfs_api;
 pub mod ogcwms_api;

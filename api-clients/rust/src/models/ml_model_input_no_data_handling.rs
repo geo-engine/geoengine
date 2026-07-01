@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MlModelInputNoDataHandling {
-    #[serde(rename = "noDataValue", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub no_data_value: Option<Option<f32>>,
     #[serde(rename = "variant")]
     pub variant: models::MlModelInputNoDataHandlingVariant,
+    #[serde(rename = "noDataValue", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub no_data_value: Option<Option<f32>>,
 }
 
 impl MlModelInputNoDataHandling {
     pub fn new(variant: models::MlModelInputNoDataHandlingVariant) -> MlModelInputNoDataHandling {
         MlModelInputNoDataHandling {
-            no_data_value: None,
             variant,
+            no_data_value: None,
         }
     }
 }

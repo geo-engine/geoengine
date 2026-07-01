@@ -16,16 +16,16 @@
 export interface TaskStatusAborted {
     /**
      *
-     * @type {any}
-     * @memberof TaskStatusAborted
-     */
-    cleanUp: any | null;
-    /**
-     *
      * @type {TaskStatusAbortedStatusEnum}
      * @memberof TaskStatusAborted
      */
     status: TaskStatusAbortedStatusEnum;
+    /**
+     *
+     * @type {any}
+     * @memberof TaskStatusAborted
+     */
+    cleanUp: any | null;
 }
 /**
  * @export

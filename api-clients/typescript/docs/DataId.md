@@ -7,10 +7,10 @@ The identifier for loadable data. It is used in the source operators to get the 
 
 Name | Type
 ------------ | -------------
-`datasetId` | string
 `type` | string
-`layerId` | string
+`datasetId` | string
 `providerId` | string
+`layerId` | string
 
 ## Example
 
@@ -19,10 +19,10 @@ import type { DataId } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "datasetId": null,
   "type": null,
-  "layerId": null,
+  "datasetId": null,
   "providerId": null,
+  "layerId": null,
 } satisfies DataId
 
 console.log(example)

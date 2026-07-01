@@ -35,10 +35,10 @@ class TestOgrSourceParameters(unittest.TestCase):
         model = OgrSourceParameters()
         if include_optional:
             return OgrSourceParameters(
+                data = '',
                 attribute_projection = [
                     ''
-                    ],
-                data = ''
+                    ]
             )
         else:
             return OgrSourceParameters(

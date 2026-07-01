@@ -6,10 +6,10 @@
 
 Name | Type
 ------------ | -------------
+`type` | string
 `breakpoints` | [Array&lt;Breakpoint&gt;](Breakpoint.md)
 `noDataColor` | Array&lt;number&gt;
 `overColor` | Array&lt;number&gt;
-`type` | string
 `underColor` | Array&lt;number&gt;
 
 ## Example
@@ -19,10 +19,10 @@ import type { LogarithmicGradient } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "breakpoints": null,
   "noDataColor": null,
   "overColor": null,
-  "type": null,
   "underColor": null,
 } satisfies LogarithmicGradient
 

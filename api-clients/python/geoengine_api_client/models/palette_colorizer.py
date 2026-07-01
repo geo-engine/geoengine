@@ -27,11 +27,11 @@ class PaletteColorizer(BaseModel):
     """
     PaletteColorizer
     """ # noqa: E501
-    colors: Dict[str, Annotated[List[StrictInt], Field(min_length=4, max_length=4)]] = Field(description="A map from value to color  It is assumed that is has at least one and at most 256 entries.")
-    default_color: Annotated[List[StrictInt], Field(min_length=4, max_length=4)] = Field(alias="defaultColor")
-    no_data_color: Annotated[List[StrictInt], Field(min_length=4, max_length=4)] = Field(alias="noDataColor")
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["colors", "defaultColor", "noDataColor", "type"]
+    colors: Dict[str, Annotated[List[StrictInt], Field(min_length=4, max_length=4)]] = Field(description="A map from value to color  It is assumed that is has at least one and at most 256 entries.")
+    no_data_color: Annotated[List[StrictInt], Field(min_length=4, max_length=4)] = Field(alias="noDataColor")
+    default_color: Annotated[List[StrictInt], Field(min_length=4, max_length=4)] = Field(alias="defaultColor")
+    __properties: ClassVar[List[str]] = ["type", "colors", "noDataColor", "defaultColor"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -91,10 +91,10 @@ class PaletteColorizer(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "type": obj.get("type"),
             "colors": obj.get("colors"),
-            "defaultColor": obj.get("defaultColor"),
             "noDataColor": obj.get("noDataColor"),
-            "type": obj.get("type")
+            "defaultColor": obj.get("defaultColor")
         })
         return _obj
 

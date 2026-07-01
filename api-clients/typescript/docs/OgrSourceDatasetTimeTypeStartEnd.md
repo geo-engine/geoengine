@@ -6,11 +6,11 @@
 
 Name | Type
 ------------ | -------------
-`endField` | string
-`endFormat` | [OgrSourceTimeFormat](OgrSourceTimeFormat.md)
+`type` | string
 `startField` | string
 `startFormat` | [OgrSourceTimeFormat](OgrSourceTimeFormat.md)
-`type` | string
+`endField` | string
+`endFormat` | [OgrSourceTimeFormat](OgrSourceTimeFormat.md)
 
 ## Example
 
@@ -19,11 +19,11 @@ import type { OgrSourceDatasetTimeTypeStartEnd } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "endField": null,
-  "endFormat": null,
+  "type": null,
   "startField": null,
   "startFormat": null,
-  "type": null,
+  "endField": null,
+  "endFormat": null,
 } satisfies OgrSourceDatasetTimeTypeStartEnd
 
 console.log(example)

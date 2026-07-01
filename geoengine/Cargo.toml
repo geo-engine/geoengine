@@ -127,14 +127,15 @@ ndarray = { version = "0.17", features = ["approx"] }     # has to match with `o
 num = "0.4"
 num-traits = "0.2"
 oauth2 = "5.0"
+ogcapi-types = { git = "https://github.com/georust/ogcapi", branch = "main", features = ["common", "tiles"], default-features = false }
 openidconnect = "4.0"
-ordered-float = { version = "5.1", features = ["serde"] }
 # `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-*`
 opentelemetry = { version = "0.31", default-features = false, features = [
     "trace",
 ] }
 opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"] }
+ordered-float = { version = "5.1", features = ["serde"] }
 ort = { version = "2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "tracing", "download-binaries", "tls-native", "copy-dylibs", "api-21"] } # allow default features again wrt. <https://github.com/pykeio/ort/issues/553>
 ouroboros = "0.18"
 paste = "1.0"

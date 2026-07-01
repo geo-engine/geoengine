@@ -23,9 +23,9 @@ const DataId_1 = require("./DataId");
  * Check if a given object implements the ProvenanceEntry interface.
  */
 function instanceOfProvenanceEntry(value) {
-    if (!('data' in value) || value['data'] === undefined)
-        return false;
     if (!('provenance' in value) || value['provenance'] === undefined)
+        return false;
+    if (!('data' in value) || value['data'] === undefined)
         return false;
     return true;
 }
@@ -37,8 +37,8 @@ function ProvenanceEntryFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'data': (json['data'].map(DataId_1.DataIdFromJSON)),
         'provenance': (0, Provenance_1.ProvenanceFromJSON)(json['provenance']),
+        'data': (json['data'].map(DataId_1.DataIdFromJSON)),
     };
 }
 function ProvenanceEntryToJSON(json) {
@@ -49,7 +49,7 @@ function ProvenanceEntryToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'data': (value['data'].map(DataId_1.DataIdToJSON)),
         'provenance': (0, Provenance_1.ProvenanceToJSON)(value['provenance']),
+        'data': (value['data'].map(DataId_1.DataIdToJSON)),
     };
 }

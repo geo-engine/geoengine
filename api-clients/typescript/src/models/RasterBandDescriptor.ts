@@ -28,24 +28,24 @@ import {
 export interface RasterBandDescriptor {
     /**
      * 
-     * @type {Measurement}
-     * @memberof RasterBandDescriptor
-     */
-    measurement: Measurement;
-    /**
-     * 
      * @type {string}
      * @memberof RasterBandDescriptor
      */
     name: string;
+    /**
+     * 
+     * @type {Measurement}
+     * @memberof RasterBandDescriptor
+     */
+    measurement: Measurement;
 }
 
 /**
  * Check if a given object implements the RasterBandDescriptor interface.
  */
 export function instanceOfRasterBandDescriptor(value: object): value is RasterBandDescriptor {
-    if (!('measurement' in value) || value['measurement'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('measurement' in value) || value['measurement'] === undefined) return false;
     return true;
 }
 
@@ -59,8 +59,8 @@ export function RasterBandDescriptorFromJSONTyped(json: any, ignoreDiscriminator
     }
     return {
         
-        'measurement': MeasurementFromJSON(json['measurement']),
         'name': json['name'],
+        'measurement': MeasurementFromJSON(json['measurement']),
     };
 }
 
@@ -75,8 +75,8 @@ export function RasterBandDescriptorToJSONTyped(value?: RasterBandDescriptor | n
 
     return {
         
-        'measurement': MeasurementToJSON(value['measurement']),
         'name': value['name'],
+        'measurement': MeasurementToJSON(value['measurement']),
     };
 }
 

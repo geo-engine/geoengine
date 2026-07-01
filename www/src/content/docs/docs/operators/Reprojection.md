@@ -34,8 +34,8 @@ The operator returns an error if the target projection is unknown or if input da
 
 | Name                   | Type                       | Description                                                                                                                                                                                             | Examples       |
 | ---------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| deriveOutSpec          | DeriveOutRasterSpecsSource | Controls how raster output bounds are derived.<br><br>The default `projectionBounds` usually keeps a projection-aligned target grid,<br>while `dataBounds` derives it directly from source data bounds. |                |
 | targetSpatialReference | string                     | Target spatial reference system.                                                                                                                                                                        | `"EPSG:32632"` |
+| deriveOutSpec          | DeriveOutRasterSpecsSource | Controls how raster output bounds are derived.<br><br>The default `projectionBounds` usually keeps a projection-aligned target grid,<br>while `dataBounds` derives it directly from source data bounds. |                |
 
 ## Sources
 

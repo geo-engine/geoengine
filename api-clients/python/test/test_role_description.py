@@ -35,17 +35,17 @@ class TestRoleDescription(unittest.TestCase):
         model = RoleDescription()
         if include_optional:
             return RoleDescription(
-                individual = True,
-                role = geoengine_api_client.models.role.Role(
-                    id = '', 
-                    name = '', )
-            )
-        else:
-            return RoleDescription(
-                individual = True,
                 role = geoengine_api_client.models.role.Role(
                     id = '', 
                     name = '', ),
+                individual = True
+            )
+        else:
+            return RoleDescription(
+                role = geoengine_api_client.models.role.Role(
+                    id = '', 
+                    name = '', ),
+                individual = True,
         )
         """
 

@@ -25,9 +25,9 @@ const RasterDataType_1 = require("./RasterDataType");
 function instanceOfExpressionParameters(value) {
     if (!('expression' in value) || value['expression'] === undefined)
         return false;
-    if (!('mapNoData' in value) || value['mapNoData'] === undefined)
-        return false;
     if (!('outputType' in value) || value['outputType'] === undefined)
+        return false;
+    if (!('mapNoData' in value) || value['mapNoData'] === undefined)
         return false;
     return true;
 }
@@ -40,9 +40,9 @@ function ExpressionParametersFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'expression': json['expression'],
-        'mapNoData': json['mapNoData'],
-        'outputBand': json['outputBand'] == null ? undefined : (0, RasterBandDescriptor_1.RasterBandDescriptorFromJSON)(json['outputBand']),
         'outputType': (0, RasterDataType_1.RasterDataTypeFromJSON)(json['outputType']),
+        'outputBand': json['outputBand'] == null ? undefined : (0, RasterBandDescriptor_1.RasterBandDescriptorFromJSON)(json['outputBand']),
+        'mapNoData': json['mapNoData'],
     };
 }
 function ExpressionParametersToJSON(json) {
@@ -54,8 +54,8 @@ function ExpressionParametersToJSONTyped(value, ignoreDiscriminator = false) {
     }
     return {
         'expression': value['expression'],
-        'mapNoData': value['mapNoData'],
-        'outputBand': (0, RasterBandDescriptor_1.RasterBandDescriptorToJSON)(value['outputBand']),
         'outputType': (0, RasterDataType_1.RasterDataTypeToJSON)(value['outputType']),
+        'outputBand': (0, RasterBandDescriptor_1.RasterBandDescriptorToJSON)(value['outputBand']),
+        'mapNoData': value['mapNoData'],
     };
 }

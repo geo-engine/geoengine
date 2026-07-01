@@ -35,23 +35,23 @@ class TestEbvPortalDataProviderDefinition(unittest.TestCase):
         model = EbvPortalDataProviderDefinition()
         if include_optional:
             return EbvPortalDataProviderDefinition(
-                base_url = '',
-                cache_ttl = 0,
-                data = '',
-                description = '',
+                type = 'EbvPortal',
                 name = '',
-                overviews = '',
+                description = '',
                 priority = 56,
-                type = 'EbvPortal'
+                base_url = '',
+                data = '',
+                overviews = '',
+                cache_ttl = 0
             )
         else:
             return EbvPortalDataProviderDefinition(
+                type = 'EbvPortal',
+                name = '',
+                description = '',
                 base_url = '',
                 data = '',
-                description = '',
-                name = '',
                 overviews = '',
-                type = 'EbvPortal',
         )
         """
 

@@ -18,12 +18,6 @@ import type { BoundingBox2D } from './BoundingBox2D';
 export interface PlotResultDescriptor {
     /**
      *
-     * @type {BoundingBox2D}
-     * @memberof PlotResultDescriptor
-     */
-    bbox?: BoundingBox2D | null;
-    /**
-     *
      * @type {string}
      * @memberof PlotResultDescriptor
      */
@@ -34,6 +28,12 @@ export interface PlotResultDescriptor {
      * @memberof PlotResultDescriptor
      */
     time?: TimeInterval | null;
+    /**
+     *
+     * @type {BoundingBox2D}
+     * @memberof PlotResultDescriptor
+     */
+    bbox?: BoundingBox2D | null;
 }
 /**
  * Check if a given object implements the PlotResultDescriptor interface.

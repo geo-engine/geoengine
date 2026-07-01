@@ -21,9 +21,9 @@ exports.UpdateLayerCollectionToJSONTyped = UpdateLayerCollectionToJSONTyped;
  * Check if a given object implements the UpdateLayerCollection interface.
  */
 function instanceOfUpdateLayerCollection(value) {
-    if (!('description' in value) || value['description'] === undefined)
-        return false;
     if (!('name' in value) || value['name'] === undefined)
+        return false;
+    if (!('description' in value) || value['description'] === undefined)
         return false;
     return true;
 }
@@ -35,8 +35,8 @@ function UpdateLayerCollectionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'description': json['description'],
         'name': json['name'],
+        'description': json['description'],
         'properties': json['properties'] == null ? undefined : json['properties'],
     };
 }
@@ -48,8 +48,8 @@ function UpdateLayerCollectionToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'description': value['description'],
         'name': value['name'],
+        'description': value['description'],
         'properties': value['properties'],
     };
 }

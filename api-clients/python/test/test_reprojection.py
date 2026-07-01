@@ -35,21 +35,21 @@ class TestReprojection(unittest.TestCase):
         model = Reprojection()
         if include_optional:
             return Reprojection(
+                type = 'Reprojection',
                 params = geoengine_api_client.models.reprojection_parameters.ReprojectionParameters(
-                    derive_out_spec = null, 
-                    target_spatial_reference = '', ),
+                    target_spatial_reference = '', 
+                    derive_out_spec = null, ),
                 sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
-                    source = null, ),
-                type = 'Reprojection'
+                    source = null, )
             )
         else:
             return Reprojection(
+                type = 'Reprojection',
                 params = geoengine_api_client.models.reprojection_parameters.ReprojectionParameters(
-                    derive_out_spec = null, 
-                    target_spatial_reference = '', ),
+                    target_spatial_reference = '', 
+                    derive_out_spec = null, ),
                 sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
                     source = null, ),
-                type = 'Reprojection',
         )
         """
 

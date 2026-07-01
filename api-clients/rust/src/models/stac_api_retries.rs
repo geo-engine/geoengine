@@ -12,20 +12,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StacApiRetries {
-    #[serde(rename = "exponentialBackoffFactor")]
-    pub exponential_backoff_factor: f64,
-    #[serde(rename = "initialDelayMs")]
-    pub initial_delay_ms: i64,
     #[serde(rename = "numberOfRetries")]
     pub number_of_retries: i32,
+    #[serde(rename = "initialDelayMs")]
+    pub initial_delay_ms: i64,
+    #[serde(rename = "exponentialBackoffFactor")]
+    pub exponential_backoff_factor: f64,
 }
 
 impl StacApiRetries {
-    pub fn new(exponential_backoff_factor: f64, initial_delay_ms: i64, number_of_retries: i32) -> StacApiRetries {
+    pub fn new(number_of_retries: i32, initial_delay_ms: i64, exponential_backoff_factor: f64) -> StacApiRetries {
         StacApiRetries {
-            exponential_backoff_factor,
-            initial_delay_ms,
             number_of_retries,
+            initial_delay_ms,
+            exponential_backoff_factor,
         }
     }
 }

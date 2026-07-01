@@ -35,32 +35,32 @@ class TestSymbology(unittest.TestCase):
         model = Symbology()
         if include_optional:
             return Symbology(
+                type = 'raster',
                 opacity = 1.337,
                 raster_colorizer = None,
-                type = 'raster',
-                fill_color = None,
                 radius = None,
+                fill_color = None,
                 stroke = geoengine_api_client.models.stroke_param.StrokeParam(
-                    color = null, 
-                    width = null, ),
+                    width = null, 
+                    color = null, ),
                 text = geoengine_api_client.models.text_symbology.TextSymbology(
                     attribute = '', 
                     fill_color = null, 
                     stroke = geoengine_api_client.models.stroke_param.StrokeParam(
-                        color = null, 
-                        width = null, ), ),
+                        width = null, 
+                        color = null, ), ),
                 auto_simplified = True
             )
         else:
             return Symbology(
+                type = 'raster',
                 opacity = 1.337,
                 raster_colorizer = None,
-                type = 'raster',
-                fill_color = None,
                 radius = None,
+                fill_color = None,
                 stroke = geoengine_api_client.models.stroke_param.StrokeParam(
-                    color = null, 
-                    width = null, ),
+                    width = null, 
+                    color = null, ),
                 auto_simplified = True,
         )
         """

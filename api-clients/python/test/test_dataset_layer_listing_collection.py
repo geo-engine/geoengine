@@ -35,16 +35,16 @@ class TestDatasetLayerListingCollection(unittest.TestCase):
         model = DatasetLayerListingCollection()
         if include_optional:
             return DatasetLayerListingCollection(
-                description = '',
                 name = '',
+                description = '',
                 tags = [
                     ''
                     ]
             )
         else:
             return DatasetLayerListingCollection(
-                description = '',
                 name = '',
+                description = '',
                 tags = [
                     ''
                     ],

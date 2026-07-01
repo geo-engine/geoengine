@@ -31,6 +31,12 @@ import type { SingleRasterSource } from './SingleRasterSource';
 export interface TemporalRasterAggregation {
     /**
      *
+     * @type {TemporalRasterAggregationTypeEnum}
+     * @memberof TemporalRasterAggregation
+     */
+    type: TemporalRasterAggregationTypeEnum;
+    /**
+     *
      * @type {TemporalRasterAggregationParameters}
      * @memberof TemporalRasterAggregation
      */
@@ -41,12 +47,6 @@ export interface TemporalRasterAggregation {
      * @memberof TemporalRasterAggregation
      */
     sources: SingleRasterSource;
-    /**
-     *
-     * @type {TemporalRasterAggregationTypeEnum}
-     * @memberof TemporalRasterAggregation
-     */
-    type: TemporalRasterAggregationTypeEnum;
 }
 /**
  * @export

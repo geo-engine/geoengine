@@ -7,9 +7,9 @@ A struct describing tensor shape for `MlModelMetadata`
 
 Name | Type
 ------------ | -------------
-`bands` | number
-`x` | number
 `y` | number
+`x` | number
+`bands` | number
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { MlTensorShape3D } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "bands": null,
-  "x": null,
   "y": null,
+  "x": null,
+  "bands": null,
 } satisfies MlTensorShape3D
 
 console.log(example)

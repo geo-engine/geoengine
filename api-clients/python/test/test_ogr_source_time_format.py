@@ -35,14 +35,14 @@ class TestOgrSourceTimeFormat(unittest.TestCase):
         model = OgrSourceTimeFormat()
         if include_optional:
             return OgrSourceTimeFormat(
-                custom_format = '',
                 format = 'auto',
+                custom_format = '',
                 timestamp_type = 'epochSeconds'
             )
         else:
             return OgrSourceTimeFormat(
-                custom_format = '',
                 format = 'auto',
+                custom_format = '',
                 timestamp_type = 'epochSeconds',
         )
         """

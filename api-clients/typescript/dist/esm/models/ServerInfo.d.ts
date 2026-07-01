@@ -31,13 +31,13 @@ export interface ServerInfo {
      * @type {string}
      * @memberof ServerInfo
      */
-    features: string;
+    version: string;
     /**
      *
      * @type {string}
      * @memberof ServerInfo
      */
-    version: string;
+    features: string;
 }
 /**
  * Check if a given object implements the ServerInfo interface.

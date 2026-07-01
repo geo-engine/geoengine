@@ -12,37 +12,37 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EbvPortalDataProviderDefinition {
+    #[serde(rename = "type")]
+    pub r#type: Type,
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "description")]
+    pub description: String,
+    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Option<i32>>,
     #[serde(rename = "baseUrl")]
     pub base_url: String,
-    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
-    pub cache_ttl: Option<i32>,
     /// Path were the `NetCDF` data can be found
     #[serde(rename = "data")]
     pub data: String,
-    #[serde(rename = "description")]
-    pub description: String,
-    #[serde(rename = "name")]
-    pub name: String,
     /// Path were overview files are stored
     #[serde(rename = "overviews")]
     pub overviews: String,
-    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub priority: Option<Option<i32>>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
+    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<i32>,
 }
 
 impl EbvPortalDataProviderDefinition {
-    pub fn new(base_url: String, data: String, description: String, name: String, overviews: String, r#type: Type) -> EbvPortalDataProviderDefinition {
+    pub fn new(r#type: Type, name: String, description: String, base_url: String, data: String, overviews: String) -> EbvPortalDataProviderDefinition {
         EbvPortalDataProviderDefinition {
-            base_url,
-            cache_ttl: None,
-            data,
-            description,
-            name,
-            overviews,
-            priority: None,
             r#type,
+            name,
+            description,
+            priority: None,
+            base_url,
+            data,
+            overviews,
+            cache_ttl: None,
         }
     }
 }

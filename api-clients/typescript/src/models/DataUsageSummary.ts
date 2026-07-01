@@ -20,10 +20,10 @@ import { mapValues } from '../runtime';
 export interface DataUsageSummary {
     /**
      * 
-     * @type {number}
+     * @type {Date}
      * @memberof DataUsageSummary
      */
-    count: number;
+    timestamp: Date;
     /**
      * 
      * @type {string}
@@ -32,19 +32,19 @@ export interface DataUsageSummary {
     data: string;
     /**
      * 
-     * @type {Date}
+     * @type {number}
      * @memberof DataUsageSummary
      */
-    timestamp: Date;
+    count: number;
 }
 
 /**
  * Check if a given object implements the DataUsageSummary interface.
  */
 export function instanceOfDataUsageSummary(value: object): value is DataUsageSummary {
-    if (!('count' in value) || value['count'] === undefined) return false;
-    if (!('data' in value) || value['data'] === undefined) return false;
     if (!('timestamp' in value) || value['timestamp'] === undefined) return false;
+    if (!('data' in value) || value['data'] === undefined) return false;
+    if (!('count' in value) || value['count'] === undefined) return false;
     return true;
 }
 
@@ -58,9 +58,9 @@ export function DataUsageSummaryFromJSONTyped(json: any, ignoreDiscriminator: bo
     }
     return {
         
-        'count': json['count'],
-        'data': json['data'],
         'timestamp': (new Date(json['timestamp'])),
+        'data': json['data'],
+        'count': json['count'],
     };
 }
 
@@ -75,9 +75,9 @@ export function DataUsageSummaryToJSONTyped(value?: DataUsageSummary | null, ign
 
     return {
         
-        'count': value['count'],
-        'data': value['data'],
         'timestamp': value['timestamp'].toISOString(),
+        'data': value['data'],
+        'count': value['count'],
     };
 }
 
