@@ -79,10 +79,12 @@
                 <div>
                     <h4>Data Source</h4>
                     <mat-radio-group class="data-sources" [value]="selectedDataSource()" (change)="setSelectedDataSource($event.value)">
-                        <mat-radio-button value="sentinel1">Sentinel-1</mat-radio-button>
-                        <mat-radio-button value="sentinel2L2a">Sentinel-2 L2A</mat-radio-button>
-                        <mat-radio-button disabled>Sentinel-3 L2</mat-radio-button>
-                        <mat-radio-button disabled>Landsat 8</mat-radio-button>
+                        @for (group of dataSourceGroups(); track group.groupName) {
+                            <span class="data-source-group-label">{{ group.groupName }}</span>
+                            @for (ds of group.items; track ds.key) {
+                                <mat-radio-button [value]="ds.key">{{ ds.name }}</mat-radio-button>
+                            }
+                        }
                     </mat-radio-group>
                 </div>
                 <mat-divider></mat-divider>

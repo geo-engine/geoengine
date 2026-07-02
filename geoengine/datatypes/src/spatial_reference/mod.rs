@@ -9,6 +9,7 @@ use gdal::spatial_ref::SpatialRef;
 use postgres_types::private::BytesMut;
 
 use postgres_types::{FromSql, IsNull, ToSql, Type};
+use proj::Proj;
 use proj_sys::{
     proj_context_create, proj_context_destroy, proj_create, proj_destroy,
     proj_ellipsoid_get_parameters, proj_get_ellipsoid,

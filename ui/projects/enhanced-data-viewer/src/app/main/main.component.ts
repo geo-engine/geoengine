@@ -1,4 +1,15 @@
-import {ChangeDetectionStrategy, Component, ElementRef, afterNextRender, computed, inject, signal, viewChild} from '@angular/core';
+import {
+    ChangeDetectionStrategy,
+    Component,
+    ElementRef,
+    ResourceRef,
+    afterNextRender,
+    computed,
+    inject,
+    resource,
+    signal,
+    viewChild,
+} from '@angular/core';
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {ProjectService, MapService, MapContainerComponent, CoreModule} from '@geoengine/core';
 import {AppConfig} from '../app-config.service';
@@ -11,7 +22,38 @@ import {toSignal} from '@angular/core/rxjs-interop';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {MatRadioModule} from '@angular/material/radio';
 import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
+import {ProviderLayerId} from '@geoengine/api-client/dist/models/ProviderLayerId';
 import {A11yModule} from '@angular/cdk/a11y';
+
+interface DataSourceDefinition {
+    key: string;
+    groupName: string;
+    connectorId: string;
+    collectionId: string;
+    name: string;
+}
+
+interface DataSourceLayer {
+    dataConnectorId: string;
+    layerId: string;
+}
+
+const DATA_SOURCES: DataSourceDefinition[] = [
+    {
+        key: 'sentinel1',
+        groupName: 'static',
+        connectorId: 'ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74',
+        collectionId: '05102bb3-a855-4a37-8a8a-30026a91fef1',
+        name: 'Sentinel-1 Global Mosaics',
+    },
+    {
+        key: 'sentinel2',
+        groupName: 'static',
+        connectorId: 'ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74',
+        collectionId: '05102bb3-a855-4a37-8a8a-30026a91fef1',
+        name: 'Sentinel-2 L2A',
+    },
+];
 
 @Component({
     selector: 'geoengine-main',
@@ -69,17 +111,51 @@ export class MainComponent {
     });
     readonly spatialReference = toSignal(this.projectService.getSpatialReferenceStream());
 
-    readonly selectedDataSource = signal<string>('sentinel1');
+    readonly selectedDataSource = signal<string>(DATA_SOURCES[0].key);
 
-    private readonly layerConfigs: Record<string, {dataConnectorId: string; layerId: string}> = {
-        sentinel1: {dataConnectorId: 'ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74', layerId: '616cd754-a67f-4750-8afc-8a328a4c9bda'},
-        sentinel2L2a: {dataConnectorId: 'ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74', layerId: '10a6c58a-cd42-4a7a-98da-1321af0e6d80'},
-    };
+    readonly dataSourceGroups = computed(() => {
+        const groups = new Map<string, DataSourceDefinition[]>();
+        for (const ds of DATA_SOURCES) {
+            const group = groups.get(ds.groupName) ?? [];
+            group.push(ds);
+            groups.set(ds.groupName, group);
+        }
+        return Array.from(groups.entries()).map(([groupName, items]) => ({groupName, items}));
+    });
 
-    readonly mapTileLayer = computed(() => this.layerConfigs[this.selectedDataSource()] ?? null);
+    readonly dataSourceResources: Record<string, ResourceRef<DataSourceLayer | undefined>>;
+
+    readonly mapTileLayer = computed(() => {
+        const key = this.selectedDataSource();
+        const res = this.dataSourceResources[key];
+        return res?.value();
+    });
     readonly testIsVisible = signal(true);
 
     constructor() {
+        this.dataSourceResources = Object.fromEntries(
+            DATA_SOURCES.map((ds) => [
+                ds.key,
+                resource({
+                    params: () => ({}),
+                    loader: async () => {
+                        const items = await this.layerService.getLayerCollectionItems(ds.connectorId, ds.collectionId);
+
+                        const layer = items.items.find((item) => item.name === ds.name);
+
+                        if (!layer) return undefined;
+
+                        const id = layer.id as ProviderLayerId;
+
+                        return {
+                            dataConnectorId: id.providerId,
+                            layerId: id.layerId,
+                        };
+                    },
+                }),
+            ]),
+        );
+
         afterNextRender({
             read: () => {
                 this.mapService.registerMapComponent(this.mapComponent());
@@ -89,13 +165,6 @@ export class MainComponent {
                 topToolbarObserver.observe(this.topToolbar().nativeElement);
             },
         });
-
-        // setTimeout(() => {
-        //     this.testIsVisible.set(false);
-        //     setTimeout(() => {
-        //         this.testIsVisible.set(true);
-        //     }, 5000);
-        // }, 5000);
     }
 
     onResize(): void {
