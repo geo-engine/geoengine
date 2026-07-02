@@ -35,18 +35,18 @@ class TestUpdateDataset(unittest.TestCase):
         model = UpdateDataset()
         if include_optional:
             return UpdateDataset(
-                description = '',
-                display_name = '',
                 name = '',
+                display_name = '',
+                description = '',
                 tags = [
                     ''
                     ]
             )
         else:
             return UpdateDataset(
-                description = '',
-                display_name = '',
                 name = '',
+                display_name = '',
+                description = '',
                 tags = [
                     ''
                     ],

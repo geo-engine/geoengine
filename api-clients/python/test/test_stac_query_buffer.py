@@ -35,13 +35,13 @@ class TestStacQueryBuffer(unittest.TestCase):
         model = StacQueryBuffer()
         if include_optional:
             return StacQueryBuffer(
-                end_seconds = 56,
-                start_seconds = 56
+                start_seconds = 56,
+                end_seconds = 56
             )
         else:
             return StacQueryBuffer(
-                end_seconds = 56,
                 start_seconds = 56,
+                end_seconds = 56,
         )
         """
 

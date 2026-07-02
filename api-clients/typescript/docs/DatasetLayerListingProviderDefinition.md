@@ -6,12 +6,12 @@
 
 Name | Type
 ------------ | -------------
-`collections` | [Array&lt;DatasetLayerListingCollection&gt;](DatasetLayerListingCollection.md)
-`description` | string
+`type` | string
 `id` | string
 `name` | string
+`description` | string
 `priority` | number
-`type` | string
+`collections` | [Array&lt;DatasetLayerListingCollection&gt;](DatasetLayerListingCollection.md)
 
 ## Example
 
@@ -20,12 +20,12 @@ import type { DatasetLayerListingProviderDefinition } from '@geoengine/api-clien
 
 // TODO: Update the object below with actual values
 const example = {
-  "collections": null,
-  "description": null,
+  "type": null,
   "id": null,
   "name": null,
+  "description": null,
   "priority": null,
-  "type": null,
+  "collections": null,
 } satisfies DatasetLayerListingProviderDefinition
 
 console.log(example)

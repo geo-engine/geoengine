@@ -14,9 +14,9 @@
  * Check if a given object implements the ProviderLayerId interface.
  */
 export function instanceOfProviderLayerId(value) {
-    if (!('layerId' in value) || value['layerId'] === undefined)
-        return false;
     if (!('providerId' in value) || value['providerId'] === undefined)
+        return false;
+    if (!('layerId' in value) || value['layerId'] === undefined)
         return false;
     return true;
 }
@@ -28,8 +28,8 @@ export function ProviderLayerIdFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'layerId': json['layerId'],
         'providerId': json['providerId'],
+        'layerId': json['layerId'],
     };
 }
 export function ProviderLayerIdToJSON(json) {
@@ -40,7 +40,7 @@ export function ProviderLayerIdToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'layerId': value['layerId'],
         'providerId': value['providerId'],
+        'layerId': value['layerId'],
     };
 }

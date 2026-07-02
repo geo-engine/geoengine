@@ -13,8 +13,8 @@ If the given dataset does not exist or is not readable, an error is thrown.
 
 | Name                | Type       | Description                                                                          | Examples |
 | ------------------- | ---------- | ------------------------------------------------------------------------------------ | -------- |
-| attributeProjection | array,null | _Optional_: list of attributes to include. When `None`, all attributes are included. |          |
 | data                | string     | Dataset name or identifier to be loaded.                                             | `"ndvi"` |
+| attributeProjection | array,null | _Optional_: list of attributes to include. When `None`, all attributes are included. |          |
 
 ## Examples
 

@@ -6,16 +6,16 @@
 
 Name | Type
 ------------ | -------------
-`dataPath` | [DataPath](DataPath.md)
-`description` | string
-`displayName` | string
 `id` | string
 `name` | string
-`provenance` | [Array&lt;Provenance&gt;](Provenance.md)
+`displayName` | string
+`description` | string
 `resultDescriptor` | [TypedResultDescriptor](TypedResultDescriptor.md)
 `sourceOperator` | string
 `symbology` | [Symbology](Symbology.md)
+`provenance` | [Array&lt;Provenance&gt;](Provenance.md)
 `tags` | Array&lt;string&gt;
+`dataPath` | [DataPath](DataPath.md)
 
 ## Example
 
@@ -24,16 +24,16 @@ import type { Dataset } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "dataPath": null,
-  "description": null,
-  "displayName": null,
   "id": null,
   "name": null,
-  "provenance": null,
+  "displayName": null,
+  "description": null,
   "resultDescriptor": null,
   "sourceOperator": null,
   "symbology": null,
+  "provenance": null,
   "tags": null,
+  "dataPath": null,
 } satisfies Dataset
 
 console.log(example)

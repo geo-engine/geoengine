@@ -7,8 +7,8 @@ The [`GdalSource`] is a source operator that reads raster data using GDAL. The c
 
 Name | Type
 ------------ | -------------
-`params` | [GdalSourceParameters](GdalSourceParameters.md)
 `type` | string
+`params` | [GdalSourceParameters](GdalSourceParameters.md)
 
 ## Example
 
@@ -17,8 +17,8 @@ import type { GdalSource } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "params": null,
   "type": null,
+  "params": null,
 } satisfies GdalSource
 
 console.log(example)

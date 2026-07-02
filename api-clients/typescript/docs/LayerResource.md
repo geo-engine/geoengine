@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`id` | string
 `type` | string
+`id` | string
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { LayerResource } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "id": null,
   "type": null,
+  "id": null,
 } satisfies LayerResource
 
 console.log(example)

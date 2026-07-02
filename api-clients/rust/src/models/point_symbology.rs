@@ -12,26 +12,26 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PointSymbology {
-    #[serde(rename = "fillColor")]
-    pub fill_color: Box<models::ColorParam>,
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "radius")]
     pub radius: Box<models::NumberParam>,
+    #[serde(rename = "fillColor")]
+    pub fill_color: Box<models::ColorParam>,
     #[serde(rename = "stroke")]
     pub stroke: Box<models::StrokeParam>,
     #[serde(rename = "text", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub text: Option<Option<Box<models::TextSymbology>>>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
 }
 
 impl PointSymbology {
-    pub fn new(fill_color: models::ColorParam, radius: models::NumberParam, stroke: models::StrokeParam, r#type: Type) -> PointSymbology {
+    pub fn new(r#type: Type, radius: models::NumberParam, fill_color: models::ColorParam, stroke: models::StrokeParam) -> PointSymbology {
         PointSymbology {
-            fill_color: Box::new(fill_color),
+            r#type,
             radius: Box::new(radius),
+            fill_color: Box::new(fill_color),
             stroke: Box::new(stroke),
             text: None,
-            r#type,
         }
     }
 }

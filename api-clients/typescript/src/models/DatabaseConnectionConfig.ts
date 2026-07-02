@@ -23,25 +23,19 @@ export interface DatabaseConnectionConfig {
      * @type {string}
      * @memberof DatabaseConnectionConfig
      */
-    database: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof DatabaseConnectionConfig
-     */
     host: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof DatabaseConnectionConfig
-     */
-    password: string;
     /**
      * 
      * @type {number}
      * @memberof DatabaseConnectionConfig
      */
     port: number;
+    /**
+     * 
+     * @type {string}
+     * @memberof DatabaseConnectionConfig
+     */
+    database: string;
     /**
      * 
      * @type {string}
@@ -54,18 +48,24 @@ export interface DatabaseConnectionConfig {
      * @memberof DatabaseConnectionConfig
      */
     user: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof DatabaseConnectionConfig
+     */
+    password: string;
 }
 
 /**
  * Check if a given object implements the DatabaseConnectionConfig interface.
  */
 export function instanceOfDatabaseConnectionConfig(value: object): value is DatabaseConnectionConfig {
-    if (!('database' in value) || value['database'] === undefined) return false;
     if (!('host' in value) || value['host'] === undefined) return false;
-    if (!('password' in value) || value['password'] === undefined) return false;
     if (!('port' in value) || value['port'] === undefined) return false;
+    if (!('database' in value) || value['database'] === undefined) return false;
     if (!('schema' in value) || value['schema'] === undefined) return false;
     if (!('user' in value) || value['user'] === undefined) return false;
+    if (!('password' in value) || value['password'] === undefined) return false;
     return true;
 }
 
@@ -79,12 +79,12 @@ export function DatabaseConnectionConfigFromJSONTyped(json: any, ignoreDiscrimin
     }
     return {
         
-        'database': json['database'],
         'host': json['host'],
-        'password': json['password'],
         'port': json['port'],
+        'database': json['database'],
         'schema': json['schema'],
         'user': json['user'],
+        'password': json['password'],
     };
 }
 
@@ -99,12 +99,12 @@ export function DatabaseConnectionConfigToJSONTyped(value?: DatabaseConnectionCo
 
     return {
         
-        'database': value['database'],
         'host': value['host'],
-        'password': value['password'],
         'port': value['port'],
+        'database': value['database'],
         'schema': value['schema'],
         'user': value['user'],
+        'password': value['password'],
     };
 }
 

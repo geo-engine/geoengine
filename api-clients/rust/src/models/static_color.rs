@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StaticColor {
-    #[serde(rename = "color")]
-    pub color: Vec<i32>,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "color")]
+    pub color: Vec<i32>,
 }
 
 impl StaticColor {
-    pub fn new(color: Vec<i32>, r#type: Type) -> StaticColor {
+    pub fn new(r#type: Type, color: Vec<i32>) -> StaticColor {
         StaticColor {
-            color,
             r#type,
+            color,
         }
     }
 }

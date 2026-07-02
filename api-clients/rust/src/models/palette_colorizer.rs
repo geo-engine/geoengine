@@ -12,24 +12,24 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PaletteColorizer {
+    #[serde(rename = "type")]
+    pub r#type: Type,
     /// A map from value to color  It is assumed that is has at least one and at most 256 entries.
     #[serde(rename = "colors")]
     pub colors: std::collections::HashMap<String, Vec<i32>>,
-    #[serde(rename = "defaultColor")]
-    pub default_color: Vec<i32>,
     #[serde(rename = "noDataColor")]
     pub no_data_color: Vec<i32>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
+    #[serde(rename = "defaultColor")]
+    pub default_color: Vec<i32>,
 }
 
 impl PaletteColorizer {
-    pub fn new(colors: std::collections::HashMap<String, Vec<i32>>, default_color: Vec<i32>, no_data_color: Vec<i32>, r#type: Type) -> PaletteColorizer {
+    pub fn new(r#type: Type, colors: std::collections::HashMap<String, Vec<i32>>, no_data_color: Vec<i32>, default_color: Vec<i32>) -> PaletteColorizer {
         PaletteColorizer {
-            colors,
-            default_color,
-            no_data_color,
             r#type,
+            colors,
+            no_data_color,
+            default_color,
         }
     }
 }

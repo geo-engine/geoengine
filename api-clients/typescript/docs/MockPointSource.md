@@ -7,8 +7,8 @@ The [`MockPointSource`] is a source operator that provides mock vector point dat
 
 Name | Type
 ------------ | -------------
-`params` | [MockPointSourceParameters](MockPointSourceParameters.md)
 `type` | string
+`params` | [MockPointSourceParameters](MockPointSourceParameters.md)
 
 ## Example
 
@@ -17,8 +17,8 @@ import type { MockPointSource } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "params": null,
   "type": null,
+  "params": null,
 } satisfies MockPointSource
 
 console.log(example)

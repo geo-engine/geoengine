@@ -29,11 +29,11 @@ exports.DerivedColorTypeEnum = {
  * Check if a given object implements the DerivedColor interface.
  */
 function instanceOfDerivedColor(value) {
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
     if (!('attribute' in value) || value['attribute'] === undefined)
         return false;
     if (!('colorizer' in value) || value['colorizer'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -45,9 +45,9 @@ function DerivedColorFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'type': json['type'],
         'attribute': json['attribute'],
         'colorizer': (0, Colorizer_1.ColorizerFromJSON)(json['colorizer']),
-        'type': json['type'],
     };
 }
 function DerivedColorToJSON(json) {
@@ -58,8 +58,8 @@ function DerivedColorToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
+        'type': value['type'],
         'attribute': value['attribute'],
         'colorizer': (0, Colorizer_1.ColorizerToJSON)(value['colorizer']),
-        'type': value['type'],
     };
 }

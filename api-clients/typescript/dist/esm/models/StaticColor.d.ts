@@ -16,16 +16,16 @@
 export interface StaticColor {
     /**
      *
-     * @type {Array<number>}
-     * @memberof StaticColor
-     */
-    color: Array<number>;
-    /**
-     *
      * @type {StaticColorTypeEnum}
      * @memberof StaticColor
      */
     type: StaticColorTypeEnum;
+    /**
+     *
+     * @type {Array<number>}
+     * @memberof StaticColor
+     */
+    color: Array<number>;
 }
 /**
  * @export

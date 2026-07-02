@@ -38,7 +38,7 @@ export interface AddDataset {
      * @type {string}
      * @memberof AddDataset
      */
-    description: string;
+    name?: string | null;
     /**
      * 
      * @type {string}
@@ -50,13 +50,7 @@ export interface AddDataset {
      * @type {string}
      * @memberof AddDataset
      */
-    name?: string | null;
-    /**
-     * 
-     * @type {Array<Provenance>}
-     * @memberof AddDataset
-     */
-    provenance?: Array<Provenance> | null;
+    description: string;
     /**
      * 
      * @type {string}
@@ -71,6 +65,12 @@ export interface AddDataset {
     symbology?: Symbology | null;
     /**
      * 
+     * @type {Array<Provenance>}
+     * @memberof AddDataset
+     */
+    provenance?: Array<Provenance> | null;
+    /**
+     * 
      * @type {Array<string>}
      * @memberof AddDataset
      */
@@ -81,8 +81,8 @@ export interface AddDataset {
  * Check if a given object implements the AddDataset interface.
  */
 export function instanceOfAddDataset(value: object): value is AddDataset {
-    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('displayName' in value) || value['displayName'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('sourceOperator' in value) || value['sourceOperator'] === undefined) return false;
     return true;
 }
@@ -97,12 +97,12 @@ export function AddDatasetFromJSONTyped(json: any, ignoreDiscriminator: boolean)
     }
     return {
         
-        'description': json['description'],
-        'displayName': json['displayName'],
         'name': json['name'] == null ? undefined : json['name'],
-        'provenance': json['provenance'] == null ? undefined : ((json['provenance'] as Array<any>).map(ProvenanceFromJSON)),
+        'displayName': json['displayName'],
+        'description': json['description'],
         'sourceOperator': json['sourceOperator'],
         'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
+        'provenance': json['provenance'] == null ? undefined : ((json['provenance'] as Array<any>).map(ProvenanceFromJSON)),
         'tags': json['tags'] == null ? undefined : json['tags'],
     };
 }
@@ -118,12 +118,12 @@ export function AddDatasetToJSONTyped(value?: AddDataset | null, ignoreDiscrimin
 
     return {
         
-        'description': value['description'],
-        'displayName': value['displayName'],
         'name': value['name'],
-        'provenance': value['provenance'] == null ? undefined : ((value['provenance'] as Array<any>).map(ProvenanceToJSON)),
+        'displayName': value['displayName'],
+        'description': value['description'],
         'sourceOperator': value['sourceOperator'],
         'symbology': SymbologyToJSON(value['symbology']),
+        'provenance': value['provenance'] == null ? undefined : ((value['provenance'] as Array<any>).map(ProvenanceToJSON)),
         'tags': value['tags'],
     };
 }

@@ -15,9 +15,9 @@ import { SearchTypesFromJSON, SearchTypesToJSON, } from './SearchTypes';
  * Check if a given object implements the SearchCapabilities interface.
  */
 export function instanceOfSearchCapabilities(value) {
-    if (!('autocomplete' in value) || value['autocomplete'] === undefined)
-        return false;
     if (!('searchTypes' in value) || value['searchTypes'] === undefined)
+        return false;
+    if (!('autocomplete' in value) || value['autocomplete'] === undefined)
         return false;
     return true;
 }
@@ -29,9 +29,9 @@ export function SearchCapabilitiesFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'searchTypes': SearchTypesFromJSON(json['searchTypes']),
         'autocomplete': json['autocomplete'],
         'filters': json['filters'] == null ? undefined : json['filters'],
-        'searchTypes': SearchTypesFromJSON(json['searchTypes']),
     };
 }
 export function SearchCapabilitiesToJSON(json) {
@@ -42,8 +42,8 @@ export function SearchCapabilitiesToJSONTyped(value, ignoreDiscriminator = false
         return value;
     }
     return {
+        'searchTypes': SearchTypesToJSON(value['searchTypes']),
         'autocomplete': value['autocomplete'],
         'filters': value['filters'],
-        'searchTypes': SearchTypesToJSON(value['searchTypes']),
     };
 }

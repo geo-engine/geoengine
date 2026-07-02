@@ -12,31 +12,31 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TaskStatusRunning {
-    #[serde(rename = "description", skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(rename = "estimatedTimeRemaining")]
-    pub estimated_time_remaining: String,
-    #[serde(rename = "info", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub info: Option<Option<serde_json::Value>>,
-    #[serde(rename = "pctComplete")]
-    pub pct_complete: String,
     #[serde(rename = "status")]
     pub status: Status,
     #[serde(rename = "taskType")]
     pub task_type: String,
+    #[serde(rename = "description", skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(rename = "info", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub info: Option<Option<serde_json::Value>>,
+    #[serde(rename = "pctComplete")]
+    pub pct_complete: String,
+    #[serde(rename = "estimatedTimeRemaining")]
+    pub estimated_time_remaining: String,
     #[serde(rename = "timeStarted")]
     pub time_started: String,
 }
 
 impl TaskStatusRunning {
-    pub fn new(estimated_time_remaining: String, pct_complete: String, status: Status, task_type: String, time_started: String) -> TaskStatusRunning {
+    pub fn new(status: Status, task_type: String, pct_complete: String, estimated_time_remaining: String, time_started: String) -> TaskStatusRunning {
         TaskStatusRunning {
-            description: None,
-            estimated_time_remaining,
-            info: None,
-            pct_complete,
             status,
             task_type,
+            description: None,
+            info: None,
+            pct_complete,
+            estimated_time_remaining,
             time_started,
         }
     }

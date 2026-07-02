@@ -32,19 +32,19 @@ class OgrSourceDataset(BaseModel):
     """
     OgrSourceDataset
     """ # noqa: E501
-    attribute_query: Optional[StrictStr] = Field(default=None, alias="attributeQuery")
-    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
-    columns: Optional[OgrSourceColumnSpec] = None
-    data_type: Optional[VectorDataType] = Field(default=None, alias="dataType")
-    default_geometry: Optional[TypedGeometry] = Field(default=None, alias="defaultGeometry")
     file_name: StrictStr = Field(alias="fileName")
-    force_ogr_spatial_filter: Optional[StrictBool] = Field(default=None, alias="forceOgrSpatialFilter")
-    force_ogr_time_filter: Optional[StrictBool] = Field(default=None, alias="forceOgrTimeFilter")
     layer_name: StrictStr = Field(alias="layerName")
+    data_type: Optional[VectorDataType] = Field(default=None, alias="dataType")
+    time: Optional[OgrSourceDatasetTimeType] = None
+    default_geometry: Optional[TypedGeometry] = Field(default=None, alias="defaultGeometry")
+    columns: Optional[OgrSourceColumnSpec] = None
+    force_ogr_time_filter: Optional[StrictBool] = Field(default=None, alias="forceOgrTimeFilter")
+    force_ogr_spatial_filter: Optional[StrictBool] = Field(default=None, alias="forceOgrSpatialFilter")
     on_error: OgrSourceErrorSpec = Field(alias="onError")
     sql_query: Optional[StrictStr] = Field(default=None, alias="sqlQuery")
-    time: Optional[OgrSourceDatasetTimeType] = None
-    __properties: ClassVar[List[str]] = ["attributeQuery", "cacheTtl", "columns", "dataType", "defaultGeometry", "fileName", "forceOgrSpatialFilter", "forceOgrTimeFilter", "layerName", "onError", "sqlQuery", "time"]
+    attribute_query: Optional[StrictStr] = Field(default=None, alias="attributeQuery")
+    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
+    __properties: ClassVar[List[str]] = ["fileName", "layerName", "dataType", "time", "defaultGeometry", "columns", "forceOgrTimeFilter", "forceOgrSpatialFilter", "onError", "sqlQuery", "attributeQuery", "cacheTtl"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -85,25 +85,15 @@ class OgrSourceDataset(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of columns
-        if self.columns:
-            _dict['columns'] = self.columns.to_dict()
-        # override the default output from pydantic by calling `to_dict()` of default_geometry
-        if self.default_geometry:
-            _dict['defaultGeometry'] = self.default_geometry.to_dict()
         # override the default output from pydantic by calling `to_dict()` of time
         if self.time:
             _dict['time'] = self.time.to_dict()
-        # set to None if attribute_query (nullable) is None
-        # and model_fields_set contains the field
-        if self.attribute_query is None and "attribute_query" in self.model_fields_set:
-            _dict['attributeQuery'] = None
-
-        # set to None if columns (nullable) is None
-        # and model_fields_set contains the field
-        if self.columns is None and "columns" in self.model_fields_set:
-            _dict['columns'] = None
-
+        # override the default output from pydantic by calling `to_dict()` of default_geometry
+        if self.default_geometry:
+            _dict['defaultGeometry'] = self.default_geometry.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of columns
+        if self.columns:
+            _dict['columns'] = self.columns.to_dict()
         # set to None if data_type (nullable) is None
         # and model_fields_set contains the field
         if self.data_type is None and "data_type" in self.model_fields_set:
@@ -114,10 +104,20 @@ class OgrSourceDataset(BaseModel):
         if self.default_geometry is None and "default_geometry" in self.model_fields_set:
             _dict['defaultGeometry'] = None
 
+        # set to None if columns (nullable) is None
+        # and model_fields_set contains the field
+        if self.columns is None and "columns" in self.model_fields_set:
+            _dict['columns'] = None
+
         # set to None if sql_query (nullable) is None
         # and model_fields_set contains the field
         if self.sql_query is None and "sql_query" in self.model_fields_set:
             _dict['sqlQuery'] = None
+
+        # set to None if attribute_query (nullable) is None
+        # and model_fields_set contains the field
+        if self.attribute_query is None and "attribute_query" in self.model_fields_set:
+            _dict['attributeQuery'] = None
 
         return _dict
 
@@ -131,18 +131,18 @@ class OgrSourceDataset(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "attributeQuery": obj.get("attributeQuery"),
-            "cacheTtl": obj.get("cacheTtl"),
-            "columns": OgrSourceColumnSpec.from_dict(obj["columns"]) if obj.get("columns") is not None else None,
-            "dataType": obj.get("dataType"),
-            "defaultGeometry": TypedGeometry.from_dict(obj["defaultGeometry"]) if obj.get("defaultGeometry") is not None else None,
             "fileName": obj.get("fileName"),
-            "forceOgrSpatialFilter": obj.get("forceOgrSpatialFilter"),
-            "forceOgrTimeFilter": obj.get("forceOgrTimeFilter"),
             "layerName": obj.get("layerName"),
+            "dataType": obj.get("dataType"),
+            "time": OgrSourceDatasetTimeType.from_dict(obj["time"]) if obj.get("time") is not None else None,
+            "defaultGeometry": TypedGeometry.from_dict(obj["defaultGeometry"]) if obj.get("defaultGeometry") is not None else None,
+            "columns": OgrSourceColumnSpec.from_dict(obj["columns"]) if obj.get("columns") is not None else None,
+            "forceOgrTimeFilter": obj.get("forceOgrTimeFilter"),
+            "forceOgrSpatialFilter": obj.get("forceOgrSpatialFilter"),
             "onError": obj.get("onError"),
             "sqlQuery": obj.get("sqlQuery"),
-            "time": OgrSourceDatasetTimeType.from_dict(obj["time"]) if obj.get("time") is not None else None
+            "attributeQuery": obj.get("attributeQuery"),
+            "cacheTtl": obj.get("cacheTtl")
         })
         return _obj
 

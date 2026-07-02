@@ -23,21 +23,21 @@ export interface HistogramBoundsValues {
      * @type {number}
      * @memberof HistogramBoundsValues
      */
-    max: number;
+    min: number;
     /**
      * 
      * @type {number}
      * @memberof HistogramBoundsValues
      */
-    min: number;
+    max: number;
 }
 
 /**
  * Check if a given object implements the HistogramBoundsValues interface.
  */
 export function instanceOfHistogramBoundsValues(value: object): value is HistogramBoundsValues {
-    if (!('max' in value) || value['max'] === undefined) return false;
     if (!('min' in value) || value['min'] === undefined) return false;
+    if (!('max' in value) || value['max'] === undefined) return false;
     return true;
 }
 
@@ -51,8 +51,8 @@ export function HistogramBoundsValuesFromJSONTyped(json: any, ignoreDiscriminato
     }
     return {
         
-        'max': json['max'],
         'min': json['min'],
+        'max': json['max'],
     };
 }
 
@@ -67,8 +67,8 @@ export function HistogramBoundsValuesToJSONTyped(value?: HistogramBoundsValues |
 
     return {
         
-        'max': value['max'],
         'min': value['min'],
+        'max': value['max'],
     };
 }
 

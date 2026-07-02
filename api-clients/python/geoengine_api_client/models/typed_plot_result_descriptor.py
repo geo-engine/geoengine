@@ -30,7 +30,7 @@ class TypedPlotResultDescriptor(PlotResultDescriptor):
     TypedPlotResultDescriptor
     """ # noqa: E501
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["bbox", "spatialReference", "time", "type"]
+    __properties: ClassVar[List[str]] = ["spatialReference", "time", "bbox", "type"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -78,21 +78,21 @@ class TypedPlotResultDescriptor(PlotResultDescriptor):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of bbox
-        if self.bbox:
-            _dict['bbox'] = self.bbox.to_dict()
         # override the default output from pydantic by calling `to_dict()` of time
         if self.time:
             _dict['time'] = self.time.to_dict()
-        # set to None if bbox (nullable) is None
-        # and model_fields_set contains the field
-        if self.bbox is None and "bbox" in self.model_fields_set:
-            _dict['bbox'] = None
-
+        # override the default output from pydantic by calling `to_dict()` of bbox
+        if self.bbox:
+            _dict['bbox'] = self.bbox.to_dict()
         # set to None if time (nullable) is None
         # and model_fields_set contains the field
         if self.time is None and "time" in self.model_fields_set:
             _dict['time'] = None
+
+        # set to None if bbox (nullable) is None
+        # and model_fields_set contains the field
+        if self.bbox is None and "bbox" in self.model_fields_set:
+            _dict['bbox'] = None
 
         return _dict
 
@@ -106,9 +106,9 @@ class TypedPlotResultDescriptor(PlotResultDescriptor):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "bbox": BoundingBox2D.from_dict(obj["bbox"]) if obj.get("bbox") is not None else None,
             "spatialReference": obj.get("spatialReference"),
             "time": TimeInterval.from_dict(obj["time"]) if obj.get("time") is not None else None,
+            "bbox": BoundingBox2D.from_dict(obj["bbox"]) if obj.get("bbox") is not None else None,
             "type": obj.get("type")
         })
         return _obj

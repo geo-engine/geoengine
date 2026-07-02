@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Rename {
-    #[serde(rename = "type")]
-    pub r#type: Type,
     #[serde(rename = "values")]
     pub values: Vec<String>,
+    #[serde(rename = "type")]
+    pub r#type: Type,
 }
 
 impl Rename {
-    pub fn new(r#type: Type, values: Vec<String>) -> Rename {
+    pub fn new(values: Vec<String>, r#type: Type) -> Rename {
         Rename {
-            r#type,
             values,
+            r#type,
         }
     }
 }

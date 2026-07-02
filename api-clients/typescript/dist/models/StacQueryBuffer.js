@@ -21,9 +21,9 @@ exports.StacQueryBufferToJSONTyped = StacQueryBufferToJSONTyped;
  * Check if a given object implements the StacQueryBuffer interface.
  */
 function instanceOfStacQueryBuffer(value) {
-    if (!('endSeconds' in value) || value['endSeconds'] === undefined)
-        return false;
     if (!('startSeconds' in value) || value['startSeconds'] === undefined)
+        return false;
+    if (!('endSeconds' in value) || value['endSeconds'] === undefined)
         return false;
     return true;
 }
@@ -35,8 +35,8 @@ function StacQueryBufferFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'endSeconds': json['endSeconds'],
         'startSeconds': json['startSeconds'],
+        'endSeconds': json['endSeconds'],
     };
 }
 function StacQueryBufferToJSON(json) {
@@ -47,7 +47,7 @@ function StacQueryBufferToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'endSeconds': value['endSeconds'],
         'startSeconds': value['startSeconds'],
+        'endSeconds': value['endSeconds'],
     };
 }

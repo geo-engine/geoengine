@@ -4,12 +4,12 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**description** | Option<**String**> |  | [optional]
-**estimated_time_remaining** | **String** |  | 
-**info** | Option<**serde_json::Value**> |  | [optional]
-**pct_complete** | **String** |  | 
 **status** | **Status** |  (enum: failed) | 
 **task_type** | **String** |  | 
+**description** | Option<**String**> |  | [optional]
+**info** | Option<**serde_json::Value**> |  | [optional]
+**pct_complete** | **String** |  | 
+**estimated_time_remaining** | **String** |  | 
 **time_started** | **String** |  | 
 **time_total** | **String** |  | 
 **clean_up** | Option<**serde_json::Value**> |  | 

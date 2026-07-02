@@ -42,10 +42,10 @@ import {
 export interface PolygonSymbology {
     /**
      * 
-     * @type {boolean}
+     * @type {PolygonSymbologyTypeEnum}
      * @memberof PolygonSymbology
      */
-    autoSimplified: boolean;
+    type: PolygonSymbologyTypeEnum;
     /**
      * 
      * @type {ColorParam}
@@ -66,10 +66,10 @@ export interface PolygonSymbology {
     text?: TextSymbology | null;
     /**
      * 
-     * @type {PolygonSymbologyTypeEnum}
+     * @type {boolean}
      * @memberof PolygonSymbology
      */
-    type: PolygonSymbologyTypeEnum;
+    autoSimplified: boolean;
 }
 
 
@@ -86,10 +86,10 @@ export type PolygonSymbologyTypeEnum = typeof PolygonSymbologyTypeEnum[keyof typ
  * Check if a given object implements the PolygonSymbology interface.
  */
 export function instanceOfPolygonSymbology(value: object): value is PolygonSymbology {
-    if (!('autoSimplified' in value) || value['autoSimplified'] === undefined) return false;
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('fillColor' in value) || value['fillColor'] === undefined) return false;
     if (!('stroke' in value) || value['stroke'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('autoSimplified' in value) || value['autoSimplified'] === undefined) return false;
     return true;
 }
 
@@ -103,11 +103,11 @@ export function PolygonSymbologyFromJSONTyped(json: any, ignoreDiscriminator: bo
     }
     return {
         
-        'autoSimplified': json['autoSimplified'],
+        'type': json['type'],
         'fillColor': ColorParamFromJSON(json['fillColor']),
         'stroke': StrokeParamFromJSON(json['stroke']),
         'text': json['text'] == null ? undefined : TextSymbologyFromJSON(json['text']),
-        'type': json['type'],
+        'autoSimplified': json['autoSimplified'],
     };
 }
 
@@ -122,11 +122,11 @@ export function PolygonSymbologyToJSONTyped(value?: PolygonSymbology | null, ign
 
     return {
         
-        'autoSimplified': value['autoSimplified'],
+        'type': value['type'],
         'fillColor': ColorParamToJSON(value['fillColor']),
         'stroke': StrokeParamToJSON(value['stroke']),
         'text': TextSymbologyToJSON(value['text']),
-        'type': value['type'],
+        'autoSimplified': value['autoSimplified'],
     };
 }
 

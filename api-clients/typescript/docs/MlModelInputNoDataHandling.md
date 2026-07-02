@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`noDataValue` | number
 `variant` | [MlModelInputNoDataHandlingVariant](MlModelInputNoDataHandlingVariant.md)
+`noDataValue` | number
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { MlModelInputNoDataHandling } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "noDataValue": null,
   "variant": null,
+  "noDataValue": null,
 } satisfies MlModelInputNoDataHandling
 
 console.log(example)

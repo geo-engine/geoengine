@@ -28,9 +28,9 @@ class ProjectVersion(BaseModel):
     """
     ProjectVersion
     """ # noqa: E501
-    changed: datetime
     id: UUID
-    __properties: ClassVar[List[str]] = ["changed", "id"]
+    changed: datetime
+    __properties: ClassVar[List[str]] = ["id", "changed"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -83,8 +83,8 @@ class ProjectVersion(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "changed": obj.get("changed"),
-            "id": obj.get("id")
+            "id": obj.get("id"),
+            "changed": obj.get("changed")
         })
         return _obj
 

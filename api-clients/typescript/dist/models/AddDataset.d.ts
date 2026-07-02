@@ -21,7 +21,7 @@ export interface AddDataset {
      * @type {string}
      * @memberof AddDataset
      */
-    description: string;
+    name?: string | null;
     /**
      *
      * @type {string}
@@ -33,13 +33,7 @@ export interface AddDataset {
      * @type {string}
      * @memberof AddDataset
      */
-    name?: string | null;
-    /**
-     *
-     * @type {Array<Provenance>}
-     * @memberof AddDataset
-     */
-    provenance?: Array<Provenance> | null;
+    description: string;
     /**
      *
      * @type {string}
@@ -52,6 +46,12 @@ export interface AddDataset {
      * @memberof AddDataset
      */
     symbology?: Symbology | null;
+    /**
+     *
+     * @type {Array<Provenance>}
+     * @memberof AddDataset
+     */
+    provenance?: Array<Provenance> | null;
     /**
      *
      * @type {Array<string>}

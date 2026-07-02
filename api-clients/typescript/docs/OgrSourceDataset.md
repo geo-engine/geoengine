@@ -6,18 +6,18 @@
 
 Name | Type
 ------------ | -------------
-`attributeQuery` | string
-`cacheTtl` | number
-`columns` | [OgrSourceColumnSpec](OgrSourceColumnSpec.md)
-`dataType` | [VectorDataType](VectorDataType.md)
-`defaultGeometry` | [TypedGeometry](TypedGeometry.md)
 `fileName` | string
-`forceOgrSpatialFilter` | boolean
-`forceOgrTimeFilter` | boolean
 `layerName` | string
+`dataType` | [VectorDataType](VectorDataType.md)
+`time` | [OgrSourceDatasetTimeType](OgrSourceDatasetTimeType.md)
+`defaultGeometry` | [TypedGeometry](TypedGeometry.md)
+`columns` | [OgrSourceColumnSpec](OgrSourceColumnSpec.md)
+`forceOgrTimeFilter` | boolean
+`forceOgrSpatialFilter` | boolean
 `onError` | [OgrSourceErrorSpec](OgrSourceErrorSpec.md)
 `sqlQuery` | string
-`time` | [OgrSourceDatasetTimeType](OgrSourceDatasetTimeType.md)
+`attributeQuery` | string
+`cacheTtl` | number
 
 ## Example
 
@@ -26,18 +26,18 @@ import type { OgrSourceDataset } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "attributeQuery": null,
-  "cacheTtl": null,
-  "columns": null,
-  "dataType": null,
-  "defaultGeometry": null,
   "fileName": null,
-  "forceOgrSpatialFilter": null,
-  "forceOgrTimeFilter": null,
   "layerName": null,
+  "dataType": null,
+  "time": null,
+  "defaultGeometry": null,
+  "columns": null,
+  "forceOgrTimeFilter": null,
+  "forceOgrSpatialFilter": null,
   "onError": null,
   "sqlQuery": null,
-  "time": null,
+  "attributeQuery": null,
+  "cacheTtl": null,
 } satisfies OgrSourceDataset
 
 console.log(example)

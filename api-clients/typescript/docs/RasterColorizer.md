@@ -6,22 +6,22 @@
 
 Name | Type
 ------------ | -------------
+`type` | string
 `band` | number
 `bandColorizer` | [Colorizer](Colorizer.md)
-`type` | string
-`blueBand` | number
-`blueMax` | number
-`blueMin` | number
-`blueScale` | number
-`greenBand` | number
-`greenMax` | number
-`greenMin` | number
-`greenScale` | number
-`noDataColor` | Array&lt;number&gt;
 `redBand` | number
-`redMax` | number
 `redMin` | number
+`redMax` | number
 `redScale` | number
+`greenBand` | number
+`greenMin` | number
+`greenMax` | number
+`greenScale` | number
+`blueBand` | number
+`blueMin` | number
+`blueMax` | number
+`blueScale` | number
+`noDataColor` | Array&lt;number&gt;
 
 ## Example
 
@@ -30,22 +30,22 @@ import type { RasterColorizer } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "band": null,
   "bandColorizer": null,
-  "type": null,
-  "blueBand": null,
-  "blueMax": null,
-  "blueMin": null,
-  "blueScale": null,
-  "greenBand": null,
-  "greenMax": null,
-  "greenMin": null,
-  "greenScale": null,
-  "noDataColor": null,
   "redBand": null,
-  "redMax": null,
   "redMin": null,
+  "redMax": null,
   "redScale": null,
+  "greenBand": null,
+  "greenMin": null,
+  "greenMax": null,
+  "greenScale": null,
+  "blueBand": null,
+  "blueMin": null,
+  "blueMax": null,
+  "blueScale": null,
+  "noDataColor": null,
 } satisfies RasterColorizer
 
 console.log(example)

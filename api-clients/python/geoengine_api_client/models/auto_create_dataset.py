@@ -27,13 +27,13 @@ class AutoCreateDataset(BaseModel):
     """
     AutoCreateDataset
     """ # noqa: E501
-    dataset_description: StrictStr = Field(alias="datasetDescription")
-    dataset_name: StrictStr = Field(alias="datasetName")
-    layer_name: Optional[StrictStr] = Field(default=None, alias="layerName")
-    main_file: StrictStr = Field(alias="mainFile")
-    tags: Optional[List[StrictStr]] = None
     upload: UUID
-    __properties: ClassVar[List[str]] = ["datasetDescription", "datasetName", "layerName", "mainFile", "tags", "upload"]
+    dataset_name: StrictStr = Field(alias="datasetName")
+    dataset_description: StrictStr = Field(alias="datasetDescription")
+    main_file: StrictStr = Field(alias="mainFile")
+    layer_name: Optional[StrictStr] = Field(default=None, alias="layerName")
+    tags: Optional[List[StrictStr]] = None
+    __properties: ClassVar[List[str]] = ["upload", "datasetName", "datasetDescription", "mainFile", "layerName", "tags"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -96,12 +96,12 @@ class AutoCreateDataset(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "datasetDescription": obj.get("datasetDescription"),
+            "upload": obj.get("upload"),
             "datasetName": obj.get("datasetName"),
-            "layerName": obj.get("layerName"),
+            "datasetDescription": obj.get("datasetDescription"),
             "mainFile": obj.get("mainFile"),
-            "tags": obj.get("tags"),
-            "upload": obj.get("upload")
+            "layerName": obj.get("layerName"),
+            "tags": obj.get("tags")
         })
         return _obj
 

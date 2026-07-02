@@ -7,9 +7,9 @@ The `TemporalRasterAggregation` operator aggregates a raster time series into un
 
 Name | Type
 ------------ | -------------
+`type` | string
 `params` | [TemporalRasterAggregationParameters](TemporalRasterAggregationParameters.md)
 `sources` | [SingleRasterSource](SingleRasterSource.md)
-`type` | string
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { TemporalRasterAggregation } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "params": null,
   "sources": null,
-  "type": null,
 } satisfies TemporalRasterAggregation
 
 console.log(example)

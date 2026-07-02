@@ -14,9 +14,9 @@
  * Check if a given object implements the HistogramBoundsValues interface.
  */
 export function instanceOfHistogramBoundsValues(value) {
-    if (!('max' in value) || value['max'] === undefined)
-        return false;
     if (!('min' in value) || value['min'] === undefined)
+        return false;
+    if (!('max' in value) || value['max'] === undefined)
         return false;
     return true;
 }
@@ -28,8 +28,8 @@ export function HistogramBoundsValuesFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'max': json['max'],
         'min': json['min'],
+        'max': json['max'],
     };
 }
 export function HistogramBoundsValuesToJSON(json) {
@@ -40,7 +40,7 @@ export function HistogramBoundsValuesToJSONTyped(value, ignoreDiscriminator = fa
         return value;
     }
     return {
-        'max': value['max'],
         'min': value['min'],
+        'max': value['max'],
     };
 }

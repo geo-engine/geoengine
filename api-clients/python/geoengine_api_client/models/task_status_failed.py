@@ -26,10 +26,10 @@ class TaskStatusFailed(BaseModel):
     """
     TaskStatusFailed
     """ # noqa: E501
-    clean_up: Optional[Any] = Field(alias="cleanUp")
-    error: Optional[Any]
     status: StrictStr
-    __properties: ClassVar[List[str]] = ["cleanUp", "error", "status"]
+    error: Optional[Any]
+    clean_up: Optional[Any] = Field(alias="cleanUp")
+    __properties: ClassVar[List[str]] = ["status", "error", "cleanUp"]
 
     @field_validator('status')
     def status_validate_enum(cls, value):
@@ -77,15 +77,15 @@ class TaskStatusFailed(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if clean_up (nullable) is None
-        # and model_fields_set contains the field
-        if self.clean_up is None and "clean_up" in self.model_fields_set:
-            _dict['cleanUp'] = None
-
         # set to None if error (nullable) is None
         # and model_fields_set contains the field
         if self.error is None and "error" in self.model_fields_set:
             _dict['error'] = None
+
+        # set to None if clean_up (nullable) is None
+        # and model_fields_set contains the field
+        if self.clean_up is None and "clean_up" in self.model_fields_set:
+            _dict['cleanUp'] = None
 
         return _dict
 
@@ -99,9 +99,9 @@ class TaskStatusFailed(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "cleanUp": obj.get("cleanUp"),
+            "status": obj.get("status"),
             "error": obj.get("error"),
-            "status": obj.get("status")
+            "cleanUp": obj.get("cleanUp")
         })
         return _obj
 

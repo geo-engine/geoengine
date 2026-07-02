@@ -16,16 +16,16 @@
 export interface LayerCollectionResource {
     /**
      *
-     * @type {string}
-     * @memberof LayerCollectionResource
-     */
-    id: string;
-    /**
-     *
      * @type {LayerCollectionResourceTypeEnum}
      * @memberof LayerCollectionResource
      */
     type: LayerCollectionResourceTypeEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof LayerCollectionResource
+     */
+    id: string;
 }
 /**
  * @export

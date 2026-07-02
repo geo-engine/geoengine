@@ -6,15 +6,15 @@
 
 Name | Type
 ------------ | -------------
-`abcdDbConfig` | [DatabaseConnectionConfig](DatabaseConnectionConfig.md)
-`cacheTtl` | number
-`collectionApiAuthToken` | string
-`collectionApiUrl` | string
-`description` | string
-`name` | string
-`pangaeaUrl` | string
-`priority` | number
 `type` | string
+`name` | string
+`description` | string
+`priority` | number
+`collectionApiUrl` | string
+`collectionApiAuthToken` | string
+`abcdDbConfig` | [DatabaseConnectionConfig](DatabaseConnectionConfig.md)
+`pangaeaUrl` | string
+`cacheTtl` | number
 
 ## Example
 
@@ -23,15 +23,15 @@ import type { GfbioCollectionsDataProviderDefinition } from '@geoengine/api-clie
 
 // TODO: Update the object below with actual values
 const example = {
-  "abcdDbConfig": null,
-  "cacheTtl": null,
-  "collectionApiAuthToken": null,
-  "collectionApiUrl": null,
-  "description": null,
-  "name": null,
-  "pangaeaUrl": null,
-  "priority": null,
   "type": null,
+  "name": null,
+  "description": null,
+  "priority": null,
+  "collectionApiUrl": null,
+  "collectionApiAuthToken": null,
+  "abcdDbConfig": null,
+  "pangaeaUrl": null,
+  "cacheTtl": null,
 } satisfies GfbioCollectionsDataProviderDefinition
 
 console.log(example)

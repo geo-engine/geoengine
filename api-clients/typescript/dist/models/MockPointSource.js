@@ -29,9 +29,9 @@ exports.MockPointSourceTypeEnum = {
  * Check if a given object implements the MockPointSource interface.
  */
 function instanceOfMockPointSource(value) {
-    if (!('params' in value) || value['params'] === undefined)
-        return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('params' in value) || value['params'] === undefined)
         return false;
     return true;
 }
@@ -43,8 +43,8 @@ function MockPointSourceFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'params': (0, MockPointSourceParameters_1.MockPointSourceParametersFromJSON)(json['params']),
         'type': json['type'],
+        'params': (0, MockPointSourceParameters_1.MockPointSourceParametersFromJSON)(json['params']),
     };
 }
 function MockPointSourceToJSON(json) {
@@ -55,7 +55,7 @@ function MockPointSourceToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'params': (0, MockPointSourceParameters_1.MockPointSourceParametersToJSON)(value['params']),
         'type': value['type'],
+        'params': (0, MockPointSourceParameters_1.MockPointSourceParametersToJSON)(value['params']),
     };
 }

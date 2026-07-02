@@ -36,11 +36,11 @@ class TestTemporalRasterAggregationParameters(unittest.TestCase):
         if include_optional:
             return TemporalRasterAggregationParameters(
                 aggregation = None,
-                output_type = 'U8',
                 window = geoengine_api_client.models.time_step.TimeStep(
                     granularity = 'millis', 
                     step = 0, ),
-                window_reference = 56
+                window_reference = 56,
+                output_type = 'U8'
             )
         else:
             return TemporalRasterAggregationParameters(

@@ -35,17 +35,17 @@ class TestPlotResultDescriptor(unittest.TestCase):
         model = PlotResultDescriptor()
         if include_optional:
             return PlotResultDescriptor(
+                spatial_reference = '',
+                time = geoengine_api_client.models.time_interval.TimeInterval(
+                    start = 56, 
+                    end = 56, ),
                 bbox = geoengine_api_client.models.bounding_box2_d.BoundingBox2D(
                     lower_left_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                         x = 1.337, 
                         y = 1.337, ), 
                     upper_right_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                         x = 1.337, 
-                        y = 1.337, ), ),
-                spatial_reference = '',
-                time = geoengine_api_client.models.time_interval.TimeInterval(
-                    end = 56, 
-                    start = 56, )
+                        y = 1.337, ), )
             )
         else:
             return PlotResultDescriptor(

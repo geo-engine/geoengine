@@ -35,15 +35,15 @@ class TestTaskStatusFailed(unittest.TestCase):
         model = TaskStatusFailed()
         if include_optional:
             return TaskStatusFailed(
-                clean_up = None,
+                status = 'failed',
                 error = None,
-                status = 'failed'
+                clean_up = None
             )
         else:
             return TaskStatusFailed(
-                clean_up = None,
-                error = None,
                 status = 'failed',
+                error = None,
+                clean_up = None,
         )
         """
 

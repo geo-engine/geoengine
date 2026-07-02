@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
-`cleanUp` | any
-`error` | any
 `status` | string
+`error` | any
+`cleanUp` | any
 
 ## Example
 
@@ -17,9 +17,9 @@ import type { TaskStatusFailed } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "cleanUp": null,
-  "error": null,
   "status": null,
+  "error": null,
+  "cleanUp": null,
 } satisfies TaskStatusFailed
 
 console.log(example)

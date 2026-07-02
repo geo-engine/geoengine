@@ -35,27 +35,27 @@ class TestPointSymbology(unittest.TestCase):
         model = PointSymbology()
         if include_optional:
             return PointSymbology(
-                fill_color = None,
+                type = 'point',
                 radius = None,
+                fill_color = None,
                 stroke = geoengine_api_client.models.stroke_param.StrokeParam(
-                    color = null, 
-                    width = null, ),
+                    width = null, 
+                    color = null, ),
                 text = geoengine_api_client.models.text_symbology.TextSymbology(
                     attribute = '', 
                     fill_color = null, 
                     stroke = geoengine_api_client.models.stroke_param.StrokeParam(
-                        color = null, 
-                        width = null, ), ),
-                type = 'point'
+                        width = null, 
+                        color = null, ), )
             )
         else:
             return PointSymbology(
-                fill_color = None,
-                radius = None,
-                stroke = geoengine_api_client.models.stroke_param.StrokeParam(
-                    color = null, 
-                    width = null, ),
                 type = 'point',
+                radius = None,
+                fill_color = None,
+                stroke = geoengine_api_client.models.stroke_param.StrokeParam(
+                    width = null, 
+                    color = null, ),
         )
         """
 

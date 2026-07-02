@@ -19,13 +19,13 @@ export interface DatasetLayerListingCollection {
      * @type {string}
      * @memberof DatasetLayerListingCollection
      */
-    description: string;
+    name: string;
     /**
      *
      * @type {string}
      * @memberof DatasetLayerListingCollection
      */
-    name: string;
+    description: string;
     /**
      *
      * @type {Array<string>}

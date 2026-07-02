@@ -25,6 +25,12 @@ import type { InterpolationParameters } from './InterpolationParameters';
 export interface Interpolation {
     /**
      *
+     * @type {InterpolationTypeEnum}
+     * @memberof Interpolation
+     */
+    type: InterpolationTypeEnum;
+    /**
+     *
      * @type {InterpolationParameters}
      * @memberof Interpolation
      */
@@ -35,12 +41,6 @@ export interface Interpolation {
      * @memberof Interpolation
      */
     sources: SingleRasterSource;
-    /**
-     *
-     * @type {InterpolationTypeEnum}
-     * @memberof Interpolation
-     */
-    type: InterpolationTypeEnum;
 }
 /**
  * @export

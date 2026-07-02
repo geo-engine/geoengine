@@ -196,7 +196,7 @@ async fn get_workflow_metadata_handler<C: ApplicationContext>(
     Ok(web::Json(result_descriptor))
 }
 
-async fn workflow_metadata<C: SessionContext>(
+pub(crate) async fn workflow_metadata<C: SessionContext>(
     workflow: Workflow,
     execution_context: C::ExecutionContext,
 ) -> Result<crate::api::model::operators::TypedResultDescriptor> {
@@ -255,7 +255,16 @@ pub struct ProvenanceEntry {
     data: Vec<DataId>,
 }
 
-async fn workflow_provenance<C: SessionContext>(
+impl ProvenanceEntry {
+    pub fn attribution(&self) -> Option<String> {
+        if self.provenance.citation.is_empty() {
+            return None;
+        }
+        Some(self.provenance.citation.clone())
+    }
+}
+
+pub(crate) async fn workflow_provenance<C: SessionContext>(
     workflow: &Workflow,
     ctx: &C,
 ) -> Result<Vec<ProvenanceEntry>> {

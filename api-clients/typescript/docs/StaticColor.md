@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`color` | Array&lt;number&gt;
 `type` | string
+`color` | Array&lt;number&gt;
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { StaticColor } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "color": null,
   "type": null,
+  "color": null,
 } satisfies StaticColor
 
 console.log(example)

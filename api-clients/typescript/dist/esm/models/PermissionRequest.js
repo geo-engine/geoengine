@@ -16,11 +16,11 @@ import { ResourceFromJSON, ResourceToJSON, } from './Resource';
  * Check if a given object implements the PermissionRequest interface.
  */
 export function instanceOfPermissionRequest(value) {
-    if (!('permission' in value) || value['permission'] === undefined)
-        return false;
     if (!('resource' in value) || value['resource'] === undefined)
         return false;
     if (!('roleId' in value) || value['roleId'] === undefined)
+        return false;
+    if (!('permission' in value) || value['permission'] === undefined)
         return false;
     return true;
 }
@@ -32,9 +32,9 @@ export function PermissionRequestFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'permission': PermissionFromJSON(json['permission']),
         'resource': ResourceFromJSON(json['resource']),
         'roleId': json['roleId'],
+        'permission': PermissionFromJSON(json['permission']),
     };
 }
 export function PermissionRequestToJSON(json) {
@@ -45,8 +45,8 @@ export function PermissionRequestToJSONTyped(value, ignoreDiscriminator = false)
         return value;
     }
     return {
-        'permission': PermissionToJSON(value['permission']),
         'resource': ResourceToJSON(value['resource']),
         'roleId': value['roleId'],
+        'permission': PermissionToJSON(value['permission']),
     };
 }

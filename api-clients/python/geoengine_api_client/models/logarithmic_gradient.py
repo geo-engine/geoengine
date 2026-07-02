@@ -28,12 +28,12 @@ class LogarithmicGradient(BaseModel):
     """
     LogarithmicGradient
     """ # noqa: E501
+    type: StrictStr
     breakpoints: List[Breakpoint]
     no_data_color: Annotated[List[StrictInt], Field(min_length=4, max_length=4)] = Field(alias="noDataColor")
     over_color: Annotated[List[StrictInt], Field(min_length=4, max_length=4)] = Field(alias="overColor")
-    type: StrictStr
     under_color: Annotated[List[StrictInt], Field(min_length=4, max_length=4)] = Field(alias="underColor")
-    __properties: ClassVar[List[str]] = ["breakpoints", "noDataColor", "overColor", "type", "underColor"]
+    __properties: ClassVar[List[str]] = ["type", "breakpoints", "noDataColor", "overColor", "underColor"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -100,10 +100,10 @@ class LogarithmicGradient(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "type": obj.get("type"),
             "breakpoints": [Breakpoint.from_dict(_item) for _item in obj["breakpoints"]] if obj.get("breakpoints") is not None else None,
             "noDataColor": obj.get("noDataColor"),
             "overColor": obj.get("overColor"),
-            "type": obj.get("type"),
             "underColor": obj.get("underColor")
         })
         return _obj

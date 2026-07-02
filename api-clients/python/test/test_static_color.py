@@ -35,17 +35,17 @@ class TestStaticColor(unittest.TestCase):
         model = StaticColor()
         if include_optional:
             return StaticColor(
+                type = 'static',
                 color = [
                     56
-                    ],
-                type = 'static'
+                    ]
             )
         else:
             return StaticColor(
+                type = 'static',
                 color = [
                     56
                     ],
-                type = 'static',
         )
         """
 

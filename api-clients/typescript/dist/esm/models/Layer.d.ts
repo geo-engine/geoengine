@@ -19,16 +19,40 @@ import type { Workflow } from './Workflow';
 export interface Layer {
     /**
      *
+     * @type {ProviderLayerId}
+     * @memberof Layer
+     */
+    id: ProviderLayerId;
+    /**
+     *
+     * @type {string}
+     * @memberof Layer
+     */
+    name: string;
+    /**
+     *
      * @type {string}
      * @memberof Layer
      */
     description: string;
     /**
      *
-     * @type {ProviderLayerId}
+     * @type {Workflow}
      * @memberof Layer
      */
-    id: ProviderLayerId;
+    workflow: Workflow;
+    /**
+     *
+     * @type {Symbology}
+     * @memberof Layer
+     */
+    symbology?: Symbology | null;
+    /**
+     * properties, for instance, to be rendered in the UI
+     * @type {Array<Array<string>>}
+     * @memberof Layer
+     */
+    properties?: Array<Array<string>>;
     /**
      * metadata used for loading the data
      * @type {{ [key: string]: string; }}
@@ -37,30 +61,6 @@ export interface Layer {
     metadata?: {
         [key: string]: string;
     };
-    /**
-     *
-     * @type {string}
-     * @memberof Layer
-     */
-    name: string;
-    /**
-     * properties, for instance, to be rendered in the UI
-     * @type {Array<Array<string>>}
-     * @memberof Layer
-     */
-    properties?: Array<Array<string>>;
-    /**
-     *
-     * @type {Symbology}
-     * @memberof Layer
-     */
-    symbology?: Symbology | null;
-    /**
-     *
-     * @type {Workflow}
-     * @memberof Layer
-     */
-    workflow: Workflow;
 }
 /**
  * Check if a given object implements the Layer interface.

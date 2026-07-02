@@ -21,13 +21,13 @@ exports.AutoCreateDatasetToJSONTyped = AutoCreateDatasetToJSONTyped;
  * Check if a given object implements the AutoCreateDataset interface.
  */
 function instanceOfAutoCreateDataset(value) {
-    if (!('datasetDescription' in value) || value['datasetDescription'] === undefined)
+    if (!('upload' in value) || value['upload'] === undefined)
         return false;
     if (!('datasetName' in value) || value['datasetName'] === undefined)
         return false;
-    if (!('mainFile' in value) || value['mainFile'] === undefined)
+    if (!('datasetDescription' in value) || value['datasetDescription'] === undefined)
         return false;
-    if (!('upload' in value) || value['upload'] === undefined)
+    if (!('mainFile' in value) || value['mainFile'] === undefined)
         return false;
     return true;
 }
@@ -39,12 +39,12 @@ function AutoCreateDatasetFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'datasetDescription': json['datasetDescription'],
-        'datasetName': json['datasetName'],
-        'layerName': json['layerName'] == null ? undefined : json['layerName'],
-        'mainFile': json['mainFile'],
-        'tags': json['tags'] == null ? undefined : json['tags'],
         'upload': json['upload'],
+        'datasetName': json['datasetName'],
+        'datasetDescription': json['datasetDescription'],
+        'mainFile': json['mainFile'],
+        'layerName': json['layerName'] == null ? undefined : json['layerName'],
+        'tags': json['tags'] == null ? undefined : json['tags'],
     };
 }
 function AutoCreateDatasetToJSON(json) {
@@ -55,11 +55,11 @@ function AutoCreateDatasetToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'datasetDescription': value['datasetDescription'],
-        'datasetName': value['datasetName'],
-        'layerName': value['layerName'],
-        'mainFile': value['mainFile'],
-        'tags': value['tags'],
         'upload': value['upload'],
+        'datasetName': value['datasetName'],
+        'datasetDescription': value['datasetDescription'],
+        'mainFile': value['mainFile'],
+        'layerName': value['layerName'],
+        'tags': value['tags'],
     };
 }

@@ -20,9 +20,9 @@ export const InternalDataIdTypeEnum = {
  * Check if a given object implements the InternalDataId interface.
  */
 export function instanceOfInternalDataId(value) {
-    if (!('datasetId' in value) || value['datasetId'] === undefined)
-        return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('datasetId' in value) || value['datasetId'] === undefined)
         return false;
     return true;
 }
@@ -34,8 +34,8 @@ export function InternalDataIdFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'datasetId': json['datasetId'],
         'type': json['type'],
+        'datasetId': json['datasetId'],
     };
 }
 export function InternalDataIdToJSON(json) {
@@ -46,7 +46,7 @@ export function InternalDataIdToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'datasetId': value['datasetId'],
         'type': value['type'],
+        'datasetId': value['datasetId'],
     };
 }

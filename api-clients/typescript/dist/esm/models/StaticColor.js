@@ -20,9 +20,9 @@ export const StaticColorTypeEnum = {
  * Check if a given object implements the StaticColor interface.
  */
 export function instanceOfStaticColor(value) {
-    if (!('color' in value) || value['color'] === undefined)
-        return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('color' in value) || value['color'] === undefined)
         return false;
     return true;
 }
@@ -34,8 +34,8 @@ export function StaticColorFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'color': json['color'],
         'type': json['type'],
+        'color': json['color'],
     };
 }
 export function StaticColorToJSON(json) {
@@ -46,7 +46,7 @@ export function StaticColorToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'color': value['color'],
         'type': value['type'],
+        'color': value['color'],
     };
 }

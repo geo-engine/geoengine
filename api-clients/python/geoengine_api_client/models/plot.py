@@ -27,9 +27,9 @@ class Plot(BaseModel):
     """
     Plot
     """ # noqa: E501
-    name: StrictStr
     workflow: UUID
-    __properties: ClassVar[List[str]] = ["name", "workflow"]
+    name: StrictStr
+    __properties: ClassVar[List[str]] = ["workflow", "name"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -82,8 +82,8 @@ class Plot(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "name": obj.get("name"),
-            "workflow": obj.get("workflow")
+            "workflow": obj.get("workflow"),
+            "name": obj.get("name")
         })
         return _obj
 

@@ -28,9 +28,9 @@ export function PlotResultDescriptorFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'bbox': json['bbox'] == null ? undefined : BoundingBox2DFromJSON(json['bbox']),
         'spatialReference': json['spatialReference'],
         'time': json['time'] == null ? undefined : TimeIntervalFromJSON(json['time']),
+        'bbox': json['bbox'] == null ? undefined : BoundingBox2DFromJSON(json['bbox']),
     };
 }
 export function PlotResultDescriptorToJSON(json) {
@@ -41,8 +41,8 @@ export function PlotResultDescriptorToJSONTyped(value, ignoreDiscriminator = fal
         return value;
     }
     return {
-        'bbox': BoundingBox2DToJSON(value['bbox']),
         'spatialReference': value['spatialReference'],
         'time': TimeIntervalToJSON(value['time']),
+        'bbox': BoundingBox2DToJSON(value['bbox']),
     };
 }

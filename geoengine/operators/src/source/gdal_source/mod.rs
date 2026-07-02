@@ -37,10 +37,7 @@ pub use loading_info::{
     GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
 };
-use num::{
-    FromPrimitive,
-    integer::{div_ceil, div_floor},
-};
+use num::{FromPrimitive, integer::div_floor};
 use reader_mode::{GdalReaderMode, OverviewReaderState, ReaderState};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -508,7 +505,7 @@ fn overview_level_spatial_grid(
                 source_spatial_grid.grid_bounds.y_min(),
                 overview_level as isize,
             ),
-            div_ceil(
+            div_floor(
                 source_spatial_grid.grid_bounds.y_max(),
                 overview_level as isize,
             ),
@@ -516,7 +513,7 @@ fn overview_level_spatial_grid(
                 source_spatial_grid.grid_bounds.x_min(),
                 overview_level as isize,
             ),
-            div_ceil(
+            div_floor(
                 source_spatial_grid.grid_bounds.x_max(),
                 overview_level as isize,
             ),
@@ -818,22 +815,40 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
 mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext};
-    use crate::source::gdal_in::{
-        FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
-        GdalProcessPoolAccess, GdalSourceTimePlaceholder, TimeReference,
+    use crate::test_data;
+    use crate::util::Result;
+    use crate::util::gdal::add_ndvi_dataset;
+    use float_cmp::assert_approx_eq;
+    use geoengine_datatypes::hashmap;
+    use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
+    use geoengine_datatypes::raster::{
+        BoundedGrid, GridBoundingBox, GridShape2D, SpatialGridDefinition,
     };
-    use crate::util::{Result, gdal::add_ndvi_dataset};
-    use geoengine_datatypes::primitives::AxisAlignedRectangle;
-    use geoengine_datatypes::{
-        hashmap,
-        primitives::{DateTimeParseFormat, SpatialPartition2D, TimeInstance},
-        raster::{
-            BoundedGrid, EmptyGrid2D, GridBounds, GridIdx2D, GridShape2D, GridSize,
-            RasterPropertiesEntryType, RasterPropertiesKey, SpatialGridDefinition, TileInformation,
-            TilesEqualIgnoringCacheHint, TilingStrategy,
-        },
-        util::{gdal::hide_gdal_errors, test::TestDefault},
+    use geoengine_datatypes::raster::{
+        EmptyGrid2D, GridBounds, GridIdx2D, TilesEqualIgnoringCacheHint,
     };
+    use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
+    use geoengine_datatypes::util::gdal::hide_gdal_errors;
+    use httptest::matchers::request;
+    use httptest::{Expectation, Server, responders};
+    use reader::{GdalReadAdvise, GdalReadWindow};
+
+    fn tile_information_with_partition_and_shape(
+        partition: SpatialPartition2D,
+        shape: GridShape2D,
+    ) -> TileInformation {
+        let real_geotransform = GeoTransform::new(
+            partition.upper_left(),
+            partition.size_x() / shape.axis_size_x() as f64,
+            -partition.size_y() / shape.axis_size_y() as f64,
+        );
+
+        TileInformation {
+            tile_size_in_pixels: shape,
+            global_tile_position: [0, 0].into(),
+            global_geo_transform: real_geotransform,
+        }
+    }
 
     async fn query_gdal_source(
         exe_ctx: &MockExecutionContext,
@@ -1455,5 +1470,46 @@ mod tests {
         );
 
         assert!(tile.unwrap().tiles_equal_ignoring_cache_hint(&expected));
+    }
+
+    #[test]
+    fn it_computes_spatial_grids_for_overviews() {
+        let spatial_grid_definition = SpatialGridDefinition::new(
+            GeoTransform::new(Coordinate2D::new(0., 0.), 0.1, -0.1),
+            GridBoundingBox::new([-900, -1800], [899, 1799]).unwrap(),
+        );
+
+        let spatial_grid_definition_2x =
+            overview_level_spatial_grid(spatial_grid_definition, 2).unwrap();
+        let expected_spatial_grid_definition_2x = SpatialGridDefinition::new(
+            GeoTransform::new(Coordinate2D::new(0., 0.), 0.2, -0.2),
+            GridBoundingBox::new([-450, -900], [449, 899]).unwrap(),
+        );
+        assert_eq!(
+            spatial_grid_definition_2x,
+            expected_spatial_grid_definition_2x
+        );
+
+        let spatial_grid_definition_4x =
+            overview_level_spatial_grid(spatial_grid_definition, 4).unwrap();
+        let expected_spatial_grid_definition_4x = SpatialGridDefinition::new(
+            GeoTransform::new(Coordinate2D::new(0., 0.), 0.4, -0.4),
+            GridBoundingBox::new([-225, -450], [224, 449]).unwrap(),
+        );
+        assert_eq!(
+            spatial_grid_definition_4x,
+            expected_spatial_grid_definition_4x
+        );
+
+        let spatial_grid_definition_8x =
+            overview_level_spatial_grid(spatial_grid_definition, 8).unwrap();
+        let expected_spatial_grid_definition_8x = SpatialGridDefinition::new(
+            GeoTransform::new(Coordinate2D::new(0., 0.), 0.8, -0.8),
+            GridBoundingBox::new([-113, -225], [112, 224]).unwrap(),
+        );
+        assert_eq!(
+            spatial_grid_definition_8x,
+            expected_spatial_grid_definition_8x
+        );
     }
 }

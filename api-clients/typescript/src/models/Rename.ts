@@ -20,16 +20,16 @@ import { mapValues } from '../runtime';
 export interface Rename {
     /**
      * 
-     * @type {RenameTypeEnum}
-     * @memberof Rename
-     */
-    type: RenameTypeEnum;
-    /**
-     * 
      * @type {Array<string>}
      * @memberof Rename
      */
     values: Array<string>;
+    /**
+     * 
+     * @type {RenameTypeEnum}
+     * @memberof Rename
+     */
+    type: RenameTypeEnum;
 }
 
 
@@ -46,8 +46,8 @@ export type RenameTypeEnum = typeof RenameTypeEnum[keyof typeof RenameTypeEnum];
  * Check if a given object implements the Rename interface.
  */
 export function instanceOfRename(value: object): value is Rename {
-    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('values' in value) || value['values'] === undefined) return false;
+    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -61,8 +61,8 @@ export function RenameFromJSONTyped(json: any, ignoreDiscriminator: boolean): Re
     }
     return {
         
-        'type': json['type'],
         'values': json['values'],
+        'type': json['type'],
     };
 }
 
@@ -77,8 +77,8 @@ export function RenameToJSONTyped(value?: Rename | null, ignoreDiscriminator: bo
 
     return {
         
-        'type': value['type'],
         'values': value['values'],
+        'type': value['type'],
     };
 }
 

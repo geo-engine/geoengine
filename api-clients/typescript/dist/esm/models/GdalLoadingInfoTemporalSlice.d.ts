@@ -18,10 +18,10 @@ import type { GdalDatasetParameters } from './GdalDatasetParameters';
 export interface GdalLoadingInfoTemporalSlice {
     /**
      *
-     * @type {number}
+     * @type {TimeInterval}
      * @memberof GdalLoadingInfoTemporalSlice
      */
-    cacheTtl?: number;
+    time: TimeInterval;
     /**
      *
      * @type {GdalDatasetParameters}
@@ -30,10 +30,10 @@ export interface GdalLoadingInfoTemporalSlice {
     params?: GdalDatasetParameters | null;
     /**
      *
-     * @type {TimeInterval}
+     * @type {number}
      * @memberof GdalLoadingInfoTemporalSlice
      */
-    time: TimeInterval;
+    cacheTtl?: number;
 }
 /**
  * Check if a given object implements the GdalLoadingInfoTemporalSlice interface.

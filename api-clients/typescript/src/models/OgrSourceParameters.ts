@@ -19,17 +19,17 @@ import { mapValues } from '../runtime';
  */
 export interface OgrSourceParameters {
     /**
-     * *Optional*: list of attributes to include. When `None`, all attributes are included.
-     * @type {Array<string>}
-     * @memberof OgrSourceParameters
-     */
-    attributeProjection?: Array<string> | null;
-    /**
      * Dataset name or identifier to be loaded.
      * @type {string}
      * @memberof OgrSourceParameters
      */
     data: string;
+    /**
+     * *Optional*: list of attributes to include. When `None`, all attributes are included.
+     * @type {Array<string>}
+     * @memberof OgrSourceParameters
+     */
+    attributeProjection?: Array<string> | null;
 }
 
 /**
@@ -50,8 +50,8 @@ export function OgrSourceParametersFromJSONTyped(json: any, ignoreDiscriminator:
     }
     return {
         
-        'attributeProjection': json['attributeProjection'] == null ? undefined : json['attributeProjection'],
         'data': json['data'],
+        'attributeProjection': json['attributeProjection'] == null ? undefined : json['attributeProjection'],
     };
 }
 
@@ -66,8 +66,8 @@ export function OgrSourceParametersToJSONTyped(value?: OgrSourceParameters | nul
 
     return {
         
-        'attributeProjection': value['attributeProjection'],
         'data': value['data'],
+        'attributeProjection': value['attributeProjection'],
     };
 }
 

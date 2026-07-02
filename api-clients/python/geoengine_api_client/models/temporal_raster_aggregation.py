@@ -27,10 +27,10 @@ class TemporalRasterAggregation(BaseModel):
     """
     The `TemporalRasterAggregation` operator aggregates a raster time series into uniform time windows. The output starts with the first window that contains the query start and contains all windows that overlap the query interval.  Pixel values are computed by aggregating all input rasters that contribute to the current window.  ## Inputs  The `TemporalRasterAggregation` operator expects exactly one _raster_ input.  ## Errors  If the aggregation method is `first`, `last`, or `mean` and the input raster has no NO DATA value, an error is returned.
     """ # noqa: E501
+    type: StrictStr
     params: TemporalRasterAggregationParameters
     sources: SingleRasterSource
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["params", "sources", "type"]
+    __properties: ClassVar[List[str]] = ["type", "params", "sources"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -96,9 +96,9 @@ class TemporalRasterAggregation(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "type": obj.get("type"),
             "params": TemporalRasterAggregationParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
-            "sources": SingleRasterSource.from_dict(obj["sources"]) if obj.get("sources") is not None else None,
-            "type": obj.get("type")
+            "sources": SingleRasterSource.from_dict(obj["sources"]) if obj.get("sources") is not None else None
         })
         return _obj
 

@@ -6,15 +6,15 @@
 
 Name | Type
 ------------ | -------------
-`bool` | Array&lt;string&gt;
-`datetime` | Array&lt;string&gt;
-`_float` | Array&lt;string&gt;
 `formatSpecifics` | [FormatSpecifics](FormatSpecifics.md)
-`_int` | Array&lt;string&gt;
-`rename` | { [key: string]: string; }
-`text` | Array&lt;string&gt;
 `x` | string
 `y` | string
+`_int` | Array&lt;string&gt;
+`_float` | Array&lt;string&gt;
+`text` | Array&lt;string&gt;
+`bool` | Array&lt;string&gt;
+`datetime` | Array&lt;string&gt;
+`rename` | { [key: string]: string; }
 
 ## Example
 
@@ -23,15 +23,15 @@ import type { OgrSourceColumnSpec } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "bool": null,
-  "datetime": null,
-  "_float": null,
   "formatSpecifics": null,
-  "_int": null,
-  "rename": null,
-  "text": null,
   "x": null,
   "y": null,
+  "_int": null,
+  "_float": null,
+  "text": null,
+  "bool": null,
+  "datetime": null,
+  "rename": null,
 } satisfies OgrSourceColumnSpec
 
 console.log(example)

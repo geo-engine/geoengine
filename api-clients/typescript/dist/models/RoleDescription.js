@@ -22,9 +22,9 @@ const Role_1 = require("./Role");
  * Check if a given object implements the RoleDescription interface.
  */
 function instanceOfRoleDescription(value) {
-    if (!('individual' in value) || value['individual'] === undefined)
-        return false;
     if (!('role' in value) || value['role'] === undefined)
+        return false;
+    if (!('individual' in value) || value['individual'] === undefined)
         return false;
     return true;
 }
@@ -36,8 +36,8 @@ function RoleDescriptionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'individual': json['individual'],
         'role': (0, Role_1.RoleFromJSON)(json['role']),
+        'individual': json['individual'],
     };
 }
 function RoleDescriptionToJSON(json) {
@@ -48,7 +48,7 @@ function RoleDescriptionToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'individual': value['individual'],
         'role': (0, Role_1.RoleToJSON)(value['role']),
+        'individual': value['individual'],
     };
 }

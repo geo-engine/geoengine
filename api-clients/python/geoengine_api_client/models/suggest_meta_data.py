@@ -28,9 +28,9 @@ class SuggestMetaData(BaseModel):
     SuggestMetaData
     """ # noqa: E501
     data_path: DataPath = Field(alias="dataPath")
-    layer_name: Optional[StrictStr] = Field(default=None, alias="layerName")
     main_file: Optional[StrictStr] = Field(default=None, alias="mainFile")
-    __properties: ClassVar[List[str]] = ["dataPath", "layerName", "mainFile"]
+    layer_name: Optional[StrictStr] = Field(default=None, alias="layerName")
+    __properties: ClassVar[List[str]] = ["dataPath", "mainFile", "layerName"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -74,15 +74,15 @@ class SuggestMetaData(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of data_path
         if self.data_path:
             _dict['dataPath'] = self.data_path.to_dict()
-        # set to None if layer_name (nullable) is None
-        # and model_fields_set contains the field
-        if self.layer_name is None and "layer_name" in self.model_fields_set:
-            _dict['layerName'] = None
-
         # set to None if main_file (nullable) is None
         # and model_fields_set contains the field
         if self.main_file is None and "main_file" in self.model_fields_set:
             _dict['mainFile'] = None
+
+        # set to None if layer_name (nullable) is None
+        # and model_fields_set contains the field
+        if self.layer_name is None and "layer_name" in self.model_fields_set:
+            _dict['layerName'] = None
 
         return _dict
 
@@ -97,8 +97,8 @@ class SuggestMetaData(BaseModel):
 
         _obj = cls.model_validate({
             "dataPath": DataPath.from_dict(obj["dataPath"]) if obj.get("dataPath") is not None else None,
-            "layerName": obj.get("layerName"),
-            "mainFile": obj.get("mainFile")
+            "mainFile": obj.get("mainFile"),
+            "layerName": obj.get("layerName")
         })
         return _obj
 

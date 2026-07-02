@@ -22,11 +22,11 @@ export const RasterVectorJoinTypeEnum = {
  * Check if a given object implements the RasterVectorJoin interface.
  */
 export function instanceOfRasterVectorJoin(value) {
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;
     if (!('sources' in value) || value['sources'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -38,9 +38,9 @@ export function RasterVectorJoinFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'type': json['type'],
         'params': RasterVectorJoinParametersFromJSON(json['params']),
         'sources': SingleVectorMultipleRasterSourcesFromJSON(json['sources']),
-        'type': json['type'],
     };
 }
 export function RasterVectorJoinToJSON(json) {
@@ -51,8 +51,8 @@ export function RasterVectorJoinToJSONTyped(value, ignoreDiscriminator = false) 
         return value;
     }
     return {
+        'type': value['type'],
         'params': RasterVectorJoinParametersToJSON(value['params']),
         'sources': SingleVectorMultipleRasterSourcesToJSON(value['sources']),
-        'type': value['type'],
     };
 }

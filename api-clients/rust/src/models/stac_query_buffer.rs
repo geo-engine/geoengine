@@ -13,18 +13,18 @@ use serde::{Deserialize, Serialize};
 /// StacQueryBuffer : A struct that represents buffers to apply to stac requests
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StacQueryBuffer {
-    #[serde(rename = "endSeconds")]
-    pub end_seconds: i64,
     #[serde(rename = "startSeconds")]
     pub start_seconds: i64,
+    #[serde(rename = "endSeconds")]
+    pub end_seconds: i64,
 }
 
 impl StacQueryBuffer {
     /// A struct that represents buffers to apply to stac requests
-    pub fn new(end_seconds: i64, start_seconds: i64) -> StacQueryBuffer {
+    pub fn new(start_seconds: i64, end_seconds: i64) -> StacQueryBuffer {
         StacQueryBuffer {
-            end_seconds,
             start_seconds,
+            end_seconds,
         }
     }
 }

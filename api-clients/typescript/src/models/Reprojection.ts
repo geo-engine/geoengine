@@ -61,6 +61,12 @@ import {
 export interface Reprojection {
     /**
      * 
+     * @type {ReprojectionTypeEnum}
+     * @memberof Reprojection
+     */
+    type: ReprojectionTypeEnum;
+    /**
+     * 
      * @type {ReprojectionParameters}
      * @memberof Reprojection
      */
@@ -71,12 +77,6 @@ export interface Reprojection {
      * @memberof Reprojection
      */
     sources: SingleRasterOrVectorSource;
-    /**
-     * 
-     * @type {ReprojectionTypeEnum}
-     * @memberof Reprojection
-     */
-    type: ReprojectionTypeEnum;
 }
 
 
@@ -93,9 +93,9 @@ export type ReprojectionTypeEnum = typeof ReprojectionTypeEnum[keyof typeof Repr
  * Check if a given object implements the Reprojection interface.
  */
 export function instanceOfReprojection(value: object): value is Reprojection {
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -109,9 +109,9 @@ export function ReprojectionFromJSONTyped(json: any, ignoreDiscriminator: boolea
     }
     return {
         
+        'type': json['type'],
         'params': ReprojectionParametersFromJSON(json['params']),
         'sources': SingleRasterOrVectorSourceFromJSON(json['sources']),
-        'type': json['type'],
     };
 }
 
@@ -126,9 +126,9 @@ export function ReprojectionToJSONTyped(value?: Reprojection | null, ignoreDiscr
 
     return {
         
+        'type': value['type'],
         'params': ReprojectionParametersToJSON(value['params']),
         'sources': SingleRasterOrVectorSourceToJSON(value['sources']),
-        'type': value['type'],
     };
 }
 

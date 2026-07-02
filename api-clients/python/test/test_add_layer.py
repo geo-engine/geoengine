@@ -35,23 +35,23 @@ class TestAddLayer(unittest.TestCase):
         model = AddLayer()
         if include_optional:
             return AddLayer(
-                description = 'Example layer description',
-                metadata = {
-                    'key' : ''
-                    },
                 name = 'Example Layer',
+                description = 'Example layer description',
+                workflow = None,
+                symbology = None,
                 properties = [
                     [
                         ''
                         ]
                     ],
-                symbology = None,
-                workflow = None
+                metadata = {
+                    'key' : ''
+                    }
             )
         else:
             return AddLayer(
-                description = 'Example layer description',
                 name = 'Example Layer',
+                description = 'Example layer description',
                 workflow = None,
         )
         """

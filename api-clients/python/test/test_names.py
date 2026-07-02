@@ -35,17 +35,17 @@ class TestNames(unittest.TestCase):
         model = Names()
         if include_optional:
             return Names(
-                type = 'names',
-                values = [
-                    ''
-                    ]
-            )
-        else:
-            return Names(
-                type = 'names',
                 values = [
                     ''
                     ],
+                type = 'names'
+            )
+        else:
+            return Names(
+                values = [
+                    ''
+                    ],
+                type = 'names',
         )
         """
 

@@ -12,41 +12,41 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Dataset {
-    #[serde(rename = "dataPath", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub data_path: Option<Option<Box<models::DataPath>>>,
-    #[serde(rename = "description")]
-    pub description: String,
-    #[serde(rename = "displayName")]
-    pub display_name: String,
     #[serde(rename = "id")]
     pub id: uuid::Uuid,
     #[serde(rename = "name")]
     pub name: String,
-    #[serde(rename = "provenance", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub provenance: Option<Option<Vec<models::Provenance>>>,
+    #[serde(rename = "displayName")]
+    pub display_name: String,
+    #[serde(rename = "description")]
+    pub description: String,
     #[serde(rename = "resultDescriptor")]
     pub result_descriptor: Box<models::TypedResultDescriptor>,
     #[serde(rename = "sourceOperator")]
     pub source_operator: String,
     #[serde(rename = "symbology", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub symbology: Option<Option<Box<models::Symbology>>>,
+    #[serde(rename = "provenance", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<Option<Vec<models::Provenance>>>,
     #[serde(rename = "tags", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub tags: Option<Option<Vec<String>>>,
+    #[serde(rename = "dataPath", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub data_path: Option<Option<Box<models::DataPath>>>,
 }
 
 impl Dataset {
-    pub fn new(description: String, display_name: String, id: uuid::Uuid, name: String, result_descriptor: models::TypedResultDescriptor, source_operator: String) -> Dataset {
+    pub fn new(id: uuid::Uuid, name: String, display_name: String, description: String, result_descriptor: models::TypedResultDescriptor, source_operator: String) -> Dataset {
         Dataset {
-            data_path: None,
-            description,
-            display_name,
             id,
             name,
-            provenance: None,
+            display_name,
+            description,
             result_descriptor: Box::new(result_descriptor),
             source_operator,
             symbology: None,
+            provenance: None,
             tags: None,
+            data_path: None,
         }
     }
 }

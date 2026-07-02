@@ -33,8 +33,8 @@ function UserInfoFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'email': json['email'] == null ? undefined : json['email'],
         'id': json['id'],
+        'email': json['email'] == null ? undefined : json['email'],
         'realName': json['realName'] == null ? undefined : json['realName'],
     };
 }
@@ -46,8 +46,8 @@ function UserInfoToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'email': value['email'],
         'id': value['id'],
+        'email': value['email'],
         'realName': value['realName'],
     };
 }

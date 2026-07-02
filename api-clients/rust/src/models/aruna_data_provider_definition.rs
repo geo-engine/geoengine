@@ -12,41 +12,41 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ArunaDataProviderDefinition {
-    #[serde(rename = "apiToken")]
-    pub api_token: String,
-    #[serde(rename = "apiUrl")]
-    pub api_url: String,
-    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
-    pub cache_ttl: Option<i32>,
-    #[serde(rename = "description")]
-    pub description: String,
-    #[serde(rename = "filterLabel")]
-    pub filter_label: String,
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "id")]
     pub id: uuid::Uuid,
     #[serde(rename = "name")]
     pub name: String,
+    #[serde(rename = "description")]
+    pub description: String,
     #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub priority: Option<Option<i32>>,
+    #[serde(rename = "apiUrl")]
+    pub api_url: String,
     #[serde(rename = "projectId")]
     pub project_id: String,
-    #[serde(rename = "type")]
-    pub r#type: Type,
+    #[serde(rename = "apiToken")]
+    pub api_token: String,
+    #[serde(rename = "filterLabel")]
+    pub filter_label: String,
+    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<i32>,
 }
 
 impl ArunaDataProviderDefinition {
-    pub fn new(api_token: String, api_url: String, description: String, filter_label: String, id: uuid::Uuid, name: String, project_id: String, r#type: Type) -> ArunaDataProviderDefinition {
+    pub fn new(r#type: Type, id: uuid::Uuid, name: String, description: String, api_url: String, project_id: String, api_token: String, filter_label: String) -> ArunaDataProviderDefinition {
         ArunaDataProviderDefinition {
-            api_token,
-            api_url,
-            cache_ttl: None,
-            description,
-            filter_label,
+            r#type,
             id,
             name,
+            description,
             priority: None,
+            api_url,
             project_id,
-            r#type,
+            api_token,
+            filter_label,
+            cache_ttl: None,
         }
     }
 }

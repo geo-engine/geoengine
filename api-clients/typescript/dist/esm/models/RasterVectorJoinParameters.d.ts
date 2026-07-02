@@ -18,18 +18,6 @@ import type { FeatureAggregationMethod } from './FeatureAggregationMethod';
  */
 export interface RasterVectorJoinParameters {
     /**
-     * The aggregation function to use for features covering multiple pixels.
-     * @type {FeatureAggregationMethod}
-     * @memberof RasterVectorJoinParameters
-     */
-    featureAggregation: FeatureAggregationMethod;
-    /**
-     * Whether to ignore no data values in the aggregation. Defaults to `false`.
-     * @type {boolean}
-     * @memberof RasterVectorJoinParameters
-     */
-    featureAggregationIgnoreNoData?: boolean;
-    /**
      * Specify how the new column names are derived from the raster band names.
      *
      * The `ColumnNames` type is used to specify how the new column names are derived from the raster band names.
@@ -42,6 +30,18 @@ export interface RasterVectorJoinParameters {
      * @memberof RasterVectorJoinParameters
      */
     names: ColumnNames;
+    /**
+     * The aggregation function to use for features covering multiple pixels.
+     * @type {FeatureAggregationMethod}
+     * @memberof RasterVectorJoinParameters
+     */
+    featureAggregation: FeatureAggregationMethod;
+    /**
+     * Whether to ignore no data values in the aggregation. Defaults to `false`.
+     * @type {boolean}
+     * @memberof RasterVectorJoinParameters
+     */
+    featureAggregationIgnoreNoData?: boolean;
     /**
      * The aggregation function to use for features covering multiple (raster) time steps.
      * @type {TemporalAggregationMethod}

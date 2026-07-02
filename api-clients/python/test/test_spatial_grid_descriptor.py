@@ -35,7 +35,6 @@ class TestSpatialGridDescriptor(unittest.TestCase):
         model = SpatialGridDescriptor()
         if include_optional:
             return SpatialGridDescriptor(
-                descriptor = 'source',
                 spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(
                     geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
                         origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
@@ -44,16 +43,16 @@ class TestSpatialGridDescriptor(unittest.TestCase):
                         x_pixel_size = 1.337, 
                         y_pixel_size = 1.337, ), 
                     grid_bounds = geoengine_api_client.models.grid_bounding_box2_d.GridBoundingBox2D(
-                        bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                            x_idx = 56, 
-                            y_idx = 56, ), 
                         top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                            x_idx = 56, 
-                            y_idx = 56, ), ), )
+                            y_idx = 56, 
+                            x_idx = 56, ), 
+                        bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                            y_idx = 56, 
+                            x_idx = 56, ), ), ),
+                descriptor = 'source'
             )
         else:
             return SpatialGridDescriptor(
-                descriptor = 'source',
                 spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(
                     geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
                         origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
@@ -62,12 +61,13 @@ class TestSpatialGridDescriptor(unittest.TestCase):
                         x_pixel_size = 1.337, 
                         y_pixel_size = 1.337, ), 
                     grid_bounds = geoengine_api_client.models.grid_bounding_box2_d.GridBoundingBox2D(
-                        bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                            x_idx = 56, 
-                            y_idx = 56, ), 
                         top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                            x_idx = 56, 
-                            y_idx = 56, ), ), ),
+                            y_idx = 56, 
+                            x_idx = 56, ), 
+                        bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                            y_idx = 56, 
+                            x_idx = 56, ), ), ),
+                descriptor = 'source',
         )
         """
 

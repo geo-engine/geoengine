@@ -35,15 +35,15 @@ class TestDataUsageSummary(unittest.TestCase):
         model = DataUsageSummary()
         if include_optional:
             return DataUsageSummary(
-                count = 0,
+                timestamp = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
                 data = '',
-                timestamp = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f')
+                count = 0
             )
         else:
             return DataUsageSummary(
-                count = 0,
-                data = '',
                 timestamp = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
+                data = '',
+                count = 0,
         )
         """
 

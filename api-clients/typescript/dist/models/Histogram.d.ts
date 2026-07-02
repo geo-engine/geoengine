@@ -33,6 +33,12 @@ import type { HistogramParameters } from './HistogramParameters';
 export interface Histogram {
     /**
      *
+     * @type {HistogramTypeEnum}
+     * @memberof Histogram
+     */
+    type: HistogramTypeEnum;
+    /**
+     *
      * @type {HistogramParameters}
      * @memberof Histogram
      */
@@ -43,12 +49,6 @@ export interface Histogram {
      * @memberof Histogram
      */
     sources: SingleVectorOrRasterSource;
-    /**
-     *
-     * @type {HistogramTypeEnum}
-     * @memberof Histogram
-     */
-    type: HistogramTypeEnum;
 }
 /**
  * @export

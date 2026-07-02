@@ -14,9 +14,9 @@
  * Check if a given object implements the Plot interface.
  */
 export function instanceOfPlot(value) {
-    if (!('name' in value) || value['name'] === undefined)
-        return false;
     if (!('workflow' in value) || value['workflow'] === undefined)
+        return false;
+    if (!('name' in value) || value['name'] === undefined)
         return false;
     return true;
 }
@@ -28,8 +28,8 @@ export function PlotFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'name': json['name'],
         'workflow': json['workflow'],
+        'name': json['name'],
     };
 }
 export function PlotToJSON(json) {
@@ -40,7 +40,7 @@ export function PlotToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'name': value['name'],
         'workflow': value['workflow'],
+        'name': value['name'],
     };
 }

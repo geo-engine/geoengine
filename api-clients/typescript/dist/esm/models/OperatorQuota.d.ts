@@ -16,12 +16,6 @@
 export interface OperatorQuota {
     /**
      *
-     * @type {number}
-     * @memberof OperatorQuota
-     */
-    count: number;
-    /**
-     *
      * @type {string}
      * @memberof OperatorQuota
      */
@@ -32,6 +26,12 @@ export interface OperatorQuota {
      * @memberof OperatorQuota
      */
     operatorPath: string;
+    /**
+     *
+     * @type {number}
+     * @memberof OperatorQuota
+     */
+    count: number;
 }
 /**
  * Check if a given object implements the OperatorQuota interface.

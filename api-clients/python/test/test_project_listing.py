@@ -35,29 +35,29 @@ class TestProjectListing(unittest.TestCase):
         model = ProjectListing()
         if include_optional:
             return ProjectListing(
-                changed = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
-                description = '',
                 id = '',
+                name = '',
+                description = '',
                 layer_names = [
                     ''
                     ],
-                name = '',
                 plot_names = [
                     ''
-                    ]
+                    ],
+                changed = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f')
             )
         else:
             return ProjectListing(
-                changed = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
-                description = '',
                 id = '',
+                name = '',
+                description = '',
                 layer_names = [
                     ''
                     ],
-                name = '',
                 plot_names = [
                     ''
                     ],
+                changed = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
         )
         """
 

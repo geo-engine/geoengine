@@ -12,20 +12,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ExternalDataId {
-    #[serde(rename = "layerId")]
-    pub layer_id: String,
-    #[serde(rename = "providerId")]
-    pub provider_id: uuid::Uuid,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "providerId")]
+    pub provider_id: uuid::Uuid,
+    #[serde(rename = "layerId")]
+    pub layer_id: String,
 }
 
 impl ExternalDataId {
-    pub fn new(layer_id: String, provider_id: uuid::Uuid, r#type: Type) -> ExternalDataId {
+    pub fn new(r#type: Type, provider_id: uuid::Uuid, layer_id: String) -> ExternalDataId {
         ExternalDataId {
-            layer_id,
-            provider_id,
             r#type,
+            provider_id,
+            layer_id,
         }
     }
 }

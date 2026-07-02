@@ -16,12 +16,12 @@ pub struct InterpolationParameters {
     /// Interpolation method.
     #[serde(rename = "interpolation")]
     pub interpolation: models::InterpolationMethod,
-    /// Optional reference point used to align the output grid origin.
-    #[serde(rename = "outputOriginReference", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub output_origin_reference: Option<Option<Box<models::Coordinate2D>>>,
     /// Target output resolution.
     #[serde(rename = "outputResolution")]
     pub output_resolution: Box<models::InterpolationResolution>,
+    /// Optional reference point used to align the output grid origin.
+    #[serde(rename = "outputOriginReference", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub output_origin_reference: Option<Option<Box<models::Coordinate2D>>>,
 }
 
 impl InterpolationParameters {
@@ -29,8 +29,8 @@ impl InterpolationParameters {
     pub fn new(interpolation: models::InterpolationMethod, output_resolution: models::InterpolationResolution) -> InterpolationParameters {
         InterpolationParameters {
             interpolation,
-            output_origin_reference: None,
             output_resolution: Box::new(output_resolution),
+            output_origin_reference: None,
         }
     }
 }

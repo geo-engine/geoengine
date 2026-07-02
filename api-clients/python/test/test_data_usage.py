@@ -35,19 +35,19 @@ class TestDataUsage(unittest.TestCase):
         model = DataUsage()
         if include_optional:
             return DataUsage(
-                computation_id = '',
-                count = 0,
-                data = '',
                 timestamp = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
-                user_id = ''
+                user_id = '',
+                computation_id = '',
+                data = '',
+                count = 0
             )
         else:
             return DataUsage(
-                computation_id = '',
-                count = 0,
-                data = '',
                 timestamp = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
                 user_id = '',
+                computation_id = '',
+                data = '',
+                count = 0,
         )
         """
 

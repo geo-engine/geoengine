@@ -21,9 +21,9 @@ exports.ProviderLayerCollectionIdToJSONTyped = ProviderLayerCollectionIdToJSONTy
  * Check if a given object implements the ProviderLayerCollectionId interface.
  */
 function instanceOfProviderLayerCollectionId(value) {
-    if (!('collectionId' in value) || value['collectionId'] === undefined)
-        return false;
     if (!('providerId' in value) || value['providerId'] === undefined)
+        return false;
+    if (!('collectionId' in value) || value['collectionId'] === undefined)
         return false;
     return true;
 }
@@ -35,8 +35,8 @@ function ProviderLayerCollectionIdFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'collectionId': json['collectionId'],
         'providerId': json['providerId'],
+        'collectionId': json['collectionId'],
     };
 }
 function ProviderLayerCollectionIdToJSON(json) {
@@ -47,7 +47,7 @@ function ProviderLayerCollectionIdToJSONTyped(value, ignoreDiscriminator = false
         return value;
     }
     return {
-        'collectionId': value['collectionId'],
         'providerId': value['providerId'],
+        'collectionId': value['collectionId'],
     };
 }

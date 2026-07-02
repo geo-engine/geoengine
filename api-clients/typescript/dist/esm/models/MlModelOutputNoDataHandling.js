@@ -27,8 +27,8 @@ export function MlModelOutputNoDataHandlingFromJSONTyped(json, ignoreDiscriminat
         return json;
     }
     return {
-        'noDataValue': json['noDataValue'] == null ? undefined : json['noDataValue'],
         'variant': MlModelOutputNoDataHandlingVariantFromJSON(json['variant']),
+        'noDataValue': json['noDataValue'] == null ? undefined : json['noDataValue'],
     };
 }
 export function MlModelOutputNoDataHandlingToJSON(json) {
@@ -39,7 +39,7 @@ export function MlModelOutputNoDataHandlingToJSONTyped(value, ignoreDiscriminato
         return value;
     }
     return {
-        'noDataValue': value['noDataValue'],
         'variant': MlModelOutputNoDataHandlingVariantToJSON(value['variant']),
+        'noDataValue': value['noDataValue'],
     };
 }

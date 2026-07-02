@@ -109,6 +109,12 @@ import {
 export interface Expression {
     /**
      * 
+     * @type {ExpressionTypeEnum}
+     * @memberof Expression
+     */
+    type: ExpressionTypeEnum;
+    /**
+     * 
      * @type {ExpressionParameters}
      * @memberof Expression
      */
@@ -119,12 +125,6 @@ export interface Expression {
      * @memberof Expression
      */
     sources: SingleRasterSource;
-    /**
-     * 
-     * @type {ExpressionTypeEnum}
-     * @memberof Expression
-     */
-    type: ExpressionTypeEnum;
 }
 
 
@@ -141,9 +141,9 @@ export type ExpressionTypeEnum = typeof ExpressionTypeEnum[keyof typeof Expressi
  * Check if a given object implements the Expression interface.
  */
 export function instanceOfExpression(value: object): value is Expression {
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -157,9 +157,9 @@ export function ExpressionFromJSONTyped(json: any, ignoreDiscriminator: boolean)
     }
     return {
         
+        'type': json['type'],
         'params': ExpressionParametersFromJSON(json['params']),
         'sources': SingleRasterSourceFromJSON(json['sources']),
-        'type': json['type'],
     };
 }
 
@@ -174,9 +174,9 @@ export function ExpressionToJSONTyped(value?: Expression | null, ignoreDiscrimin
 
     return {
         
+        'type': value['type'],
         'params': ExpressionParametersToJSON(value['params']),
         'sources': SingleRasterSourceToJSON(value['sources']),
-        'type': value['type'],
     };
 }
 

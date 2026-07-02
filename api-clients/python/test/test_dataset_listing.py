@@ -35,28 +35,28 @@ class TestDatasetListing(unittest.TestCase):
         model = DatasetListing()
         if include_optional:
             return DatasetListing(
-                description = '',
-                display_name = '',
                 id = '',
                 name = '',
-                result_descriptor = None,
-                source_operator = '',
-                symbology = None,
-                tags = [
-                    ''
-                    ]
-            )
-        else:
-            return DatasetListing(
-                description = '',
                 display_name = '',
-                id = '',
-                name = '',
-                result_descriptor = None,
-                source_operator = '',
+                description = '',
                 tags = [
                     ''
                     ],
+                source_operator = '',
+                result_descriptor = None,
+                symbology = None
+            )
+        else:
+            return DatasetListing(
+                id = '',
+                name = '',
+                display_name = '',
+                description = '',
+                tags = [
+                    ''
+                    ],
+                source_operator = '',
+                result_descriptor = None,
         )
         """
 

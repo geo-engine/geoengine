@@ -20,16 +20,16 @@ import { mapValues } from '../runtime';
 export interface TaskStatusAborted {
     /**
      * 
-     * @type {any}
-     * @memberof TaskStatusAborted
-     */
-    cleanUp: any | null;
-    /**
-     * 
      * @type {TaskStatusAbortedStatusEnum}
      * @memberof TaskStatusAborted
      */
     status: TaskStatusAbortedStatusEnum;
+    /**
+     * 
+     * @type {any}
+     * @memberof TaskStatusAborted
+     */
+    cleanUp: any | null;
 }
 
 
@@ -46,8 +46,8 @@ export type TaskStatusAbortedStatusEnum = typeof TaskStatusAbortedStatusEnum[key
  * Check if a given object implements the TaskStatusAborted interface.
  */
 export function instanceOfTaskStatusAborted(value: object): value is TaskStatusAborted {
-    if (!('cleanUp' in value) || value['cleanUp'] === undefined) return false;
     if (!('status' in value) || value['status'] === undefined) return false;
+    if (!('cleanUp' in value) || value['cleanUp'] === undefined) return false;
     return true;
 }
 
@@ -61,8 +61,8 @@ export function TaskStatusAbortedFromJSONTyped(json: any, ignoreDiscriminator: b
     }
     return {
         
-        'cleanUp': json['cleanUp'],
         'status': json['status'],
+        'cleanUp': json['cleanUp'],
     };
 }
 
@@ -77,8 +77,8 @@ export function TaskStatusAbortedToJSONTyped(value?: TaskStatusAborted | null, i
 
     return {
         
-        'cleanUp': value['cleanUp'],
         'status': value['status'],
+        'cleanUp': value['cleanUp'],
     };
 }
 

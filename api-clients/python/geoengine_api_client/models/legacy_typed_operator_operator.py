@@ -26,10 +26,10 @@ class LegacyTypedOperatorOperator(BaseModel):
     """
     LegacyTypedOperatorOperator
     """ # noqa: E501
+    type: StrictStr
     params: Optional[Dict[str, Any]] = None
     sources: Optional[Dict[str, Any]] = None
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["params", "sources", "type"]
+    __properties: ClassVar[List[str]] = ["type", "params", "sources"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -82,9 +82,9 @@ class LegacyTypedOperatorOperator(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "type": obj.get("type"),
             "params": obj.get("params"),
-            "sources": obj.get("sources"),
-            "type": obj.get("type")
+            "sources": obj.get("sources")
         })
         return _obj
 

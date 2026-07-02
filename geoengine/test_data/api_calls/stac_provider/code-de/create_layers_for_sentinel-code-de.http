@@ -1,0 +1,387 @@
+###
+# Create layers for the sentinel data sources in the Layer DB.
+# These layers are used by the `geoengine-ol-ogc-api-map-tile-layer` component
+# in the Enhanced Data Viewer.
+#
+# The layers are created in the root collection of the internal layer DB.
+# Use the returned UUIDs as `dataLayerId` with `dataConnectorId` = internal provider.
+#
+# Prerequisites: The STAC providers must be registered first (see register_and_share_provider-code-de.http)
+
+# @name anonymousSession
+POST https://edv.apps.gen-01.code-de-internal.cloudferro.com/api/anonymous
+Content-Type: application/json
+
+###
+@internalProviderId = ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74
+@rootCollectionId = 05102bb3-a855-4a37-8a8a-30026a91fef1
+
+# Sentinel-2 L2A collection from STAC provider
+@sentinel2ProviderId = b274275c-373d-4a3f-8b45-9b48e9614329
+
+# Sentinel-1 collection from STAC provider
+@sentinel1ProviderId = 452a4ca2-306c-4ab2-a6e2-ffe42d5c49c8
+
+###
+# @name layerSentinel2Raw
+# Create layer: Sentinel-2 L2A Raw (16-bit, 10m, single band)
+POST https://edv.apps.gen-01.code-de-internal.cloudferro.com/api/layerDb/collections/{{rootCollectionId}}/layers
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+
+{
+    "name": "Sentinel-2 L2A Raw",
+    "description": "Sentinel-2 L2A raw 16-bit 10m data from STAC provider",
+    "workflow": {
+        "type": "Raster",
+        "operator": {
+            "type": "MultiBandGdalSource",
+            "params": {
+                "data": "_:{{sentinel2ProviderId}}:`dataset/epsg32632_u16_10`"
+            }
+        }
+    },
+    "symbology": {
+        "type": "raster",
+        "opacity": 1.0,
+        "rasterColorizer": {
+            "type": "singleBand",
+            "band": 0,
+            "bandColorizer": {
+                "type": "linearGradient",
+                "breakpoints": [
+                    {
+                        "value": 0,
+                        "color": [0, 0, 0, 255]
+                    },
+                    {
+                        "value": 2000,
+                        "color": [255, 255, 255, 255]
+                    }
+                ],
+                "noDataColor": [0, 0, 0, 0],
+                "overColor": [255, 255, 255, 255],
+                "underColor": [0, 0, 0, 255]
+            }
+        }
+    },
+    "properties": [
+        ["dataSource", "sentinel2L2a"],
+        ["preset", "raw"]
+    ]
+}
+
+###
+# @name layerSentinel2Rgb
+# Create layer: Sentinel-2 L2A RGB (8-bit, 10m, multi-band)
+POST https://edv.apps.gen-01.code-de-internal.cloudferro.com/api/layerDb/collections/{{rootCollectionId}}/layers
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+
+{
+    "name": "Sentinel-2 L2A RGB",
+    "description": "Sentinel-2 L2A true color RGB 8-bit 10m data from STAC provider",
+    "workflow": {
+        "type": "Raster",
+        "operator": {
+            "type": "MultiBandGdalSource",
+            "params": {
+                "data": "_:{{sentinel2ProviderId}}:`dataset/epsg32632_u8_10`"
+            }
+        }
+    },
+    "symbology": {
+        "type": "raster",
+        "opacity": 1.0,
+        "rasterColorizer": {
+            "type": "multiBand",
+            "redBand": 2,
+            "greenBand": 1,
+            "blueBand": 0,
+            "redMin": 0,
+            "redMax": 255,
+            "redScale": 1,
+            "greenMin": 0,
+            "greenMax": 255,
+            "greenScale": 1,
+            "blueMin": 0,
+            "blueMax": 255,
+            "blueScale": 1,
+            "noDataColor": [0, 0, 0, 0]
+        }
+    },
+    "properties": [
+        ["dataSource", "sentinel2L2a"],
+        ["preset", "rgb"]
+    ]
+}
+
+###
+# @name layerSentinel2Ndvi
+# Create layer: Sentinel-2 L2A NDVI
+# A: SCL (20m -> interpolated to 10m), B: NIR (B08), C: Red (B04)
+POST https://edv.apps.gen-01.code-de-internal.cloudferro.com/api/layerDb/collections/{{rootCollectionId}}/layers
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+
+{
+    "name": "Sentinel-2 L2A NDVI",
+    "description": "Sentinel-2 L2A NDVI computed from NIR (B08) and Red (B04) with cloud masking via SCL",
+    "workflow": {
+        "type": "Raster",
+        "operator": {
+            "type": "Expression",
+            "params": {
+                "expression": "if (A == 3 || (A >= 7 && A <= 11)) { NODATA } else { (B - C) / (B + C) }",
+                "mapNoData": false,
+                "outputBand": {
+                    "name": "NDVI",
+                    "measurement": {
+                        "type": "continuous",
+                        "measurement": "NDVI",
+                        "unit": "NDVI"
+                    }
+                },
+                "outputType": "F32"
+            },
+            "sources": {
+                "raster": {
+                    "type": "RasterStacker",
+                    "params": {
+                        "renameBands": {
+                            "type": "default"
+                        }
+                    },
+                    "sources": {
+                        "rasters": [
+                            {
+                                "type": "RasterTypeConversion",
+                                "params": {
+                                    "outputDataType": "U16"
+                                },
+                                "sources": {
+                                    "raster": {
+                                        "type": "Interpolation",
+                                        "params": {
+                                            "interpolation": "nearestNeighbor",
+                                            "outputResolution": {
+                                                "type": "fraction",
+                                                "x": 2.0,
+                                                "y": 2.0
+                                            }
+                                        },
+                                        "sources": {
+                                            "raster": {
+                                                "type": "BandFilter",
+                                                "params": {
+                                                    "bands": [1]
+                                                },
+                                                "sources": {
+                                                    "raster": {
+                                                        "type": "MultiBandGdalSource",
+                                                        "params": {
+                                                            "data": "_:{{sentinel2ProviderId}}:`dataset/epsg32632_u8_20`"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                "type": "BandFilter",
+                                "params": {
+                                    "bands": [3, 4]
+                                },
+                                "sources": {
+                                    "raster": {
+                                        "type": "MultiBandGdalSource",
+                                        "params": {
+                                            "data": "_:{{sentinel2ProviderId}}:`dataset/epsg32632_u16_10`"
+                                        }
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    },
+    "symbology": {
+        "type": "raster",
+        "opacity": 1.0,
+        "rasterColorizer": {
+            "type": "singleBand",
+            "band": 0,
+            "bandColorizer": {
+                "type": "linearGradient",
+                "breakpoints": [
+                    {
+                        "value": -0.1,
+                        "color": [0, 0, 0, 255]
+                    },
+                    {
+                        "value": 0.8,
+                        "color": [0, 255, 0, 255]
+                    }
+                ],
+                "noDataColor": [0, 0, 0, 0],
+                "overColor": [246, 250, 254, 255],
+                "underColor": [247, 251, 255, 255]
+            }
+        }
+    },
+    "properties": [
+        ["dataSource", "sentinel2L2a"],
+        ["preset", "ndvi"]
+    ]
+}
+
+###
+# @name layerSentinel1Raw
+# Create layer: Sentinel-1 Raw (32-bit float, 20m)
+POST https://edv.apps.gen-01.code-de-internal.cloudferro.com/api/layerDb/collections/{{rootCollectionId}}/layers
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+
+{
+    "name": "Sentinel-1 Raw",
+    "description": "Sentinel-1 raw 32-bit float 20m data from STAC provider",
+    "workflow": {
+        "type": "Raster",
+        "operator": {
+            "type": "MultiBandGdalSource",
+            "params": {
+                "data": "_:{{sentinel1ProviderId}}:`dataset/epsg32632_f32_20`"
+            }
+        }
+    },
+    "symbology": {
+        "type": "raster",
+        "opacity": 1.0,
+        "rasterColorizer": {
+            "type": "singleBand",
+            "band": 0,
+            "bandColorizer": {
+                "type": "linearGradient",
+                "breakpoints": [
+                    {
+                        "value": 0,
+                        "color": [0, 0, 0, 255]
+                    },
+                    {
+                        "value": 0.3,
+                        "color": [255, 255, 255, 255]
+                    }
+                ],
+                "noDataColor": [0, 0, 0, 0],
+                "overColor": [255, 255, 255, 255],
+                "underColor": [0, 0, 0, 255]
+            }
+        }
+    },
+    "properties": [
+        ["dataSource", "sentinel1"],
+        ["preset", "raw"]
+    ]
+}
+
+###
+# @name layerSentinel1Static
+# Create layer: Sentinel-1 Global Mosaics (static)
+POST https://edv.apps.gen-01.code-de-internal.cloudferro.com/api/layerDb/collections/{{rootCollectionId}}/layers
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+
+{
+    "name": "Sentinel-1 Global Mosaics",
+    "description": "Sentinel-1 global mosaics static dataset",
+    "workflow": {
+        "type": "Raster",
+        "operator": {
+            "type": "GdalSource",
+            "params": {
+                "data": "sentinel-1-global-mosaics"
+            }
+        }
+    },
+    "symbology": {
+        "type": "raster",
+        "opacity": 1.0,
+        "rasterColorizer": {
+            "type": "singleBand",
+            "band": 0,
+            "bandColorizer": {
+                "type": "linearGradient",
+                "breakpoints": [
+                    {
+                        "value": 0,
+                        "color": [0, 0, 0, 255]
+                    },
+                    {
+                        "value": 1,
+                        "color": [255, 255, 255, 255]
+                    }
+                ],
+                "noDataColor": [0, 0, 0, 0],
+                "overColor": [255, 255, 255, 255],
+                "underColor": [0, 0, 0, 255]
+            }
+        }
+    },
+    "properties": [
+        ["dataSource", "sentinel1Static"],
+        ["preset", "raw"]
+    ]
+}
+
+###
+# @name layerSentinel2Static
+# Create layer: Sentinel-2 L2A Tile 32UMB (static)
+POST https://edv.apps.gen-01.code-de-internal.cloudferro.com/api/layerDb/collections/{{rootCollectionId}}/layers
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+
+{
+    "name": "Sentinel-2 Tile 32UMB",
+    "description": "Sentinel-2 L2A tile 32UMB static dataset",
+    "workflow": {
+        "type": "Raster",
+        "operator": {
+            "type": "GdalSource",
+            "params": {
+                "data": "sentinel-2-l2a-tile-32umb"
+            }
+        }
+    },
+    "symbology": {
+        "type": "raster",
+        "opacity": 1.0,
+        "rasterColorizer": {
+            "type": "singleBand",
+            "band": 0,
+            "bandColorizer": {
+                "type": "linearGradient",
+                "breakpoints": [
+                    {
+                        "value": 0,
+                        "color": [0, 0, 0, 255]
+                    },
+                    {
+                        "value": 2000,
+                        "color": [255, 255, 255, 255]
+                    }
+                ],
+                "noDataColor": [0, 0, 0, 0],
+                "overColor": [255, 255, 255, 255],
+                "underColor": [0, 0, 0, 255]
+            }
+        }
+    },
+    "properties": [
+        ["dataSource", "sentinel2Static"],
+        ["preset", "raw"]
+    ]
+}

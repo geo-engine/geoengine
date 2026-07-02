@@ -62,6 +62,10 @@ export class BackendService {
         return `${this.config.API_URL}/wcs`;
     }
 
+    get ogcApiBaseUrl(): string {
+        return `${this.config.API_URL}/ogc`;
+    }
+
     registerUser(request: {email: string; password: string; realName: string}): Observable<RegistrationDict> {
         return this.http.post<RegistrationDict>(this.config.API_URL + '/user', request);
     }

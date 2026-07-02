@@ -64,6 +64,12 @@ import {
 export interface RasterVectorJoin {
     /**
      * 
+     * @type {RasterVectorJoinTypeEnum}
+     * @memberof RasterVectorJoin
+     */
+    type: RasterVectorJoinTypeEnum;
+    /**
+     * 
      * @type {RasterVectorJoinParameters}
      * @memberof RasterVectorJoin
      */
@@ -74,12 +80,6 @@ export interface RasterVectorJoin {
      * @memberof RasterVectorJoin
      */
     sources: SingleVectorMultipleRasterSources;
-    /**
-     * 
-     * @type {RasterVectorJoinTypeEnum}
-     * @memberof RasterVectorJoin
-     */
-    type: RasterVectorJoinTypeEnum;
 }
 
 
@@ -96,9 +96,9 @@ export type RasterVectorJoinTypeEnum = typeof RasterVectorJoinTypeEnum[keyof typ
  * Check if a given object implements the RasterVectorJoin interface.
  */
 export function instanceOfRasterVectorJoin(value: object): value is RasterVectorJoin {
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -112,9 +112,9 @@ export function RasterVectorJoinFromJSONTyped(json: any, ignoreDiscriminator: bo
     }
     return {
         
+        'type': json['type'],
         'params': RasterVectorJoinParametersFromJSON(json['params']),
         'sources': SingleVectorMultipleRasterSourcesFromJSON(json['sources']),
-        'type': json['type'],
     };
 }
 
@@ -129,9 +129,9 @@ export function RasterVectorJoinToJSONTyped(value?: RasterVectorJoin | null, ign
 
     return {
         
+        'type': value['type'],
         'params': RasterVectorJoinParametersToJSON(value['params']),
         'sources': SingleVectorMultipleRasterSourcesToJSON(value['sources']),
-        'type': value['type'],
     };
 }
 

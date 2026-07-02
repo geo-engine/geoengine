@@ -35,39 +35,39 @@ class TestGbifDataProviderDefinition(unittest.TestCase):
         model = GbifDataProviderDefinition()
         if include_optional:
             return GbifDataProviderDefinition(
-                autocomplete_timeout = 56,
+                type = 'Gbif',
+                name = '',
+                description = '',
+                priority = 56,
+                db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
+                    host = '', 
+                    port = 0, 
+                    database = '', 
+                    schema = '', 
+                    user = '', 
+                    password = '', ),
                 cache_ttl = 0,
+                autocomplete_timeout = 56,
                 columns = [
                     ''
-                    ],
-                db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
-                    database = '', 
-                    host = '', 
-                    password = '', 
-                    port = 0, 
-                    schema = '', 
-                    user = '', ),
-                description = '',
-                name = '',
-                priority = 56,
-                type = 'Gbif'
+                    ]
             )
         else:
             return GbifDataProviderDefinition(
+                type = 'Gbif',
+                name = '',
+                description = '',
+                db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
+                    host = '', 
+                    port = 0, 
+                    database = '', 
+                    schema = '', 
+                    user = '', 
+                    password = '', ),
                 autocomplete_timeout = 56,
                 columns = [
                     ''
                     ],
-                db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
-                    database = '', 
-                    host = '', 
-                    password = '', 
-                    port = 0, 
-                    schema = '', 
-                    user = '', ),
-                description = '',
-                name = '',
-                type = 'Gbif',
         )
         """
 

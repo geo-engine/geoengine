@@ -34,8 +34,8 @@ function ReprojectionParametersFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'deriveOutSpec': json['deriveOutSpec'] == null ? undefined : (0, DeriveOutRasterSpecsSource_1.DeriveOutRasterSpecsSourceFromJSON)(json['deriveOutSpec']),
         'targetSpatialReference': json['targetSpatialReference'],
+        'deriveOutSpec': json['deriveOutSpec'] == null ? undefined : (0, DeriveOutRasterSpecsSource_1.DeriveOutRasterSpecsSourceFromJSON)(json['deriveOutSpec']),
     };
 }
 function ReprojectionParametersToJSON(json) {
@@ -46,7 +46,7 @@ function ReprojectionParametersToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'deriveOutSpec': (0, DeriveOutRasterSpecsSource_1.DeriveOutRasterSpecsSourceToJSON)(value['deriveOutSpec']),
         'targetSpatialReference': value['targetSpatialReference'],
+        'deriveOutSpec': (0, DeriveOutRasterSpecsSource_1.DeriveOutRasterSpecsSourceToJSON)(value['deriveOutSpec']),
     };
 }

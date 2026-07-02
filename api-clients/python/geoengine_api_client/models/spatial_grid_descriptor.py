@@ -28,9 +28,9 @@ class SpatialGridDescriptor(BaseModel):
     """
     SpatialGridDescriptor
     """ # noqa: E501
-    descriptor: SpatialGridDescriptorState
     spatial_grid: SpatialGridDefinition = Field(alias="spatialGrid")
-    __properties: ClassVar[List[str]] = ["descriptor", "spatialGrid"]
+    descriptor: SpatialGridDescriptorState
+    __properties: ClassVar[List[str]] = ["spatialGrid", "descriptor"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -86,8 +86,8 @@ class SpatialGridDescriptor(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "descriptor": obj.get("descriptor"),
-            "spatialGrid": SpatialGridDefinition.from_dict(obj["spatialGrid"]) if obj.get("spatialGrid") is not None else None
+            "spatialGrid": SpatialGridDefinition.from_dict(obj["spatialGrid"]) if obj.get("spatialGrid") is not None else None,
+            "descriptor": obj.get("descriptor")
         })
         return _obj
 

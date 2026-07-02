@@ -16,10 +16,10 @@
 export interface DataUsageSummary {
     /**
      *
-     * @type {number}
+     * @type {Date}
      * @memberof DataUsageSummary
      */
-    count: number;
+    timestamp: Date;
     /**
      *
      * @type {string}
@@ -28,10 +28,10 @@ export interface DataUsageSummary {
     data: string;
     /**
      *
-     * @type {Date}
+     * @type {number}
      * @memberof DataUsageSummary
      */
-    timestamp: Date;
+    count: number;
 }
 /**
  * Check if a given object implements the DataUsageSummary interface.

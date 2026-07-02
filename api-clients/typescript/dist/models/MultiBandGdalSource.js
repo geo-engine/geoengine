@@ -29,9 +29,9 @@ exports.MultiBandGdalSourceTypeEnum = {
  * Check if a given object implements the MultiBandGdalSource interface.
  */
 function instanceOfMultiBandGdalSource(value) {
-    if (!('params' in value) || value['params'] === undefined)
-        return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('params' in value) || value['params'] === undefined)
         return false;
     return true;
 }
@@ -43,8 +43,8 @@ function MultiBandGdalSourceFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'params': (0, GdalSourceParameters_1.GdalSourceParametersFromJSON)(json['params']),
         'type': json['type'],
+        'params': (0, GdalSourceParameters_1.GdalSourceParametersFromJSON)(json['params']),
     };
 }
 function MultiBandGdalSourceToJSON(json) {
@@ -55,7 +55,7 @@ function MultiBandGdalSourceToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'params': (0, GdalSourceParameters_1.GdalSourceParametersToJSON)(value['params']),
         'type': value['type'],
+        'params': (0, GdalSourceParameters_1.GdalSourceParametersToJSON)(value['params']),
     };
 }

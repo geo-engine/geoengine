@@ -12,12 +12,12 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TypedPlotResultDescriptor {
-    #[serde(rename = "bbox", skip_serializing_if = "Option::is_none")]
-    pub bbox: Option<Box<models::BoundingBox2D>>,
     #[serde(rename = "spatialReference")]
     pub spatial_reference: String,
     #[serde(rename = "time", skip_serializing_if = "Option::is_none")]
     pub time: Option<Box<models::TimeInterval>>,
+    #[serde(rename = "bbox", skip_serializing_if = "Option::is_none")]
+    pub bbox: Option<Box<models::BoundingBox2D>>,
     #[serde(rename = "type")]
     pub r#type: Type,
 }
@@ -25,9 +25,9 @@ pub struct TypedPlotResultDescriptor {
 impl TypedPlotResultDescriptor {
     pub fn new(spatial_reference: String, r#type: Type) -> TypedPlotResultDescriptor {
         TypedPlotResultDescriptor {
-            bbox: None,
             spatial_reference,
             time: None,
+            bbox: None,
             r#type,
         }
     }

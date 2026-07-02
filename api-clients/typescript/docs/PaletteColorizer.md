@@ -6,10 +6,10 @@
 
 Name | Type
 ------------ | -------------
-`colors` | { [key: string]: Array&lt;number&gt;; }
-`defaultColor` | Array&lt;number&gt;
-`noDataColor` | Array&lt;number&gt;
 `type` | string
+`colors` | { [key: string]: Array&lt;number&gt;; }
+`noDataColor` | Array&lt;number&gt;
+`defaultColor` | Array&lt;number&gt;
 
 ## Example
 
@@ -18,10 +18,10 @@ import type { PaletteColorizer } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "colors": null,
-  "defaultColor": null,
-  "noDataColor": null,
   "type": null,
+  "colors": null,
+  "noDataColor": null,
+  "defaultColor": null,
 } satisfies PaletteColorizer
 
 console.log(example)

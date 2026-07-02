@@ -12,31 +12,31 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AddDataset {
-    #[serde(rename = "description")]
-    pub description: String,
-    #[serde(rename = "displayName")]
-    pub display_name: String,
     #[serde(rename = "name", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub name: Option<Option<String>>,
-    #[serde(rename = "provenance", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub provenance: Option<Option<Vec<models::Provenance>>>,
+    #[serde(rename = "displayName")]
+    pub display_name: String,
+    #[serde(rename = "description")]
+    pub description: String,
     #[serde(rename = "sourceOperator")]
     pub source_operator: String,
     #[serde(rename = "symbology", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub symbology: Option<Option<Box<models::Symbology>>>,
+    #[serde(rename = "provenance", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<Option<Vec<models::Provenance>>>,
     #[serde(rename = "tags", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub tags: Option<Option<Vec<String>>>,
 }
 
 impl AddDataset {
-    pub fn new(description: String, display_name: String, source_operator: String) -> AddDataset {
+    pub fn new(display_name: String, description: String, source_operator: String) -> AddDataset {
         AddDataset {
-            description,
-            display_name,
             name: None,
-            provenance: None,
+            display_name,
+            description,
             source_operator,
             symbology: None,
+            provenance: None,
             tags: None,
         }
     }

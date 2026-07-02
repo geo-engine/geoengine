@@ -28,11 +28,11 @@ class LineSymbology(BaseModel):
     """
     LineSymbology
     """ # noqa: E501
-    auto_simplified: StrictBool = Field(alias="autoSimplified")
+    type: StrictStr
     stroke: StrokeParam
     text: Optional[TextSymbology] = None
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["autoSimplified", "stroke", "text", "type"]
+    auto_simplified: StrictBool = Field(alias="autoSimplified")
+    __properties: ClassVar[List[str]] = ["type", "stroke", "text", "autoSimplified"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -103,10 +103,10 @@ class LineSymbology(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "autoSimplified": obj.get("autoSimplified"),
+            "type": obj.get("type"),
             "stroke": StrokeParam.from_dict(obj["stroke"]) if obj.get("stroke") is not None else None,
             "text": TextSymbology.from_dict(obj["text"]) if obj.get("text") is not None else None,
-            "type": obj.get("type")
+            "autoSimplified": obj.get("autoSimplified")
         })
         return _obj
 

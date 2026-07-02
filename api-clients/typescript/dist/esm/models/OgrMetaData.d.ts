@@ -18,6 +18,12 @@ import type { OgrSourceDataset } from './OgrSourceDataset';
 export interface OgrMetaData {
     /**
      *
+     * @type {OgrMetaDataTypeEnum}
+     * @memberof OgrMetaData
+     */
+    type: OgrMetaDataTypeEnum;
+    /**
+     *
      * @type {OgrSourceDataset}
      * @memberof OgrMetaData
      */
@@ -28,12 +34,6 @@ export interface OgrMetaData {
      * @memberof OgrMetaData
      */
     resultDescriptor: VectorResultDescriptor;
-    /**
-     *
-     * @type {OgrMetaDataTypeEnum}
-     * @memberof OgrMetaData
-     */
-    type: OgrMetaDataTypeEnum;
 }
 /**
  * @export

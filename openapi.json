@@ -2279,6 +2279,580 @@
         ]
       }
     },
+    "/ogc/{dataConnectorId}/{layerId}/": {
+      "get": {
+        "tags": ["OGC API"],
+        "summary": "OGC API Landing Page",
+        "description": "Cf. [OGC API - Common - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).",
+        "operationId": "landing_page",
+        "parameters": [
+          {
+            "name": "dataConnectorId",
+            "in": "path",
+            "description": "ID of the data connector",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LandingPage"
+                },
+                "example": {
+                  "title": "Geo Engine OGC API",
+                  "description": "Processing System für Geospatial Data",
+                  "links": [
+                    {
+                      "href": "http://geoengine.example.com/",
+                      "rel": "self",
+                      "type": "application/json"
+                    },
+                    {
+                      "href": "http://geoengine.example.com/conformance",
+                      "rel": "conformance",
+                      "type": "application/json"
+                    },
+                    {
+                      "href": "http://geoengine.example.com/collections",
+                      "rel": "data",
+                      "type": "application/json"
+                    },
+                    {
+                      "href": "http://geoengine.example.com/tileMatrixSets",
+                      "rel": "http://www.opengis.net/def/rel/ogc/1.0/tiling-schemes",
+                      "type": "application/json"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/ogc/{dataConnectorId}/{layerId}/collections": {
+      "get": {
+        "tags": ["OGC API"],
+        "summary": "OGC API Collections List",
+        "description": "Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).\n\nInside Geo Engine, every [`Layer`] gets its own OGC API endpoint.\nInside this endpoint, this [`Layer`] is represented as a single [`Collection`](ogcapi_types::common::Collection).\nTherefore, the list of collections for a given layer will always contain exactly one collection,\nand the `collectionId` will always be the same as the [`LayerId`].\n\n",
+        "operationId": "collections",
+        "parameters": [
+          {
+            "name": "dataConnectorId",
+            "in": "path",
+            "description": "ID of the data connector",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
+            }
+          },
+          {
+            "name": "datetime",
+            "in": "query",
+            "description": "Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "2018-02-12T23:20:50Z"
+          },
+          {
+            "name": "bbox",
+            "in": "query",
+            "description": "Only features with geometries intersecting the bounding box are selected. Provide four or six comma-separated numbers in CRS84 order: minLon,minLat,maxLon,maxLat (optionally with vertical min/max).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "-180,-90,180,90"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Optional limit for the number of first-level collections returned (minimum: 1, maximum: 10000, default: 10).",
+            "required": false,
+            "schema": {
+              "type": ["integer", "null"],
+              "format": "int32",
+              "minimum": 0
+            },
+            "example": 10
+          },
+          {
+            "name": "f",
+            "in": "query",
+            "description": "Response format. If omitted, the `Accept` header is used.",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/CollectionsResponseFormat"
+                }
+              ]
+            },
+            "example": "json"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Collections"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}": {
+      "get": {
+        "tags": ["OGC API"],
+        "summary": "OGC API Collection Metadata",
+        "description": "Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).",
+        "operationId": "collection",
+        "parameters": [
+          {
+            "name": "dataConnectorId",
+            "in": "path",
+            "description": "ID of the data connector",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Collection"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles": {
+      "get": {
+        "tags": ["OGC API"],
+        "summary": "OGC API Collection Tilesets List",
+        "description": "Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).",
+        "operationId": "collection_tilesets",
+        "parameters": [
+          {
+            "name": "dataConnectorId",
+            "in": "path",
+            "description": "ID of the data connector",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TileSets"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Collection not found"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}": {
+      "get": {
+        "tags": ["OGC API"],
+        "summary": "OGC API Collection Tileset Metadata",
+        "description": "Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).",
+        "operationId": "collection_tileset",
+        "parameters": [
+          {
+            "name": "dataConnectorId",
+            "in": "path",
+            "description": "ID of the data connector",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
+            }
+          },
+          {
+            "name": "tileMatrixSetId",
+            "in": "path",
+            "description": "Tile matrix set identifier",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TileMatrixSetId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TileSet"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Collection or tile matrix set not found"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}": {
+      "get": {
+        "tags": ["OGC API"],
+        "summary": "OGC API Tile",
+        "description": "Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).\n\n## Sketch\n\n```text\npointOfOrigin (cornerOfOrigin=topLeft)\n\ntileMatrixMinX, tileMatrixMaxY                                               tileMatrixMaxX\n       |                                                                            |\n       v                                                                            v\n       +---------------------------+---------------------------+-----+---------------------------+ ---> tileCol axis\n       | 0,0                       | 1,0                       | ... | matrixWidth-1,0           |\n       |                           |                           |     |                           |\n       +---------------------------+---------------------------+-----+---------------------------+\n       | 0,1                       | 1,1                       | ... | matrixWidth-1,1           |\n       |                           |                           |     |                           |\n       +---------------------------+---------------------------+-----+---------------------------+\n       | ...                       | ...                       | ... | ...                       |\n       |                           |                           |     |                           |\n       +---------------------------+---------------------------+-----+---------------------------+\n       | 0,                        | 1,                        | ... | matrixWidth-1,            |\n v     |   matrixHeight-1          |   matrixHeight-1          |     |   matrixHeight-1          | --+ tileHeight\ntileMatrixMinY                     |                           |     |                           |   | (in pixels)\n       +---------------------------+---------------------------+-----+---------------------------+ --+\n |                                                                   |<-       tileWidth       ->|\n v                                                                   |        (in pixels)        |\ntileRow axis\n```\n\n",
+        "operationId": "tile",
+        "parameters": [
+          {
+            "name": "dataConnectorId",
+            "in": "path",
+            "description": "ID of the data connector",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
+            }
+          },
+          {
+            "name": "tileMatrixSetId",
+            "in": "path",
+            "description": "Tile matrix set identifier",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TileMatrixSetId"
+            }
+          },
+          {
+            "name": "tileMatrix",
+            "in": "path",
+            "description": "Tile matrix level",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "tileRow",
+            "in": "path",
+            "description": "Tile row",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "tileCol",
+            "in": "path",
+            "description": "Tile column",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "datetime",
+            "in": "query",
+            "description": "Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "2018-02-12T23:20:50Z"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PngResponse"
+          },
+          "400": {
+            "description": "Invalid tile coordinates or datetime"
+          },
+          "404": {
+            "description": "Collection or tile matrix set not found"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/ogc/{dataConnectorId}/{layerId}/conformance": {
+      "get": {
+        "tags": ["OGC API"],
+        "summary": "OGC API Conformance Classes",
+        "description": "Cf. [OGC API - Common - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).",
+        "operationId": "conformance",
+        "parameters": [
+          {
+            "name": "dataConnectorId",
+            "in": "path",
+            "description": "ID of the data connector",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conformance"
+                },
+                "example": {
+                  "conformsTo": [
+                    "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/core",
+                    "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/json",
+                    "http://www.opengis.net/spec/ogcapi-common-2/1.0/conf/collections",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/png",
+                    "http://www.opengis.net/spec/tms/2.0/conf/tilematrixset",
+                    "http://www.opengis.net/spec/tms/2.0/conf/json-tilematrixset"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/ogc/{dataConnectorId}/{layerId}/tileMatrixSets": {
+      "get": {
+        "tags": ["OGC API"],
+        "summary": "OGC API Tile Matrix Set List",
+        "description": "Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).\nCf. [OGC Two Dimensional Tile Matrix Set and Tile Set Metadata](https://docs.ogc.org/is/17-083r4/17-083r4.html).",
+        "operationId": "tile_matrix_sets",
+        "parameters": [
+          {
+            "name": "dataConnectorId",
+            "in": "path",
+            "description": "ID of the data connector",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TileMatrixSets"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}": {
+      "get": {
+        "tags": ["OGC API"],
+        "summary": "OGC API Tile Matrix Set Definition",
+        "description": "Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).\nCf. [OGC Two Dimensional Tile Matrix Set and Tile Set Metadata](https://docs.ogc.org/is/17-083r4/17-083r4.html).",
+        "operationId": "tile_matrix_set",
+        "parameters": [
+          {
+            "name": "dataConnectorId",
+            "in": "path",
+            "description": "ID of the data connector",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
+            }
+          },
+          {
+            "name": "tileMatrixSetId",
+            "in": "path",
+            "description": "Tile matrix set identifier",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TileMatrixSetId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TileMatrixSet"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tile matrix set not found"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
     "/oidcInit": {
       "post": {
         "tags": ["Session"],
@@ -4831,16 +5405,21 @@
   },
   "components": {
     "schemas": {
+      "AccessConstraints": {
+        "type": "string",
+        "default": "unclassified",
+        "enum": [
+          "unclassified",
+          "restricted",
+          "confidential",
+          "secret",
+          "topSecret"
+        ]
+      },
       "AddDataset": {
         "type": "object",
         "required": ["displayName", "description", "sourceOperator"],
         "properties": {
-          "description": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
           "name": {
             "oneOf": [
               {
@@ -4870,6 +5449,12 @@
               }
             ]
           },
+          "provenance": {
+            "type": ["array", "null"],
+            "items": {
+              "$ref": "#/components/schemas/Provenance"
+            }
+          },
           "tags": {
             "type": ["array", "null"],
             "items": {
@@ -4882,30 +5467,16 @@
         "type": "object",
         "required": ["name", "description", "workflow"],
         "properties": {
-          "description": {
-            "type": "string",
-            "example": "Example layer description"
-          },
-          "metadata": {
-            "type": "object",
-            "description": "metadata used for loading the data",
-            "additionalProperties": {
-              "type": "string"
-            },
-            "propertyNames": {
-              "type": "string"
-            }
-          },
           "name": {
             "type": "string",
             "example": "Example Layer"
           },
-          "properties": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Property"
-            },
-            "description": "properties, for instance, to be rendered in the UI"
+          "description": {
+            "type": "string",
+            "example": "Example layer description"
+          },
+          "workflow": {
+            "$ref": "#/components/schemas/Workflow"
           },
           "symbology": {
             "oneOf": [
@@ -4917,8 +5488,22 @@
               }
             ]
           },
-          "workflow": {
-            "$ref": "#/components/schemas/Workflow"
+          "properties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Property"
+            },
+            "description": "properties, for instance, to be rendered in the UI"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "metadata used for loading the data",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
           }
         }
       },
@@ -4926,13 +5511,13 @@
         "type": "object",
         "required": ["name", "description"],
         "properties": {
-          "description": {
-            "type": "string",
-            "example": "A description for an example collection"
-          },
           "name": {
             "type": "string",
             "example": "Example Collection"
+          },
+          "description": {
+            "type": "string",
+            "example": "A description for an example collection"
           },
           "properties": {
             "type": "array",
@@ -5085,20 +5670,9 @@
           "filterLabel"
         ],
         "properties": {
-          "apiToken": {
-            "type": "string"
-          },
-          "apiUrl": {
-            "type": "string"
-          },
-          "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
-          },
-          "description": {
-            "type": "string"
-          },
-          "filterLabel": {
-            "type": "string"
+          "type": {
+            "type": "string",
+            "enum": ["Aruna"]
           },
           "id": {
             "$ref": "#/components/schemas/DataProviderId"
@@ -5106,9 +5680,15 @@
           "name": {
             "type": "string"
           },
+          "description": {
+            "type": "string"
+          },
           "priority": {
             "type": ["integer", "null"],
             "format": "int32"
+          },
+          "apiUrl": {
+            "type": "string"
           },
           "projectId": {
             "type": "string"
@@ -5133,10 +5713,10 @@
         "type": "object",
         "required": ["sessionState", "code", "state"],
         "properties": {
-          "code": {
+          "sessionState": {
             "type": "string"
           },
-          "sessionState": {
+          "code": {
             "type": "string"
           },
           "state": {
@@ -5148,26 +5728,26 @@
         "type": "object",
         "required": ["upload", "datasetName", "datasetDescription", "mainFile"],
         "properties": {
-          "datasetDescription": {
-            "type": "string"
+          "upload": {
+            "$ref": "#/components/schemas/UploadId"
           },
           "datasetName": {
             "type": "string"
           },
-          "layerName": {
-            "type": ["string", "null"]
+          "datasetDescription": {
+            "type": "string"
           },
           "mainFile": {
             "type": "string"
+          },
+          "layerName": {
+            "type": ["string", "null"]
           },
           "tags": {
             "type": ["array", "null"],
             "items": {
               "type": "string"
             }
-          },
-          "upload": {
-            "$ref": "#/components/schemas/UploadId"
           }
         },
         "example": {
@@ -5188,12 +5768,6 @@
         "description": "The `BandFilter` operator selects bands from a raster source by band names or band indices.\n\nIt removes all non-selected bands while preserving the original order of remaining bands.\n\n## Inputs\n\nThe `BandFilter` operator expects exactly one _raster_ input.\n\n## Errors\n\nThe operator returns an error if no bands are selected or if selected band names/indices\ncannot be mapped to existing input bands.",
         "required": ["type", "params", "sources"],
         "properties": {
-          "params": {
-            "$ref": "#/components/schemas/BandFilterParameters"
-          },
-          "sources": {
-            "$ref": "#/components/schemas/SingleRasterSource"
-          },
           "type": {
             "type": "string",
             "enum": ["BandFilter"]
@@ -5246,6 +5820,25 @@
           }
         ]
       },
+      "Bbox": {
+        "oneOf": [
+          {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        ],
+        "description": "Each bounding box is provided as four or six numbers, depending on\nwhether the coordinate reference system includes a vertical axis\n(height or depth):\n\n* Lower left corner, coordinate axis 1\n\n* Lower left corner, coordinate axis 2\n\n* Minimum value, coordinate axis 3 (optional)\n\n* Upper right corner, coordinate axis 1\n\n* Upper right corner, coordinate axis 2\n\n* Maximum value, coordinate axis 3 (optional)\n\nThe coordinate reference system of the values is WGS 84 longitude/latitude\n(http://www.opengis.net/def/crs/OGC/1.3/CRS84) unless a different coordinate\nreference system is specified in `crs`.\n\nFor WGS 84 longitude/latitude the values are in most cases the sequence of\nminimum longitude, minimum latitude, maximum longitude and maximum latitude.\nHowever, in cases where the box spans the antimeridian the first value\n(west-most box edge) is larger than the third value (east-most box edge).\n\nIf the vertical axis is included, the third and the sixth number are\nthe bottom and the top of the 3-dimensional bounding box.\n\nIf a feature has multiple spatial geometry properties, it is the decision of the\nserver whether only a single spatial geometry property is used to determine\nthe extent or all relevant geometries."
+      },
       "BoundingBox2D": {
         "type": "object",
         "description": "A bounding box that includes all border points.\nNote: may degenerate to a point!",
@@ -5263,11 +5856,11 @@
         "type": "object",
         "required": ["value", "color"],
         "properties": {
-          "color": {
-            "$ref": "#/components/schemas/RgbaColor"
-          },
           "value": {
             "type": "number"
+          },
+          "color": {
+            "$ref": "#/components/schemas/RgbaColor"
           }
         }
       },
@@ -5280,6 +5873,13 @@
         "type": "object",
         "required": ["type", "measurement", "classes"],
         "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["classification"]
+          },
+          "measurement": {
+            "type": "string"
+          },
           "classes": {
             "type": "object",
             "additionalProperties": {
@@ -5290,8 +5890,15 @@
               "format": "int32",
               "minimum": 0
             }
-          },
-          "measurement": {
+          }
+        }
+      },
+      "Collection": {
+        "type": "object",
+        "description": "A body of resources that belong or are used together. An aggregate, set, or group of related resources.",
+        "required": ["id"],
+        "properties": {
+          "id": {
             "type": "string"
           },
           "type": {
@@ -5320,6 +5927,47 @@
       "CollectionType": {
         "type": "string",
         "enum": ["FeatureCollection"]
+      },
+      "Collections": {
+        "type": "object",
+        "required": ["collections"],
+        "properties": {
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            }
+          },
+          "timeStamp": {
+            "type": ["string", "null"]
+          },
+          "numberMatched": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "minimum": 0
+          },
+          "numberReturned": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "minimum": 0
+          },
+          "collections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Collection"
+            }
+          },
+          "crs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CollectionsResponseFormat": {
+        "type": "string",
+        "enum": ["json"]
       },
       "ColorParam": {
         "oneOf": [
@@ -5378,6 +6026,12 @@
             "title": "Suffix",
             "required": ["values", "type"],
             "properties": {
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "type": {
                 "type": "string",
                 "enum": ["suffix"]
@@ -5395,6 +6049,12 @@
             "title": "Names",
             "required": ["values", "type"],
             "properties": {
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "type": {
                 "type": "string",
                 "enum": ["names"]
@@ -5413,7 +6073,15 @@
         "type": "object",
         "required": ["timestamp", "computationId", "workflowId", "count"],
         "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
           "computationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workflowId": {
             "type": "string",
             "format": "uuid"
           },
@@ -5421,14 +6089,19 @@
             "type": "integer",
             "format": "int64",
             "minimum": 0
-          },
-          "timestamp": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "workflowId": {
-            "type": "string",
-            "format": "uuid"
+          }
+        }
+      },
+      "Conformance": {
+        "type": "object",
+        "description": "The Conformance declaration states the conformance classes from standards or community\nspecifications, identified by a URI, that the API conforms to. Clients can but are not\nrequired to use this information. Accessing the Conformance declaration using HTTP GET\nreturns the list of URIs of conformance classes implemented by the server.",
+        "required": ["conformsTo"],
+        "properties": {
+          "conformsTo": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -5436,12 +6109,12 @@
         "type": "object",
         "required": ["type", "measurement"],
         "properties": {
-          "measurement": {
-            "type": "string"
-          },
           "type": {
             "type": "string",
             "enum": ["continuous"]
+          },
+          "measurement": {
+            "type": "string"
           },
           "unit": {
             "type": ["string", "null"]
@@ -5476,19 +6149,20 @@
           "gdalConfig"
         ],
         "properties": {
-          "description": {
+          "type": {
+            "type": "string",
+            "enum": ["CopernicusDataspace"]
+          },
+          "name": {
             "type": "string"
           },
-          "gdalConfig": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/StringPair"
-            }
+          "description": {
+            "type": "string"
           },
           "id": {
             "$ref": "#/components/schemas/DataProviderId"
           },
-          "name": {
+          "stacUrl": {
             "type": "string"
           },
           "priority": {
@@ -5501,8 +6175,11 @@
           "s3SecretKey": {
             "type": "string"
           },
-          "s3Url": {
-            "type": "string"
+          "gdalConfig": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StringPair"
+            }
           },
           "stacUrl": {
             "type": "string"
@@ -5529,14 +6206,14 @@
         "type": "object",
         "required": ["name", "description", "bounds"],
         "properties": {
-          "bounds": {
-            "$ref": "#/components/schemas/STRectangle"
+          "name": {
+            "type": "string"
           },
           "description": {
             "type": "string"
           },
-          "name": {
-            "type": "string"
+          "bounds": {
+            "$ref": "#/components/schemas/STRectangle"
           },
           "timeStep": {
             "oneOf": [
@@ -5633,9 +6310,6 @@
         "type": "object",
         "required": ["type", "id"],
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/DataProviderId"
-          },
           "type": {
             "type": "string",
             "enum": ["provider"]
@@ -5646,18 +6320,6 @@
         "type": "object",
         "required": ["timestamp", "userId", "computationId", "data", "count"],
         "properties": {
-          "computationId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "count": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "data": {
-            "type": "string"
-          },
           "timestamp": {
             "type": "string",
             "format": "date-time"
@@ -5665,6 +6327,18 @@
           "userId": {
             "type": "string",
             "format": "uuid"
+          },
+          "computationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "data": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
           }
         }
       },
@@ -5672,17 +6346,17 @@
         "type": "object",
         "required": ["timestamp", "data", "count"],
         "properties": {
-          "count": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
           },
           "data": {
             "type": "string"
           },
-          "timestamp": {
-            "type": "string",
-            "format": "date-time"
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
           }
         }
       },
@@ -5690,13 +6364,7 @@
         "type": "object",
         "required": ["host", "port", "database", "schema", "user", "password"],
         "properties": {
-          "database": {
-            "type": "string"
-          },
           "host": {
-            "type": "string"
-          },
-          "password": {
             "type": "string"
           },
           "port": {
@@ -5704,10 +6372,16 @@
             "format": "int32",
             "minimum": 0
           },
+          "database": {
+            "type": "string"
+          },
           "schema": {
             "type": "string"
           },
           "user": {
+            "type": "string"
+          },
+          "password": {
             "type": "string"
           }
         }
@@ -5723,22 +6397,6 @@
           "sourceOperator"
         ],
         "properties": {
-          "dataPath": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/DataPath"
-              }
-            ]
-          },
-          "description": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
           "id": {
             "$ref": "#/components/schemas/DatasetId"
           },
@@ -5767,11 +6425,27 @@
               }
             ]
           },
+          "provenance": {
+            "type": ["array", "null"],
+            "items": {
+              "$ref": "#/components/schemas/Provenance"
+            }
+          },
           "tags": {
             "type": ["array", "null"],
             "items": {
               "type": "string"
             }
+          },
+          "dataPath": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DataPath"
+              }
+            ]
           }
         }
       },
@@ -5779,11 +6453,11 @@
         "type": "object",
         "required": ["properties", "metaData"],
         "properties": {
-          "metaData": {
-            "$ref": "#/components/schemas/MetaDataDefinition"
-          },
           "properties": {
             "$ref": "#/components/schemas/AddDataset"
+          },
+          "metaData": {
+            "$ref": "#/components/schemas/MetaDataDefinition"
           }
         }
       },
@@ -5795,10 +6469,10 @@
         "type": "object",
         "required": ["name", "description", "tags"],
         "properties": {
-          "description": {
+          "name": {
             "type": "string"
           },
-          "name": {
+          "description": {
             "type": "string"
           },
           "tags": {
@@ -5813,19 +6487,17 @@
         "type": "object",
         "required": ["type", "id", "name", "description", "collections"],
         "properties": {
-          "collections": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DatasetLayerListingCollection"
-            }
-          },
-          "description": {
-            "type": "string"
+          "type": {
+            "type": "string",
+            "enum": ["DatasetLayerListing"]
           },
           "id": {
             "$ref": "#/components/schemas/DataProviderId"
           },
           "name": {
+            "type": "string"
+          },
+          "description": {
             "type": "string"
           },
           "priority": {
@@ -5850,23 +6522,29 @@
           "resultDescriptor"
         ],
         "properties": {
-          "description": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
           "id": {
             "$ref": "#/components/schemas/DatasetId"
           },
           "name": {
             "$ref": "#/components/schemas/DatasetName"
           },
-          "resultDescriptor": {
-            "$ref": "#/components/schemas/TypedResultDescriptor"
+          "displayName": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "sourceOperator": {
             "type": "string"
+          },
+          "resultDescriptor": {
+            "$ref": "#/components/schemas/TypedResultDescriptor"
           },
           "symbology": {
             "oneOf": [
@@ -5877,12 +6555,6 @@
                 "$ref": "#/components/schemas/Symbology"
               }
             ]
-          },
-          "tags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           }
         }
       },
@@ -5904,9 +6576,6 @@
         "type": "object",
         "required": ["type", "id"],
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/DatasetName"
-          },
           "type": {
             "type": "string",
             "enum": ["dataset"]
@@ -5924,12 +6593,6 @@
         "type": "object",
         "required": ["type", "attribute", "colorizer"],
         "properties": {
-          "attribute": {
-            "type": "string"
-          },
-          "colorizer": {
-            "$ref": "#/components/schemas/Colorizer"
-          },
           "type": {
             "type": "string",
             "enum": ["derived"]
@@ -5940,14 +6603,18 @@
         "type": "object",
         "required": ["type", "attribute", "factor", "defaultValue"],
         "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["derived"]
+          },
           "attribute": {
             "type": "string"
           },
-          "defaultValue": {
+          "factor": {
             "type": "number",
             "format": "double"
           },
-          "factor": {
+          "defaultValue": {
             "type": "number",
             "format": "double"
           },
@@ -5968,32 +6635,21 @@
           "overviews"
         ],
         "properties": {
-          "baseUrl": {
+          "type": {
             "type": "string",
-            "format": "uri"
-          },
-          "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
-          },
-          "data": {
-            "type": "string",
-            "description": "Path were the `NetCDF` data can be found"
-          },
-          "description": {
-            "type": "string"
+            "enum": ["EbvPortal"]
           },
           "name": {
             "type": "string"
           },
-          "overviews": {
-            "type": "string",
-            "description": "Path were overview files are stored"
+          "description": {
+            "type": "string"
           },
           "priority": {
             "type": ["integer", "null"],
             "format": "int32"
           },
-          "type": {
+          "baseUrl": {
             "type": "string",
             "enum": ["EbvPortal"]
           }
@@ -6003,27 +6659,14 @@
         "type": "object",
         "required": ["type", "name", "description", "id", "baseUrl"],
         "properties": {
-          "baseUrl": {
+          "type": {
             "type": "string",
-            "format": "uri"
-          },
-          "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
-          },
-          "description": {
-            "type": "string"
-          },
-          "discreteVrs": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "List of vertical reference systems with a discrete scale"
-          },
-          "id": {
-            "$ref": "#/components/schemas/DataProviderId"
+            "enum": ["Edr"]
           },
           "name": {
+            "type": "string"
+          },
+          "description": {
             "type": "string"
           },
           "priority": {
@@ -6036,7 +6679,7 @@
               "$ref": "#/components/schemas/Provenance"
             }
           },
-          "type": {
+          "baseUrl": {
             "type": "string",
             "enum": ["Edr"]
           },
@@ -6049,6 +6692,22 @@
                 "$ref": "#/components/schemas/EdrVectorSpec"
               }
             ]
+          },
+          "cacheTtl": {
+            "$ref": "#/components/schemas/CacheTtlSeconds"
+          },
+          "discreteVrs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of vertical reference systems with a discrete scale"
+          },
+          "provenance": {
+            "type": ["array", "null"],
+            "items": {
+              "$ref": "#/components/schemas/Provenance"
+            }
           }
         }
       },
@@ -6056,9 +6715,6 @@
         "type": "object",
         "required": ["x", "time"],
         "properties": {
-          "time": {
-            "type": "string"
-          },
           "x": {
             "type": "string"
           },
@@ -6085,12 +6741,6 @@
         "description": "The `Expression` operator performs a pixel-wise mathematical expression on one or more bands of a raster source.\nThe expression is specified as a user-defined script in a very simple language.\nThe output is a raster time series with the result of the expression and with time intervals that are the same as for the inputs.\nUsers can specify an output data type.\nInternally, the expression is evaluated using floating-point numbers.\n\nAn example usage scenario is to calculate NDVI for a red and a near-infrared raster channel.\nThe expression uses a raster source with two bands, referred to as A and B, and calculates the formula `(A - B) / (A + B)`.\nWhen the temporal resolution is months, our output NDVI will also be a monthly time series.\n\n## Types\n\nThe following describes the types used in the parameters.\n\n### Expression\n\nExpressions are simple scripts to perform pixel-wise computations.\nOne can refer to the raster inputs as `A` for the first raster band, `B` for the second, and so on.\nFurthermore, expressions can check with `A IS NODATA`, `B IS NODATA`, etc. for NO DATA values.\nThis is important if `mapNoData` is set to true.\nOtherwise, NO DATA values are mapped automatically to the output NO DATA value.\nFinally, the value `NODATA` can be used to output NO DATA.\n\nUsers can think of this implicit function signature for, e.g., two inputs:\n\n```rust,ignore\nfn (A: f64, B: f64) -> f64\n```\n\nAs a start, expressions contain algebraic operations and mathematical functions.\n\n```rust,ignore\n(A + B) / 2\n```\n\nIn addition, branches can be used to check for conditions.\n\n```rust,ignore\nif A IS NODATA {\n    B\n} else {\n    A\n}\n```\n\nFunction calls can be used to access utility functions.\n\n```rust,ignore\nmax(A, 0)\n```\n\nCurrently, the following functions are available:\n\n- `abs(a)`: absolute value\n- `min(a, b)`, `min(a, b, c)`: minimum value\n- `max(a, b)`, `max(a, b, c)`: maximum value\n- `sqrt(a)`: square root\n- `ln(a)`: natural logarithm\n- `log10(a)`: base 10 logarithm\n- `cos(a)`, `sin(a)`, `tan(a)`, `acos(a)`, `asin(a)`, `atan(a)`: trigonometric functions\n- `pi()`, `e()`: mathematical constants\n- `round(a)`, `ceil(a)`, `floor(a)`: rounding functions\n- `mod(a, b)`: division remainder\n- `to_degrees(a)`, `to_radians(a)`: conversion to degrees or radians\n\nTo generate more complex expressions, it is possible to have variable assignments.\n\n```rust,ignore\nlet mean = (A + B) / 2;\nlet coefficient = 0.357;\nmean * coefficient\n```\n\nNote, that all assignments are separated by semicolons.\nHowever, the last expression must be without a semicolon.",
         "required": ["type", "params", "sources"],
         "properties": {
-          "params": {
-            "$ref": "#/components/schemas/ExpressionParameters"
-          },
-          "sources": {
-            "$ref": "#/components/schemas/SingleRasterSource"
-          },
           "type": {
             "type": "string",
             "enum": ["Expression"]
@@ -6131,6 +6781,14 @@
             "description": "Expression script\n\nExample: `\"(A - B) / (A + B)\"`",
             "examples": ["(A - B) / (A + B)"]
           },
+          "outputType": {
+            "$ref": "#/components/schemas/RasterDataType",
+            "description": "A raster data type for the output"
+          },
+          "outputBand": {
+            "$ref": "#/components/schemas/RasterBandDescriptor",
+            "description": "Description about the output"
+          },
           "mapNoData": {
             "type": "boolean",
             "description": "Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA.",
@@ -6150,12 +6808,6 @@
         "type": "object",
         "required": ["type", "providerId", "layerId"],
         "properties": {
-          "layerId": {
-            "$ref": "#/components/schemas/LayerId"
-          },
-          "providerId": {
-            "$ref": "#/components/schemas/DataProviderId"
-          },
           "type": {
             "type": "string",
             "enum": ["external"]
@@ -6204,26 +6856,14 @@
           "columns"
         ],
         "properties": {
-          "autocompleteTimeout": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
-          },
-          "columns": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "dbConfig": {
-            "$ref": "#/components/schemas/DatabaseConnectionConfig"
-          },
-          "description": {
-            "type": "string"
+          "type": {
+            "type": "string",
+            "enum": ["Gbif"]
           },
           "name": {
+            "type": "string"
+          },
+          "description": {
             "type": "string"
           },
           "priority": {
@@ -6248,12 +6888,6 @@
           "fileNotFoundHandling"
         ],
         "properties": {
-          "allowAlphabandAsMask": {
-            "type": "boolean"
-          },
-          "fileNotFoundHandling": {
-            "$ref": "#/components/schemas/FileNotFoundHandling"
-          },
           "filePath": {
             "type": "string"
           },
@@ -6272,9 +6906,16 @@
           "geoTransform": {
             "$ref": "#/components/schemas/GeoTransform"
           },
+          "width": {
+            "type": "integer",
+            "minimum": 0
+          },
           "height": {
             "type": "integer",
             "minimum": 0
+          },
+          "fileNotFoundHandling": {
+            "$ref": "#/components/schemas/FileNotFoundHandling"
           },
           "noDataValue": {
             "type": ["number", "null"],
@@ -6286,13 +6927,20 @@
               "$ref": "#/components/schemas/GdalMetadataMapping"
             }
           },
-          "rasterbandChannel": {
-            "type": "integer",
-            "minimum": 0
+          "gdalOpenOptions": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "string"
+            }
           },
-          "width": {
-            "type": "integer",
-            "minimum": 0
+          "gdalConfigOptions": {
+            "type": ["array", "null"],
+            "items": {
+              "$ref": "#/components/schemas/StringPair"
+            }
+          },
+          "allowAlphabandAsMask": {
+            "type": "boolean"
           }
         }
       },
@@ -6301,8 +6949,8 @@
         "description": "one temporal slice of the dataset that requires reading from exactly one Gdal dataset",
         "required": ["time"],
         "properties": {
-          "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
+          "time": {
+            "$ref": "#/components/schemas/TimeInterval"
           },
           "params": {
             "oneOf": [
@@ -6314,8 +6962,8 @@
               }
             ]
           },
-          "time": {
-            "$ref": "#/components/schemas/TimeInterval"
+          "cacheTtl": {
+            "$ref": "#/components/schemas/CacheTtlSeconds"
           }
         }
       },
@@ -6323,15 +6971,6 @@
         "type": "object",
         "required": ["type", "resultDescriptor", "params"],
         "properties": {
-          "params": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/GdalLoadingInfoTemporalSlice"
-            }
-          },
-          "resultDescriptor": {
-            "$ref": "#/components/schemas/RasterResultDescriptor"
-          },
           "type": {
             "type": "string",
             "enum": ["GdalMetaDataList"]
@@ -6349,20 +6988,15 @@
           "step"
         ],
         "properties": {
-          "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
-          },
-          "dataTime": {
-            "$ref": "#/components/schemas/TimeInterval"
-          },
-          "params": {
-            "$ref": "#/components/schemas/GdalDatasetParameters"
+          "type": {
+            "type": "string",
+            "enum": ["GdalMetaDataRegular"]
           },
           "resultDescriptor": {
             "$ref": "#/components/schemas/RasterResultDescriptor"
           },
-          "step": {
-            "$ref": "#/components/schemas/TimeStep"
+          "params": {
+            "$ref": "#/components/schemas/GdalDatasetParameters"
           },
           "timePlaceholders": {
             "type": "object",
@@ -6383,14 +7017,9 @@
         "type": "object",
         "required": ["type", "params", "resultDescriptor"],
         "properties": {
-          "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
-          },
-          "params": {
-            "$ref": "#/components/schemas/GdalDatasetParameters"
-          },
-          "resultDescriptor": {
-            "$ref": "#/components/schemas/RasterResultDescriptor"
+          "type": {
+            "type": "string",
+            "enum": ["GdalStatic"]
           },
           "time": {
             "oneOf": [
@@ -6436,26 +7065,22 @@
           "bandOffset"
         ],
         "properties": {
-          "bandOffset": {
-            "type": "integer",
-            "description": "A band offset specifies the first band index to use for the first point in time.\nAll other time steps are added to this offset.",
-            "minimum": 0
-          },
-          "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
-          },
-          "end": {
-            "$ref": "#/components/schemas/TimeInstance",
-            "description": "We use the end to specify the last, non-inclusive valid time point.\nQueries behind this point return no data.\nTODO: Alternatively, we could think about using the number of possible time steps in the future."
-          },
-          "params": {
-            "$ref": "#/components/schemas/GdalDatasetParameters"
+          "type": {
+            "type": "string",
+            "enum": ["GdalMetaDataNetCdfCf"]
           },
           "resultDescriptor": {
             "$ref": "#/components/schemas/RasterResultDescriptor"
           },
+          "params": {
+            "$ref": "#/components/schemas/GdalDatasetParameters"
+          },
           "start": {
             "$ref": "#/components/schemas/TimeInstance"
+          },
+          "end": {
+            "$ref": "#/components/schemas/TimeInstance",
+            "description": "We use the end to specify the last, non-inclusive valid time point.\nQueries behind this point return no data.\nTODO: Alternatively, we could think about using the number of possible time steps in the future."
           },
           "step": {
             "$ref": "#/components/schemas/TimeStep"
@@ -6470,9 +7095,6 @@
         "type": "object",
         "required": ["type", "resultDescriptor"],
         "properties": {
-          "resultDescriptor": {
-            "$ref": "#/components/schemas/RasterResultDescriptor"
-          },
           "type": {
             "type": "string",
             "enum": ["GdalMultiBand"]
@@ -6485,9 +7107,6 @@
         "description": "The [`GdalSource`] is a source operator that reads raster data using GDAL.\nThe counterpart for vector data is the [`OgrSource`].\n\n## Errors\n\nIf the given dataset does not exist or is not readable, an error is thrown.\n",
         "required": ["type", "params"],
         "properties": {
-          "params": {
-            "$ref": "#/components/schemas/GdalSourceParameters"
-          },
           "type": {
             "type": "string",
             "enum": ["GdalSource"]
@@ -6538,12 +7157,12 @@
         "type": "object",
         "required": ["type", "features"],
         "properties": {
+          "type": {
+            "$ref": "#/components/schemas/CollectionType"
+          },
           "features": {
             "type": "array",
             "items": {}
-          },
-          "type": {
-            "$ref": "#/components/schemas/CollectionType"
           }
         }
       },
@@ -6564,6 +7183,172 @@
           }
         }
       },
+      "GeometryDimension": {
+        "type": "integer",
+        "enum": [0, 1, 2, 3]
+      },
+      "GeospatialData": {
+        "type": "object",
+        "required": ["id", "dataType"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier of the Layer."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title for this layer"
+          },
+          "description": {
+            "type": "string",
+            "description": "Brief narrative description of this layer"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Unordered list of one or more commonly used or formalized word(s) or\nphrase(s) used to describe this layer"
+          },
+          "dataType": {
+            "oneOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "enum": ["map"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["vector"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["coverage"]
+                  },
+                  {
+                    "type": "object",
+                    "required": ["string"],
+                    "properties": {
+                      "string": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "description": "Type of data represented in the layer"
+          },
+          "geometryDimension": {
+            "$ref": "#/components/schemas/GeometryDimension",
+            "description": "The geometry dimension of the features shown in this layer (0: points,\n1: curves, 2: surfaces, 3: solids), unspecified: mixed or unknown"
+          },
+          "featureType": {
+            "type": "string",
+            "description": "Feature type identifier. Only applicable to layers of datatype 'geometries'"
+          },
+          "attribution": {
+            "type": "string",
+            "description": "Short reference to recognize the author or provider"
+          },
+          "license": {
+            "type": "string",
+            "description": "License applicable to the tiles"
+          },
+          "pointOfContact": {
+            "type": "string",
+            "description": "Useful information to contact the authors or custodians for the layer\n(e.g. e-mail address, a physical address,  phone numbers, etc)"
+          },
+          "publisher": {
+            "type": "string",
+            "description": "Organization or individual responsible for making the layer available"
+          },
+          "theme": {
+            "type": "string",
+            "description": "Category where the layer can be grouped"
+          },
+          "crs": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TilesCrs",
+                "description": "Coordinate Reference System (CRS)"
+              }
+            ]
+          },
+          "epoch": {
+            "type": "number",
+            "format": "double",
+            "description": "Epoch of the Coordinate Reference System (CRS)"
+          },
+          "minScaleDenominator": {
+            "type": "number",
+            "format": "double",
+            "description": "Minimum scale denominator for usage of the layer"
+          },
+          "maxScaleDenominator": {
+            "type": "number",
+            "format": "double",
+            "description": "aximum scale denominator for usage of the layer"
+          },
+          "minCellSize": {
+            "type": "number",
+            "format": "double",
+            "description": "Minimum cell size for usage of the layer"
+          },
+          "maxCellSize": {
+            "type": "number",
+            "format": "double",
+            "description": "Maximum cell size for usage of the layer"
+          },
+          "maxTileMatrix": {
+            "type": "string",
+            "description": "TileMatrix identifier associated with the minScaleDenominator"
+          },
+          "minTileMatrix": {
+            "type": "string",
+            "description": "TileMatrix identifier associated with the maxScaleDenominator"
+          },
+          "boundingBox": {
+            "$ref": "#/components/schemas/BoundingBox2D",
+            "description": "Minimum bounding rectangle surrounding the layer"
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the layer was first produced"
+          },
+          "updated": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last layer change/revision"
+          },
+          "style": {
+            "$ref": "#/components/schemas/Style",
+            "description": "Style used to generate the layer in the tileset"
+          },
+          "geoDataClasses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "URI identifying a class of data contained in this layer (useful to\ndetermine compatibility with styles or processes)"
+          },
+          "propertiesSchema": {
+            "description": "Properties represented by the features in this layer. Can be the\nattributes of a feature dataset (datatype=geometries) or the rangeType\nof a coverage (datatype=coverage)"
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            },
+            "description": "Links related to this layer. Possible link 'rel' values are:\n'geodata' for a URL pointing to the collection of geospatial data."
+          }
+        }
+      },
       "GetCoverageFormat": {
         "type": "string",
         "enum": ["image/tiff"]
@@ -6576,16 +7361,14 @@
         "type": "object",
         "required": ["type", "name", "description", "dbConfig"],
         "properties": {
-          "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
-          },
-          "dbConfig": {
-            "$ref": "#/components/schemas/DatabaseConnectionConfig"
-          },
-          "description": {
-            "type": "string"
+          "type": {
+            "type": "string",
+            "enum": ["GfbioAbcd"]
           },
           "name": {
+            "type": "string"
+          },
+          "description": {
             "type": "string"
           },
           "priority": {
@@ -6610,24 +7393,29 @@
           "pangaeaUrl"
         ],
         "properties": {
-          "abcdDbConfig": {
-            "$ref": "#/components/schemas/DatabaseConnectionConfig"
+          "type": {
+            "type": "string",
+            "enum": ["GfbioCollections"]
           },
-          "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
-          },
-          "collectionApiAuthToken": {
+          "name": {
             "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "priority": {
+            "type": ["integer", "null"],
+            "format": "int32"
           },
           "collectionApiUrl": {
             "type": "string",
             "format": "uri"
           },
-          "description": {
+          "collectionApiAuthToken": {
             "type": "string"
           },
-          "name": {
-            "type": "string"
+          "abcdDbConfig": {
+            "$ref": "#/components/schemas/DatabaseConnectionConfig"
           },
           "pangaeaUrl": {
             "type": "string",
@@ -6647,10 +7435,10 @@
         "type": "object",
         "required": ["topLeftIdx", "bottomRightIdx"],
         "properties": {
-          "bottomRightIdx": {
+          "topLeftIdx": {
             "$ref": "#/components/schemas/GridIdx2D"
           },
-          "topLeftIdx": {
+          "bottomRightIdx": {
             "$ref": "#/components/schemas/GridIdx2D"
           }
         }
@@ -6659,10 +7447,10 @@
         "type": "object",
         "required": ["yIdx", "xIdx"],
         "properties": {
-          "xIdx": {
+          "yIdx": {
             "type": "integer"
           },
-          "yIdx": {
+          "xIdx": {
             "type": "integer"
           }
         }
@@ -6673,12 +7461,6 @@
         "description": "The `Histogram` is a _plot operator_ that computes a histogram plot either over attributes of a vector dataset or values of a raster source.\nThe output is a plot in [Vega-Lite](https://vega.github.io/vega-lite/) specification.\n\nFor instance, you want to plot the data distribution of numeric attributes of a feature collection.\nThen you can use a histogram with a suitable number of buckets to visualize and assess this.\n\n## Errors\n\nThe operator returns an error if the selected column (`columnName`) does not exist or is not numeric.\n\n## Notes\n\nIf `bounds` or `buckets` are not defined, the operator will determine these values by itself which requires processing the data twice.\n\nIf the `buckets` parameter is set to `squareRootChoiceRule`, the operator estimates it using the square root of the number of elements in the data.\n",
         "required": ["type", "params", "sources"],
         "properties": {
-          "params": {
-            "$ref": "#/components/schemas/HistogramParameters"
-          },
-          "sources": {
-            "$ref": "#/components/schemas/SingleVectorOrRasterSource"
-          },
           "type": {
             "type": "string",
             "enum": ["Histogram"]
@@ -6724,11 +7506,11 @@
         "type": "object",
         "required": ["min", "max"],
         "properties": {
-          "max": {
+          "min": {
             "type": "number",
             "format": "double"
           },
-          "min": {
+          "max": {
             "type": "number",
             "format": "double"
           }
@@ -6770,11 +7552,6 @@
         "type": "object",
         "required": ["type"],
         "properties": {
-          "maxNumberOfBuckets": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
           "type": {
             "type": "string",
             "enum": ["squareRootChoiceRule"]
@@ -6786,6 +7563,11 @@
         "description": "The parameter spec for `Histogram`",
         "required": ["columnName", "bounds", "buckets"],
         "properties": {
+          "columnName": {
+            "type": "string",
+            "description": "Name of the (numeric) vector attribute or raster band to compute the histogram on.",
+            "examples": ["temperature"]
+          },
           "bounds": {
             "$ref": "#/components/schemas/HistogramBounds",
             "description": "If `data`, it computes the bounds of the underlying data.\nIf `{ \"min\": ..., \"max\": ... }`, one can specify custom bounds."
@@ -6810,9 +7592,6 @@
         "type": "object",
         "required": ["type", "datasetId"],
         "properties": {
-          "datasetId": {
-            "$ref": "#/components/schemas/DatasetId"
-          },
           "type": {
             "type": "string",
             "enum": ["internal"]
@@ -6825,12 +7604,6 @@
         "description": "The `Interpolation` operator increases raster resolution by interpolating values of an input raster.\n\nIf queried with a resolution that is coarser than the input resolution,\ninterpolation is not applicable and an error is returned.\n\n## Inputs\n\nThe `Interpolation` operator expects exactly one _raster_ input.",
         "required": ["type", "params", "sources"],
         "properties": {
-          "params": {
-            "$ref": "#/components/schemas/InterpolationParameters"
-          },
-          "sources": {
-            "$ref": "#/components/schemas/SingleRasterSource"
-          },
           "type": {
             "type": "string",
             "enum": ["Interpolation"]
@@ -6871,6 +7644,10 @@
             "$ref": "#/components/schemas/InterpolationMethod",
             "description": "Interpolation method."
           },
+          "outputResolution": {
+            "$ref": "#/components/schemas/InterpolationResolution",
+            "description": "Target output resolution."
+          },
           "outputOriginReference": {
             "oneOf": [
               {
@@ -6881,10 +7658,6 @@
                 "description": "Optional reference point used to align the output grid origin."
               }
             ]
-          },
-          "outputResolution": {
-            "$ref": "#/components/schemas/InterpolationResolution",
-            "description": "Target output resolution."
           }
         }
       },
@@ -6907,6 +7680,10 @@
               "y": {
                 "type": "number",
                 "format": "double"
+              },
+              "type": {
+                "type": "string",
+                "enum": ["resolution"]
               }
             }
           },
@@ -6927,40 +7704,56 @@
               "y": {
                 "type": "number",
                 "format": "double"
+              },
+              "type": {
+                "type": "string",
+                "enum": ["fraction"]
               }
             }
           }
         ]
       },
+      "LandingPage": {
+        "type": "object",
+        "description": "The Landing page is the entry point of a OGC API.\n\nThe Landing page provides links to:\n* the API definition (link relations `service-desc` and `service-doc`),\n* the Conformance declaration (path `/conformance`, link relation `conformance`), and\n* the Collections (path `/collections`, link relation `data`).",
+        "properties": {
+          "title": {
+            "type": ["string", "null"],
+            "description": "The title of the API."
+          },
+          "description": {
+            "type": ["string", "null"],
+            "description": "A textual description of the API."
+          },
+          "attribution": {
+            "type": ["string", "null"],
+            "description": "Attribution for the API."
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            },
+            "description": "Links to the resources exposed through this API"
+          }
+        },
+        "additionalProperties": {}
+      },
       "Layer": {
         "type": "object",
         "required": ["id", "name", "description", "workflow"],
         "properties": {
-          "description": {
-            "type": "string"
-          },
           "id": {
             "$ref": "#/components/schemas/ProviderLayerId"
-          },
-          "metadata": {
-            "type": "object",
-            "description": "metadata used for loading the data",
-            "additionalProperties": {
-              "type": "string"
-            },
-            "propertyNames": {
-              "type": "string"
-            }
           },
           "name": {
             "type": "string"
           },
-          "properties": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Property"
-            },
-            "description": "properties, for instance, to be rendered in the UI"
+          "description": {
+            "type": "string"
+          },
+          "workflow": {
+            "$ref": "#/components/schemas/Workflow"
           },
           "symbology": {
             "oneOf": [
@@ -6972,8 +7765,22 @@
               }
             ]
           },
-          "workflow": {
-            "$ref": "#/components/schemas/Workflow"
+          "properties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Property"
+            },
+            "description": "properties, for instance, to be rendered in the UI"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "metadata used for loading the data",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
           }
         }
       },
@@ -6981,15 +7788,14 @@
         "type": "object",
         "required": ["id", "name", "description", "items", "properties"],
         "properties": {
-          "description": {
-            "type": "string"
-          },
-          "entryLabel": {
-            "type": ["string", "null"],
-            "description": "a common label for the collection's entries, if there is any"
-          },
           "id": {
             "$ref": "#/components/schemas/ProviderLayerCollectionId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
           },
           "items": {
             "type": "array",
@@ -6997,8 +7803,9 @@
               "$ref": "#/components/schemas/CollectionItem"
             }
           },
-          "name": {
-            "type": "string"
+          "entryLabel": {
+            "type": ["string", "null"],
+            "description": "a common label for the collection's entries, if there is any"
           },
           "properties": {
             "type": "array",
@@ -7015,13 +7822,17 @@
         "type": "object",
         "required": ["type", "id", "name", "description"],
         "properties": {
-          "description": {
-            "type": "string"
+          "type": {
+            "type": "string",
+            "enum": ["collection"]
           },
           "id": {
             "$ref": "#/components/schemas/ProviderLayerCollectionId"
           },
           "name": {
+            "type": "string"
+          },
+          "description": {
             "type": "string"
           },
           "properties": {
@@ -7040,9 +7851,6 @@
         "type": "object",
         "required": ["type", "id"],
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/LayerCollectionId"
-          },
           "type": {
             "type": "string",
             "enum": ["layerCollection"]
@@ -7056,13 +7864,17 @@
         "type": "object",
         "required": ["type", "id", "name", "description"],
         "properties": {
-          "description": {
-            "type": "string"
+          "type": {
+            "type": "string",
+            "enum": ["layer"]
           },
           "id": {
             "$ref": "#/components/schemas/ProviderLayerId"
           },
           "name": {
+            "type": "string"
+          },
+          "description": {
             "type": "string"
           },
           "properties": {
@@ -7098,9 +7910,6 @@
         "type": "object",
         "required": ["type", "id"],
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/LayerId"
-          },
           "type": {
             "type": "string",
             "enum": ["layer"]
@@ -7124,18 +7933,22 @@
         "description": "An enum to differentiate between `Operator` variants",
         "required": ["type", "operator"],
         "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["Vector", "Raster", "Plot"]
+          },
           "operator": {
             "type": "object",
             "required": ["type"],
             "properties": {
+              "type": {
+                "type": "string"
+              },
               "params": {
                 "type": "object"
               },
               "sources": {
                 "type": "object"
-              },
-              "type": {
-                "type": "string"
               }
             }
           },
@@ -7166,8 +7979,9 @@
         "type": "object",
         "required": ["type", "stroke", "autoSimplified"],
         "properties": {
-          "autoSimplified": {
-            "type": "boolean"
+          "type": {
+            "type": "string",
+            "enum": ["line"]
           },
           "stroke": {
             "$ref": "#/components/schemas/StrokeParam"
@@ -7198,6 +8012,10 @@
           "underColor"
         ],
         "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["linearGradient"]
+          },
           "breakpoints": {
             "type": "array",
             "items": {
@@ -7209,6 +8027,24 @@
           },
           "overColor": {
             "$ref": "#/components/schemas/RgbaColor"
+          },
+          "underColor": {
+            "$ref": "#/components/schemas/RgbaColor"
+          }
+        }
+      },
+      "Link": {
+        "type": "object",
+        "description": "Hyperlink to enable Hypermedia Access",
+        "required": ["href", "rel"],
+        "properties": {
+          "href": {
+            "type": "string",
+            "description": "Supplies the URI to a remote resource (or resource fragment)."
+          },
+          "rel": {
+            "type": "string",
+            "description": "The type or semantics of the relation."
           },
           "type": {
             "type": "string",
@@ -7229,6 +8065,10 @@
           "underColor"
         ],
         "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["logarithmicGradient"]
+          },
           "breakpoints": {
             "type": "array",
             "items": {
@@ -7312,10 +8152,10 @@
         "type": "object",
         "required": ["mainFile", "layerName", "metaData"],
         "properties": {
-          "layerName": {
+          "mainFile": {
             "type": "string"
           },
-          "mainFile": {
+          "layerName": {
             "type": "string"
           },
           "metaData": {
@@ -7334,23 +8174,23 @@
           "fileName"
         ],
         "properties": {
-          "description": {
-            "type": "string"
+          "name": {
+            "$ref": "#/components/schemas/MlModelName"
           },
           "displayName": {
             "type": "string"
           },
-          "fileName": {
+          "description": {
             "type": "string"
+          },
+          "upload": {
+            "$ref": "#/components/schemas/UploadId"
           },
           "metadata": {
             "$ref": "#/components/schemas/MlModelMetadata"
           },
-          "name": {
-            "$ref": "#/components/schemas/MlModelName"
-          },
-          "upload": {
-            "$ref": "#/components/schemas/UploadId"
+          "fileName": {
+            "type": "string"
           }
         }
       },
@@ -7358,12 +8198,12 @@
         "type": "object",
         "required": ["variant"],
         "properties": {
+          "variant": {
+            "$ref": "#/components/schemas/MlModelInputNoDataHandlingVariant"
+          },
           "noDataValue": {
             "type": ["number", "null"],
             "format": "float"
-          },
-          "variant": {
-            "$ref": "#/components/schemas/MlModelInputNoDataHandlingVariant"
           }
         }
       },
@@ -7382,23 +8222,23 @@
           "outputNoDataHandling"
         ],
         "properties": {
-          "inputNoDataHandling": {
-            "$ref": "#/components/schemas/MlModelInputNoDataHandling"
+          "inputType": {
+            "$ref": "#/components/schemas/RasterDataType"
+          },
+          "outputType": {
+            "$ref": "#/components/schemas/RasterDataType"
           },
           "inputShape": {
             "$ref": "#/components/schemas/MlTensorShape3D"
           },
-          "inputType": {
-            "$ref": "#/components/schemas/RasterDataType"
-          },
-          "outputNoDataHandling": {
-            "$ref": "#/components/schemas/MlModelOutputNoDataHandling"
-          },
           "outputShape": {
             "$ref": "#/components/schemas/MlTensorShape3D"
           },
-          "outputType": {
-            "$ref": "#/components/schemas/RasterDataType"
+          "inputNoDataHandling": {
+            "$ref": "#/components/schemas/MlModelInputNoDataHandling"
+          },
+          "outputNoDataHandling": {
+            "$ref": "#/components/schemas/MlModelOutputNoDataHandling"
           }
         }
       },
@@ -7418,12 +8258,12 @@
         "type": "object",
         "required": ["variant"],
         "properties": {
+          "variant": {
+            "$ref": "#/components/schemas/MlModelOutputNoDataHandlingVariant"
+          },
           "noDataValue": {
             "type": ["number", "null"],
             "format": "float"
-          },
-          "variant": {
-            "$ref": "#/components/schemas/MlModelOutputNoDataHandlingVariant"
           }
         }
       },
@@ -7435,9 +8275,6 @@
         "type": "object",
         "required": ["type", "id"],
         "properties": {
-          "id": {
-            "type": "string"
-          },
           "type": {
             "type": "string",
             "enum": ["mlModel"]
@@ -7449,7 +8286,7 @@
         "description": "A struct describing tensor shape for `MlModelMetadata`",
         "required": ["y", "x", "bands"],
         "properties": {
-          "bands": {
+          "y": {
             "type": "integer",
             "format": "int32",
             "minimum": 0
@@ -7459,7 +8296,7 @@
             "format": "int32",
             "minimum": 0
           },
-          "y": {
+          "bands": {
             "type": "integer",
             "format": "int32",
             "minimum": 0
@@ -7482,12 +8319,6 @@
         "type": "object",
         "required": ["type", "loadingInfo", "resultDescriptor"],
         "properties": {
-          "loadingInfo": {
-            "$ref": "#/components/schemas/MockDatasetDataSourceLoadingInfo"
-          },
-          "resultDescriptor": {
-            "$ref": "#/components/schemas/VectorResultDescriptor"
-          },
           "type": {
             "type": "string",
             "enum": ["MockMetaData"]
@@ -7500,9 +8331,6 @@
         "description": "The [`MockPointSource`] is a source operator that provides mock vector point data for testing and development purposes.\n",
         "required": ["type", "params"],
         "properties": {
-          "params": {
-            "$ref": "#/components/schemas/MockPointSourceParameters"
-          },
           "type": {
             "type": "string",
             "enum": ["MockPointSource"]
@@ -7553,9 +8381,6 @@
         "description": "The [`MultiBandGdalSource`] is a source operator that reads multi-band raster data using GDAL.",
         "required": ["type", "params"],
         "properties": {
-          "params": {
-            "$ref": "#/components/schemas/GdalSourceParameters"
-          },
           "type": {
             "type": "string",
             "enum": ["MultiBandGdalSource"]
@@ -7586,51 +8411,9 @@
           "blueMax"
         ],
         "properties": {
-          "blueBand": {
-            "type": "integer",
-            "format": "int32",
-            "description": "The band index of the blue channel.",
-            "minimum": 0
-          },
-          "blueMax": {
-            "type": "number",
-            "format": "double",
-            "description": "The maximum value for the red channel."
-          },
-          "blueMin": {
-            "type": "number",
-            "format": "double",
-            "description": "The minimum value for the red channel."
-          },
-          "blueScale": {
-            "type": "number",
-            "format": "double",
-            "description": "A scaling factor for the blue channel between 0 and 1."
-          },
-          "greenBand": {
-            "type": "integer",
-            "format": "int32",
-            "description": "The band index of the green channel.",
-            "minimum": 0
-          },
-          "greenMax": {
-            "type": "number",
-            "format": "double",
-            "description": "The maximum value for the red channel."
-          },
-          "greenMin": {
-            "type": "number",
-            "format": "double",
-            "description": "The minimum value for the red channel."
-          },
-          "greenScale": {
-            "type": "number",
-            "format": "double",
-            "description": "A scaling factor for the green channel between 0 and 1."
-          },
-          "noDataColor": {
-            "$ref": "#/components/schemas/RgbaColor",
-            "description": "The color to use for no data values.\nIf not specified, the no data values will be transparent."
+          "type": {
+            "type": "string",
+            "enum": ["multiBand"]
           },
           "redBand": {
             "type": "integer",
@@ -7638,20 +8421,62 @@
             "description": "The band index of the red channel.",
             "minimum": 0
           },
-          "redMax": {
-            "type": "number",
-            "format": "double",
-            "description": "The maximum value for the red channel."
-          },
           "redMin": {
             "type": "number",
             "format": "double",
             "description": "The minimum value for the red channel."
           },
+          "redMax": {
+            "type": "number",
+            "format": "double",
+            "description": "The maximum value for the red channel."
+          },
           "redScale": {
             "type": "number",
             "format": "double",
             "description": "A scaling factor for the red channel between 0 and 1."
+          },
+          "greenBand": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The band index of the green channel.",
+            "minimum": 0
+          },
+          "greenMin": {
+            "type": "number",
+            "format": "double",
+            "description": "The minimum value for the red channel."
+          },
+          "greenMax": {
+            "type": "number",
+            "format": "double",
+            "description": "The maximum value for the red channel."
+          },
+          "greenScale": {
+            "type": "number",
+            "format": "double",
+            "description": "A scaling factor for the green channel between 0 and 1."
+          },
+          "blueBand": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The band index of the blue channel.",
+            "minimum": 0
+          },
+          "blueMin": {
+            "type": "number",
+            "format": "double",
+            "description": "The minimum value for the red channel."
+          },
+          "blueMax": {
+            "type": "number",
+            "format": "double",
+            "description": "The maximum value for the red channel."
+          },
+          "blueScale": {
+            "type": "number",
+            "format": "double",
+            "description": "A scaling factor for the blue channel between 0 and 1."
           },
           "type": {
             "type": "string",
@@ -7745,28 +8570,21 @@
         "type": "object",
         "required": ["type", "name", "description", "data", "overviews"],
         "properties": {
-          "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
-          },
-          "data": {
+          "type": {
             "type": "string",
-            "description": "Path were the `NetCDF` data can be found"
-          },
-          "description": {
-            "type": "string"
+            "enum": ["NetCdfCf"]
           },
           "name": {
             "type": "string"
           },
-          "overviews": {
-            "type": "string",
-            "description": "Path were overview files are stored"
+          "description": {
+            "type": "string"
           },
           "priority": {
             "type": ["integer", "null"],
             "format": "int32"
           },
-          "type": {
+          "data": {
             "type": "string",
             "enum": ["NetCdfCf"]
           }
@@ -7799,12 +8617,6 @@
         "type": "object",
         "required": ["type", "loadingInfo", "resultDescriptor"],
         "properties": {
-          "loadingInfo": {
-            "$ref": "#/components/schemas/OgrSourceDataset"
-          },
-          "resultDescriptor": {
-            "$ref": "#/components/schemas/VectorResultDescriptor"
-          },
           "type": {
             "type": "string",
             "enum": ["OgrMetaData"]
@@ -7817,9 +8629,6 @@
         "description": "The [`OgrSource`] is a source operator that reads vector data using OGR (part of GDAL).\nThe counterpart for raster data is the [`GdalSource`].\n\n## Errors\n\nIf the given dataset does not exist or is not readable, an error is thrown.\n",
         "required": ["type", "params"],
         "properties": {
-          "params": {
-            "$ref": "#/components/schemas/OgrSourceParameters"
-          },
           "type": {
             "type": "string",
             "enum": ["OgrSource"]
@@ -7838,13 +8647,23 @@
         "type": "object",
         "required": ["x"],
         "properties": {
-          "bool": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+          "formatSpecifics": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FormatSpecifics"
+              }
+            ]
           },
-          "datetime": {
+          "x": {
+            "type": "string"
+          },
+          "y": {
+            "type": ["string", "null"]
+          },
+          "int": {
             "type": "array",
             "items": {
               "type": "string"
@@ -7856,17 +8675,19 @@
               "type": "string"
             }
           },
-          "formatSpecifics": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/FormatSpecifics"
-              }
-            ]
+          "text": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
-          "int": {
+          "bool": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "datetime": {
             "type": "array",
             "items": {
               "type": "string"
@@ -7902,18 +8723,8 @@
           "attributeQuery": {
             "type": ["string", "null"]
           },
-          "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
-          },
-          "columns": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/OgrSourceColumnSpec"
-              }
-            ]
+          "layerName": {
+            "type": "string"
           },
           "dataType": {
             "oneOf": [
@@ -7925,6 +8736,9 @@
               }
             ]
           },
+          "time": {
+            "$ref": "#/components/schemas/OgrSourceDatasetTimeType"
+          },
           "defaultGeometry": {
             "oneOf": [
               {
@@ -7935,17 +8749,21 @@
               }
             ]
           },
-          "fileName": {
-            "type": "string"
-          },
-          "forceOgrSpatialFilter": {
-            "type": "boolean"
+          "columns": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OgrSourceColumnSpec"
+              }
+            ]
           },
           "forceOgrTimeFilter": {
             "type": "boolean"
           },
-          "layerName": {
-            "type": "string"
+          "forceOgrSpatialFilter": {
+            "type": "boolean"
           },
           "onError": {
             "$ref": "#/components/schemas/OgrSourceErrorSpec"
@@ -7953,8 +8771,11 @@
           "sqlQuery": {
             "type": ["string", "null"]
           },
-          "time": {
-            "$ref": "#/components/schemas/OgrSourceDatasetTimeType"
+          "attributeQuery": {
+            "type": ["string", "null"]
+          },
+          "cacheTtl": {
+            "$ref": "#/components/schemas/CacheTtlSeconds"
           }
         }
       },
@@ -7997,8 +8818,9 @@
         "type": "object",
         "required": ["type", "startField", "startFormat", "duration"],
         "properties": {
-          "duration": {
-            "$ref": "#/components/schemas/OgrSourceDurationSpec"
+          "type": {
+            "type": "string",
+            "enum": ["start"]
           },
           "startField": {
             "type": "string"
@@ -8016,8 +8838,9 @@
         "type": "object",
         "required": ["type", "startField", "startFormat", "durationField"],
         "properties": {
-          "durationField": {
-            "type": "string"
+          "type": {
+            "type": "string",
+            "enum": ["start+duration"]
           },
           "startField": {
             "type": "string"
@@ -8041,11 +8864,9 @@
           "endFormat"
         ],
         "properties": {
-          "endField": {
-            "type": "string"
-          },
-          "endFormat": {
-            "$ref": "#/components/schemas/OgrSourceTimeFormat"
+          "type": {
+            "type": "string",
+            "enum": ["start+end"]
           },
           "startField": {
             "type": "string"
@@ -8126,6 +8947,11 @@
         "description": "Parameters for the [`OgrSource`] operator.",
         "required": ["data"],
         "properties": {
+          "data": {
+            "type": "string",
+            "description": "Dataset name or identifier to be loaded.",
+            "examples": ["ndvi"]
+          },
           "attributeProjection": {
             "type": ["array", "null"],
             "items": {
@@ -8175,9 +9001,6 @@
         "type": "object",
         "required": ["format", "customFormat"],
         "properties": {
-          "customFormat": {
-            "$ref": "#/components/schemas/DateTimeParseFormat"
-          },
           "format": {
             "type": "string",
             "enum": ["custom"]
@@ -8201,16 +9024,16 @@
         "type": "object",
         "required": ["operatorName", "operatorPath", "count"],
         "properties": {
-          "count": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
           "operatorName": {
             "type": "string"
           },
           "operatorPath": {
             "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
           }
         }
       },
@@ -8233,11 +9056,12 @@
         "type": "object",
         "required": ["type", "colors", "noDataColor", "defaultColor"],
         "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["palette"]
+          },
           "colors": {
             "$ref": "#/components/schemas/Palette"
-          },
-          "defaultColor": {
-            "$ref": "#/components/schemas/RgbaColor"
           },
           "noDataColor": {
             "$ref": "#/components/schemas/RgbaColor"
@@ -8252,24 +9076,21 @@
         "type": "object",
         "required": ["type", "name", "description", "baseUrl", "cacheTtl"],
         "properties": {
-          "baseUrl": {
+          "type": {
             "type": "string",
-            "format": "uri"
-          },
-          "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
-          },
-          "description": {
-            "type": "string"
+            "enum": ["Pangaea"]
           },
           "name": {
+            "type": "string"
+          },
+          "description": {
             "type": "string"
           },
           "priority": {
             "type": ["integer", "null"],
             "format": "int32"
           },
-          "type": {
+          "baseUrl": {
             "type": "string",
             "enum": ["Pangaea"]
           }
@@ -8283,14 +9104,14 @@
         "type": "object",
         "required": ["resource", "role", "permission"],
         "properties": {
-          "permission": {
-            "$ref": "#/components/schemas/Permission"
-          },
           "resource": {
             "$ref": "#/components/schemas/Resource"
           },
           "role": {
             "$ref": "#/components/schemas/Role"
+          },
+          "permission": {
+            "$ref": "#/components/schemas/Permission"
           }
         }
       },
@@ -8299,14 +9120,14 @@
         "description": "Request for adding a new permission to the given role on the given resource",
         "required": ["resource", "roleId", "permission"],
         "properties": {
-          "permission": {
-            "$ref": "#/components/schemas/Permission"
-          },
           "resource": {
             "$ref": "#/components/schemas/Resource"
           },
           "roleId": {
             "$ref": "#/components/schemas/RoleId"
+          },
+          "permission": {
+            "$ref": "#/components/schemas/Permission"
           }
         }
       },
@@ -8314,11 +9135,11 @@
         "type": "object",
         "required": ["workflow", "name"],
         "properties": {
-          "name": {
-            "type": "string"
-          },
           "workflow": {
             "$ref": "#/components/schemas/WorkflowId"
+          },
+          "name": {
+            "type": "string"
           }
         }
       },
@@ -8349,16 +9170,6 @@
         "description": "A `ResultDescriptor` for plot queries",
         "required": ["spatialReference"],
         "properties": {
-          "bbox": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/BoundingBox2D"
-              }
-            ]
-          },
           "spatialReference": {
             "type": "string"
           },
@@ -8371,6 +9182,16 @@
                 "$ref": "#/components/schemas/TimeInterval"
               }
             ]
+          },
+          "bbox": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BoundingBox2D"
+              }
+            ]
           }
         }
       },
@@ -8378,11 +9199,15 @@
         "type": "object",
         "required": ["type", "radius", "fillColor", "stroke"],
         "properties": {
-          "fillColor": {
-            "$ref": "#/components/schemas/ColorParam"
+          "type": {
+            "type": "string",
+            "enum": ["point"]
           },
           "radius": {
             "$ref": "#/components/schemas/NumberParam"
+          },
+          "fillColor": {
+            "$ref": "#/components/schemas/ColorParam"
           },
           "stroke": {
             "$ref": "#/components/schemas/StrokeParam"
@@ -8407,8 +9232,9 @@
         "type": "object",
         "required": ["type", "fillColor", "stroke", "autoSimplified"],
         "properties": {
-          "autoSimplified": {
-            "type": "boolean"
+          "type": {
+            "type": "string",
+            "enum": ["polygon"]
           },
           "fillColor": {
             "$ref": "#/components/schemas/ColorParam"
@@ -8445,14 +9271,17 @@
           "timeStep"
         ],
         "properties": {
-          "bounds": {
-            "$ref": "#/components/schemas/STRectangle"
+          "id": {
+            "$ref": "#/components/schemas/ProjectId"
+          },
+          "version": {
+            "$ref": "#/components/schemas/ProjectVersion"
+          },
+          "name": {
+            "type": "string"
           },
           "description": {
             "type": "string"
-          },
-          "id": {
-            "$ref": "#/components/schemas/ProjectId"
           },
           "layers": {
             "type": "array",
@@ -8460,20 +9289,17 @@
               "$ref": "#/components/schemas/ProjectLayer"
             }
           },
-          "name": {
-            "type": "string"
-          },
           "plots": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Plot"
             }
           },
+          "bounds": {
+            "$ref": "#/components/schemas/STRectangle"
+          },
           "timeStep": {
             "$ref": "#/components/schemas/TimeStep"
-          },
-          "version": {
-            "$ref": "#/components/schemas/ProjectVersion"
           }
         }
       },
@@ -8485,17 +9311,17 @@
         "type": "object",
         "required": ["workflow", "name", "visibility", "symbology"],
         "properties": {
+          "workflow": {
+            "$ref": "#/components/schemas/WorkflowId"
+          },
           "name": {
             "type": "string"
-          },
-          "symbology": {
-            "$ref": "#/components/schemas/Symbology"
           },
           "visibility": {
             "$ref": "#/components/schemas/LayerVisibility"
           },
-          "workflow": {
-            "$ref": "#/components/schemas/WorkflowId"
+          "symbology": {
+            "$ref": "#/components/schemas/Symbology"
           }
         }
       },
@@ -8510,15 +9336,14 @@
           "changed"
         ],
         "properties": {
-          "changed": {
-            "type": "string",
-            "format": "date-time"
+          "id": {
+            "$ref": "#/components/schemas/ProjectId"
+          },
+          "name": {
+            "type": "string"
           },
           "description": {
             "type": "string"
-          },
-          "id": {
-            "$ref": "#/components/schemas/ProjectId"
           },
           "layerNames": {
             "type": "array",
@@ -8526,14 +9351,15 @@
               "type": "string"
             }
           },
-          "name": {
-            "type": "string"
-          },
           "plotNames": {
             "type": "array",
             "items": {
               "type": "string"
             }
+          },
+          "changed": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -8541,9 +9367,6 @@
         "type": "object",
         "required": ["type", "id"],
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/ProjectId"
-          },
           "type": {
             "type": "string",
             "enum": ["project"]
@@ -8558,12 +9381,12 @@
         "type": "object",
         "required": ["id", "changed"],
         "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ProjectVersionId"
+          },
           "changed": {
             "type": "string",
             "format": "date-time"
-          },
-          "id": {
-            "$ref": "#/components/schemas/ProjectVersionId"
           }
         }
       },
@@ -8598,14 +9421,14 @@
         "type": "object",
         "required": ["provenance", "data"],
         "properties": {
+          "provenance": {
+            "$ref": "#/components/schemas/Provenance"
+          },
           "data": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/DataId"
             }
-          },
-          "provenance": {
-            "$ref": "#/components/schemas/Provenance"
           }
         }
       },
@@ -8637,11 +9460,11 @@
         "type": "object",
         "required": ["providerId", "collectionId"],
         "properties": {
-          "collectionId": {
-            "$ref": "#/components/schemas/LayerCollectionId"
-          },
           "providerId": {
             "$ref": "#/components/schemas/DataProviderId"
+          },
+          "collectionId": {
+            "$ref": "#/components/schemas/LayerCollectionId"
           }
         }
       },
@@ -8649,11 +9472,11 @@
         "type": "object",
         "required": ["providerId", "layerId"],
         "properties": {
-          "layerId": {
-            "$ref": "#/components/schemas/LayerId"
-          },
           "providerId": {
             "$ref": "#/components/schemas/DataProviderId"
+          },
+          "layerId": {
+            "$ref": "#/components/schemas/LayerId"
           }
         }
       },
@@ -8676,11 +9499,11 @@
         "type": "object",
         "required": ["name", "measurement"],
         "properties": {
-          "measurement": {
-            "$ref": "#/components/schemas/Measurement"
-          },
           "name": {
             "type": "string"
+          },
+          "measurement": {
+            "$ref": "#/components/schemas/Measurement"
           }
         }
       },
@@ -8747,8 +9570,18 @@
               }
             ]
           },
+          "displayName": {
+            "type": "string"
+          },
+          "description": {
+            "type": ["string", "null"]
+          },
           "query": {
             "$ref": "#/components/schemas/RasterToDatasetQueryRectangle"
+          },
+          "asCog": {
+            "type": "boolean",
+            "default": true
           }
         },
         "example": {
@@ -8846,20 +9679,20 @@
           "bands"
         ],
         "properties": {
-          "bands": {
-            "$ref": "#/components/schemas/RasterBandDescriptors"
-          },
           "dataType": {
             "$ref": "#/components/schemas/RasterDataType"
-          },
-          "spatialGrid": {
-            "$ref": "#/components/schemas/SpatialGridDescriptor"
           },
           "spatialReference": {
             "type": "string"
           },
           "time": {
             "$ref": "#/components/schemas/TimeDescriptor"
+          },
+          "spatialGrid": {
+            "$ref": "#/components/schemas/SpatialGridDescriptor"
+          },
+          "bands": {
+            "$ref": "#/components/schemas/RasterBandDescriptors"
           }
         }
       },
@@ -8869,12 +9702,6 @@
         "description": "The `RasterStacker` stacks all of its inputs into a single raster time series.\nIt queries all inputs and combines them by band, space, and then time.\n\nThe output raster has as many bands as the sum of all input bands.\nTiles are automatically temporally aligned.\n\nAll inputs must have the same data type and spatial reference.\n\n## Inputs\n\nThe `RasterStacker` operator expects multiple raster inputs.",
         "required": ["type", "params", "sources"],
         "properties": {
-          "params": {
-            "$ref": "#/components/schemas/RasterStackerParameters"
-          },
-          "sources": {
-            "$ref": "#/components/schemas/MultipleRasterSources"
-          },
           "type": {
             "type": "string",
             "enum": ["RasterStacker"]
@@ -8927,6 +9754,10 @@
         "type": "object",
         "required": ["type", "opacity", "rasterColorizer"],
         "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["raster"]
+          },
           "opacity": {
             "type": "number",
             "format": "double"
@@ -8959,12 +9790,6 @@
         "description": "The `RasterTypeConversion` operator changes the data type of raster pixels.\n\nApplying this conversion may cause precision loss.\nFor example, converting `F32` value `3.1` to `U8` results in `3`.\n\nIf a value is outside of the range of the target data type,\nit is clipped to the valid range of that type.\nFor example, converting `F32` value `300.0` to `U8` results in `255`.\n\n## Inputs\n\nThe `RasterTypeConversion` operator expects exactly one _raster_ input.",
         "required": ["type", "params", "sources"],
         "properties": {
-          "params": {
-            "$ref": "#/components/schemas/RasterTypeConversionParameters"
-          },
-          "sources": {
-            "$ref": "#/components/schemas/SingleRasterSource"
-          },
           "type": {
             "type": "string",
             "enum": ["RasterTypeConversion"]
@@ -9004,12 +9829,6 @@
         "description": "The `RasterVectorJoin` operator allows combining a single vector input and multiple raster inputs.\nFor each raster input, a new column is added to the collection from the vector input.\nThe new column contains the value of the raster at the location of the vector feature.\nFor features covering multiple pixels like `MultiPoints` or `MultiPolygons`, the value is calculated using an aggregation function selected by the user.\nThe same is true if the temporal extent of a vector feature covers multiple raster time steps.\nMore details are described below.\n\n**Example**:\nYou have a collection of agricultural fields (`Polygons`) and a collection of raster images containing each pixel's monthly NDVI value.\nFor your application, you want to know the NDVI value of each field.\nThe `RasterVectorJoin` operator allows you to combine the vector and raster data and offers multiple spatial and temporal aggregation strategies.\nFor example, you can use the `first` aggregation function to get the NDVI value of the first pixel that intersects with each field.\nThis is useful for exploratory analysis since the computation is very fast.\nTo calculate the mean NDVI value of all pixels that intersect with the field you should use the `mean` aggregation function.\nSince the NDVI data is a monthly time series, you have to specify the temporal aggregation function as well.\nThe default is `none` which will create a new feature for each month.\nOther options are `first` and `mean` which will calculate the first or mean NDVI value for each field over time.\n\n## Inputs\n\nThe `RasterVectorJoin` operator expects one _vector_ input and one or more _raster_ inputs.\n\n| Parameter | Type                                |\n| --------- | ----------------------------------- |\n| `sources` | `SingleVectorMultipleRasterSources` |\n\n## Errors\n\nIf the length of `names` is not equal to the number of raster inputs, an error is thrown.\n",
         "required": ["type", "params", "sources"],
         "properties": {
-          "params": {
-            "$ref": "#/components/schemas/RasterVectorJoinParameters"
-          },
-          "sources": {
-            "$ref": "#/components/schemas/SingleVectorMultipleRasterSources"
-          },
           "type": {
             "type": "string",
             "enum": ["RasterVectorJoin"]
@@ -9047,6 +9866,10 @@
         "type": "object",
         "required": ["names", "featureAggregation", "temporalAggregation"],
         "properties": {
+          "names": {
+            "$ref": "#/components/schemas/ColumnNames",
+            "description": "Specify how the new column names are derived from the raster band names.\n\nThe `ColumnNames` type is used to specify how the new column names are derived from the raster band names.\n\n- **default**: Appends \" (n)\" to the band name with the smallest `n` that avoids a conflict.\n- **suffix**: Specifies a suffix for each input, to be appended to the band names.\n- **rename**: A list of names for each new column.\n"
+          },
           "featureAggregation": {
             "$ref": "#/components/schemas/FeatureAggregationMethod",
             "description": "The aggregation function to use for features covering multiple pixels."
@@ -9055,10 +9878,6 @@
             "type": "boolean",
             "description": "Whether to ignore no data values in the aggregation. Defaults to `false`.",
             "examples": [true]
-          },
-          "names": {
-            "$ref": "#/components/schemas/ColumnNames",
-            "description": "Specify how the new column names are derived from the raster band names.\n\nThe `ColumnNames` type is used to specify how the new column names are derived from the raster band names.\n\n- **default**: Appends \" (n)\" to the band name with the smallest `n` that avoids a conflict.\n- **suffix**: Specifies a suffix for each input, to be appended to the band names.\n- **rename**: A list of names for each new column.\n"
           },
           "temporalAggregation": {
             "$ref": "#/components/schemas/TemporalAggregationMethod",
@@ -9101,6 +9920,12 @@
             "title": "Suffix",
             "required": ["values", "type"],
             "properties": {
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "type": {
                 "type": "string",
                 "enum": ["suffix"]
@@ -9118,6 +9943,12 @@
             "title": "Rename",
             "required": ["values", "type"],
             "properties": {
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "type": {
                 "type": "string",
                 "enum": ["rename"]
@@ -9138,12 +9969,6 @@
         "description": "The `Reprojection` operator reprojects data from one spatial reference system to another.\nIt accepts exactly one input which can either be a raster or a vector data stream.\nThe operator produces all data that, after reprojection, is contained in the query rectangle.\n\n## Data Type Specifics\n\nThe concrete behavior depends on the data type.\n\n### Vector Data\n\nThe operator reprojects all coordinates of the features individually.\nThe result contains all features that, after reprojection, are intersected by the query rectangle.\n\n### Raster Data\n\nTo create tiles in the target projection, the operator loads corresponding tiles in the source projection.\nFor each output pixel, the value of the nearest input pixel is used.\n\nIf parts of a tile are outside of the source extent after projection, the operator produces NO DATA values.\n\n## Inputs\n\nThe `Reprojection` operator expects exactly one _raster_ or _vector_ input.\n\n## Errors\n\nThe operator returns an error if the target projection is unknown or if input data cannot be reprojected.",
         "required": ["type", "params", "sources"],
         "properties": {
-          "params": {
-            "$ref": "#/components/schemas/ReprojectionParameters"
-          },
-          "sources": {
-            "$ref": "#/components/schemas/SingleRasterOrVectorSource"
-          },
           "type": {
             "type": "string",
             "enum": ["Reprojection"]
@@ -9180,10 +10005,6 @@
         "description": "Parameters for the `Reprojection` operator.",
         "required": ["targetSpatialReference"],
         "properties": {
-          "deriveOutSpec": {
-            "$ref": "#/components/schemas/DeriveOutRasterSpecsSource",
-            "description": "Controls how raster output bounds are derived.\n\nThe default `projectionBounds` usually keeps a projection-aligned target grid,\nwhile `dataBounds` derives it directly from source data bounds."
-          },
           "targetSpatialReference": {
             "type": "string",
             "description": "Target spatial reference system.",
@@ -9249,11 +10070,11 @@
         "type": "object",
         "required": ["role", "individual"],
         "properties": {
-          "individual": {
-            "type": "boolean"
-          },
           "role": {
             "$ref": "#/components/schemas/Role"
+          },
+          "individual": {
+            "type": "boolean"
           }
         }
       },
@@ -9265,11 +10086,11 @@
         "type": "object",
         "required": ["spatialReference", "boundingBox", "timeInterval"],
         "properties": {
-          "boundingBox": {
-            "$ref": "#/components/schemas/BoundingBox2D"
-          },
           "spatialReference": {
             "type": "string"
+          },
+          "boundingBox": {
+            "$ref": "#/components/schemas/BoundingBox2D"
           },
           "timeInterval": {
             "$ref": "#/components/schemas/TimeInterval"
@@ -9280,6 +10101,9 @@
         "type": "object",
         "required": ["searchTypes", "autocomplete"],
         "properties": {
+          "searchTypes": {
+            "$ref": "#/components/schemas/SearchTypes"
+          },
           "autocomplete": {
             "type": "boolean"
           },
@@ -9288,9 +10112,6 @@
             "items": {
               "type": "string"
             }
-          },
-          "searchTypes": {
-            "$ref": "#/components/schemas/SearchTypes"
           }
         }
       },
@@ -9318,31 +10139,25 @@
         "type": "object",
         "required": ["type", "name", "id", "description", "apiUrl"],
         "properties": {
-          "apiUrl": {
+          "type": {
+            "type": "string",
+            "enum": ["SentinelS2L2ACogs"]
+          },
+          "name": {
             "type": "string"
-          },
-          "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
-          },
-          "description": {
-            "type": "string"
-          },
-          "gdalRetries": {
-            "type": "integer",
-            "minimum": 0
           },
           "id": {
             "$ref": "#/components/schemas/DataProviderId"
           },
-          "name": {
+          "description": {
             "type": "string"
           },
           "priority": {
             "type": ["integer", "null"],
             "format": "int32"
           },
-          "queryBuffer": {
-            "$ref": "#/components/schemas/StacQueryBuffer"
+          "apiUrl": {
+            "type": "string"
           },
           "stacApiRetries": {
             "$ref": "#/components/schemas/StacApiRetries"
@@ -9363,10 +10178,10 @@
           "commitHash": {
             "type": "string"
           },
-          "features": {
+          "version": {
             "type": "string"
           },
-          "version": {
+          "features": {
             "type": "string"
           }
         }
@@ -9379,6 +10194,10 @@
         "type": "object",
         "required": ["type", "band", "bandColorizer"],
         "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["singleBand"]
+          },
           "band": {
             "type": "integer",
             "format": "int32",
@@ -9429,14 +10248,14 @@
         "description": "A single vector operator and one or more raster operators as source for this operator.",
         "required": ["vector", "rasters"],
         "properties": {
+          "vector": {
+            "$ref": "#/components/schemas/VectorOperator"
+          },
           "rasters": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/RasterOperator"
             }
-          },
-          "vector": {
-            "$ref": "#/components/schemas/VectorOperator"
           }
         }
       },
@@ -9509,6 +10328,23 @@
           }
         }
       },
+      "SpatialExtent": {
+        "type": "object",
+        "description": "The spatial extent of the features in the collection.",
+        "properties": {
+          "bbox": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Bbox"
+            },
+            "description": "One or more bounding boxes that describe the spatial extent of the\ndataset. In the Core only a single bounding box is supported. Extensions\nmay support additional areas. If multiple areas are provided, the union\nof the bounding boxes describes the spatial extent."
+          },
+          "crs": {
+            "type": "string",
+            "description": "Coordinate reference system of the coordinates in the spatial extent\n(property `bbox`). The default reference system is WGS 84 longitude/latitude.\nIn the Core this is the only supported coordinate reference system.\nExtensions may support additional coordinate reference systems and add\nadditional enum values."
+          }
+        }
+      },
       "SpatialGridDefinition": {
         "type": "object",
         "required": ["geoTransform", "gridBounds"],
@@ -9525,11 +10361,11 @@
         "type": "object",
         "required": ["spatialGrid", "descriptor"],
         "properties": {
-          "descriptor": {
-            "$ref": "#/components/schemas/SpatialGridDescriptorState"
-          },
           "spatialGrid": {
             "$ref": "#/components/schemas/SpatialGridDefinition"
+          },
+          "descriptor": {
+            "$ref": "#/components/schemas/SpatialGridDescriptorState"
           }
         }
       },
@@ -9542,10 +10378,10 @@
         "description": "A partition of space that include the upper left but excludes the lower right coordinate",
         "required": ["upperLeftCoordinate", "lowerRightCoordinate"],
         "properties": {
-          "lowerRightCoordinate": {
+          "upperLeftCoordinate": {
             "$ref": "#/components/schemas/Coordinate2D"
           },
-          "upperLeftCoordinate": {
+          "lowerRightCoordinate": {
             "$ref": "#/components/schemas/Coordinate2D"
           }
         }
@@ -9555,6 +10391,18 @@
         "description": "The specification of a spatial reference, where extent and axis labels are given\nin natural order (x, y) = (east, north)",
         "required": ["name", "spatialReference", "projString", "extent"],
         "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spatialReference": {
+            "type": "string"
+          },
+          "projString": {
+            "type": "string"
+          },
+          "extent": {
+            "$ref": "#/components/schemas/BoundingBox2D"
+          },
           "axisLabels": {
             "oneOf": [
               {
@@ -9574,18 +10422,6 @@
                 "$ref": "#/components/schemas/AxisOrder"
               }
             ]
-          },
-          "extent": {
-            "$ref": "#/components/schemas/BoundingBox2D"
-          },
-          "name": {
-            "type": "string"
-          },
-          "projString": {
-            "type": "string"
-          },
-          "spatialReference": {
-            "type": "string"
           }
         }
       },
@@ -9597,18 +10433,18 @@
           "exponentialBackoffFactor"
         ],
         "properties": {
-          "exponentialBackoffFactor": {
-            "type": "number",
-            "format": "double"
+          "numberOfRetries": {
+            "type": "integer",
+            "minimum": 0
           },
           "initialDelayMs": {
             "type": "integer",
             "format": "int64",
             "minimum": 0
           },
-          "numberOfRetries": {
-            "type": "integer",
-            "minimum": 0
+          "exponentialBackoffFactor": {
+            "type": "number",
+            "format": "double"
           }
         }
       },
@@ -9625,30 +10461,28 @@
           "datasets"
         ],
         "properties": {
-          "apiUrl": {
-            "type": "string"
+          "type": {
+            "type": "string",
+            "enum": ["StacProviderDefinition"]
           },
-          "collectionName": {
-            "type": "string"
-          },
-          "datasets": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/StacProviderDataset"
-            }
-          },
-          "description": {
+          "name": {
             "type": "string"
           },
           "id": {
             "$ref": "#/components/schemas/DataProviderId"
           },
-          "name": {
+          "description": {
             "type": "string"
           },
           "priority": {
             "type": ["integer", "null"],
             "format": "int32"
+          },
+          "apiUrl": {
+            "type": "string"
+          },
+          "collectionName": {
+            "type": "string"
           },
           "s3Config": {
             "oneOf": [
@@ -9681,29 +10515,29 @@
           "bands"
         ],
         "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "dataType": {
+            "$ref": "#/components/schemas/RasterDataType"
+          },
+          "resolution": {
+            "$ref": "#/components/schemas/SpatialResolution"
+          },
+          "projection": {
+            "type": "string"
+          },
+          "spatialGrid": {
+            "$ref": "#/components/schemas/SpatialGridDescriptor"
+          },
           "bands": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/StacProviderDatasetBand"
             }
-          },
-          "dataType": {
-            "$ref": "#/components/schemas/RasterDataType"
-          },
-          "description": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "projection": {
-            "type": "string"
-          },
-          "resolution": {
-            "$ref": "#/components/schemas/SpatialResolution"
-          },
-          "spatialGrid": {
-            "$ref": "#/components/schemas/SpatialGridDescriptor"
           }
         }
       },
@@ -9723,6 +10557,9 @@
         "type": "object",
         "required": ["endpoint"],
         "properties": {
+          "endpoint": {
+            "type": "string"
+          },
           "accessKey": {
             "oneOf": [
               {
@@ -9732,9 +10569,6 @@
                 "$ref": "#/components/schemas/Secret_String"
               }
             ]
-          },
-          "endpoint": {
-            "type": "string"
           },
           "secretKey": {
             "oneOf": [
@@ -9753,11 +10587,11 @@
         "description": "A struct that represents buffers to apply to stac requests",
         "required": ["startSeconds", "endSeconds"],
         "properties": {
-          "endSeconds": {
+          "startSeconds": {
             "type": "integer",
             "format": "int64"
           },
-          "startSeconds": {
+          "endSeconds": {
             "type": "integer",
             "format": "int64"
           }
@@ -9767,9 +10601,6 @@
         "type": "object",
         "required": ["type", "color"],
         "properties": {
-          "color": {
-            "$ref": "#/components/schemas/RgbaColor"
-          },
           "type": {
             "type": "string",
             "enum": ["static"]
@@ -9796,12 +10627,6 @@
         "description": "The `Statistics` operator is a _plot operator_ that computes count statistics over\n\n- a selection of numerical columns of a single vector dataset, or\n- multiple raster datasets.\n\nThe output is a JSON description.\n\nFor instance, you want to get an overview of a raster data source.\nThen, you can use this operator to get basic count statistics.\n\n## Vector Data\n\nIn the case of vector data, the operator generates one statistic for each of the selected numerical attributes.\nThe operator returns an error if one of the selected attributes is not numeric.\n\n## Raster Data\n\nFor raster data, the operator generates one statistic for each input raster.\n\n## Inputs\n\nThe operator consumes exactly one _vector_ or multiple _raster_ operators.\n\n| Parameter | Type                                 |\n| --------- | ------------------------------------ |\n| `source`  | `MultipleRasterOrSingleVectorSource` |\n\n## Errors\n\nThe operator returns an error in the following cases.\n\n- Vector data: The `attribute` for one of the given `columnNames` is not numeric.\n- Vector data: The `attribute` for one of the given `columnNames` does not exist.\n- Raster data: The length of the `columnNames` parameter does not match the number of input rasters.\n\n### Example Output\n\n```json\n{\n  \"A\": {\n    \"valueCount\": 6,\n    \"validCount\": 6,\n    \"min\": 1.0,\n    \"max\": 6.0,\n    \"mean\": 3.5,\n    \"stddev\": 1.707,\n    \"percentiles\": [\n      {\n        \"percentile\": 0.25,\n        \"value\": 2.0\n      },\n      {\n        \"percentile\": 0.5,\n        \"value\": 3.5\n      },\n      {\n        \"percentile\": 0.75,\n        \"value\": 5.0\n      }\n    ]\n  }\n}\n```\n",
         "required": ["type", "params", "sources"],
         "properties": {
-          "params": {
-            "$ref": "#/components/schemas/StatisticsParameters"
-          },
-          "sources": {
-            "$ref": "#/components/schemas/MultipleRasterOrSingleVectorSource"
-          },
           "type": {
             "type": "string",
             "enum": ["Statistics"]
@@ -9862,11 +10687,44 @@
         "type": "object",
         "required": ["width", "color"],
         "properties": {
-          "color": {
-            "$ref": "#/components/schemas/ColorParam"
-          },
           "width": {
             "$ref": "#/components/schemas/NumberParam"
+          },
+          "color": {
+            "$ref": "#/components/schemas/ColorParam"
+          }
+        }
+      },
+      "Style": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "An identifier for this style. Implementation of 'identifier'"
+          },
+          "title": {
+            "type": "string",
+            "description": "A title for this style"
+          },
+          "description": {
+            "type": "string",
+            "description": "Brief narrative description of this style"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Keywords about this style"
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            },
+            "description": "Links to style related resources. Possible link 'rel' values are:\n'style' for a URL pointing to the style description, 'styleSpec' for a\nURL pointing to the specification or standard used to define the style.",
+            "minItems": 1
           }
         }
       },
@@ -9941,10 +10799,14 @@
               "timeStarted"
             ],
             "properties": {
-              "description": {
+              "status": {
+                "type": "string",
+                "enum": ["running"]
+              },
+              "taskType": {
                 "type": "string"
               },
-              "estimatedTimeRemaining": {
+              "description": {
                 "type": "string"
               },
               "info": {},
@@ -9968,10 +10830,6 @@
             "title": "TaskStatusCompleted",
             "required": ["status", "taskType", "timeTotal", "timeStarted"],
             "properties": {
-              "description": {
-                "type": "string"
-              },
-              "info": {},
               "status": {
                 "type": "string",
                 "enum": ["completed"]
@@ -9979,10 +10837,14 @@
               "taskType": {
                 "type": "string"
               },
-              "timeStarted": {
+              "description": {
                 "type": "string"
               },
+              "info": {},
               "timeTotal": {
+                "type": "string"
+              },
+              "timeStarted": {
                 "type": "string"
               }
             }
@@ -9992,7 +10854,6 @@
             "title": "TaskStatusAborted",
             "required": ["status", "cleanUp"],
             "properties": {
-              "cleanUp": {},
               "status": {
                 "type": "string",
                 "enum": ["aborted"]
@@ -10004,8 +10865,6 @@
             "title": "TaskStatusFailed",
             "required": ["status", "error", "cleanUp"],
             "properties": {
-              "cleanUp": {},
-              "error": {},
               "status": {
                 "type": "string",
                 "enum": ["failed"]
@@ -10043,18 +10902,34 @@
         "type": "string",
         "enum": ["none", "first", "mean"]
       },
+      "TemporalExtent": {
+        "type": "object",
+        "description": "The temporal extent of the features in the collection.",
+        "required": ["interval"],
+        "properties": {
+          "interval": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": ["string", "null"],
+                "format": "date-time"
+              }
+            },
+            "description": "One or more time intervals that describe the temporal extent of the\ndataset. The value `null` is supported and indicates an unbounded\ninterval end. In the Core only a single time interval is supported.\nExtensions may support multiple intervals. If multiple intervals are\nprovided, the union of the intervals describes the temporal extent."
+          },
+          "trs": {
+            "type": "string",
+            "description": "Coordinate reference system of the coordinates in the temporal extent\n(property `interval`). The default reference system is the Gregorian\ncalendar. In the Core this is the only supported temporal coordinate\nreference system. Extensions may support additional temporal coordinate\nreference systems and add additional enum values."
+          }
+        }
+      },
       "TemporalRasterAggregation": {
         "type": "object",
         "title": "Temporal Raster Aggregation",
         "description": "The `TemporalRasterAggregation` operator aggregates a raster time series into uniform time windows.\nThe output starts with the first window that contains the query start and contains all windows\nthat overlap the query interval.\n\nPixel values are computed by aggregating all input rasters that contribute to the current window.\n\n## Inputs\n\nThe `TemporalRasterAggregation` operator expects exactly one _raster_ input.\n\n## Errors\n\nIf the aggregation method is `first`, `last`, or `mean` and the input raster has no NO DATA value,\nan error is returned.",
         "required": ["type", "params", "sources"],
         "properties": {
-          "params": {
-            "$ref": "#/components/schemas/TemporalRasterAggregationParameters"
-          },
-          "sources": {
-            "$ref": "#/components/schemas/SingleRasterSource"
-          },
           "type": {
             "type": "string",
             "enum": ["TemporalRasterAggregation"]
@@ -10109,17 +10984,6 @@
             "$ref": "#/components/schemas/Aggregation",
             "description": "Aggregation method for values within each time window.\n\nEncountering NO DATA makes the aggregation result NO DATA unless\n`ignoreNoData` is `true` for the selected aggregation variant."
           },
-          "outputType": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/RasterDataType",
-                "description": "Optional output raster data type."
-              }
-            ]
-          },
           "window": {
             "$ref": "#/components/schemas/TimeStep",
             "description": "Window size and granularity for the output time series."
@@ -10132,6 +10996,17 @@
               {
                 "$ref": "#/components/schemas/TimeInstance",
                 "description": "Optional reference timestamp used as the anchor for window boundaries.\n\nIf omitted, windows are anchored at `1970-01-01T00:00:00Z`."
+              }
+            ]
+          },
+          "outputType": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RasterDataType",
+                "description": "Optional output raster data type."
               }
             ]
           }
@@ -10151,6 +11026,531 @@
             "$ref": "#/components/schemas/StrokeParam"
           }
         }
+      },
+      "TileMatrix": {
+        "type": "object",
+        "description": "A tile matrix, usually corresponding to a particular zoom level of a\nTileMatrixSet.",
+        "required": [
+          "id",
+          "scaleDenominator",
+          "cellSize",
+          "pointOfOrigin",
+          "tileWidth",
+          "tileHeight",
+          "matrixWidth",
+          "matrixHeight"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identifier selecting one of the scales defined in the [TileMatrixSet]\nand representing the scaleDenominator the tile."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of a tile matrix, normally used for display to a human"
+          },
+          "description": {
+            "type": "string",
+            "description": "Brief narrative description of a tile matrix, normally available\nfor display to a human"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Unordered list of one or more commonly used or formalized word(s) or\nphrase(s) used to describe this tile set"
+          },
+          "scaleDenominator": {
+            "type": "number",
+            "format": "double",
+            "description": "Scale denominator of this tile matrix"
+          },
+          "cellSize": {
+            "type": "number",
+            "format": "double",
+            "description": "Cell size of this tile matrix"
+          },
+          "cornerOfOrigin": {
+            "$ref": "#/components/schemas/CornerOfOrigin",
+            "description": "The corner of the tile matrix (_topLeft_ or\n_bottomLeft_) used as the origin for numbering tile rows and columns.\nThis corner is also a corner of the (0, 0) tile."
+          },
+          "pointOfOrigin": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "description": "Precise position in CRS coordinates of the corner of origin (e.g. the\ntop-left corner) for this tile matrix. This position is also a corner\nof the (0, 0) tile.",
+            "maxItems": 2,
+            "minItems": 2
+          },
+          "tileWidth": {
+            "type": "integer",
+            "description": "Width of each tile of this tile matrix in pixels",
+            "minimum": 1
+          },
+          "tileHeight": {
+            "type": "integer",
+            "description": "Height of each tile of this tile matrix in pixels",
+            "minimum": 1
+          },
+          "matrixWidth": {
+            "type": "integer",
+            "description": "Width of the matrix (number of tiles in width)",
+            "minimum": 1
+          },
+          "matrixHeight": {
+            "type": "integer",
+            "description": "Height of the matrix (number of tiles in height)",
+            "minimum": 1
+          },
+          "variableMatrixWidths": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VariableMatrixWidth"
+            },
+            "description": "Describes the rows that has variable matrix width"
+          }
+        }
+      },
+      "TileMatrixLimits": {
+        "type": "object",
+        "description": "A resource describing useful to create an array that describes the limits\nfor a tile set [super::TileMatrixSet] based on the OGC TileSet Metadata Standard",
+        "required": [
+          "tileMatrix",
+          "minTileRow",
+          "maxTileRow",
+          "minTileCol",
+          "maxTileCol"
+        ],
+        "properties": {
+          "tileMatrix": {
+            "type": "string"
+          },
+          "minTileRow": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "maxTileRow": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "minTileCol": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "maxTileCol": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "TileMatrixSet": {
+        "type": "object",
+        "description": "A definition of a tile matrix set following the Tile Matrix Set standard.\nFor tileset metadata, such a description (in `tileMatrixSet` property) is\nonly required for offline use, as an alternative to a link with a\n`http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme` relation type.",
+        "required": ["id", "crs", "tileMatrices"],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/TileMatrixSetId",
+            "description": "Tile matrix set identifier"
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of a tile matrix set, normally used for display to a human"
+          },
+          "description": {
+            "type": "string",
+            "description": "Brief narrative description of a tile matrix set, normally available\nfor display to a human"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Unordered list of one or more commonly used or formalized word(s) or\nphrase(s) used to describe this resource entity"
+          },
+          "uri": {
+            "type": "string",
+            "description": "Reference to an official source for this tile matrix set"
+          },
+          "crs": {
+            "$ref": "#/components/schemas/TilesCrs",
+            "description": "Coordinate Reference System (CRS)"
+          },
+          "orderedAxes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ordered list of names of the dimensions defined in the CRS",
+            "minItems": 1
+          },
+          "wellKnownScaleSet": {
+            "type": "string",
+            "description": "Reference to a well-known scale set"
+          },
+          "boundingBox": {
+            "$ref": "#/components/schemas/BoundingBox2D",
+            "description": "Minimum bounding rectangle surrounding the tile matrix set, in the\nsupported CRS"
+          },
+          "tileMatrices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TileMatrix"
+            },
+            "description": "Describes scale levels and its tile matrices"
+          }
+        }
+      },
+      "TileMatrixSetId": {
+        "oneOf": [
+          {
+            "type": "string",
+            "enum": ["WebMercatorQuad"]
+          },
+          {
+            "type": "object",
+            "required": ["Custom"],
+            "properties": {
+              "Custom": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "description": "Identifier for a supported TileMatrixSet"
+      },
+      "TileMatrixSetItem": {
+        "type": "object",
+        "description": "A minimal tile matrix set element for use within a list of tile matrix\nsets linking to a full definition.",
+        "required": ["links"],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/TileMatrixSetId",
+            "description": "Optional local tile matrix set identifier, e.g. for use as unspecified\n`{tileMatrixSetId}` parameter. Implementation of 'identifier'"
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of this tile matrix set, normally used for display to a human"
+          },
+          "uri": {
+            "type": "string",
+            "description": "Reference to an official source for this tileMatrixSet"
+          },
+          "crs": {
+            "$ref": "#/components/schemas/TilesCrs"
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            },
+            "description": "Links to related resources. A 'self' link to the tile matrix set\ndefinition is required."
+          }
+        }
+      },
+      "TileMatrixSets": {
+        "type": "object",
+        "description": "A definition of a tile matrix set following the Tile Matrix Set standard.\nFor tileset metadata, such a description (in `tileMatrixSet` property) is\nonly required for offline use, as an alternative to a link with a\n`http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme` relation type.",
+        "required": ["tileMatrixSets"],
+        "properties": {
+          "tileMatrixSets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TileMatrixSetItem"
+            }
+          }
+        }
+      },
+      "TilePoint": {
+        "type": "object",
+        "required": ["coordinates"],
+        "properties": {
+          "coordinates": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "maxItems": 2,
+            "minItems": 2
+          },
+          "crs": {
+            "$ref": "#/components/schemas/TilesCrs"
+          },
+          "tileMatrix": {
+            "type": "string",
+            "description": "TileMatrix identifier associated with the scaleDenominator"
+          },
+          "scaleDenominator": {
+            "type": "number",
+            "format": "double",
+            "description": "Scale denominator of the tile matrix selected"
+          },
+          "cellSize": {
+            "type": "number",
+            "format": "double",
+            "description": "Cell size of the tile matrix selected"
+          }
+        }
+      },
+      "TileSet": {
+        "type": "object",
+        "description": "A resource describing a tileset based on the OGC TileSet Metadata Standard.\nAt least one of the 'TileMatrixSet',  or a link with 'rel' tiling-scheme\"",
+        "required": ["dataType", "crs", "links"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "A title for this tileset"
+          },
+          "description": {
+            "type": "string",
+            "description": "Brief narrative description of this tile set"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Unordered list of one or more commonly used or formalized word(s) or\nphrase(s) used to describe a TileSet"
+          },
+          "dataType": {
+            "oneOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "enum": ["map"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["vector"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["coverage"]
+                  },
+                  {
+                    "type": "object",
+                    "required": ["string"],
+                    "properties": {
+                      "string": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "description": "Type of data represented in the tileset"
+          },
+          "tileMatrixSetURI": {
+            "type": "string",
+            "format": "uri",
+            "description": "Reference to a Tile Matrix Set on the OGC NA definition server\n(<http://www.opengis.net/def/tms/>). Required if the tile matrix set is\nregistered on the definition server."
+          },
+          "tileMatrixSetLimits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TileMatrixLimits"
+            },
+            "description": "Limits for the TileRow and TileCol values for each TileMatrix in the\nTileMatrixSet. If missing, there are no limits other that the ones\nimposed by the TileMatrixSet. If present the TileMatrices listed are\nlimited and the rest not available at all"
+          },
+          "crs": {
+            "$ref": "#/components/schemas/TilesCrs",
+            "description": "Coordinate Reference System (CRS)"
+          },
+          "epoch": {
+            "type": "number",
+            "format": "double",
+            "description": "Epoch of the Coordinate Reference System (CRS)"
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            },
+            "description": "Links to related resources. Possible link 'rel' values are: 'dataset'\nfor a URL pointing to the dataset, 'tiles' for a URL template to get\nthe tiles; 'alternate' for a URL pointing to another representation of\nthe TileSetMetadata (e.g a TileJSON file); 'tiling-scheme' for a\ndefinition of the TileMatrixSet"
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeospatialData"
+            },
+            "minItems": 1
+          },
+          "boundingBox": {
+            "$ref": "#/components/schemas/BoundingBox2D",
+            "description": "Minimum bounding rectangle surrounding the tile matrix set, in the supported CRS"
+          },
+          "centerPoint": {
+            "$ref": "#/components/schemas/TilePoint",
+            "description": "Location of a tile that nicely represents the tileset. Implementations\nmay use this center value to set the default location or to present a\nrepresentative tile in a user interface"
+          },
+          "style": {
+            "$ref": "#/components/schemas/Style",
+            "description": "Style involving all layers used to generate the tileset"
+          },
+          "attribution": {
+            "type": "string",
+            "description": "Short reference to recognize the author or provider"
+          },
+          "license": {
+            "type": "string",
+            "description": "License applicable to the tiles"
+          },
+          "accessConstraints": {
+            "$ref": "#/components/schemas/AccessConstraints",
+            "description": "Restrictions on the availability of the Tile Set that the user needs to\nbe aware of before using or redistributing the Tile Set"
+          },
+          "version": {
+            "type": "string",
+            "description": "Version of the Tile Set. Changes if the data behind the tiles has been changed"
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the Tile Set was first produced"
+          },
+          "updated": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last Tile Set change/revision"
+          },
+          "pointOfContact": {
+            "type": "string",
+            "description": "Useful information to contact the authors or custodians for the Tile Set"
+          },
+          "mediaTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Media types available for the tiles"
+          }
+        }
+      },
+      "TileSetItem": {
+        "type": "object",
+        "description": "A minimal tileset element for use within a list of tilesets linking to\nfull description of those tilesets.",
+        "required": ["dataType", "crs", "links"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "A title for this tileset"
+          },
+          "dataType": {
+            "oneOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "enum": ["map"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["vector"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["coverage"]
+                  },
+                  {
+                    "type": "object",
+                    "required": ["string"],
+                    "properties": {
+                      "string": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "description": "Type of data represented in the tileset"
+          },
+          "crs": {
+            "$ref": "#/components/schemas/TilesCrs",
+            "description": "Coordinate Reference System (CRS)"
+          },
+          "tileMatrixSetURI": {
+            "type": "string",
+            "format": "uri",
+            "description": "Reference to a Tile Matrix Set on an offical source for Tile Matrix Sets\nsuch as the OGC NA definition server (http://www.opengis.net/def/tms/).\nRequired if the tile matrix set is registered on an open official source."
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            },
+            "description": "Links to related resources. A 'self' link to the tileset as well as a\n'http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme' link to a\ndefinition of the TileMatrixSet are required."
+          }
+        }
+      },
+      "TileSets": {
+        "type": "object",
+        "required": ["tilesets"],
+        "properties": {
+          "tilesets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TileSetItem"
+            }
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            }
+          }
+        }
+      },
+      "TilesCrs": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Simplification of the object into a url if the other properties are not present"
+          },
+          {
+            "type": "object",
+            "description": "Reference to one coordinate reference system (CRS)",
+            "required": ["uri"],
+            "properties": {
+              "uri": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "An object defining the CRS using the JSON encoding for Well-known text\nrepresentation of coordinate reference systems 2.0",
+            "required": ["wkt"],
+            "properties": {
+              "wkt": {
+                "type": "object",
+                "additionalProperties": {},
+                "propertyNames": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "A reference system data structure as defined in the MD_ReferenceSystem of the ISO 19115",
+            "required": ["referenceSystem"],
+            "properties": {
+              "referenceSystem": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "description": "Coordinate Reference System (CRS)"
       },
       "TimeDescriptor": {
         "type": "object",
@@ -10226,10 +11626,10 @@
         "description": "Stores time intervals in ms in close-open semantic [start, end)",
         "required": ["start", "end"],
         "properties": {
-          "end": {
+          "start": {
             "$ref": "#/components/schemas/TimeInstance"
           },
-          "start": {
+          "end": {
             "$ref": "#/components/schemas/TimeInstance"
           }
         }
@@ -10497,14 +11897,14 @@
         "type": "object",
         "required": ["name", "display_name", "description", "tags"],
         "properties": {
-          "description": {
-            "type": "string"
+          "name": {
+            "$ref": "#/components/schemas/DatasetName"
           },
           "display_name": {
             "type": "string"
           },
-          "name": {
-            "$ref": "#/components/schemas/DatasetName"
+          "description": {
+            "type": "string"
           },
           "tags": {
             "type": "array",
@@ -10518,30 +11918,16 @@
         "type": "object",
         "required": ["name", "description", "workflow"],
         "properties": {
-          "description": {
-            "type": "string",
-            "example": "Example layer description"
-          },
-          "metadata": {
-            "type": "object",
-            "description": "metadata used for loading the data",
-            "additionalProperties": {
-              "type": "string"
-            },
-            "propertyNames": {
-              "type": "string"
-            }
-          },
           "name": {
             "type": "string",
             "example": "Example Layer"
           },
-          "properties": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Property"
-            },
-            "description": "properties, for instance, to be rendered in the UI"
+          "description": {
+            "type": "string",
+            "example": "Example layer description"
+          },
+          "workflow": {
+            "$ref": "#/components/schemas/Workflow"
           },
           "symbology": {
             "oneOf": [
@@ -10553,8 +11939,22 @@
               }
             ]
           },
-          "workflow": {
-            "$ref": "#/components/schemas/Workflow"
+          "properties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Property"
+            },
+            "description": "properties, for instance, to be rendered in the UI"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "metadata used for loading the data",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
           }
         }
       },
@@ -10562,13 +11962,13 @@
         "type": "object",
         "required": ["name", "description"],
         "properties": {
-          "description": {
-            "type": "string",
-            "example": "A description for an example collection"
-          },
           "name": {
             "type": "string",
             "example": "Example Collection"
+          },
+          "description": {
+            "type": "string",
+            "example": "A description for an example collection"
           },
           "properties": {
             "type": "array",
@@ -10582,21 +11982,14 @@
         "type": "object",
         "required": ["id"],
         "properties": {
-          "bounds": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/STRectangle"
-              }
-            ]
+          "id": {
+            "$ref": "#/components/schemas/ProjectId"
+          },
+          "name": {
+            "type": ["string", "null"]
           },
           "description": {
             "type": ["string", "null"]
-          },
-          "id": {
-            "$ref": "#/components/schemas/ProjectId"
           },
           "layers": {
             "type": ["array", "null"],
@@ -10612,6 +12005,16 @@
             "items": {
               "$ref": "#/components/schemas/VecUpdate"
             }
+          },
+          "bounds": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/STRectangle"
+              }
+            ]
           },
           "timeStep": {
             "oneOf": [
@@ -10725,11 +12128,11 @@
         "type": "object",
         "required": ["id"],
         "properties": {
-          "email": {
-            "type": ["string", "null"]
-          },
           "id": {
             "$ref": "#/components/schemas/UserId"
+          },
+          "email": {
+            "type": ["string", "null"]
           },
           "realName": {
             "type": ["string", "null"]
@@ -10760,12 +12163,19 @@
         "type": "object",
         "required": ["id", "user", "created", "validUntil", "roles"],
         "properties": {
+          "id": {
+            "$ref": "#/components/schemas/SessionId"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserInfo"
+          },
           "created": {
             "type": "string",
             "format": "date-time"
           },
-          "id": {
-            "$ref": "#/components/schemas/SessionId"
+          "validUntil": {
+            "type": "string",
+            "format": "date-time"
           },
           "project": {
             "oneOf": [
@@ -10777,19 +12187,6 @@
               }
             ]
           },
-          "roles": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RoleId"
-            }
-          },
-          "user": {
-            "$ref": "#/components/schemas/UserInfo"
-          },
-          "validUntil": {
-            "type": "string",
-            "format": "date-time"
-          },
           "view": {
             "oneOf": [
               {
@@ -10799,6 +12196,36 @@
                 "$ref": "#/components/schemas/STRectangle"
               }
             ]
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RoleId"
+            }
+          }
+        }
+      },
+      "VariableMatrixWidth": {
+        "type": "object",
+        "description": "Variable Matrix Width data structure",
+        "required": ["coalesc", "minTileRow", "smaxTileRow"],
+        "properties": {
+          "coalesc": {
+            "type": "integer",
+            "description": "Number of tiles in width that coalesce in a single tile for these rows",
+            "minimum": 2
+          },
+          "minTileRow": {
+            "type": "integer",
+            "format": "int64",
+            "description": "First tile row where the coalescence factor applies for this tilematrix",
+            "minimum": 0
+          },
+          "smaxTileRow": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Last tile row where the coalescence factor applies for this tilematrix",
+            "minimum": 0
           }
         }
       },
@@ -10859,15 +12286,11 @@
         "type": "object",
         "required": ["dataType", "spatialReference", "columns"],
         "properties": {
-          "bbox": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/BoundingBox2D"
-              }
-            ]
+          "dataType": {
+            "$ref": "#/components/schemas/VectorDataType"
+          },
+          "spatialReference": {
+            "type": "string"
           },
           "columns": {
             "type": "object",
@@ -10878,12 +12301,6 @@
               "type": "string"
             }
           },
-          "dataType": {
-            "$ref": "#/components/schemas/VectorDataType"
-          },
-          "spatialReference": {
-            "type": "string"
-          },
           "time": {
             "oneOf": [
               {
@@ -10891,6 +12308,16 @@
               },
               {
                 "$ref": "#/components/schemas/TimeInterval"
+              }
+            ]
+          },
+          "bbox": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BoundingBox2D"
               }
             ]
           }
@@ -11027,14 +12454,14 @@
         "type": "object",
         "required": ["outputFormat", "plotType", "data"],
         "properties": {
-          "data": {
-            "type": "object"
-          },
           "outputFormat": {
             "$ref": "#/components/schemas/PlotOutputFormat"
           },
           "plotType": {
             "type": "string"
+          },
+          "data": {
+            "type": "object"
           }
         }
       }

@@ -35,17 +35,17 @@ class TestDataId(unittest.TestCase):
         model = DataId()
         if include_optional:
             return DataId(
-                dataset_id = '',
                 type = 'internal',
-                layer_id = '',
-                provider_id = ''
+                dataset_id = '',
+                provider_id = '',
+                layer_id = ''
             )
         else:
             return DataId(
-                dataset_id = '',
                 type = 'internal',
-                layer_id = '',
+                dataset_id = '',
                 provider_id = '',
+                layer_id = '',
         )
         """
 

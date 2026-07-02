@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`type` | string
 `values` | Array&lt;string&gt;
+`type` | string
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { Names } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "type": null,
   "values": null,
+  "type": null,
 } satisfies Names
 
 console.log(example)

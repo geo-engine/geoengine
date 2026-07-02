@@ -28,16 +28,16 @@ import {
 export interface MlModelInputNoDataHandling {
     /**
      * 
-     * @type {number}
-     * @memberof MlModelInputNoDataHandling
-     */
-    noDataValue?: number | null;
-    /**
-     * 
      * @type {MlModelInputNoDataHandlingVariant}
      * @memberof MlModelInputNoDataHandling
      */
     variant: MlModelInputNoDataHandlingVariant;
+    /**
+     * 
+     * @type {number}
+     * @memberof MlModelInputNoDataHandling
+     */
+    noDataValue?: number | null;
 }
 
 
@@ -60,8 +60,8 @@ export function MlModelInputNoDataHandlingFromJSONTyped(json: any, ignoreDiscrim
     }
     return {
         
-        'noDataValue': json['noDataValue'] == null ? undefined : json['noDataValue'],
         'variant': MlModelInputNoDataHandlingVariantFromJSON(json['variant']),
+        'noDataValue': json['noDataValue'] == null ? undefined : json['noDataValue'],
     };
 }
 
@@ -76,8 +76,8 @@ export function MlModelInputNoDataHandlingToJSONTyped(value?: MlModelInputNoData
 
     return {
         
-        'noDataValue': value['noDataValue'],
         'variant': MlModelInputNoDataHandlingVariantToJSON(value['variant']),
+        'noDataValue': value['noDataValue'],
     };
 }
 

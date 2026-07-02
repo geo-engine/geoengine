@@ -35,9 +35,9 @@ class TestLegacyTypedOperatorOperator(unittest.TestCase):
         model = LegacyTypedOperatorOperator()
         if include_optional:
             return LegacyTypedOperatorOperator(
+                type = '',
                 params = geoengine_api_client.models.params.params(),
-                sources = geoengine_api_client.models.sources.sources(),
-                type = ''
+                sources = geoengine_api_client.models.sources.sources()
             )
         else:
             return LegacyTypedOperatorOperator(

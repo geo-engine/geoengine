@@ -26,9 +26,9 @@ class OgrSourceParameters(BaseModel):
     """
     Parameters for the [`OgrSource`] operator.
     """ # noqa: E501
-    attribute_projection: Optional[List[StrictStr]] = Field(default=None, description="*Optional*: list of attributes to include. When `None`, all attributes are included.", alias="attributeProjection")
     data: StrictStr = Field(description="Dataset name or identifier to be loaded.")
-    __properties: ClassVar[List[str]] = ["attributeProjection", "data"]
+    attribute_projection: Optional[List[StrictStr]] = Field(default=None, description="*Optional*: list of attributes to include. When `None`, all attributes are included.", alias="attributeProjection")
+    __properties: ClassVar[List[str]] = ["data", "attributeProjection"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -86,8 +86,8 @@ class OgrSourceParameters(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "attributeProjection": obj.get("attributeProjection"),
-            "data": obj.get("data")
+            "data": obj.get("data"),
+            "attributeProjection": obj.get("attributeProjection")
         })
         return _obj
 

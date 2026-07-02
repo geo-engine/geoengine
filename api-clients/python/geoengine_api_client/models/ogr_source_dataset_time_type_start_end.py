@@ -27,12 +27,12 @@ class OgrSourceDatasetTimeTypeStartEnd(BaseModel):
     """
     OgrSourceDatasetTimeTypeStartEnd
     """ # noqa: E501
-    end_field: StrictStr = Field(alias="endField")
-    end_format: OgrSourceTimeFormat = Field(alias="endFormat")
+    type: StrictStr
     start_field: StrictStr = Field(alias="startField")
     start_format: OgrSourceTimeFormat = Field(alias="startFormat")
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["endField", "endFormat", "startField", "startFormat", "type"]
+    end_field: StrictStr = Field(alias="endField")
+    end_format: OgrSourceTimeFormat = Field(alias="endFormat")
+    __properties: ClassVar[List[str]] = ["type", "startField", "startFormat", "endField", "endFormat"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -80,12 +80,12 @@ class OgrSourceDatasetTimeTypeStartEnd(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of end_format
-        if self.end_format:
-            _dict['endFormat'] = self.end_format.to_dict()
         # override the default output from pydantic by calling `to_dict()` of start_format
         if self.start_format:
             _dict['startFormat'] = self.start_format.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of end_format
+        if self.end_format:
+            _dict['endFormat'] = self.end_format.to_dict()
         return _dict
 
     @classmethod
@@ -98,11 +98,11 @@ class OgrSourceDatasetTimeTypeStartEnd(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "endField": obj.get("endField"),
-            "endFormat": OgrSourceTimeFormat.from_dict(obj["endFormat"]) if obj.get("endFormat") is not None else None,
+            "type": obj.get("type"),
             "startField": obj.get("startField"),
             "startFormat": OgrSourceTimeFormat.from_dict(obj["startFormat"]) if obj.get("startFormat") is not None else None,
-            "type": obj.get("type")
+            "endField": obj.get("endField"),
+            "endFormat": OgrSourceTimeFormat.from_dict(obj["endFormat"]) if obj.get("endFormat") is not None else None
         })
         return _obj
 

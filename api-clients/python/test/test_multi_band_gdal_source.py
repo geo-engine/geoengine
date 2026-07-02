@@ -35,17 +35,17 @@ class TestMultiBandGdalSource(unittest.TestCase):
         model = MultiBandGdalSource()
         if include_optional:
             return MultiBandGdalSource(
+                type = 'MultiBandGdalSource',
                 params = geoengine_api_client.models.gdal_source_parameters.GdalSourceParameters(
                     data = '', 
-                    overview_level = 0, ),
-                type = 'MultiBandGdalSource'
+                    overview_level = 0, )
             )
         else:
             return MultiBandGdalSource(
+                type = 'MultiBandGdalSource',
                 params = geoengine_api_client.models.gdal_source_parameters.GdalSourceParameters(
                     data = '', 
                     overview_level = 0, ),
-                type = 'MultiBandGdalSource',
         )
         """
 

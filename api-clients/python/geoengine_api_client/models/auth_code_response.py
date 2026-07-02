@@ -26,10 +26,10 @@ class AuthCodeResponse(BaseModel):
     """
     AuthCodeResponse
     """ # noqa: E501
-    code: StrictStr
     session_state: StrictStr = Field(alias="sessionState")
+    code: StrictStr
     state: StrictStr
-    __properties: ClassVar[List[str]] = ["code", "sessionState", "state"]
+    __properties: ClassVar[List[str]] = ["sessionState", "code", "state"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -82,8 +82,8 @@ class AuthCodeResponse(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "code": obj.get("code"),
             "sessionState": obj.get("sessionState"),
+            "code": obj.get("code"),
             "state": obj.get("state")
         })
         return _obj

@@ -13,45 +13,45 @@ use serde::{Deserialize, Serialize};
 /// GdalDatasetParameters : Parameters for loading data using Gdal
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GdalDatasetParameters {
-    #[serde(rename = "allowAlphabandAsMask", skip_serializing_if = "Option::is_none")]
-    pub allow_alphaband_as_mask: Option<bool>,
-    #[serde(rename = "fileNotFoundHandling")]
-    pub file_not_found_handling: models::FileNotFoundHandling,
     #[serde(rename = "filePath")]
     pub file_path: String,
-    #[serde(rename = "gdalConfigOptions", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub gdal_config_options: Option<Option<Vec<Vec<String>>>>,
-    #[serde(rename = "gdalOpenOptions", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub gdal_open_options: Option<Option<Vec<String>>>,
+    #[serde(rename = "rasterbandChannel")]
+    pub rasterband_channel: i32,
     #[serde(rename = "geoTransform")]
     pub geo_transform: Box<models::GeoTransform>,
+    #[serde(rename = "width")]
+    pub width: i32,
     #[serde(rename = "height")]
     pub height: i32,
+    #[serde(rename = "fileNotFoundHandling")]
+    pub file_not_found_handling: models::FileNotFoundHandling,
     #[serde(rename = "noDataValue", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub no_data_value: Option<Option<f64>>,
     #[serde(rename = "propertiesMapping", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub properties_mapping: Option<Option<Vec<models::GdalMetadataMapping>>>,
-    #[serde(rename = "rasterbandChannel")]
-    pub rasterband_channel: i32,
-    #[serde(rename = "width")]
-    pub width: i32,
+    #[serde(rename = "gdalOpenOptions", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub gdal_open_options: Option<Option<Vec<String>>>,
+    #[serde(rename = "gdalConfigOptions", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub gdal_config_options: Option<Option<Vec<Vec<String>>>>,
+    #[serde(rename = "allowAlphabandAsMask", skip_serializing_if = "Option::is_none")]
+    pub allow_alphaband_as_mask: Option<bool>,
 }
 
 impl GdalDatasetParameters {
     /// Parameters for loading data using Gdal
-    pub fn new(file_not_found_handling: models::FileNotFoundHandling, file_path: String, geo_transform: models::GeoTransform, height: i32, rasterband_channel: i32, width: i32) -> GdalDatasetParameters {
+    pub fn new(file_path: String, rasterband_channel: i32, geo_transform: models::GeoTransform, width: i32, height: i32, file_not_found_handling: models::FileNotFoundHandling) -> GdalDatasetParameters {
         GdalDatasetParameters {
-            allow_alphaband_as_mask: None,
-            file_not_found_handling,
             file_path,
-            gdal_config_options: None,
-            gdal_open_options: None,
+            rasterband_channel,
             geo_transform: Box::new(geo_transform),
+            width,
             height,
+            file_not_found_handling,
             no_data_value: None,
             properties_mapping: None,
-            rasterband_channel,
-            width,
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: None,
         }
     }
 }

@@ -23,21 +23,21 @@ export interface ProviderLayerId {
      * @type {string}
      * @memberof ProviderLayerId
      */
-    layerId: string;
+    providerId: string;
     /**
      * 
      * @type {string}
      * @memberof ProviderLayerId
      */
-    providerId: string;
+    layerId: string;
 }
 
 /**
  * Check if a given object implements the ProviderLayerId interface.
  */
 export function instanceOfProviderLayerId(value: object): value is ProviderLayerId {
-    if (!('layerId' in value) || value['layerId'] === undefined) return false;
     if (!('providerId' in value) || value['providerId'] === undefined) return false;
+    if (!('layerId' in value) || value['layerId'] === undefined) return false;
     return true;
 }
 
@@ -51,8 +51,8 @@ export function ProviderLayerIdFromJSONTyped(json: any, ignoreDiscriminator: boo
     }
     return {
         
-        'layerId': json['layerId'],
         'providerId': json['providerId'],
+        'layerId': json['layerId'],
     };
 }
 
@@ -67,8 +67,8 @@ export function ProviderLayerIdToJSONTyped(value?: ProviderLayerId | null, ignor
 
     return {
         
-        'layerId': value['layerId'],
         'providerId': value['providerId'],
+        'layerId': value['layerId'],
     };
 }
 

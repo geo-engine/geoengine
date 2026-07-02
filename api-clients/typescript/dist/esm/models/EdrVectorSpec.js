@@ -14,9 +14,9 @@
  * Check if a given object implements the EdrVectorSpec interface.
  */
 export function instanceOfEdrVectorSpec(value) {
-    if (!('time' in value) || value['time'] === undefined)
-        return false;
     if (!('x' in value) || value['x'] === undefined)
+        return false;
+    if (!('time' in value) || value['time'] === undefined)
         return false;
     return true;
 }
@@ -28,9 +28,9 @@ export function EdrVectorSpecFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'time': json['time'],
         'x': json['x'],
         'y': json['y'] == null ? undefined : json['y'],
+        'time': json['time'],
     };
 }
 export function EdrVectorSpecToJSON(json) {
@@ -41,8 +41,8 @@ export function EdrVectorSpecToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'time': value['time'],
         'x': value['x'],
         'y': value['y'],
+        'time': value['time'],
     };
 }

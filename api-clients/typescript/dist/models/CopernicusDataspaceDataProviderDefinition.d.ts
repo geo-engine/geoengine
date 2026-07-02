@@ -16,16 +16,22 @@
 export interface CopernicusDataspaceDataProviderDefinition {
     /**
      *
+     * @type {CopernicusDataspaceDataProviderDefinitionTypeEnum}
+     * @memberof CopernicusDataspaceDataProviderDefinition
+     */
+    type: CopernicusDataspaceDataProviderDefinitionTypeEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof CopernicusDataspaceDataProviderDefinition
+     */
+    name: string;
+    /**
+     *
      * @type {string}
      * @memberof CopernicusDataspaceDataProviderDefinition
      */
     description: string;
-    /**
-     *
-     * @type {Array<Array<string>>}
-     * @memberof CopernicusDataspaceDataProviderDefinition
-     */
-    gdalConfig: Array<Array<string>>;
     /**
      *
      * @type {string}
@@ -37,13 +43,13 @@ export interface CopernicusDataspaceDataProviderDefinition {
      * @type {string}
      * @memberof CopernicusDataspaceDataProviderDefinition
      */
-    name: string;
+    stacUrl: string;
     /**
      *
-     * @type {number}
+     * @type {string}
      * @memberof CopernicusDataspaceDataProviderDefinition
      */
-    priority?: number | null;
+    s3Url: string;
     /**
      *
      * @type {string}
@@ -58,22 +64,16 @@ export interface CopernicusDataspaceDataProviderDefinition {
     s3SecretKey: string;
     /**
      *
-     * @type {string}
+     * @type {Array<Array<string>>}
      * @memberof CopernicusDataspaceDataProviderDefinition
      */
-    s3Url: string;
+    gdalConfig: Array<Array<string>>;
     /**
      *
-     * @type {string}
+     * @type {number}
      * @memberof CopernicusDataspaceDataProviderDefinition
      */
-    stacUrl: string;
-    /**
-     *
-     * @type {CopernicusDataspaceDataProviderDefinitionTypeEnum}
-     * @memberof CopernicusDataspaceDataProviderDefinition
-     */
-    type: CopernicusDataspaceDataProviderDefinitionTypeEnum;
+    priority?: number | null;
 }
 /**
  * @export

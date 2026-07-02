@@ -20,16 +20,16 @@ import { mapValues } from '../runtime';
 export interface NetCdfCfDataProviderDefinition {
     /**
      * 
-     * @type {number}
+     * @type {NetCdfCfDataProviderDefinitionTypeEnum}
      * @memberof NetCdfCfDataProviderDefinition
      */
-    cacheTtl?: number;
+    type: NetCdfCfDataProviderDefinitionTypeEnum;
     /**
-     * Path were the `NetCDF` data can be found
+     * 
      * @type {string}
      * @memberof NetCdfCfDataProviderDefinition
      */
-    data: string;
+    name: string;
     /**
      * 
      * @type {string}
@@ -38,10 +38,16 @@ export interface NetCdfCfDataProviderDefinition {
     description: string;
     /**
      * 
+     * @type {number}
+     * @memberof NetCdfCfDataProviderDefinition
+     */
+    priority?: number | null;
+    /**
+     * Path were the `NetCDF` data can be found
      * @type {string}
      * @memberof NetCdfCfDataProviderDefinition
      */
-    name: string;
+    data: string;
     /**
      * Path were overview files are stored
      * @type {string}
@@ -53,13 +59,7 @@ export interface NetCdfCfDataProviderDefinition {
      * @type {number}
      * @memberof NetCdfCfDataProviderDefinition
      */
-    priority?: number | null;
-    /**
-     * 
-     * @type {NetCdfCfDataProviderDefinitionTypeEnum}
-     * @memberof NetCdfCfDataProviderDefinition
-     */
-    type: NetCdfCfDataProviderDefinitionTypeEnum;
+    cacheTtl?: number;
 }
 
 
@@ -76,11 +76,11 @@ export type NetCdfCfDataProviderDefinitionTypeEnum = typeof NetCdfCfDataProvider
  * Check if a given object implements the NetCdfCfDataProviderDefinition interface.
  */
 export function instanceOfNetCdfCfDataProviderDefinition(value: object): value is NetCdfCfDataProviderDefinition {
-    if (!('data' in value) || value['data'] === undefined) return false;
-    if (!('description' in value) || value['description'] === undefined) return false;
-    if (!('name' in value) || value['name'] === undefined) return false;
-    if (!('overviews' in value) || value['overviews'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
+    if (!('data' in value) || value['data'] === undefined) return false;
+    if (!('overviews' in value) || value['overviews'] === undefined) return false;
     return true;
 }
 
@@ -94,13 +94,13 @@ export function NetCdfCfDataProviderDefinitionFromJSONTyped(json: any, ignoreDis
     }
     return {
         
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
-        'data': json['data'],
-        'description': json['description'],
-        'name': json['name'],
-        'overviews': json['overviews'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
         'type': json['type'],
+        'name': json['name'],
+        'description': json['description'],
+        'priority': json['priority'] == null ? undefined : json['priority'],
+        'data': json['data'],
+        'overviews': json['overviews'],
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 
@@ -115,13 +115,13 @@ export function NetCdfCfDataProviderDefinitionToJSONTyped(value?: NetCdfCfDataPr
 
     return {
         
-        'cacheTtl': value['cacheTtl'],
-        'data': value['data'],
-        'description': value['description'],
-        'name': value['name'],
-        'overviews': value['overviews'],
-        'priority': value['priority'],
         'type': value['type'],
+        'name': value['name'],
+        'description': value['description'],
+        'priority': value['priority'],
+        'data': value['data'],
+        'overviews': value['overviews'],
+        'cacheTtl': value['cacheTtl'],
     };
 }
 

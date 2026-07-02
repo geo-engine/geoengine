@@ -27,10 +27,10 @@ class OperatorQuota(BaseModel):
     """
     OperatorQuota
     """ # noqa: E501
-    count: Annotated[int, Field(strict=True, ge=0)]
     operator_name: StrictStr = Field(alias="operatorName")
     operator_path: StrictStr = Field(alias="operatorPath")
-    __properties: ClassVar[List[str]] = ["count", "operatorName", "operatorPath"]
+    count: Annotated[int, Field(strict=True, ge=0)]
+    __properties: ClassVar[List[str]] = ["operatorName", "operatorPath", "count"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -83,9 +83,9 @@ class OperatorQuota(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "count": obj.get("count"),
             "operatorName": obj.get("operatorName"),
-            "operatorPath": obj.get("operatorPath")
+            "operatorPath": obj.get("operatorPath"),
+            "count": obj.get("count")
         })
         return _obj
 

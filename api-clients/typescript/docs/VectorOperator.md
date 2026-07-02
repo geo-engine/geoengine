@@ -7,8 +7,8 @@ An operator that produces vector data.
 
 Name | Type
 ------------ | -------------
-`params` | [ReprojectionParameters](ReprojectionParameters.md)
 `type` | string
+`params` | [ReprojectionParameters](ReprojectionParameters.md)
 `sources` | [SingleRasterOrVectorSource](SingleRasterOrVectorSource.md)
 
 ## Example
@@ -18,8 +18,8 @@ import type { VectorOperator } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "params": null,
   "type": null,
+  "params": null,
   "sources": null,
 } satisfies VectorOperator
 

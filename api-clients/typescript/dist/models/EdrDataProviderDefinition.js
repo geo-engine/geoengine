@@ -30,15 +30,15 @@ exports.EdrDataProviderDefinitionTypeEnum = {
  * Check if a given object implements the EdrDataProviderDefinition interface.
  */
 function instanceOfEdrDataProviderDefinition(value) {
-    if (!('baseUrl' in value) || value['baseUrl'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('name' in value) || value['name'] === undefined)
         return false;
     if (!('description' in value) || value['description'] === undefined)
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;
-    if (!('name' in value) || value['name'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('baseUrl' in value) || value['baseUrl'] === undefined)
         return false;
     return true;
 }
@@ -50,16 +50,16 @@ function EdrDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'baseUrl': json['baseUrl'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
-        'description': json['description'],
-        'discreteVrs': json['discreteVrs'] == null ? undefined : json['discreteVrs'],
-        'id': json['id'],
-        'name': json['name'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
-        'provenance': json['provenance'] == null ? undefined : (json['provenance'].map(Provenance_1.ProvenanceFromJSON)),
         'type': json['type'],
+        'name': json['name'],
+        'description': json['description'],
+        'priority': json['priority'] == null ? undefined : json['priority'],
+        'id': json['id'],
+        'baseUrl': json['baseUrl'],
         'vectorSpec': json['vectorSpec'] == null ? undefined : (0, EdrVectorSpec_1.EdrVectorSpecFromJSON)(json['vectorSpec']),
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'discreteVrs': json['discreteVrs'] == null ? undefined : json['discreteVrs'],
+        'provenance': json['provenance'] == null ? undefined : (json['provenance'].map(Provenance_1.ProvenanceFromJSON)),
     };
 }
 function EdrDataProviderDefinitionToJSON(json) {
@@ -70,15 +70,15 @@ function EdrDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator = false
         return value;
     }
     return {
-        'baseUrl': value['baseUrl'],
-        'cacheTtl': value['cacheTtl'],
-        'description': value['description'],
-        'discreteVrs': value['discreteVrs'],
-        'id': value['id'],
-        'name': value['name'],
-        'priority': value['priority'],
-        'provenance': value['provenance'] == null ? undefined : (value['provenance'].map(Provenance_1.ProvenanceToJSON)),
         'type': value['type'],
+        'name': value['name'],
+        'description': value['description'],
+        'priority': value['priority'],
+        'id': value['id'],
+        'baseUrl': value['baseUrl'],
         'vectorSpec': (0, EdrVectorSpec_1.EdrVectorSpecToJSON)(value['vectorSpec']),
+        'cacheTtl': value['cacheTtl'],
+        'discreteVrs': value['discreteVrs'],
+        'provenance': value['provenance'] == null ? undefined : (value['provenance'].map(Provenance_1.ProvenanceToJSON)),
     };
 }

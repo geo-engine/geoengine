@@ -131,6 +131,7 @@ where
         tx.execute(&stmt, &[&user_id, &Role::anonymous_role_id()])
             .await?;
 
+        // Normal mode, a new session ID is generated for each anonymous session
         let session_id = SessionId::new();
 
         // TODO: load from config

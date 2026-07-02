@@ -28,9 +28,9 @@ class ServerInfo(BaseModel):
     """ # noqa: E501
     build_date: StrictStr = Field(alias="buildDate")
     commit_hash: StrictStr = Field(alias="commitHash")
-    features: StrictStr
     version: StrictStr
-    __properties: ClassVar[List[str]] = ["buildDate", "commitHash", "features", "version"]
+    features: StrictStr
+    __properties: ClassVar[List[str]] = ["buildDate", "commitHash", "version", "features"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -85,8 +85,8 @@ class ServerInfo(BaseModel):
         _obj = cls.model_validate({
             "buildDate": obj.get("buildDate"),
             "commitHash": obj.get("commitHash"),
-            "features": obj.get("features"),
-            "version": obj.get("version")
+            "version": obj.get("version"),
+            "features": obj.get("features")
         })
         return _obj
 

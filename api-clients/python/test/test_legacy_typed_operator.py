@@ -35,19 +35,19 @@ class TestLegacyTypedOperator(unittest.TestCase):
         model = LegacyTypedOperator()
         if include_optional:
             return LegacyTypedOperator(
+                type = 'Vector',
                 operator = geoengine_api_client.models.legacy_typed_operator_operator.LegacyTypedOperator_operator(
+                    type = '', 
                     params = geoengine_api_client.models.params.params(), 
-                    sources = geoengine_api_client.models.sources.sources(), 
-                    type = '', ),
-                type = 'Vector'
+                    sources = geoengine_api_client.models.sources.sources(), )
             )
         else:
             return LegacyTypedOperator(
-                operator = geoengine_api_client.models.legacy_typed_operator_operator.LegacyTypedOperator_operator(
-                    params = geoengine_api_client.models.params.params(), 
-                    sources = geoengine_api_client.models.sources.sources(), 
-                    type = '', ),
                 type = 'Vector',
+                operator = geoengine_api_client.models.legacy_typed_operator_operator.LegacyTypedOperator_operator(
+                    type = '', 
+                    params = geoengine_api_client.models.params.params(), 
+                    sources = geoengine_api_client.models.sources.sources(), ),
         )
         """
 

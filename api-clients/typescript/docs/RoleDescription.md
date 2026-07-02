@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`individual` | boolean
 `role` | [Role](Role.md)
+`individual` | boolean
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { RoleDescription } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "individual": null,
   "role": null,
+  "individual": null,
 } satisfies RoleDescription
 
 console.log(example)

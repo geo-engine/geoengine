@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RasterBandDescriptor {
-    #[serde(rename = "measurement")]
-    pub measurement: Box<models::Measurement>,
     #[serde(rename = "name")]
     pub name: String,
+    #[serde(rename = "measurement")]
+    pub measurement: Box<models::Measurement>,
 }
 
 impl RasterBandDescriptor {
-    pub fn new(measurement: models::Measurement, name: String) -> RasterBandDescriptor {
+    pub fn new(name: String, measurement: models::Measurement) -> RasterBandDescriptor {
         RasterBandDescriptor {
-            measurement: Box::new(measurement),
             name,
+            measurement: Box::new(measurement),
         }
     }
 }

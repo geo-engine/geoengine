@@ -24,11 +24,11 @@ const Workflow_1 = require("./Workflow");
  * Check if a given object implements the Layer interface.
  */
 function instanceOfLayer(value) {
-    if (!('description' in value) || value['description'] === undefined)
-        return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
+        return false;
+    if (!('description' in value) || value['description'] === undefined)
         return false;
     if (!('workflow' in value) || value['workflow'] === undefined)
         return false;
@@ -42,13 +42,13 @@ function LayerFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'description': json['description'],
         'id': (0, ProviderLayerId_1.ProviderLayerIdFromJSON)(json['id']),
-        'metadata': json['metadata'] == null ? undefined : json['metadata'],
         'name': json['name'],
-        'properties': json['properties'] == null ? undefined : json['properties'],
-        'symbology': json['symbology'] == null ? undefined : (0, Symbology_1.SymbologyFromJSON)(json['symbology']),
+        'description': json['description'],
         'workflow': (0, Workflow_1.WorkflowFromJSON)(json['workflow']),
+        'symbology': json['symbology'] == null ? undefined : (0, Symbology_1.SymbologyFromJSON)(json['symbology']),
+        'properties': json['properties'] == null ? undefined : json['properties'],
+        'metadata': json['metadata'] == null ? undefined : json['metadata'],
     };
 }
 function LayerToJSON(json) {
@@ -59,12 +59,12 @@ function LayerToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'description': value['description'],
         'id': (0, ProviderLayerId_1.ProviderLayerIdToJSON)(value['id']),
-        'metadata': value['metadata'],
         'name': value['name'],
-        'properties': value['properties'],
-        'symbology': (0, Symbology_1.SymbologyToJSON)(value['symbology']),
+        'description': value['description'],
         'workflow': (0, Workflow_1.WorkflowToJSON)(value['workflow']),
+        'symbology': (0, Symbology_1.SymbologyToJSON)(value['symbology']),
+        'properties': value['properties'],
+        'metadata': value['metadata'],
     };
 }

@@ -32,13 +32,13 @@ exports.PointSymbologyTypeEnum = {
  * Check if a given object implements the PointSymbology interface.
  */
 function instanceOfPointSymbology(value) {
-    if (!('fillColor' in value) || value['fillColor'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('radius' in value) || value['radius'] === undefined)
         return false;
-    if (!('stroke' in value) || value['stroke'] === undefined)
+    if (!('fillColor' in value) || value['fillColor'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('stroke' in value) || value['stroke'] === undefined)
         return false;
     return true;
 }
@@ -50,11 +50,11 @@ function PointSymbologyFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'fillColor': (0, ColorParam_1.ColorParamFromJSON)(json['fillColor']),
+        'type': json['type'],
         'radius': (0, NumberParam_1.NumberParamFromJSON)(json['radius']),
+        'fillColor': (0, ColorParam_1.ColorParamFromJSON)(json['fillColor']),
         'stroke': (0, StrokeParam_1.StrokeParamFromJSON)(json['stroke']),
         'text': json['text'] == null ? undefined : (0, TextSymbology_1.TextSymbologyFromJSON)(json['text']),
-        'type': json['type'],
     };
 }
 function PointSymbologyToJSON(json) {
@@ -65,10 +65,10 @@ function PointSymbologyToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'fillColor': (0, ColorParam_1.ColorParamToJSON)(value['fillColor']),
+        'type': value['type'],
         'radius': (0, NumberParam_1.NumberParamToJSON)(value['radius']),
+        'fillColor': (0, ColorParam_1.ColorParamToJSON)(value['fillColor']),
         'stroke': (0, StrokeParam_1.StrokeParamToJSON)(value['stroke']),
         'text': (0, TextSymbology_1.TextSymbologyToJSON)(value['text']),
-        'type': value['type'],
     };
 }

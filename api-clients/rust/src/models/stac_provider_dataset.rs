@@ -12,32 +12,32 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StacProviderDataset {
-    #[serde(rename = "bands")]
-    pub bands: Vec<models::StacProviderDatasetBand>,
-    #[serde(rename = "dataType")]
-    pub data_type: models::RasterDataType,
-    #[serde(rename = "description")]
-    pub description: String,
     #[serde(rename = "name")]
     pub name: String,
-    #[serde(rename = "projection")]
-    pub projection: String,
+    #[serde(rename = "description")]
+    pub description: String,
+    #[serde(rename = "dataType")]
+    pub data_type: models::RasterDataType,
     #[serde(rename = "resolution")]
     pub resolution: Box<models::SpatialResolution>,
+    #[serde(rename = "projection")]
+    pub projection: String,
     #[serde(rename = "spatialGrid")]
     pub spatial_grid: Box<models::SpatialGridDescriptor>,
+    #[serde(rename = "bands")]
+    pub bands: Vec<models::StacProviderDatasetBand>,
 }
 
 impl StacProviderDataset {
-    pub fn new(bands: Vec<models::StacProviderDatasetBand>, data_type: models::RasterDataType, description: String, name: String, projection: String, resolution: models::SpatialResolution, spatial_grid: models::SpatialGridDescriptor) -> StacProviderDataset {
+    pub fn new(name: String, description: String, data_type: models::RasterDataType, resolution: models::SpatialResolution, projection: String, spatial_grid: models::SpatialGridDescriptor, bands: Vec<models::StacProviderDatasetBand>) -> StacProviderDataset {
         StacProviderDataset {
-            bands,
-            data_type,
-            description,
             name,
-            projection,
+            description,
+            data_type,
             resolution: Box::new(resolution),
+            projection,
             spatial_grid: Box::new(spatial_grid),
+            bands,
         }
     }
 }

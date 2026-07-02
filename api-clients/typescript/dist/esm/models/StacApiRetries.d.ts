@@ -19,7 +19,7 @@ export interface StacApiRetries {
      * @type {number}
      * @memberof StacApiRetries
      */
-    exponentialBackoffFactor: number;
+    numberOfRetries: number;
     /**
      *
      * @type {number}
@@ -31,7 +31,7 @@ export interface StacApiRetries {
      * @type {number}
      * @memberof StacApiRetries
      */
-    numberOfRetries: number;
+    exponentialBackoffFactor: number;
 }
 /**
  * Check if a given object implements the StacApiRetries interface.

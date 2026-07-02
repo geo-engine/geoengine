@@ -35,19 +35,19 @@ class TestSpatialPartition2D(unittest.TestCase):
         model = SpatialPartition2D()
         if include_optional:
             return SpatialPartition2D(
-                lower_right_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
+                upper_left_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                     x = 1.337, 
                     y = 1.337, ),
-                upper_left_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
+                lower_right_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                     x = 1.337, 
                     y = 1.337, )
             )
         else:
             return SpatialPartition2D(
-                lower_right_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
+                upper_left_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                     x = 1.337, 
                     y = 1.337, ),
-                upper_left_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
+                lower_right_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                     x = 1.337, 
                     y = 1.337, ),
         )

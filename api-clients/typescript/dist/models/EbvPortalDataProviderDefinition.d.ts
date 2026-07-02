@@ -16,22 +16,16 @@
 export interface EbvPortalDataProviderDefinition {
     /**
      *
-     * @type {string}
+     * @type {EbvPortalDataProviderDefinitionTypeEnum}
      * @memberof EbvPortalDataProviderDefinition
      */
-    baseUrl: string;
+    type: EbvPortalDataProviderDefinitionTypeEnum;
     /**
      *
-     * @type {number}
-     * @memberof EbvPortalDataProviderDefinition
-     */
-    cacheTtl?: number;
-    /**
-     * Path were the `NetCDF` data can be found
      * @type {string}
      * @memberof EbvPortalDataProviderDefinition
      */
-    data: string;
+    name: string;
     /**
      *
      * @type {string}
@@ -40,10 +34,22 @@ export interface EbvPortalDataProviderDefinition {
     description: string;
     /**
      *
+     * @type {number}
+     * @memberof EbvPortalDataProviderDefinition
+     */
+    priority?: number | null;
+    /**
+     *
      * @type {string}
      * @memberof EbvPortalDataProviderDefinition
      */
-    name: string;
+    baseUrl: string;
+    /**
+     * Path were the `NetCDF` data can be found
+     * @type {string}
+     * @memberof EbvPortalDataProviderDefinition
+     */
+    data: string;
     /**
      * Path were overview files are stored
      * @type {string}
@@ -55,13 +61,7 @@ export interface EbvPortalDataProviderDefinition {
      * @type {number}
      * @memberof EbvPortalDataProviderDefinition
      */
-    priority?: number | null;
-    /**
-     *
-     * @type {EbvPortalDataProviderDefinitionTypeEnum}
-     * @memberof EbvPortalDataProviderDefinition
-     */
-    type: EbvPortalDataProviderDefinitionTypeEnum;
+    cacheTtl?: number;
 }
 /**
  * @export

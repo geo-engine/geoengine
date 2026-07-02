@@ -36,8 +36,8 @@ class TestTimeDescriptor(unittest.TestCase):
         if include_optional:
             return TimeDescriptor(
                 bounds = geoengine_api_client.models.time_interval.TimeInterval(
-                    end = 56, 
-                    start = 56, ),
+                    start = 56, 
+                    end = 56, ),
                 dimension = None
             )
         else:

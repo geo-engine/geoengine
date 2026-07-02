@@ -29,13 +29,13 @@ exports.LayerCollectionListingTypeEnum = {
  * Check if a given object implements the LayerCollectionListing interface.
  */
 function instanceOfLayerCollectionListing(value) {
-    if (!('description' in value) || value['description'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('description' in value) || value['description'] === undefined)
         return false;
     return true;
 }
@@ -47,11 +47,11 @@ function LayerCollectionListingFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'description': json['description'],
+        'type': json['type'],
         'id': (0, ProviderLayerCollectionId_1.ProviderLayerCollectionIdFromJSON)(json['id']),
         'name': json['name'],
+        'description': json['description'],
         'properties': json['properties'] == null ? undefined : json['properties'],
-        'type': json['type'],
     };
 }
 function LayerCollectionListingToJSON(json) {
@@ -62,10 +62,10 @@ function LayerCollectionListingToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'description': value['description'],
+        'type': value['type'],
         'id': (0, ProviderLayerCollectionId_1.ProviderLayerCollectionIdToJSON)(value['id']),
         'name': value['name'],
+        'description': value['description'],
         'properties': value['properties'],
-        'type': value['type'],
     };
 }

@@ -26,10 +26,10 @@ class ClassificationMeasurement(BaseModel):
     """
     ClassificationMeasurement
     """ # noqa: E501
-    classes: Dict[str, StrictStr]
-    measurement: StrictStr
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["classes", "measurement", "type"]
+    measurement: StrictStr
+    classes: Dict[str, StrictStr]
+    __properties: ClassVar[List[str]] = ["type", "measurement", "classes"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -89,9 +89,9 @@ class ClassificationMeasurement(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "classes": obj.get("classes"),
+            "type": obj.get("type"),
             "measurement": obj.get("measurement"),
-            "type": obj.get("type")
+            "classes": obj.get("classes")
         })
         return _obj
 

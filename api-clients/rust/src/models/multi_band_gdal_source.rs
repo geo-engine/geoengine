@@ -13,18 +13,18 @@ use serde::{Deserialize, Serialize};
 /// MultiBandGdalSource : The [`MultiBandGdalSource`] is a source operator that reads multi-band raster data using GDAL.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MultiBandGdalSource {
-    #[serde(rename = "params")]
-    pub params: Box<models::GdalSourceParameters>,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "params")]
+    pub params: Box<models::GdalSourceParameters>,
 }
 
 impl MultiBandGdalSource {
     /// The [`MultiBandGdalSource`] is a source operator that reads multi-band raster data using GDAL.
-    pub fn new(params: models::GdalSourceParameters, r#type: Type) -> MultiBandGdalSource {
+    pub fn new(r#type: Type, params: models::GdalSourceParameters) -> MultiBandGdalSource {
         MultiBandGdalSource {
-            params: Box::new(params),
             r#type,
+            params: Box::new(params),
         }
     }
 }

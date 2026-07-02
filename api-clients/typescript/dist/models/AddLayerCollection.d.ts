@@ -19,13 +19,13 @@ export interface AddLayerCollection {
      * @type {string}
      * @memberof AddLayerCollection
      */
-    description: string;
+    name: string;
     /**
      *
      * @type {string}
      * @memberof AddLayerCollection
      */
-    name: string;
+    description: string;
     /**
      *
      * @type {Array<Array<string>>}

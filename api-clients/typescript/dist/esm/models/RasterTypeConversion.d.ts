@@ -29,6 +29,12 @@ import type { RasterTypeConversionParameters } from './RasterTypeConversionParam
 export interface RasterTypeConversion {
     /**
      *
+     * @type {RasterTypeConversionTypeEnum}
+     * @memberof RasterTypeConversion
+     */
+    type: RasterTypeConversionTypeEnum;
+    /**
+     *
      * @type {RasterTypeConversionParameters}
      * @memberof RasterTypeConversion
      */
@@ -39,12 +45,6 @@ export interface RasterTypeConversion {
      * @memberof RasterTypeConversion
      */
     sources: SingleRasterSource;
-    /**
-     *
-     * @type {RasterTypeConversionTypeEnum}
-     * @memberof RasterTypeConversion
-     */
-    type: RasterTypeConversionTypeEnum;
 }
 /**
  * @export

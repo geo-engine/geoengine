@@ -27,9 +27,9 @@ class MockPointSource(BaseModel):
     """
     The [`MockPointSource`] is a source operator that provides mock vector point data for testing and development purposes. 
     """ # noqa: E501
-    params: MockPointSourceParameters
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["params", "type"]
+    params: MockPointSourceParameters
+    __properties: ClassVar[List[str]] = ["type", "params"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -92,8 +92,8 @@ class MockPointSource(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "params": MockPointSourceParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
-            "type": obj.get("type")
+            "type": obj.get("type"),
+            "params": MockPointSourceParameters.from_dict(obj["params"]) if obj.get("params") is not None else None
         })
         return _obj
 

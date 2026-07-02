@@ -6,12 +6,12 @@
 
 Name | Type
 ------------ | -------------
-`changed` | Date
-`description` | string
 `id` | string
-`layerNames` | Array&lt;string&gt;
 `name` | string
+`description` | string
+`layerNames` | Array&lt;string&gt;
 `plotNames` | Array&lt;string&gt;
+`changed` | Date
 
 ## Example
 
@@ -20,12 +20,12 @@ import type { ProjectListing } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "changed": null,
-  "description": null,
   "id": null,
-  "layerNames": null,
   "name": null,
+  "description": null,
+  "layerNames": null,
   "plotNames": null,
+  "changed": null,
 } satisfies ProjectListing
 
 console.log(example)

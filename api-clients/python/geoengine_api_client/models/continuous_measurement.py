@@ -26,10 +26,10 @@ class ContinuousMeasurement(BaseModel):
     """
     ContinuousMeasurement
     """ # noqa: E501
-    measurement: StrictStr
     type: StrictStr
+    measurement: StrictStr
     unit: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["measurement", "type", "unit"]
+    __properties: ClassVar[List[str]] = ["type", "measurement", "unit"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -94,8 +94,8 @@ class ContinuousMeasurement(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "measurement": obj.get("measurement"),
             "type": obj.get("type"),
+            "measurement": obj.get("measurement"),
             "unit": obj.get("unit")
         })
         return _obj

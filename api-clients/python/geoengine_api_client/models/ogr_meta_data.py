@@ -28,10 +28,10 @@ class OgrMetaData(BaseModel):
     """
     OgrMetaData
     """ # noqa: E501
+    type: StrictStr
     loading_info: OgrSourceDataset = Field(alias="loadingInfo")
     result_descriptor: VectorResultDescriptor = Field(alias="resultDescriptor")
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["loadingInfo", "resultDescriptor", "type"]
+    __properties: ClassVar[List[str]] = ["type", "loadingInfo", "resultDescriptor"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -97,9 +97,9 @@ class OgrMetaData(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "type": obj.get("type"),
             "loadingInfo": OgrSourceDataset.from_dict(obj["loadingInfo"]) if obj.get("loadingInfo") is not None else None,
-            "resultDescriptor": VectorResultDescriptor.from_dict(obj["resultDescriptor"]) if obj.get("resultDescriptor") is not None else None,
-            "type": obj.get("type")
+            "resultDescriptor": VectorResultDescriptor.from_dict(obj["resultDescriptor"]) if obj.get("resultDescriptor") is not None else None
         })
         return _obj
 

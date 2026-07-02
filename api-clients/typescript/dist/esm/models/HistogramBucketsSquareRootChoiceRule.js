@@ -32,8 +32,8 @@ export function HistogramBucketsSquareRootChoiceRuleFromJSONTyped(json, ignoreDi
         return json;
     }
     return {
-        'maxNumberOfBuckets': json['maxNumberOfBuckets'] == null ? undefined : json['maxNumberOfBuckets'],
         'type': json['type'],
+        'maxNumberOfBuckets': json['maxNumberOfBuckets'] == null ? undefined : json['maxNumberOfBuckets'],
     };
 }
 export function HistogramBucketsSquareRootChoiceRuleToJSON(json) {
@@ -44,7 +44,7 @@ export function HistogramBucketsSquareRootChoiceRuleToJSONTyped(value, ignoreDis
         return value;
     }
     return {
-        'maxNumberOfBuckets': value['maxNumberOfBuckets'],
         'type': value['type'],
+        'maxNumberOfBuckets': value['maxNumberOfBuckets'],
     };
 }

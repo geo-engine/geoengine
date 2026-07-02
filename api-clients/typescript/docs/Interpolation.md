@@ -7,9 +7,9 @@ The `Interpolation` operator increases raster resolution by interpolating values
 
 Name | Type
 ------------ | -------------
+`type` | string
 `params` | [InterpolationParameters](InterpolationParameters.md)
 `sources` | [SingleRasterSource](SingleRasterSource.md)
-`type` | string
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { Interpolation } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "params": null,
   "sources": null,
-  "type": null,
 } satisfies Interpolation
 
 console.log(example)

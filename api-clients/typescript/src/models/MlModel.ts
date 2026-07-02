@@ -31,7 +31,7 @@ export interface MlModel {
      * @type {string}
      * @memberof MlModel
      */
-    description: string;
+    name: string;
     /**
      * 
      * @type {string}
@@ -43,7 +43,13 @@ export interface MlModel {
      * @type {string}
      * @memberof MlModel
      */
-    fileName: string;
+    description: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof MlModel
+     */
+    upload: string;
     /**
      * 
      * @type {MlModelMetadata}
@@ -55,25 +61,19 @@ export interface MlModel {
      * @type {string}
      * @memberof MlModel
      */
-    name: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof MlModel
-     */
-    upload: string;
+    fileName: string;
 }
 
 /**
  * Check if a given object implements the MlModel interface.
  */
 export function instanceOfMlModel(value: object): value is MlModel {
-    if (!('description' in value) || value['description'] === undefined) return false;
-    if (!('displayName' in value) || value['displayName'] === undefined) return false;
-    if (!('fileName' in value) || value['fileName'] === undefined) return false;
-    if (!('metadata' in value) || value['metadata'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('displayName' in value) || value['displayName'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('upload' in value) || value['upload'] === undefined) return false;
+    if (!('metadata' in value) || value['metadata'] === undefined) return false;
+    if (!('fileName' in value) || value['fileName'] === undefined) return false;
     return true;
 }
 
@@ -87,12 +87,12 @@ export function MlModelFromJSONTyped(json: any, ignoreDiscriminator: boolean): M
     }
     return {
         
-        'description': json['description'],
-        'displayName': json['displayName'],
-        'fileName': json['fileName'],
-        'metadata': MlModelMetadataFromJSON(json['metadata']),
         'name': json['name'],
+        'displayName': json['displayName'],
+        'description': json['description'],
         'upload': json['upload'],
+        'metadata': MlModelMetadataFromJSON(json['metadata']),
+        'fileName': json['fileName'],
     };
 }
 
@@ -107,12 +107,12 @@ export function MlModelToJSONTyped(value?: MlModel | null, ignoreDiscriminator: 
 
     return {
         
-        'description': value['description'],
-        'displayName': value['displayName'],
-        'fileName': value['fileName'],
-        'metadata': MlModelMetadataToJSON(value['metadata']),
         'name': value['name'],
+        'displayName': value['displayName'],
+        'description': value['description'],
         'upload': value['upload'],
+        'metadata': MlModelMetadataToJSON(value['metadata']),
+        'fileName': value['fileName'],
     };
 }
 

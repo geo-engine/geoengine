@@ -6,12 +6,12 @@
 
 Name | Type
 ------------ | -------------
-`inputNoDataHandling` | [MlModelInputNoDataHandling](MlModelInputNoDataHandling.md)
-`inputShape` | [MlTensorShape3D](MlTensorShape3D.md)
 `inputType` | [RasterDataType](RasterDataType.md)
-`outputNoDataHandling` | [MlModelOutputNoDataHandling](MlModelOutputNoDataHandling.md)
-`outputShape` | [MlTensorShape3D](MlTensorShape3D.md)
 `outputType` | [RasterDataType](RasterDataType.md)
+`inputShape` | [MlTensorShape3D](MlTensorShape3D.md)
+`outputShape` | [MlTensorShape3D](MlTensorShape3D.md)
+`inputNoDataHandling` | [MlModelInputNoDataHandling](MlModelInputNoDataHandling.md)
+`outputNoDataHandling` | [MlModelOutputNoDataHandling](MlModelOutputNoDataHandling.md)
 
 ## Example
 
@@ -20,12 +20,12 @@ import type { MlModelMetadata } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "inputNoDataHandling": null,
-  "inputShape": null,
   "inputType": null,
-  "outputNoDataHandling": null,
-  "outputShape": null,
   "outputType": null,
+  "inputShape": null,
+  "outputShape": null,
+  "inputNoDataHandling": null,
+  "outputNoDataHandling": null,
 } satisfies MlModelMetadata
 
 console.log(example)

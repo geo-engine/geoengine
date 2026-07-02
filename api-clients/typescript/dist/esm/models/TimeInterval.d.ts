@@ -19,13 +19,13 @@ export interface TimeInterval {
      * @type {number}
      * @memberof TimeInterval
      */
-    end: number;
+    start: number;
     /**
      *
      * @type {number}
      * @memberof TimeInterval
      */
-    start: number;
+    end: number;
 }
 /**
  * Check if a given object implements the TimeInterval interface.

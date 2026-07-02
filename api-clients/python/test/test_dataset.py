@@ -35,30 +35,30 @@ class TestDataset(unittest.TestCase):
         model = Dataset()
         if include_optional:
             return Dataset(
-                data_path = None,
-                description = '',
-                display_name = '',
                 id = '',
                 name = '',
+                display_name = '',
+                description = '',
+                result_descriptor = None,
+                source_operator = '',
+                symbology = None,
                 provenance = [
                     geoengine_api_client.models.provenance.Provenance(
                         citation = '', 
                         license = '', 
                         uri = '', )
                     ],
-                result_descriptor = None,
-                source_operator = '',
-                symbology = None,
                 tags = [
                     ''
-                    ]
+                    ],
+                data_path = None
             )
         else:
             return Dataset(
-                description = '',
-                display_name = '',
                 id = '',
                 name = '',
+                display_name = '',
+                description = '',
                 result_descriptor = None,
                 source_operator = '',
         )

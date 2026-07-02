@@ -6,11 +6,11 @@
 
 Name | Type
 ------------ | -------------
-`fillColor` | [ColorParam](ColorParam.md)
+`type` | string
 `radius` | [NumberParam](NumberParam.md)
+`fillColor` | [ColorParam](ColorParam.md)
 `stroke` | [StrokeParam](StrokeParam.md)
 `text` | [TextSymbology](TextSymbology.md)
-`type` | string
 
 ## Example
 
@@ -19,11 +19,11 @@ import type { PointSymbology } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "fillColor": null,
+  "type": null,
   "radius": null,
+  "fillColor": null,
   "stroke": null,
   "text": null,
-  "type": null,
 } satisfies PointSymbology
 
 console.log(example)

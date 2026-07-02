@@ -7,8 +7,8 @@ The [`MultiBandGdalSource`] is a source operator that reads multi-band raster da
 
 Name | Type
 ------------ | -------------
-`params` | [GdalSourceParameters](GdalSourceParameters.md)
 `type` | string
+`params` | [GdalSourceParameters](GdalSourceParameters.md)
 
 ## Example
 
@@ -17,8 +17,8 @@ import type { MultiBandGdalSource } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "params": null,
   "type": null,
+  "params": null,
 } satisfies MultiBandGdalSource
 
 console.log(example)

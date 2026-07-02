@@ -20,9 +20,9 @@ export const NamesTypeEnum = {
  * Check if a given object implements the Names interface.
  */
 export function instanceOfNames(value) {
-    if (!('type' in value) || value['type'] === undefined)
-        return false;
     if (!('values' in value) || value['values'] === undefined)
+        return false;
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -34,8 +34,8 @@ export function NamesFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'type': json['type'],
         'values': json['values'],
+        'type': json['type'],
     };
 }
 export function NamesToJSON(json) {
@@ -46,7 +46,7 @@ export function NamesToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'type': value['type'],
         'values': value['values'],
+        'type': value['type'],
     };
 }

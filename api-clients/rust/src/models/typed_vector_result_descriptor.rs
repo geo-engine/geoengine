@@ -12,28 +12,28 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TypedVectorResultDescriptor {
-    #[serde(rename = "bbox", skip_serializing_if = "Option::is_none")]
-    pub bbox: Option<Box<models::BoundingBox2D>>,
-    #[serde(rename = "columns")]
-    pub columns: std::collections::HashMap<String, models::VectorColumnInfo>,
     #[serde(rename = "dataType")]
     pub data_type: models::VectorDataType,
     #[serde(rename = "spatialReference")]
     pub spatial_reference: String,
+    #[serde(rename = "columns")]
+    pub columns: std::collections::HashMap<String, models::VectorColumnInfo>,
     #[serde(rename = "time", skip_serializing_if = "Option::is_none")]
     pub time: Option<Box<models::TimeInterval>>,
+    #[serde(rename = "bbox", skip_serializing_if = "Option::is_none")]
+    pub bbox: Option<Box<models::BoundingBox2D>>,
     #[serde(rename = "type")]
     pub r#type: Type,
 }
 
 impl TypedVectorResultDescriptor {
-    pub fn new(columns: std::collections::HashMap<String, models::VectorColumnInfo>, data_type: models::VectorDataType, spatial_reference: String, r#type: Type) -> TypedVectorResultDescriptor {
+    pub fn new(data_type: models::VectorDataType, spatial_reference: String, columns: std::collections::HashMap<String, models::VectorColumnInfo>, r#type: Type) -> TypedVectorResultDescriptor {
         TypedVectorResultDescriptor {
-            bbox: None,
-            columns,
             data_type,
             spatial_reference,
+            columns,
             time: None,
+            bbox: None,
             r#type,
         }
     }

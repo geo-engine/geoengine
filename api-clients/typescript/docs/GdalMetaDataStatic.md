@@ -6,11 +6,11 @@
 
 Name | Type
 ------------ | -------------
-`cacheTtl` | number
+`type` | string
+`time` | [TimeInterval](TimeInterval.md)
 `params` | [GdalDatasetParameters](GdalDatasetParameters.md)
 `resultDescriptor` | [RasterResultDescriptor](RasterResultDescriptor.md)
-`time` | [TimeInterval](TimeInterval.md)
-`type` | string
+`cacheTtl` | number
 
 ## Example
 
@@ -19,11 +19,11 @@ import type { GdalMetaDataStatic } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "cacheTtl": null,
+  "type": null,
+  "time": null,
   "params": null,
   "resultDescriptor": null,
-  "time": null,
-  "type": null,
+  "cacheTtl": null,
 } satisfies GdalMetaDataStatic
 
 console.log(example)

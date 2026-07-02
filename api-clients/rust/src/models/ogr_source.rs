@@ -13,18 +13,18 @@ use serde::{Deserialize, Serialize};
 /// OgrSource : The [`OgrSource`] is a source operator that reads vector data using OGR (part of GDAL). The counterpart for raster data is the [`GdalSource`].  ## Errors  If the given dataset does not exist or is not readable, an error is thrown. 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct OgrSource {
-    #[serde(rename = "params")]
-    pub params: Box<models::OgrSourceParameters>,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "params")]
+    pub params: Box<models::OgrSourceParameters>,
 }
 
 impl OgrSource {
     /// The [`OgrSource`] is a source operator that reads vector data using OGR (part of GDAL). The counterpart for raster data is the [`GdalSource`].  ## Errors  If the given dataset does not exist or is not readable, an error is thrown. 
-    pub fn new(params: models::OgrSourceParameters, r#type: Type) -> OgrSource {
+    pub fn new(r#type: Type, params: models::OgrSourceParameters) -> OgrSource {
         OgrSource {
-            params: Box::new(params),
             r#type,
+            params: Box::new(params),
         }
     }
 }

@@ -27,9 +27,9 @@ class ProviderLayerCollectionId(BaseModel):
     """
     ProviderLayerCollectionId
     """ # noqa: E501
-    collection_id: StrictStr = Field(alias="collectionId")
     provider_id: UUID = Field(alias="providerId")
-    __properties: ClassVar[List[str]] = ["collectionId", "providerId"]
+    collection_id: StrictStr = Field(alias="collectionId")
+    __properties: ClassVar[List[str]] = ["providerId", "collectionId"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -82,8 +82,8 @@ class ProviderLayerCollectionId(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "collectionId": obj.get("collectionId"),
-            "providerId": obj.get("providerId")
+            "providerId": obj.get("providerId"),
+            "collectionId": obj.get("collectionId")
         })
         return _obj
 

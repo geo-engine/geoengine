@@ -27,10 +27,10 @@ class MlTensorShape3D(BaseModel):
     """
     A struct describing tensor shape for `MlModelMetadata`
     """ # noqa: E501
-    bands: Annotated[int, Field(strict=True, ge=0)]
-    x: Annotated[int, Field(strict=True, ge=0)]
     y: Annotated[int, Field(strict=True, ge=0)]
-    __properties: ClassVar[List[str]] = ["bands", "x", "y"]
+    x: Annotated[int, Field(strict=True, ge=0)]
+    bands: Annotated[int, Field(strict=True, ge=0)]
+    __properties: ClassVar[List[str]] = ["y", "x", "bands"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -83,9 +83,9 @@ class MlTensorShape3D(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "bands": obj.get("bands"),
+            "y": obj.get("y"),
             "x": obj.get("x"),
-            "y": obj.get("y")
+            "bands": obj.get("bands")
         })
         return _obj
 

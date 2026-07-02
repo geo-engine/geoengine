@@ -21,13 +21,13 @@ export interface ProjectLayer {
      * @type {string}
      * @memberof ProjectLayer
      */
-    name: string;
+    workflow: string;
     /**
      *
-     * @type {Symbology}
+     * @type {string}
      * @memberof ProjectLayer
      */
-    symbology: Symbology;
+    name: string;
     /**
      *
      * @type {LayerVisibility}
@@ -36,10 +36,10 @@ export interface ProjectLayer {
     visibility: LayerVisibility;
     /**
      *
-     * @type {string}
+     * @type {Symbology}
      * @memberof ProjectLayer
      */
-    workflow: string;
+    symbology: Symbology;
 }
 /**
  * Check if a given object implements the ProjectLayer interface.

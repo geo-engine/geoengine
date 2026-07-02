@@ -2818,7 +2818,7 @@ dependencies = [
  "gdal",
  "geo",
  "geodesy",
- "geojson 0.24.2",
+ "geojson 0.24.2 0.24.2",
  "image",
  "num",
  "num-traits",
@@ -2827,6 +2827,7 @@ dependencies = [
  "postgres-protocol",
  "postgres-types",
  "proj",
+ "proj-sys",
  "rayon",
  "serde",
  "serde_json",
@@ -2986,6 +2987,7 @@ dependencies = [
  "nix",
  "num-traits",
  "oauth2",
+ "ogcapi-types",
  "openidconnect",
  "opentelemetry",
  "opentelemetry-otlp",
@@ -4823,6 +4825,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "ogcapi-types"
+version = "0.3.0"
+source = "git+https://github.com/georust/ogcapi?branch=main#f072b72336d85ca55283fdf071c85a4317f54ff0"
+dependencies = [
+ "chrono",
+ "geojson 1.0.0",
+ "log",
+ "serde",
+ "serde_json",
+ "serde_qs",
+ "serde_repr",
+ "serde_with",
+ "url",
+ "utoipa",
 ]
 
 [[package]]
@@ -6859,6 +6878,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_qs"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67d525c8ff68aa99e5818302259bdd02d86d0303710616f39c0f44846ff6d332"
+dependencies = [
+ "itoa",
+ "percent-encoding",
+ "ryu",
+ "serde",
+]
+
+[[package]]
 name = "serde_repr"
 version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6897,6 +6928,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76a5c54c7310e7b8b9577c286d7e399ddd876c3e12b3ed917a8aabc4b96e9e8c"
 dependencies = [
  "base64 0.22.1",
+ "bs58",
  "bs58",
  "chrono",
  "hex",

@@ -38,13 +38,13 @@ export interface ProjectLayer {
      * @type {string}
      * @memberof ProjectLayer
      */
-    name: string;
+    workflow: string;
     /**
      * 
-     * @type {Symbology}
+     * @type {string}
      * @memberof ProjectLayer
      */
-    symbology: Symbology;
+    name: string;
     /**
      * 
      * @type {LayerVisibility}
@@ -53,20 +53,20 @@ export interface ProjectLayer {
     visibility: LayerVisibility;
     /**
      * 
-     * @type {string}
+     * @type {Symbology}
      * @memberof ProjectLayer
      */
-    workflow: string;
+    symbology: Symbology;
 }
 
 /**
  * Check if a given object implements the ProjectLayer interface.
  */
 export function instanceOfProjectLayer(value: object): value is ProjectLayer {
-    if (!('name' in value) || value['name'] === undefined) return false;
-    if (!('symbology' in value) || value['symbology'] === undefined) return false;
-    if (!('visibility' in value) || value['visibility'] === undefined) return false;
     if (!('workflow' in value) || value['workflow'] === undefined) return false;
+    if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('visibility' in value) || value['visibility'] === undefined) return false;
+    if (!('symbology' in value) || value['symbology'] === undefined) return false;
     return true;
 }
 
@@ -80,10 +80,10 @@ export function ProjectLayerFromJSONTyped(json: any, ignoreDiscriminator: boolea
     }
     return {
         
-        'name': json['name'],
-        'symbology': SymbologyFromJSON(json['symbology']),
-        'visibility': LayerVisibilityFromJSON(json['visibility']),
         'workflow': json['workflow'],
+        'name': json['name'],
+        'visibility': LayerVisibilityFromJSON(json['visibility']),
+        'symbology': SymbologyFromJSON(json['symbology']),
     };
 }
 
@@ -98,10 +98,10 @@ export function ProjectLayerToJSONTyped(value?: ProjectLayer | null, ignoreDiscr
 
     return {
         
-        'name': value['name'],
-        'symbology': SymbologyToJSON(value['symbology']),
-        'visibility': LayerVisibilityToJSON(value['visibility']),
         'workflow': value['workflow'],
+        'name': value['name'],
+        'visibility': LayerVisibilityToJSON(value['visibility']),
+        'symbology': SymbologyToJSON(value['symbology']),
     };
 }
 

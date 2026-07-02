@@ -20,7 +20,7 @@ export interface MlModel {
      * @type {string}
      * @memberof MlModel
      */
-    description: string;
+    name: string;
     /**
      *
      * @type {string}
@@ -32,7 +32,13 @@ export interface MlModel {
      * @type {string}
      * @memberof MlModel
      */
-    fileName: string;
+    description: string;
+    /**
+     *
+     * @type {string}
+     * @memberof MlModel
+     */
+    upload: string;
     /**
      *
      * @type {MlModelMetadata}
@@ -44,13 +50,7 @@ export interface MlModel {
      * @type {string}
      * @memberof MlModel
      */
-    name: string;
-    /**
-     *
-     * @type {string}
-     * @memberof MlModel
-     */
-    upload: string;
+    fileName: string;
 }
 /**
  * Check if a given object implements the MlModel interface.

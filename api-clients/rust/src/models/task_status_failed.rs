@@ -12,20 +12,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TaskStatusFailed {
-    #[serde(rename = "cleanUp", deserialize_with = "Option::deserialize")]
-    pub clean_up: Option<serde_json::Value>,
-    #[serde(rename = "error", deserialize_with = "Option::deserialize")]
-    pub error: Option<serde_json::Value>,
     #[serde(rename = "status")]
     pub status: Status,
+    #[serde(rename = "error", deserialize_with = "Option::deserialize")]
+    pub error: Option<serde_json::Value>,
+    #[serde(rename = "cleanUp", deserialize_with = "Option::deserialize")]
+    pub clean_up: Option<serde_json::Value>,
 }
 
 impl TaskStatusFailed {
-    pub fn new(clean_up: Option<serde_json::Value>, error: Option<serde_json::Value>, status: Status) -> TaskStatusFailed {
+    pub fn new(status: Status, error: Option<serde_json::Value>, clean_up: Option<serde_json::Value>) -> TaskStatusFailed {
         TaskStatusFailed {
-            clean_up,
-            error,
             status,
+            error,
+            clean_up,
         }
     }
 }

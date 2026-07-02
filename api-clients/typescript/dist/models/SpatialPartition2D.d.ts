@@ -20,13 +20,13 @@ export interface SpatialPartition2D {
      * @type {Coordinate2D}
      * @memberof SpatialPartition2D
      */
-    lowerRightCoordinate: Coordinate2D;
+    upperLeftCoordinate: Coordinate2D;
     /**
      *
      * @type {Coordinate2D}
      * @memberof SpatialPartition2D
      */
-    upperLeftCoordinate: Coordinate2D;
+    lowerRightCoordinate: Coordinate2D;
 }
 /**
  * Check if a given object implements the SpatialPartition2D interface.

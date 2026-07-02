@@ -49,22 +49,10 @@ import {
 export interface RasterResultDescriptor {
     /**
      * 
-     * @type {Array<RasterBandDescriptor>}
-     * @memberof RasterResultDescriptor
-     */
-    bands: Array<RasterBandDescriptor>;
-    /**
-     * 
      * @type {RasterDataType}
      * @memberof RasterResultDescriptor
      */
     dataType: RasterDataType;
-    /**
-     * 
-     * @type {SpatialGridDescriptor}
-     * @memberof RasterResultDescriptor
-     */
-    spatialGrid: SpatialGridDescriptor;
     /**
      * 
      * @type {string}
@@ -77,6 +65,18 @@ export interface RasterResultDescriptor {
      * @memberof RasterResultDescriptor
      */
     time: TimeDescriptor;
+    /**
+     * 
+     * @type {SpatialGridDescriptor}
+     * @memberof RasterResultDescriptor
+     */
+    spatialGrid: SpatialGridDescriptor;
+    /**
+     * 
+     * @type {Array<RasterBandDescriptor>}
+     * @memberof RasterResultDescriptor
+     */
+    bands: Array<RasterBandDescriptor>;
 }
 
 
@@ -85,11 +85,11 @@ export interface RasterResultDescriptor {
  * Check if a given object implements the RasterResultDescriptor interface.
  */
 export function instanceOfRasterResultDescriptor(value: object): value is RasterResultDescriptor {
-    if (!('bands' in value) || value['bands'] === undefined) return false;
     if (!('dataType' in value) || value['dataType'] === undefined) return false;
-    if (!('spatialGrid' in value) || value['spatialGrid'] === undefined) return false;
     if (!('spatialReference' in value) || value['spatialReference'] === undefined) return false;
     if (!('time' in value) || value['time'] === undefined) return false;
+    if (!('spatialGrid' in value) || value['spatialGrid'] === undefined) return false;
+    if (!('bands' in value) || value['bands'] === undefined) return false;
     return true;
 }
 
@@ -103,11 +103,11 @@ export function RasterResultDescriptorFromJSONTyped(json: any, ignoreDiscriminat
     }
     return {
         
-        'bands': ((json['bands'] as Array<any>).map(RasterBandDescriptorFromJSON)),
         'dataType': RasterDataTypeFromJSON(json['dataType']),
-        'spatialGrid': SpatialGridDescriptorFromJSON(json['spatialGrid']),
         'spatialReference': json['spatialReference'],
         'time': TimeDescriptorFromJSON(json['time']),
+        'spatialGrid': SpatialGridDescriptorFromJSON(json['spatialGrid']),
+        'bands': ((json['bands'] as Array<any>).map(RasterBandDescriptorFromJSON)),
     };
 }
 
@@ -122,11 +122,11 @@ export function RasterResultDescriptorToJSONTyped(value?: RasterResultDescriptor
 
     return {
         
-        'bands': ((value['bands'] as Array<any>).map(RasterBandDescriptorToJSON)),
         'dataType': RasterDataTypeToJSON(value['dataType']),
-        'spatialGrid': SpatialGridDescriptorToJSON(value['spatialGrid']),
         'spatialReference': value['spatialReference'],
         'time': TimeDescriptorToJSON(value['time']),
+        'spatialGrid': SpatialGridDescriptorToJSON(value['spatialGrid']),
+        'bands': ((value['bands'] as Array<any>).map(RasterBandDescriptorToJSON)),
     };
 }
 

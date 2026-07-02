@@ -23,21 +23,21 @@ export interface GridIdx2D {
      * @type {number}
      * @memberof GridIdx2D
      */
-    xIdx: number;
+    yIdx: number;
     /**
      * 
      * @type {number}
      * @memberof GridIdx2D
      */
-    yIdx: number;
+    xIdx: number;
 }
 
 /**
  * Check if a given object implements the GridIdx2D interface.
  */
 export function instanceOfGridIdx2D(value: object): value is GridIdx2D {
-    if (!('xIdx' in value) || value['xIdx'] === undefined) return false;
     if (!('yIdx' in value) || value['yIdx'] === undefined) return false;
+    if (!('xIdx' in value) || value['xIdx'] === undefined) return false;
     return true;
 }
 
@@ -51,8 +51,8 @@ export function GridIdx2DFromJSONTyped(json: any, ignoreDiscriminator: boolean):
     }
     return {
         
-        'xIdx': json['xIdx'],
         'yIdx': json['yIdx'],
+        'xIdx': json['xIdx'],
     };
 }
 
@@ -67,8 +67,8 @@ export function GridIdx2DToJSONTyped(value?: GridIdx2D | null, ignoreDiscriminat
 
     return {
         
-        'xIdx': value['xIdx'],
         'yIdx': value['yIdx'],
+        'xIdx': value['xIdx'],
     };
 }
 

@@ -21,13 +21,13 @@ exports.ComputationQuotaToJSONTyped = ComputationQuotaToJSONTyped;
  * Check if a given object implements the ComputationQuota interface.
  */
 function instanceOfComputationQuota(value) {
-    if (!('computationId' in value) || value['computationId'] === undefined)
-        return false;
-    if (!('count' in value) || value['count'] === undefined)
-        return false;
     if (!('timestamp' in value) || value['timestamp'] === undefined)
         return false;
+    if (!('computationId' in value) || value['computationId'] === undefined)
+        return false;
     if (!('workflowId' in value) || value['workflowId'] === undefined)
+        return false;
+    if (!('count' in value) || value['count'] === undefined)
         return false;
     return true;
 }
@@ -39,10 +39,10 @@ function ComputationQuotaFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'computationId': json['computationId'],
-        'count': json['count'],
         'timestamp': (new Date(json['timestamp'])),
+        'computationId': json['computationId'],
         'workflowId': json['workflowId'],
+        'count': json['count'],
     };
 }
 function ComputationQuotaToJSON(json) {
@@ -53,9 +53,9 @@ function ComputationQuotaToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'computationId': value['computationId'],
-        'count': value['count'],
         'timestamp': value['timestamp'].toISOString(),
+        'computationId': value['computationId'],
         'workflowId': value['workflowId'],
+        'count': value['count'],
     };
 }

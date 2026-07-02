@@ -28,15 +28,15 @@ class GbifDataProviderDefinition(BaseModel):
     """
     GbifDataProviderDefinition
     """ # noqa: E501
-    autocomplete_timeout: StrictInt = Field(alias="autocompleteTimeout")
-    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
-    columns: List[StrictStr]
-    db_config: DatabaseConnectionConfig = Field(alias="dbConfig")
-    description: StrictStr
-    name: StrictStr
-    priority: Optional[StrictInt] = None
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["autocompleteTimeout", "cacheTtl", "columns", "dbConfig", "description", "name", "priority", "type"]
+    name: StrictStr
+    description: StrictStr
+    priority: Optional[StrictInt] = None
+    db_config: DatabaseConnectionConfig = Field(alias="dbConfig")
+    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
+    autocomplete_timeout: StrictInt = Field(alias="autocompleteTimeout")
+    columns: List[StrictStr]
+    __properties: ClassVar[List[str]] = ["type", "name", "description", "priority", "dbConfig", "cacheTtl", "autocompleteTimeout", "columns"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -104,14 +104,14 @@ class GbifDataProviderDefinition(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "autocompleteTimeout": obj.get("autocompleteTimeout"),
-            "cacheTtl": obj.get("cacheTtl"),
-            "columns": obj.get("columns"),
-            "dbConfig": DatabaseConnectionConfig.from_dict(obj["dbConfig"]) if obj.get("dbConfig") is not None else None,
-            "description": obj.get("description"),
+            "type": obj.get("type"),
             "name": obj.get("name"),
+            "description": obj.get("description"),
             "priority": obj.get("priority"),
-            "type": obj.get("type")
+            "dbConfig": DatabaseConnectionConfig.from_dict(obj["dbConfig"]) if obj.get("dbConfig") is not None else None,
+            "cacheTtl": obj.get("cacheTtl"),
+            "autocompleteTimeout": obj.get("autocompleteTimeout"),
+            "columns": obj.get("columns")
         })
         return _obj
 

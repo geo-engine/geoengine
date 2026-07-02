@@ -32,7 +32,7 @@ class TypedRasterResultDescriptor(RasterResultDescriptor):
     TypedRasterResultDescriptor
     """ # noqa: E501
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["bands", "dataType", "spatialGrid", "spatialReference", "time", "type"]
+    __properties: ClassVar[List[str]] = ["dataType", "spatialReference", "time", "spatialGrid", "bands", "type"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -80,6 +80,12 @@ class TypedRasterResultDescriptor(RasterResultDescriptor):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of time
+        if self.time:
+            _dict['time'] = self.time.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of spatial_grid
+        if self.spatial_grid:
+            _dict['spatialGrid'] = self.spatial_grid.to_dict()
         # override the default output from pydantic by calling `to_dict()` of each item in bands (list)
         _items = []
         if self.bands:
@@ -87,12 +93,6 @@ class TypedRasterResultDescriptor(RasterResultDescriptor):
                 if _item_bands:
                     _items.append(_item_bands.to_dict())
             _dict['bands'] = _items
-        # override the default output from pydantic by calling `to_dict()` of spatial_grid
-        if self.spatial_grid:
-            _dict['spatialGrid'] = self.spatial_grid.to_dict()
-        # override the default output from pydantic by calling `to_dict()` of time
-        if self.time:
-            _dict['time'] = self.time.to_dict()
         return _dict
 
     @classmethod
@@ -105,11 +105,11 @@ class TypedRasterResultDescriptor(RasterResultDescriptor):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "bands": [RasterBandDescriptor.from_dict(_item) for _item in obj["bands"]] if obj.get("bands") is not None else None,
             "dataType": obj.get("dataType"),
-            "spatialGrid": SpatialGridDescriptor.from_dict(obj["spatialGrid"]) if obj.get("spatialGrid") is not None else None,
             "spatialReference": obj.get("spatialReference"),
             "time": TimeDescriptor.from_dict(obj["time"]) if obj.get("time") is not None else None,
+            "spatialGrid": SpatialGridDescriptor.from_dict(obj["spatialGrid"]) if obj.get("spatialGrid") is not None else None,
+            "bands": [RasterBandDescriptor.from_dict(_item) for _item in obj["bands"]] if obj.get("bands") is not None else None,
             "type": obj.get("type")
         })
         return _obj

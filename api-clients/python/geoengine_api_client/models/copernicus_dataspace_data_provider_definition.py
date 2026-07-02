@@ -28,17 +28,17 @@ class CopernicusDataspaceDataProviderDefinition(BaseModel):
     """
     CopernicusDataspaceDataProviderDefinition
     """ # noqa: E501
-    description: StrictStr
-    gdal_config: List[Annotated[List[StrictStr], Field(min_length=2, max_length=2)]] = Field(alias="gdalConfig")
-    id: UUID
+    type: StrictStr
     name: StrictStr
-    priority: Optional[StrictInt] = None
+    description: StrictStr
+    id: UUID
+    stac_url: StrictStr = Field(alias="stacUrl")
+    s3_url: StrictStr = Field(alias="s3Url")
     s3_access_key: StrictStr = Field(alias="s3AccessKey")
     s3_secret_key: StrictStr = Field(alias="s3SecretKey")
-    s3_url: StrictStr = Field(alias="s3Url")
-    stac_url: StrictStr = Field(alias="stacUrl")
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["description", "gdalConfig", "id", "name", "priority", "s3AccessKey", "s3SecretKey", "s3Url", "stacUrl", "type"]
+    gdal_config: List[Annotated[List[StrictStr], Field(min_length=2, max_length=2)]] = Field(alias="gdalConfig")
+    priority: Optional[StrictInt] = None
+    __properties: ClassVar[List[str]] = ["type", "name", "description", "id", "stacUrl", "s3Url", "s3AccessKey", "s3SecretKey", "gdalConfig", "priority"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -103,16 +103,16 @@ class CopernicusDataspaceDataProviderDefinition(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "description": obj.get("description"),
-            "gdalConfig": obj.get("gdalConfig"),
-            "id": obj.get("id"),
+            "type": obj.get("type"),
             "name": obj.get("name"),
-            "priority": obj.get("priority"),
+            "description": obj.get("description"),
+            "id": obj.get("id"),
+            "stacUrl": obj.get("stacUrl"),
+            "s3Url": obj.get("s3Url"),
             "s3AccessKey": obj.get("s3AccessKey"),
             "s3SecretKey": obj.get("s3SecretKey"),
-            "s3Url": obj.get("s3Url"),
-            "stacUrl": obj.get("stacUrl"),
-            "type": obj.get("type")
+            "gdalConfig": obj.get("gdalConfig"),
+            "priority": obj.get("priority")
         })
         return _obj
 

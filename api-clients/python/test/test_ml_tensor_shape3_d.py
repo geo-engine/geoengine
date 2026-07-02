@@ -35,15 +35,15 @@ class TestMlTensorShape3D(unittest.TestCase):
         model = MlTensorShape3D()
         if include_optional:
             return MlTensorShape3D(
-                bands = 0,
+                y = 0,
                 x = 0,
-                y = 0
+                bands = 0
             )
         else:
             return MlTensorShape3D(
-                bands = 0,
-                x = 0,
                 y = 0,
+                x = 0,
+                bands = 0,
         )
         """
 

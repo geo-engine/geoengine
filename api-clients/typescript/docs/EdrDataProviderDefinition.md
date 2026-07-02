@@ -6,16 +6,16 @@
 
 Name | Type
 ------------ | -------------
-`baseUrl` | string
-`cacheTtl` | number
-`description` | string
-`discreteVrs` | Array&lt;string&gt;
-`id` | string
-`name` | string
-`priority` | number
-`provenance` | [Array&lt;Provenance&gt;](Provenance.md)
 `type` | string
+`name` | string
+`description` | string
+`priority` | number
+`id` | string
+`baseUrl` | string
 `vectorSpec` | [EdrVectorSpec](EdrVectorSpec.md)
+`cacheTtl` | number
+`discreteVrs` | Array&lt;string&gt;
+`provenance` | [Array&lt;Provenance&gt;](Provenance.md)
 
 ## Example
 
@@ -24,16 +24,16 @@ import type { EdrDataProviderDefinition } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "baseUrl": null,
-  "cacheTtl": null,
-  "description": null,
-  "discreteVrs": null,
-  "id": null,
-  "name": null,
-  "priority": null,
-  "provenance": null,
   "type": null,
+  "name": null,
+  "description": null,
+  "priority": null,
+  "id": null,
+  "baseUrl": null,
   "vectorSpec": null,
+  "cacheTtl": null,
+  "discreteVrs": null,
+  "provenance": null,
 } satisfies EdrDataProviderDefinition
 
 console.log(example)

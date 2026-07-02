@@ -36,6 +36,7 @@ paste = { workspace = true }
 postgres-protocol = { workspace = true }
 postgres-types = { workspace = true }
 proj = { workspace = true }
+proj-sys = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -35,34 +35,34 @@ class TestDatasetLayerListingProviderDefinition(unittest.TestCase):
         model = DatasetLayerListingProviderDefinition()
         if include_optional:
             return DatasetLayerListingProviderDefinition(
+                type = 'DatasetLayerListing',
+                id = '',
+                name = '',
+                description = '',
+                priority = 56,
                 collections = [
                     geoengine_api_client.models.dataset_layer_listing_collection.DatasetLayerListingCollection(
-                        description = '', 
                         name = '', 
+                        description = '', 
                         tags = [
                             ''
                             ], )
-                    ],
-                description = '',
-                id = '',
-                name = '',
-                priority = 56,
-                type = 'DatasetLayerListing'
+                    ]
             )
         else:
             return DatasetLayerListingProviderDefinition(
+                type = 'DatasetLayerListing',
+                id = '',
+                name = '',
+                description = '',
                 collections = [
                     geoengine_api_client.models.dataset_layer_listing_collection.DatasetLayerListingCollection(
-                        description = '', 
                         name = '', 
+                        description = '', 
                         tags = [
                             ''
                             ], )
                     ],
-                description = '',
-                id = '',
-                name = '',
-                type = 'DatasetLayerListing',
         )
         """
 

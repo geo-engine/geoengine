@@ -21,28 +21,16 @@ import type { ProjectLayer } from './ProjectLayer';
 export interface Project {
     /**
      *
-     * @type {STRectangle}
-     * @memberof Project
-     */
-    bounds: STRectangle;
-    /**
-     *
-     * @type {string}
-     * @memberof Project
-     */
-    description: string;
-    /**
-     *
      * @type {string}
      * @memberof Project
      */
     id: string;
     /**
      *
-     * @type {Array<ProjectLayer>}
+     * @type {ProjectVersion}
      * @memberof Project
      */
-    layers: Array<ProjectLayer>;
+    version: ProjectVersion;
     /**
      *
      * @type {string}
@@ -51,22 +39,34 @@ export interface Project {
     name: string;
     /**
      *
+     * @type {string}
+     * @memberof Project
+     */
+    description: string;
+    /**
+     *
+     * @type {Array<ProjectLayer>}
+     * @memberof Project
+     */
+    layers: Array<ProjectLayer>;
+    /**
+     *
      * @type {Array<Plot>}
      * @memberof Project
      */
     plots: Array<Plot>;
     /**
      *
+     * @type {STRectangle}
+     * @memberof Project
+     */
+    bounds: STRectangle;
+    /**
+     *
      * @type {TimeStep}
      * @memberof Project
      */
     timeStep: TimeStep;
-    /**
-     *
-     * @type {ProjectVersion}
-     * @memberof Project
-     */
-    version: ProjectVersion;
 }
 /**
  * Check if a given object implements the Project interface.

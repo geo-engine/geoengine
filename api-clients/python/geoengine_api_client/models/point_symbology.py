@@ -30,12 +30,12 @@ class PointSymbology(BaseModel):
     """
     PointSymbology
     """ # noqa: E501
-    fill_color: ColorParam = Field(alias="fillColor")
+    type: StrictStr
     radius: NumberParam
+    fill_color: ColorParam = Field(alias="fillColor")
     stroke: StrokeParam
     text: Optional[TextSymbology] = None
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["fillColor", "radius", "stroke", "text", "type"]
+    __properties: ClassVar[List[str]] = ["type", "radius", "fillColor", "stroke", "text"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -83,12 +83,12 @@ class PointSymbology(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of fill_color
-        if self.fill_color:
-            _dict['fillColor'] = self.fill_color.to_dict()
         # override the default output from pydantic by calling `to_dict()` of radius
         if self.radius:
             _dict['radius'] = self.radius.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of fill_color
+        if self.fill_color:
+            _dict['fillColor'] = self.fill_color.to_dict()
         # override the default output from pydantic by calling `to_dict()` of stroke
         if self.stroke:
             _dict['stroke'] = self.stroke.to_dict()
@@ -112,11 +112,11 @@ class PointSymbology(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "fillColor": ColorParam.from_dict(obj["fillColor"]) if obj.get("fillColor") is not None else None,
+            "type": obj.get("type"),
             "radius": NumberParam.from_dict(obj["radius"]) if obj.get("radius") is not None else None,
+            "fillColor": ColorParam.from_dict(obj["fillColor"]) if obj.get("fillColor") is not None else None,
             "stroke": StrokeParam.from_dict(obj["stroke"]) if obj.get("stroke") is not None else None,
-            "text": TextSymbology.from_dict(obj["text"]) if obj.get("text") is not None else None,
-            "type": obj.get("type")
+            "text": TextSymbology.from_dict(obj["text"]) if obj.get("text") is not None else None
         })
         return _obj
 

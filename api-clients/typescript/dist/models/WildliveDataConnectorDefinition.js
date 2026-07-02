@@ -28,13 +28,13 @@ exports.WildliveDataConnectorDefinitionTypeEnum = {
  * Check if a given object implements the WildliveDataConnectorDefinition interface.
  */
 function instanceOfWildliveDataConnectorDefinition(value) {
-    if (!('description' in value) || value['description'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('description' in value) || value['description'] === undefined)
         return false;
     return true;
 }
@@ -46,14 +46,14 @@ function WildliveDataConnectorDefinitionFromJSONTyped(json, ignoreDiscriminator)
         return json;
     }
     return {
-        'description': json['description'],
-        'expiryDate': json['expiryDate'] == null ? undefined : (new Date(json['expiryDate'])),
+        'type': json['type'],
         'id': json['id'],
         'name': json['name'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
-        'refreshToken': json['refreshToken'] == null ? undefined : json['refreshToken'],
-        'type': json['type'],
+        'description': json['description'],
         'user': json['user'] == null ? undefined : json['user'],
+        'refreshToken': json['refreshToken'] == null ? undefined : json['refreshToken'],
+        'expiryDate': json['expiryDate'] == null ? undefined : (new Date(json['expiryDate'])),
+        'priority': json['priority'] == null ? undefined : json['priority'],
     };
 }
 function WildliveDataConnectorDefinitionToJSON(json) {
@@ -64,13 +64,13 @@ function WildliveDataConnectorDefinitionToJSONTyped(value, ignoreDiscriminator =
         return value;
     }
     return {
-        'description': value['description'],
-        'expiryDate': value['expiryDate'] == null ? value['expiryDate'] : value['expiryDate'].toISOString(),
+        'type': value['type'],
         'id': value['id'],
         'name': value['name'],
-        'priority': value['priority'],
-        'refreshToken': value['refreshToken'],
-        'type': value['type'],
+        'description': value['description'],
         'user': value['user'],
+        'refreshToken': value['refreshToken'],
+        'expiryDate': value['expiryDate'] == null ? value['expiryDate'] : value['expiryDate'].toISOString(),
+        'priority': value['priority'],
     };
 }

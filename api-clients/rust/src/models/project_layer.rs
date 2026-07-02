@@ -12,23 +12,23 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectLayer {
-    #[serde(rename = "name")]
-    pub name: String,
-    #[serde(rename = "symbology")]
-    pub symbology: Box<models::Symbology>,
-    #[serde(rename = "visibility")]
-    pub visibility: Box<models::LayerVisibility>,
     #[serde(rename = "workflow")]
     pub workflow: uuid::Uuid,
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "visibility")]
+    pub visibility: Box<models::LayerVisibility>,
+    #[serde(rename = "symbology")]
+    pub symbology: Box<models::Symbology>,
 }
 
 impl ProjectLayer {
-    pub fn new(name: String, symbology: models::Symbology, visibility: models::LayerVisibility, workflow: uuid::Uuid) -> ProjectLayer {
+    pub fn new(workflow: uuid::Uuid, name: String, visibility: models::LayerVisibility, symbology: models::Symbology) -> ProjectLayer {
         ProjectLayer {
-            name,
-            symbology: Box::new(symbology),
-            visibility: Box::new(visibility),
             workflow,
+            name,
+            visibility: Box::new(visibility),
+            symbology: Box::new(symbology),
         }
     }
 }

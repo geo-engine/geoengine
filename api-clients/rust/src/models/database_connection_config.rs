@@ -12,29 +12,29 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DatabaseConnectionConfig {
-    #[serde(rename = "database")]
-    pub database: String,
     #[serde(rename = "host")]
     pub host: String,
-    #[serde(rename = "password")]
-    pub password: String,
     #[serde(rename = "port")]
     pub port: i32,
+    #[serde(rename = "database")]
+    pub database: String,
     #[serde(rename = "schema")]
     pub schema: String,
     #[serde(rename = "user")]
     pub user: String,
+    #[serde(rename = "password")]
+    pub password: String,
 }
 
 impl DatabaseConnectionConfig {
-    pub fn new(database: String, host: String, password: String, port: i32, schema: String, user: String) -> DatabaseConnectionConfig {
+    pub fn new(host: String, port: i32, database: String, schema: String, user: String, password: String) -> DatabaseConnectionConfig {
         DatabaseConnectionConfig {
-            database,
             host,
-            password,
             port,
+            database,
             schema,
             user,
+            password,
         }
     }
 }

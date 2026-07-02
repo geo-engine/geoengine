@@ -7,9 +7,9 @@ The `Histogram` is a _plot operator_ that computes a histogram plot either over 
 
 Name | Type
 ------------ | -------------
+`type` | string
 `params` | [HistogramParameters](HistogramParameters.md)
 `sources` | [SingleVectorOrRasterSource](SingleVectorOrRasterSource.md)
-`type` | string
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { Histogram } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "params": null,
   "sources": null,
-  "type": null,
 } satisfies Histogram
 
 console.log(example)

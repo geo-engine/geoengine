@@ -31,19 +31,19 @@ exports.GdalMetadataNetCdfCfTypeEnum = {
  * Check if a given object implements the GdalMetadataNetCdfCf interface.
  */
 function instanceOfGdalMetadataNetCdfCf(value) {
-    if (!('bandOffset' in value) || value['bandOffset'] === undefined)
-        return false;
-    if (!('end' in value) || value['end'] === undefined)
-        return false;
-    if (!('params' in value) || value['params'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
         return false;
+    if (!('params' in value) || value['params'] === undefined)
+        return false;
     if (!('start' in value) || value['start'] === undefined)
+        return false;
+    if (!('end' in value) || value['end'] === undefined)
         return false;
     if (!('step' in value) || value['step'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('bandOffset' in value) || value['bandOffset'] === undefined)
         return false;
     return true;
 }
@@ -55,14 +55,14 @@ function GdalMetadataNetCdfCfFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'type': json['type'],
+        'resultDescriptor': (0, RasterResultDescriptor_1.RasterResultDescriptorFromJSON)(json['resultDescriptor']),
+        'params': (0, GdalDatasetParameters_1.GdalDatasetParametersFromJSON)(json['params']),
+        'start': json['start'],
+        'end': json['end'],
+        'step': (0, TimeStep_1.TimeStepFromJSON)(json['step']),
         'bandOffset': json['bandOffset'],
         'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
-        'end': json['end'],
-        'params': (0, GdalDatasetParameters_1.GdalDatasetParametersFromJSON)(json['params']),
-        'resultDescriptor': (0, RasterResultDescriptor_1.RasterResultDescriptorFromJSON)(json['resultDescriptor']),
-        'start': json['start'],
-        'step': (0, TimeStep_1.TimeStepFromJSON)(json['step']),
-        'type': json['type'],
     };
 }
 function GdalMetadataNetCdfCfToJSON(json) {
@@ -73,13 +73,13 @@ function GdalMetadataNetCdfCfToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
+        'type': value['type'],
+        'resultDescriptor': (0, RasterResultDescriptor_1.RasterResultDescriptorToJSON)(value['resultDescriptor']),
+        'params': (0, GdalDatasetParameters_1.GdalDatasetParametersToJSON)(value['params']),
+        'start': value['start'],
+        'end': value['end'],
+        'step': (0, TimeStep_1.TimeStepToJSON)(value['step']),
         'bandOffset': value['bandOffset'],
         'cacheTtl': value['cacheTtl'],
-        'end': value['end'],
-        'params': (0, GdalDatasetParameters_1.GdalDatasetParametersToJSON)(value['params']),
-        'resultDescriptor': (0, RasterResultDescriptor_1.RasterResultDescriptorToJSON)(value['resultDescriptor']),
-        'start': value['start'],
-        'step': (0, TimeStep_1.TimeStepToJSON)(value['step']),
-        'type': value['type'],
     };
 }

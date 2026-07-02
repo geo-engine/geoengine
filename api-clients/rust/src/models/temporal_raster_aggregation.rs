@@ -13,21 +13,21 @@ use serde::{Deserialize, Serialize};
 /// TemporalRasterAggregation : The `TemporalRasterAggregation` operator aggregates a raster time series into uniform time windows. The output starts with the first window that contains the query start and contains all windows that overlap the query interval.  Pixel values are computed by aggregating all input rasters that contribute to the current window.  ## Inputs  The `TemporalRasterAggregation` operator expects exactly one _raster_ input.  ## Errors  If the aggregation method is `first`, `last`, or `mean` and the input raster has no NO DATA value, an error is returned.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TemporalRasterAggregation {
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "params")]
     pub params: Box<models::TemporalRasterAggregationParameters>,
     #[serde(rename = "sources")]
     pub sources: Box<models::SingleRasterSource>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
 }
 
 impl TemporalRasterAggregation {
     /// The `TemporalRasterAggregation` operator aggregates a raster time series into uniform time windows. The output starts with the first window that contains the query start and contains all windows that overlap the query interval.  Pixel values are computed by aggregating all input rasters that contribute to the current window.  ## Inputs  The `TemporalRasterAggregation` operator expects exactly one _raster_ input.  ## Errors  If the aggregation method is `first`, `last`, or `mean` and the input raster has no NO DATA value, an error is returned.
-    pub fn new(params: models::TemporalRasterAggregationParameters, sources: models::SingleRasterSource, r#type: Type) -> TemporalRasterAggregation {
+    pub fn new(r#type: Type, params: models::TemporalRasterAggregationParameters, sources: models::SingleRasterSource) -> TemporalRasterAggregation {
         TemporalRasterAggregation {
+            r#type,
             params: Box::new(params),
             sources: Box::new(sources),
-            r#type,
         }
     }
 }

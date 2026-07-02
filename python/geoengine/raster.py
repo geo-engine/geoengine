@@ -114,7 +114,7 @@ class RasterTile2D:
 
         numpy_mask: np.ndarray | np.ma.MaskType = np.ma.nomask if maybe_numpy_mask is None else maybe_numpy_mask
 
-        numpy_masked_data: np.ma.MaskedArray = np.ma.masked_array(numpy_data, mask=numpy_mask)
+        numpy_masked_data: np.ma.MaskedArray = np.ma.MaskedArray(numpy_data, mask=numpy_mask)
 
         return numpy_masked_data
 

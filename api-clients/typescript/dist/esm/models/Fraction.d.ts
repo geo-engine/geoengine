@@ -16,12 +16,6 @@
 export interface Fraction {
     /**
      *
-     * @type {FractionTypeEnum}
-     * @memberof Fraction
-     */
-    type: FractionTypeEnum;
-    /**
-     *
      * @type {number}
      * @memberof Fraction
      */
@@ -32,6 +26,12 @@ export interface Fraction {
      * @memberof Fraction
      */
     y: number;
+    /**
+     *
+     * @type {FractionTypeEnum}
+     * @memberof Fraction
+     */
+    type: FractionTypeEnum;
 }
 /**
  * @export

@@ -26,9 +26,9 @@ class SingleVectorMultipleRasterSources(BaseModel):
     """
     A single vector operator and one or more raster operators as source for this operator.
     """ # noqa: E501
-    rasters: List[RasterOperator]
     vector: VectorOperator
-    __properties: ClassVar[List[str]] = ["rasters", "vector"]
+    rasters: List[RasterOperator]
+    __properties: ClassVar[List[str]] = ["vector", "rasters"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -69,6 +69,9 @@ class SingleVectorMultipleRasterSources(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of vector
+        if self.vector:
+            _dict['vector'] = self.vector.to_dict()
         # override the default output from pydantic by calling `to_dict()` of each item in rasters (list)
         _items = []
         if self.rasters:
@@ -76,9 +79,6 @@ class SingleVectorMultipleRasterSources(BaseModel):
                 if _item_rasters:
                     _items.append(_item_rasters.to_dict())
             _dict['rasters'] = _items
-        # override the default output from pydantic by calling `to_dict()` of vector
-        if self.vector:
-            _dict['vector'] = self.vector.to_dict()
         return _dict
 
     @classmethod
@@ -91,8 +91,8 @@ class SingleVectorMultipleRasterSources(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "rasters": [RasterOperator.from_dict(_item) for _item in obj["rasters"]] if obj.get("rasters") is not None else None,
-            "vector": VectorOperator.from_dict(obj["vector"]) if obj.get("vector") is not None else None
+            "vector": VectorOperator.from_dict(obj["vector"]) if obj.get("vector") is not None else None,
+            "rasters": [RasterOperator.from_dict(_item) for _item in obj["rasters"]] if obj.get("rasters") is not None else None
         })
         return _obj
 

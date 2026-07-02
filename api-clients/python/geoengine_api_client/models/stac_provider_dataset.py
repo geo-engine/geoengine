@@ -30,14 +30,14 @@ class StacProviderDataset(BaseModel):
     """
     StacProviderDataset
     """ # noqa: E501
-    bands: List[StacProviderDatasetBand]
-    data_type: RasterDataType = Field(alias="dataType")
-    description: StrictStr
     name: StrictStr
-    projection: StrictStr
+    description: StrictStr
+    data_type: RasterDataType = Field(alias="dataType")
     resolution: SpatialResolution
+    projection: StrictStr
     spatial_grid: SpatialGridDescriptor = Field(alias="spatialGrid")
-    __properties: ClassVar[List[str]] = ["bands", "dataType", "description", "name", "projection", "resolution", "spatialGrid"]
+    bands: List[StacProviderDatasetBand]
+    __properties: ClassVar[List[str]] = ["name", "description", "dataType", "resolution", "projection", "spatialGrid", "bands"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -78,6 +78,12 @@ class StacProviderDataset(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of resolution
+        if self.resolution:
+            _dict['resolution'] = self.resolution.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of spatial_grid
+        if self.spatial_grid:
+            _dict['spatialGrid'] = self.spatial_grid.to_dict()
         # override the default output from pydantic by calling `to_dict()` of each item in bands (list)
         _items = []
         if self.bands:
@@ -85,12 +91,6 @@ class StacProviderDataset(BaseModel):
                 if _item_bands:
                     _items.append(_item_bands.to_dict())
             _dict['bands'] = _items
-        # override the default output from pydantic by calling `to_dict()` of resolution
-        if self.resolution:
-            _dict['resolution'] = self.resolution.to_dict()
-        # override the default output from pydantic by calling `to_dict()` of spatial_grid
-        if self.spatial_grid:
-            _dict['spatialGrid'] = self.spatial_grid.to_dict()
         return _dict
 
     @classmethod
@@ -103,13 +103,13 @@ class StacProviderDataset(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "bands": [StacProviderDatasetBand.from_dict(_item) for _item in obj["bands"]] if obj.get("bands") is not None else None,
-            "dataType": obj.get("dataType"),
-            "description": obj.get("description"),
             "name": obj.get("name"),
-            "projection": obj.get("projection"),
+            "description": obj.get("description"),
+            "dataType": obj.get("dataType"),
             "resolution": SpatialResolution.from_dict(obj["resolution"]) if obj.get("resolution") is not None else None,
-            "spatialGrid": SpatialGridDescriptor.from_dict(obj["spatialGrid"]) if obj.get("spatialGrid") is not None else None
+            "projection": obj.get("projection"),
+            "spatialGrid": SpatialGridDescriptor.from_dict(obj["spatialGrid"]) if obj.get("spatialGrid") is not None else None,
+            "bands": [StacProviderDatasetBand.from_dict(_item) for _item in obj["bands"]] if obj.get("bands") is not None else None
         })
         return _obj
 

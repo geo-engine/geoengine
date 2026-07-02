@@ -21,11 +21,11 @@ exports.MlTensorShape3DToJSONTyped = MlTensorShape3DToJSONTyped;
  * Check if a given object implements the MlTensorShape3D interface.
  */
 function instanceOfMlTensorShape3D(value) {
-    if (!('bands' in value) || value['bands'] === undefined)
+    if (!('y' in value) || value['y'] === undefined)
         return false;
     if (!('x' in value) || value['x'] === undefined)
         return false;
-    if (!('y' in value) || value['y'] === undefined)
+    if (!('bands' in value) || value['bands'] === undefined)
         return false;
     return true;
 }
@@ -37,9 +37,9 @@ function MlTensorShape3DFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'bands': json['bands'],
-        'x': json['x'],
         'y': json['y'],
+        'x': json['x'],
+        'bands': json['bands'],
     };
 }
 function MlTensorShape3DToJSON(json) {
@@ -50,8 +50,8 @@ function MlTensorShape3DToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'bands': value['bands'],
-        'x': value['x'],
         'y': value['y'],
+        'x': value['x'],
+        'bands': value['bands'],
     };
 }

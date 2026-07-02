@@ -20,24 +20,6 @@ import { mapValues } from '../runtime';
 export interface DataUsage {
     /**
      * 
-     * @type {string}
-     * @memberof DataUsage
-     */
-    computationId: string;
-    /**
-     * 
-     * @type {number}
-     * @memberof DataUsage
-     */
-    count: number;
-    /**
-     * 
-     * @type {string}
-     * @memberof DataUsage
-     */
-    data: string;
-    /**
-     * 
      * @type {Date}
      * @memberof DataUsage
      */
@@ -48,17 +30,35 @@ export interface DataUsage {
      * @memberof DataUsage
      */
     userId: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof DataUsage
+     */
+    computationId: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof DataUsage
+     */
+    data: string;
+    /**
+     * 
+     * @type {number}
+     * @memberof DataUsage
+     */
+    count: number;
 }
 
 /**
  * Check if a given object implements the DataUsage interface.
  */
 export function instanceOfDataUsage(value: object): value is DataUsage {
-    if (!('computationId' in value) || value['computationId'] === undefined) return false;
-    if (!('count' in value) || value['count'] === undefined) return false;
-    if (!('data' in value) || value['data'] === undefined) return false;
     if (!('timestamp' in value) || value['timestamp'] === undefined) return false;
     if (!('userId' in value) || value['userId'] === undefined) return false;
+    if (!('computationId' in value) || value['computationId'] === undefined) return false;
+    if (!('data' in value) || value['data'] === undefined) return false;
+    if (!('count' in value) || value['count'] === undefined) return false;
     return true;
 }
 
@@ -72,11 +72,11 @@ export function DataUsageFromJSONTyped(json: any, ignoreDiscriminator: boolean):
     }
     return {
         
-        'computationId': json['computationId'],
-        'count': json['count'],
-        'data': json['data'],
         'timestamp': (new Date(json['timestamp'])),
         'userId': json['userId'],
+        'computationId': json['computationId'],
+        'data': json['data'],
+        'count': json['count'],
     };
 }
 
@@ -91,11 +91,11 @@ export function DataUsageToJSONTyped(value?: DataUsage | null, ignoreDiscriminat
 
     return {
         
-        'computationId': value['computationId'],
-        'count': value['count'],
-        'data': value['data'],
         'timestamp': value['timestamp'].toISOString(),
         'userId': value['userId'],
+        'computationId': value['computationId'],
+        'data': value['data'],
+        'count': value['count'],
     };
 }
 

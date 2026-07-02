@@ -17,6 +17,12 @@ import type { Breakpoint } from './Breakpoint';
 export interface LogarithmicGradient {
     /**
      *
+     * @type {LogarithmicGradientTypeEnum}
+     * @memberof LogarithmicGradient
+     */
+    type: LogarithmicGradientTypeEnum;
+    /**
+     *
      * @type {Array<Breakpoint>}
      * @memberof LogarithmicGradient
      */
@@ -33,12 +39,6 @@ export interface LogarithmicGradient {
      * @memberof LogarithmicGradient
      */
     overColor: Array<number>;
-    /**
-     *
-     * @type {LogarithmicGradientTypeEnum}
-     * @memberof LogarithmicGradient
-     */
-    type: LogarithmicGradientTypeEnum;
     /**
      *
      * @type {Array<number>}

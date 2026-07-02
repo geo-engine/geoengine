@@ -12,20 +12,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DerivedColor {
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "attribute")]
     pub attribute: String,
     #[serde(rename = "colorizer")]
     pub colorizer: Box<models::Colorizer>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
 }
 
 impl DerivedColor {
-    pub fn new(attribute: String, colorizer: models::Colorizer, r#type: Type) -> DerivedColor {
+    pub fn new(r#type: Type, attribute: String, colorizer: models::Colorizer) -> DerivedColor {
         DerivedColor {
+            r#type,
             attribute,
             colorizer: Box::new(colorizer),
-            r#type,
         }
     }
 }

@@ -29,16 +29,16 @@ import {
 export interface MockPointSource {
     /**
      * 
-     * @type {MockPointSourceParameters}
-     * @memberof MockPointSource
-     */
-    params: MockPointSourceParameters;
-    /**
-     * 
      * @type {MockPointSourceTypeEnum}
      * @memberof MockPointSource
      */
     type: MockPointSourceTypeEnum;
+    /**
+     * 
+     * @type {MockPointSourceParameters}
+     * @memberof MockPointSource
+     */
+    params: MockPointSourceParameters;
 }
 
 
@@ -55,8 +55,8 @@ export type MockPointSourceTypeEnum = typeof MockPointSourceTypeEnum[keyof typeo
  * Check if a given object implements the MockPointSource interface.
  */
 export function instanceOfMockPointSource(value: object): value is MockPointSource {
-    if (!('params' in value) || value['params'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('params' in value) || value['params'] === undefined) return false;
     return true;
 }
 
@@ -70,8 +70,8 @@ export function MockPointSourceFromJSONTyped(json: any, ignoreDiscriminator: boo
     }
     return {
         
-        'params': MockPointSourceParametersFromJSON(json['params']),
         'type': json['type'],
+        'params': MockPointSourceParametersFromJSON(json['params']),
     };
 }
 
@@ -86,8 +86,8 @@ export function MockPointSourceToJSONTyped(value?: MockPointSource | null, ignor
 
     return {
         
-        'params': MockPointSourceParametersToJSON(value['params']),
         'type': value['type'],
+        'params': MockPointSourceParametersToJSON(value['params']),
     };
 }
 

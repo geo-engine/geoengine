@@ -29,9 +29,9 @@ exports.GdalMultiBandTypeEnum = {
  * Check if a given object implements the GdalMultiBand interface.
  */
 function instanceOfGdalMultiBand(value) {
-    if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
-        return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
         return false;
     return true;
 }
@@ -43,8 +43,8 @@ function GdalMultiBandFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'resultDescriptor': (0, RasterResultDescriptor_1.RasterResultDescriptorFromJSON)(json['resultDescriptor']),
         'type': json['type'],
+        'resultDescriptor': (0, RasterResultDescriptor_1.RasterResultDescriptorFromJSON)(json['resultDescriptor']),
     };
 }
 function GdalMultiBandToJSON(json) {
@@ -55,7 +55,7 @@ function GdalMultiBandToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'resultDescriptor': (0, RasterResultDescriptor_1.RasterResultDescriptorToJSON)(value['resultDescriptor']),
         'type': value['type'],
+        'resultDescriptor': (0, RasterResultDescriptor_1.RasterResultDescriptorToJSON)(value['resultDescriptor']),
     };
 }

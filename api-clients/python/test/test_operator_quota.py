@@ -35,15 +35,15 @@ class TestOperatorQuota(unittest.TestCase):
         model = OperatorQuota()
         if include_optional:
             return OperatorQuota(
-                count = 0,
                 operator_name = '',
-                operator_path = ''
+                operator_path = '',
+                count = 0
             )
         else:
             return OperatorQuota(
-                count = 0,
                 operator_name = '',
                 operator_path = '',
+                count = 0,
         )
         """
 

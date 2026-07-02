@@ -23,13 +23,13 @@ export interface UserInfo {
      * @type {string}
      * @memberof UserInfo
      */
-    email?: string | null;
+    id: string;
     /**
      * 
      * @type {string}
      * @memberof UserInfo
      */
-    id: string;
+    email?: string | null;
     /**
      * 
      * @type {string}
@@ -56,8 +56,8 @@ export function UserInfoFromJSONTyped(json: any, ignoreDiscriminator: boolean): 
     }
     return {
         
-        'email': json['email'] == null ? undefined : json['email'],
         'id': json['id'],
+        'email': json['email'] == null ? undefined : json['email'],
         'realName': json['realName'] == null ? undefined : json['realName'],
     };
 }
@@ -73,8 +73,8 @@ export function UserInfoToJSONTyped(value?: UserInfo | null, ignoreDiscriminator
 
     return {
         
-        'email': value['email'],
         'id': value['id'],
+        'email': value['email'],
         'realName': value['realName'],
     };
 }

@@ -13,18 +13,18 @@ use serde::{Deserialize, Serialize};
 /// LegacyTypedOperator : An enum to differentiate between `Operator` variants
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct LegacyTypedOperator {
-    #[serde(rename = "operator")]
-    pub operator: Box<models::LegacyTypedOperatorOperator>,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "operator")]
+    pub operator: Box<models::LegacyTypedOperatorOperator>,
 }
 
 impl LegacyTypedOperator {
     /// An enum to differentiate between `Operator` variants
-    pub fn new(operator: models::LegacyTypedOperatorOperator, r#type: Type) -> LegacyTypedOperator {
+    pub fn new(r#type: Type, operator: models::LegacyTypedOperatorOperator) -> LegacyTypedOperator {
         LegacyTypedOperator {
-            operator: Box::new(operator),
             r#type,
+            operator: Box::new(operator),
         }
     }
 }

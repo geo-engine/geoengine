@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`color` | [ColorParam](ColorParam.md)
 `width` | [NumberParam](NumberParam.md)
+`color` | [ColorParam](ColorParam.md)
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { StrokeParam } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "color": null,
   "width": null,
+  "color": null,
 } satisfies StrokeParam
 
 console.log(example)

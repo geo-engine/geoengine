@@ -35,8 +35,8 @@ class TestStacProviderS3Config(unittest.TestCase):
         model = StacProviderS3Config()
         if include_optional:
             return StacProviderS3Config(
-                access_key = '',
                 endpoint = '',
+                access_key = '',
                 secret_key = ''
             )
         else:

@@ -20,16 +20,16 @@ import { mapValues } from '../runtime';
 export interface InternalDataId {
     /**
      * 
-     * @type {string}
-     * @memberof InternalDataId
-     */
-    datasetId: string;
-    /**
-     * 
      * @type {InternalDataIdTypeEnum}
      * @memberof InternalDataId
      */
     type: InternalDataIdTypeEnum;
+    /**
+     * 
+     * @type {string}
+     * @memberof InternalDataId
+     */
+    datasetId: string;
 }
 
 
@@ -46,8 +46,8 @@ export type InternalDataIdTypeEnum = typeof InternalDataIdTypeEnum[keyof typeof 
  * Check if a given object implements the InternalDataId interface.
  */
 export function instanceOfInternalDataId(value: object): value is InternalDataId {
-    if (!('datasetId' in value) || value['datasetId'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('datasetId' in value) || value['datasetId'] === undefined) return false;
     return true;
 }
 
@@ -61,8 +61,8 @@ export function InternalDataIdFromJSONTyped(json: any, ignoreDiscriminator: bool
     }
     return {
         
-        'datasetId': json['datasetId'],
         'type': json['type'],
+        'datasetId': json['datasetId'],
     };
 }
 
@@ -77,8 +77,8 @@ export function InternalDataIdToJSONTyped(value?: InternalDataId | null, ignoreD
 
     return {
         
-        'datasetId': value['datasetId'],
         'type': value['type'],
+        'datasetId': value['datasetId'],
     };
 }
 

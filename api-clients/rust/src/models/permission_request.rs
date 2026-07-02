@@ -13,21 +13,21 @@ use serde::{Deserialize, Serialize};
 /// PermissionRequest : Request for adding a new permission to the given role on the given resource
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PermissionRequest {
-    #[serde(rename = "permission")]
-    pub permission: models::Permission,
     #[serde(rename = "resource")]
     pub resource: Box<models::Resource>,
     #[serde(rename = "roleId")]
     pub role_id: uuid::Uuid,
+    #[serde(rename = "permission")]
+    pub permission: models::Permission,
 }
 
 impl PermissionRequest {
     /// Request for adding a new permission to the given role on the given resource
-    pub fn new(permission: models::Permission, resource: models::Resource, role_id: uuid::Uuid) -> PermissionRequest {
+    pub fn new(resource: models::Resource, role_id: uuid::Uuid, permission: models::Permission) -> PermissionRequest {
         PermissionRequest {
-            permission,
             resource: Box::new(resource),
             role_id,
+            permission,
         }
     }
 }

@@ -13,21 +13,21 @@ use serde::{Deserialize, Serialize};
 /// Interpolation : The `Interpolation` operator increases raster resolution by interpolating values of an input raster.  If queried with a resolution that is coarser than the input resolution, interpolation is not applicable and an error is returned.  ## Inputs  The `Interpolation` operator expects exactly one _raster_ input.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Interpolation {
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "params")]
     pub params: Box<models::InterpolationParameters>,
     #[serde(rename = "sources")]
     pub sources: Box<models::SingleRasterSource>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
 }
 
 impl Interpolation {
     /// The `Interpolation` operator increases raster resolution by interpolating values of an input raster.  If queried with a resolution that is coarser than the input resolution, interpolation is not applicable and an error is returned.  ## Inputs  The `Interpolation` operator expects exactly one _raster_ input.
-    pub fn new(params: models::InterpolationParameters, sources: models::SingleRasterSource, r#type: Type) -> Interpolation {
+    pub fn new(r#type: Type, params: models::InterpolationParameters, sources: models::SingleRasterSource) -> Interpolation {
         Interpolation {
+            r#type,
             params: Box::new(params),
             sources: Box::new(sources),
-            r#type,
         }
     }
 }

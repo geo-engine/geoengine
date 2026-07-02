@@ -28,10 +28,10 @@ class STRectangle(BaseModel):
     """
     STRectangle
     """ # noqa: E501
-    bounding_box: BoundingBox2D = Field(alias="boundingBox")
     spatial_reference: StrictStr = Field(alias="spatialReference")
+    bounding_box: BoundingBox2D = Field(alias="boundingBox")
     time_interval: TimeInterval = Field(alias="timeInterval")
-    __properties: ClassVar[List[str]] = ["boundingBox", "spatialReference", "timeInterval"]
+    __properties: ClassVar[List[str]] = ["spatialReference", "boundingBox", "timeInterval"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -90,8 +90,8 @@ class STRectangle(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "boundingBox": BoundingBox2D.from_dict(obj["boundingBox"]) if obj.get("boundingBox") is not None else None,
             "spatialReference": obj.get("spatialReference"),
+            "boundingBox": BoundingBox2D.from_dict(obj["boundingBox"]) if obj.get("boundingBox") is not None else None,
             "timeInterval": TimeInterval.from_dict(obj["timeInterval"]) if obj.get("timeInterval") is not None else None
         })
         return _obj

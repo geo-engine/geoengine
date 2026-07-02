@@ -6,10 +6,10 @@
 
 Name | Type
 ------------ | -------------
-`computationId` | string
-`count` | number
 `timestamp` | Date
+`computationId` | string
 `workflowId` | string
+`count` | number
 
 ## Example
 
@@ -18,10 +18,10 @@ import type { ComputationQuota } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "computationId": null,
-  "count": null,
   "timestamp": null,
+  "computationId": null,
   "workflowId": null,
+  "count": null,
 } satisfies ComputationQuota
 
 console.log(example)

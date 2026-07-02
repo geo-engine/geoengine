@@ -4,9 +4,9 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**cache_ttl** | Option<**i32**> |  | [optional]
-**params** | Option<[**models::GdalDatasetParameters**](GdalDatasetParameters.md)> |  | [optional]
 **time** | [**models::TimeInterval**](TimeInterval.md) |  | 
+**params** | Option<[**models::GdalDatasetParameters**](GdalDatasetParameters.md)> |  | [optional]
+**cache_ttl** | Option<**i32**> |  | [optional]
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

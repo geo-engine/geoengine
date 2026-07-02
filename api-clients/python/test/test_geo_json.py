@@ -35,17 +35,17 @@ class TestGeoJson(unittest.TestCase):
         model = GeoJson()
         if include_optional:
             return GeoJson(
+                type = 'FeatureCollection',
                 features = [
                     null
-                    ],
-                type = 'FeatureCollection'
+                    ]
             )
         else:
             return GeoJson(
+                type = 'FeatureCollection',
                 features = [
                     null
                     ],
-                type = 'FeatureCollection',
         )
         """
 

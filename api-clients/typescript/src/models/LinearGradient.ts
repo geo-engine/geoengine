@@ -28,6 +28,12 @@ import {
 export interface LinearGradient {
     /**
      * 
+     * @type {LinearGradientTypeEnum}
+     * @memberof LinearGradient
+     */
+    type: LinearGradientTypeEnum;
+    /**
+     * 
      * @type {Array<Breakpoint>}
      * @memberof LinearGradient
      */
@@ -44,12 +50,6 @@ export interface LinearGradient {
      * @memberof LinearGradient
      */
     overColor: Array<number>;
-    /**
-     * 
-     * @type {LinearGradientTypeEnum}
-     * @memberof LinearGradient
-     */
-    type: LinearGradientTypeEnum;
     /**
      * 
      * @type {Array<number>}
@@ -72,10 +72,10 @@ export type LinearGradientTypeEnum = typeof LinearGradientTypeEnum[keyof typeof 
  * Check if a given object implements the LinearGradient interface.
  */
 export function instanceOfLinearGradient(value: object): value is LinearGradient {
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('breakpoints' in value) || value['breakpoints'] === undefined) return false;
     if (!('noDataColor' in value) || value['noDataColor'] === undefined) return false;
     if (!('overColor' in value) || value['overColor'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('underColor' in value) || value['underColor'] === undefined) return false;
     return true;
 }
@@ -90,10 +90,10 @@ export function LinearGradientFromJSONTyped(json: any, ignoreDiscriminator: bool
     }
     return {
         
+        'type': json['type'],
         'breakpoints': ((json['breakpoints'] as Array<any>).map(BreakpointFromJSON)),
         'noDataColor': json['noDataColor'],
         'overColor': json['overColor'],
-        'type': json['type'],
         'underColor': json['underColor'],
     };
 }
@@ -109,10 +109,10 @@ export function LinearGradientToJSONTyped(value?: LinearGradient | null, ignoreD
 
     return {
         
+        'type': value['type'],
         'breakpoints': ((value['breakpoints'] as Array<any>).map(BreakpointToJSON)),
         'noDataColor': value['noDataColor'],
         'overColor': value['overColor'],
-        'type': value['type'],
         'underColor': value['underColor'],
     };
 }

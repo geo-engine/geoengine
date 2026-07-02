@@ -35,15 +35,15 @@ class TestResolution(unittest.TestCase):
         model = Resolution()
         if include_optional:
             return Resolution(
-                type = 'resolution',
                 x = 1.337,
-                y = 1.337
+                y = 1.337,
+                type = 'resolution'
             )
         else:
             return Resolution(
-                type = 'resolution',
                 x = 1.337,
                 y = 1.337,
+                type = 'resolution',
         )
         """
 

@@ -13,20 +13,20 @@ use serde::{Deserialize, Serialize};
 /// ReprojectionParameters : Parameters for the `Reprojection` operator.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ReprojectionParameters {
-    /// Controls how raster output bounds are derived.  The default `projectionBounds` usually keeps a projection-aligned target grid, while `dataBounds` derives it directly from source data bounds.
-    #[serde(rename = "deriveOutSpec", skip_serializing_if = "Option::is_none")]
-    pub derive_out_spec: Option<models::DeriveOutRasterSpecsSource>,
     /// Target spatial reference system.
     #[serde(rename = "targetSpatialReference")]
     pub target_spatial_reference: String,
+    /// Controls how raster output bounds are derived.  The default `projectionBounds` usually keeps a projection-aligned target grid, while `dataBounds` derives it directly from source data bounds.
+    #[serde(rename = "deriveOutSpec", skip_serializing_if = "Option::is_none")]
+    pub derive_out_spec: Option<models::DeriveOutRasterSpecsSource>,
 }
 
 impl ReprojectionParameters {
     /// Parameters for the `Reprojection` operator.
     pub fn new(target_spatial_reference: String) -> ReprojectionParameters {
         ReprojectionParameters {
-            derive_out_spec: None,
             target_spatial_reference,
+            derive_out_spec: None,
         }
     }
 }

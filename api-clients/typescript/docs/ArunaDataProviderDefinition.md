@@ -6,16 +6,16 @@
 
 Name | Type
 ------------ | -------------
-`apiToken` | string
-`apiUrl` | string
-`cacheTtl` | number
-`description` | string
-`filterLabel` | string
+`type` | string
 `id` | string
 `name` | string
+`description` | string
 `priority` | number
+`apiUrl` | string
 `projectId` | string
-`type` | string
+`apiToken` | string
+`filterLabel` | string
+`cacheTtl` | number
 
 ## Example
 
@@ -24,16 +24,16 @@ import type { ArunaDataProviderDefinition } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "apiToken": null,
-  "apiUrl": null,
-  "cacheTtl": null,
-  "description": null,
-  "filterLabel": null,
+  "type": null,
   "id": null,
   "name": null,
+  "description": null,
   "priority": null,
+  "apiUrl": null,
   "projectId": null,
-  "type": null,
+  "apiToken": null,
+  "filterLabel": null,
+  "cacheTtl": null,
 } satisfies ArunaDataProviderDefinition
 
 console.log(example)

@@ -28,13 +28,13 @@ class DatasetLayerListingProviderDefinition(BaseModel):
     """
     DatasetLayerListingProviderDefinition
     """ # noqa: E501
-    collections: List[DatasetLayerListingCollection]
-    description: StrictStr
+    type: StrictStr
     id: UUID
     name: StrictStr
+    description: StrictStr
     priority: Optional[StrictInt] = None
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["collections", "description", "id", "name", "priority", "type"]
+    collections: List[DatasetLayerListingCollection]
+    __properties: ClassVar[List[str]] = ["type", "id", "name", "description", "priority", "collections"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -106,12 +106,12 @@ class DatasetLayerListingProviderDefinition(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "collections": [DatasetLayerListingCollection.from_dict(_item) for _item in obj["collections"]] if obj.get("collections") is not None else None,
-            "description": obj.get("description"),
+            "type": obj.get("type"),
             "id": obj.get("id"),
             "name": obj.get("name"),
+            "description": obj.get("description"),
             "priority": obj.get("priority"),
-            "type": obj.get("type")
+            "collections": [DatasetLayerListingCollection.from_dict(_item) for _item in obj["collections"]] if obj.get("collections") is not None else None
         })
         return _obj
 

@@ -28,10 +28,10 @@ class SingleBandRasterColorizer(BaseModel):
     """
     SingleBandRasterColorizer
     """ # noqa: E501
+    type: StrictStr
     band: Annotated[int, Field(strict=True, ge=0)]
     band_colorizer: Colorizer = Field(alias="bandColorizer")
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["band", "bandColorizer", "type"]
+    __properties: ClassVar[List[str]] = ["type", "band", "bandColorizer"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -94,9 +94,9 @@ class SingleBandRasterColorizer(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "type": obj.get("type"),
             "band": obj.get("band"),
-            "bandColorizer": Colorizer.from_dict(obj["bandColorizer"]) if obj.get("bandColorizer") is not None else None,
-            "type": obj.get("type")
+            "bandColorizer": Colorizer.from_dict(obj["bandColorizer"]) if obj.get("bandColorizer") is not None else None
         })
         return _obj
 

@@ -27,9 +27,9 @@ class HistogramBucketsSquareRootChoiceRule(BaseModel):
     """
     HistogramBucketsSquareRootChoiceRule
     """ # noqa: E501
-    max_number_of_buckets: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="maxNumberOfBuckets")
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["maxNumberOfBuckets", "type"]
+    max_number_of_buckets: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="maxNumberOfBuckets")
+    __properties: ClassVar[List[str]] = ["type", "maxNumberOfBuckets"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -89,8 +89,8 @@ class HistogramBucketsSquareRootChoiceRule(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "maxNumberOfBuckets": obj.get("maxNumberOfBuckets"),
-            "type": obj.get("type")
+            "type": obj.get("type"),
+            "maxNumberOfBuckets": obj.get("maxNumberOfBuckets")
         })
         return _obj
 

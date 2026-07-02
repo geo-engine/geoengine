@@ -21,9 +21,9 @@ exports.PlotToJSONTyped = PlotToJSONTyped;
  * Check if a given object implements the Plot interface.
  */
 function instanceOfPlot(value) {
-    if (!('name' in value) || value['name'] === undefined)
-        return false;
     if (!('workflow' in value) || value['workflow'] === undefined)
+        return false;
+    if (!('name' in value) || value['name'] === undefined)
         return false;
     return true;
 }
@@ -35,8 +35,8 @@ function PlotFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'name': json['name'],
         'workflow': json['workflow'],
+        'name': json['name'],
     };
 }
 function PlotToJSON(json) {
@@ -47,7 +47,7 @@ function PlotToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'name': value['name'],
         'workflow': value['workflow'],
+        'name': value['name'],
     };
 }

@@ -28,15 +28,15 @@ class WildliveDataConnectorDefinition(BaseModel):
     """
     WildliveDataConnectorDefinition
     """ # noqa: E501
-    description: StrictStr
-    expiry_date: Optional[datetime] = Field(default=None, alias="expiryDate")
+    type: StrictStr
     id: UUID
     name: StrictStr
-    priority: Optional[StrictInt] = None
-    refresh_token: Optional[StrictStr] = Field(default=None, description="A wrapper type that serializes to \"*****\" and can be deserialized from any string. If the inner value is \"*****\", it is considered unknown and `as_option` returns `None`. This is useful for secrets that should not be exposed in API responses, but can be set in API requests.", alias="refreshToken")
-    type: StrictStr
+    description: StrictStr
     user: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["description", "expiryDate", "id", "name", "priority", "refreshToken", "type", "user"]
+    refresh_token: Optional[StrictStr] = Field(default=None, description="A wrapper type that serializes to \"*****\" and can be deserialized from any string. If the inner value is \"*****\", it is considered unknown and `as_option` returns `None`. This is useful for secrets that should not be exposed in API responses, but can be set in API requests.", alias="refreshToken")
+    expiry_date: Optional[datetime] = Field(default=None, alias="expiryDate")
+    priority: Optional[StrictInt] = None
+    __properties: ClassVar[List[str]] = ["type", "id", "name", "description", "user", "refreshToken", "expiryDate", "priority"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -84,6 +84,16 @@ class WildliveDataConnectorDefinition(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if user (nullable) is None
+        # and model_fields_set contains the field
+        if self.user is None and "user" in self.model_fields_set:
+            _dict['user'] = None
+
+        # set to None if refresh_token (nullable) is None
+        # and model_fields_set contains the field
+        if self.refresh_token is None and "refresh_token" in self.model_fields_set:
+            _dict['refreshToken'] = None
+
         # set to None if expiry_date (nullable) is None
         # and model_fields_set contains the field
         if self.expiry_date is None and "expiry_date" in self.model_fields_set:
@@ -93,16 +103,6 @@ class WildliveDataConnectorDefinition(BaseModel):
         # and model_fields_set contains the field
         if self.priority is None and "priority" in self.model_fields_set:
             _dict['priority'] = None
-
-        # set to None if refresh_token (nullable) is None
-        # and model_fields_set contains the field
-        if self.refresh_token is None and "refresh_token" in self.model_fields_set:
-            _dict['refreshToken'] = None
-
-        # set to None if user (nullable) is None
-        # and model_fields_set contains the field
-        if self.user is None and "user" in self.model_fields_set:
-            _dict['user'] = None
 
         return _dict
 
@@ -116,14 +116,14 @@ class WildliveDataConnectorDefinition(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "description": obj.get("description"),
-            "expiryDate": obj.get("expiryDate"),
+            "type": obj.get("type"),
             "id": obj.get("id"),
             "name": obj.get("name"),
-            "priority": obj.get("priority"),
+            "description": obj.get("description"),
+            "user": obj.get("user"),
             "refreshToken": obj.get("refreshToken"),
-            "type": obj.get("type"),
-            "user": obj.get("user")
+            "expiryDate": obj.get("expiryDate"),
+            "priority": obj.get("priority")
         })
         return _obj
 

@@ -28,16 +28,16 @@ import {
 export interface GdalMultiBand {
     /**
      * 
-     * @type {RasterResultDescriptor}
-     * @memberof GdalMultiBand
-     */
-    resultDescriptor: RasterResultDescriptor;
-    /**
-     * 
      * @type {GdalMultiBandTypeEnum}
      * @memberof GdalMultiBand
      */
     type: GdalMultiBandTypeEnum;
+    /**
+     * 
+     * @type {RasterResultDescriptor}
+     * @memberof GdalMultiBand
+     */
+    resultDescriptor: RasterResultDescriptor;
 }
 
 
@@ -54,8 +54,8 @@ export type GdalMultiBandTypeEnum = typeof GdalMultiBandTypeEnum[keyof typeof Gd
  * Check if a given object implements the GdalMultiBand interface.
  */
 export function instanceOfGdalMultiBand(value: object): value is GdalMultiBand {
-    if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined) return false;
     return true;
 }
 
@@ -69,8 +69,8 @@ export function GdalMultiBandFromJSONTyped(json: any, ignoreDiscriminator: boole
     }
     return {
         
-        'resultDescriptor': RasterResultDescriptorFromJSON(json['resultDescriptor']),
         'type': json['type'],
+        'resultDescriptor': RasterResultDescriptorFromJSON(json['resultDescriptor']),
     };
 }
 
@@ -85,8 +85,8 @@ export function GdalMultiBandToJSONTyped(value?: GdalMultiBand | null, ignoreDis
 
     return {
         
-        'resultDescriptor': RasterResultDescriptorToJSON(value['resultDescriptor']),
         'type': value['type'],
+        'resultDescriptor': RasterResultDescriptorToJSON(value['resultDescriptor']),
     };
 }
 

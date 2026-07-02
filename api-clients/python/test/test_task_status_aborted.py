@@ -35,13 +35,13 @@ class TestTaskStatusAborted(unittest.TestCase):
         model = TaskStatusAborted()
         if include_optional:
             return TaskStatusAborted(
-                clean_up = None,
-                status = 'aborted'
+                status = 'aborted',
+                clean_up = None
             )
         else:
             return TaskStatusAborted(
-                clean_up = None,
                 status = 'aborted',
+                clean_up = None,
         )
         """
 

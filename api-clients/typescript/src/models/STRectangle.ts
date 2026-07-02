@@ -35,16 +35,16 @@ import {
 export interface STRectangle {
     /**
      * 
-     * @type {BoundingBox2D}
-     * @memberof STRectangle
-     */
-    boundingBox: BoundingBox2D;
-    /**
-     * 
      * @type {string}
      * @memberof STRectangle
      */
     spatialReference: string;
+    /**
+     * 
+     * @type {BoundingBox2D}
+     * @memberof STRectangle
+     */
+    boundingBox: BoundingBox2D;
     /**
      * 
      * @type {TimeInterval}
@@ -57,8 +57,8 @@ export interface STRectangle {
  * Check if a given object implements the STRectangle interface.
  */
 export function instanceOfSTRectangle(value: object): value is STRectangle {
-    if (!('boundingBox' in value) || value['boundingBox'] === undefined) return false;
     if (!('spatialReference' in value) || value['spatialReference'] === undefined) return false;
+    if (!('boundingBox' in value) || value['boundingBox'] === undefined) return false;
     if (!('timeInterval' in value) || value['timeInterval'] === undefined) return false;
     return true;
 }
@@ -73,8 +73,8 @@ export function STRectangleFromJSONTyped(json: any, ignoreDiscriminator: boolean
     }
     return {
         
-        'boundingBox': BoundingBox2DFromJSON(json['boundingBox']),
         'spatialReference': json['spatialReference'],
+        'boundingBox': BoundingBox2DFromJSON(json['boundingBox']),
         'timeInterval': TimeIntervalFromJSON(json['timeInterval']),
     };
 }
@@ -90,8 +90,8 @@ export function STRectangleToJSONTyped(value?: STRectangle | null, ignoreDiscrim
 
     return {
         
-        'boundingBox': BoundingBox2DToJSON(value['boundingBox']),
         'spatialReference': value['spatialReference'],
+        'boundingBox': BoundingBox2DToJSON(value['boundingBox']),
         'timeInterval': TimeIntervalToJSON(value['timeInterval']),
     };
 }

@@ -12,10 +12,12 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StacProviderS3Config {
-    #[serde(rename = "accessKey", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub access_key: Option<Option<String>>,
     #[serde(rename = "endpoint")]
     pub endpoint: String,
+    /// A wrapper type that serializes to \"*****\" and can be deserialized from any string. If the inner value is \"*****\", it is considered unknown and `as_option` returns `None`. This is useful for secrets that should not be exposed in API responses, but can be set in API requests.
+    #[serde(rename = "accessKey", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub access_key: Option<Option<String>>,
+    /// A wrapper type that serializes to \"*****\" and can be deserialized from any string. If the inner value is \"*****\", it is considered unknown and `as_option` returns `None`. This is useful for secrets that should not be exposed in API responses, but can be set in API requests.
     #[serde(rename = "secretKey", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub secret_key: Option<Option<String>>,
 }
@@ -23,8 +25,8 @@ pub struct StacProviderS3Config {
 impl StacProviderS3Config {
     pub fn new(endpoint: String) -> StacProviderS3Config {
         StacProviderS3Config {
-            access_key: None,
             endpoint,
+            access_key: None,
             secret_key: None,
         }
     }

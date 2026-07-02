@@ -28,11 +28,11 @@ exports.TaskStatusFailedStatusEnum = {
  * Check if a given object implements the TaskStatusFailed interface.
  */
 function instanceOfTaskStatusFailed(value) {
-    if (!('cleanUp' in value) || value['cleanUp'] === undefined)
+    if (!('status' in value) || value['status'] === undefined)
         return false;
     if (!('error' in value) || value['error'] === undefined)
         return false;
-    if (!('status' in value) || value['status'] === undefined)
+    if (!('cleanUp' in value) || value['cleanUp'] === undefined)
         return false;
     return true;
 }
@@ -44,9 +44,9 @@ function TaskStatusFailedFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'cleanUp': json['cleanUp'],
-        'error': json['error'],
         'status': json['status'],
+        'error': json['error'],
+        'cleanUp': json['cleanUp'],
     };
 }
 function TaskStatusFailedToJSON(json) {
@@ -57,8 +57,8 @@ function TaskStatusFailedToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'cleanUp': value['cleanUp'],
-        'error': value['error'],
         'status': value['status'],
+        'error': value['error'],
+        'cleanUp': value['cleanUp'],
     };
 }

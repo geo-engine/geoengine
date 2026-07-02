@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`customFormat` | string
 `format` | string
+`customFormat` | string
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { OgrSourceTimeFormatCustom } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "customFormat": null,
   "format": null,
+  "customFormat": null,
 } satisfies OgrSourceTimeFormatCustom
 
 console.log(example)

@@ -20,9 +20,9 @@ export const OgrSourceTimeFormatCustomFormatEnum = {
  * Check if a given object implements the OgrSourceTimeFormatCustom interface.
  */
 export function instanceOfOgrSourceTimeFormatCustom(value) {
-    if (!('customFormat' in value) || value['customFormat'] === undefined)
-        return false;
     if (!('format' in value) || value['format'] === undefined)
+        return false;
+    if (!('customFormat' in value) || value['customFormat'] === undefined)
         return false;
     return true;
 }
@@ -34,8 +34,8 @@ export function OgrSourceTimeFormatCustomFromJSONTyped(json, ignoreDiscriminator
         return json;
     }
     return {
-        'customFormat': json['customFormat'],
         'format': json['format'],
+        'customFormat': json['customFormat'],
     };
 }
 export function OgrSourceTimeFormatCustomToJSON(json) {
@@ -46,7 +46,7 @@ export function OgrSourceTimeFormatCustomToJSONTyped(value, ignoreDiscriminator 
         return value;
     }
     return {
-        'customFormat': value['customFormat'],
         'format': value['format'],
+        'customFormat': value['customFormat'],
     };
 }

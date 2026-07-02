@@ -19,6 +19,12 @@ import { mapValues } from '../runtime';
  */
 export interface PaletteColorizer {
     /**
+     * 
+     * @type {PaletteColorizerTypeEnum}
+     * @memberof PaletteColorizer
+     */
+    type: PaletteColorizerTypeEnum;
+    /**
      * A map from value to color
      * 
      * It is assumed that is has at least one and at most 256 entries.
@@ -31,19 +37,13 @@ export interface PaletteColorizer {
      * @type {Array<number>}
      * @memberof PaletteColorizer
      */
-    defaultColor: Array<number>;
+    noDataColor: Array<number>;
     /**
      * 
      * @type {Array<number>}
      * @memberof PaletteColorizer
      */
-    noDataColor: Array<number>;
-    /**
-     * 
-     * @type {PaletteColorizerTypeEnum}
-     * @memberof PaletteColorizer
-     */
-    type: PaletteColorizerTypeEnum;
+    defaultColor: Array<number>;
 }
 
 
@@ -60,10 +60,10 @@ export type PaletteColorizerTypeEnum = typeof PaletteColorizerTypeEnum[keyof typ
  * Check if a given object implements the PaletteColorizer interface.
  */
 export function instanceOfPaletteColorizer(value: object): value is PaletteColorizer {
-    if (!('colors' in value) || value['colors'] === undefined) return false;
-    if (!('defaultColor' in value) || value['defaultColor'] === undefined) return false;
-    if (!('noDataColor' in value) || value['noDataColor'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('colors' in value) || value['colors'] === undefined) return false;
+    if (!('noDataColor' in value) || value['noDataColor'] === undefined) return false;
+    if (!('defaultColor' in value) || value['defaultColor'] === undefined) return false;
     return true;
 }
 
@@ -77,10 +77,10 @@ export function PaletteColorizerFromJSONTyped(json: any, ignoreDiscriminator: bo
     }
     return {
         
-        'colors': json['colors'],
-        'defaultColor': json['defaultColor'],
-        'noDataColor': json['noDataColor'],
         'type': json['type'],
+        'colors': json['colors'],
+        'noDataColor': json['noDataColor'],
+        'defaultColor': json['defaultColor'],
     };
 }
 
@@ -95,10 +95,10 @@ export function PaletteColorizerToJSONTyped(value?: PaletteColorizer | null, ign
 
     return {
         
-        'colors': value['colors'],
-        'defaultColor': value['defaultColor'],
-        'noDataColor': value['noDataColor'],
         'type': value['type'],
+        'colors': value['colors'],
+        'noDataColor': value['noDataColor'],
+        'defaultColor': value['defaultColor'],
     };
 }
 

@@ -30,11 +30,11 @@ exports.RasterTypeConversionTypeEnum = {
  * Check if a given object implements the RasterTypeConversion interface.
  */
 function instanceOfRasterTypeConversion(value) {
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;
     if (!('sources' in value) || value['sources'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -46,9 +46,9 @@ function RasterTypeConversionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'type': json['type'],
         'params': (0, RasterTypeConversionParameters_1.RasterTypeConversionParametersFromJSON)(json['params']),
         'sources': (0, SingleRasterSource_1.SingleRasterSourceFromJSON)(json['sources']),
-        'type': json['type'],
     };
 }
 function RasterTypeConversionToJSON(json) {
@@ -59,8 +59,8 @@ function RasterTypeConversionToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
+        'type': value['type'],
         'params': (0, RasterTypeConversionParameters_1.RasterTypeConversionParametersToJSON)(value['params']),
         'sources': (0, SingleRasterSource_1.SingleRasterSourceToJSON)(value['sources']),
-        'type': value['type'],
     };
 }

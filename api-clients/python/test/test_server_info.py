@@ -37,15 +37,15 @@ class TestServerInfo(unittest.TestCase):
             return ServerInfo(
                 build_date = '',
                 commit_hash = '',
-                features = '',
-                version = ''
+                version = '',
+                features = ''
             )
         else:
             return ServerInfo(
                 build_date = '',
                 commit_hash = '',
-                features = '',
                 version = '',
+                features = '',
         )
         """
 

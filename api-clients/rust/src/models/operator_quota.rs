@@ -12,20 +12,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct OperatorQuota {
-    #[serde(rename = "count")]
-    pub count: i64,
     #[serde(rename = "operatorName")]
     pub operator_name: String,
     #[serde(rename = "operatorPath")]
     pub operator_path: String,
+    #[serde(rename = "count")]
+    pub count: i64,
 }
 
 impl OperatorQuota {
-    pub fn new(count: i64, operator_name: String, operator_path: String) -> OperatorQuota {
+    pub fn new(operator_name: String, operator_path: String, count: i64) -> OperatorQuota {
         OperatorQuota {
-            count,
             operator_name,
             operator_path,
+            count,
         }
     }
 }

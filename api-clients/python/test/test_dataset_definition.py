@@ -35,41 +35,41 @@ class TestDatasetDefinition(unittest.TestCase):
         model = DatasetDefinition()
         if include_optional:
             return DatasetDefinition(
-                meta_data = None,
                 properties = geoengine_api_client.models.add_dataset.AddDataset(
-                    description = '', 
-                    display_name = '', 
                     name = null, 
+                    display_name = '', 
+                    description = '', 
+                    source_operator = '', 
+                    symbology = null, 
                     provenance = [
                         geoengine_api_client.models.provenance.Provenance(
                             citation = '', 
                             license = '', 
                             uri = '', )
                         ], 
-                    source_operator = '', 
-                    symbology = null, 
-                    tags = [
-                        ''
-                        ], )
-            )
-        else:
-            return DatasetDefinition(
-                meta_data = None,
-                properties = geoengine_api_client.models.add_dataset.AddDataset(
-                    description = '', 
-                    display_name = '', 
-                    name = null, 
-                    provenance = [
-                        geoengine_api_client.models.provenance.Provenance(
-                            citation = '', 
-                            license = '', 
-                            uri = '', )
-                        ], 
-                    source_operator = '', 
-                    symbology = null, 
                     tags = [
                         ''
                         ], ),
+                meta_data = None
+            )
+        else:
+            return DatasetDefinition(
+                properties = geoengine_api_client.models.add_dataset.AddDataset(
+                    name = null, 
+                    display_name = '', 
+                    description = '', 
+                    source_operator = '', 
+                    symbology = null, 
+                    provenance = [
+                        geoengine_api_client.models.provenance.Provenance(
+                            citation = '', 
+                            license = '', 
+                            uri = '', )
+                        ], 
+                    tags = [
+                        ''
+                        ], ),
+                meta_data = None,
         )
         """
 

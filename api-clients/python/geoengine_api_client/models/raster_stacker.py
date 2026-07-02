@@ -27,10 +27,10 @@ class RasterStacker(BaseModel):
     """
     The `RasterStacker` stacks all of its inputs into a single raster time series. It queries all inputs and combines them by band, space, and then time.  The output raster has as many bands as the sum of all input bands. Tiles are automatically temporally aligned.  All inputs must have the same data type and spatial reference.  ## Inputs  The `RasterStacker` operator expects multiple raster inputs.
     """ # noqa: E501
+    type: StrictStr
     params: RasterStackerParameters
     sources: MultipleRasterSources
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["params", "sources", "type"]
+    __properties: ClassVar[List[str]] = ["type", "params", "sources"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -96,9 +96,9 @@ class RasterStacker(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "type": obj.get("type"),
             "params": RasterStackerParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
-            "sources": MultipleRasterSources.from_dict(obj["sources"]) if obj.get("sources") is not None else None,
-            "type": obj.get("type")
+            "sources": MultipleRasterSources.from_dict(obj["sources"]) if obj.get("sources") is not None else None
         })
         return _obj
 

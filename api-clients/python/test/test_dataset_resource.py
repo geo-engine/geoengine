@@ -35,13 +35,13 @@ class TestDatasetResource(unittest.TestCase):
         model = DatasetResource()
         if include_optional:
             return DatasetResource(
-                id = '',
-                type = 'dataset'
+                type = 'dataset',
+                id = ''
             )
         else:
             return DatasetResource(
-                id = '',
                 type = 'dataset',
+                id = '',
         )
         """
 

@@ -20,15 +20,15 @@ export const PangaeaDataProviderDefinitionTypeEnum = {
  * Check if a given object implements the PangaeaDataProviderDefinition interface.
  */
 export function instanceOfPangaeaDataProviderDefinition(value) {
-    if (!('baseUrl' in value) || value['baseUrl'] === undefined)
-        return false;
-    if (!('cacheTtl' in value) || value['cacheTtl'] === undefined)
-        return false;
-    if (!('description' in value) || value['description'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('description' in value) || value['description'] === undefined)
+        return false;
+    if (!('baseUrl' in value) || value['baseUrl'] === undefined)
+        return false;
+    if (!('cacheTtl' in value) || value['cacheTtl'] === undefined)
         return false;
     return true;
 }
@@ -40,12 +40,12 @@ export function PangaeaDataProviderDefinitionFromJSONTyped(json, ignoreDiscrimin
         return json;
     }
     return {
+        'type': json['type'],
+        'name': json['name'],
+        'description': json['description'],
+        'priority': json['priority'] == null ? undefined : json['priority'],
         'baseUrl': json['baseUrl'],
         'cacheTtl': json['cacheTtl'],
-        'description': json['description'],
-        'name': json['name'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
-        'type': json['type'],
     };
 }
 export function PangaeaDataProviderDefinitionToJSON(json) {
@@ -56,11 +56,11 @@ export function PangaeaDataProviderDefinitionToJSONTyped(value, ignoreDiscrimina
         return value;
     }
     return {
+        'type': value['type'],
+        'name': value['name'],
+        'description': value['description'],
+        'priority': value['priority'],
         'baseUrl': value['baseUrl'],
         'cacheTtl': value['cacheTtl'],
-        'description': value['description'],
-        'name': value['name'],
-        'priority': value['priority'],
-        'type': value['type'],
     };
 }

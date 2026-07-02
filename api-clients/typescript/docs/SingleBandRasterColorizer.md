@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
+`type` | string
 `band` | number
 `bandColorizer` | [Colorizer](Colorizer.md)
-`type` | string
 
 ## Example
 
@@ -17,9 +17,9 @@ import type { SingleBandRasterColorizer } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "band": null,
   "bandColorizer": null,
-  "type": null,
 } satisfies SingleBandRasterColorizer
 
 console.log(example)

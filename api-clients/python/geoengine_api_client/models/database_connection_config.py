@@ -27,13 +27,13 @@ class DatabaseConnectionConfig(BaseModel):
     """
     DatabaseConnectionConfig
     """ # noqa: E501
-    database: StrictStr
     host: StrictStr
-    password: StrictStr
     port: Annotated[int, Field(strict=True, ge=0)]
+    database: StrictStr
     var_schema: StrictStr = Field(alias="schema")
     user: StrictStr
-    __properties: ClassVar[List[str]] = ["database", "host", "password", "port", "schema", "user"]
+    password: StrictStr
+    __properties: ClassVar[List[str]] = ["host", "port", "database", "schema", "user", "password"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -86,12 +86,12 @@ class DatabaseConnectionConfig(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "database": obj.get("database"),
             "host": obj.get("host"),
-            "password": obj.get("password"),
             "port": obj.get("port"),
+            "database": obj.get("database"),
             "schema": obj.get("schema"),
-            "user": obj.get("user")
+            "user": obj.get("user"),
+            "password": obj.get("password")
         })
         return _obj
 

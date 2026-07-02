@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`measurement` | [Measurement](Measurement.md)
 `name` | string
+`measurement` | [Measurement](Measurement.md)
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { RasterBandDescriptor } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "measurement": null,
   "name": null,
+  "measurement": null,
 } satisfies RasterBandDescriptor
 
 console.log(example)

@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SpatialGridDescriptor {
-    #[serde(rename = "descriptor")]
-    pub descriptor: models::SpatialGridDescriptorState,
     #[serde(rename = "spatialGrid")]
     pub spatial_grid: Box<models::SpatialGridDefinition>,
+    #[serde(rename = "descriptor")]
+    pub descriptor: models::SpatialGridDescriptorState,
 }
 
 impl SpatialGridDescriptor {
-    pub fn new(descriptor: models::SpatialGridDescriptorState, spatial_grid: models::SpatialGridDefinition) -> SpatialGridDescriptor {
+    pub fn new(spatial_grid: models::SpatialGridDefinition, descriptor: models::SpatialGridDescriptorState) -> SpatialGridDescriptor {
         SpatialGridDescriptor {
-            descriptor,
             spatial_grid: Box::new(spatial_grid),
+            descriptor,
         }
     }
 }

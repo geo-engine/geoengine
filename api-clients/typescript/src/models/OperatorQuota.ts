@@ -20,12 +20,6 @@ import { mapValues } from '../runtime';
 export interface OperatorQuota {
     /**
      * 
-     * @type {number}
-     * @memberof OperatorQuota
-     */
-    count: number;
-    /**
-     * 
      * @type {string}
      * @memberof OperatorQuota
      */
@@ -36,15 +30,21 @@ export interface OperatorQuota {
      * @memberof OperatorQuota
      */
     operatorPath: string;
+    /**
+     * 
+     * @type {number}
+     * @memberof OperatorQuota
+     */
+    count: number;
 }
 
 /**
  * Check if a given object implements the OperatorQuota interface.
  */
 export function instanceOfOperatorQuota(value: object): value is OperatorQuota {
-    if (!('count' in value) || value['count'] === undefined) return false;
     if (!('operatorName' in value) || value['operatorName'] === undefined) return false;
     if (!('operatorPath' in value) || value['operatorPath'] === undefined) return false;
+    if (!('count' in value) || value['count'] === undefined) return false;
     return true;
 }
 
@@ -58,9 +58,9 @@ export function OperatorQuotaFromJSONTyped(json: any, ignoreDiscriminator: boole
     }
     return {
         
-        'count': json['count'],
         'operatorName': json['operatorName'],
         'operatorPath': json['operatorPath'],
+        'count': json['count'],
     };
 }
 
@@ -75,9 +75,9 @@ export function OperatorQuotaToJSONTyped(value?: OperatorQuota | null, ignoreDis
 
     return {
         
-        'count': value['count'],
         'operatorName': value['operatorName'],
         'operatorPath': value['operatorPath'],
+        'count': value['count'],
     };
 }
 

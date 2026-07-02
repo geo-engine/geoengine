@@ -27,9 +27,9 @@ class SpatialPartition2D(BaseModel):
     """
     A partition of space that include the upper left but excludes the lower right coordinate
     """ # noqa: E501
-    lower_right_coordinate: Coordinate2D = Field(alias="lowerRightCoordinate")
     upper_left_coordinate: Coordinate2D = Field(alias="upperLeftCoordinate")
-    __properties: ClassVar[List[str]] = ["lowerRightCoordinate", "upperLeftCoordinate"]
+    lower_right_coordinate: Coordinate2D = Field(alias="lowerRightCoordinate")
+    __properties: ClassVar[List[str]] = ["upperLeftCoordinate", "lowerRightCoordinate"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -70,12 +70,12 @@ class SpatialPartition2D(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of lower_right_coordinate
-        if self.lower_right_coordinate:
-            _dict['lowerRightCoordinate'] = self.lower_right_coordinate.to_dict()
         # override the default output from pydantic by calling `to_dict()` of upper_left_coordinate
         if self.upper_left_coordinate:
             _dict['upperLeftCoordinate'] = self.upper_left_coordinate.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of lower_right_coordinate
+        if self.lower_right_coordinate:
+            _dict['lowerRightCoordinate'] = self.lower_right_coordinate.to_dict()
         return _dict
 
     @classmethod
@@ -88,8 +88,8 @@ class SpatialPartition2D(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "lowerRightCoordinate": Coordinate2D.from_dict(obj["lowerRightCoordinate"]) if obj.get("lowerRightCoordinate") is not None else None,
-            "upperLeftCoordinate": Coordinate2D.from_dict(obj["upperLeftCoordinate"]) if obj.get("upperLeftCoordinate") is not None else None
+            "upperLeftCoordinate": Coordinate2D.from_dict(obj["upperLeftCoordinate"]) if obj.get("upperLeftCoordinate") is not None else None,
+            "lowerRightCoordinate": Coordinate2D.from_dict(obj["lowerRightCoordinate"]) if obj.get("lowerRightCoordinate") is not None else None
         })
         return _obj
 

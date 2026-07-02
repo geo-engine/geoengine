@@ -7,15 +7,17 @@ import {
     OnInit,
     SimpleChange,
     SimpleChanges,
+    effect,
     inject,
     input,
     output,
+    resource,
 } from '@angular/core';
 import {Subject, Subscription} from 'rxjs';
 
 import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol/layer';
 import {ImageTile as OlImageTile} from 'ol';
-import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource} from 'ol/source';
+import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
 import {get as olGetProj} from 'ol/proj';
 import {CoreConfig} from '../config.service';
 import {ProjectService} from '../project/project.service';
@@ -271,6 +273,7 @@ export class OlRasterLayerComponent
         const symbology = this.symbology();
         if (changes.symbology && symbology) {
             this._mapLayer.setOpacity(symbology.opacity);
+
             this.source.updateParams({
                 STYLES: this.stylesFromColorizer(symbology.rasterColorizer),
             });
@@ -388,6 +391,185 @@ export class OlRasterLayerComponent
                 opacity: symbology.opacity,
             });
         }
+    }
+
+    private addStateListenersToOlSource(): void {
+        // TILE LOADING STATE
+        let tilesPending = 0;
+
+        this.source.on('tileloadstart', () => {
+            tilesPending++;
+            this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.LOADING);
+        });
+        this.source.on('tileloadend', () => {
+            tilesPending--;
+            if (tilesPending <= 0) {
+                this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.OK);
+            }
+        });
+        this.source.on('tileloaderror', () => {
+            tilesPending--;
+            this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.ERROR);
+        });
+    }
+}
+
+/**
+ * This component renders a raster layer on the map by using the OGC API Map Tiles standard.
+ */
+@Component({
+    selector: 'geoengine-ol-ogc-api-map-tile-layer',
+    template: '',
+    providers: [{provide: MapLayerComponent, useExisting: OlOgcApiMapTileLayerComponent}],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
+    OlLayerTile<OGCMapTile | TileDebug>,
+    OGCMapTile | TileDebug | ImageTile,
+    RasterSymbology
+> {
+    protected readonly backend = inject(BackendService);
+    protected readonly config = inject(CoreConfig);
+    protected readonly notificationService = inject(NotificationService);
+
+    readonly dataConnectorId = input.required<UUID>();
+    readonly dataLayerId = input.required<string>();
+    readonly sessionToken = input.required<UUID>();
+    readonly spatialReference = input.required<SpatialReference>(); // TODO: do we need this?
+    readonly time = input.required<Time>();
+
+    // Show tile debug info instead of the actual layer. This is useful for debugging tile loading issues.
+    readonly debug = input(false);
+
+    readonly tileSource = resource({
+        params: () => ({
+            dataConnectorId: this.dataConnectorId(),
+            layerId: this.dataLayerId(),
+            sessionToken: this.sessionToken(),
+            spatialReference: this.spatialReference(),
+            time: this.time(), // no way to just update `context` field in OGCMapTile…
+        }),
+        loader: async () =>
+            new OGCMapTile({
+                url: await this.tmsBlobUrl(),
+                context: {
+                    datetime: this.time().asRequestString(),
+                },
+                wrapX: false, // wrapping does not work with our implementation
+                interpolate: false, // Stops blurry tiles when zooming in.
+                tileLoadFunction: (olTile, src): void => {
+                    (async (): Promise<void> => {
+                        try {
+                            // Successfully assign the object URL to the image element
+                            (olTile as unknown as {getImage: () => HTMLImageElement}).getImage().src = await this.urlToBlobUrl(
+                                src,
+                                'IMAGE',
+                            );
+                        } catch (error) {
+                            console.error('Error loading OGC tile:', error);
+
+                            // CRITICAL: You must explicitly catch errors and notify OpenLayers,
+                            // otherwise the map will wait indefinitely for this tile to resolve.
+                            olTile.setState(TileState.ERROR);
+                        }
+                    })();
+                },
+            }),
+    });
+
+    constructor() {
+        super(
+            new ImageTile({}), // use as placeholder until the actual source is loaded
+            (_source) => {
+                return new OlLayerTile();
+            },
+        );
+
+        effect(() => {
+            const source = this.tileSource.value();
+            if (!source) return;
+
+            this.source = source;
+            if (this.debug()) {
+                this.source = new TileDebug({source: this.source});
+            }
+
+            this.addStateListenersToOlSource();
+            this._mapLayer.setSource(this.source);
+        });
+
+        effect(() => /* TODO: define in parent class */ {
+            const isVisible = this.isVisible();
+            this._mapLayer.setVisible(isVisible);
+        });
+
+        effect(() => {
+            const symbology = this.symbology();
+            if (!symbology) return;
+
+            this._mapLayer.setOpacity(symbology.opacity);
+        });
+    }
+
+    async tmsBlobUrl(): Promise<string> {
+        const dataConnectorId = this.dataConnectorId();
+        const layerId = this.dataLayerId();
+        const tms = 'GeoEngineCustomTMS';
+
+        const tmsUrl = `${this.backend.ogcApiBaseUrl}/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
+
+        return await this.urlToBlobUrl(tmsUrl, 'JSON', async (metadata) => {
+            if (!('links' in metadata)) {
+                return;
+            }
+            for (const link of metadata.links as Array<{rel: string; href: string; type: string}>) {
+                if (link.rel === 'http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme') {
+                    link.href = await this.urlToBlobUrl(link.href, 'JSON');
+                }
+            }
+        });
+    }
+
+    async urlToBlobUrl(url: string, type: 'JSON' | 'IMAGE', interceptor?: (metadata: JSON) => Promise<void>): Promise<string> {
+        const sessionToken = this.sessionToken();
+
+        const response = await fetch(url, {
+            headers: {
+                Authorization: `Bearer ${sessionToken}`,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`Fetch failed with status: ${response.status}`);
+        }
+
+        let blob;
+        switch (type) {
+            case 'JSON': {
+                const metadata = await response.json();
+
+                if (interceptor) {
+                    await interceptor(metadata);
+                }
+
+                blob = new Blob([JSON.stringify(metadata)], {
+                    type: 'application/json',
+                });
+
+                break;
+            }
+            case 'IMAGE': {
+                blob = await response.blob();
+
+                break;
+            }
+        }
+
+        return URL.createObjectURL(blob);
+    }
+
+    getExtent(): [number, number, number, number] {
+        return olExtentToTuple(this._mapLayer.getExtent() ?? [0, 0, 0, 0]);
     }
 
     private addStateListenersToOlSource(): void {

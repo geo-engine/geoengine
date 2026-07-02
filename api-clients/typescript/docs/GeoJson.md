@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`features` | Array&lt;any&gt;
 `type` | [CollectionType](CollectionType.md)
+`features` | Array&lt;any&gt;
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { GeoJson } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "features": null,
   "type": null,
+  "features": null,
 } satisfies GeoJson
 
 console.log(example)

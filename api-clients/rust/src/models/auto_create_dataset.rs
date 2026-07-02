@@ -12,29 +12,29 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AutoCreateDataset {
-    #[serde(rename = "datasetDescription")]
-    pub dataset_description: String,
-    #[serde(rename = "datasetName")]
-    pub dataset_name: String,
-    #[serde(rename = "layerName", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub layer_name: Option<Option<String>>,
-    #[serde(rename = "mainFile")]
-    pub main_file: String,
-    #[serde(rename = "tags", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub tags: Option<Option<Vec<String>>>,
     #[serde(rename = "upload")]
     pub upload: uuid::Uuid,
+    #[serde(rename = "datasetName")]
+    pub dataset_name: String,
+    #[serde(rename = "datasetDescription")]
+    pub dataset_description: String,
+    #[serde(rename = "mainFile")]
+    pub main_file: String,
+    #[serde(rename = "layerName", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub layer_name: Option<Option<String>>,
+    #[serde(rename = "tags", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Option<Vec<String>>>,
 }
 
 impl AutoCreateDataset {
-    pub fn new(dataset_description: String, dataset_name: String, main_file: String, upload: uuid::Uuid) -> AutoCreateDataset {
+    pub fn new(upload: uuid::Uuid, dataset_name: String, dataset_description: String, main_file: String) -> AutoCreateDataset {
         AutoCreateDataset {
-            dataset_description,
-            dataset_name,
-            layer_name: None,
-            main_file,
-            tags: None,
             upload,
+            dataset_name,
+            dataset_description,
+            main_file,
+            layer_name: None,
+            tags: None,
         }
     }
 }

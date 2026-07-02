@@ -21,9 +21,9 @@ exports.DatasetLayerListingCollectionToJSONTyped = DatasetLayerListingCollection
  * Check if a given object implements the DatasetLayerListingCollection interface.
  */
 function instanceOfDatasetLayerListingCollection(value) {
-    if (!('description' in value) || value['description'] === undefined)
-        return false;
     if (!('name' in value) || value['name'] === undefined)
+        return false;
+    if (!('description' in value) || value['description'] === undefined)
         return false;
     if (!('tags' in value) || value['tags'] === undefined)
         return false;
@@ -37,8 +37,8 @@ function DatasetLayerListingCollectionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'description': json['description'],
         'name': json['name'],
+        'description': json['description'],
         'tags': json['tags'],
     };
 }
@@ -50,8 +50,8 @@ function DatasetLayerListingCollectionToJSONTyped(value, ignoreDiscriminator = f
         return value;
     }
     return {
-        'description': value['description'],
         'name': value['name'],
+        'description': value['description'],
         'tags': value['tags'],
     };
 }

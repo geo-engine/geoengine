@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`measurement` | string
 `type` | string
+`measurement` | string
 `unit` | string
 
 ## Example
@@ -17,8 +17,8 @@ import type { ContinuousMeasurement } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "measurement": null,
   "type": null,
+  "measurement": null,
   "unit": null,
 } satisfies ContinuousMeasurement
 

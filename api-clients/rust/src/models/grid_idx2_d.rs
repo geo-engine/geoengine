@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GridIdx2D {
-    #[serde(rename = "xIdx")]
-    pub x_idx: i32,
     #[serde(rename = "yIdx")]
     pub y_idx: i32,
+    #[serde(rename = "xIdx")]
+    pub x_idx: i32,
 }
 
 impl GridIdx2D {
-    pub fn new(x_idx: i32, y_idx: i32) -> GridIdx2D {
+    pub fn new(y_idx: i32, x_idx: i32) -> GridIdx2D {
         GridIdx2D {
-            x_idx,
             y_idx,
+            x_idx,
         }
     }
 }

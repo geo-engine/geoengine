@@ -35,24 +35,24 @@ import {
 export interface ProvenanceEntry {
     /**
      * 
-     * @type {Array<DataId>}
-     * @memberof ProvenanceEntry
-     */
-    data: Array<DataId>;
-    /**
-     * 
      * @type {Provenance}
      * @memberof ProvenanceEntry
      */
     provenance: Provenance;
+    /**
+     * 
+     * @type {Array<DataId>}
+     * @memberof ProvenanceEntry
+     */
+    data: Array<DataId>;
 }
 
 /**
  * Check if a given object implements the ProvenanceEntry interface.
  */
 export function instanceOfProvenanceEntry(value: object): value is ProvenanceEntry {
-    if (!('data' in value) || value['data'] === undefined) return false;
     if (!('provenance' in value) || value['provenance'] === undefined) return false;
+    if (!('data' in value) || value['data'] === undefined) return false;
     return true;
 }
 
@@ -66,8 +66,8 @@ export function ProvenanceEntryFromJSONTyped(json: any, ignoreDiscriminator: boo
     }
     return {
         
-        'data': ((json['data'] as Array<any>).map(DataIdFromJSON)),
         'provenance': ProvenanceFromJSON(json['provenance']),
+        'data': ((json['data'] as Array<any>).map(DataIdFromJSON)),
     };
 }
 
@@ -82,8 +82,8 @@ export function ProvenanceEntryToJSONTyped(value?: ProvenanceEntry | null, ignor
 
     return {
         
-        'data': ((value['data'] as Array<any>).map(DataIdToJSON)),
         'provenance': ProvenanceToJSON(value['provenance']),
+        'data': ((value['data'] as Array<any>).map(DataIdToJSON)),
     };
 }
 

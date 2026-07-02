@@ -23,9 +23,9 @@ const VectorOperator_1 = require("./VectorOperator");
  * Check if a given object implements the SingleVectorMultipleRasterSources interface.
  */
 function instanceOfSingleVectorMultipleRasterSources(value) {
-    if (!('rasters' in value) || value['rasters'] === undefined)
-        return false;
     if (!('vector' in value) || value['vector'] === undefined)
+        return false;
+    if (!('rasters' in value) || value['rasters'] === undefined)
         return false;
     return true;
 }
@@ -37,8 +37,8 @@ function SingleVectorMultipleRasterSourcesFromJSONTyped(json, ignoreDiscriminato
         return json;
     }
     return {
-        'rasters': (json['rasters'].map(RasterOperator_1.RasterOperatorFromJSON)),
         'vector': (0, VectorOperator_1.VectorOperatorFromJSON)(json['vector']),
+        'rasters': (json['rasters'].map(RasterOperator_1.RasterOperatorFromJSON)),
     };
 }
 function SingleVectorMultipleRasterSourcesToJSON(json) {
@@ -49,7 +49,7 @@ function SingleVectorMultipleRasterSourcesToJSONTyped(value, ignoreDiscriminator
         return value;
     }
     return {
-        'rasters': (value['rasters'].map(RasterOperator_1.RasterOperatorToJSON)),
         'vector': (0, VectorOperator_1.VectorOperatorToJSON)(value['vector']),
+        'rasters': (value['rasters'].map(RasterOperator_1.RasterOperatorToJSON)),
     };
 }

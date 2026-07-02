@@ -12,35 +12,35 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Project {
-    #[serde(rename = "bounds")]
-    pub bounds: Box<models::StRectangle>,
-    #[serde(rename = "description")]
-    pub description: String,
     #[serde(rename = "id")]
     pub id: uuid::Uuid,
-    #[serde(rename = "layers")]
-    pub layers: Vec<models::ProjectLayer>,
-    #[serde(rename = "name")]
-    pub name: String,
-    #[serde(rename = "plots")]
-    pub plots: Vec<models::Plot>,
-    #[serde(rename = "timeStep")]
-    pub time_step: Box<models::TimeStep>,
     #[serde(rename = "version")]
     pub version: Box<models::ProjectVersion>,
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "description")]
+    pub description: String,
+    #[serde(rename = "layers")]
+    pub layers: Vec<models::ProjectLayer>,
+    #[serde(rename = "plots")]
+    pub plots: Vec<models::Plot>,
+    #[serde(rename = "bounds")]
+    pub bounds: Box<models::StRectangle>,
+    #[serde(rename = "timeStep")]
+    pub time_step: Box<models::TimeStep>,
 }
 
 impl Project {
-    pub fn new(bounds: models::StRectangle, description: String, id: uuid::Uuid, layers: Vec<models::ProjectLayer>, name: String, plots: Vec<models::Plot>, time_step: models::TimeStep, version: models::ProjectVersion) -> Project {
+    pub fn new(id: uuid::Uuid, version: models::ProjectVersion, name: String, description: String, layers: Vec<models::ProjectLayer>, plots: Vec<models::Plot>, bounds: models::StRectangle, time_step: models::TimeStep) -> Project {
         Project {
-            bounds: Box::new(bounds),
-            description,
             id,
-            layers,
-            name,
-            plots,
-            time_step: Box::new(time_step),
             version: Box::new(version),
+            name,
+            description,
+            layers,
+            plots,
+            bounds: Box::new(bounds),
+            time_step: Box::new(time_step),
         }
     }
 }
