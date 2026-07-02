@@ -89,7 +89,7 @@ async function addWgs84TileLayer(map, sessionToken) {
   const dataConnectorId = collection.id.providerId;
   const layerId = collection.id.layerId;
 
-  const tms = "GeoEngineCustomTMS";
+  const tms = "Custom";
 
   const tileUrl = `${SERVER_URL}/api/ogc/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
   console.log("Layer WGS84:", dataConnectorId, layerId, "\n" + tileUrl);
@@ -139,7 +139,7 @@ async function addWebMercatorTileLayer(map, sessionToken) {
   const dataConnectorId = collection.id.providerId;
   const layerId = collection.id.layerId;
 
-  const tms = "GeoEngineCustomTMS";
+  const tms = "Custom";
 
   const tileUrl = `${SERVER_URL}/api/ogc/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
   console.log("Layer WebMercator:", dataConnectorId, layerId, "\n" + tileUrl);
@@ -176,8 +176,6 @@ async function addWebMercatorTileLayer(map, sessionToken) {
 
 function tileLoadFunction(sessionToken) {
   return async function (olTile, src) {
-    console.log("tileLoadFunction", olTile, src);
-
     try {
       const response = await fetch(src, {
         headers: {

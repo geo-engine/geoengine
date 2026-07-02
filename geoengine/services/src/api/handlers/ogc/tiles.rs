@@ -298,7 +298,11 @@ impl TileQuery {
         if tile_row >= expected_number_of_tiles_at_zoom_level.y()
             || tile_col >= expected_number_of_tiles_at_zoom_level.x()
         {
-            return Err(self.invalid_tile_coordinates_error());
+            return Err(OgcApiError::TileCoordinatesOutOfBounds {
+                matrix: self.tile_matrix.to_string(),
+                row: self.tile_row,
+                col: self.tile_col,
+            });
         }
 
         Ok(())

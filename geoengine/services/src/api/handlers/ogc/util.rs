@@ -172,6 +172,19 @@ pub async fn load_layer<C: ApplicationContext>(
         })
 }
 
+/// Ensures that the layer exists in the given data connector. Returns an error if it does not exist.
+pub async fn ensure_layer_exists<C: ApplicationContext>(
+    app_ctx: &C,
+    session: C::Session,
+    data_connector_id: DataProviderId,
+    layer_id: LayerId,
+) -> OgcApiResult<()> {
+    let ctx = app_ctx.session_context(session);
+    let _layer = load_layer::<C>(&ctx, data_connector_id, layer_id).await?;
+
+    Ok(())
+}
+
 pub async fn get_initialized_raster_operator<C: SessionContext>(
     layer: &Layer,
     execution_context: &C::ExecutionContext,

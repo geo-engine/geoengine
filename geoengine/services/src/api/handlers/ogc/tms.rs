@@ -5,8 +5,8 @@ use crate::{
                 OgcApiResult,
                 error::OgcApiError,
                 util::{
-                    crs_from_spatial_reference_option, link_creator, load_layer,
-                    raster_workflow_metadata,
+                    crs_from_spatial_reference_option, ensure_layer_exists, link_creator,
+                    load_layer, raster_workflow_metadata,
                 },
             },
             spatial_references::{AxisOrder, spatial_reference_specification},
@@ -19,7 +19,10 @@ use actix_web::web;
 use float_cmp::approx_eq;
 use geoengine_datatypes::{
     primitives::{Coordinate2D, SpatialResolution},
-    raster::{GridBounds, GridShape2D, GridShapeAccess, GridSize, TilingSpecification},
+    raster::{
+        GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
+        TilingSpatialGridDefinition, TilingSpecification,
+    },
     spatial_reference::SpatialReference,
 };
 use geoengine_operators::engine::{ExecutionContext, RasterResultDescriptor};
@@ -36,8 +39,14 @@ use std::{
 };
 use tracing::warn;
 
-pub(super) const CUSTOM_TILE_MATRIX_SET_ID: &str = "GeoEngineCustomTMS";
+pub(super) const CUSTOM_TILE_MATRIX_SET_ID: &str = "Custom";
 const CUSTOM_TILE_MATRIX_SET_TITLE: &str = "Custom Grid for Geo Engine";
+
+pub(super) const WEBMERCATOR_TILE_MATRIX_SET_ID: &str = "WebMercatorQuad";
+const WEBMERCATOR_TILE_MATRIX_SET_TITLE: &str = "Google Maps Compatible for the World";
+const WEBMERCATOR_TILE_MATRIX_SET_URI: &str =
+    "http://www.opengis.net/def/tilematrixset/OGC/1.0/WebMercatorQuad";
+
 /// Cf. <https://docs.ogc.org/is/17-083r4/17-083r4.html#6-1-1-1-%C2%A0-tile-matrix-in-a-two-dimensional-space>
 const STANDARD_PIXEL_SIZE_METERS: f64 = 0.28e-3;
 
@@ -61,27 +70,45 @@ const STANDARD_PIXEL_SIZE_METERS: f64 = 0.28e-3;
     )
 )]
 pub async fn tile_matrix_sets<C: ApplicationContext>(
-    _session: C::Session,
-    _app_ctx: web::Data<C>,
+    session: C::Session,
+    app_ctx: web::Data<C>,
     path: web::Path<(DataProviderId, LayerId)>,
 ) -> OgcApiResult<web::Json<TileMatrixSets>> {
     let (data_connector_id, layer_id) = path.into_inner();
+
+    ensure_layer_exists::<C>(&app_ctx, session, data_connector_id, layer_id.clone()).await?;
+
     let create_link = link_creator(data_connector_id, layer_id.clone());
 
     Ok(web::Json(TileMatrixSets {
-        tile_matrix_sets: vec![TileMatrixSetItem {
-            id: Some(TileMatrixSetId::Custom(
-                CUSTOM_TILE_MATRIX_SET_ID.to_string(),
-            )),
-            title: Some(CUSTOM_TILE_MATRIX_SET_TITLE.to_string()),
-            uri: None,
-            crs: None,
-            links: vec![create_link(
-                &format!("tileMatrixSets/{CUSTOM_TILE_MATRIX_SET_ID}"),
-                SELF,
-                JSON,
-            )?],
-        }],
+        tile_matrix_sets: vec![
+            // Always include custom TMS
+            TileMatrixSetItem {
+                id: Some(TileMatrixSetId::Custom(
+                    CUSTOM_TILE_MATRIX_SET_ID.to_string(),
+                )),
+                title: Some(CUSTOM_TILE_MATRIX_SET_TITLE.to_string()),
+                uri: None,
+                crs: None,
+                links: vec![create_link(
+                    &format!("tileMatrixSets/{CUSTOM_TILE_MATRIX_SET_ID}"),
+                    SELF,
+                    JSON,
+                )?],
+            },
+            // Add WebMercatorQuad for compatibility
+            TileMatrixSetItem {
+                id: Some(TileMatrixSetId::WebMercatorQuad),
+                title: Some(WEBMERCATOR_TILE_MATRIX_SET_TITLE.to_string()),
+                uri: Some(WEBMERCATOR_TILE_MATRIX_SET_URI.to_string()),
+                crs: None,
+                links: vec![create_link(
+                    &format!("tileMatrixSets/{WEBMERCATOR_TILE_MATRIX_SET_ID}"),
+                    SELF,
+                    JSON,
+                )?],
+            },
+        ],
     }))
 }
 
@@ -113,12 +140,6 @@ pub async fn tile_matrix_set<C: ApplicationContext>(
 ) -> OgcApiResult<web::Json<TileMatrixSet>> {
     let (data_connector_id, layer_id, tile_matrix_set_id) = path.into_inner();
 
-    if tile_matrix_set_id != TileMatrixSetId::Custom(CUSTOM_TILE_MATRIX_SET_ID.to_string()) {
-        return Err(OgcApiError::TileMatrixSetNotFound {
-            tile_matrix_set_id: tile_matrix_set_id.to_string(),
-        });
-    }
-
     let ctx = app_ctx.session_context(session);
     let execution_context = ctx.execution_context()?;
 
@@ -128,27 +149,424 @@ pub async fn tile_matrix_set<C: ApplicationContext>(
     let descriptor =
         raster_workflow_metadata::<C::SessionContext>(layer.workflow, execution_context).await?;
 
-    let spatial_reference = descriptor.spatial_reference.as_option().ok_or_else(|| {
-        OgcApiError::TileMatrixSetDefinitionNotAvailable {
-            tile_matrix_set_id: tile_matrix_set_id.to_string(),
-            reason: "Spatial reference of the layer is not available".to_string(),
-        }
-    })?;
+    // Resolve the appropriate TMS provider
+    let provider = TypedTileMatrixSetProvider::resolve(
+        &tile_matrix_set_id,
+        &descriptor,
+        tiling_specification,
+    )?;
 
-    Ok(web::Json(TileMatrixSet {
-        id: TileMatrixSetId::Custom(CUSTOM_TILE_MATRIX_SET_ID.to_string()),
-        title: Some(CUSTOM_TILE_MATRIX_SET_TITLE.to_string()),
-        description: None,
-        keywords: Vec::new(),
-        uri: None,
-        crs: TilesCrs::Simple(crs_from_spatial_reference_option(
-            descriptor.spatial_reference,
-        )?),
-        ordered_axes: ordered_axes(spatial_reference)?,
-        well_known_scale_set: None,
-        bounding_box: None, // TODO: BBox of layer?
-        tile_matrices: build_tile_matrices(&descriptor, tiling_specification, spatial_reference)?,
-    }))
+    Ok(web::Json(provider.tile_matrix_set_definition()?))
+}
+
+/// Trait for Tile Matrix Set providers that support both metadata and tile rendering.
+pub trait TileMatrixSetProvider: Send + Sync {
+    /// Returns the tile matrix set ID
+    fn id(&self) -> TileMatrixSetId;
+
+    /// Returns the tile matrix set definition, including all tile matrices
+    fn tile_matrix_set_definition(&self) -> OgcApiResult<TileMatrixSet>;
+
+    /// Returns the tile matrix definitions for all zoom levels
+    fn tile_matrices(&self) -> OgcApiResult<Vec<TileMatrix>>;
+
+    /// Returns the CRS for this tile matrix set
+    fn tiles_crs(&self) -> OgcApiResult<TilesCrs>;
+
+    /// Returns the ordered axes labels (e.g., `["Lon", "Lat"]` or `["x", "y"]`)
+    fn ordered_axes(&self) -> OgcApiResult<Vec<String>>;
+
+    /// Validates that tile coordinates are within valid bounds for the given zoom level
+    fn validate_tile_coordinates(
+        &self,
+        tile_matrix: u8,
+        tile_row: u32,
+        tile_col: u32,
+    ) -> OgcApiResult<()>;
+
+    /// Computes the pixel bounds of a tile in the global pixel grid
+    fn tile_grid_bbox(
+        &self,
+        tile_matrix: u8,
+        tile_row: u32,
+        tile_col: u32,
+    ) -> OgcApiResult<GridBoundingBox2D>;
+}
+
+/// A wrapper Tile Matrix Set Provider
+pub enum TypedTileMatrixSetProvider {
+    Custom(GeoEngineCustomTMS),
+    WebMercatorQuad(WebMercatorQuadTMS),
+}
+
+impl TypedTileMatrixSetProvider {
+    /// Factory function to create the appropriate TMS provider for a given ID and layer
+    fn resolve(
+        tile_matrix_set_id: &TileMatrixSetId,
+        result_descriptor: &RasterResultDescriptor,
+        tiling_specification: TilingSpecification,
+    ) -> OgcApiResult<Self> {
+        match tile_matrix_set_id {
+            TileMatrixSetId::Custom(id) if id == CUSTOM_TILE_MATRIX_SET_ID => {
+                let tms = GeoEngineCustomTMS::new(result_descriptor.clone(), tiling_specification)?;
+                Ok(TypedTileMatrixSetProvider::Custom(tms))
+            }
+            TileMatrixSetId::WebMercatorQuad => Ok(TypedTileMatrixSetProvider::WebMercatorQuad(
+                WebMercatorQuadTMS,
+            )),
+            TileMatrixSetId::Custom(_) => Err(OgcApiError::TileMatrixSetNotFound {
+                tile_matrix_set_id: tile_matrix_set_id.to_string(),
+            }),
+        }
+    }
+}
+
+impl TileMatrixSetProvider for TypedTileMatrixSetProvider {
+    fn id(&self) -> TileMatrixSetId {
+        match self {
+            TypedTileMatrixSetProvider::Custom(provider) => provider.id(),
+            TypedTileMatrixSetProvider::WebMercatorQuad(provider) => provider.id(),
+        }
+    }
+
+    fn tile_matrix_set_definition(&self) -> OgcApiResult<TileMatrixSet> {
+        match self {
+            TypedTileMatrixSetProvider::Custom(provider) => provider.tile_matrix_set_definition(),
+            TypedTileMatrixSetProvider::WebMercatorQuad(provider) => {
+                provider.tile_matrix_set_definition()
+            }
+        }
+    }
+
+    fn tile_matrices(&self) -> OgcApiResult<Vec<TileMatrix>> {
+        match self {
+            TypedTileMatrixSetProvider::Custom(provider) => provider.tile_matrices(),
+            TypedTileMatrixSetProvider::WebMercatorQuad(provider) => provider.tile_matrices(),
+        }
+    }
+
+    fn tiles_crs(&self) -> OgcApiResult<TilesCrs> {
+        match self {
+            TypedTileMatrixSetProvider::Custom(provider) => provider.tiles_crs(),
+            TypedTileMatrixSetProvider::WebMercatorQuad(provider) => provider.tiles_crs(),
+        }
+    }
+
+    fn ordered_axes(&self) -> OgcApiResult<Vec<String>> {
+        match self {
+            TypedTileMatrixSetProvider::Custom(provider) => provider.ordered_axes(),
+            TypedTileMatrixSetProvider::WebMercatorQuad(provider) => provider.ordered_axes(),
+        }
+    }
+
+    fn validate_tile_coordinates(
+        &self,
+        tile_matrix: u8,
+        tile_row: u32,
+        tile_col: u32,
+    ) -> OgcApiResult<()> {
+        match self {
+            TypedTileMatrixSetProvider::Custom(provider) => {
+                provider.validate_tile_coordinates(tile_matrix, tile_row, tile_col)
+            }
+            TypedTileMatrixSetProvider::WebMercatorQuad(provider) => {
+                provider.validate_tile_coordinates(tile_matrix, tile_row, tile_col)
+            }
+        }
+    }
+
+    fn tile_grid_bbox(
+        &self,
+        tile_matrix: u8,
+        tile_row: u32,
+        tile_col: u32,
+    ) -> OgcApiResult<GridBoundingBox2D> {
+        match self {
+            TypedTileMatrixSetProvider::Custom(provider) => {
+                provider.tile_grid_bbox(tile_matrix, tile_row, tile_col)
+            }
+            TypedTileMatrixSetProvider::WebMercatorQuad(provider) => {
+                provider.tile_grid_bbox(tile_matrix, tile_row, tile_col)
+            }
+        }
+    }
+}
+
+/// Custom tile matrix set implementation that computes TMS dynamically per layer
+/// as a perfect fit to Geo Engine's internal tiling.
+pub struct GeoEngineCustomTMS {
+    result_descriptor: RasterResultDescriptor,
+    tiling_specification: TilingSpecification,
+    spatial_reference: SpatialReference,
+}
+
+impl GeoEngineCustomTMS {
+    fn new(
+        result_descriptor: RasterResultDescriptor,
+        tiling_specification: TilingSpecification,
+    ) -> OgcApiResult<Self> {
+        let spatial_reference =
+            result_descriptor
+                .spatial_reference
+                .as_option()
+                .ok_or_else(|| OgcApiError::TileMatrixSetDefinitionNotAvailable {
+                    tile_matrix_set_id: CUSTOM_TILE_MATRIX_SET_ID.to_string(),
+                    reason: "Spatial reference of the layer is not available".to_string(),
+                })?;
+
+        Ok(GeoEngineCustomTMS {
+            result_descriptor,
+            tiling_specification,
+            spatial_reference,
+        })
+    }
+}
+
+impl TileMatrixSetProvider for GeoEngineCustomTMS {
+    fn id(&self) -> TileMatrixSetId {
+        TileMatrixSetId::Custom(CUSTOM_TILE_MATRIX_SET_ID.to_string())
+    }
+
+    fn tile_matrix_set_definition(&self) -> OgcApiResult<TileMatrixSet> {
+        Ok(TileMatrixSet {
+            id: self.id(),
+            title: CUSTOM_TILE_MATRIX_SET_TITLE.to_string().into(),
+            description: None,
+            keywords: Vec::new(),
+            uri: None,
+            crs: self.tiles_crs()?,
+            ordered_axes: self.ordered_axes()?,
+            well_known_scale_set: None,
+            bounding_box: None,
+            tile_matrices: self.tile_matrices()?,
+        })
+    }
+
+    fn tile_matrices(&self) -> OgcApiResult<Vec<TileMatrix>> {
+        build_tile_matrices(
+            &self.result_descriptor,
+            self.tiling_specification,
+            self.spatial_reference,
+        )
+    }
+
+    fn tiles_crs(&self) -> OgcApiResult<TilesCrs> {
+        crs_from_spatial_reference_option(self.result_descriptor.spatial_reference)
+            .map(TilesCrs::Simple)
+    }
+
+    fn ordered_axes(&self) -> OgcApiResult<Vec<String>> {
+        ordered_axes(self.spatial_reference)
+    }
+
+    fn validate_tile_coordinates(
+        &self,
+        tile_matrix: u8,
+        tile_row: u32,
+        tile_col: u32,
+    ) -> OgcApiResult<()> {
+        let tile_matrices = build_tile_matrices(
+            &self.result_descriptor,
+            self.tiling_specification,
+            self.spatial_reference,
+        )?;
+        if tile_matrix as usize >= tile_matrices.len() {
+            return Err(OgcApiError::TileMatrixNotFound {
+                tile_matrix: tile_matrix.to_string(),
+            });
+        }
+
+        let tile_matrix_def = &tile_matrices[tile_matrices.len() - 1 - tile_matrix as usize];
+        let max_row = tile_matrix_def.matrix_height.get() as u32;
+        let max_col = tile_matrix_def.matrix_width.get() as u32;
+
+        if tile_row >= max_row || tile_col >= max_col {
+            return Err(OgcApiError::TileCoordinatesOutOfBounds {
+                matrix: tile_matrix.to_string(),
+                row: tile_row,
+                col: tile_col,
+            });
+        }
+
+        Ok(())
+    }
+
+    fn tile_grid_bbox(
+        &self,
+        tile_matrix: u8,
+        tile_row: u32,
+        tile_col: u32,
+    ) -> OgcApiResult<GridBoundingBox2D> {
+        let tiling_spatial_grid_definition = self
+            .result_descriptor
+            .tiling_grid_definition(self.tiling_specification);
+        compute_tile_grid_bbox(
+            tile_matrix,
+            &tiling_spatial_grid_definition,
+            tile_row,
+            tile_col,
+        )
+    }
+}
+
+/// Web Mercator Quad tile matrix set (OGC standard, fixed to EPSG:3857)
+pub struct WebMercatorQuadTMS;
+
+impl TileMatrixSetProvider for WebMercatorQuadTMS {
+    fn id(&self) -> TileMatrixSetId {
+        TileMatrixSetId::WebMercatorQuad
+    }
+
+    fn tile_matrix_set_definition(&self) -> OgcApiResult<TileMatrixSet> {
+        Ok(TileMatrixSet {
+            id: self.id(),
+            title: WEBMERCATOR_TILE_MATRIX_SET_TITLE.to_string().into(),
+            description: None,
+            keywords: Vec::new(),
+            uri: Some(WEBMERCATOR_TILE_MATRIX_SET_URI.to_string()),
+            crs: self.tiles_crs()?,
+            ordered_axes: vec!["X".to_string(), "Y".to_string()],
+            well_known_scale_set: "http://www.opengis.net/def/wkss/OGC/1.0/GoogleMapsCompatible"
+                .to_string()
+                .into(),
+            bounding_box: None,
+            tile_matrices: self.tile_matrices()?,
+        })
+    }
+
+    /// OGC standard `WebMercatorQuad` tile matrices (25 levels, 0-24)
+    /// From: <https://raw.githubusercontent.com/opengeospatial/2D-Tile-Matrix-Set/master/registry/json/WebMercatorQuad.json>
+    fn tile_matrices(&self) -> OgcApiResult<Vec<TileMatrix>> {
+        const WIDTH_AND_HEIGHT: NonZeroU16 =
+            NonZeroU16::new(256).expect("256 is a valid non-zero u16");
+
+        #[allow(clippy::unreadable_literal)]
+        const DATA: &[(u8, f64, f64, u64, u64)] = &[
+            (0, 559082264.028717, 156543.033928041, 1, 1),
+            (1, 279541132.014358, 78271.5169640204, 2, 2),
+            (2, 139770566.007179, 39135.7584820102, 4, 4),
+            (3, 69885283.0035897, 19567.8792410051, 8, 8),
+            (4, 34942641.5017948, 9783.93962050256, 16, 16),
+            (5, 17471320.7508974, 4891.96981025128, 32, 32),
+            (6, 8735660.37544871, 2445.98490512564, 64, 64),
+            (7, 4367830.18772435, 1222.99245256282, 128, 128),
+            (8, 2183915.09386217, 611.49622628141, 256, 256),
+            (9, 1091957.54693108, 305.748113140704, 512, 512),
+            (10, 545978.773465544, 152.874056570352, 1024, 1024),
+            (11, 272989.386732772, 76.4370282851762, 2048, 2048),
+            (12, 136494.693366386, 38.2185141425881, 4096, 4096),
+            (13, 68247.346683193, 19.109257071294, 8192, 8192),
+            (14, 34123.6733415964, 9.55462853564703, 16384, 16384),
+            (15, 17061.8366707982, 4.77731426782351, 32768, 32768),
+            (16, 8530.91833539913, 2.38865713391175, 65536, 65536),
+            (17, 4265.45916769956, 1.19432856695587, 131072, 131072),
+            (18, 2132.72958384978, 0.597164283477939, 262144, 262144),
+            (19, 1066.36479192489, 0.29858214173897, 524288, 524288),
+            (20, 533.182395962445, 0.149291070869485, 1048576, 1048576),
+            (21, 266.591197981222, 0.0746455354347424, 2097152, 2097152),
+            (22, 133.295598990611, 0.0373227677173712, 4194304, 4194304),
+            (23, 66.6477994953056, 0.0186613838586856, 8388608, 8388608),
+            (24, 33.3238997476528, 0.0093306919293428, 16777216, 16777216),
+        ];
+        let matrices = DATA
+            .iter()
+            .map(|&(id, scale, cell, mw, mh)| TileMatrix {
+                id: id.to_string(),
+                scale_denominator: scale,
+                cell_size: cell,
+                corner_of_origin: CornerOfOrigin::TopLeft,
+                point_of_origin: [-20_037_508.342_789_2, 20_037_508.342_789_2],
+                tile_width: WIDTH_AND_HEIGHT,
+                tile_height: WIDTH_AND_HEIGHT,
+                matrix_width: NonZeroU64::new(mw).expect("tile matrix dimension is non-zero"),
+                matrix_height: NonZeroU64::new(mh).expect("tile matrix dimension is non-zero"),
+                title: None,
+                description: None,
+                keywords: Vec::new(),
+                variable_matrix_widths: Vec::new(),
+            })
+            .collect();
+        Ok(matrices)
+    }
+
+    fn tiles_crs(&self) -> OgcApiResult<TilesCrs> {
+        Ok(TilesCrs::Uri {
+            uri: "http://www.opengis.net/def/crs/EPSG/0/3857".to_string(),
+        })
+    }
+
+    fn ordered_axes(&self) -> OgcApiResult<Vec<String>> {
+        Ok(vec!["X".to_string(), "Y".to_string()])
+    }
+
+    fn validate_tile_coordinates(
+        &self,
+        tile_matrix: u8,
+        tile_row: u32,
+        tile_col: u32,
+    ) -> OgcApiResult<()> {
+        const WEBMERCATOR_ZOOM_LEVELS: u8 = 25; // 0-24
+
+        if tile_matrix >= WEBMERCATOR_ZOOM_LEVELS {
+            return Err(OgcApiError::TileMatrixNotFound {
+                tile_matrix: tile_matrix.to_string(),
+            });
+        }
+
+        // Matrix width/height = 2^zoom_level
+        let max_tile_index = (1u64 << tile_matrix) - 1;
+
+        if u64::from(tile_row) > max_tile_index || u64::from(tile_col) > max_tile_index {
+            return Err(OgcApiError::TileCoordinatesOutOfBounds {
+                matrix: tile_matrix.to_string(),
+                row: tile_row,
+                col: tile_col,
+            });
+        }
+
+        Ok(())
+    }
+
+    fn tile_grid_bbox(
+        &self,
+        _tile_matrix: u8,
+        _tile_row: u32,
+        _tile_col: u32,
+    ) -> OgcApiResult<GridBoundingBox2D> {
+        // WebMercator tile grid computation is different and will be handled separately
+        // For now, return error as this requires Web Mercator specific grid calculations
+        Err(OgcApiError::TileMatrixSetDefinitionNotAvailable {
+            tile_matrix_set_id: WEBMERCATOR_TILE_MATRIX_SET_ID.to_string(),
+            reason: "Web Mercator tile grid calculation requires projection support".to_string(),
+        })
+    }
+}
+
+/// Computes the pixel bounds of a tile in the global pixel grid for native custom TMS
+fn compute_tile_grid_bbox(
+    tile_matrix: u8,
+    tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
+    tile_row: u32,
+    tile_col: u32,
+) -> OgcApiResult<GridBoundingBox2D> {
+    let _grid_bounds = tiling_spatial_grid_definition.tiling_grid_bounds();
+    let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
+
+    let tile_index = GridIdx2D::new([tile_row as isize, tile_col as isize]);
+
+    let min_pixel_index = tiling_strategy.tile_idx_to_global_pixel_idx(tile_index);
+    let max_pixel_index = GridIdx2D::new([
+        min_pixel_index.x() + tiling_strategy.tile_size_in_pixels.x() as isize - 1,
+        min_pixel_index.y() + tiling_strategy.tile_size_in_pixels.y() as isize - 1,
+    ]);
+
+    GridBoundingBox2D::new(min_pixel_index, max_pixel_index).map_err(|_source| {
+        OgcApiError::TileGridBboxComputationFailed {
+            matrix: tile_matrix.to_string(),
+            row: tile_row,
+            col: tile_col,
+        }
+    })
 }
 
 fn ordered_axes(spatial_reference: SpatialReference) -> OgcApiResult<Vec<String>> {
@@ -156,7 +574,7 @@ fn ordered_axes(spatial_reference: SpatialReference) -> OgcApiResult<Vec<String>
 
     Ok(match specification.axis_order {
         Some(AxisOrder::NorthEast) => vec!["Lon".into(), "Lat".into()],
-        _ => vec!["x".into(), "y".into()],
+        _ => vec!["X".into(), "Y".into()],
     })
 }
 
@@ -479,7 +897,21 @@ mod tests {
                                 "type": "application/json"
                             }
                         ]
-                    }
+                    },
+                    {
+                        "id": "WebMercatorQuad",
+                        "title": WEBMERCATOR_TILE_MATRIX_SET_TITLE,
+                        "uri": WEBMERCATOR_TILE_MATRIX_SET_URI,
+                        "links": [
+                            {
+                                "href": format!(
+                                    "{server_url}/api/ogc/{data_connector_id}/{layer_id}/tileMatrixSets/WebMercatorQuad"
+                                ),
+                                "rel": "self",
+                                "type": "application/json"
+                            }
+                        ]
+                    },
                 ]
             })
         );
@@ -676,7 +1108,7 @@ mod tests {
                 keywords: vec![],
                 uri: None,
                 crs: TilesCrs::Simple(Crs::from_epsg(3857)),
-                ordered_axes: ["x", "y"].iter().map(ToString::to_string).collect(),
+                ordered_axes: ["X", "Y"].iter().map(ToString::to_string).collect(),
                 well_known_scale_set: None,
                 bounding_box: None,
                 tile_matrices: vec![
@@ -818,7 +1250,7 @@ mod tests {
         );
         assert_eq!(
             ordered_axes(SpatialReference::web_mercator()).unwrap(),
-            vec!["x".to_string(), "y".to_string()]
+            vec!["X".to_string(), "Y".to_string()]
         );
     }
 
@@ -1116,5 +1548,42 @@ mod tests {
         assert_eq!(all_tiles[1].0, tiles_z1);
         assert_eq!(all_tiles[2].0, tiles_z2);
         assert_eq!(all_tiles[3].0, tiles_z3);
+    }
+
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Test should be comprehensive and readable"
+    )]
+    #[ge_context::test]
+    async fn it_returns_a_webmercator_quad_tile_matrix_set_definition(
+        app_ctx: PostgresContext<NoTls>,
+    ) {
+        let (session_id, data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
+
+        let req = TestRequest::get()
+            .uri(&format!(
+                "/ogc/{data_connector_id}/{layer_id}/tileMatrixSets/WebMercatorQuad"
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+        let status = res.status();
+        let body = read_body_json(res).await;
+
+        assert_eq!(status, 200, "{body}");
+
+        let tile_matrix_set = serde_json::from_value::<TileMatrixSet>(body)
+            .expect("Response body should be a valid TileMatrixSet JSON");
+
+        // from <https://raw.githubusercontent.com/opengeospatial/2D-Tile-Matrix-Set/master/registry/json/WebMercatorQuad.json>
+        let mut expected_tile_matrix_set = serde_json::from_str::<TileMatrixSet>(include_str!(
+            "../../../../../test_data/ogc/tiles/WebMercatorQuad.json"
+        ))
+        .expect("Response body should be a valid TileMatrixSet JSON");
+        expected_tile_matrix_set.crs = TilesCrs::Uri {
+            uri: "http://www.opengis.net/def/crs/EPSG/0/3857".to_string(),
+        }; // TODO: fix deserialization in `ogcapi` crate to handle this correctly
+
+        assert_eq!(tile_matrix_set, expected_tile_matrix_set);
     }
 }
