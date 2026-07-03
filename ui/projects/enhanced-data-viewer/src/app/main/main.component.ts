@@ -40,18 +40,25 @@ interface DataSourceLayer {
 
 const DATA_SOURCES: DataSourceDefinition[] = [
     {
-        key: 'sentinel1',
+        key: 'sentinel1-static',
         groupName: 'static',
         connectorId: 'ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74',
         collectionId: '05102bb3-a855-4a37-8a8a-30026a91fef1',
         name: 'Sentinel-1 Global Mosaics',
     },
     {
-        key: 'sentinel2',
+        key: 'sentinel2-static',
         groupName: 'static',
         connectorId: 'ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74',
         collectionId: '05102bb3-a855-4a37-8a8a-30026a91fef1',
         name: 'Sentinel-2 L2A',
+    },
+    {
+        key: 'sentinel2-stac',
+        groupName: 'stac',
+        connectorId: 'ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74',
+        collectionId: '05102bb3-a855-4a37-8a8a-30026a91fef1',
+        name: 'Sentinel-2 L2A STAC',
     },
 ];
 

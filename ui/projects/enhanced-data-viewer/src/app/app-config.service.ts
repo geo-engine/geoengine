@@ -15,7 +15,7 @@ const APP_CONFIG_DEFAULTS = mergeDeepOverrideLists(DEFAULT_CORE_CONFIG, {
     DEFAULTS: {
         PROJECT: {
             NAME: 'Default',
-            TIME: '2026-01-01T00:00:00.000Z',
+            TIME: '2026-04-01T00:00:00.000Z',
             TIMESTEP: '1 day',
             PROJECTION: 'EPSG:3857',
         },
