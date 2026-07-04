@@ -21,9 +21,10 @@ documentation = "https://docs.geoengine.io"
 repository = "https://github.com/geo-engine/geoengine"
 
 # Rust does not inline across crates if link-time optimization (LTO) is off, which it is by default.
+# Thin LTO retains cross-crate optimization while avoiding the much slower full-LTO link step.
 # TODO: Maybe https://rust-lang.github.io/rust-clippy/stable/index.html#missing_inline_in_public_items is more suitable
 [profile.release]
-lto = true
+lto = "thin"
 
 [profile.ci]
 inherits = "test"
@@ -116,7 +117,7 @@ geo = "0.32.0"
 geo-types = "0.7.18"                                      # important for compatibility when linking expressions
 geojson = { version = "0.24", features = ["geo-types"] }
 httptest = "0.16"
-image = "0.25"
+image = { version = "0.25", default-features = false, features = ["png", "tiff"] }
 indoc = "2.0"
 itertools = "0.14"
 libloading = "0.9"

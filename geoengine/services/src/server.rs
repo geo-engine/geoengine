@@ -1,3 +1,4 @@
+#[cfg(feature = "swagger-ui")]
 use crate::api::apidoc::ApiDoc;
 use crate::api::handlers;
 use crate::config::{self, get_config_element};
@@ -7,9 +8,11 @@ use crate::error::{Error, Result};
 use crate::users::UserSession;
 use crate::util::middleware::OutputRequestId;
 use crate::util::postgres::DatabaseConnectionConfig;
+#[cfg(feature = "swagger-ui")]
+use crate::util::server::serve_openapi_json;
 use crate::util::server::{
     CustomRootSpanBuilder, calculate_max_blocking_threads_per_worker, configure_extractors,
-    connection_init, log_server_info, render_404, render_405, serve_openapi_json,
+    connection_init, log_server_info, render_404, render_405,
 };
 use actix_files::Files;
 use actix_web::{App, FromRequest, HttpServer, http, middleware, web};
@@ -21,7 +24,9 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use tracing::info;
 use tracing_actix_web::TracingLogger;
+#[cfg(feature = "swagger-ui")]
 use utoipa::OpenApi;
+#[cfg(feature = "swagger-ui")]
 use utoipa_swagger_ui::SwaggerUi;
 
 async fn start<C>(
@@ -35,8 +40,29 @@ where
     C: ApplicationContext<Session = UserSession>,
     C::Session: FromRequest,
 {
-    let wrapped_ctx = web::Data::new(app_ctx);
+    start_without_swagger(
+        static_files_dir,
+        bind_address,
+        api_prefix,
+        version_api,
+        app_ctx,
+    )
+    .await
+}
 
+#[cfg(feature = "swagger-ui")]
+async fn start_without_swagger<C>(
+    static_files_dir: Option<PathBuf>,
+    bind_address: SocketAddr,
+    api_prefix: String,
+    version_api: bool,
+    app_ctx: C,
+) -> Result<(), Error>
+where
+    C: ApplicationContext<Session = UserSession>,
+    C::Session: FromRequest,
+{
+    let wrapped_ctx = web::Data::new(app_ctx);
     let openapi = ApiDoc::openapi();
 
     HttpServer::new(move || {
@@ -62,8 +88,8 @@ where
                 web::get().to(crate::util::server::available_handler),
             );
 
+        api = api.service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>()));
         let mut api_urls = vec![];
-
         api = serve_openapi_json(
             api,
             &mut api_urls,
@@ -73,21 +99,83 @@ where
             openapi.clone(),
         );
 
-        // EBV endpoint
-        {
-            api = api.service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>()));
+        api = serve_openapi_json(
+            api,
+            &mut api_urls,
+            "EBV",
+            "../api-docs/ebv/openapi.json",
+            "/api-docs/ebv/openapi.json",
+            crate::api::handlers::ebv::ApiDoc::openapi(),
+        );
 
-            api = serve_openapi_json(
-                api,
-                &mut api_urls,
-                "EBV",
-                "../api-docs/ebv/openapi.json",
-                "/api-docs/ebv/openapi.json",
-                crate::api::handlers::ebv::ApiDoc::openapi(),
+        api = api.service(SwaggerUi::new("/swagger-ui/{_:.*}").urls(api_urls));
+
+        if version_api {
+            api = api.route(
+                "/info",
+                web::get().to(crate::util::server::server_info_handler),
             );
         }
 
-        api = api.service(SwaggerUi::new("/swagger-ui/{_:.*}").urls(api_urls));
+        if let Some(static_files_dir) = static_files_dir.clone() {
+            api = api.service(Files::new("/static", static_files_dir));
+        }
+
+        App::new()
+            .app_data(wrapped_ctx.clone())
+            .wrap(OutputRequestId)
+            .wrap(
+                middleware::ErrorHandlers::default()
+                    .handler(http::StatusCode::NOT_FOUND, render_404)
+                    .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
+            )
+            .wrap(TracingLogger::<CustomRootSpanBuilder>::new())
+            .service(api)
+    })
+    .worker_max_blocking_threads(calculate_max_blocking_threads_per_worker())
+    .on_connect(connection_init)
+    .bind(bind_address)?
+    .run()
+    .await
+    .map_err(Into::into)
+}
+
+#[cfg(not(feature = "swagger-ui"))]
+async fn start_without_swagger<C>(
+    static_files_dir: Option<PathBuf>,
+    bind_address: SocketAddr,
+    api_prefix: String,
+    version_api: bool,
+    app_ctx: C,
+) -> Result<(), Error>
+where
+    C: ApplicationContext<Session = UserSession>,
+    C::Session: FromRequest,
+{
+    let wrapped_ctx = web::Data::new(app_ctx);
+
+    HttpServer::new(move || {
+        let mut api = web::scope(&api_prefix)
+            .configure(configure_extractors)
+            .configure(handlers::datasets::init_dataset_routes::<C>)
+            .configure(handlers::layers::init_layer_routes::<C>)
+            .configure(handlers::permissions::init_permissions_routes::<C>)
+            .configure(handlers::plots::init_plot_routes::<C>)
+            .configure(handlers::projects::init_project_routes::<C>)
+            .configure(handlers::users::init_user_routes::<C>)
+            .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
+            .configure(handlers::upload::init_upload_routes::<C>)
+            .configure(handlers::tasks::init_task_routes::<C>)
+            .configure(handlers::wcs::init_wcs_routes::<C>)
+            .configure(handlers::wfs::init_wfs_routes::<C>)
+            .configure(handlers::wms::init_wms_routes::<C>)
+            .configure(handlers::workflows::init_workflow_routes::<C>)
+            .configure(handlers::machine_learning::init_ml_routes::<C>)
+            .route(
+                "/available",
+                web::get().to(crate::util::server::available_handler),
+            )
+            .service(web::scope("/ebv").configure(handlers::ebv::init_ebv_routes::<C>()));
 
         if version_api {
             api = api.route(
