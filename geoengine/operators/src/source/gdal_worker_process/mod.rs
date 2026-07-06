@@ -4,6 +4,8 @@ mod grid_and_properties;
 pub mod process_common;
 pub mod process_impl;
 mod process_pool;
+pub mod reader;
+pub mod reader_mode;
 
 pub use gdal_dataset_params::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetadataMapping,
@@ -11,6 +13,7 @@ pub use gdal_dataset_params::{
 };
 pub use grid_and_properties::GridAndProperties;
 pub use process_pool::{GdalPoolDispatcher, GdalProcessPool, GdalProcessPoolError};
+pub use reader::{GdalPoolReader, GdalProcessReadResult};
 
 pub trait GdalProcessPoolAccess {
     fn get_gdal_pool(&self) -> &std::sync::Arc<GdalProcessPool>;

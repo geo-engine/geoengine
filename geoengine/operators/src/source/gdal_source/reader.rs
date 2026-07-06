@@ -1,16 +1,13 @@
 use gdal::raster::GdalType;
 use geoengine_datatypes::raster::{
-    EmptyGrid, GridBlit, GridBoundingBox2D, GridOrEmpty, MaskedGrid, Pixel, RasterProperties,
+    EmptyGrid, GridBlit, GridBoundingBox2D, GridOrEmpty, Pixel, RasterProperties,
 };
 use num::FromPrimitive;
 
 use crate::source::gdal_worker_process::{
-    FileNotFoundHandling, GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError,
+    GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError, GdalProcessReadResult,
     GridAndProperties,
-    process_common::{
-        GdalReadAdvise, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
-        IpcProcessGdalErrorKind,
-    },
+    process_common::GdalReadAdvise,
 };
 
 pub struct GdalPoolReader(GdalPoolDispatcher);
@@ -41,68 +38,31 @@ impl GdalPoolReader {
         dataset_params: GdalDatasetParameters,
         read_advise: GdalReadAdvise,
     ) -> Result<GridAndProperties<T, GridBoundingBox2D>, GdalProcessPoolError> {
-        let file_not_found_as_no_data =
-            dataset_params.file_not_found_handling == FileNotFoundHandling::NoData;
+        let shared_reader = crate::source::gdal_worker_process::reader::GdalPoolReader::from(
+            self.worker_instance().clone(),
+        );
 
-        let message = IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
-            dataset_params,
-            read_advise,
-            data_type: T::TYPE,
-        });
-
-        let res: Result<_, _> = self.worker_instance().read_data(message).await;
-
-        let res = match res {
-            Ok(t) => {
-                // Here we need to handle edges!
-                // First, convert response to GridAndProperties
-                let GridAndProperties { grid, properties }: GridAndProperties<
-                    T,
-                    GridBoundingBox2D,
-                > = t.into();
-                // Second, flip y-axis if necessary
-                let grid = if read_advise.flip_y {
-                    match grid {
-                        GridOrEmpty::Grid(MaskedGrid {
-                            inner_grid,
-                            validity_mask,
-                        }) => GridOrEmpty::new_grid(
-                            MaskedGrid::new(
-                                inner_grid.reversed_y_axis_grid(),
-                                validity_mask.reversed_y_axis_grid(),
-                            )
-                            .expect("The bounds of the input grid should be the same after reversing the y axis, so this should never fail"),
-                        ),
-                        GridOrEmpty::Empty(e) => GridOrEmpty::new_empty(e),
-                    }
-                } else {
-                    grid
-                };
-                // Third, blit the grid to the tile bounds if necessary
-                let grid = if read_advise.direct_read() {
-                    grid
-                } else {
-                    let mut tile_raster =
-                        GridOrEmpty::from(EmptyGrid::new(read_advise.bounds_of_target));
-                    tile_raster.grid_blit_from(&grid);
-                    tile_raster
-                };
-                Ok(GridAndProperties { grid, properties })
-            }
-            Err(GdalProcessPoolError::IpcProcessError {
-                source:
-                    IpcProcessError::GdalError {
-                        kind: IpcProcessGdalErrorKind::FileNotFound,
-                        details: _details,
-                    },
-            }) if file_not_found_as_no_data => Ok(GridAndProperties {
+        let GridAndProperties { grid, properties } = match shared_reader
+            .read_tile_data::<T>(dataset_params, read_advise)
+            .await?
+        {
+            GdalProcessReadResult::Grid(grid_and_properties) => grid_and_properties,
+            GdalProcessReadResult::FileNotFoundAsNoData => GridAndProperties {
                 grid: GridOrEmpty::new_empty_shape(read_advise.bounds_of_target),
                 properties: RasterProperties::default(),
-            }),
-            Err(other_err) => Err(other_err),
-        }?;
+            },
+        };
 
-        Ok(res)
+        // blit the grid to the tile bounds if necessary
+        let grid = if read_advise.direct_read() {
+            grid
+        } else {
+            let mut tile_raster = GridOrEmpty::from(EmptyGrid::new(read_advise.bounds_of_target));
+            tile_raster.grid_blit_from(&grid);
+            tile_raster
+        };
+
+        Ok(GridAndProperties { grid, properties })
     }
 }
 
@@ -118,7 +78,8 @@ mod tests {
     };
 
     use crate::source::gdal_worker_process::{
-        GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool, GdalProcessPoolAccess,
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
+        GdalProcessPoolAccess,
         process_common::GdalReadWindow,
     };
 
