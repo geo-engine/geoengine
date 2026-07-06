@@ -45,3 +45,4 @@ landing_zone_ratio = 0.1 # 10% of total cache size
 number_of_processes = 2
 max_active_processes = 2
 max_dataset_processes = 2
+dedup_requests = true

@@ -1,9 +1,7 @@
 use snafu::Snafu;
 use std::collections::VecDeque;
 use std::hash::{BuildHasherDefault, Hasher};
-use std::sync::Arc;
-#[cfg(feature = "gdalpool_dedup_requests")]
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Duration;
@@ -12,7 +10,6 @@ use geoengine_datatypes::raster::{GridBoundingBox2D, GridBounds, Pixel};
 use ipc_channel::ipc::{IpcReceiver, IpcSender};
 use rustc_hash::FxHasher;
 
-#[cfg(feature = "gdalpool_dedup_requests")]
 use crate::source::gdal_in::process_common::GdalIpcBytePayload;
 
 use super::{
@@ -230,13 +227,11 @@ enum BrokerCommand {
     },
 }
 
-#[cfg(feature = "gdalpool_dedup_requests")]
 type SharedResult = Option<Arc<Result<GdalIpcBytePayload, GdalProcessPoolError>>>;
 
 pub struct GdalProcessPool {
     broker_tx: mpsc::Sender<BrokerCommand>,
-
-    #[cfg(feature = "gdalpool_dedup_requests")]
+    dedup_requests: bool,
     in_flight_tiles: Mutex<FastHashMap<u64, tokio::sync::watch::Receiver<SharedResult>>>,
 }
 
@@ -252,6 +247,7 @@ impl GdalProcessPool {
     /// - `max_total`: The total number of GDAL worker processes to spawn and maintain in the pool.
     /// - `max_active_global`: The maximum number of active (in-flight) requests allowed across all datasets at any given time.
     /// - `max_parallel_per_dataset`: The maximum number of active requests allowed concurrently for the same dataset, enforcing per-dataset concurrency limits.
+    /// - `dedup_requests`: Whether to deduplicate identical concurrent tile requests via a leader/follower mechanism.
     /// # Panics
     /// This function will panic if any of the worker processes fail to spawn successfully.
     pub fn new_with_tokio_handle(
@@ -259,6 +255,7 @@ impl GdalProcessPool {
         number_of_processes: usize,
         max_active_processes: usize,
         max_dataset_processes: usize,
+        dedup_requests: bool,
     ) -> Arc<Self> {
         let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
         let b_tx_clone = broker_tx.clone();
@@ -297,7 +294,7 @@ impl GdalProcessPool {
 
         Arc::new(Self {
             broker_tx,
-            #[cfg(feature = "gdalpool_dedup_requests")]
+            dedup_requests,
             in_flight_tiles: Mutex::new(FastHashMap::default()),
         })
     }
@@ -312,6 +309,7 @@ impl GdalProcessPool {
     /// - `number_of_processes`: The total number of GDAL worker processes to spawn and maintain in the pool.
     /// - `max_active_processes`: The maximum number of active (in-flight) requests allowed across all datasets at any given time.
     /// - `max_dataset_processes`: The maximum number of active requests allowed concurrently for the same dataset, enforcing per-dataset concurrency limits.
+    /// - `dedup_requests`: Whether to deduplicate identical concurrent tile requests via a leader/follower mechanism.
     ///
     /// # Panics
     /// This function will panic if any of the worker processes fail to spawn successfully.
@@ -321,6 +319,7 @@ impl GdalProcessPool {
         number_of_processes: usize,
         max_active_processes: usize,
         max_dataset_processes: usize,
+        dedup_requests: bool,
     ) -> Arc<Self> {
         let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
         let b_tx_clone = broker_tx.clone();
@@ -359,7 +358,7 @@ impl GdalProcessPool {
 
         Arc::new(Self {
             broker_tx,
-            #[cfg(feature = "gdalpool_dedup_requests")]
+            dedup_requests,
             in_flight_tiles: Mutex::new(FastHashMap::default()),
         })
     }
@@ -763,13 +762,11 @@ pub struct GdalPoolWorkerInstance {
     pool: Arc<GdalProcessPool>,
 }
 
-#[cfg(feature = "gdalpool_dedup_requests")]
 struct LeaderCleanupGuard {
     pool: std::sync::Arc<GdalProcessPool>,
     tile_key: u64,
 }
 
-#[cfg(feature = "gdalpool_dedup_requests")]
 impl Drop for LeaderCleanupGuard {
     fn drop(&mut self) {
         // This is guaranteed to run whether the function succeeds, errors,
@@ -785,8 +782,29 @@ impl GdalPoolWorkerInstance {
         Self { pool }
     }
 
-    #[cfg(not(feature = "gdalpool_dedup_requests"))]
+    /// Read gdal tiles.
+    ///
+    /// When the pool is configured with `dedup_requests`, identical concurrent tile requests are
+    /// coalesced via a leader/follower mechanism: the first request spawns a detached background
+    /// task that submits the read to the broker; later requests attach to a shared watch channel.
+    /// Because the leader task is detached, cancelling the caller's HTTP request does not abort
+    /// the leader, so followers still receive the result. The `LeaderCleanupGuard` ensures the
+    /// in-flight entry is removed when the leader task finishes, succeeds, fails, or panics.
+    ///
+    /// # Panics
+    /// This function will panic if a required channel is dropped unexpectedly.
     pub async fn read_data<P: Pixel>(
+        &self,
+        request: IpcChannelMessage,
+    ) -> Result<GdalIpcPayload<P>, GdalProcessPoolError> {
+        if self.pool.dedup_requests {
+            self.read_data_dedup(request).await
+        } else {
+            self.read_data_direct(request).await
+        }
+    }
+
+    async fn read_data_direct<P: Pixel>(
         &self,
         request: IpcChannelMessage,
     ) -> Result<GdalIpcPayload<P>, GdalProcessPoolError> {
@@ -809,7 +827,7 @@ impl GdalPoolWorkerInstance {
         let res = rx
             .await
             .map_err(|_| GdalProcessPoolError::WorkerPanic)??
-            .map_err(|e| GdalProcessPoolError::from(e))
+            .map_err(GdalProcessPoolError::from)
             .inspect_err(|e| tracing::error!("Ipc response error: {e}"))?;
 
         let payload: GdalIpcPayload<P> =
@@ -823,20 +841,7 @@ impl GdalPoolWorkerInstance {
         Ok(payload)
     }
 
-    #[cfg(feature = "gdalpool_dedup_requests")]
-    /// Read gdal tiles with leader & follower feature.
-    ///
-    /// The first concurrent request for a tile becomes the leader and spawns a detached
-    /// background task that submits the request to the broker and waits for the worker
-    /// response. Subsequent requests for the same tile become followers and attach to a
-    /// shared watch channel. Because the leader task is detached, cancelling the caller's
-    /// HTTP request does not abort the leader; the result is still broadcast to all
-    /// followers. The `LeaderCleanupGuard` ensures the in-flight entry is removed when
-    /// the leader task finishes, succeeds, fails, or panics.
-    ///
-    /// # Panics
-    /// This function will panic if watch channel fails
-    pub async fn read_data<P: Pixel>(
+    async fn read_data_dedup<P: Pixel>(
         &self,
         request: IpcChannelMessage,
     ) -> Result<GdalIpcPayload<P>, GdalProcessPoolError> {
@@ -903,7 +908,7 @@ impl GdalPoolWorkerInstance {
             }
         };
 
-        // ALL requests (including the one that spawned the background task) waits for the task.
+        // ALL requests (including the one that spawned the background task) wait for the task.
         while rx.borrow().is_none() {
             if rx.changed().await.is_err() {
                 // Background task panicked before sending
