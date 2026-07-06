@@ -72,7 +72,12 @@ impl GdalDatasetParameters {
         SpatialGridDefinition::new(gdal_geo_transform, self.dataset_bounds())
     }
 
-    pub fn gdal_config_options_vsi_curl() -> &'static [(&'static str, &'static str)] {
+    /// GDAL config options that affect the whole worker process and are typically read by GDAL
+    /// only once at first use (e.g. VSICURL cache / chunk settings).
+    ///
+    /// These must be set once when the worker process starts, before any dataset is opened,
+    /// otherwise they have no effect.
+    pub fn gdal_worker_process_global_config_options() -> &'static [(&'static str, &'static str)] {
         &[
             ("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR"),
             (
@@ -89,23 +94,13 @@ impl GdalDatasetParameters {
         self.file_path.starts_with("/vsicurl/") || self.file_path.starts_with("/vsis3/")
     }
 
-    pub fn gdal_config_options_with_defaults(&self) -> Option<Vec<(String, String)>> {
-        if !self.is_vis_curl() {
-            return self.gdal_config_options.clone();
-        }
-
-        let mut opts = self.gdal_config_options.clone().unwrap_or_default();
-        let opt_keys: Vec<&str> = opts.iter().map(|(k, _)| k.as_ref()).collect();
-
-        let mut use_defaults: Vec<(String, String)> = Self::gdal_config_options_vsi_curl()
-            .iter()
-            .filter(|(k, _)| !opt_keys.contains(k))
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect();
-
-        opts.append(&mut use_defaults);
-
-        if opts.is_empty() { None } else { Some(opts) }
+    /// Returns the request-level GDAL config options supplied by the user.
+    ///
+    /// VSICURL process-global options (cache, chunk size, etc.) are intentionally not merged here;
+    /// they are configured once per worker process at startup via
+    /// [`Self::gdal_worker_process_global_config_options`].
+    pub fn gdal_config_options_for_request(&self) -> Option<Vec<(String, String)>> {
+        self.gdal_config_options.clone()
     }
 
     pub fn max_retries(&self) -> Option<usize> {

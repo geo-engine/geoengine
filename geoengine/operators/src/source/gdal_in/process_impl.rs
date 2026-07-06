@@ -181,9 +181,9 @@ impl GdalDatasetHolder {
             .as_ref()
             .map(|o| o.iter().map(String::as_str).collect::<Vec<_>>());
 
-        // reverts the thread local configs on drop
+        // reverts the process-global configs on drop
         let thread_local_configs: Option<GdalConfigOptions> = dataset_params
-            .gdal_config_options_with_defaults()
+            .gdal_config_options_for_request()
             .as_ref()
             .map(|config_options| GdalConfigOptions::new(config_options))
             .transpose()

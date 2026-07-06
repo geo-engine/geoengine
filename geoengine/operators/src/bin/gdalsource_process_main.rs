@@ -2,12 +2,13 @@ use std::{fmt::Display, str::FromStr};
 
 use gdal::raster::GdalType;
 use geoengine_datatypes::raster::Pixel;
-use geoengine_operators::source::gdal_in::process_common::{
-    GdalIpcBytePayload, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
-    IpcProcessRasterResult,
-};
-use geoengine_operators::source::gdal_in::process_impl::{
-    GdalDatasetHolder, GdalHandling, setup_client,
+use geoengine_operators::source::gdal_in::{
+    GdalDatasetParameters,
+    process_common::{
+        GdalIpcBytePayload, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
+        IpcProcessRasterResult,
+    },
+    process_impl::{GdalDatasetHolder, GdalHandling, setup_client},
 };
 use ipc_channel::ipc::IpcSender;
 use num::FromPrimitive;
@@ -80,8 +81,20 @@ fn reroute_gdal_logging() {
 }
 */
 
+/// Configure GDAL process-global options once before any dataset is opened.
+/// Options like VSICURL cache sizes are only read by GDAL at first use, so they must be set here
+/// rather than per-request.
+fn set_gdal_process_global_options() {
+    for (key, value) in GdalDatasetParameters::gdal_worker_process_global_config_options() {
+        if let Err(err) = gdal::config::set_config_option(key, value) {
+            eprintln!("Failed to set GDAL config option {key}={value}: {err}");
+        }
+    }
+}
+
 fn main() {
     let (token, _debug_lvl) = setup();
+    set_gdal_process_global_options();
     // TODO: add a logger?
     //reroute_gdal_logging();
     run(token);
