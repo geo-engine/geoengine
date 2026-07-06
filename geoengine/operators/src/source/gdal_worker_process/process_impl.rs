@@ -5,7 +5,7 @@ use super::{
     },
 };
 use crate::{
-    source::gdal_in::process_common::IpcProcessGdalErrorKind,
+    source::gdal_worker_process::process_common::IpcProcessGdalErrorKind,
     util::{GdalConfigOptions, gdal::gdal_open_ex_gdal_error, retry::retry_sync},
 };
 use float_cmp::approx_eq;

@@ -2,7 +2,7 @@ use std::{fmt::Display, str::FromStr};
 
 use gdal::raster::GdalType;
 use geoengine_datatypes::raster::Pixel;
-use geoengine_operators::source::gdal_in::{
+use geoengine_operators::source::gdal_worker_process::{
     GdalDatasetParameters,
     process_common::{
         GdalIpcBytePayload, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,

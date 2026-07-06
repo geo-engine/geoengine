@@ -10,7 +10,7 @@ use geoengine_datatypes::raster::{GridBoundingBox2D, GridBounds, Pixel};
 use ipc_channel::ipc::{IpcReceiver, IpcSender};
 use rustc_hash::FxHasher;
 
-use crate::source::gdal_in::process_common::GdalIpcBytePayload;
+use crate::source::gdal_worker_process::process_common::GdalIpcBytePayload;
 
 use super::{
     GdalProcessPoolAccess,
@@ -758,7 +758,7 @@ fn calculate_grid_distance(a: &GridBoundingBox2D, b: &GridBoundingBox2D) -> f64 
 }
 
 #[derive(Clone)]
-pub struct GdalPoolWorkerInstance {
+pub struct GdalPoolDispatcher {
     pool: Arc<GdalProcessPool>,
 }
 
@@ -777,7 +777,7 @@ impl Drop for LeaderCleanupGuard {
     }
 }
 
-impl GdalPoolWorkerInstance {
+impl GdalPoolDispatcher {
     pub fn new(pool: Arc<GdalProcessPool>) -> Self {
         Self { pool }
     }

@@ -7,7 +7,7 @@ use geoengine_datatypes::{
 };
 use tracing::{trace, warn};
 
-use crate::source::gdal_in::process_common::{GdalReadAdvise, GdalReadWindow};
+use crate::source::gdal_worker_process::process_common::{GdalReadAdvise, GdalReadWindow};
 
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
@@ -506,7 +506,7 @@ mod tests {
     };
 
     use crate::source::{
-        gdal_in::process_common::GdalReadWindow,
+        gdal_worker_process::process_common::GdalReadWindow,
         multi_band_gdal_source::reader_mode::{OverviewReaderState, ReaderState},
     };
 

@@ -69,7 +69,7 @@ mod test_util {
     use crate::source::gdal_source::GdalMetaDataRegular;
     use crate::source::{
         GdalSource, GdalSourceParameters,
-        gdal_in::{
+        gdal_worker_process::{
             FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
             GdalMetadataMapping, GdalSourceTimePlaceholder, TimeReference,
         },

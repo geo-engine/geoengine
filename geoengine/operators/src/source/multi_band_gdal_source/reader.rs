@@ -11,8 +11,8 @@ use tracing::{debug, trace};
 
 use crate::source::{
     MultiBandGdalLoadingInfo, MultiBandGdalSourceError,
-    gdal_in::{
-        FileNotFoundHandling, GdalDatasetParameters, GdalPoolWorkerInstance, GdalProcessPoolError,
+    gdal_worker_process::{
+        FileNotFoundHandling, GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError,
         GridAndProperties,
         process_common::{
             GdalReadAdvise, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
@@ -22,17 +22,17 @@ use crate::source::{
     multi_band_gdal_source::reader_mode::GdalReaderMode,
 };
 
-pub(crate) struct GdalPoolReader(GdalPoolWorkerInstance);
+pub(crate) struct GdalPoolReader(GdalPoolDispatcher);
 
-impl From<GdalPoolWorkerInstance> for GdalPoolReader {
-    fn from(value: GdalPoolWorkerInstance) -> Self {
+impl From<GdalPoolDispatcher> for GdalPoolReader {
+    fn from(value: GdalPoolDispatcher) -> Self {
         GdalPoolReader(value)
     }
 }
 
 impl GdalPoolReader {
     #[inline]
-    fn worker_instance(&self) -> &GdalPoolWorkerInstance {
+    fn worker_instance(&self) -> &GdalPoolDispatcher {
         &self.0
     }
 
@@ -131,7 +131,7 @@ impl GdalPoolReader {
         tile_information: TileInformation,
         time: TimeInterval,
         band: u32,
-        gdal_worker: GdalPoolWorkerInstance,
+        gdal_worker: GdalPoolDispatcher,
     ) -> Result<RasterTile2D<T>, MultiBandGdalSourceError> {
         debug!(
             "loading tile {:?} for time: {}, band: {band}",

@@ -1,4 +1,4 @@
-use crate::source::gdal_in::{GdalProcessPoolError, process_common::IpcProcessError};
+use crate::source::gdal_worker_process::{GdalProcessPoolError, process_common::IpcProcessError};
 use geoengine_datatypes::raster::{GridBoundingBox2D, RasterDataType};
 use snafu::Snafu;
 

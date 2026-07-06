@@ -1,4 +1,4 @@
-use super::gdal_in::{GdalDatasetParameters, GdalPoolWorkerInstance, GridAndProperties};
+use super::gdal_worker_process::{GdalDatasetParameters, GdalPoolDispatcher, GridAndProperties};
 use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor,
     SpatialGridDescriptor, WorkflowOperatorPath,
@@ -102,7 +102,7 @@ impl GdalRasterLoader {
         dataset_params: GdalDatasetParameters,
         reader_mode: GdalReaderMode,
         tile_information: TileInformation,
-        gdal_worker: GdalPoolWorkerInstance,
+        gdal_worker: GdalPoolDispatcher,
     ) -> Result<Option<GridAndProperties<T, GridBoundingBox2D>>, GdalSourceError> {
         tracing::trace!(
             "Loading tile {:?}, from {}, band: {}",
@@ -144,7 +144,7 @@ impl GdalRasterLoader {
         tile_information: TileInformation,
         tile_time: TimeInterval,
         cache_hint: CacheHint,
-        gdal_worker: GdalPoolWorkerInstance,
+        gdal_worker: GdalPoolDispatcher,
     ) -> Result<RasterTile2D<T>, GdalSourceError> {
         match dataset_params {
             // TODO: discuss if we need this check here. The metadata provider should only pass on loading infos if the query intersects the datasets bounds! And the tiling strategy should only generate tiles that intersect the querys bbox.
@@ -209,7 +209,7 @@ fn temporal_slice_tile_future_stream<T: Pixel + GdalType + FromPrimitive>(
     info: GdalLoadingInfoTemporalSlice,
     tiling_strategy: TilingStrategy,
     reader_mode: GdalReaderMode,
-    gdal_worker: GdalPoolWorkerInstance,
+    gdal_worker: GdalPoolDispatcher,
 ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> + use<T> {
     stream::iter(tiling_strategy.tile_information_iterator_from_pixel_bounds(spatial_bounds)).map(
         move |tile| {
@@ -471,7 +471,7 @@ fn load_source_stream<P, S>(
     spatial_query: GridBoundingBox2D,
     tiling_strategy: TilingStrategy,
     reader_mode: GdalReaderMode,
-    gdal_worker: GdalPoolWorkerInstance,
+    gdal_worker: GdalPoolDispatcher,
 ) -> impl Stream<Item = Result<RasterTile2D<P>>> + use<P, S>
 where
     P: Pixel + GdalType + FromPrimitive,
@@ -818,7 +818,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
 mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext};
-    use crate::source::gdal_in::{
+    use crate::source::gdal_worker_process::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
         GdalProcessPoolAccess, GdalSourceTimePlaceholder, TimeReference,
     };
@@ -1256,7 +1256,7 @@ mod tests {
         });
 
         let gpp = GdalProcessPool::new(2, 2, 2, true);
-        let gw: GdalPoolWorkerInstance = gpp.get_gdal_worker();
+        let gw: GdalPoolDispatcher = gpp.get_gdal_worker();
 
         let tile = GdalRasterLoader::load_tile_async::<f64>(
             params,
@@ -1427,7 +1427,7 @@ mod tests {
         let params = None;
 
         let gpp = GdalProcessPool::new(2, 2, 2, true);
-        let gw: GdalPoolWorkerInstance = gpp.get_gdal_worker();
+        let gw: GdalPoolDispatcher = gpp.get_gdal_worker();
 
         let tile = GdalRasterLoader::load_tile_async::<f64>(
             params,

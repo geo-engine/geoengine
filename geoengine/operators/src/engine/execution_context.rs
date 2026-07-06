@@ -11,7 +11,7 @@ use crate::machine_learning::MlModelLoadingInfo;
 use crate::meta::quota::{QuotaChecker, QuotaTracking};
 use crate::meta::wrapper::InitializedOperatorWrapper;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
-use crate::source::gdal_in::{GdalProcessPool, GdalProcessPoolAccess};
+use crate::source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess};
 use crate::source::{
     GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
     OgrSourceDataset,

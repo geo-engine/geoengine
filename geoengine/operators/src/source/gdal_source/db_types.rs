@@ -2,7 +2,7 @@ use crate::{
     engine::RasterResultDescriptor,
     error::Error,
     source::{
-        gdal_in::{GdalDatasetParameters, GdalSourceTimePlaceholder},
+        gdal_worker_process::{GdalDatasetParameters, GdalSourceTimePlaceholder},
         gdal_source::loading_info::{GdalMetaDataRegular, GdalMetadataNetCdfCf},
     },
 };

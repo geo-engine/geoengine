@@ -8,7 +8,7 @@ use crate::{
     cache::shared_cache::SharedCache,
     error,
     meta::quota::QuotaChecker,
-    source::gdal_in::{GdalProcessPool, GdalProcessPoolAccess},
+    source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
     util::create_rayon_thread_pool,
 };
 use crate::{meta::quota::QuotaTracking, util::Result};

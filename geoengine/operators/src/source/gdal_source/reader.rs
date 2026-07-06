@@ -4,8 +4,8 @@ use geoengine_datatypes::raster::{
 };
 use num::FromPrimitive;
 
-use crate::source::gdal_in::{
-    FileNotFoundHandling, GdalDatasetParameters, GdalPoolWorkerInstance, GdalProcessPoolError,
+use crate::source::gdal_worker_process::{
+    FileNotFoundHandling, GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError,
     GridAndProperties,
     process_common::{
         GdalReadAdvise, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
@@ -13,17 +13,17 @@ use crate::source::gdal_in::{
     },
 };
 
-pub struct GdalPoolReader(GdalPoolWorkerInstance);
+pub struct GdalPoolReader(GdalPoolDispatcher);
 
-impl From<GdalPoolWorkerInstance> for GdalPoolReader {
-    fn from(value: GdalPoolWorkerInstance) -> Self {
+impl From<GdalPoolDispatcher> for GdalPoolReader {
+    fn from(value: GdalPoolDispatcher) -> Self {
         GdalPoolReader(value)
     }
 }
 
 impl GdalPoolReader {
     #[inline]
-    fn worker_instance(&self) -> &GdalPoolWorkerInstance {
+    fn worker_instance(&self) -> &GdalPoolDispatcher {
         &self.0
     }
 
@@ -117,7 +117,7 @@ mod tests {
         test_data,
     };
 
-    use crate::source::gdal_in::{
+    use crate::source::gdal_worker_process::{
         GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool, GdalProcessPoolAccess,
         process_common::GdalReadWindow,
     };
@@ -128,7 +128,7 @@ mod tests {
     async fn load_ndvi_jan_2014_by_process(
         gdal_read_advice: GdalReadAdvise,
         tile_information: TileInformation,
-        gdal_worker: GdalPoolWorkerInstance,
+        gdal_worker: GdalPoolDispatcher,
     ) -> Result<RasterTile2D<u8>, GdalProcessPoolError> {
         let dataset_params = GdalDatasetParameters {
             file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),

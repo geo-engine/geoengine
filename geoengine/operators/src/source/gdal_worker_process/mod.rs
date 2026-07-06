@@ -10,11 +10,11 @@ pub use gdal_dataset_params::{
     GdalRetryOptions, GdalSourceTimePlaceholder, TimeReference,
 };
 pub use grid_and_properties::GridAndProperties;
-pub use process_pool::{GdalPoolWorkerInstance, GdalProcessPool, GdalProcessPoolError};
+pub use process_pool::{GdalPoolDispatcher, GdalProcessPool, GdalProcessPoolError};
 
 pub trait GdalProcessPoolAccess {
     fn get_gdal_pool(&self) -> &std::sync::Arc<GdalProcessPool>;
-    fn get_gdal_worker(&self) -> GdalPoolWorkerInstance {
-        GdalPoolWorkerInstance::new(self.get_gdal_pool().clone())
+    fn get_gdal_worker(&self) -> GdalPoolDispatcher {
+        GdalPoolDispatcher::new(self.get_gdal_pool().clone())
     }
 }

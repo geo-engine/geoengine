@@ -4,7 +4,7 @@ use geoengine_datatypes::raster::{
 use geoengine_datatypes::raster::{GridIdx2D, SpatialGridDefinition};
 use num::Zero;
 
-use crate::source::gdal_in::process_common::{GdalReadAdvise, GdalReadWindow};
+use crate::source::gdal_worker_process::process_common::{GdalReadAdvise, GdalReadWindow};
 
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
