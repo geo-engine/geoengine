@@ -39,6 +39,9 @@ lz4_flex = { workspace = true }
 ndarray = { workspace = true }
 num-traits = { workspace = true }
 num = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-otlp = { workspace = true }
 ouroboros = { workspace = true }
 ordered-float = { workspace = true }
 ort = { workspace = true }
@@ -57,6 +60,8 @@ stream-cancel = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-postgres = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 typetag = { workspace = true }
 uuid = { workspace = true }
 strum = { workspace = true }

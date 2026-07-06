@@ -12,6 +12,10 @@ use geoengine_operators::source::gdal_worker_process::{
 };
 use ipc_channel::ipc::IpcSender;
 use num::FromPrimitive;
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::trace::SdkTracerProvider;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
 fn exit_with_error(msg: impl Display) -> ! {
     tracing::error!("Error: {msg}");
@@ -53,8 +57,6 @@ fn setup() -> (Token, Level) {
     }
 }
 
-// TODO: when we add a logger to the process, we should re-route gdal logs, too.
-/*
 /// We install a GDAL error handler that logs all messages with our log macros.
 fn reroute_gdal_logging() {
     gdal::config::set_error_handler(|error_type, error_num, error_msg| {
@@ -79,7 +81,6 @@ fn reroute_gdal_logging() {
         }
     });
 }
-*/
 
 /// Configure GDAL process-global options once before any dataset is opened.
 /// Options like VSICURL cache sizes are only read by GDAL at first use, so they must be set here
@@ -92,12 +93,76 @@ fn set_gdal_process_global_options() {
     }
 }
 
+/// Initializes a tracing subscriber. When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, an OpenTelemetry
+/// OTLP layer is added and the corresponding tracer provider is returned so it can be flushed on
+/// shutdown. Otherwise only a stderr fmt layer is installed.
+fn init_subscriber() -> Option<SdkTracerProvider> {
+    let fmt_layer = tracing_subscriber::fmt::layer()
+        .with_writer(std::io::stderr)
+        .with_filter(EnvFilter::from_default_env());
+
+    if let Ok(endpoint) = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT") {
+        if !endpoint.is_empty() {
+            let exporter = opentelemetry_otlp::SpanExporter::builder()
+                .with_tonic()
+                .with_endpoint(endpoint)
+                .build()
+                .unwrap_or_else(|err| {
+                    eprintln!("Failed to build OTLP exporter: {err}. Continuing without OTLP.");
+                    std::process::exit(1);
+                });
+
+            let provider = SdkTracerProvider::builder()
+                .with_batch_exporter(exporter)
+                .with_resource(
+                    opentelemetry_sdk::Resource::builder_empty()
+                        .with_attribute(opentelemetry::KeyValue::new(
+                            "service.name",
+                            "Geo Engine GDAL Worker",
+                        ))
+                        .build(),
+                )
+                .build();
+
+            let opentelemetry = tracing_opentelemetry::layer().with_tracer(provider.tracer("gdal-worker"));
+
+            tracing_subscriber::registry()
+                .with(fmt_layer)
+                .with(opentelemetry)
+                .init();
+
+            return Some(provider);
+        }
+    }
+
+    tracing_subscriber::registry().with(fmt_layer).init();
+    None
+}
+
 fn main() {
     let (token, _debug_lvl) = setup();
     set_gdal_process_global_options();
-    // TODO: add a logger?
-    //reroute_gdal_logging();
+
+    // The OTLP exporter needs a tokio runtime. We keep the worker's main loop synchronous and
+    // dedicate a single background thread to the runtime that drives the exporter.
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()
+        .expect("Failed to create tokio runtime for telemetry");
+
+    let _runtime_guard = runtime.enter();
+    let provider = init_subscriber();
+
+    reroute_gdal_logging();
     run(token);
+
+    drop(_runtime_guard);
+    if let Some(provider) = provider {
+        if let Err(err) = provider.shutdown() {
+            eprintln!("Failed to flush OpenTelemetry provider: {err}");
+        }
+    }
 }
 
 fn raster_type_dispatch(
