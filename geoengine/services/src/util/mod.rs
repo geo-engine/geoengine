@@ -1,5 +1,6 @@
 use crate::error::{Error, Result};
 use bytes::BytesMut;
+use geoengine_datatypes::primitives::AxisAlignedRectangle;
 use postgres_types::{FromSql, ToSql, to_sql_checked};
 use serde::{Deserialize, Serialize, Serializer};
 use std::ops::Deref;
@@ -136,6 +137,33 @@ pub fn join_base_url_and_path(base_url: &Url, path: &str) -> Result<Url, url::Pa
     url.parse()
 }
 
+/// Scale factor for 5-decimal outward rounding when serializing a WGS84 bbox for a STAC API query.
+///
+/// Five decimals correspond to roughly 1 m at the equator (and less at higher latitudes),
+/// which is more than enough for filtering satellite acquisitions while making the output
+/// stable against tiny float-arithmetic differences between projection backends.
+const STAC_WGS84_BBOX_SCALE: f64 = 100_000.0;
+
+/// Format a WGS84 `bbox` for a STAC API query with bounded precision.
+///
+/// The lower-left corner is rounded down (floor) and the upper-right corner is rounded up
+/// (ceil), so the query rectangle can only grow. This avoids missing STAC items due to
+/// rounding, while the 5-decimal precision keeps the query stable when the projection
+/// library produces slightly different floating-point results.
+pub fn format_stac_wgs84_bbox<T: AxisAlignedRectangle>(bbox: T) -> String {
+    // ponytail: 5 decimals ≈ 1 m precision; outward rounding intentionally enlarges the filter
+    // bbox so no STAC items are missed. Increase decimals only if sub-meter filters are needed.
+    let lower_left = bbox.lower_left();
+    let upper_right = bbox.upper_right();
+
+    let min_x = (lower_left.x * STAC_WGS84_BBOX_SCALE).floor() / STAC_WGS84_BBOX_SCALE;
+    let min_y = (lower_left.y * STAC_WGS84_BBOX_SCALE).floor() / STAC_WGS84_BBOX_SCALE;
+    let max_x = (upper_right.x * STAC_WGS84_BBOX_SCALE).ceil() / STAC_WGS84_BBOX_SCALE;
+    let max_y = (upper_right.y * STAC_WGS84_BBOX_SCALE).ceil() / STAC_WGS84_BBOX_SCALE;
+
+    format!("{min_x:.5},{min_y:.5},{max_x:.5},{max_y:.5}")
+}
+
 /// A wrapper type that serializes to "*****" and can be deserialized from any string.
 /// If the inner value is "*****", it is considered unknown and `as_option` returns `None`.
 /// This is useful for secrets that should not be exposed in API responses, but can be set in API requests.
@@ -247,6 +275,7 @@ where
 #[cfg(test)]
 mod mod_tests {
     use super::*;
+    use geoengine_datatypes::primitives::BoundingBox2D;
 
     #[test]
     fn bool() {
@@ -306,6 +335,30 @@ mod mod_tests {
                 .unwrap()
                 .to_string(),
             "https://example.com/foo/bar/baz"
+        );
+    }
+
+    #[test]
+    fn it_formats_stac_wgs84_bbox_with_outward_rounding() {
+        let bbox = BoundingBox2D::new_unchecked(
+            (8.751_627_919, 50.798_975_685).into(),
+            (8.765_865_426, 50.807_997_755).into(),
+        );
+        assert_eq!(
+            format_stac_wgs84_bbox(bbox),
+            "8.75162,50.79897,8.76587,50.80800"
+        );
+    }
+
+    #[test]
+    fn it_formats_stac_wgs84_bbox_with_negative_and_zero_values() {
+        let bbox = BoundingBox2D::new_unchecked(
+            (9.396_566_748, -83.828_529_729).into(),
+            (63.837_566_566, 0.0).into(),
+        );
+        assert_eq!(
+            format_stac_wgs84_bbox(bbox),
+            "9.39656,-83.82853,63.83757,0.00000"
         );
     }
 }

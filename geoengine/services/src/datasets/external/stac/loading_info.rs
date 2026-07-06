@@ -1,6 +1,6 @@
 use super::{StacDataProvider, StacProviderDataset, StacProviderS3Config};
 use crate::error::Result;
-use crate::util::join_base_url_and_path;
+use crate::util::{format_stac_wgs84_bbox, join_base_url_and_path};
 use async_trait::async_trait;
 use chrono::DateTime as ChronoDateTime;
 use geoengine_datatypes::dataset::DataId;
@@ -325,13 +325,7 @@ impl StacMultiBandMetaData {
         let query_params = vec![
 			(
 				"bbox".to_owned(),
-				format!(
-					"{},{},{},{}",
-					bbox.lower_left().x,
-					bbox.lower_left().y,
-					bbox.upper_right().x,
-					bbox.upper_right().y
-				),
+				format_stac_wgs84_bbox(bbox),
 			),
 			(
 				"datetime".to_owned(),

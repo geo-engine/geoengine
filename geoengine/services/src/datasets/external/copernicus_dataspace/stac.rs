@@ -1,12 +1,12 @@
 use geoengine_datatypes::{
     operations::reproject::ReprojectClipped,
-    primitives::{AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, QueryRectangle},
+    primitives::{BoundingBox2D, DateTime, Duration, QueryRectangle},
     spatial_reference::{CoordinateProjection, DefaultCoordinateProjector, SpatialReference},
 };
 use snafu::{ResultExt, Snafu};
 use url::Url;
 
-use crate::util::join_base_url_and_path;
+use crate::util::{format_stac_wgs84_bbox, join_base_url_and_path};
 
 // API limits
 const MAX_NUM_PAGES: usize = 100;
@@ -61,16 +61,7 @@ fn bbox_time_query(
         .ok_or(CopernicusStacError::BboxNotInsideUtmZone)?;
 
     let query = [
-        (
-            "bbox",
-            format!(
-                "{},{},{},{}",
-                bbox.lower_left().x,
-                bbox.lower_left().y,
-                bbox.upper_right().x,
-                bbox.upper_right().y
-            ),
-        ),
+        ("bbox", format_stac_wgs84_bbox(bbox)),
         (
             "datetime",
             format!(

@@ -11,6 +11,7 @@ use crate::layers::listing::{
 };
 use crate::projects::{RasterSymbology, Symbology};
 use crate::stac::{Feature as StacFeature, FeatureCollection as StacCollection, StacAsset};
+use crate::util::format_stac_wgs84_bbox;
 use crate::util::operators::source_operator_from_dataset;
 use crate::util::sentinel_2_utm_zones::UtmZone;
 use crate::workflows::workflow::Workflow;
@@ -686,11 +687,8 @@ impl SentinelS2L2aCogsMetaData {
                 (
                     "bbox".to_owned(),
                     format!(
-                        "[{},{},{},{}]", // array-brackets are not used in standard but required here for unknkown reason
-                        bbox.lower_left().x,
-                        bbox.lower_left().y,
-                        bbox.upper_right().x,
-                        bbox.upper_right().y
+                        "[{}]", // array-brackets are not used in standard but required here for unknkown reason
+                        format_stac_wgs84_bbox(bbox),
                     ),
                 ), // TODO: order coordinates depending on projection
                 (
@@ -1165,7 +1163,7 @@ mod tests {
                 request::query(url_decoded(contains(("limit", "500")))),
                 request::query(url_decoded(contains((
                     "bbox",
-                    "[9.396566748392315,-83.82852972938498,63.83756656611425,0]"
+                    "[9.39656,-83.82853,63.83757,0.00000]"
                 )))),
                 request::query(url_decoded(contains((
                     "datetime",

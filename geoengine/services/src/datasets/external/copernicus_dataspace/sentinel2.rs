@@ -386,7 +386,7 @@ mod tests {
                 request::path("/stac/collections/SENTINEL-2/items"),
                 request::query(url_decoded(contains((
                     "bbox",
-                    "8.751627919756874,50.79897568511778,8.765865426422579,50.80799775499464",
+                    "8.75162,50.79897,8.76587,50.80800",
                 )))),
                 request::query(url_decoded(contains((
                     "datetime",
