@@ -37,7 +37,6 @@ impl GdalReaderMode {
     }
 }
 
-
 #[derive(Copy, Clone, Debug)]
 pub struct OverviewReaderState {
     pub original_dataset_grid: SpatialGridDefinition,

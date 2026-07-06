@@ -13,8 +13,7 @@ use crate::source::{
     MultiBandGdalLoadingInfo, MultiBandGdalSourceError,
     gdal_worker_process::{
         GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError, GdalProcessReadResult,
-        GridAndProperties,
-        process_common::GdalReadAdvise,
+        GridAndProperties, process_common::GdalReadAdvise,
     },
     multi_band_gdal_source::reader_mode::GdalReaderMode,
 };

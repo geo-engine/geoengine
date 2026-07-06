@@ -2,8 +2,8 @@ use crate::{
     engine::RasterResultDescriptor,
     error::Error,
     source::{
-        gdal_worker_process::{GdalDatasetParameters, GdalSourceTimePlaceholder},
         gdal_source::loading_info::{GdalMetaDataRegular, GdalMetadataNetCdfCf},
+        gdal_worker_process::{GdalDatasetParameters, GdalSourceTimePlaceholder},
     },
 };
 use geoengine_datatypes::{

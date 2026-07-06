@@ -665,7 +665,9 @@ mod tests {
 
     use crate::{
         engine::{RasterBandDescriptors, SpatialGridDescriptor, TimeDescriptor},
-        source::gdal_worker_process::{FileNotFoundHandling, GdalDatasetGeoTransform, TimeReference},
+        source::gdal_worker_process::{
+            FileNotFoundHandling, GdalDatasetGeoTransform, TimeReference,
+        },
     };
 
     use super::*;

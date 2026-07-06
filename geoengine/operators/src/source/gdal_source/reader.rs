@@ -6,8 +6,7 @@ use num::FromPrimitive;
 
 use crate::source::gdal_worker_process::{
     GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError, GdalProcessReadResult,
-    GridAndProperties,
-    process_common::GdalReadAdvise,
+    GridAndProperties, process_common::GdalReadAdvise,
 };
 
 pub struct GdalPoolReader(GdalPoolDispatcher);
@@ -79,8 +78,7 @@ mod tests {
 
     use crate::source::gdal_worker_process::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
-        GdalProcessPoolAccess,
-        process_common::GdalReadWindow,
+        GdalProcessPoolAccess, process_common::GdalReadWindow,
     };
 
     use super::*;

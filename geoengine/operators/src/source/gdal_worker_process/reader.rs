@@ -82,7 +82,10 @@ impl GdalPoolReader {
                 } else {
                     grid
                 };
-                Ok(GdalProcessReadResult::Grid(GridAndProperties { grid, properties }))
+                Ok(GdalProcessReadResult::Grid(GridAndProperties {
+                    grid,
+                    properties,
+                }))
             }
             Err(GdalProcessPoolError::IpcProcessError {
                 source:

@@ -15,7 +15,7 @@ use num::FromPrimitive;
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::trace::SdkTracerProvider;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
+use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 fn exit_with_error(msg: impl Display) -> ! {
     tracing::error!("Error: {msg}");
@@ -124,7 +124,8 @@ fn init_subscriber() -> Option<SdkTracerProvider> {
                 )
                 .build();
 
-            let opentelemetry = tracing_opentelemetry::layer().with_tracer(provider.tracer("gdal-worker"));
+            let opentelemetry =
+                tracing_opentelemetry::layer().with_tracer(provider.tracer("gdal-worker"));
 
             tracing_subscriber::registry()
                 .with(fmt_layer)
