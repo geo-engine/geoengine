@@ -81,7 +81,7 @@ impl GdalDatasetParameters {
             ),
             ("CPL_VSIL_CURL_CHUNK_SIZE", "1048576"), // 1mb TODO: need to tune this!
             ("VSI_CACHE", "TRUE"),
-            ("VSI_CACHE_SIZE", "67108864 "), // 64mb per worker! TODO: need to tune this!
+            ("VSI_CACHE_SIZE", "67108864"), // 64mb per worker! TODO: need to tune this!
         ]
     }
 
