@@ -826,8 +826,16 @@ impl GdalPoolWorkerInstance {
     #[cfg(feature = "gdalpool_dedup_requests")]
     /// Read gdal tiles with leader & follower feature.
     ///
+    /// The first concurrent request for a tile becomes the leader and spawns a detached
+    /// background task that submits the request to the broker and waits for the worker
+    /// response. Subsequent requests for the same tile become followers and attach to a
+    /// shared watch channel. Because the leader task is detached, cancelling the caller's
+    /// HTTP request does not abort the leader; the result is still broadcast to all
+    /// followers. The `LeaderCleanupGuard` ensures the in-flight entry is removed when
+    /// the leader task finishes, succeeds, fails, or panics.
+    ///
     /// # Panics
-    /// This function will panic if watch channel fails    
+    /// This function will panic if watch channel fails
     pub async fn read_data<P: Pixel>(
         &self,
         request: IpcChannelMessage,
