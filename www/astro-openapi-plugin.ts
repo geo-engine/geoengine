@@ -167,10 +167,14 @@ ${operatorMd.content}`;
  */
 function parseParameters(parameters: [string, OpenAPI.SchemaObject][]): ParameterTableEntry[] {
     return parameters.map(([name, param]) => {
+        const oneOfDescriptions =
+            param.oneOf
+                ?.map((schema: OpenAPI.SchemaObject) => schema?.description)
+                .filter((description): description is string => !!description) ?? [];
         const entry = {
             name,
             type: param['x-reference-id'] ?? param.type ?? 'unknown',
-            description: param.description ?? '',
+            description: param.description ?? oneOfDescriptions[0] ?? '',
             examples: param.examples ? Object.values(param.examples).map((ex) => JSON.stringify(ex, null, 2)) : [],
         };
         if (entry.type === 'unknown' && param.oneOf) {

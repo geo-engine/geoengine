@@ -12,8 +12,9 @@ use geoengine_operators::{
     mock::MockPointSource as OperatorsMockPointSource,
     plot::{Histogram as OperatorsHistogram, Statistics as OperatorsStatistics},
     processing::{
-        BandFilter as OperatorsBandFilter, Expression as OperatorsExpression,
-        Interpolation as OperatorsInterpolation, RasterStacker as OperatorsRasterStacker,
+        BandFilter as OperatorsBandFilter, Downsampling as OperatorsDownsampling,
+        Expression as OperatorsExpression, Interpolation as OperatorsInterpolation,
+        RasterStacker as OperatorsRasterStacker,
         RasterTypeConversion as OperatorsRasterTypeConversion,
         RasterVectorJoin as OperatorsRasterVectorJoin, Reprojection as OperatorsReprojection,
         TemporalRasterAggregation as OperatorsTemporalRasterAggregation,
@@ -40,7 +41,8 @@ pub(crate) use crate::api::model::processing_graphs::{
     plots::{Histogram, HistogramParameters, Statistics, StatisticsParameters},
     processing::{
         Aggregation, BandFilter, BandFilterParameters, BandsByNameOrIndex,
-        DeriveOutRasterSpecsSource, Expression, ExpressionParameters, Interpolation,
+        DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParameters,
+        DownsamplingResolution, Expression, ExpressionParameters, Fraction, Interpolation,
         InterpolationMethod, InterpolationParameters, InterpolationResolution, RasterStacker,
         RasterStackerParameters, RasterTypeConversion, RasterTypeConversionParameters,
         RasterVectorJoin, RasterVectorJoinParameters, RenameBands, Reprojection,
@@ -76,6 +78,7 @@ pub enum TypedOperator {
 #[schema(discriminator = "type")]
 pub enum RasterOperator {
     BandFilter(BandFilter),
+    Downsampling(Downsampling),
     Expression(Expression),
     GdalSource(GdalSource),
     Interpolation(Interpolation),
@@ -112,7 +115,6 @@ impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
         // TODO: Missing raster operator mappings (operators crate -> OpenAPI model):
         // [ ] BandNeighborhoodAggregate
         // [ ] BandwiseExpression
-        // [ ] Downsampling
         // [ ] NeighborhoodAggregate
         // [ ] Onnx
         // [ ] RasterScaling
@@ -124,6 +126,9 @@ impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
         match operator {
             RasterOperator::BandFilter(band_filter) => {
                 OperatorsBandFilter::try_from(band_filter).map(OperatorsRasterOperator::boxed)
+            }
+            RasterOperator::Downsampling(downsampling) => {
+                OperatorsDownsampling::try_from(downsampling).map(OperatorsRasterOperator::boxed)
             }
             RasterOperator::Expression(expression) => {
                 OperatorsExpression::try_from(expression).map(OperatorsRasterOperator::boxed)
@@ -240,8 +245,13 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     BandFilterParameters,
     BandsByNameOrIndex,
     DeriveOutRasterSpecsSource,
+    Downsampling,
+    DownsamplingMethod,
+    DownsamplingParameters,
+    DownsamplingResolution,
     Expression,
     ExpressionParameters,
+    Fraction,
     Interpolation,
     InterpolationMethod,
     InterpolationParameters,
