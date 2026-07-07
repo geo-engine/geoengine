@@ -54,6 +54,24 @@ impl RasterColorizer {
             RasterColorizer::MultiBand { rgb_params, .. } => rgb_params.no_data_color,
         }
     }
+
+    /// Returns the band indices used by this colorizer
+    pub fn band_selection(&self) -> Vec<u32> {
+        match self {
+            RasterColorizer::SingleBand { band, .. } => vec![*band],
+            RasterColorizer::MultiBand {
+                red_band,
+                green_band,
+                blue_band,
+                ..
+            } => {
+                let mut bands = vec![*red_band, *green_band, *blue_band];
+                bands.sort_unstable();
+                bands.dedup();
+                bands
+            }
+        }
+    }
 }
 
 /// The parameters for the RGBA colorizer

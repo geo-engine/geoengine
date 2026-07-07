@@ -434,7 +434,19 @@ pub async fn tile<C: ApplicationContext>(
         .spatial_grid
         .tiling_grid_definition(tiling_specification);
 
-    let query_rect = calculate_query_rectangle(&query, &tiling_spatial_grid_definition)?;
+    let band_selection = layer
+        .symbology
+        .as_ref()
+        .and_then(|s| match s {
+            Symbology::Raster(r) => Some(BandSelection::new_unchecked(
+                r.raster_colorizer.band_selection(),
+            )),
+            _ => None,
+        })
+        .unwrap_or_else(BandSelection::first);
+
+    let query_rect =
+        calculate_query_rectangle(&query, &tiling_spatial_grid_definition, band_selection)?;
 
     let (processor, query_ctx) =
         create_query_processor_and_query_context(&layer, &initialized_operator, &ctx).await?;
@@ -472,6 +484,7 @@ pub async fn tile<C: ApplicationContext>(
 fn calculate_query_rectangle(
     query: &TileQuery,
     tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
+    band_selection: BandSelection,
 ) -> OgcApiResult<RasterQueryRectangle> {
     Ok(RasterQueryRectangle::new(
         tile_grid_bbox(
@@ -481,7 +494,7 @@ fn calculate_query_rectangle(
             query.tile_col,
         )?,
         query.time_interval,
-        BandSelection::first(),
+        band_selection,
     ))
 }
 
