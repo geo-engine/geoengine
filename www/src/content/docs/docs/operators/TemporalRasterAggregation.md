@@ -23,8 +23,8 @@ an error is returned.
 | --------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
 | aggregation     | Aggregation            | Aggregation method for values within each time window.<br><br>Encountering NO DATA makes the aggregation result NO DATA unless<br>`ignoreNoData` is `true` for the selected aggregation variant. |          |
 | window          | TimeStep               | Window size and granularity for the output time series.                                                                                                                                          |          |
-| windowReference | null or TimeInstance   |                                                                                                                                                                                                  |          |
-| outputType      | null or RasterDataType |                                                                                                                                                                                                  |          |
+| windowReference | null or TimeInstance   | Optional reference timestamp used as the anchor for window boundaries.<br><br>If omitted, windows are anchored at `1970-01-01T00:00:00Z`.                                                        |          |
+| outputType      | null or RasterDataType | Optional output raster data type.                                                                                                                                                                |          |
 
 ## Sources
 

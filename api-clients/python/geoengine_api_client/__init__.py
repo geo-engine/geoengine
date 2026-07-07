@@ -99,6 +99,10 @@ __all__ = [
     "DeriveOutRasterSpecsSource",
     "DerivedColor",
     "DerivedNumber",
+    "Downsampling",
+    "DownsamplingMethod",
+    "DownsamplingParameters",
+    "DownsamplingResolution",
     "EbvPortalDataProviderDefinition",
     "EdrDataProviderDefinition",
     "EdrVectorSpec",
@@ -114,6 +118,8 @@ __all__ = [
     "FormatSpecifics",
     "FormatSpecificsCsv",
     "Fraction",
+    "Fraction1",
+    "Fraction2",
     "GbifDataProviderDefinition",
     "GdalDatasetParameters",
     "GdalLoadingInfoTemporalSlice",
@@ -481,6 +487,10 @@ from geoengine_api_client.models.default import Default as Default
 from geoengine_api_client.models.derive_out_raster_specs_source import DeriveOutRasterSpecsSource as DeriveOutRasterSpecsSource
 from geoengine_api_client.models.derived_color import DerivedColor as DerivedColor
 from geoengine_api_client.models.derived_number import DerivedNumber as DerivedNumber
+from geoengine_api_client.models.downsampling import Downsampling as Downsampling
+from geoengine_api_client.models.downsampling_method import DownsamplingMethod as DownsamplingMethod
+from geoengine_api_client.models.downsampling_parameters import DownsamplingParameters as DownsamplingParameters
+from geoengine_api_client.models.downsampling_resolution import DownsamplingResolution as DownsamplingResolution
 from geoengine_api_client.models.ebv_portal_data_provider_definition import EbvPortalDataProviderDefinition as EbvPortalDataProviderDefinition
 from geoengine_api_client.models.edr_data_provider_definition import EdrDataProviderDefinition as EdrDataProviderDefinition
 from geoengine_api_client.models.edr_vector_spec import EdrVectorSpec as EdrVectorSpec
@@ -496,6 +506,8 @@ from geoengine_api_client.models.first_aggregation import FirstAggregation as Fi
 from geoengine_api_client.models.format_specifics import FormatSpecifics as FormatSpecifics
 from geoengine_api_client.models.format_specifics_csv import FormatSpecificsCsv as FormatSpecificsCsv
 from geoengine_api_client.models.fraction import Fraction as Fraction
+from geoengine_api_client.models.fraction1 import Fraction1 as Fraction1
+from geoengine_api_client.models.fraction2 import Fraction2 as Fraction2
 from geoengine_api_client.models.gbif_data_provider_definition import GbifDataProviderDefinition as GbifDataProviderDefinition
 from geoengine_api_client.models.gdal_dataset_parameters import GdalDatasetParameters as GdalDatasetParameters
 from geoengine_api_client.models.gdal_loading_info_temporal_slice import GdalLoadingInfoTemporalSlice as GdalLoadingInfoTemporalSlice

@@ -1,6 +1,6 @@
 --- typescript/src/models/RasterOperator.ts
 +++ typescript/src/models/RasterOperator.ts
-@@ -147,3 +147,11 @@
+@@ -158,3 +158,11 @@
      }
  }
  

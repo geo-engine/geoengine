@@ -58,6 +58,10 @@ docs/Default.md
 docs/DeriveOutRasterSpecsSource.md
 docs/DerivedColor.md
 docs/DerivedNumber.md
+docs/Downsampling.md
+docs/DownsamplingMethod.md
+docs/DownsamplingParameters.md
+docs/DownsamplingResolution.md
 docs/EbvPortalDataProviderDefinition.md
 docs/EdrDataProviderDefinition.md
 docs/EdrVectorSpec.md
@@ -73,6 +77,8 @@ docs/FirstAggregation.md
 docs/FormatSpecifics.md
 docs/FormatSpecificsCsv.md
 docs/Fraction.md
+docs/Fraction1.md
+docs/Fraction2.md
 docs/GbifDataProviderDefinition.md
 docs/GdalDatasetParameters.md
 docs/GdalLoadingInfoTemporalSlice.md
@@ -444,6 +450,10 @@ src/models/default.rs
 src/models/derive_out_raster_specs_source.rs
 src/models/derived_color.rs
 src/models/derived_number.rs
+src/models/downsampling.rs
+src/models/downsampling_method.rs
+src/models/downsampling_parameters.rs
+src/models/downsampling_resolution.rs
 src/models/ebv_portal_data_provider_definition.rs
 src/models/edr_data_provider_definition.rs
 src/models/edr_vector_spec.rs
@@ -459,6 +469,8 @@ src/models/first_aggregation.rs
 src/models/format_specifics.rs
 src/models/format_specifics_csv.rs
 src/models/fraction.rs
+src/models/fraction_1.rs
+src/models/fraction_2.rs
 src/models/gbif_data_provider_definition.rs
 src/models/gdal_dataset_parameters.rs
 src/models/gdal_loading_info_temporal_slice.rs

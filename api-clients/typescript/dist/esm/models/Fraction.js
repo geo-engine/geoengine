@@ -11,20 +11,12 @@
  * Do not edit the class manually.
  */
 /**
- * @export
- */
-export const FractionTypeEnum = {
-    Fraction: 'fraction'
-};
-/**
  * Check if a given object implements the Fraction interface.
  */
 export function instanceOfFraction(value) {
     if (!('x' in value) || value['x'] === undefined)
         return false;
     if (!('y' in value) || value['y'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -38,7 +30,6 @@ export function FractionFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'x': json['x'],
         'y': json['y'],
-        'type': json['type'],
     };
 }
 export function FractionToJSON(json) {
@@ -51,6 +42,5 @@ export function FractionToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'x': value['x'],
         'y': value['y'],
-        'type': value['type'],
     };
 }

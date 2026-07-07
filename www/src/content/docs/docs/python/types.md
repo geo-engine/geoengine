@@ -183,6 +183,14 @@ def __init__(x_resolution: float, y_resolution: float) -> None
 
 Initialize a new `SpatialResolution` object
 
+#### to_api_dict
+
+```python
+def to_api_dict() -> SpatialResolutionDict
+```
+
+create a openapi `SpatialResolution` from self
+
 #### from_response
 
 ```python
@@ -1455,6 +1463,14 @@ def from_response(cls,
 ```
 
 Parse a geotransform from an HTTP JSON response
+
+#### to_api_dict
+
+```python
+def to_api_dict() -> geoengine_api_client.GeoTransform
+```
+
+Convert the geotransform for an API request
 
 #### to_gdal
 

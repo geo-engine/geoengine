@@ -12,18 +12,11 @@
  * Do not edit the class manually.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.FractionTypeEnum = void 0;
 exports.instanceOfFraction = instanceOfFraction;
 exports.FractionFromJSON = FractionFromJSON;
 exports.FractionFromJSONTyped = FractionFromJSONTyped;
 exports.FractionToJSON = FractionToJSON;
 exports.FractionToJSONTyped = FractionToJSONTyped;
-/**
- * @export
- */
-exports.FractionTypeEnum = {
-    Fraction: 'fraction'
-};
 /**
  * Check if a given object implements the Fraction interface.
  */
@@ -31,8 +24,6 @@ function instanceOfFraction(value) {
     if (!('x' in value) || value['x'] === undefined)
         return false;
     if (!('y' in value) || value['y'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -46,7 +37,6 @@ function FractionFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'x': json['x'],
         'y': json['y'],
-        'type': json['type'],
     };
 }
 function FractionToJSON(json) {
@@ -59,6 +49,5 @@ function FractionToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'x': value['x'],
         'y': value['y'],
-        'type': value['type'],
     };
 }

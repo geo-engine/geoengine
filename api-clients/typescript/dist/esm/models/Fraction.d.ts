@@ -9,37 +9,24 @@
  * Do not edit the class manually.
  */
 /**
- * Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).
+ *
  * @export
  * @interface Fraction
  */
 export interface Fraction {
     /**
-     *
+     * Scaling factor in x direction.
      * @type {number}
      * @memberof Fraction
      */
     x: number;
     /**
-     *
+     * Scaling factor in y direction.
      * @type {number}
      * @memberof Fraction
      */
     y: number;
-    /**
-     *
-     * @type {FractionTypeEnum}
-     * @memberof Fraction
-     */
-    type: FractionTypeEnum;
 }
-/**
- * @export
- */
-export declare const FractionTypeEnum: {
-    readonly Fraction: "fraction";
-};
-export type FractionTypeEnum = typeof FractionTypeEnum[keyof typeof FractionTypeEnum];
 /**
  * Check if a given object implements the Fraction interface.
  */

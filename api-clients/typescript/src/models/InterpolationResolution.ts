@@ -11,13 +11,13 @@
  * Do not edit the class manually.
  */
 
-import type { Fraction } from './Fraction';
+import type { Fraction2 } from './Fraction2';
 import {
-    instanceOfFraction,
-    FractionFromJSON,
-    FractionFromJSONTyped,
-    FractionToJSON,
-} from './Fraction';
+    instanceOfFraction2,
+    Fraction2FromJSON,
+    Fraction2FromJSONTyped,
+    Fraction2ToJSON,
+} from './Fraction2';
 import type { Resolution } from './Resolution';
 import {
     instanceOfResolution,
@@ -31,7 +31,7 @@ import {
  * 
  * @export
  */
-export type InterpolationResolution = Fraction | Resolution;
+export type InterpolationResolution = Fraction2 | Resolution;
 
 export function InterpolationResolutionFromJSON(json: any): InterpolationResolution {
     return InterpolationResolutionFromJSONTyped(json, false);
@@ -44,8 +44,8 @@ export function InterpolationResolutionFromJSONTyped(json: any, ignoreDiscrimina
     if (typeof json !== 'object') {
         return json;
     }
-    if (instanceOfFraction(json)) {
-        return FractionFromJSONTyped(json, true);
+    if (instanceOfFraction2(json)) {
+        return Fraction2FromJSONTyped(json, true);
     }
     if (instanceOfResolution(json)) {
         return ResolutionFromJSONTyped(json, true);
@@ -64,8 +64,8 @@ export function InterpolationResolutionToJSONTyped(value?: InterpolationResoluti
     if (typeof value !== 'object') {
         return value;
     }
-    if (instanceOfFraction(value)) {
-        return FractionToJSON(value as Fraction);
+    if (instanceOfFraction2(value)) {
+        return Fraction2ToJSON(value as Fraction2);
     }
     if (instanceOfResolution(value)) {
         return ResolutionToJSON(value as Resolution);
