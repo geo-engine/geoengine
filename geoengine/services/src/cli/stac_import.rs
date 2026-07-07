@@ -20,6 +20,8 @@ use geoengine_datatypes::{
 use serde::Deserialize;
 use stac::Asset;
 use tracing::{debug, error, info, warn};
+use tracing_subscriber::Layer;
+use tracing_subscriber::layer::SubscriberExt;
 
 use crate::{
     api::{
@@ -237,10 +239,22 @@ fn init_stac_import_logging(verbose: bool) {
         tracing::Level::WARN
     };
 
-    let _ = tracing_subscriber::fmt()
-        .with_max_level(level)
-        .with_writer(std::io::stderr)
-        .try_init();
+    let filter_targets = tracing_subscriber::filter::Targets::new()
+        .with_target("geoengine_services", level)
+        .with_default(match level {
+            tracing::Level::DEBUG => tracing::Level::INFO,
+            _ => level,
+        });
+
+    let subscriber = tracing_subscriber::Registry::default()
+        .with(filter_targets)
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_filter(tracing_subscriber::filter::LevelFilter::from_level(level)),
+        );
+
+    let _ = tracing::subscriber::set_global_default(subscriber);
 }
 
 struct StacImporter {
@@ -465,7 +479,7 @@ impl StacImporter {
         let item_epsg_code = epsg_code_from_item(&item, stac_extension_versions.projection)?;
 
         // Filter by EPSG code if epsgs parameter is provided
-        // TODO: also filter when epsg code is at asset and not item level
+        // (asset-level EPSG is also filtered in the per-asset processing functions below)
         if let Some(epsg) = item_epsg_code
             && !self.params.epsgs.is_empty()
             && !self.params.epsgs.contains(&epsg)
@@ -600,6 +614,11 @@ impl StacImporter {
             .or(epsg)
             .ok_or(anyhow::anyhow!("Failed to determine EPSG code from asset"))?;
 
+        // Filter by EPSG code if epsgs parameter is provided (catches asset-level EPSG)
+        if !self.params.epsgs.is_empty() && !self.params.epsgs.contains(&epsg) {
+            anyhow::bail!("EPSG {epsg} not in filter list");
+        }
+
         let dataset_key = DatasetKey {
             epsg,
             data_type,
@@ -704,6 +723,11 @@ impl StacImporter {
         let epsg = epsg_code_from_fields(StacExtensionMajorVersion::V2, &asset.additional_fields)
             .or(epsg)
             .ok_or(anyhow::anyhow!("Failed to determine EPSG code from asset"))?;
+
+        // Filter by EPSG code if epsgs parameter is provided (catches asset-level EPSG)
+        if !self.params.epsgs.is_empty() && !self.params.epsgs.contains(&epsg) {
+            anyhow::bail!("EPSG {epsg} not in filter list");
+        }
 
         let dataset_key = DatasetKey {
             epsg,
@@ -2121,7 +2145,7 @@ async fn scan_collection(
                     raster: StacExtensionMajorVersion::V2,
                     eo: StacExtensionMajorVersion::V2,
                 },
-            ) => scan_item_asset_v1_1_0(asset),
+            ) => scan_item_asset_v1_1_0(asset, &collection.summaries),
             _ => Err(anyhow::anyhow!(
                 "Unsupported STAC version or extension versions: {:?}, {stac_extension_versions:?}",
                 collection.version
@@ -2230,6 +2254,7 @@ fn scan_item_asset_v1_0_0(
 
 fn scan_item_asset_v1_1_0(
     asset: &stac::ItemAsset,
+    collection_summaries: &Option<serde_json::Map<String, serde_json::Value>>,
 ) -> anyhow::Result<Option<HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>>> {
     let mut dataset_bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> = HashMap::new();
 
@@ -2252,9 +2277,23 @@ fn scan_item_asset_v1_1_0(
     let resolution = asset
         .additional_fields
         .get("gsd")
-        .ok_or(anyhow::anyhow!("missing attribute `gsd`"))?
-        .as_f64()
-        .ok_or(anyhow::anyhow!("attribute `gsd` is not a number"))?;
+        .and_then(serde_json::Value::as_f64)
+        .or_else(|| {
+            // Fall back to deriving resolution from proj:transform if gsd is not available
+            geo_transform_from_fields(&asset.additional_fields).map(|gt| gt.x_pixel_size().abs())
+        })
+        .or_else(|| {
+            // Fall back to collection summaries for gsd (may list multiple resolutions)
+            collection_summaries
+                .as_ref()
+                .and_then(|s| s.get("gsd"))
+                .and_then(|v| v.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|v| v.as_f64())
+        })
+        .ok_or(anyhow::anyhow!(
+            "missing attribute `gsd` or `proj:transform`"
+        ))?;
 
     for band_name in band_names {
         dataset_bands
@@ -2541,38 +2580,57 @@ fn parse_stac_extension_versions(extensions: &[String]) -> anyhow::Result<StacEx
 fn infer_collection_extension_versions(
     collection: &stac::Collection,
 ) -> anyhow::Result<StacExtensionVersions> {
-    if collection.version != stac::Version::v1_0_0 {
-        anyhow::bail!(
-            "Cannot infer extension versions for STAC {}",
-            collection.version
-        );
+    match collection.version {
+        stac::Version::v1_0_0 => {
+            let has_projection = collection.item_assets.values().any(|asset| {
+                asset.additional_fields.contains_key("proj:transform")
+                    || asset.additional_fields.contains_key("proj:shape")
+                    || asset.additional_fields.contains_key("proj:epsg")
+            });
+            let has_raster = collection
+                .item_assets
+                .values()
+                .any(|asset| asset.additional_fields.contains_key("raster:bands"));
+            let has_eo = collection
+                .item_assets
+                .values()
+                .any(|asset| asset.additional_fields.contains_key("eo:bands"));
+
+            Ok(StacExtensionVersions {
+                projection: has_projection
+                    .then_some(StacExtensionMajorVersion::V1)
+                    .ok_or(anyhow::anyhow!("Missing projection extension"))?,
+                raster: has_raster
+                    .then_some(StacExtensionMajorVersion::V1)
+                    .ok_or(anyhow::anyhow!("Missing raster extension"))?,
+                eo: has_eo
+                    .then_some(StacExtensionMajorVersion::V1)
+                    .ok_or(anyhow::anyhow!("Missing eo extension"))?,
+            })
+        }
+        stac::Version::v1_1_0 => {
+            // In STAC 1.1.0, projection extension is v2.0.0,
+            // raster:bands/eo:bands are merged into common metadata `bands`,
+            // and `data_type`/`nodata`/`gsd` are common metadata fields.
+            //
+            // Projection/raster/eo info is often only present at the item
+            // level, not in collection-level item_assets. The collection
+            // scan functions don't use the extension versions for data
+            // extraction — they only need to know which scan function to
+            // call. So we default all to V2 for any STAC 1.1.0 collection.
+            Ok(StacExtensionVersions {
+                projection: StacExtensionMajorVersion::V2,
+                raster: StacExtensionMajorVersion::V2,
+                eo: StacExtensionMajorVersion::V2,
+            })
+        }
+        _ => {
+            anyhow::bail!(
+                "Cannot infer extension versions for STAC {}",
+                collection.version
+            );
+        }
     }
-
-    let has_projection = collection.item_assets.values().any(|asset| {
-        asset.additional_fields.contains_key("proj:transform")
-            || asset.additional_fields.contains_key("proj:shape")
-            || asset.additional_fields.contains_key("proj:epsg")
-    });
-    let has_raster = collection
-        .item_assets
-        .values()
-        .any(|asset| asset.additional_fields.contains_key("raster:bands"));
-    let has_eo = collection
-        .item_assets
-        .values()
-        .any(|asset| asset.additional_fields.contains_key("eo:bands"));
-
-    Ok(StacExtensionVersions {
-        projection: has_projection
-            .then_some(StacExtensionMajorVersion::V1)
-            .ok_or(anyhow::anyhow!("Missing projection extension"))?,
-        raster: has_raster
-            .then_some(StacExtensionMajorVersion::V1)
-            .ok_or(anyhow::anyhow!("Missing raster extension"))?,
-        eo: has_eo
-            .then_some(StacExtensionMajorVersion::V1)
-            .ok_or(anyhow::anyhow!("Missing eo extension"))?,
-    })
 }
 
 impl TryFrom<&stac::Collection> for StacExtensionVersions {
@@ -2588,7 +2646,23 @@ impl TryFrom<&stac::Item> for StacExtensionVersions {
     type Error = anyhow::Error;
 
     fn try_from(item: &stac::Item) -> Result<Self, Self::Error> {
-        parse_stac_extension_versions(&item.extensions)
+        parse_stac_extension_versions(&item.extensions).or_else(|_| {
+            // For STAC 1.1.0 items (or newer), the raster/eo extensions may not
+            // be listed because they're common metadata. Default to V2 for all
+            // extensions since the scan functions handle the actual field checks.
+            if matches!(
+                item.version,
+                stac::Version::v1_1_0 | stac::Version::Unknown(_)
+            ) && !item.assets.is_empty()
+            {
+                return Ok(StacExtensionVersions {
+                    projection: StacExtensionMajorVersion::V2,
+                    raster: StacExtensionMajorVersion::V2,
+                    eo: StacExtensionMajorVersion::V2,
+                });
+            }
+            Err(anyhow::anyhow!("Missing raster extension"))
+        })
     }
 }
 
