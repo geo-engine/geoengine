@@ -109,13 +109,13 @@ mat-drawer {
                 display: flex;
                 flex-direction: row;
                 flex-wrap: wrap;
-                gap: 1rem;
+                gap: 0.5rem;
 
                 width: 100%;
                 border: none;
 
                 mat-list-item {
-                    width: 46%;
+                    width: calc(50% - 0.25rem);
                     text-align: center;
                     padding: 0;
                     cursor: pointer;
@@ -124,11 +124,15 @@ mat-drawer {
                     transition:
                         border-color 120ms ease,
                         box-shadow 120ms ease;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 0;
+                    overflow: hidden;
 
                     img {
                         width: 100%;
-                        height: 100%;
-                        object-fit: cover;
+                        display: block;
                         border-radius: 4px;
                     }
 
@@ -136,21 +140,18 @@ mat-drawer {
                         color: white;
                         text-shadow: 0 0 5px rgba(0, 0, 0, 0.7);
                         transform: translateY(-1rem);
-                    }
-
-                    &.preset-disabled {
-                        cursor: default;
-                        opacity: 0.55;
-                        pointer-events: none;
-
-                        img {
-                            filter: grayscale(1);
-                        }
+                        margin-bottom: -1rem;
+                        font-size: 0.85rem;
+                        line-height: 1.2;
                     }
 
                     &.preset-active {
                         border-color: var(--geoengine-primary-color, #2f6dff);
                         box-shadow: 0 0 0 2px rgb(47 109 255 / 25%);
+
+                        span {
+                            font-weight: 600;
+                        }
                     }
                 }
             }

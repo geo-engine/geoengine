@@ -441,6 +441,9 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
     // Show tile debug info instead of the actual layer. This is useful for debugging tile loading issues.
     readonly debug = input(false);
 
+    /** Emits `true` while any tile in this layer is loading, `false` when all tiles are loaded. */
+    readonly loading = output<boolean>();
+
     readonly tileSource = resource({
         params: () => ({
             dataConnectorId: this.dataConnectorId(),
@@ -496,6 +499,22 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
 
             this.addStateListenersToOlSource();
             this._mapLayer.setSource(this.source);
+
+            // Track tile loading and emit through the loading output
+            let tilesPending = 0;
+            const onStart = (): void => {
+                tilesPending++;
+                this.loading.emit(true);
+            };
+            const onEnd = (): void => {
+                tilesPending--;
+                if (tilesPending <= 0) {
+                    this.loading.emit(false);
+                }
+            };
+            this.source.on('tileloadstart', onStart);
+            this.source.on('tileloadend', onEnd);
+            this.source.on('tileloaderror', onEnd);
         });
 
         effect(() => /* TODO: define in parent class */ {
