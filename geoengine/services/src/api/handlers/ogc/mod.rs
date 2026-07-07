@@ -11,8 +11,11 @@ use utoipa::OpenApi;
 
 mod common;
 mod error;
+#[cfg(test)]
+mod test_util;
 mod tiles;
 mod tms;
+mod tms_spec;
 mod util;
 
 pub(crate) fn init_ogc_routes<C>(cfg: &mut web::ServiceConfig)

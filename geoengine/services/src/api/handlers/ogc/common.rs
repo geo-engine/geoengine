@@ -531,32 +531,20 @@ fn time_instance_to_ogc_datetime(time_instance: TimeInstance) -> Option<DateTime
 mod tests {
     use super::*;
     use crate::{
-        api::model::datatypes::DataProviderId,
-        contexts::{ApplicationContext, PostgresContext, Session, SessionContext, SessionId},
+        api::handlers::ogc::test_util::session_and_4326_layer_id,
+        contexts::PostgresContext,
         ge_context,
-        util::tests::{add_ndvi_to_layers, admin_login, read_body_json, send_test_request},
+        util::tests::{read_body_json, send_test_request},
     };
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use pretty_assertions::assert_eq;
     use tokio_postgres::NoTls;
 
-    async fn session_and_layer_id(
-        app_ctx: &PostgresContext<NoTls>,
-    ) -> (SessionId, DataProviderId, LayerId) {
-        let session = admin_login(app_ctx).await;
-        let ctx = app_ctx.session_context(session.clone());
-
-        let session_id = ctx.session().id();
-        let (data_connector_id, layer_id) = add_ndvi_to_layers(app_ctx).await;
-
-        (session_id, data_connector_id.into(), layer_id.into())
-    }
-
     #[ge_context::test]
     async fn it_returns_ogc_landing_page(app_ctx: PostgresContext<NoTls>) {
         let server_url = "http://127.0.0.1:3030";
-        let (session_id, data_connector_id, layer_id) = session_and_layer_id(&app_ctx).await;
+        let (session_id, data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
 
         let req = test::TestRequest::get()
             .uri(&format!("/ogc/{data_connector_id}/{layer_id}"))
@@ -601,7 +589,7 @@ mod tests {
 
     #[ge_context::test]
     async fn it_returns_ogc_conformance_classes(app_ctx: PostgresContext<NoTls>) {
-        let (session_id, data_connector_id, layer_id) = session_and_layer_id(&app_ctx).await;
+        let (session_id, data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
 
         let req = test::TestRequest::get()
             .uri(&format!("/ogc/{data_connector_id}/{layer_id}/conformance"))
@@ -636,7 +624,7 @@ mod tests {
     #[ge_context::test]
     async fn it_returns_ogc_collections(app_ctx: PostgresContext<NoTls>) {
         let server_url = "http://127.0.0.1:3030";
-        let (session_id, data_connector_id, layer_id) = session_and_layer_id(&app_ctx).await;
+        let (session_id, data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
 
         let req = test::TestRequest::get()
             .uri(&format!("/ogc/{data_connector_id}/{layer_id}/collections"))
@@ -691,7 +679,7 @@ mod tests {
     #[ge_context::test]
     async fn it_returns_ogc_collection_metadata(app_ctx: PostgresContext<NoTls>) {
         let server_url = "http://127.0.0.1:3030";
-        let (session_id, data_connector_id, layer_id) = session_and_layer_id(&app_ctx).await;
+        let (session_id, data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
 
         let req = test::TestRequest::get()
             .uri(&format!(

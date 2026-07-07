@@ -165,13 +165,13 @@ jobs:
           ogc-api-tiles: true
           service-url: ${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}
           ogc-api-tiles-tilematrixsetdefinitionurl: "http://www.opengis.net/def/tilematrixset/OGC/1.0/WebMercatorQuad"
-          ogc-api-tiles-urltemplatefortiles: "${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}/collections/${{ steps.prepare-service.outputs.LAYER_ID }}/map/tiles/GeoEngineCustomTMS/{tileMatrix}/{tileRow}/{tileCol}?datetime=2014-04-01T00:00:00Z"
-          ogc-api-tiles-tilematrix: "0"
+          ogc-api-tiles-urltemplatefortiles: "${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}/collections/${{ steps.prepare-service.outputs.LAYER_ID }}/map/tiles/WebMercatorQuad/{tileMatrix}/{tileRow}/{tileCol}?datetime=2014-04-01T00:00:00Z"
+          ogc-api-tiles-tilematrix: "1"
           ogc-api-tiles-mintilerow: "0"
           ogc-api-tiles-maxtilerow: "1"
           ogc-api-tiles-mintilecol: "0"
           ogc-api-tiles-maxtilecol: "1"
-          ogc-api-tiles-ignore: "verifyMinimalConformance"
+          ogc-api-tiles-ignore: ""
         env:
           PROXY_URL: "http://localhost:8123"
   

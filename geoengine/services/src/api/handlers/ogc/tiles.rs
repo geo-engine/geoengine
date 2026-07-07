@@ -5,14 +5,14 @@ use crate::{
         handlers::ogc::{
             OgcApiResult,
             error::{self, OgcApiError},
-            tms::{
-                CUSTOM_TILE_MATRIX_SET_ID, calculate_number_of_zoom_levels,
-                calculate_tiles_for_zoom_level,
+            tms_spec::{
+                GeoEngineCustomTMS, TileMatrixSetProvider, TypedTileMatrixSetProvider,
+                WebMercatorQuadTMS,
             },
             util::{
                 crs_from_spatial_reference_option, get_initialized_raster_operator, link_creator,
-                load_layer, parse_datetime_option, raster_operator_in_fitting_resolution,
-                raster_workflow_metadata,
+                load_layer, parse_datetime_option, raster_workflow_metadata,
+                reproject_if_necessary,
             },
         },
         model::datatypes::{DataProviderId, LayerId},
@@ -30,10 +30,7 @@ use geoengine_datatypes::{
     primitives::{
         AxisAlignedRectangle, BandSelection, RasterQueryRectangle, TimeInstance, TimeInterval,
     },
-    raster::{
-        GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
-        TilingSpatialGridDefinition,
-    },
+    raster::GridShape2D,
     util::Identifier,
 };
 use geoengine_operators::{
@@ -46,7 +43,7 @@ use geoengine_operators::{
 };
 use ogcapi_types::{
     common::{
-        Datetime as OgcDatetime, IntervalDatetime,
+        Authority, Crs, Datetime as OgcDatetime, IntervalDatetime,
         link_rel::{ITEM, SELF, TILING_SCHEME},
         media_type::{JSON, PNG},
     },
@@ -102,20 +99,41 @@ pub async fn collection_tilesets<C: ApplicationContext>(
     let create_link = link_creator(data_connector_id, layer_id.clone());
 
     Ok(web::Json(TileSets {
-        tilesets: vec![TileSetItem {
-            title: Some(TILESET_LIST_TITLE.to_string()),
-            data_type: DataType::Map,
-            // tile_matrix_set_id: CUSTOM_TILE_MATRIX_SET_ID.to_string(),
-            crs: TilesCrs::Simple(crs_from_spatial_reference_option(
-                descriptor.spatial_reference,
-            )?),
-            tile_matrix_set_uri: None,
-            links: vec![create_link(
-                &format!("collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}"),
-                SELF,
-                JSON,
-            )?],
-        }],
+        tilesets: vec![
+            TileSetItem {
+                title: Some(TILESET_LIST_TITLE.to_string()),
+                data_type: DataType::Map,
+                // tile_matrix_set_id: CUSTOM_TILE_MATRIX_SET_ID.to_string(),
+                crs: TilesCrs::Simple(crs_from_spatial_reference_option(
+                    descriptor.spatial_reference,
+                )?),
+                tile_matrix_set_uri: None,
+                links: vec![create_link(
+                    &format!(
+                        "collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}",
+                        TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
+                    ),
+                    SELF,
+                    JSON,
+                )?],
+            },
+            TileSetItem {
+                title: Some("WebMercatorQuad TMS".to_string()),
+                data_type: DataType::Map,
+                crs: TilesCrs::Simple(Crs::new(Authority::EPSG, 0, 3857)),
+                tile_matrix_set_uri: Some(
+                    "http://www.opengis.net/def/tilematrixset/OGC/1.0/WebMercatorQuad".to_string(),
+                ),
+                links: vec![create_link(
+                    &format!(
+                        "collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}",
+                        TILE_MATRIX_SET_ID = WebMercatorQuadTMS::TILE_MATRIX_SET_ID
+                    ),
+                    SELF,
+                    JSON,
+                )?],
+            },
+        ],
         links: vec![create_link(
             &format!("collections/{layer_id}/map/tiles"),
             SELF,
@@ -152,18 +170,25 @@ pub async fn collection_tileset<C: ApplicationContext>(
     let (data_connector_id, layer_id, collection_id, tile_matrix_set_id) = path.into_inner();
 
     ensure_matching_collection(&layer_id, collection_id)?;
-    ensure_matching_tile_matrix_set(&tile_matrix_set_id)?;
+    TypedTileMatrixSetProvider::ensure_exists(&tile_matrix_set_id)?;
 
     let ctx = app_ctx.session_context(session);
+    let execution_context = ctx.execution_context()?;
+    let tiling_specification = execution_context.tiling_specification();
     let layer = load_layer::<C>(&ctx, data_connector_id, layer_id.clone()).await?;
     let descriptor =
         raster_workflow_metadata::<C::SessionContext>(layer.workflow, ctx.execution_context()?)
             .await?;
 
+    // Resolve the appropriate TMS provider to get correct CRS
+    let provider = TypedTileMatrixSetProvider::resolve(
+        &tile_matrix_set_id,
+        &descriptor,
+        tiling_specification,
+    )?;
+
     let create_link = link_creator(data_connector_id, layer_id.clone());
-    let crs = TilesCrs::Simple(crs_from_spatial_reference_option(
-        descriptor.spatial_reference,
-    )?);
+    let crs = provider.tiles_crs()?;
     let spatial_bounds = descriptor.spatial_bounds();
 
     Ok(web::Json(TileSet {
@@ -233,7 +258,7 @@ struct TileQuery {
 
     time_interval: TimeInterval,
 
-    // tile_matrix_set_id: TileMatrixSetId,
+    tile_matrix_set_id: TileMatrixSetId,
     tile_matrix: u8,
     tile_row: u32,
     tile_col: u32,
@@ -263,31 +288,17 @@ impl TileQuery {
         ) = path.into_inner();
 
         ensure_matching_collection(&layer_id, collection_id)?;
-        ensure_matching_tile_matrix_set(&tile_matrix_set_id)?;
+        TypedTileMatrixSetProvider::ensure_exists(&tile_matrix_set_id)?;
 
         Ok(Self {
             data_connector_id,
             layer_id,
+            tile_matrix_set_id,
             time_interval: query_time_from_datetime(query.datetime)?,
             tile_matrix,
             tile_row,
             tile_col,
         })
-    }
-
-    fn invalid_tile_coordinates_error(&self) -> OgcApiError {
-        OgcApiError::InvalidTileCoordinates {
-            matrix: self.tile_matrix.to_string(),
-            row: self.tile_row,
-            col: self.tile_col,
-        }
-    }
-
-    fn zoom_level(&self, max_zoom_level: u32) -> OgcApiResult<u32> {
-        let Some(zoom_level) = max_zoom_level.checked_sub(u32::from(self.tile_matrix)) else {
-            return Err(self.invalid_tile_coordinates_error());
-        };
-        Ok(zoom_level)
     }
 
     fn check_inside_bounds(
@@ -382,63 +393,75 @@ pub async fn tile<C: ApplicationContext>(
     let ctx = app_ctx.session_context(session);
     let execution_context = ctx.execution_context()?;
 
-    let layer = load_layer::<C>(&ctx, query.data_connector_id, query.layer_id.clone()).await?;
+    let mut layer: Layer =
+        load_layer::<C>(&ctx, query.data_connector_id, query.layer_id.clone()).await?;
     let mut initialized_operator =
         get_initialized_raster_operator::<C::SessionContext>(&layer, &execution_context).await?;
     let tiling_specification = execution_context.tiling_specification();
 
-    let max_zoom_level = calculate_number_of_zoom_levels(
+    let required_origin_and_resolution = TypedTileMatrixSetProvider::required_origin_and_resolution(
+        &query.tile_matrix_set_id,
         initialized_operator.result_descriptor(),
-        &tiling_specification,
-    ) - 1;
-    let zoom_level = query.zoom_level(max_zoom_level)?;
-    let multiple_of_resolution = 2u32.pow(zoom_level);
-
-    let (expected_number_of_tiles_at_zoom_level, _) = calculate_tiles_for_zoom_level(
-        initialized_operator.result_descriptor(),
-        &tiling_specification,
-        zoom_level,
     );
+    reproject_if_necessary::<C::SessionContext>(
+        &mut layer,
+        &mut initialized_operator,
+        &execution_context,
+        TypedTileMatrixSetProvider::required_srs(&query.tile_matrix_set_id),
+        required_origin_and_resolution,
+    )
+    .await?;
 
+    let tms_spec = TypedTileMatrixSetProvider::resolve(
+        &query.tile_matrix_set_id,
+        initialized_operator.result_descriptor(),
+        tiling_specification,
+    )?;
+
+    let (expected_number_of_tiles_at_zoom_level, _) =
+        tms_spec.grid_shape_and_origin(query.tile_matrix);
     query.check_inside_bounds(expected_number_of_tiles_at_zoom_level)?;
 
     #[cfg(debug_assertions)]
     let original_result_descriptor = initialized_operator.result_descriptor().clone();
 
-    initialized_operator = raster_operator_in_fitting_resolution::<C::SessionContext>(
-        initialized_operator,
-        &execution_context,
-        multiple_of_resolution,
-    )
-    .await?;
-
-    debug_assert_eq!(
-        calculate_actual_number_of_tiles_at_zoom_level(
-            &initialized_operator
-                .result_descriptor()
-                .tiling_grid_definition(tiling_specification)
-        ),
-        expected_number_of_tiles_at_zoom_level
-    );
+    let spatial_resolution = tms_spec.spatial_resolution(query.tile_matrix);
+    if spatial_resolution
+        != initialized_operator
+            .result_descriptor()
+            .spatial_grid
+            .spatial_resolution()
+    {
+        initialized_operator = initialized_operator
+            .optimize_and_reinitialize(spatial_resolution, &execution_context)
+            .await
+            .boxed_context(error::InitializingProcessingGraph)?;
+    }
 
     #[cfg(debug_assertions)]
     assert_multiple_of_original_resolution(
         &original_result_descriptor,
         initialized_operator.result_descriptor(),
-        multiple_of_resolution,
     );
 
+    let tile_size_in_pixels = tms_spec.tile_size_in_pixels(query.tile_matrix);
     let (tile_width, tile_height) = (
-        u32::try_from(tiling_specification.grid_shape().x()).unwrap_or(u32::MAX),
-        u32::try_from(tiling_specification.grid_shape().y()).unwrap_or(u32::MAX),
+        u32::try_from(tile_size_in_pixels.x()).unwrap_or(u32::MAX),
+        u32::try_from(tile_size_in_pixels.y()).unwrap_or(u32::MAX),
     );
 
-    let tiling_spatial_grid_definition = initialized_operator
-        .result_descriptor()
-        .spatial_grid
-        .tiling_grid_definition(tiling_specification);
-
-    let query_rect = calculate_query_rectangle(&query, &tiling_spatial_grid_definition)?;
+    let query_rect = RasterQueryRectangle::new(
+        tms_spec.tile_grid_bbox(
+            &initialized_operator
+                .result_descriptor()
+                .tiling_grid_definition(tiling_specification),
+            query.tile_matrix,
+            query.tile_row,
+            query.tile_col,
+        )?,
+        query.time_interval,
+        BandSelection::first(), // TODO: is this correct? How do we determine what's needed?
+    );
 
     let (processor, query_ctx) =
         create_query_processor_and_query_context(&layer, &initialized_operator, &ctx).await?;
@@ -473,43 +496,11 @@ pub async fn tile<C: ApplicationContext>(
         .body(image_bytes))
 }
 
-fn calculate_query_rectangle(
-    query: &TileQuery,
-    tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
-) -> OgcApiResult<RasterQueryRectangle> {
-    Ok(RasterQueryRectangle::new(
-        tile_grid_bbox(
-            query.tile_matrix,
-            tiling_spatial_grid_definition,
-            query.tile_row,
-            query.tile_col,
-        )?,
-        query.time_interval,
-        BandSelection::first(),
-    ))
-}
-
-fn calculate_actual_number_of_tiles_at_zoom_level(
-    tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
-) -> GridShape2D {
-    let grid_bounds = tiling_spatial_grid_definition.tiling_grid_bounds();
-
-    let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
-    let tile_bounds = tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
-
-    GridShape2D::new(tile_bounds.axis_size())
-}
-
 #[cfg(debug_assertions)]
 fn assert_multiple_of_original_resolution(
     original_result_descriptor: &RasterResultDescriptor,
     new_result_descriptor: &RasterResultDescriptor,
-    multiple_of_resolution: u32,
 ) {
-    if multiple_of_resolution <= 1 {
-        return;
-    }
-
     let original_pixel_resolution = original_result_descriptor
         .spatial_grid_descriptor()
         .grid_shape();
@@ -541,52 +532,9 @@ fn assert_multiple_of_original_resolution(
     }
 }
 
-/// Computes the pixel bounds of a tile in the global pixel grid of the tiling scheme.
-/// The resolution is determined by `tile_matrix`, which corresponds to the zoom level in a TMS.
-/// The origin and orientation of the tile grid is determined by the `tiling_spatial_grid_definition`.
-fn tile_grid_bbox(
-    tile_matrix: u8,
-    tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
-    tile_row: u32,
-    tile_col: u32,
-) -> OgcApiResult<GridBoundingBox2D> {
-    let grid_bounds = tiling_spatial_grid_definition.tiling_grid_bounds();
-    let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
-
-    let tile_grid_bounds = tiling_strategy.raster_spatial_query_to_tiling_grid_box(grid_bounds);
-    let tile_index =
-        tile_grid_bounds.min_index() + GridIdx2D::new([tile_row as isize, tile_col as isize]);
-
-    let min_pixel_index = tiling_strategy.tile_idx_to_global_pixel_idx(tile_index);
-    let max_pixel_index = min_pixel_index
-        + GridIdx2D::new([
-            tiling_strategy.tile_size_in_pixels.x() as isize,
-            tiling_strategy.tile_size_in_pixels.y() as isize,
-        ])
-        - GridIdx2D::new([1, 1]); // inclusive bounds, e.g. we expect max-min to be 511 and not 512 for a 512 pixel tile
-
-    GridBoundingBox2D::new(min_pixel_index, max_pixel_index).map_err(|_source| {
-        OgcApiError::InvalidTileCoordinates {
-            matrix: tile_matrix.to_string(),
-            row: tile_row,
-            col: tile_col,
-        }
-    })
-}
-
 fn ensure_matching_collection(layer_id: &LayerId, collection_id: LayerId) -> OgcApiResult<()> {
     if *layer_id != collection_id {
         return Err(OgcApiError::CollectionNotFound { collection_id });
-    }
-
-    Ok(())
-}
-
-fn ensure_matching_tile_matrix_set(tile_matrix_set_id: &TileMatrixSetId) -> OgcApiResult<()> {
-    if tile_matrix_set_id != &TileMatrixSetId::Custom(CUSTOM_TILE_MATRIX_SET_ID.to_string()) {
-        return Err(OgcApiError::TileMatrixSetNotFound {
-            tile_matrix_set_id: tile_matrix_set_id.to_string(),
-        });
     }
 
     Ok(())
@@ -649,15 +597,12 @@ async fn create_query_processor_and_query_context<C: SessionContext>(
 mod tests {
     use super::*;
     use crate::{
-        contexts::{
-            ApplicationContext, PostgresContext, PostgresSessionContext, Session, SessionContext,
-            SessionId,
+        api::handlers::ogc::test_util::{
+            session_and_3857_layer_id, session_and_4326_layer_id, session_and_native_3857_layer_id,
         },
+        contexts::PostgresContext,
         ge_context,
-        util::tests::{
-            add_file_definition_to_datasets_and_return_layer, add_ndvi_3857_to_layers,
-            add_ndvi_to_layers, admin_login, ndvi_255_symbology, read_body_json, send_test_request,
-        },
+        util::tests::{read_body_json, send_test_request},
     };
     use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -667,47 +612,6 @@ mod tests {
     };
     use pretty_assertions::assert_eq;
     use tokio_postgres::NoTls;
-
-    async fn session_and_4326_layer_id(
-        app_ctx: &PostgresContext<NoTls>,
-    ) -> (SessionId, DataProviderId, LayerId) {
-        let session = admin_login(app_ctx).await;
-        let ctx = app_ctx.session_context(session.clone());
-
-        let session_id = ctx.session().id();
-        let (data_connector_id, layer_id) = add_ndvi_to_layers(app_ctx).await;
-
-        (session_id, data_connector_id.into(), layer_id.into())
-    }
-
-    async fn session_and_3857_layer_id(
-        app_ctx: &PostgresContext<NoTls>,
-    ) -> (SessionId, DataProviderId, LayerId) {
-        let session = admin_login(app_ctx).await;
-        let ctx = app_ctx.session_context(session.clone());
-
-        let session_id = ctx.session().id();
-        let (data_connector_id, layer_id) = add_ndvi_3857_to_layers(app_ctx).await;
-
-        (session_id, data_connector_id.into(), layer_id.into())
-    }
-
-    async fn session_and_native_3857_layer_id(
-        app_ctx: &PostgresContext<NoTls>,
-    ) -> (SessionId, DataProviderId, LayerId) {
-        let session = admin_login(app_ctx).await;
-        let ctx = app_ctx.session_context(session.clone());
-
-        let session_id = ctx.session().id();
-        let (data_connector_id, layer_id) = add_file_definition_to_datasets_and_return_layer(
-            &ctx.db(),
-            test_data!("dataset_defs/ndvi (3587).json"),
-            Some(ndvi_255_symbology()),
-        )
-        .await;
-
-        (session_id, data_connector_id.into(), layer_id.into())
-    }
 
     #[ge_context::test]
     async fn it_lists_tilesets_for_collection(app_ctx: PostgresContext<NoTls>) {
@@ -737,7 +641,23 @@ mod tests {
                         "links": [
                             {
                                 "href": format!(
-                                    "{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}"
+                                    "{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}", TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
+                                ),
+                                "rel": "self",
+                                "type": "application/json"
+                            }
+                        ]
+                    },
+                    {
+                        "title": "WebMercatorQuad TMS",
+                        "dataType": "map",
+                        "crs": "http://www.opengis.net/def/crs/EPSG/0/3857",
+                        "tileMatrixSetURI": "http://www.opengis.net/def/tilematrixset/OGC/1.0/WebMercatorQuad",
+                        "links": [
+                            {
+                                "href": format!(
+                                    "{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}",
+                                    TILE_MATRIX_SET_ID = WebMercatorQuadTMS::TILE_MATRIX_SET_ID
                                 ),
                                 "rel": "self",
                                 "type": "application/json"
@@ -765,7 +685,8 @@ mod tests {
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
-                "/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}"
+                "/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}",
+                TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -791,21 +712,24 @@ mod tests {
                 "links": [
                     {
                         "href": format!(
-                            "{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}"
+                            "{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}",
+                            TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
                         ),
                         "rel": "self",
                         "type": "application/json"
                     },
                     {
                         "href": format!(
-                            "{server_url}/api/ogc/{data_connector_id}/{layer_id}/tileMatrixSets/{CUSTOM_TILE_MATRIX_SET_ID}"
+                            "{server_url}/api/ogc/{data_connector_id}/{layer_id}/tileMatrixSets/{TILE_MATRIX_SET_ID}",
+                            TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
                         ),
                         "rel": "http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme",
                         "type": "application/json"
                     },
                     {
                         "href": format!(
-                            "{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/{{tileMatrix}}/{{tileRow}}/{{tileCol}}?datetime={{datetime}}"
+                            "{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}/{{tileMatrix}}/{{tileRow}}/{{tileCol}}?datetime={{datetime}}",
+                            TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
                         ),
                         "rel": "item",
                         "type": "image/png",
@@ -822,7 +746,8 @@ mod tests {
 
         let req = actix_web::test::TestRequest::get()
 			.uri(&format!(
-				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/2/1/4?datetime=2014-04-01T00:00:00Z"
+				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}/2/1/4?datetime=2014-04-01T00:00:00Z",
+                TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
 			))
 			.append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -850,7 +775,8 @@ mod tests {
 
         let req = actix_web::test::TestRequest::get()
 			.uri(&format!(
-				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-04-01T00:00:00Z"
+				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-04-01T00:00:00Z",
+                TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
 			))
 			.append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -878,7 +804,8 @@ mod tests {
 
         let req = actix_web::test::TestRequest::get()
 			.uri(&format!(
-				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-04-01T00:00:00Z"
+				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-04-01T00:00:00Z",
+                TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
 			))
 			.append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -909,7 +836,8 @@ mod tests {
 
         let req = actix_web::test::TestRequest::get()
 			.uri(&format!(
-				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-04-01T00:00:00Z"
+				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-04-01T00:00:00Z",
+                TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
 			))
 			.append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -932,173 +860,38 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_calculates_correct_pixel_bounds_for_4326_tiles(app_ctx: PostgresContext<NoTls>) {
-        let (session_id, data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
+    async fn it_renders_webmercator_tile_png_with_datetime(app_ctx: PostgresContext<NoTls>) {
+        let (session_id, data_connector_id, layer_id) =
+            session_and_native_3857_layer_id(&app_ctx).await;
 
-        let ctx = app_ctx.session_context(app_ctx.session_by_id(session_id).await.unwrap());
+        let req = actix_web::test::TestRequest::get()
+			.uri(&format!(
+				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-04-01T00:00:00Z",
+                TILE_MATRIX_SET_ID = WebMercatorQuadTMS::TILE_MATRIX_SET_ID
+			))
+			.append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let layer = load_layer::<PostgresContext<NoTls>>(&ctx, data_connector_id, layer_id.clone())
-            .await
-            .unwrap();
-        let tiling_specification = ctx.execution_context().unwrap().tiling_specification();
-        let result_descriptor = get_initialized_raster_operator::<PostgresSessionContext<NoTls>>(
-            &layer,
-            &ctx.execution_context().unwrap(),
-        )
-        .await
-        .unwrap()
-        .result_descriptor()
-        .clone();
-
-        let tiling_spatial_grid_definition =
-            result_descriptor.tiling_grid_definition(tiling_specification);
-        let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
-
-        let tiling_iterator = tiling_strategy.tile_information_iterator_from_pixel_bounds(
-            tiling_spatial_grid_definition.tiling_grid_bounds(),
-        );
-
-        let (matrix_width, matrix_height) = (8, 4);
-
-        let (mut tile_row, mut tile_col) = (0, 0);
-        let mut num_tiles = 0;
-        for tile_info in tiling_iterator {
-            assert_eq!(
-                tile_grid_bbox(0, &tiling_spatial_grid_definition, tile_row, tile_col).unwrap(),
-                tile_info.global_pixel_bounds(),
-                "Tile row {tile_row}, tile col {tile_col}: Expected {}",
-                tile_info.global_pixel_bounds()
-            );
-
-            tile_col += 1;
-            if tile_col >= matrix_width {
-                tile_col = 0;
-                tile_row += 1;
-            }
-
-            num_tiles += 1;
-        }
-        assert_eq!(num_tiles, matrix_width * matrix_height);
-    }
-
-    #[ge_context::test]
-    async fn it_calculates_correct_pixel_bounds_for_3857_tiles(app_ctx: PostgresContext<NoTls>) {
-        let (session_id, data_connector_id, layer_id) = session_and_3857_layer_id(&app_ctx).await;
-
-        let ctx = app_ctx.session_context(app_ctx.session_by_id(session_id).await.unwrap());
-
-        let layer = load_layer::<PostgresContext<NoTls>>(&ctx, data_connector_id, layer_id.clone())
-            .await
-            .unwrap();
-        let tiling_specification = ctx.execution_context().unwrap().tiling_specification();
-
-        let result_descriptor = get_initialized_raster_operator::<PostgresSessionContext<NoTls>>(
-            &layer,
-            &ctx.execution_context().unwrap(),
-        )
-        .await
-        .unwrap()
-        .result_descriptor()
-        .clone();
-
-        let tiling_spatial_grid_definition =
-            result_descriptor.tiling_grid_definition(tiling_specification);
-        let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
-
-        let tiling_iterator = tiling_strategy.tile_information_iterator_from_pixel_bounds(
-            tiling_spatial_grid_definition.tiling_grid_bounds(),
-        );
-
-        let (matrix_width, matrix_height) = (6, 6);
-
-        let (mut tile_row, mut tile_col) = (0, 0);
-        let mut num_tiles = 0;
-        for tile_info in tiling_iterator {
-            assert_eq!(
-                tile_grid_bbox(0, &tiling_spatial_grid_definition, tile_row, tile_col).unwrap(),
-                tile_info.global_pixel_bounds(),
-                "Tile row {tile_row}, tile col {tile_col}: Expected {}",
-                tile_info.global_pixel_bounds()
-            );
-
-            tile_col += 1;
-            if tile_col >= matrix_width {
-                tile_col = 0;
-                tile_row += 1;
-            }
-
-            num_tiles += 1;
-        }
-
-        assert_eq!(num_tiles, matrix_width * matrix_height);
-    }
-
-    #[ge_context::test]
-    async fn it_calculates_correct_pixel_bounds_for_4326_overview_tiles(
-        app_ctx: PostgresContext<NoTls>,
-    ) {
-        let (session_id, data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
-
-        let ctx = app_ctx.session_context(app_ctx.session_by_id(session_id).await.unwrap());
-
-        let layer = load_layer::<PostgresContext<NoTls>>(&ctx, data_connector_id, layer_id.clone())
-            .await
-            .unwrap();
-        let tiling_specification = ctx.execution_context().unwrap().tiling_specification();
-        let mut initialized_operator = get_initialized_raster_operator::<
-            PostgresSessionContext<NoTls>,
-        >(&layer, &ctx.execution_context().unwrap())
-        .await
-        .unwrap();
-        initialized_operator =
-            raster_operator_in_fitting_resolution::<PostgresSessionContext<NoTls>>(
-                initialized_operator,
-                &ctx.execution_context().unwrap(),
-                4, // level 0/2
-            )
-            .await
-            .unwrap();
-        let result_descriptor = initialized_operator.result_descriptor();
-
-        let tiling_spatial_grid_definition =
-            result_descriptor.tiling_grid_definition(tiling_specification);
-        let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
-
-        let tiling_iterator = tiling_strategy.tile_information_iterator_from_pixel_bounds(
-            tiling_spatial_grid_definition.tiling_grid_bounds(),
-        );
-
-        let (matrix_width, _matrix_height) = (2, 1);
-        // the y-area overlaps two tiles, so the output will merge the two tiles in the y-direction, resulting in 2x1 tiles
-        let (actual_width, actual_height) = (2, 2);
-        let actual_matrix_size =
-            calculate_actual_number_of_tiles_at_zoom_level(&tiling_spatial_grid_definition);
+        let res = send_test_request(req, app_ctx).await;
+        let status = res.status();
+        let content_type = res
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(ToOwned::to_owned);
+        let image_bytes = actix_web::test::read_body(res).await;
 
         assert_eq!(
-            actual_matrix_size,
-            GridShape2D::new_2d(actual_height, actual_width)
+            status,
+            200,
+            "Response body: {:?}",
+            std::str::from_utf8(&image_bytes)
         );
+        assert_eq!(content_type.as_deref(), Some("image/png"));
 
-        let (mut tile_row, mut tile_col) = (0, 0);
-        let mut num_tiles = 0;
-        for tile_info in tiling_iterator {
-            // this still holds, the y-bounds will be corrected afterwards
-            assert_eq!(
-                tile_grid_bbox(0, &tiling_spatial_grid_definition, tile_row, tile_col).unwrap(),
-                tile_info.global_pixel_bounds(),
-                "Tile row {tile_row}, tile col {tile_col}"
-            );
+        let file_path = test_data!("ogc/tiles/ndvi_webmercator_0_0_0.png").to_path_buf();
+        save_test_bytes_if_not_exists(&image_bytes, &file_path);
 
-            tile_col += 1;
-            if tile_col >= matrix_width {
-                tile_col = 0;
-                tile_row += 1;
-            }
-
-            num_tiles += 1;
-        }
-
-        assert_eq!(num_tiles, actual_width * actual_height);
+        assert_image_equals(&file_path, &image_bytes);
     }
 
     #[test]
