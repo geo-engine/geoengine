@@ -116,9 +116,7 @@ pub fn spawn_ipc_server_process<S, R>()
 
     let mut cmd = Command::new(exe_path);
 
-    cmd.arg(token)
-        .arg("debug") // FIXME: paste log level here!
-        .stderr(std::process::Stdio::inherit()); // This sends child logs to the parent's stderr;
+    cmd.arg(token).stderr(std::process::Stdio::inherit()); // This sends child logs to the parent's stderr;
 
     if std::cfg!(debug_assertions) {
         // llcov inserts these env params. We need to remove them from the gdal-processor processes. Otherwise the processes overwrite the main process data and the files become corrupt.

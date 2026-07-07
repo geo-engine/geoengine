@@ -72,33 +72,19 @@ impl GdalDatasetParameters {
         SpatialGridDefinition::new(gdal_geo_transform, self.dataset_bounds())
     }
 
-    /// GDAL config options that affect the whole worker process and are typically read by GDAL
-    /// only once at first use (e.g. VSICURL cache / chunk settings).
-    ///
-    /// These must be set once when the worker process starts, before any dataset is opened,
-    /// otherwise they have no effect.
-    pub fn gdal_worker_process_global_config_options() -> &'static [(&'static str, &'static str)] {
-        &[
-            ("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR"),
-            (
-                "CPL_VSIL_CURL_ALLOWED_EXTENSIONS",
-                ".tif,.tiff,.TIF,.jp2,.ovr",
-            ),
-            ("CPL_VSIL_CURL_CHUNK_SIZE", "1048576"), // 1mb TODO: need to tune this!
-            ("VSI_CACHE", "TRUE"),
-            ("VSI_CACHE_SIZE", "67108864"), // 64mb per worker! TODO: need to tune this!
-        ]
-    }
-
     pub fn is_vis_curl(&self) -> bool {
         self.file_path.starts_with("/vsicurl/") || self.file_path.starts_with("/vsis3/")
     }
 
     /// Returns the request-level GDAL config options supplied by the user.
     ///
-    /// VSICURL process-global options (cache, chunk size, etc.) are intentionally not merged here;
-    /// they are configured once per worker process at startup via
-    /// [`Self::gdal_worker_process_global_config_options`].
+    /// VSICURL process-global options that are frozen at first `/vsicurl/` use (cache size,
+    /// chunk size, etc.) are intentionally not merged here; they are configured once per worker
+    /// process at startup via the `[gdal_process_pool_worker]` section of the Geo Engine settings file.
+    /// Restarting the worker process is required to change those values.
+    ///
+    /// Per-open options such as `GDAL_DISABLE_READDIR_ON_OPEN` or
+    /// `CPL_VSIL_CURL_ALLOWED_EXTENSIONS` can be overridden per request here.
     pub fn gdal_config_options_for_request(&self) -> Option<Vec<(String, String)>> {
         self.gdal_config_options.clone()
     }

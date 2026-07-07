@@ -183,6 +183,33 @@ scopes = []
 enabled = false
 endpoint = "127.0.0.1:6831"
 
+[gdal_process_pool_worker.gdal_config_options]
+# Process-global GDAL config options applied once when a GDAL worker process starts.
+#
+# Two categories:
+# 1. Frozen at first /vsicurl/ use (changing these requires restarting the worker process):
+#    - VSI_CACHE, VSI_CACHE_SIZE
+#    - CPL_VSIL_CURL_CHUNK_SIZE
+# 2. Read per dataset open (can also be overridden per request via gdal_config_options):
+#    - GDAL_DISABLE_READDIR_ON_OPEN
+#    - CPL_VSIL_CURL_ALLOWED_EXTENSIONS
+GDAL_DISABLE_READDIR_ON_OPEN = "EMPTY_DIR"
+CPL_VSIL_CURL_ALLOWED_EXTENSIONS = ".tif,.tiff,.TIF,.jp2,.ovr"
+CPL_VSIL_CURL_CHUNK_SIZE = "1048576" # 1mb TODO: need to tune this!
+VSI_CACHE = "TRUE"
+VSI_CACHE_SIZE = "67108864" # 64mb per worker! TODO: need to tune this!
+
+[gdal_process_pool_worker.logging]
+# Logging for the GDAL worker processes. Independent from the main `[logging]` section because
+# there are many worker processes and their log volume differs from the main process.
+log_spec = "info"
+# Log level for the worker's stderr output. Set to "warn" to avoid drowning the main process's
+# stderr in worker trace messages when file logging is enabled.
+stderr_log_spec = "warn"
+log_to_file = false
+filename_prefix = "geo_engine_worker"
+# log_directory = "/var/log/"
+
 [data]
 volumes = { test_data = "test_data/" }
 

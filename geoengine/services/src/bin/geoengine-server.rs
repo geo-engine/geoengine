@@ -88,9 +88,6 @@ where
     use opentelemetry_sdk::trace::Sampler;
     use opentelemetry_sdk::trace::SdkTracerProvider;
     let endpoint = open_telemetry_config.endpoint.to_string();
-    // Make the endpoint available to spawned GDAL worker processes so they can export traces, too.
-    // SAFETY: this runs once during single-threaded initialization before any worker is spawned.
-    unsafe { std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", &endpoint) };
 
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
