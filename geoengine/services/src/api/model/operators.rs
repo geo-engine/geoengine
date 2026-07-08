@@ -1219,6 +1219,13 @@ pub struct GdalDatasetParameters {
     pub gdal_config_options: Option<Vec<GdalConfigOption>>,
     #[serde(default)]
     pub allow_alphaband_as_mask: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry: Option<GdalRetryOptions>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, ToSchema)]
+pub struct GdalRetryOptions {
+    pub max_retries: usize,
 }
 
 impl From<geoengine_operators::source::GdalDatasetParameters> for GdalDatasetParameters {
@@ -1239,6 +1246,9 @@ impl From<geoengine_operators::source::GdalDatasetParameters> for GdalDatasetPar
                 .gdal_config_options
                 .map(|x| x.into_iter().map(Into::into).collect()),
             allow_alphaband_as_mask: value.allow_alphaband_as_mask,
+            retry: value.retry.map(|r| GdalRetryOptions {
+                max_retries: r.max_retries,
+            }),
         }
     }
 }
@@ -1261,7 +1271,11 @@ impl From<GdalDatasetParameters> for geoengine_operators::source::GdalDatasetPar
                 .gdal_config_options
                 .map(|x| x.into_iter().map(Into::into).collect()),
             allow_alphaband_as_mask: value.allow_alphaband_as_mask,
-            retry: None,
+            retry: value
+                .retry
+                .map(|r| geoengine_operators::source::GdalRetryOptions {
+                    max_retries: r.max_retries,
+                }),
         }
     }
 }

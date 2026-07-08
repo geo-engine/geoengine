@@ -459,6 +459,16 @@ impl GdalHandling {
 
         if dataset_mask_flags.is_all_valid() {
             debug!("all pixels are valid --> skip no-data and mask handling.");
+            // Even if GDAL reports all pixels as valid, honor an explicit
+            // no_data_value override from the caller (e.g. when the CLI
+            // `--no-data-value` argument is set for formats like JP2 that
+            // lack embedded nodata metadata).
+            if let Some(no_data_value) = dataset_params.no_data_value {
+                return Ok(GdalDataGridVariant::WithNoData {
+                    data: buffer_data,
+                    no_data_value,
+                });
+            }
             return Ok(GdalDataGridVariant::AllValid { data: buffer_data });
         }
 

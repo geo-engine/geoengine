@@ -187,6 +187,17 @@ pub struct StacImport {
     /// if true, filter the stac item fields in the query to only fetch the fields required for the import, which may reduce the response size and speed up the import.
     #[arg(long, default_value_t = false)]
     filter_item_fields: bool,
+
+    /// Override the no data value in the GDAL dataset parameters.
+    /// If set, this value will be used as the no data value for all tiles.
+    /// Otherwise, the default (None) is used.
+    #[arg(long)]
+    no_data_value: Option<f64>,
+
+    /// Number of retries for accessing remote datasets via GDAL (vsicurl/vsis3).
+    /// If set, configures GDAL retry options for the dataset parameters.
+    #[arg(long)]
+    gdal_retries: Option<usize>,
     // /// Parent layer collection ID
     // #[arg(long, default_value_t = INTERNAL_LAYER_DB_ROOT_COLLECTION_ID)]
     // parent_layer_collection_id: Uuid,
@@ -678,6 +689,8 @@ impl StacImporter {
             geo_transform,
             dataset_bands,
             z_index,
+            no_data_value: self.params.no_data_value,
+            gdal_retries: self.params.gdal_retries,
         };
 
         let mut tiles = Vec::new();
@@ -781,6 +794,8 @@ impl StacImporter {
             geo_transform,
             dataset_bands,
             z_index,
+            no_data_value: self.params.no_data_value,
+            gdal_retries: self.params.gdal_retries,
         };
 
         let mut tiles = Vec::new();
@@ -1585,6 +1600,8 @@ struct AssetBandProcessor<'a> {
     geo_transform: GeoTransform,
     dataset_bands: &'a [RasterBandDescriptor],
     z_index: i64,
+    no_data_value: Option<f64>,
+    gdal_retries: Option<usize>,
 }
 
 impl AssetBandProcessor<'_> {
@@ -1652,11 +1669,14 @@ impl AssetBandProcessor<'_> {
                 width,
                 height,
                 file_not_found_handling: crate::api::model::operators::FileNotFoundHandling::Error,
-                no_data_value: None,
+                no_data_value: self.no_data_value,
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options,
                 allow_alphaband_as_mask: false,
+                retry: self.gdal_retries.map(|max_retries| {
+                    crate::api::model::operators::GdalRetryOptions { max_retries }
+                }),
             },
         };
 
@@ -1763,11 +1783,14 @@ impl AssetBandProcessor<'_> {
                 width,
                 height,
                 file_not_found_handling: crate::api::model::operators::FileNotFoundHandling::Error,
-                no_data_value: None,
+                no_data_value: self.no_data_value,
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options,
                 allow_alphaband_as_mask: false,
+                retry: self.gdal_retries.map(|max_retries| {
+                    crate::api::model::operators::GdalRetryOptions { max_retries }
+                }),
             },
         };
 
