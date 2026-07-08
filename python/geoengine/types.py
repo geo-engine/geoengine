@@ -1753,7 +1753,6 @@ class GeoTransform:
         """Initialize a new `GeoTransform`"""
 
         assert x_pixel_size > 0, "In Geo Engine, x_pixel_size is always positive."
-        # assert y_pixel_size < 0, "In Geo Engine, y_pixel_size is always negative."
 
         self.x_min = x_min
         self.y_max = y_max
