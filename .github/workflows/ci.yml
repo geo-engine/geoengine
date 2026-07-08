@@ -99,7 +99,10 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: quay.io/geoengine/devcontainer:latest
-      options: --privileged
+      options: --privileged --security-opt seccomp=unconfined --security-opt apparmor=unconfined --user root # for podman to run in the container
+
+    env:
+      CONTAINERS_STORAGE_DRIVER: vfs # for podman error 126
 
     permissions:
       contents: read
@@ -135,12 +138,12 @@ jobs:
         run: just backend run
         background: true
         env:
-          GEOENGINE__WEB__EXTERNAL_ADDRESS: "http://127.0.0.1:8123/api"
+          GEOENGINE__WEB__EXTERNAL_ADDRESS: "http://localhost:8123/api"
       - name: Prepare service for validation
         id: prepare-service
         env:
           SERVER_PORT: 3030
-          SERVER_URL: "http://127.0.0.1:3030"
+          SERVER_URL: "http://localhost:3030"
         run: |
           just common wait-for-port $SERVER_PORT
 
@@ -170,7 +173,7 @@ jobs:
             --logger dev-null
         background: true
         env:
-          SERVER_URL: "http://127.0.0.1:3030"
+          SERVER_URL: "http://localhost:3030"
           PROXY_PORT: 8123
           SESSION_TOKEN: ${{ steps.prepare-service.outputs.SESSION_TOKEN }}
       - run: just common wait-for-port $PROXY_PORT
@@ -192,7 +195,7 @@ jobs:
           ogc-api-tiles-maxtilecol: "1"
           ogc-api-tiles-ignore: ""
         env:
-          PROXY_URL: "http://127.0.0.1:8123"
+          PROXY_URL: "http://localhost:8123"
       - cancel: proxy-instance
       - cancel: ge-instance
 
