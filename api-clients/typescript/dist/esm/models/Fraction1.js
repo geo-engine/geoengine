@@ -10,6 +10,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { FractionFromJSONTyped, FractionToJSONTyped, } from './Fraction';
 /**
  * @export
  */
@@ -20,10 +21,6 @@ export const Fraction1TypeEnum = {
  * Check if a given object implements the Fraction1 interface.
  */
 export function instanceOfFraction1(value) {
-    if (!('x' in value) || value['x'] === undefined)
-        return false;
-    if (!('y' in value) || value['y'] === undefined)
-        return false;
     if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
@@ -35,11 +32,7 @@ export function Fraction1FromJSONTyped(json, ignoreDiscriminator) {
     if (json == null) {
         return json;
     }
-    return {
-        'x': json['x'],
-        'y': json['y'],
-        'type': json['type'],
-    };
+    return Object.assign(Object.assign({}, FractionFromJSONTyped(json, true)), { 'type': json['type'] });
 }
 export function Fraction1ToJSON(json) {
     return Fraction1ToJSONTyped(json, false);
@@ -48,9 +41,5 @@ export function Fraction1ToJSONTyped(value, ignoreDiscriminator = false) {
     if (value == null) {
         return value;
     }
-    return {
-        'x': value['x'],
-        'y': value['y'],
-        'type': value['type'],
-    };
+    return Object.assign(Object.assign({}, FractionToJSONTyped(value, true)), { 'type': value['type'] });
 }

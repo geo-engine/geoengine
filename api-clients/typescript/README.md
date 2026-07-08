@@ -236,7 +236,6 @@ All URIs are relative to *https://geoengine.io/api*
 - [FormatSpecificsCsv](docs/FormatSpecificsCsv.md)
 - [Fraction](docs/Fraction.md)
 - [Fraction1](docs/Fraction1.md)
-- [Fraction2](docs/Fraction2.md)
 - [GbifDataProviderDefinition](docs/GbifDataProviderDefinition.md)
 - [GdalDatasetParameters](docs/GdalDatasetParameters.md)
 - [GdalLoadingInfoTemporalSlice](docs/GdalLoadingInfoTemporalSlice.md)

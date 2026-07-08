@@ -7447,8 +7447,7 @@
           {
             "allOf": [
               {
-                "$ref": "#/components/schemas/Fraction",
-                "description": "Downscale factor relative to input resolution (`x >= 1`, `y >= 1`)."
+                "$ref": "#/components/schemas/Fraction"
               },
               {
                 "type": "object",
@@ -7465,8 +7464,7 @@
                 }
               }
             ],
-            "title": "Fraction",
-            "description": "Downscale factor relative to input resolution (`x >= 1`, `y >= 1`)."
+            "title": "Fraction"
           }
         ]
       },
@@ -8861,8 +8859,7 @@
           {
             "allOf": [
               {
-                "$ref": "#/components/schemas/Fraction",
-                "description": "Upscale factor relative to input resolution (`x >= 1`, `y >= 1`)."
+                "$ref": "#/components/schemas/Fraction"
               },
               {
                 "type": "object",
@@ -8879,8 +8876,7 @@
                 }
               }
             ],
-            "title": "Fraction",
-            "description": "Upscale factor relative to input resolution (`x >= 1`, `y >= 1`)."
+            "title": "Fraction"
           }
         ]
       },

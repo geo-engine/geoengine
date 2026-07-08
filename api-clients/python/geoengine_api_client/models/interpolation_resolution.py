@@ -17,13 +17,13 @@ import json
 import pprint
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, field_validator
 from typing import Any, List, Optional
-from geoengine_api_client.models.fraction2 import Fraction2
+from geoengine_api_client.models.fraction1 import Fraction1
 from geoengine_api_client.models.resolution import Resolution
 from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-INTERPOLATIONRESOLUTION_ONE_OF_SCHEMAS = ["Fraction2", "Resolution"]
+INTERPOLATIONRESOLUTION_ONE_OF_SCHEMAS = ["Fraction1", "Resolution"]
 
 class InterpolationResolution(BaseModel):
     """
@@ -31,10 +31,10 @@ class InterpolationResolution(BaseModel):
     """
     # data type: Resolution
     oneof_schema_1_validator: Optional[Resolution] = None
-    # data type: Fraction2
-    oneof_schema_2_validator: Optional[Fraction2] = None
-    actual_instance: Optional[Union[Fraction2, Resolution]] = None
-    one_of_schemas: Set[str] = { "Fraction2", "Resolution" }
+    # data type: Fraction1
+    oneof_schema_2_validator: Optional[Fraction1] = None
+    actual_instance: Optional[Union[Fraction1, Resolution]] = None
+    one_of_schemas: Set[str] = { "Fraction1", "Resolution" }
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -62,17 +62,17 @@ class InterpolationResolution(BaseModel):
             error_messages.append(f"Error! Input type `{type(v)}` is not `Resolution`")
         else:
             match += 1
-        # validate data type: Fraction2
-        if not isinstance(v, Fraction2):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `Fraction2`")
+        # validate data type: Fraction1
+        if not isinstance(v, Fraction1):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `Fraction1`")
         else:
             match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in InterpolationResolution with oneOf schemas: Fraction2, Resolution. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in InterpolationResolution with oneOf schemas: Fraction1, Resolution. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in InterpolationResolution with oneOf schemas: Fraction2, Resolution. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in InterpolationResolution with oneOf schemas: Fraction1, Resolution. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -93,19 +93,19 @@ class InterpolationResolution(BaseModel):
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # deserialize data into Fraction2
+        # deserialize data into Fraction1
         try:
-            instance.actual_instance = Fraction2.from_json(json_str)
+            instance.actual_instance = Fraction1.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into InterpolationResolution with oneOf schemas: Fraction2, Resolution. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into InterpolationResolution with oneOf schemas: Fraction1, Resolution. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into InterpolationResolution with oneOf schemas: Fraction2, Resolution. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into InterpolationResolution with oneOf schemas: Fraction1, Resolution. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -119,7 +119,7 @@ class InterpolationResolution(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], Fraction2, Resolution]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], Fraction1, Resolution]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None

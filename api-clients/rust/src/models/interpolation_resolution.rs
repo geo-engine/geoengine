@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 #[serde(untagged)]
 pub enum InterpolationResolution {
     Resolution(Box<models::Resolution>),
-    Fraction2(Box<models::Fraction2>),
+    Fraction1(Box<models::Fraction1>),
 }
 
 impl Default for InterpolationResolution {

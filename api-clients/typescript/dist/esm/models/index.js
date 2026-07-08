@@ -75,7 +75,6 @@ export * from './FormatSpecifics';
 export * from './FormatSpecificsCsv';
 export * from './Fraction';
 export * from './Fraction1';
-export * from './Fraction2';
 export * from './GbifDataProviderDefinition';
 export * from './GdalDatasetParameters';
 export * from './GdalLoadingInfoTemporalSlice';

@@ -10,7 +10,6 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// Fraction1 : Downscale factor relative to input resolution (`x >= 1`, `y >= 1`).
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Fraction1 {
     /// Scaling factor in x direction.
@@ -24,7 +23,6 @@ pub struct Fraction1 {
 }
 
 impl Fraction1 {
-    /// Downscale factor relative to input resolution (`x >= 1`, `y >= 1`).
     pub fn new(x: f64, y: f64, r#type: Type) -> Fraction1 {
         Fraction1 {
             x,

@@ -79,7 +79,6 @@ docs/FormatSpecifics.md
 docs/FormatSpecificsCsv.md
 docs/Fraction.md
 docs/Fraction1.md
-docs/Fraction2.md
 docs/GbifDataProviderDefinition.md
 docs/GdalDatasetParameters.md
 docs/GdalLoadingInfoTemporalSlice.md
@@ -474,7 +473,6 @@ geoengine_api_client/models/format_specifics.py
 geoengine_api_client/models/format_specifics_csv.py
 geoengine_api_client/models/fraction.py
 geoengine_api_client/models/fraction1.py
-geoengine_api_client/models/fraction2.py
 geoengine_api_client/models/gbif_data_provider_definition.py
 geoengine_api_client/models/gdal_dataset_parameters.py
 geoengine_api_client/models/gdal_loading_info_temporal_slice.py
@@ -839,7 +837,6 @@ test/test_format_specifics.py
 test/test_format_specifics_csv.py
 test/test_fraction.py
 test/test_fraction1.py
-test/test_fraction2.py
 test/test_gbif_data_provider_definition.py
 test/test_gdal_dataset_parameters.py
 test/test_gdal_loading_info_temporal_slice.py

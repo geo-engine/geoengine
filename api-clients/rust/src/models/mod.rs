@@ -148,8 +148,6 @@ pub mod fraction;
 pub use self::fraction::Fraction;
 pub mod fraction_1;
 pub use self::fraction_1::Fraction1;
-pub mod fraction_2;
-pub use self::fraction_2::Fraction2;
 pub mod gbif_data_provider_definition;
 pub use self::gbif_data_provider_definition::GbifDataProviderDefinition;
 pub mod gdal_dataset_parameters;

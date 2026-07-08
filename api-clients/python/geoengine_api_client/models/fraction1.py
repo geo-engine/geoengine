@@ -17,17 +17,16 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt, StrictStr, field_validator
-from typing import Any, ClassVar, Dict, List, Union
+from pydantic import ConfigDict, StrictStr, field_validator
+from typing import Any, ClassVar, Dict, List
+from geoengine_api_client.models.fraction import Fraction
 from typing import Optional, Set
 from typing_extensions import Self
 
-class Fraction1(BaseModel):
+class Fraction1(Fraction):
     """
-    Downscale factor relative to input resolution (`x >= 1`, `y >= 1`).
+    Fraction1
     """ # noqa: E501
-    x: Union[StrictFloat, StrictInt] = Field(description="Scaling factor in x direction.")
-    y: Union[StrictFloat, StrictInt] = Field(description="Scaling factor in y direction.")
     type: StrictStr
     __properties: ClassVar[List[str]] = ["x", "y", "type"]
 

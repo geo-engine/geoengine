@@ -35,14 +35,10 @@ class TestFraction1(unittest.TestCase):
         model = Fraction1()
         if include_optional:
             return Fraction1(
-                x = 1.337,
-                y = 1.337,
                 type = 'fraction'
             )
         else:
             return Fraction1(
-                x = 1.337,
-                y = 1.337,
                 type = 'fraction',
         )
         """

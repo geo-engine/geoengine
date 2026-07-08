@@ -18,6 +18,7 @@ exports.Fraction1FromJSON = Fraction1FromJSON;
 exports.Fraction1FromJSONTyped = Fraction1FromJSONTyped;
 exports.Fraction1ToJSON = Fraction1ToJSON;
 exports.Fraction1ToJSONTyped = Fraction1ToJSONTyped;
+const Fraction_1 = require("./Fraction");
 /**
  * @export
  */
@@ -28,10 +29,6 @@ exports.Fraction1TypeEnum = {
  * Check if a given object implements the Fraction1 interface.
  */
 function instanceOfFraction1(value) {
-    if (!('x' in value) || value['x'] === undefined)
-        return false;
-    if (!('y' in value) || value['y'] === undefined)
-        return false;
     if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
@@ -43,11 +40,7 @@ function Fraction1FromJSONTyped(json, ignoreDiscriminator) {
     if (json == null) {
         return json;
     }
-    return {
-        'x': json['x'],
-        'y': json['y'],
-        'type': json['type'],
-    };
+    return Object.assign(Object.assign({}, (0, Fraction_1.FractionFromJSONTyped)(json, true)), { 'type': json['type'] });
 }
 function Fraction1ToJSON(json) {
     return Fraction1ToJSONTyped(json, false);
@@ -56,9 +49,5 @@ function Fraction1ToJSONTyped(value, ignoreDiscriminator = false) {
     if (value == null) {
         return value;
     }
-    return {
-        'x': value['x'],
-        'y': value['y'],
-        'type': value['type'],
-    };
+    return Object.assign(Object.assign({}, (0, Fraction_1.FractionToJSONTyped)(value, true)), { 'type': value['type'] });
 }

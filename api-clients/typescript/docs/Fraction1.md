@@ -1,14 +1,11 @@
 
 # Fraction1
 
-Downscale factor relative to input resolution (`x >= 1`, `y >= 1`).
 
 ## Properties
 
 Name | Type
 ------------ | -------------
-`x` | number
-`y` | number
 `type` | string
 
 ## Example
@@ -18,8 +15,6 @@ import type { Fraction1 } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "x": null,
-  "y": null,
   "type": null,
 } satisfies Fraction1
 

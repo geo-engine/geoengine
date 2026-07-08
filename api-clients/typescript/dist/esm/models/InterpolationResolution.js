@@ -10,7 +10,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import { instanceOfFraction2, Fraction2FromJSONTyped, Fraction2ToJSON, } from './Fraction2';
+import { instanceOfFraction1, Fraction1FromJSONTyped, Fraction1ToJSON, } from './Fraction1';
 import { instanceOfResolution, ResolutionFromJSONTyped, ResolutionToJSON, } from './Resolution';
 export function InterpolationResolutionFromJSON(json) {
     return InterpolationResolutionFromJSONTyped(json, false);
@@ -22,8 +22,8 @@ export function InterpolationResolutionFromJSONTyped(json, ignoreDiscriminator) 
     if (typeof json !== 'object') {
         return json;
     }
-    if (instanceOfFraction2(json)) {
-        return Fraction2FromJSONTyped(json, true);
+    if (instanceOfFraction1(json)) {
+        return Fraction1FromJSONTyped(json, true);
     }
     if (instanceOfResolution(json)) {
         return ResolutionFromJSONTyped(json, true);
@@ -40,8 +40,8 @@ export function InterpolationResolutionToJSONTyped(value, ignoreDiscriminator = 
     if (typeof value !== 'object') {
         return value;
     }
-    if (instanceOfFraction2(value)) {
-        return Fraction2ToJSON(value);
+    if (instanceOfFraction1(value)) {
+        return Fraction1ToJSON(value);
     }
     if (instanceOfResolution(value)) {
         return ResolutionToJSON(value);

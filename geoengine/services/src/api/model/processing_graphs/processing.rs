@@ -246,7 +246,6 @@ pub enum InterpolationResolution {
     /// Explicit output resolution (`x`, `y`) in target coordinates.
     Resolution { x: f64, y: f64 },
     #[schema(title = "Fraction")]
-    /// Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).
     Fraction(Fraction),
 }
 
@@ -750,7 +749,6 @@ pub enum DownsamplingResolution {
     /// Explicit output resolution (`x`, `y`) in target coordinates.
     Resolution { x: f64, y: f64 },
     #[schema(title = "Fraction")]
-    /// Downscale factor relative to input resolution (`x >= 1`, `y >= 1`).
     Fraction(Fraction),
 }
 

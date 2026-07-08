@@ -91,7 +91,6 @@ __exportStar(require("./FormatSpecifics"), exports);
 __exportStar(require("./FormatSpecificsCsv"), exports);
 __exportStar(require("./Fraction"), exports);
 __exportStar(require("./Fraction1"), exports);
-__exportStar(require("./Fraction2"), exports);
 __exportStar(require("./GbifDataProviderDefinition"), exports);
 __exportStar(require("./GdalDatasetParameters"), exports);
 __exportStar(require("./GdalLoadingInfoTemporalSlice"), exports);

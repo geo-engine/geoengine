@@ -16,7 +16,7 @@ exports.InterpolationResolutionFromJSON = InterpolationResolutionFromJSON;
 exports.InterpolationResolutionFromJSONTyped = InterpolationResolutionFromJSONTyped;
 exports.InterpolationResolutionToJSON = InterpolationResolutionToJSON;
 exports.InterpolationResolutionToJSONTyped = InterpolationResolutionToJSONTyped;
-const Fraction2_1 = require("./Fraction2");
+const Fraction1_1 = require("./Fraction1");
 const Resolution_1 = require("./Resolution");
 function InterpolationResolutionFromJSON(json) {
     return InterpolationResolutionFromJSONTyped(json, false);
@@ -28,8 +28,8 @@ function InterpolationResolutionFromJSONTyped(json, ignoreDiscriminator) {
     if (typeof json !== 'object') {
         return json;
     }
-    if ((0, Fraction2_1.instanceOfFraction2)(json)) {
-        return (0, Fraction2_1.Fraction2FromJSONTyped)(json, true);
+    if ((0, Fraction1_1.instanceOfFraction1)(json)) {
+        return (0, Fraction1_1.Fraction1FromJSONTyped)(json, true);
     }
     if ((0, Resolution_1.instanceOfResolution)(json)) {
         return (0, Resolution_1.ResolutionFromJSONTyped)(json, true);
@@ -46,8 +46,8 @@ function InterpolationResolutionToJSONTyped(value, ignoreDiscriminator = false) 
     if (typeof value !== 'object') {
         return value;
     }
-    if ((0, Fraction2_1.instanceOfFraction2)(value)) {
-        return (0, Fraction2_1.Fraction2ToJSON)(value);
+    if ((0, Fraction1_1.instanceOfFraction1)(value)) {
+        return (0, Fraction1_1.Fraction1ToJSON)(value);
     }
     if ((0, Resolution_1.instanceOfResolution)(value)) {
         return (0, Resolution_1.ResolutionToJSON)(value);

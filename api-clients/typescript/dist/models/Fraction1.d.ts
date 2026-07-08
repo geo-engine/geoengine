@@ -8,24 +8,13 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import type { Fraction } from './Fraction';
 /**
- * Downscale factor relative to input resolution (`x >= 1`, `y >= 1`).
+ *
  * @export
  * @interface Fraction1
  */
-export interface Fraction1 {
-    /**
-     * Scaling factor in x direction.
-     * @type {number}
-     * @memberof Fraction1
-     */
-    x: number;
-    /**
-     * Scaling factor in y direction.
-     * @type {number}
-     * @memberof Fraction1
-     */
-    y: number;
+export interface Fraction1 extends Fraction {
     /**
      *
      * @type {Fraction1TypeEnum}
