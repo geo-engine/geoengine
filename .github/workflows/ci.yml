@@ -132,6 +132,8 @@ jobs:
           SERVER_URL: "http://localhost:3030"
           PROXY_URL: "http://localhost:8123"
         run: |
+          apt-get install podman
+
           service postgresql start
           just common wait-for-port 5432
 
