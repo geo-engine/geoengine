@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-   contents: read
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -64,7 +64,7 @@ jobs:
 
   geoengine-lint:
     name: "geoengine / lint"
-    
+
     runs-on: ubuntu-24.04
     container: quay.io/geoengine/devcontainer:latest
 
@@ -134,9 +134,9 @@ jobs:
         run: |
           service postgresql start
           just common wait-for-port 5432
-          
+
           GEOENGINE__WEB__EXTERNAL_ADDRESS="$PROXY_URL/api" \
-            cargo run &
+            just backend run &
           just common wait-for-port $SERVER_PORT
 
           SESSION_TOKEN=$(curl -s -X POST $SERVER_URL/api/anonymous | jq -r '.id')
@@ -146,14 +146,15 @@ jobs:
               --header "Authorization: Bearer $SESSION_TOKEN" \
               "$SERVER_URL/api/layers/collections/$DATA_CONNECTOR_ID/tags%3A%2A?offset=0&limit=20" \
               | jq -r '.items[] | select(.name == "NDVI") | .id.layerId')
-          
+
+          just backend install # install the request-logging-proxy binary
           request-logging-proxy \
             --target-url $SERVER_URL \
             --port $PROXY_PORT \
             --override-bearer-auth $SESSION_TOKEN \
             --logger dev-null \
             &
-          
+
           just common wait-for-port $PROXY_PORT
 
           # set outputs for the next steps
@@ -176,7 +177,7 @@ jobs:
           ogc-api-tiles-ignore: ""
         env:
           PROXY_URL: "http://localhost:8123"
-  
+
   python:
     runs-on: ubuntu-24.04
     container: quay.io/geoengine/devcontainer:latest
@@ -265,7 +266,7 @@ jobs:
           compression-level: 9
           retention-days: 1
           if-no-files-found: error
-  
+
   www:
     runs-on: ubuntu-24.04
     container: quay.io/geoengine/devcontainer:latest
@@ -274,17 +275,16 @@ jobs:
       contents: read
 
     steps:
-        - name: Checkout code
-          uses: actions/checkout@v6
-        - name: Install
-          run: just www install
-        - name: Check formatting and lints
-          run: just www lint
-        - name: Build
-          run: just www build
-        - name: Idempotency check
-          run: just common check-no-changes-in-git-repo
-
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Install
+        run: just www install
+      - name: Check formatting and lints
+        run: just www lint
+      - name: Build
+        run: just www build
+      - name: Idempotency check
+        run: just common check-no-changes-in-git-repo
 
   api-client-python:
     name: "api-client / python"
@@ -391,7 +391,7 @@ jobs:
           - dashboards/ebv-analyzer
           - dashboards/ecometrics
           - dashboards/esg-indicator-service
-    
+
     steps:
       - uses: actions/checkout@v6
       - name: Install Dependencies
@@ -400,7 +400,7 @@ jobs:
         run: just ui build ${{ matrix.app }}
         env:
           CI: true
-  
+
   ui-test:
     name: "ui / test"
     runs-on: ubuntu-24.04
@@ -458,7 +458,7 @@ jobs:
   repository-coverage:
     name: "repository / coverage"
 
-    needs: 
+    needs:
       - geoengine-test
       - python
 
