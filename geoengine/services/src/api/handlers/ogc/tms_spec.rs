@@ -1,7 +1,7 @@
 use crate::api::handlers::{
     ogc::{
         OgcApiResult,
-        error::OgcApiError,
+        error::{self, OgcApiError},
         util::{
             OriginAndResolution, crs_from_spatial_reference_option, to_non_zero_u16,
             to_non_zero_u64,
@@ -11,6 +11,7 @@ use crate::api::handlers::{
 };
 use float_cmp::approx_eq;
 use geoengine_datatypes::{
+    operations::reproject::suggest_pixel_size_like_gdal_helper,
     primitives::{Coordinate2D, SpatialResolution},
     raster::{
         GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
@@ -18,8 +19,9 @@ use geoengine_datatypes::{
     },
     spatial_reference::SpatialReference,
 };
-use geoengine_operators::engine::RasterResultDescriptor;
+use geoengine_operators::engine::{RasterResultDescriptor, ResultDescriptor};
 use ogcapi_types::tiles::{CornerOfOrigin, TileMatrix, TileMatrixSet, TileMatrixSetId, TilesCrs};
+use snafu::OptionExt;
 use std::{
     f64,
     num::{NonZeroU16, NonZeroU64},
@@ -141,19 +143,37 @@ impl TypedTileMatrixSetProvider {
     pub fn required_origin_and_resolution(
         tile_matrix_set_id: &TileMatrixSetId,
         result_descriptor: &RasterResultDescriptor,
-    ) -> Option<OriginAndResolution> {
+    ) -> OgcApiResult<Option<OriginAndResolution>> {
         match tile_matrix_set_id {
-            TileMatrixSetId::WebMercatorQuad => Some(OriginAndResolution {
-                origin: Coordinate2D::new(
-                    WebMercatorQuadTMS::ORIGIN[0],
-                    WebMercatorQuadTMS::ORIGIN[1],
-                ),
-                resolution: {
-                    let native_resolution = result_descriptor.spatial_grid.spatial_resolution();
-                    WebMercatorQuadTMS::find_next_best_resolution(native_resolution)
-                },
-            }),
-            TileMatrixSetId::Custom(_) => None,
+            TileMatrixSetId::WebMercatorQuad => {
+                let spatial_reference = result_descriptor
+                    .spatial_reference()
+                    .as_option()
+                    .context(error::MissingSpatialReference)?;
+                let source_resolution = result_descriptor.spatial_grid.spatial_resolution();
+                let web_mercator = SpatialReference::web_mercator();
+
+                let resolution = if spatial_reference == web_mercator {
+                    source_resolution
+                } else {
+                    suggest_pixel_size_like_gdal_helper(
+                        result_descriptor.spatial_bounds(),
+                        source_resolution,
+                        spatial_reference,
+                        web_mercator,
+                    )
+                    .map_err(crate::error::Error::from)?
+                };
+
+                Ok(Some(OriginAndResolution {
+                    origin: Coordinate2D::new(
+                        WebMercatorQuadTMS::ORIGIN[0],
+                        WebMercatorQuadTMS::ORIGIN[1],
+                    ),
+                    resolution: WebMercatorQuadTMS::find_next_best_resolution(resolution),
+                }))
+            }
+            TileMatrixSetId::Custom(_) => Ok(None),
         }
     }
 }
@@ -341,7 +361,7 @@ impl TileMatrixSetProvider for GeoEngineCustomTMS {
     }
 
     fn tiles_crs(&self) -> OgcApiResult<TilesCrs> {
-        crs_from_spatial_reference_option(self.result_descriptor.spatial_reference)
+        crs_from_spatial_reference_option(self.result_descriptor.spatial_reference())
             .map(TilesCrs::Simple)
     }
 
@@ -952,7 +972,10 @@ mod tests {
                 calculate_number_of_tiles, grid_bbox, merge_bounds, session_and_3857_layer_id,
                 session_and_4326_layer_id, session_and_native_3857_layer_id,
             },
-            util::{get_initialized_raster_operator, load_layer, raster_workflow_metadata},
+            util::{
+                get_initialized_raster_operator, load_layer, raster_workflow_metadata,
+                reproject_if_necessary,
+            },
         },
         contexts::{ApplicationContext, PostgresContext, PostgresSessionContext, SessionContext},
         ge_context,
@@ -1545,5 +1568,176 @@ mod tests {
                 "Zoom level {zoom_level}: expected tiles {expected_tiles:?}, but operator returned {actual_from_operator:?}"
             );
         }
+    }
+
+    /// Test error cases: invalid TMS IDs, invalid zoom levels, and bounds checking
+    #[ge_context::test]
+    async fn it_handles_error_cases_for_tile_matrix_set_operations(
+        app_ctx: PostgresContext<NoTls>,
+    ) {
+        let (session_id, _data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
+        let session = app_ctx.session_by_id(session_id).await.unwrap();
+        let ctx = app_ctx.session_context(session);
+        let layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
+        let descriptor =
+            raster_workflow_metadata::<crate::contexts::PostgresSessionContext<NoTls>>(
+                layer.workflow.clone(),
+                ctx.execution_context().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let tiling_spec = ctx.execution_context().unwrap().tiling_specification();
+
+        // Error case 1: Invalid TMS ID
+        let result_invalid_tms = TypedTileMatrixSetProvider::ensure_exists(
+            &TileMatrixSetId::Custom("NonExistent".to_string()),
+        );
+        assert!(
+            result_invalid_tms.is_err(),
+            "Should reject non-existent tile matrix set ID"
+        );
+
+        // Error case 2: Invalid zoom level (out of bounds)
+        // Try to access zoom level beyond max for WebMercatorQuad
+        let provider = TypedTileMatrixSetProvider::resolve(
+            &TileMatrixSetId::WebMercatorQuad,
+            &descriptor,
+            tiling_spec,
+        )
+        .unwrap();
+
+        let max_level = provider.max_matrix_id();
+        let invalid_level = max_level + 1;
+
+        // Accessing resolution for invalid zoom should fail or return invalid value
+        // (depends on implementation, but shouldn't panic)
+        let _ = provider.spatial_resolution(invalid_level as u8);
+
+        // Error case 3: Out-of-bounds tile coordinates
+        let tiling_spatial_grid_definition = descriptor.tiling_grid_definition(tiling_spec);
+
+        // Try to access tile beyond grid bounds (row too high)
+        let result_oob_row = provider.tile_grid_bbox(&tiling_spatial_grid_definition, 0, 1000, 0);
+        assert!(
+            result_oob_row.is_err(),
+            "Should reject out-of-bounds tile row"
+        );
+
+        // Try to access tile beyond grid bounds (col too high)
+        let result_oob_col = provider.tile_grid_bbox(&tiling_spatial_grid_definition, 0, 0, 1000);
+        assert!(
+            result_oob_col.is_err(),
+            "Should reject out-of-bounds tile col"
+        );
+    }
+
+    /// Test `GeoEngineCustomWebMercatorTMS` variant properties via `TypedTileMatrixSetProvider`
+    #[ge_context::test]
+    async fn it_validates_custom_web_mercator_tms_properties(app_ctx: PostgresContext<NoTls>) {
+        let (session_id, _data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
+        let session = app_ctx.session_by_id(session_id).await.unwrap();
+        let ctx = app_ctx.session_context(session);
+        let mut layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
+        let execution_context = ctx.execution_context().unwrap();
+
+        let tiling_spec = execution_context.tiling_specification();
+        // Verify CustomWebMercator is recognized and requires Web Mercator SRS
+        let tms_id = TileMatrixSetId::Custom("CustomWebMercator".to_string());
+
+        assert!(
+            TypedTileMatrixSetProvider::ensure_exists(&tms_id).is_ok(),
+            "CustomWebMercator should be recognized as valid TMS"
+        );
+
+        let required_srs = TypedTileMatrixSetProvider::required_srs(&tms_id);
+        assert_eq!(
+            required_srs,
+            Some(SpatialReference::web_mercator()),
+            "Required SRS should be Web Mercator (EPSG:3857)"
+        );
+
+        let mut initialized_operator = get_initialized_raster_operator::<
+            PostgresSessionContext<NoTls>,
+        >(&layer, &execution_context)
+        .await
+        .expect("Failed to initialize operator");
+
+        let required_origin_and_resolution =
+            TypedTileMatrixSetProvider::required_origin_and_resolution(
+                &tms_id,
+                initialized_operator.result_descriptor(),
+            )
+            .unwrap();
+        assert!(
+            required_origin_and_resolution.is_none(),
+            "CustomWebMercator should not require specific origin and resolution"
+        );
+
+        reproject_if_necessary::<PostgresSessionContext<NoTls>>(
+            &mut layer,
+            &mut initialized_operator,
+            &execution_context,
+            required_srs,
+            required_origin_and_resolution,
+        )
+        .await
+        .unwrap();
+
+        let tms_spec = TypedTileMatrixSetProvider::resolve(
+            &tms_id,
+            initialized_operator.result_descriptor(),
+            tiling_spec,
+        )
+        .expect("Should resolve CustomWebMercator TMS");
+
+        // Verify TMS level 0
+        let tile_matrices = tms_spec.tile_matrices().unwrap();
+        let level_0 = tile_matrices.first().unwrap();
+        assert_eq!(
+            level_0,
+            &TileMatrix {
+                id: 0.to_string(),
+                title: None,
+                description: None,
+                keywords: vec![],
+                scale_denominator: 407_286_157.394_767_17,
+                cell_size: 114_040.124_070_534_79,
+                corner_of_origin: CornerOfOrigin::TopLeft,
+                point_of_origin: [-58_354_990.030_488_94, 58_418_366.631_411_66],
+                tile_width: to_non_zero_u16(512),
+                tile_height: to_non_zero_u16(512),
+                matrix_width: to_non_zero_u64(2),
+                matrix_height: to_non_zero_u64(2),
+                variable_matrix_widths: vec![],
+            },
+            "Level 0 properties should match expected values"
+        );
+
+        let initialized_operator =
+            get_initialized_raster_operator::<PostgresSessionContext<NoTls>>(
+                &layer,
+                &execution_context,
+            )
+            .await
+            .expect("Failed to initialize operator");
+        let tiling_grid_definition = initialized_operator
+            .optimize_and_reinitialize(
+                tms_spec.spatial_resolution(0), // level 0/0
+                &execution_context,
+            )
+            .await
+            .unwrap()
+            .result_descriptor()
+            .tiling_grid_definition(tiling_spec);
+        let bbox_0_0_0 = tms_spec
+            .tile_grid_bbox(&tiling_grid_definition, 0, 0, 0)
+            .unwrap();
+
+        assert_eq!(
+            bbox_0_0_0,
+            grid_bbox([-512, -512], [-1, -1]),
+            "Tile 0/0/0 bounds should match expected values"
+        );
     }
 }

@@ -399,10 +399,11 @@ pub async fn tile<C: ApplicationContext>(
         get_initialized_raster_operator::<C::SessionContext>(&layer, &execution_context).await?;
     let tiling_specification = execution_context.tiling_specification();
 
-    let required_origin_and_resolution = TypedTileMatrixSetProvider::required_origin_and_resolution(
-        &query.tile_matrix_set_id,
-        initialized_operator.result_descriptor(),
-    );
+    let required_origin_and_resolution =
+        TypedTileMatrixSetProvider::required_origin_and_resolution(
+            &query.tile_matrix_set_id,
+            initialized_operator.result_descriptor(),
+        )?;
     reproject_if_necessary::<C::SessionContext>(
         &mut layer,
         &mut initialized_operator,

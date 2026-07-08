@@ -22,7 +22,7 @@ check-no-changes-in-git-repo:
 [arg("sleep", long="sleep", help="Time in seconds to sleep between checks.")]
 [group('ci')]
 [script("python3")]
-wait-for-port port sleep="0.5":
+wait-for-port port sleep="1.0":
     import socket
     import time
     import sys

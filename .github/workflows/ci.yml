@@ -125,6 +125,7 @@ jobs:
         run: just backend build "${{ matrix.build }}"
       - name: Prepare service for validation
         id: prepare-service
+        shell: bash # for background processes
         env:
           SERVER_PORT: 3030
           PROXY_PORT: 8123
@@ -132,6 +133,7 @@ jobs:
           PROXY_URL: "http://localhost:8123"
         run: |
           service postgresql start
+          just common wait-for-port 5432
           
           GEOENGINE__WEB__EXTERNAL_ADDRESS="$PROXY_URL/api" \
             cargo run &

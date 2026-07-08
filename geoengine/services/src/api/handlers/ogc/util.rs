@@ -33,7 +33,7 @@ use geoengine_operators::engine::{
 };
 use ogcapi_types::common::{Authority, Bbox as OgcBbox, Crs, Datetime as OgcDatetime, Link};
 use serde::{Deserialize, de::Error as _};
-use snafu::ResultExt;
+use snafu::{OptionExt, ResultExt};
 use std::{
     num::{NonZeroU16, NonZeroU64},
     str::FromStr,
@@ -107,10 +107,9 @@ pub async fn raster_workflow_metadata<C: SessionContext>(
 pub fn crs_from_spatial_reference_option(
     spatial_reference_option: SpatialReferenceOption,
 ) -> OgcApiResult<Crs> {
-    let SpatialReferenceOption::SpatialReference(spatial_reference) = spatial_reference_option
-    else {
-        return Err(OgcApiError::MissingSpatialReference);
-    };
+    let spatial_reference = spatial_reference_option
+        .as_option()
+        .context(error::MissingSpatialReference)?;
 
     let authority = match spatial_reference.authority() {
         SpatialReferenceAuthority::Epsg => Authority::EPSG,
@@ -426,5 +425,124 @@ mod tests {
 
         // Common tile size
         assert_eq!(to_non_zero_u16(256), 256u16.try_into().unwrap());
+    }
+
+    #[test]
+    fn it_converts_spatial_partition_to_ogc_bbox() {
+        use geoengine_datatypes::primitives::SpatialPartition2D;
+
+        // Normal case: positive coordinates
+        // SpatialPartition2D stores coordinates and returns them via lower_left/upper_right
+        let partition = SpatialPartition2D::new_unchecked(
+            Coordinate2D::new(10.0, 40.0),
+            Coordinate2D::new(30.0, 20.0),
+        );
+        let bbox = to_ogc_bbox(partition);
+        // Verify the conversion maps lower_left and upper_right correctly
+        let lower_left = partition.lower_left();
+        let upper_right = partition.upper_right();
+        assert_eq!(
+            bbox,
+            OgcBbox::Bbox2D([lower_left.x, lower_left.y, upper_right.x, upper_right.y])
+        );
+
+        // Verify global extent (covering full world in WGS84-like coordinates)
+        let partition = SpatialPartition2D::new_unchecked(
+            Coordinate2D::new(-180.0, 90.0),
+            Coordinate2D::new(180.0, -90.0),
+        );
+        let bbox = to_ogc_bbox(partition);
+        let lower_left = partition.lower_left();
+        let upper_right = partition.upper_right();
+        assert_eq!(
+            bbox,
+            OgcBbox::Bbox2D([lower_left.x, lower_left.y, upper_right.x, upper_right.y])
+        );
+
+        // Single point partition
+        let partition = SpatialPartition2D::new_unchecked(
+            Coordinate2D::new(5.0, 5.0),
+            Coordinate2D::new(5.0, 5.0),
+        );
+        let bbox = to_ogc_bbox(partition);
+        let lower_left = partition.lower_left();
+        let upper_right = partition.upper_right();
+        assert_eq!(
+            bbox,
+            OgcBbox::Bbox2D([lower_left.x, lower_left.y, upper_right.x, upper_right.y])
+        );
+    }
+
+    #[test]
+    fn it_converts_spatial_reference_option_to_crs() {
+        // Valid EPSG spatial reference
+        let srs = SpatialReference::epsg_4326();
+        let srs_option = SpatialReferenceOption::SpatialReference(srs);
+        let result = crs_from_spatial_reference_option(srs_option);
+        assert!(result.is_ok());
+        let crs = result.unwrap();
+        assert_eq!(crs.authority, Authority::EPSG);
+        assert_eq!(crs.code, "4326");
+
+        // Missing spatial reference error
+        let srs_option = SpatialReferenceOption::Unreferenced;
+        let result = crs_from_spatial_reference_option(srs_option);
+        assert!(matches!(result, Err(OgcApiError::MissingSpatialReference)));
+
+        // Unsupported SrOrg authority
+        let srs = SpatialReference::new(SpatialReferenceAuthority::SrOrg, 1234);
+        let srs_option = SpatialReferenceOption::SpatialReference(srs);
+        let result = crs_from_spatial_reference_option(srs_option);
+        assert!(matches!(
+            result,
+            Err(OgcApiError::UnsupportedSpatialReferenceAuthority { .. })
+        ));
+
+        // Unsupported Iau2000 authority
+        let srs = SpatialReference::new(SpatialReferenceAuthority::Iau2000, 5678);
+        let srs_option = SpatialReferenceOption::SpatialReference(srs);
+        let result = crs_from_spatial_reference_option(srs_option);
+        assert!(matches!(
+            result,
+            Err(OgcApiError::UnsupportedSpatialReferenceAuthority { .. })
+        ));
+    }
+
+    #[test]
+    fn it_parses_datetime_and_bbox_options() {
+        use serde_json::json;
+
+        // Test parse_datetime_option with None
+        #[derive(Deserialize)]
+        struct DatetimeWrapper {
+            #[serde(deserialize_with = "parse_datetime_option")]
+            datetime: Option<OgcDatetime>,
+        }
+
+        let json = json!({ "datetime": null });
+        let wrapper: DatetimeWrapper = serde_json::from_value(json).unwrap();
+        assert!(wrapper.datetime.is_none());
+
+        // Test with valid datetime string
+        let json = json!({ "datetime": "2024-01-15T10:30:00Z" });
+        let wrapper: DatetimeWrapper = serde_json::from_value(json).unwrap();
+        assert!(wrapper.datetime.is_some());
+
+        // Test parse_bbox_option with None
+        #[allow(clippy::items_after_statements, reason = "Structural okay for test")]
+        #[derive(Deserialize)]
+        struct BboxWrapper {
+            #[serde(deserialize_with = "parse_bbox_option")]
+            bbox: Option<OgcBbox>,
+        }
+
+        let json = json!({ "bbox": null });
+        let wrapper: BboxWrapper = serde_json::from_value(json).unwrap();
+        assert!(wrapper.bbox.is_none());
+
+        // Test with valid bbox string
+        let json = json!({ "bbox": "-180,-90,180,90" });
+        let wrapper: BboxWrapper = serde_json::from_value(json).unwrap();
+        assert!(wrapper.bbox.is_some());
     }
 }

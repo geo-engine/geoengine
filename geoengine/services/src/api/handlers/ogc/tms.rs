@@ -144,10 +144,11 @@ pub async fn tile_matrix_set<C: ApplicationContext>(
 
     let tiling_specification = execution_context.tiling_specification();
 
-    let required_origin_and_resolution = TypedTileMatrixSetProvider::required_origin_and_resolution(
-        &tile_matrix_set_id,
-        initialized_operator.result_descriptor(),
-    );
+    let required_origin_and_resolution =
+        TypedTileMatrixSetProvider::required_origin_and_resolution(
+            &tile_matrix_set_id,
+            initialized_operator.result_descriptor(),
+        )?;
     reproject_if_necessary::<C::SessionContext>(
         &mut layer,
         &mut initialized_operator,
@@ -223,6 +224,19 @@ mod tests {
                             {
                                 "href": format!(
                                     "{server_url}/api/ogc/{data_connector_id}/{layer_id}/tileMatrixSets/{TILE_MATRIX_SET_ID}", TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
+                                ),
+                                "rel": "self",
+                                "type": "application/json"
+                            }
+                        ]
+                    },
+                    {
+                        "id":  GeoEngineCustomWebMercatorTMS::TILE_MATRIX_SET_ID,
+                        "title": GeoEngineCustomWebMercatorTMS::TILE_MATRIX_SET_TITLE,
+                        "links": [
+                            {
+                                "href": format!(
+                                    "{server_url}/api/ogc/{data_connector_id}/{layer_id}/tileMatrixSets/{TILE_MATRIX_SET_ID}", TILE_MATRIX_SET_ID = GeoEngineCustomWebMercatorTMS::TILE_MATRIX_SET_ID
                                 ),
                                 "rel": "self",
                                 "type": "application/json"

@@ -117,7 +117,7 @@ validate-ogc-compliance requests-log-file="": common::_clear
         local PORT=$2
 
         echo "Waiting for $HOST:$PORT..."
-        
+
         # The loop runs as long as the Python command returns a non-zero (fail) exit code
         # 2>/dev/null hides the ugly Python traceback errors
         while ! python3 -c "import socket; s = socket.socket(); s.settimeout(1); s.connect(('$HOST', $PORT))" 2>/dev/null; do
@@ -176,3 +176,10 @@ validate-ogc-compliance requests-log-file="": common::_clear
     touch step_summary.md
     npm install
     npx @github/local-action ./node_modules/ogc-validator src/main.ts .env
+
+# Run an example OGC Tiles application with OpenLayers.
+[group("example")]
+[working-directory("test_data/ogc/tiles/openlayers")]
+example-ogc-tiles: common::_clear
+    npm install
+    npm run start
