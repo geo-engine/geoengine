@@ -97,7 +97,9 @@ jobs:
     name: "geoengine / build"
 
     runs-on: ubuntu-24.04
-    container: quay.io/geoengine/devcontainer:latest
+    container:
+      image: quay.io/geoengine/devcontainer:latest
+      options: --privileged
 
     permissions:
       contents: read
