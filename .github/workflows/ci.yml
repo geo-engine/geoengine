@@ -150,6 +150,10 @@ jobs:
               "$SERVER_URL/api/layers/collections/$DATA_CONNECTOR_ID/tags%3A%2A?offset=0&limit=20" \
               | jq -r '.items[] | select(.name == "NDVI") | .id.layerId')
 
+          echo "DATA_CONNECTOR_ID=$DATA_CONNECTOR_ID"
+          echo "LAYER_ID=$LAYER_ID"
+          echo "SESSION_TOKEN=$SESSION_TOKEN"
+
           # set outputs for the next steps
           echo "DATA_CONNECTOR_ID=$DATA_CONNECTOR_ID" >> $GITHUB_OUTPUT
           echo "LAYER_ID=$LAYER_ID" >> $GITHUB_OUTPUT
@@ -164,7 +168,7 @@ jobs:
             --logger dev-null
         background: true
         env:
-          SERVER_URL: "http://localhost:3030"
+          SERVER_URL: "http://127.0.0.1:3030"
           PROXY_PORT: 8123
           SESSION_TOKEN: ${{ steps.prepare-service.outputs.SESSION_TOKEN }}
       - run: just common wait-for-port $PROXY_PORT
