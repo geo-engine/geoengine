@@ -123,22 +123,23 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Build
         run: just backend build "${{ matrix.build }}"
+      - name: Install dependencies for OGC validation
+        run: |
+          apt-get update && apt-get -y install podman # required for ogc-validator
+          just backend install # install the request-logging-proxy binary
+          service postgresql start
+      - name: Start Geo Engine
+        id: ge-instance
+        run: just backend run
+        background: true
+        env:
+          GEOENGINE__WEB__EXTERNAL_ADDRESS: "http://localhost:8123/api"
       - name: Prepare service for validation
         id: prepare-service
-        shell: bash # for background processes
         env:
           SERVER_PORT: 3030
-          PROXY_PORT: 8123
           SERVER_URL: "http://localhost:3030"
-          PROXY_URL: "http://localhost:8123"
         run: |
-          apt-get update && apt-get -y install podman
-
-          service postgresql start
-          just common wait-for-port 5432
-
-          GEOENGINE__WEB__EXTERNAL_ADDRESS="$PROXY_URL/api" \
-            just backend run &
           just common wait-for-port $SERVER_PORT
 
           SESSION_TOKEN=$(curl -s -X POST $SERVER_URL/api/anonymous | jq -r '.id')
@@ -149,19 +150,26 @@ jobs:
               "$SERVER_URL/api/layers/collections/$DATA_CONNECTOR_ID/tags%3A%2A?offset=0&limit=20" \
               | jq -r '.items[] | select(.name == "NDVI") | .id.layerId')
 
-          just backend install # install the request-logging-proxy binary
+          # set outputs for the next steps
+          echo "DATA_CONNECTOR_ID=$DATA_CONNECTOR_ID" >> $GITHUB_OUTPUT
+          echo "LAYER_ID=$LAYER_ID" >> $GITHUB_OUTPUT
+          echo "SESSION_TOKEN=$SESSION_TOKEN" >> $GITHUB_OUTPUT
+      - name: Start request-logging-proxy
+        id: proxy-instance
+        run: |
           request-logging-proxy \
             --target-url $SERVER_URL \
             --port $PROXY_PORT \
             --override-bearer-auth $SESSION_TOKEN \
-            --logger dev-null \
-            &
-
-          just common wait-for-port $PROXY_PORT
-
-          # set outputs for the next steps
-          echo "DATA_CONNECTOR_ID=$DATA_CONNECTOR_ID" >> $GITHUB_OUTPUT
-          echo "LAYER_ID=$LAYER_ID" >> $GITHUB_OUTPUT
+            --logger dev-null
+        background: true
+        env:
+          SERVER_URL: "http://localhost:3030"
+          PROXY_PORT: 8123
+          SESSION_TOKEN: ${{ steps.prepare-service.outputs.SESSION_TOKEN }}
+      - run: just common wait-for-port $PROXY_PORT
+        env:
+          PROXY_PORT: 8123
       - name: Validate service
         uses: geo-engine/ogc-validator@v3
         with:
@@ -179,6 +187,8 @@ jobs:
           ogc-api-tiles-ignore: ""
         env:
           PROXY_URL: "http://localhost:8123"
+      - cancel: proxy-instance
+      - cancel: ge-instance
 
   python:
     runs-on: ubuntu-24.04
