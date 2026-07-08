@@ -13,11 +13,11 @@ The `Interpolation` operator expects exactly one _raster_ input.
 
 ## Parameters
 
-| Name                  | Type                    | Description                                                    | Examples |
-| --------------------- | ----------------------- | -------------------------------------------------------------- | -------- |
-| interpolation         | InterpolationMethod     | Interpolation method.                                          |          |
-| outputResolution      | InterpolationResolution | Target output resolution.                                      |          |
-| outputOriginReference | null or Coordinate2D    | Optional reference point used to align the output grid origin. |          |
+| Name                  | Type                    | Description               | Examples |
+| --------------------- | ----------------------- | ------------------------- | -------- |
+| interpolation         | InterpolationMethod     | Interpolation method.     |          |
+| outputResolution      | InterpolationResolution | Target output resolution. |          |
+| outputOriginReference | null or Coordinate2D    |                           |          |
 
 ## Sources
 
