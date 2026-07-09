@@ -190,6 +190,7 @@ jobs:
       - name: Validate service
         uses: geo-engine/ogc-validator@v3
         with:
+          teamengine-image: "teamengine-dev:1.0-SNAPSHOT"
           ogc-api-processes: false
           ogc-api-features: false
           ogc-api-tiles: true
