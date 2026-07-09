@@ -133,6 +133,14 @@ jobs:
           apt-get update && apt-get -y install podman # required for ogc-validator
           just backend install # install the request-logging-proxy binary
           service postgresql start
+
+          # Fix nested Podman container execution barriers (Exit Code 126)
+          mkdir -p /etc/containers
+          cat << 'EOF' > /etc/containers/containers.conf
+[containers]
+cgroups = "disabled"
+default_ulimits = []
+EOF
       - name: Start Geo Engine
         id: ge-instance
         run: just backend run
