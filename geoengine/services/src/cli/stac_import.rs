@@ -2170,7 +2170,7 @@ fn scan_item_asset_v1_0_0(
     };
     let raster_bands: Vec<stac_extensions::raster::Band> =
         serde_json::from_value(raster_bands.clone())
-            .map_err(|e| anyhow::anyhow!("invalid raster:bands: {e}",))?;
+            .map_err(|e| anyhow::anyhow!("invalid raster:bands: {e}"))?;
 
     let band_count = raster_bands.len();
 
@@ -2475,7 +2475,7 @@ where
             Err(err) => {
                 attempt += 1;
                 if attempt >= MAX_RETRIES {
-                    println!("[ERROR] {operation_name} failed after {MAX_RETRIES} attempts: {err}",);
+                    println!("[ERROR] {operation_name} failed after {MAX_RETRIES} attempts: {err}");
                     return Err(err);
                 }
                 let delay = Duration::from_millis(INITIAL_RETRY_DELAY_MS * 2_u64.pow(attempt - 1));

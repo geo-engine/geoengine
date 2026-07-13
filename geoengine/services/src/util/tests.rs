@@ -778,7 +778,7 @@ pub(crate) async fn setup_db() -> (OwnedSemaphorePermit, DatabaseConnectionConfi
         .connect()
         .await
         .unwrap()
-        .batch_execute(&format!("CREATE SCHEMA {};", &db_config.schema))
+        .batch_execute(&format!("CREATE SCHEMA {};", db_config.schema))
         .await
         .unwrap();
 
@@ -1621,7 +1621,7 @@ pub(crate) mod mock_oidc {
                 email: Some(EndUserEmail::new("robin@dummy_db.com".to_string())),
                 name,
                 nonce: Some(Nonce::new(SINGLE_NONCE.to_string())),
-                duration: Some(core::time::Duration::from_secs(1800)),
+                duration: Some(core::time::Duration::from_mins(30)),
                 access: ACCESS_TOKEN.to_string(),
                 access_for_id: ACCESS_TOKEN.to_string(),
                 refresh: None,

@@ -313,7 +313,7 @@ async fn create_layer_collection_if_not_exists(
 ) -> anyhow::Result<String> {
     let add_collection = AddLayerCollection {
         name: layer_collection_name.to_string(),
-        description: format!("Layer collection for {layer_collection_name}",),
+        description: format!("Layer collection for {layer_collection_name}"),
         properties: vec![],
     };
 

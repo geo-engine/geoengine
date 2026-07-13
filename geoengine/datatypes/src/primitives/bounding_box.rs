@@ -640,10 +640,9 @@ pub fn bboxes_extent<I: Iterator<Item = Option<BoundingBox2D>>>(
     };
 
     for bbox in bboxes {
-        if let Some(bbox) = bbox {
+        {
+            let bbox = bbox?;
             extent = extent.union(&bbox);
-        } else {
-            return None;
         }
     }
 

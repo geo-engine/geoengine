@@ -172,7 +172,8 @@ impl VectorOperator for VectorExpression {
             if !is_allowed_variable_name(&variable_name) {
                 return Err(VectorExpressionError::ColumnNameContainsSpecialCharacters {
                     name: variable_name,
-                })?;
+                }
+                .into());
             }
 
             expression_input_names.push(variable_name);

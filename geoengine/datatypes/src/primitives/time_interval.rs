@@ -347,7 +347,7 @@ impl Debug for TimeInterval {
             f,
             "TimeInterval [{}, {})",
             self.start.inner(),
-            &self.end.inner()
+            self.end.inner()
         )
     }
 }
@@ -539,10 +539,9 @@ pub fn time_interval_extent<I: Iterator<Item = Option<TimeInterval>>>(
     };
 
     for time in times {
-        if let Some(time) = time {
+        {
+            let time = time?;
             extent = extent.extend(&time);
-        } else {
-            return None;
         }
     }
 

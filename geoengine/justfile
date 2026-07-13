@@ -21,9 +21,10 @@ generate-openapi-spec: common::_clear
 lint: common::_clear lint-rustfmt lint-clippy lint-sql
 
 # Run clippy for all features and all targets.
+[arg('fix', long='fix', value='--fix', help='Automatically apply fixes where possible.')]
 [group("lint")]
-lint-clippy: common::_clear
-    cargo clippy --all-features --all-targets
+lint-clippy fix="": common::_clear
+    cargo clippy --all-features --all-targets {{ fix }} --allow-dirty
 
 # Run rustfmt
 [group("lint")]

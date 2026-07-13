@@ -247,7 +247,7 @@ fn projected_coordinate_grid_parallel(
                     let in_coords = proj.project_coordinates(out_coord_slice)?;
                     in_coord_slice
                         .iter_mut()
-                        .zip(in_coords.into_iter())
+                        .zip(in_coords)
                         .for_each(|(a, b)| *a = Some(b));
                 } else if valid_out_area.intersects_bbox(&chunk_bounds) {
                     debug!("reproject part of tile chunk");

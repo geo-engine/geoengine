@@ -72,7 +72,7 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
         .collect::<Vec<usize>>();
 
     if band_positions.len() != required_bands.len() {
-        return Err(PngCreationError::ColorizerBandsMustBePresentInQuery {
+        Err(PngCreationError::ColorizerBandsMustBePresentInQuery {
             bands_present: query_rect.attributes().as_vec(),
             required_bands,
         })?;
@@ -192,7 +192,7 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
             let chunk = chunk.boxed_context(error::QueryDidNotProduceNextChunk)?;
 
             if chunk.len() != rgb_channel_count {
-                return Err(PngCreationError::RgbChunkIsNotEnoughBands)?;
+                Err(PngCreationError::RgbChunkIsNotEnoughBands)?;
             }
 
             let rgb_tile = crate::util::spawn_blocking(move || {

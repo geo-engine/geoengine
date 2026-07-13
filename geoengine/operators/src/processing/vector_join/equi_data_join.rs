@@ -465,7 +465,7 @@ mod tests {
                     .columns
                     .clone()
                     .into_iter()
-                    .chain(right.result_descriptor().columns.clone().into_iter())
+                    .chain(right.result_descriptor().columns.clone())
                     .collect(),
                 time: None,
                 bbox: None,

@@ -123,7 +123,7 @@ where
             inner_grid: data,
             mut validity_mask,
         } = self;
-        debug_assert!(data.data.len() == validity_mask.data.len());
+        debug_assert_eq!(data.data.len(), validity_mask.data.len());
         debug_assert!(data.shape == validity_mask.shape);
 
         let out_data: Vec<Out> = validity_mask
@@ -414,7 +414,7 @@ where
             inner_grid: data,
             validity_mask,
         } = self;
-        debug_assert!(data.data.len() == validity_mask.data.len());
+        debug_assert_eq!(data.data.len(), validity_mask.data.len());
         debug_assert!(data.shape == validity_mask.shape);
 
         let num_elements_per_thread = num::integer::div_ceil(

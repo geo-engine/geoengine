@@ -1974,7 +1974,7 @@ mod tests {
         let session_id = session.id();
 
         let req = TestRequest::get()
-            .uri(&format!("/layers/{INTERNAL_PROVIDER_ID}/capabilities",))
+            .uri(&format!("/layers/{INTERNAL_PROVIDER_ID}/capabilities"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, app_ctx.clone()).await;
 
