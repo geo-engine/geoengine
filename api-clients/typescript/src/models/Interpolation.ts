@@ -36,6 +36,21 @@ import {
  * ## Inputs
  * 
  * The `Interpolation` operator expects exactly one _raster_ input.
+ * 
+ * ## Resolution
+ * 
+ * The target resolution can be specified either as an explicit `Resolution` (in pixel units)
+ * or as a `Fraction` that scales the input resolution.
+ * 
+ * ```rust,ignore
+ * // Scale the input resolution by a factor of 2 in both x and y directions
+ * InterpolationResolution::Fraction(Fraction { x: 2.0, y: 2.0 })
+ * ```
+ * 
+ * ```rust,ignore
+ * // Use an explicit resolution of 50×50 pixel units
+ * InterpolationResolution::Resolution(SpatialResolution { x: 50.0, y: 50.0 })
+ * ```
  * @export
  * @interface Interpolation
  */

@@ -7339,7 +7339,7 @@
       "Downsampling": {
         "type": "object",
         "title": "Downsampling",
-        "description": "The `Downsampling` operator decreases raster resolution by sampling values of an input raster.\n\nIf queried with a resolution that is finer than the input resolution,\ndownsampling is not applicable and an error is returned.\n\n## Inputs\n\nThe `Downsampling` operator expects exactly one _raster_ input.",
+        "description": "The `Downsampling` operator decreases raster resolution by sampling values of an input raster.\n\nIf queried with a resolution that is finer than the input resolution,\ndownsampling is not applicable and an error is returned.\n\n## Inputs\n\nThe `Downsampling` operator expects exactly one _raster_ input.\n\n## Resolution\n\nThe target resolution can be specified either as an explicit `Resolution` (in pixel units)\nor as a `Fraction` that scales the input resolution.\n\n```rust,ignore\n// Scale the input resolution by a factor of 2 in both x and y directions\nDownsamplingResolution::Fraction(Fraction { x: 2.0, y: 2.0 })\n```\n\n```rust,ignore\n// Use an explicit resolution of 200×200 pixel units\nDownsamplingResolution::Resolution(SpatialResolution { x: 200.0, y: 200.0 })\n```",
         "required": [
           "type",
           "params",
@@ -8735,7 +8735,7 @@
       "Interpolation": {
         "type": "object",
         "title": "Interpolation",
-        "description": "The `Interpolation` operator increases raster resolution by interpolating values of an input raster.\n\nIf queried with a resolution that is coarser than the input resolution,\ninterpolation is not applicable and an error is returned.\n\n## Inputs\n\nThe `Interpolation` operator expects exactly one _raster_ input.",
+        "description": "The `Interpolation` operator increases raster resolution by interpolating values of an input raster.\n\nIf queried with a resolution that is coarser than the input resolution,\ninterpolation is not applicable and an error is returned.\n\n## Inputs\n\nThe `Interpolation` operator expects exactly one _raster_ input.\n\n## Resolution\n\nThe target resolution can be specified either as an explicit `Resolution` (in pixel units)\nor as a `Fraction` that scales the input resolution.\n\n```rust,ignore\n// Scale the input resolution by a factor of 2 in both x and y directions\nInterpolationResolution::Fraction(Fraction { x: 2.0, y: 2.0 })\n```\n\n```rust,ignore\n// Use an explicit resolution of 50×50 pixel units\nInterpolationResolution::Resolution(SpatialResolution { x: 50.0, y: 50.0 })\n```",
         "required": [
           "type",
           "params",
