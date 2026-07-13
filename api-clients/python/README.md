@@ -272,7 +272,6 @@ Class | Method | HTTP request | Description
  - [FormatSpecifics](docs/FormatSpecifics.md)
  - [FormatSpecificsCsv](docs/FormatSpecificsCsv.md)
  - [Fraction](docs/Fraction.md)
- - [Fraction1](docs/Fraction1.md)
  - [GbifDataProviderDefinition](docs/GbifDataProviderDefinition.md)
  - [GdalDatasetParameters](docs/GdalDatasetParameters.md)
  - [GdalLoadingInfoTemporalSlice](docs/GdalLoadingInfoTemporalSlice.md)

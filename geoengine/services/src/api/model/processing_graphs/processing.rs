@@ -17,8 +17,8 @@ use geoengine_operators::processing::{
     Downsampling as OperatorsDownsampling, DownsamplingMethod as OperatorsDownsamplingMethod,
     DownsamplingParams as OperatorsDownsamplingParameters,
     DownsamplingResolution as OperatorsDownsamplingResolution, Expression as OperatorsExpression,
-    ExpressionParams as OperatorsExpressionParameters, Interpolation as OperatorsInterpolation,
-    InterpolationMethod as OperatorsInterpolationMethod,
+    ExpressionParams as OperatorsExpressionParameters, Fraction as OperatorsFraction,
+    Interpolation as OperatorsInterpolation, InterpolationMethod as OperatorsInterpolationMethod,
     InterpolationParams as OperatorsInterpolationParameters,
     InterpolationResolution as OperatorsInterpolationResolution,
     RasterStacker as OperatorsRasterStacker,
@@ -231,22 +231,14 @@ impl From<DeriveOutRasterSpecsSource> for OperatorsDeriveOutRasterSpecsSource {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct Fraction {
-    /// Scaling factor in x direction.
-    pub x: f64,
-    /// Scaling factor in y direction.
-    pub y: f64,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum InterpolationResolution {
     #[schema(title = "Resolution")]
     /// Explicit output resolution (`x`, `y`) in target coordinates.
     Resolution { x: f64, y: f64 },
     #[schema(title = "Fraction")]
-    Fraction(Fraction),
+    /// Scaling factor in x/y direction.
+    Fraction { x: f64, y: f64 },
 }
 
 impl From<InterpolationResolution> for OperatorsInterpolationResolution {
@@ -255,10 +247,9 @@ impl From<InterpolationResolution> for OperatorsInterpolationResolution {
             InterpolationResolution::Resolution { x, y } => {
                 Self::Resolution(geoengine_datatypes::primitives::SpatialResolution { x, y })
             }
-            InterpolationResolution::Fraction(fraction) => Self::Fraction {
-                x: fraction.x,
-                y: fraction.y,
-            },
+            InterpolationResolution::Fraction { x, y } => {
+                Self::Fraction(OperatorsFraction { x, y })
+            }
         }
     }
 }
@@ -749,7 +740,8 @@ pub enum DownsamplingResolution {
     /// Explicit output resolution (`x`, `y`) in target coordinates.
     Resolution { x: f64, y: f64 },
     #[schema(title = "Fraction")]
-    Fraction(Fraction),
+    /// Scaling factor in x/y direction.
+    Fraction { x: f64, y: f64 },
 }
 
 impl From<DownsamplingResolution> for OperatorsDownsamplingResolution {
@@ -758,10 +750,7 @@ impl From<DownsamplingResolution> for OperatorsDownsamplingResolution {
             DownsamplingResolution::Resolution { x, y } => {
                 Self::Resolution(geoengine_datatypes::primitives::SpatialResolution { x, y })
             }
-            DownsamplingResolution::Fraction(fraction) => Self::Fraction {
-                x: fraction.x,
-                y: fraction.y,
-            },
+            DownsamplingResolution::Fraction { x, y } => Self::Fraction(OperatorsFraction { x, y }),
         }
     }
 }
@@ -1199,7 +1188,7 @@ mod tests {
             r#type: Default::default(),
             params: InterpolationParameters {
                 interpolation: InterpolationMethod::NearestNeighbor,
-                output_resolution: InterpolationResolution::Fraction(Fraction { x: 2.0, y: 2.0 }),
+                output_resolution: InterpolationResolution::Fraction { x: 2.0, y: 2.0 },
                 output_origin_reference: None,
             },
             sources: Box::new(SingleRasterSource {
@@ -1221,7 +1210,9 @@ mod tests {
         ));
         assert!(matches!(
             ops.params.output_resolution,
-            geoengine_operators::processing::InterpolationResolution::Fraction { x, y }
+            geoengine_operators::processing::InterpolationResolution::Fraction(
+                geoengine_operators::processing::Fraction { x, y }
+            )
             if (x - 2.0).abs() < f64::EPSILON && (y - 2.0).abs() < f64::EPSILON
         ));
         assert!(ops.params.output_origin_reference.is_none());
@@ -1233,7 +1224,7 @@ mod tests {
             r#type: Default::default(),
             params: DownsamplingParameters {
                 sampling_method: DownsamplingMethod::NearestNeighbor,
-                output_resolution: DownsamplingResolution::Fraction(Fraction { x: 2.0, y: 2.0 }),
+                output_resolution: DownsamplingResolution::Fraction { x: 2.0, y: 2.0 },
                 output_origin_reference: Some(crate::api::model::datatypes::Coordinate2D {
                     x: 0.0,
                     y: 0.0,
@@ -1258,7 +1249,9 @@ mod tests {
         ));
         assert!(matches!(
             ops.params.output_resolution,
-            geoengine_operators::processing::DownsamplingResolution::Fraction { x, y }
+            geoengine_operators::processing::DownsamplingResolution::Fraction(
+                geoengine_operators::processing::Fraction { x, y }
+            )
             if (x - 2.0).abs() < f64::EPSILON && (y - 2.0).abs() < f64::EPSILON
         ));
         assert_eq!(

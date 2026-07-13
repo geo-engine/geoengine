@@ -42,7 +42,7 @@ pub(crate) use crate::api::model::processing_graphs::{
     processing::{
         Aggregation, BandFilter, BandFilterParameters, BandsByNameOrIndex,
         DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParameters,
-        DownsamplingResolution, Expression, ExpressionParameters, Fraction, Interpolation,
+        DownsamplingResolution, Expression, ExpressionParameters, Interpolation,
         InterpolationMethod, InterpolationParameters, InterpolationResolution, RasterStacker,
         RasterStackerParameters, RasterTypeConversion, RasterTypeConversionParameters,
         RasterVectorJoin, RasterVectorJoinParameters, RenameBands, Reprojection,
@@ -251,7 +251,6 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     DownsamplingResolution,
     Expression,
     ExpressionParameters,
-    Fraction,
     Interpolation,
     InterpolationMethod,
     InterpolationParameters,

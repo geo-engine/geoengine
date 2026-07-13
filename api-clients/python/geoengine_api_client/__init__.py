@@ -118,7 +118,6 @@ __all__ = [
     "FormatSpecifics",
     "FormatSpecificsCsv",
     "Fraction",
-    "Fraction1",
     "GbifDataProviderDefinition",
     "GdalDatasetParameters",
     "GdalLoadingInfoTemporalSlice",
@@ -505,7 +504,6 @@ from geoengine_api_client.models.first_aggregation import FirstAggregation as Fi
 from geoengine_api_client.models.format_specifics import FormatSpecifics as FormatSpecifics
 from geoengine_api_client.models.format_specifics_csv import FormatSpecificsCsv as FormatSpecificsCsv
 from geoengine_api_client.models.fraction import Fraction as Fraction
-from geoengine_api_client.models.fraction1 import Fraction1 as Fraction1
 from geoengine_api_client.models.gbif_data_provider_definition import GbifDataProviderDefinition as GbifDataProviderDefinition
 from geoengine_api_client.models.gdal_dataset_parameters import GdalDatasetParameters as GdalDatasetParameters
 from geoengine_api_client.models.gdal_loading_info_temporal_slice import GdalLoadingInfoTemporalSlice as GdalLoadingInfoTemporalSlice

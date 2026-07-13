@@ -1,22 +1,27 @@
 
-# Fraction1
+# DownsamplingResolutionOneOf
 
+Scaling factor in x/y direction.
 
 ## Properties
 
 Name | Type
 ------------ | -------------
+`x` | number
+`y` | number
 `type` | string
 
 ## Example
 
 ```typescript
-import type { Fraction1 } from '@geoengine/api-client'
+import type { DownsamplingResolutionOneOf } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "x": null,
+  "y": null,
   "type": null,
-} satisfies Fraction1
+} satisfies DownsamplingResolutionOneOf
 
 console.log(example)
 
@@ -25,7 +30,7 @@ const exampleJSON: string = JSON.stringify(example)
 console.log(exampleJSON)
 
 // Parse the JSON string back to an object
-const exampleParsed = JSON.parse(exampleJSON) as Fraction1
+const exampleParsed = JSON.parse(exampleJSON) as DownsamplingResolutionOneOf
 console.log(exampleParsed)
 ```
 

@@ -1,6 +1,7 @@
 
 # Fraction
 
+Scaling factor in x/y direction.
 
 ## Properties
 
@@ -8,6 +9,7 @@ Name | Type
 ------------ | -------------
 `x` | number
 `y` | number
+`type` | string
 
 ## Example
 
@@ -18,6 +20,7 @@ import type { Fraction } from '@geoengine/api-client'
 const example = {
   "x": null,
   "y": null,
+  "type": null,
 } satisfies Fraction
 
 console.log(example)

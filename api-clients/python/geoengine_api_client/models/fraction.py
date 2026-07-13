@@ -17,18 +17,26 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt
+from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Union
 from typing import Optional, Set
 from typing_extensions import Self
 
 class Fraction(BaseModel):
     """
-    Fraction
+    Scaling factor in x/y direction.
     """ # noqa: E501
-    x: Union[StrictFloat, StrictInt] = Field(description="Scaling factor in x direction.")
-    y: Union[StrictFloat, StrictInt] = Field(description="Scaling factor in y direction.")
-    __properties: ClassVar[List[str]] = ["x", "y"]
+    x: Union[StrictFloat, StrictInt]
+    y: Union[StrictFloat, StrictInt]
+    type: StrictStr
+    __properties: ClassVar[List[str]] = ["x", "y", "type"]
+
+    @field_validator('type')
+    def type_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['fraction']):
+            raise ValueError("must be one of enum values ('fraction')")
+        return value
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -72,7 +80,19 @@ class Fraction(BaseModel):
         return _dict
 
     @classmethod
-    def from_dict(cls, obj: Dict[str, Any]) -> Optional[Self]:
+    def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
         """Create an instance of Fraction from a dict"""
+        if obj is None:
+            return None
+
+        if not isinstance(obj, dict):
+            return cls.model_validate(obj)
+
+        _obj = cls.model_validate({
+            "x": obj.get("x"),
+            "y": obj.get("y"),
+            "type": obj.get("type")
+        })
+        return _obj
 
 

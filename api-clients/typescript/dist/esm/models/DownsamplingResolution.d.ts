@@ -8,14 +8,14 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import type { Fraction1 } from './Fraction1';
+import type { Fraction } from './Fraction';
 import type { Resolution } from './Resolution';
 /**
  * @type DownsamplingResolution
  *
  * @export
  */
-export type DownsamplingResolution = Fraction1 | Resolution;
+export type DownsamplingResolution = Fraction | Resolution;
 export declare function DownsamplingResolutionFromJSON(json: any): DownsamplingResolution;
 export declare function DownsamplingResolutionFromJSONTyped(json: any, ignoreDiscriminator: boolean): DownsamplingResolution;
 export declare function DownsamplingResolutionToJSON(json: any): any;

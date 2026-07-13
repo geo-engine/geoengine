@@ -36,12 +36,14 @@ class TestFraction(unittest.TestCase):
         if include_optional:
             return Fraction(
                 x = 1.337,
-                y = 1.337
+                y = 1.337,
+                type = 'fraction'
             )
         else:
             return Fraction(
                 x = 1.337,
                 y = 1.337,
+                type = 'fraction',
         )
         """
 

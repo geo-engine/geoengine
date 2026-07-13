@@ -10,21 +10,21 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
+/// DownsamplingResolutionOneOf : Scaling factor in x/y direction.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Fraction1 {
-    /// Scaling factor in x direction.
+pub struct DownsamplingResolutionOneOf {
     #[serde(rename = "x")]
     pub x: f64,
-    /// Scaling factor in y direction.
     #[serde(rename = "y")]
     pub y: f64,
     #[serde(rename = "type")]
     pub r#type: Type,
 }
 
-impl Fraction1 {
-    pub fn new(x: f64, y: f64, r#type: Type) -> Fraction1 {
-        Fraction1 {
+impl DownsamplingResolutionOneOf {
+    /// Scaling factor in x/y direction.
+    pub fn new(x: f64, y: f64, r#type: Type) -> DownsamplingResolutionOneOf {
+        DownsamplingResolutionOneOf {
             x,
             y,
             r#type,

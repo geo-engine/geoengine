@@ -87,7 +87,6 @@ from geoengine_api_client.models.first_aggregation import FirstAggregation
 from geoengine_api_client.models.format_specifics import FormatSpecifics
 from geoengine_api_client.models.format_specifics_csv import FormatSpecificsCsv
 from geoengine_api_client.models.fraction import Fraction
-from geoengine_api_client.models.fraction1 import Fraction1
 from geoengine_api_client.models.gbif_data_provider_definition import GbifDataProviderDefinition
 from geoengine_api_client.models.gdal_dataset_parameters import GdalDatasetParameters
 from geoengine_api_client.models.gdal_loading_info_temporal_slice import GdalLoadingInfoTemporalSlice

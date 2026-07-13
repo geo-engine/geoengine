@@ -16,7 +16,7 @@ exports.DownsamplingResolutionFromJSON = DownsamplingResolutionFromJSON;
 exports.DownsamplingResolutionFromJSONTyped = DownsamplingResolutionFromJSONTyped;
 exports.DownsamplingResolutionToJSON = DownsamplingResolutionToJSON;
 exports.DownsamplingResolutionToJSONTyped = DownsamplingResolutionToJSONTyped;
-const Fraction1_1 = require("./Fraction1");
+const Fraction_1 = require("./Fraction");
 const Resolution_1 = require("./Resolution");
 function DownsamplingResolutionFromJSON(json) {
     return DownsamplingResolutionFromJSONTyped(json, false);
@@ -28,8 +28,8 @@ function DownsamplingResolutionFromJSONTyped(json, ignoreDiscriminator) {
     if (typeof json !== 'object') {
         return json;
     }
-    if ((0, Fraction1_1.instanceOfFraction1)(json)) {
-        return (0, Fraction1_1.Fraction1FromJSONTyped)(json, true);
+    if ((0, Fraction_1.instanceOfFraction)(json)) {
+        return (0, Fraction_1.FractionFromJSONTyped)(json, true);
     }
     if ((0, Resolution_1.instanceOfResolution)(json)) {
         return (0, Resolution_1.ResolutionFromJSONTyped)(json, true);
@@ -46,8 +46,8 @@ function DownsamplingResolutionToJSONTyped(value, ignoreDiscriminator = false) {
     if (typeof value !== 'object') {
         return value;
     }
-    if ((0, Fraction1_1.instanceOfFraction1)(value)) {
-        return (0, Fraction1_1.Fraction1ToJSON)(value);
+    if ((0, Fraction_1.instanceOfFraction)(value)) {
+        return (0, Fraction_1.FractionToJSON)(value);
     }
     if ((0, Resolution_1.instanceOfResolution)(value)) {
         return (0, Resolution_1.ResolutionToJSON)(value);

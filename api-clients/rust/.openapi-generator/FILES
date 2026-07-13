@@ -77,7 +77,6 @@ docs/FirstAggregation.md
 docs/FormatSpecifics.md
 docs/FormatSpecificsCsv.md
 docs/Fraction.md
-docs/Fraction1.md
 docs/GbifDataProviderDefinition.md
 docs/GdalDatasetParameters.md
 docs/GdalLoadingInfoTemporalSlice.md
@@ -468,7 +467,6 @@ src/models/first_aggregation.rs
 src/models/format_specifics.rs
 src/models/format_specifics_csv.rs
 src/models/fraction.rs
-src/models/fraction_1.rs
 src/models/gbif_data_provider_definition.rs
 src/models/gdal_dataset_parameters.rs
 src/models/gdal_loading_info_temporal_slice.rs
