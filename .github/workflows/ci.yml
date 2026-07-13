@@ -129,6 +129,7 @@ jobs:
       - name: Build
         run: just backend build "${{ matrix.build }}"
       - name: Install dependencies for OGC validation
+        if: ${{ matrix.build == '' }}
         run: |
           apt-get update && apt-get -y install podman # required for ogc-validator
           just backend install # install the request-logging-proxy binary
@@ -142,12 +143,14 @@ jobs:
           default_ulimits = []
           EOF
       - name: Start Geo Engine
+        if: ${{ matrix.build == '' }}
         id: ge-instance
         run: just backend run
         background: true
         env:
           GEOENGINE__WEB__EXTERNAL_ADDRESS: "http://127.0.0.1:8123/api"
       - name: Prepare service for validation
+        if: ${{ matrix.build == '' }}
         id: prepare-service
         env:
           SERVER_PORT: 3030
@@ -172,6 +175,7 @@ jobs:
           echo "LAYER_ID=$LAYER_ID" >> $GITHUB_OUTPUT
           echo "SESSION_TOKEN=$SESSION_TOKEN" >> $GITHUB_OUTPUT
       - name: Start request-logging-proxy
+        if: ${{ matrix.build == '' }}
         id: proxy-instance
         run: |
           request-logging-proxy \
@@ -185,9 +189,11 @@ jobs:
           PROXY_PORT: 8123
           SESSION_TOKEN: ${{ steps.prepare-service.outputs.SESSION_TOKEN }}
       - run: just common wait-for-port $PROXY_PORT
+        if: ${{ matrix.build == '' }}
         env:
           PROXY_PORT: 8123
       - name: Validate service
+        if: ${{ matrix.build == '' }}
         uses: geo-engine/ogc-validator@v3
         with:
           teamengine-image: "teamengine-dev:1.0-SNAPSHOT"
