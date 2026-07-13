@@ -2,8 +2,8 @@ use gdal::raster::GdalType;
 use geoengine_datatypes::{
     primitives::TimeInterval,
     raster::{
-        ChangeGridBounds, EmptyGrid, GridBlit, GridBoundingBox2D, GridOrEmpty, MaskedGrid, Pixel,
-        RasterProperties, RasterTile2D, TileInformation,
+        ChangeGridBounds, EmptyGrid, GridBoundingBox2D, GridOrEmpty, MaskedGrid, Pixel,
+        RasterProperties, RasterTile2D, TileInformation, grid_blit_valid_only,
     },
 };
 use num::FromPrimitive;
@@ -164,7 +164,7 @@ impl GdalPoolReader {
                 .load_tile_grid_props(dataset_params, reader_mode, tile_information)
                 .await?
             {
-                tile_raster.grid_blit_from(&file_tile.grid);
+                grid_blit_valid_only(&mut tile_raster, &file_tile.grid);
                 properties = file_tile.properties;
             }
         }

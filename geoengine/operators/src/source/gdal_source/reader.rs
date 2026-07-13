@@ -1,6 +1,7 @@
 use gdal::raster::GdalType;
 use geoengine_datatypes::raster::{
-    EmptyGrid, GridBlit, GridBoundingBox2D, GridOrEmpty, MaskedGrid, Pixel, RasterProperties,
+    EmptyGrid, GridBoundingBox2D, GridOrEmpty, MaskedGrid, Pixel, RasterProperties,
+    grid_blit_valid_only,
 };
 use num::FromPrimitive;
 
@@ -86,7 +87,7 @@ impl GdalPoolReader {
                 } else {
                     let mut tile_raster =
                         GridOrEmpty::from(EmptyGrid::new(read_advise.bounds_of_target));
-                    tile_raster.grid_blit_from(&grid);
+                    grid_blit_valid_only(&mut tile_raster, &grid);
                     tile_raster
                 };
                 Ok(GridAndProperties { grid, properties })
