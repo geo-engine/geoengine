@@ -6,8 +6,8 @@ use crate::{
             OgcApiResult,
             error::{self, OgcApiError},
             tms_spec::{
-                GeoEngineCustomTMS, TileMatrixSetProvider, TypedTileMatrixSetProvider,
-                WebMercatorQuadTMS,
+                CustomNativeTMS, CustomWebMercatorTMS, TileMatrixSetProvider,
+                TypedTileMatrixSetProvider, WebMercatorQuadTMS,
             },
             util::{
                 crs_from_spatial_reference_option, get_initialized_raster_operator, link_creator,
@@ -27,6 +27,7 @@ use crate::{
 use actix_web::{HttpRequest, HttpResponse, web};
 use geoengine_datatypes::{
     error::BoxedResultExt,
+    operations::image::RasterColorizer,
     primitives::{
         AxisAlignedRectangle, BandSelection, RasterQueryRectangle, TimeInstance, TimeInterval,
     },
@@ -43,7 +44,7 @@ use geoengine_operators::{
 };
 use ogcapi_types::{
     common::{
-        Authority, Crs, Datetime as OgcDatetime, IntervalDatetime,
+        Crs, Datetime as OgcDatetime, IntervalDatetime,
         link_rel::{ITEM, SELF, TILING_SCHEME},
         media_type::{JSON, PNG},
     },
@@ -54,9 +55,6 @@ use ogcapi_types::{
 };
 use utoipa::IntoParams;
 use uuid::Uuid;
-
-const TILESET_TITLE: &str = "Tileset Metadata";
-const TILESET_LIST_TITLE: &str = "Tiles in GeoEngine custom TMS";
 
 /// OGC API Collection Tilesets List
 ///
@@ -101,9 +99,8 @@ pub async fn collection_tilesets<C: ApplicationContext>(
     Ok(web::Json(TileSets {
         tilesets: vec![
             TileSetItem {
-                title: Some(TILESET_LIST_TITLE.to_string()),
+                title: Some(CustomNativeTMS::TILE_MATRIX_SET_TITLE.to_string()),
                 data_type: DataType::Map,
-                // tile_matrix_set_id: CUSTOM_TILE_MATRIX_SET_ID.to_string(),
                 crs: TilesCrs::Simple(crs_from_spatial_reference_option(
                     descriptor.spatial_reference,
                 )?),
@@ -111,16 +108,34 @@ pub async fn collection_tilesets<C: ApplicationContext>(
                 links: vec![create_link(
                     &format!(
                         "collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}",
-                        TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
+                        TILE_MATRIX_SET_ID = CustomNativeTMS::TILE_MATRIX_SET_ID
                     ),
                     SELF,
                     JSON,
                 )?],
             },
             TileSetItem {
-                title: Some("WebMercatorQuad TMS".to_string()),
+                title: Some(CustomWebMercatorTMS::TILE_MATRIX_SET_TITLE.to_string()),
                 data_type: DataType::Map,
-                crs: TilesCrs::Simple(Crs::new(Authority::EPSG, 0, 3857)),
+                crs: TilesCrs::Simple(Crs::from_epsg(3857)),
+                tile_matrix_set_uri: None,
+                links: vec![create_link(
+                    &format!(
+                        "collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}",
+                        TILE_MATRIX_SET_ID = CustomWebMercatorTMS::TILE_MATRIX_SET_ID
+                    ),
+                    SELF,
+                    JSON,
+                )?],
+            },
+            TileSetItem {
+                title: Some(WebMercatorQuadTMS::TILE_MATRIX_SET_TITLE.to_string()),
+                data_type: DataType::Map,
+                // TODO: fix `ogcapi-types` to support `TilesCrs::Uri` and use it here instead of `TilesCrs::Simple`
+                // crs: TilesCrs::Uri {
+                //     uri: "http://www.opengis.net/def/crs/EPSG/0/3857".to_string(),
+                // },
+                crs: TilesCrs::Simple(Crs::from_epsg(3857)),
                 tile_matrix_set_uri: Some(
                     "http://www.opengis.net/def/tilematrixset/OGC/1.0/WebMercatorQuad".to_string(),
                 ),
@@ -192,7 +207,7 @@ pub async fn collection_tileset<C: ApplicationContext>(
     let spatial_bounds = descriptor.spatial_bounds();
 
     Ok(web::Json(TileSet {
-        title: Some(TILESET_TITLE.to_string()),
+        title: Some("Tileset Metadata".to_string()),
         data_type: DataType::Map,
         description: None,
         keywords: vec![],
@@ -461,7 +476,7 @@ pub async fn tile<C: ApplicationContext>(
             query.tile_col,
         )?,
         query.time_interval,
-        BandSelection::first(), // TODO: is this correct? How do we determine what's needed?
+        band_selection(&layer),
     );
 
     let (processor, query_ctx) =
@@ -541,6 +556,18 @@ fn ensure_matching_collection(layer_id: &LayerId, collection_id: LayerId) -> Ogc
     Ok(())
 }
 
+fn band_selection(layer: &Layer) -> BandSelection {
+    layer
+        .symbology
+        .as_ref()
+        .and_then(Symbology::as_raster_symbology)
+        .map(|symbology| &symbology.raster_colorizer)
+        .map_or_else(
+            BandSelection::first, // matches to fallback linear gradient colorizer
+            RasterColorizer::band_selection,
+        )
+}
+
 fn query_time_from_datetime(datetime: Option<OgcDatetime>) -> OgcApiResult<TimeInterval> {
     match datetime {
         Some(OgcDatetime::Datetime(datetime)) => {
@@ -599,7 +626,8 @@ mod tests {
     use super::*;
     use crate::{
         api::handlers::ogc::test_util::{
-            session_and_3857_layer_id, session_and_4326_layer_id, session_and_native_3857_layer_id,
+            session_and_3857_layer_id, session_and_4326_layer_id, session_and_4326_rgb_layer_id,
+            session_and_native_3857_layer_id,
         },
         contexts::PostgresContext,
         ge_context,
@@ -636,13 +664,27 @@ mod tests {
             serde_json::json!({
                 "tilesets": [
                     {
-                        "title": TILESET_LIST_TITLE,
+                        "title": CustomNativeTMS::TILE_MATRIX_SET_TITLE,
                         "dataType": "map",
                         "crs": "http://www.opengis.net/def/crs/EPSG/0/4326",
                         "links": [
                             {
                                 "href": format!(
-                                    "{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}", TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
+                                    "{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}", TILE_MATRIX_SET_ID = CustomNativeTMS::TILE_MATRIX_SET_ID
+                                ),
+                                "rel": "self",
+                                "type": "application/json"
+                            }
+                        ]
+                    },
+                                        {
+                        "title": CustomWebMercatorTMS::TILE_MATRIX_SET_TITLE,
+                        "dataType": "map",
+                        "crs": "http://www.opengis.net/def/crs/EPSG/0/3857",
+                        "links": [
+                            {
+                                "href": format!(
+                                    "{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}", TILE_MATRIX_SET_ID = CustomWebMercatorTMS::TILE_MATRIX_SET_ID
                                 ),
                                 "rel": "self",
                                 "type": "application/json"
@@ -650,7 +692,7 @@ mod tests {
                         ]
                     },
                     {
-                        "title": "WebMercatorQuad TMS",
+                        "title": WebMercatorQuadTMS::TILE_MATRIX_SET_TITLE,
                         "dataType": "map",
                         "crs": "http://www.opengis.net/def/crs/EPSG/0/3857",
                         "tileMatrixSetURI": "http://www.opengis.net/def/tilematrixset/OGC/1.0/WebMercatorQuad",
@@ -687,7 +729,7 @@ mod tests {
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
                 "/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}",
-                TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
+                TILE_MATRIX_SET_ID = CustomNativeTMS::TILE_MATRIX_SET_ID
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -700,7 +742,7 @@ mod tests {
         assert_eq!(
             body,
             serde_json::json!({
-                "title": TILESET_TITLE,
+                "title": "Tileset Metadata",
                 "dataType": "map",
                 "crs": "http://www.opengis.net/def/crs/EPSG/0/4326",
                 "boundingBox": {
@@ -714,7 +756,7 @@ mod tests {
                     {
                         "href": format!(
                             "{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}",
-                            TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
+                            TILE_MATRIX_SET_ID = CustomNativeTMS::TILE_MATRIX_SET_ID
                         ),
                         "rel": "self",
                         "type": "application/json"
@@ -722,7 +764,7 @@ mod tests {
                     {
                         "href": format!(
                             "{server_url}/api/ogc/{data_connector_id}/{layer_id}/tileMatrixSets/{TILE_MATRIX_SET_ID}",
-                            TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
+                            TILE_MATRIX_SET_ID = CustomNativeTMS::TILE_MATRIX_SET_ID
                         ),
                         "rel": "http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme",
                         "type": "application/json"
@@ -730,7 +772,7 @@ mod tests {
                     {
                         "href": format!(
                             "{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}/{{tileMatrix}}/{{tileRow}}/{{tileCol}}?datetime={{datetime}}",
-                            TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
+                            TILE_MATRIX_SET_ID = CustomNativeTMS::TILE_MATRIX_SET_ID
                         ),
                         "rel": "item",
                         "type": "image/png",
@@ -748,7 +790,7 @@ mod tests {
         let req = actix_web::test::TestRequest::get()
 			.uri(&format!(
 				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}/2/1/4?datetime=2014-04-01T00:00:00Z",
-                TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
+                TILE_MATRIX_SET_ID = CustomNativeTMS::TILE_MATRIX_SET_ID
 			))
 			.append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -777,7 +819,7 @@ mod tests {
         let req = actix_web::test::TestRequest::get()
 			.uri(&format!(
 				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-04-01T00:00:00Z",
-                TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
+                TILE_MATRIX_SET_ID = CustomNativeTMS::TILE_MATRIX_SET_ID
 			))
 			.append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -806,7 +848,7 @@ mod tests {
         let req = actix_web::test::TestRequest::get()
 			.uri(&format!(
 				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-04-01T00:00:00Z",
-                TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
+                TILE_MATRIX_SET_ID = CustomNativeTMS::TILE_MATRIX_SET_ID
 			))
 			.append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -838,7 +880,7 @@ mod tests {
         let req = actix_web::test::TestRequest::get()
 			.uri(&format!(
 				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-04-01T00:00:00Z",
-                TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
+                TILE_MATRIX_SET_ID = CustomNativeTMS::TILE_MATRIX_SET_ID
 			))
 			.append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -890,6 +932,43 @@ mod tests {
         assert_eq!(content_type.as_deref(), Some("image/png"));
 
         let file_path = test_data!("ogc/tiles/ndvi_webmercator_0_0_0.png").to_path_buf();
+        save_test_bytes_if_not_exists(&image_bytes, &file_path);
+
+        assert_image_equals(&file_path, &image_bytes);
+    }
+
+    #[ge_context::test]
+    async fn it_renders_custom_webmercator_rgb_tile_png_with_datetime(
+        app_ctx: PostgresContext<NoTls>,
+    ) {
+        let (session_id, data_connector_id, layer_id) =
+            session_and_4326_rgb_layer_id(&app_ctx).await;
+
+        let req = actix_web::test::TestRequest::get()
+			.uri(&format!(
+				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}/1/0/1?datetime=2014-04-01T00:00:00Z",
+                TILE_MATRIX_SET_ID = CustomWebMercatorTMS::TILE_MATRIX_SET_ID
+			))
+			.append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+        let status = res.status();
+        let content_type = res
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(ToOwned::to_owned);
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        assert_eq!(
+            status,
+            200,
+            "Response body: {:?}",
+            std::str::from_utf8(&image_bytes)
+        );
+        assert_eq!(content_type.as_deref(), Some("image/png"));
+
+        let file_path = test_data!("ogc/tiles/natural_earth_rgb_1_0_1.png").to_path_buf();
         save_test_bytes_if_not_exists(&image_bytes, &file_path);
 
         assert_image_equals(&file_path, &image_bytes);

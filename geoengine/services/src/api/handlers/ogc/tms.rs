@@ -3,7 +3,7 @@ use crate::{
         handlers::ogc::{
             OgcApiResult,
             tms_spec::{
-                GeoEngineCustomTMS, GeoEngineCustomWebMercatorTMS, TileMatrixSetProvider,
+                CustomNativeTMS, CustomWebMercatorTMS, TileMatrixSetProvider,
                 TypedTileMatrixSetProvider, WebMercatorQuadTMS,
             },
             util::{
@@ -57,15 +57,15 @@ pub async fn tile_matrix_sets<C: ApplicationContext>(
             // Always include custom TMS
             TileMatrixSetItem {
                 id: Some(TileMatrixSetId::Custom(
-                    GeoEngineCustomTMS::TILE_MATRIX_SET_ID.to_string(),
+                    CustomNativeTMS::TILE_MATRIX_SET_ID.to_string(),
                 )),
-                title: Some(GeoEngineCustomTMS::TILE_MATRIX_SET_TITLE.to_string()),
+                title: Some(CustomNativeTMS::TILE_MATRIX_SET_TITLE.to_string()),
                 uri: None,
                 crs: None,
                 links: vec![create_link(
                     &format!(
                         "tileMatrixSets/{TILE_MATRIX_SET_ID}",
-                        TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
+                        TILE_MATRIX_SET_ID = CustomNativeTMS::TILE_MATRIX_SET_ID
                     ),
                     SELF,
                     JSON,
@@ -74,15 +74,15 @@ pub async fn tile_matrix_sets<C: ApplicationContext>(
             // Add custom WebMercator TMS
             TileMatrixSetItem {
                 id: Some(TileMatrixSetId::Custom(
-                    GeoEngineCustomWebMercatorTMS::TILE_MATRIX_SET_ID.to_string(),
+                    CustomWebMercatorTMS::TILE_MATRIX_SET_ID.to_string(),
                 )),
-                title: Some(GeoEngineCustomWebMercatorTMS::TILE_MATRIX_SET_TITLE.to_string()),
+                title: Some(CustomWebMercatorTMS::TILE_MATRIX_SET_TITLE.to_string()),
                 uri: None,
                 crs: None,
                 links: vec![create_link(
                     &format!(
                         "tileMatrixSets/{TILE_MATRIX_SET_ID}",
-                        TILE_MATRIX_SET_ID = GeoEngineCustomWebMercatorTMS::TILE_MATRIX_SET_ID
+                        TILE_MATRIX_SET_ID = CustomWebMercatorTMS::TILE_MATRIX_SET_ID
                     ),
                     SELF,
                     JSON,
@@ -218,12 +218,12 @@ mod tests {
             serde_json::json!({
                 "tileMatrixSets": [
                     {
-                        "id":  GeoEngineCustomTMS::TILE_MATRIX_SET_ID,
-                        "title": GeoEngineCustomTMS::TILE_MATRIX_SET_TITLE,
+                        "id":  CustomNativeTMS::TILE_MATRIX_SET_ID,
+                        "title": CustomNativeTMS::TILE_MATRIX_SET_TITLE,
                         "links": [
                             {
                                 "href": format!(
-                                    "{server_url}/api/ogc/{data_connector_id}/{layer_id}/tileMatrixSets/{TILE_MATRIX_SET_ID}", TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
+                                    "{server_url}/api/ogc/{data_connector_id}/{layer_id}/tileMatrixSets/{TILE_MATRIX_SET_ID}", TILE_MATRIX_SET_ID = CustomNativeTMS::TILE_MATRIX_SET_ID
                                 ),
                                 "rel": "self",
                                 "type": "application/json"
@@ -231,12 +231,12 @@ mod tests {
                         ]
                     },
                     {
-                        "id":  GeoEngineCustomWebMercatorTMS::TILE_MATRIX_SET_ID,
-                        "title": GeoEngineCustomWebMercatorTMS::TILE_MATRIX_SET_TITLE,
+                        "id":  CustomWebMercatorTMS::TILE_MATRIX_SET_ID,
+                        "title": CustomWebMercatorTMS::TILE_MATRIX_SET_TITLE,
                         "links": [
                             {
                                 "href": format!(
-                                    "{server_url}/api/ogc/{data_connector_id}/{layer_id}/tileMatrixSets/{TILE_MATRIX_SET_ID}", TILE_MATRIX_SET_ID = GeoEngineCustomWebMercatorTMS::TILE_MATRIX_SET_ID
+                                    "{server_url}/api/ogc/{data_connector_id}/{layer_id}/tileMatrixSets/{TILE_MATRIX_SET_ID}", TILE_MATRIX_SET_ID = CustomWebMercatorTMS::TILE_MATRIX_SET_ID
                                 ),
                                 "rel": "self",
                                 "type": "application/json"
@@ -308,7 +308,7 @@ mod tests {
         let req = TestRequest::get()
             .uri(&format!(
                 "/ogc/{data_connector_id}/{layer_id}/tileMatrixSets/{TILE_MATRIX_SET_ID}",
-                TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
+                TILE_MATRIX_SET_ID = CustomNativeTMS::TILE_MATRIX_SET_ID
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -324,8 +324,8 @@ mod tests {
         assert_eq!(
             tile_matrix_set,
             TileMatrixSet {
-                id: TileMatrixSetId::Custom(GeoEngineCustomTMS::TILE_MATRIX_SET_ID.to_string()),
-                title: Some(GeoEngineCustomTMS::TILE_MATRIX_SET_TITLE.to_string()),
+                id: TileMatrixSetId::Custom(CustomNativeTMS::TILE_MATRIX_SET_ID.to_string()),
+                title: Some(CustomNativeTMS::TILE_MATRIX_SET_TITLE.to_string()),
                 description: None,
                 keywords: vec![],
                 uri: None,
@@ -437,7 +437,7 @@ mod tests {
         let req = TestRequest::get()
             .uri(&format!(
                 "/ogc/{data_connector_id}/{layer_id}/tileMatrixSets/{TILE_MATRIX_SET_ID}",
-                TILE_MATRIX_SET_ID = GeoEngineCustomTMS::TILE_MATRIX_SET_ID
+                TILE_MATRIX_SET_ID = CustomNativeTMS::TILE_MATRIX_SET_ID
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -453,8 +453,8 @@ mod tests {
         assert_eq!(
             tile_matrix_set,
             TileMatrixSet {
-                id: TileMatrixSetId::Custom(GeoEngineCustomTMS::TILE_MATRIX_SET_ID.to_string()),
-                title: Some(GeoEngineCustomTMS::TILE_MATRIX_SET_TITLE.to_string()),
+                id: TileMatrixSetId::Custom(CustomNativeTMS::TILE_MATRIX_SET_ID.to_string()),
+                title: Some(CustomNativeTMS::TILE_MATRIX_SET_TITLE.to_string()),
                 description: None,
                 keywords: vec![],
                 uri: None,

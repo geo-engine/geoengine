@@ -2,8 +2,9 @@ use crate::{
     api::model::datatypes::{DataProviderId, LayerId},
     contexts::{ApplicationContext, PostgresContext, Session, SessionContext, SessionId},
     util::tests::{
-        add_file_definition_to_datasets_and_return_layer, add_ndvi_3857_to_layers,
-        add_ndvi_to_layers, admin_login, ndvi_255_symbology,
+        add_file_definition_to_datasets, add_file_definition_to_datasets_and_return_layer,
+        add_file_definition_to_layers, add_ndvi_3857_to_layers, add_ndvi_to_layers, admin_login,
+        ndvi_255_symbology,
     },
 };
 use geoengine_datatypes::{
@@ -52,6 +53,30 @@ pub async fn session_and_native_3857_layer_id(
         Some(ndvi_255_symbology()),
     )
     .await;
+
+    (session_id, data_connector_id.into(), layer_id.into())
+}
+
+/// Returns a session id, data connector id and layer id for the Modis NDVI dataset in native EPSG:3857 projection.
+pub async fn session_and_4326_rgb_layer_id(
+    app_ctx: &PostgresContext<NoTls>,
+) -> (SessionId, DataProviderId, LayerId) {
+    let session = admin_login(app_ctx).await;
+    let ctx = app_ctx.session_context(session.clone());
+
+    let session_id = ctx.session().id();
+
+    for color in ["red", "green", "blue"] {
+        let _ = add_file_definition_to_datasets(
+            &ctx.db(),
+            test_data!(&format!("dataset_defs/natural_earth_2_{color}.json")),
+        )
+        .await;
+    }
+
+    let (data_connector_id, layer_id) =
+        add_file_definition_to_layers(&ctx.db(), test_data!("layer_defs/natural_earth_rgb.json"))
+            .await;
 
     (session_id, data_connector_id.into(), layer_id.into())
 }

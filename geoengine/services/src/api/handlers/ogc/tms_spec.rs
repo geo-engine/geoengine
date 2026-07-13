@@ -75,8 +75,8 @@ pub trait TileMatrixSetProvider: Send + Sync {
 
 /// A wrapper Tile Matrix Set Provider
 pub enum TypedTileMatrixSetProvider {
-    Custom(GeoEngineCustomTMS),
-    CustomWebMercator(GeoEngineCustomWebMercatorTMS),
+    Custom(CustomNativeTMS),
+    CustomWebMercator(CustomWebMercatorTMS),
     WebMercatorQuad(WebMercatorQuadTMS),
 }
 
@@ -88,17 +88,13 @@ impl TypedTileMatrixSetProvider {
         tiling_specification: TilingSpecification,
     ) -> OgcApiResult<Self> {
         match tile_matrix_set_id {
-            TileMatrixSetId::Custom(id) if id == GeoEngineCustomTMS::TILE_MATRIX_SET_ID => {
-                let tms = GeoEngineCustomTMS::new(result_descriptor.clone(), tiling_specification)?;
+            TileMatrixSetId::Custom(id) if id == CustomNativeTMS::TILE_MATRIX_SET_ID => {
+                let tms = CustomNativeTMS::new(result_descriptor.clone(), tiling_specification)?;
                 Ok(TypedTileMatrixSetProvider::Custom(tms))
             }
-            TileMatrixSetId::Custom(id)
-                if id == GeoEngineCustomWebMercatorTMS::TILE_MATRIX_SET_ID =>
-            {
-                let tms = GeoEngineCustomWebMercatorTMS::new(
-                    result_descriptor.clone(),
-                    tiling_specification,
-                )?;
+            TileMatrixSetId::Custom(id) if id == CustomWebMercatorTMS::TILE_MATRIX_SET_ID => {
+                let tms =
+                    CustomWebMercatorTMS::new(result_descriptor.clone(), tiling_specification)?;
                 Ok(TypedTileMatrixSetProvider::CustomWebMercator(tms))
             }
             TileMatrixSetId::WebMercatorQuad => Ok(TypedTileMatrixSetProvider::WebMercatorQuad(
@@ -113,12 +109,8 @@ impl TypedTileMatrixSetProvider {
     /// Ensures that the tile matrix set exists. Returns an error if it does not exist.
     pub fn ensure_exists(tile_matrix_set_id: &TileMatrixSetId) -> OgcApiResult<()> {
         match tile_matrix_set_id {
-            TileMatrixSetId::Custom(id) if id == GeoEngineCustomTMS::TILE_MATRIX_SET_ID => Ok(()),
-            TileMatrixSetId::Custom(id)
-                if id == GeoEngineCustomWebMercatorTMS::TILE_MATRIX_SET_ID =>
-            {
-                Ok(())
-            }
+            TileMatrixSetId::Custom(id) if id == CustomNativeTMS::TILE_MATRIX_SET_ID => Ok(()),
+            TileMatrixSetId::Custom(id) if id == CustomWebMercatorTMS::TILE_MATRIX_SET_ID => Ok(()),
             TileMatrixSetId::WebMercatorQuad => Ok(()),
             TileMatrixSetId::Custom(_) => Err(OgcApiError::TileMatrixSetNotFound {
                 tile_matrix_set_id: tile_matrix_set_id.to_string(),
@@ -130,9 +122,7 @@ impl TypedTileMatrixSetProvider {
     pub fn required_srs(tile_matrix_set_id: &TileMatrixSetId) -> Option<SpatialReference> {
         match tile_matrix_set_id {
             TileMatrixSetId::WebMercatorQuad => Some(SpatialReference::web_mercator()),
-            TileMatrixSetId::Custom(id)
-                if id == GeoEngineCustomWebMercatorTMS::TILE_MATRIX_SET_ID =>
-            {
+            TileMatrixSetId::Custom(id) if id == CustomWebMercatorTMS::TILE_MATRIX_SET_ID => {
                 Some(SpatialReference::web_mercator())
             }
             TileMatrixSetId::Custom(_) => None,
@@ -173,6 +163,7 @@ impl TypedTileMatrixSetProvider {
                     resolution: WebMercatorQuadTMS::find_next_best_resolution(resolution),
                 }))
             }
+            // For custom tile matrix sets, we use the layer's native resolution and origin, so we don't need to require a specific one here.
             TileMatrixSetId::Custom(_) => Ok(None),
         }
     }
@@ -301,13 +292,13 @@ impl TileMatrixSetProvider for TypedTileMatrixSetProvider {
 
 /// Custom tile matrix set implementation that computes TMS dynamically per layer
 /// as a perfect fit to Geo Engine's internal tiling.
-pub struct GeoEngineCustomTMS {
+pub struct CustomNativeTMS {
     result_descriptor: RasterResultDescriptor,
     tiling_specification: TilingSpecification,
     spatial_reference: SpatialReference,
 }
 
-impl GeoEngineCustomTMS {
+impl CustomNativeTMS {
     pub const TILE_MATRIX_SET_ID: &str = "Custom";
     pub const TILE_MATRIX_SET_TITLE: &str = "Custom Grid for Geo Engine";
 
@@ -324,7 +315,7 @@ impl GeoEngineCustomTMS {
                     reason: "Spatial reference of the layer is not available".to_string(),
                 })?;
 
-        Ok(GeoEngineCustomTMS {
+        Ok(CustomNativeTMS {
             result_descriptor,
             tiling_specification,
             spatial_reference,
@@ -332,7 +323,7 @@ impl GeoEngineCustomTMS {
     }
 }
 
-impl TileMatrixSetProvider for GeoEngineCustomTMS {
+impl TileMatrixSetProvider for CustomNativeTMS {
     fn id(&self) -> TileMatrixSetId {
         TileMatrixSetId::Custom(Self::TILE_MATRIX_SET_ID.to_string())
     }
@@ -432,9 +423,9 @@ impl TileMatrixSetProvider for GeoEngineCustomTMS {
 /// as a perfect fit to Geo Engine's internal tiling.
 ///
 /// Requires that the layer is in EPSG:3857 (Web Mercator).
-pub struct GeoEngineCustomWebMercatorTMS(GeoEngineCustomTMS);
+pub struct CustomWebMercatorTMS(CustomNativeTMS);
 
-impl GeoEngineCustomWebMercatorTMS {
+impl CustomWebMercatorTMS {
     pub const TILE_MATRIX_SET_ID: &str = "CustomWebMercator";
     pub const TILE_MATRIX_SET_TITLE: &str = "Custom Grid for Geo Engine (Web Mercator)";
 
@@ -442,14 +433,14 @@ impl GeoEngineCustomWebMercatorTMS {
         result_descriptor: RasterResultDescriptor,
         tiling_specification: TilingSpecification,
     ) -> OgcApiResult<Self> {
-        Ok(GeoEngineCustomWebMercatorTMS(GeoEngineCustomTMS::new(
+        Ok(CustomWebMercatorTMS(CustomNativeTMS::new(
             result_descriptor,
             tiling_specification,
         )?))
     }
 }
 
-impl TileMatrixSetProvider for GeoEngineCustomWebMercatorTMS {
+impl TileMatrixSetProvider for CustomWebMercatorTMS {
     fn id(&self) -> TileMatrixSetId {
         TileMatrixSetId::Custom(Self::TILE_MATRIX_SET_ID.into())
     }
@@ -1222,7 +1213,7 @@ mod tests {
         );
 
         let provider = TypedTileMatrixSetProvider::resolve(
-            &TileMatrixSetId::Custom(GeoEngineCustomTMS::TILE_MATRIX_SET_ID.to_string()),
+            &TileMatrixSetId::Custom(CustomNativeTMS::TILE_MATRIX_SET_ID.to_string()),
             &result_descriptor,
             tiling_specification,
         )
@@ -1282,7 +1273,7 @@ mod tests {
         );
 
         let provider = TypedTileMatrixSetProvider::resolve(
-            &TileMatrixSetId::Custom(GeoEngineCustomTMS::TILE_MATRIX_SET_ID.to_string()),
+            &TileMatrixSetId::Custom(CustomNativeTMS::TILE_MATRIX_SET_ID.to_string()),
             &result_descriptor,
             tiling_specification,
         )
@@ -1332,7 +1323,7 @@ mod tests {
         .await
         .unwrap();
         let provider = TypedTileMatrixSetProvider::resolve(
-            &TileMatrixSetId::Custom(GeoEngineCustomTMS::TILE_MATRIX_SET_ID.to_string()),
+            &TileMatrixSetId::Custom(CustomNativeTMS::TILE_MATRIX_SET_ID.to_string()),
             initialized_operator.result_descriptor(),
             tiling_specification,
         )
@@ -1355,7 +1346,7 @@ mod tests {
         );
 
         let provider = TypedTileMatrixSetProvider::resolve(
-            &TileMatrixSetId::Custom(GeoEngineCustomTMS::TILE_MATRIX_SET_ID.to_string()),
+            &TileMatrixSetId::Custom(CustomNativeTMS::TILE_MATRIX_SET_ID.to_string()),
             result_descriptor,
             tiling_specification,
         )
@@ -1540,7 +1531,7 @@ mod tests {
             .expect("Failed to initialize operator");
 
             let provider = TypedTileMatrixSetProvider::resolve(
-                &TileMatrixSetId::Custom(GeoEngineCustomTMS::TILE_MATRIX_SET_ID.to_string()),
+                &TileMatrixSetId::Custom(CustomNativeTMS::TILE_MATRIX_SET_ID.to_string()),
                 initialized_operator.result_descriptor(),
                 tiling_spec,
             )
