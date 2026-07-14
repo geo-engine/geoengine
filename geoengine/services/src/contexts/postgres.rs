@@ -101,6 +101,7 @@ where
             gdal_process_pool_config.max_active_processes as usize,
             gdal_process_pool_config.max_dataset_processes as usize,
             gdal_process_pool_config.dedup_requests,
+            gdal_process_pool_config.worker.into(),
         );
 
         Ok(PostgresContext {
@@ -145,6 +146,7 @@ where
             gdal_process_pool_config.max_active_processes as usize,
             gdal_process_pool_config.max_dataset_processes as usize,
             gdal_process_pool_config.dedup_requests,
+            gdal_process_pool_config.worker.into(),
         );
 
         Ok(PostgresContext {
@@ -199,6 +201,7 @@ where
             gdal_process_pool_config.max_active_processes as usize,
             gdal_process_pool_config.max_dataset_processes as usize,
             gdal_process_pool_config.dedup_requests,
+            gdal_process_pool_config.worker.into(),
         );
 
         let app_ctx = PostgresContext {

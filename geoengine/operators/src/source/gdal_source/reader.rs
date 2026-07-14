@@ -78,7 +78,7 @@ mod tests {
 
     use crate::source::gdal_worker_process::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
-        GdalProcessPoolAccess, process_common::GdalReadWindow,
+        GdalProcessPoolAccess, WorkerConfig, process_common::GdalReadWindow,
     };
 
     use super::*;
@@ -180,7 +180,7 @@ mod tests {
         let tile_information =
             tile_information_with_partition_and_shape(output_bounds, output_shape);
 
-        let gpp = GdalProcessPool::new(2, 2, 2, true);
+        let gpp = GdalProcessPool::new(2, 2, 2, true, WorkerConfig::default());
         let gw = gpp.get_gdal_worker();
 
         let RasterTile2D {

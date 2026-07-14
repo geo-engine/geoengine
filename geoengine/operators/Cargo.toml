@@ -22,7 +22,6 @@ bb8-postgres = { workspace = true }
 bytemuck = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
-config = { workspace = true }
 csv = { workspace = true }
 float-cmp = { workspace = true }
 futures = { workspace = true }

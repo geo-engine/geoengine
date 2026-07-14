@@ -11,7 +11,7 @@ use crate::machine_learning::MlModelLoadingInfo;
 use crate::meta::quota::{QuotaChecker, QuotaTracking};
 use crate::meta::wrapper::InitializedOperatorWrapper;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
-use crate::source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess};
+use crate::source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess, WorkerConfig};
 use crate::source::{
     GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
     OgrSourceDataset,
@@ -119,7 +119,7 @@ impl TestDefault for MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification: TilingSpecification::test_default(),
-            gdal_process_pool: GdalProcessPool::new(2, 2, 2, true),
+            gdal_process_pool: GdalProcessPool::new(2, 2, 2, true, WorkerConfig::default()),
         }
     }
 }
@@ -135,7 +135,14 @@ impl MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification,
-            gdal_process_pool: GdalProcessPool::new_with_tokio_handle(handle, 2, 2, 2, true),
+            gdal_process_pool: GdalProcessPool::new_with_tokio_handle(
+                handle,
+                2,
+                2,
+                2,
+                true,
+                WorkerConfig::default(),
+            ),
         }
     }
 
@@ -146,7 +153,7 @@ impl MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification,
-            gdal_process_pool: GdalProcessPool::new(2, 2, 2, true), // TODO: GdalProcessPool defaults!
+            gdal_process_pool: GdalProcessPool::new(2, 2, 2, true, WorkerConfig::default()),
         }
     }
 
@@ -160,7 +167,7 @@ impl MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification,
-            gdal_process_pool: GdalProcessPool::new(2, 2, 2, true),
+            gdal_process_pool: GdalProcessPool::new(2, 2, 2, true, WorkerConfig::default()),
         }
     }
 

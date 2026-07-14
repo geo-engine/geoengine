@@ -364,10 +364,11 @@ impl ConfigElement for Gdal {
 }
 
 ///  Controlls the global `GdalProcessPool`.
-/// - `global_processes`: The total number of GDAL worker processes to spawn and maintain in the pool.
-/// - `max_active_global`: The maximum number of active (in-flight) requests allowed across all datasets at any given time.
+/// - `number_of_processes`: The total number of GDAL worker processes to spawn and maintain in the pool.
+/// - `max_active_processes`: The maximum number of active (in-flight) requests allowed across all datasets at any given time.
 /// - `max_dataset_processes`: The maximum number of active requests allowed concurrently for the same dataset, enforcing per-dataset concurrency limits.
 /// - `dedup_requests`: Whether to deduplicate identical concurrent tile requests via a leader/follower mechanism.
+/// - `worker`: Configuration passed to each GDAL worker process at spawn time.
 #[derive(Debug, Deserialize)]
 #[allow(clippy::struct_field_names)]
 pub struct GdalProcessPool {
@@ -375,10 +376,91 @@ pub struct GdalProcessPool {
     pub max_active_processes: u64,
     pub max_dataset_processes: u64,
     pub dedup_requests: bool,
+    #[serde(default)]
+    pub worker: GdalProcessPoolWorkerConfig,
 }
+
+/// Configuration for GDAL worker processes, passed from the main process at spawn time.
+#[derive(Debug, Default, Deserialize)]
+pub struct GdalProcessPoolWorkerConfig {
+    #[serde(default)]
+    pub gdal_config_options: Option<Vec<(String, String)>>,
+    #[serde(default)]
+    pub logging: WorkerLoggingConfig,
+    #[serde(default)]
+    pub open_telemetry: OpenTelemetryConfig,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WorkerLoggingConfig {
+    pub log_spec: String,
+    #[serde(default)]
+    pub stderr_log_spec: String,
+    #[serde(default)]
+    pub log_to_file: bool,
+    #[serde(default = "default_worker_log_prefix")]
+    pub filename_prefix: String,
+    pub log_directory: Option<String>,
+}
+
+fn default_worker_log_prefix() -> String {
+    "geo_engine_worker".to_string()
+}
+
+impl Default for WorkerLoggingConfig {
+    fn default() -> Self {
+        Self {
+            log_spec: "info".to_string(),
+            stderr_log_spec: "info".to_string(),
+            log_to_file: false,
+            filename_prefix: default_worker_log_prefix(),
+            log_directory: None,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OpenTelemetryConfig {
+    pub enabled: bool,
+    pub endpoint: String,
+}
+
+impl Default for OpenTelemetryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: "127.0.0.1:6831".to_string(),
+        }
+    }
+}
+
+
 
 impl ConfigElement for GdalProcessPool {
     const KEY: &'static str = "gdal_process_pool";
+}
+
+impl From<GdalProcessPoolWorkerConfig>
+    for geoengine_operators::source::gdal_worker_process::WorkerConfig
+{
+    fn from(
+        config: GdalProcessPoolWorkerConfig,
+    ) -> geoengine_operators::source::gdal_worker_process::WorkerConfig {
+        geoengine_operators::source::gdal_worker_process::WorkerConfig {
+            gdal_config_options: config.gdal_config_options,
+            logging: geoengine_operators::source::gdal_worker_process::WorkerLoggingConfig {
+                log_spec: config.logging.log_spec,
+                stderr_log_spec: config.logging.stderr_log_spec,
+                log_to_file: config.logging.log_to_file,
+                filename_prefix: config.logging.filename_prefix,
+                log_directory: config.logging.log_directory,
+            },
+            open_telemetry: geoengine_operators::source::gdal_worker_process::OpenTelemetryConfig {
+                enabled: config.open_telemetry.enabled,
+                endpoint: config.open_telemetry.endpoint,
+            },
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

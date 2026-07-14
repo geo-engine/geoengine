@@ -15,7 +15,7 @@ use crate::source::gdal_worker_process::process_common::GdalIpcBytePayload;
 use super::{
     GdalProcessPoolAccess,
     process_common::{GdalIpcPayload, IpcChannelMessage, IpcProcessError, IpcProcessRasterResult},
-    process_impl::{ChildProcessGuard, spawn_ipc_server_process},
+    process_impl::{ChildProcessGuard, WorkerConfig, spawn_ipc_server_process},
 };
 
 // --- Core Structural Parameters & Tuning Constants ---
@@ -256,17 +256,21 @@ impl GdalProcessPool {
         max_active_processes: usize,
         max_dataset_processes: usize,
         dedup_requests: bool,
+        worker_config: WorkerConfig,
     ) -> Arc<Self> {
         let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
         let b_tx_clone = broker_tx.clone();
+        let worker_config_clone = worker_config.clone();
 
         handle.spawn(async move {
             let b_tx_clone_2 = b_tx_clone.clone();
+            let wc = worker_config_clone;
+            let wc2 = wc.clone();
             let workers = tokio::task::spawn_blocking(move || {
                 let mut w = Vec::with_capacity(number_of_processes);
                 for id in 0..number_of_processes {
                     let (child_guard, _join_handle, job_tx) =
-                        Self::create_worker_with_id(id, b_tx_clone_2.clone())
+                        Self::create_worker_with_id(id, b_tx_clone_2.clone(), &wc)
                             .expect("Failed to create worker");
 
                     w.push(WorkerProcess {
@@ -288,6 +292,7 @@ impl GdalProcessPool {
                 max_active_processes,
                 max_dataset_processes,
                 b_tx_clone,
+                wc2,
             )
             .await;
         });
@@ -320,17 +325,21 @@ impl GdalProcessPool {
         max_active_processes: usize,
         max_dataset_processes: usize,
         dedup_requests: bool,
+        worker_config: WorkerConfig,
     ) -> Arc<Self> {
         let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
         let b_tx_clone = broker_tx.clone();
+        let worker_config_clone = worker_config.clone();
 
         tokio::spawn(async move {
             let b_tx_clone_2 = b_tx_clone.clone();
+            let wc = worker_config_clone;
+            let wc2 = wc.clone();
             let workers = tokio::task::spawn_blocking(move || {
                 let mut w = Vec::with_capacity(number_of_processes);
                 for id in 0..number_of_processes {
                     let (child_guard, _join_handle, job_tx) =
-                        Self::create_worker_with_id(id, b_tx_clone_2.clone())
+                        Self::create_worker_with_id(id, b_tx_clone_2.clone(), &wc)
                             .expect("Failed to create worker");
 
                     w.push(WorkerProcess {
@@ -352,6 +361,7 @@ impl GdalProcessPool {
                 max_active_processes,
                 max_dataset_processes,
                 b_tx_clone,
+                wc2,
             )
             .await;
         });
@@ -366,6 +376,7 @@ impl GdalProcessPool {
     fn create_worker_with_id(
         worker_id: usize,
         broker_tx: mpsc::Sender<BrokerCommand>,
+        worker_config: &WorkerConfig,
     ) -> Result<
         (
             ChildProcessGuard,
@@ -375,7 +386,7 @@ impl GdalProcessPool {
         GdalProcessPoolError,
     > {
         let (guard, tx, rx) =
-            spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>()?;
+            spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>(worker_config)?;
 
         let (job_tx, mut job_rx) = mpsc::unbounded_channel();
 
@@ -431,6 +442,7 @@ impl GdalProcessPool {
         max_active_processes: usize,
         max_dataset_processes: usize,
         broker_tx: mpsc::Sender<BrokerCommand>,
+        worker_config: WorkerConfig,
     ) {
         let mut state = BrokerState::new(
             workers,
@@ -477,12 +489,13 @@ impl GdalProcessPool {
                         state.global_active_count = state.global_active_count.saturating_sub(1);
 
                         let b_tx = broker_tx.clone();
+                        let wc = worker_config.clone();
                         tokio::task::spawn_blocking(move || {
                             std::thread::sleep(std::time::Duration::from_millis(
                                 INITIAL_SPAWN_DELAY_MS,
                             ));
 
-                            match Self::create_worker_with_id(worker_id, b_tx.clone()) {
+                            match Self::create_worker_with_id(worker_id, b_tx.clone(), &wc) {
                                 Ok((child_guard, _join_handle, job_tx)) => {
                                     tracing::info!(
                                         "Successfully respawned GDAL Worker {}",

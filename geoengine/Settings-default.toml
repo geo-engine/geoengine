@@ -183,7 +183,7 @@ scopes = []
 enabled = false
 endpoint = "127.0.0.1:6831"
 
-[gdal_process_pool_worker.gdal_config_options]
+[gdal_process_pool.worker.gdal_config_options]
 # Process-global GDAL config options applied once when a GDAL worker process starts.
 #
 # Two categories:
@@ -199,7 +199,7 @@ CPL_VSIL_CURL_CHUNK_SIZE = "1048576" # 1mb TODO: need to tune this!
 VSI_CACHE = "TRUE"
 VSI_CACHE_SIZE = "67108864" # 64mb per worker! TODO: need to tune this!
 
-[gdal_process_pool_worker.logging]
+[gdal_process_pool.worker.logging]
 # Logging for the GDAL worker processes. Independent from the main `[logging]` section because
 # there are many worker processes and their log volume differs from the main process.
 log_spec = "info"

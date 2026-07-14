@@ -12,6 +12,7 @@ pub use gdal_dataset_params::{
     GdalRetryOptions, GdalSourceTimePlaceholder, TimeReference,
 };
 pub use grid_and_properties::GridAndProperties;
+pub use process_impl::{OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig};
 pub use process_pool::{GdalPoolDispatcher, GdalProcessPool, GdalProcessPoolError};
 pub use reader::{GdalPoolReader, GdalProcessReadResult};
 

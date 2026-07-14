@@ -1,9 +1,9 @@
-use std::{collections::HashMap, fmt::Display, net::SocketAddr, path::PathBuf};
+use std::fmt::Display;
 
-use config::{Config, Environment, File};
 use gdal::raster::GdalType;
 use geoengine_datatypes::raster::Pixel;
 use geoengine_operators::source::gdal_worker_process::{
+    OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig,
     process_common::{
         GdalIpcBytePayload, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
         IpcProcessRasterResult,
@@ -15,7 +15,6 @@ use num::FromPrimitive;
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::trace::SdkTracerProvider;
-use serde::Deserialize;
 use tracing::Subscriber;
 use tracing_appender::{
     non_blocking::WorkerGuard,
@@ -38,98 +37,18 @@ fn exit_with_error(msg: impl Display) -> ! {
 
 type Token = String;
 
-fn setup() -> Token {
+fn setup() -> (Token, WorkerConfig) {
     let args: Vec<String> = std::env::args().collect();
     match args.as_slice() {
-        [_bin, token] => token.clone(),
+        [_bin, token, config_json] => {
+            let config: WorkerConfig = serde_json::from_str(config_json)
+                .unwrap_or_else(|e| panic!("Failed to parse worker config JSON: {e}"));
+            (token.clone(), config)
+        }
         _ => {
-            panic!("Usage: gdalsource-process <token>")
+            panic!("Usage: gdalsource-process <token> <config-json>")
         }
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct WorkerLoggingConfig {
-    pub log_spec: String,
-    #[serde(default)]
-    pub stderr_log_spec: String,
-    #[serde(default)]
-    pub log_to_file: bool,
-    #[serde(default = "default_worker_log_prefix")]
-    pub filename_prefix: String,
-    pub log_directory: Option<String>,
-}
-
-fn default_worker_log_prefix() -> String {
-    "geo_engine_worker".to_string()
-}
-
-impl Default for WorkerLoggingConfig {
-    fn default() -> Self {
-        Self {
-            log_spec: "info".to_string(),
-            stderr_log_spec: "info".to_string(),
-            log_to_file: false,
-            filename_prefix: default_worker_log_prefix(),
-            log_directory: None,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenTelemetryConfig {
-    enabled: bool,
-    endpoint: SocketAddr,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct GdalProcessPoolWorkerConfig {
-    #[serde(default)]
-    gdal_config_options: HashMap<String, String>,
-    #[serde(default)]
-    logging: WorkerLoggingConfig,
-}
-
-/// Locate the directory that contains `Settings-default.toml`, walking up from the current
-/// working directory. This matches the behaviour of the main Geo Engine process and is needed
-/// because the worker may be spawned from a subdirectory (e.g. during `cargo test`).
-fn retrieve_settings_dir() -> PathBuf {
-    const MAX_PARENT_DIRS: usize = 5;
-
-    let mut settings_dir =
-        std::env::current_dir().expect("working directory must exist for GDAL worker");
-
-    for _ in 0..=MAX_PARENT_DIRS {
-        if settings_dir.join("Settings-default.toml").exists() {
-            return settings_dir;
-        }
-
-        if !settings_dir.pop() {
-            break;
-        }
-    }
-
-    panic!(
-        "Settings-default.toml not found in current directory or any parent up to {MAX_PARENT_DIRS} levels"
-    )
-}
-
-fn load_settings() -> Config {
-    let dir = retrieve_settings_dir();
-
-    let files = ["Settings-default.toml", "Settings.toml"];
-    let file_sources: Vec<File<_, _>> = files
-        .iter()
-        .map(|f| dir.join(f))
-        .filter(|p| p.exists())
-        .map(File::from)
-        .collect();
-
-    Config::builder()
-        .add_source(file_sources)
-        .add_source(Environment::with_prefix("geoengine").separator("__"))
-        .build()
-        .unwrap_or_else(|err| panic!("Failed to load GDAL worker settings: {err}"))
 }
 
 /// We install a GDAL error handler that logs all messages with our log macros.
@@ -162,12 +81,12 @@ fn reroute_gdal_logging() {
 /// Some VSICURL-related options (e.g. `VSI_CACHE_SIZE`, `CPL_VSIL_CURL_CHUNK_SIZE`) are frozen by
 /// GDAL after the first `/vsicurl/` access: the cache pool is allocated once and there is no public
 /// API to resize it at runtime. Changing those options therefore requires restarting the worker
-/// process so the new values are read from the settings file on startup.
+/// process so the new values are passed via the config at spawn time.
 ///
 /// Per-open options such as `GDAL_DISABLE_READDIR_ON_OPEN` or
 /// `CPL_VSIL_CURL_ALLOWED_EXTENSIONS` can additionally be overridden per request via
 /// `GdalDatasetParameters.gdal_config_options`.
-fn set_gdal_process_global_options(options: &HashMap<String, String>) {
+fn set_gdal_process_global_options(options: &[(String, String)]) {
     for (key, value) in options {
         if let Err(err) = gdal::config::set_config_option(key, value) {
             tracing::warn!("Failed to set GDAL config option {key}={value}: {err}");
@@ -179,7 +98,7 @@ fn set_gdal_process_global_options(options: &HashMap<String, String>) {
 /// if enabled, to a per-worker rolling log file (filtered by `log_spec`). The filename includes
 /// the worker's IPC token so multiple workers do not corrupt a shared file.
 ///
-/// When `[open_telemetry]` is enabled, an OpenTelemetry OTLP layer is added and the corresponding
+/// When `open_telemetry` is enabled, an OpenTelemetry OTLP layer is added and the corresponding
 /// tracer provider is returned so it can be flushed on shutdown.
 ///
 /// # Panics
@@ -201,7 +120,7 @@ fn init_subscriber(
     };
 
     if open_telemetry_config.enabled {
-        let endpoint = open_telemetry_config.endpoint.to_string();
+        let endpoint = open_telemetry_config.endpoint.clone();
         let exporter = opentelemetry_otlp::SpanExporter::builder()
             .with_tonic()
             .with_endpoint(endpoint)
@@ -288,18 +207,7 @@ where
 }
 
 fn main() {
-    let token = setup();
-
-    let settings = load_settings();
-    let logging_config: WorkerLoggingConfig = settings
-        .get::<GdalProcessPoolWorkerConfig>("gdal_process_pool_worker")
-        .unwrap_or_default()
-        .logging;
-    let open_telemetry_config: OpenTelemetryConfig = settings
-        .get("open_telemetry")
-        .expect("open_telemetry config must be present");
-    let gdal_worker_config: GdalProcessPoolWorkerConfig =
-        settings.get("gdal_process_pool_worker").unwrap_or_default();
+    let (token, worker_config) = setup();
 
     // The OTLP exporter needs a tokio runtime. We keep the worker's main loop synchronous and
     // dedicate a single background thread to the runtime that drives the exporter.
@@ -310,9 +218,15 @@ fn main() {
         .expect("Failed to create tokio runtime for telemetry");
 
     let _runtime_guard = runtime.enter();
-    let (provider, _file_guard) = init_subscriber(&logging_config, &open_telemetry_config, &token);
+    let (provider, _file_guard) = init_subscriber(
+        &worker_config.logging,
+        &worker_config.open_telemetry,
+        &token,
+    );
 
-    set_gdal_process_global_options(&gdal_worker_config.gdal_config_options);
+    if let Some(ref opts) = worker_config.gdal_config_options {
+        set_gdal_process_global_options(opts);
+    }
     reroute_gdal_logging();
     run(token);
 

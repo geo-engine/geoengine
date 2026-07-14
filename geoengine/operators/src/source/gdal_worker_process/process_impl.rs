@@ -21,6 +21,7 @@ use geoengine_datatypes::{
 };
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
 use num::FromPrimitive;
+use serde::{Deserialize, Serialize};
 use std::{
     env,
     ffi::CString,
@@ -89,6 +90,71 @@ impl Drop for ChildProcessGuard {
     }
 }
 
+/// Configuration passed from the main process to each GDAL worker at spawn time via a JSON CLI argument.
+/// The worker binary deserializes this instead of reading config files from disk.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkerConfig {
+    #[serde(default)]
+    pub gdal_config_options: Option<Vec<(String, String)>>,
+    #[serde(default)]
+    pub logging: WorkerLoggingConfig,
+    #[serde(default)]
+    pub open_telemetry: OpenTelemetryConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkerLoggingConfig {
+    pub log_spec: String,
+    #[serde(default)]
+    pub stderr_log_spec: String,
+    #[serde(default)]
+    pub log_to_file: bool,
+    #[serde(default = "default_worker_log_prefix")]
+    pub filename_prefix: String,
+    pub log_directory: Option<String>,
+}
+
+fn default_worker_log_prefix() -> String {
+    "geo_engine_worker".to_string()
+}
+
+impl Default for WorkerLoggingConfig {
+    fn default() -> Self {
+        Self {
+            log_spec: "info".to_string(),
+            stderr_log_spec: "info".to_string(),
+            log_to_file: false,
+            filename_prefix: default_worker_log_prefix(),
+            log_directory: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenTelemetryConfig {
+    pub enabled: bool,
+    pub endpoint: String,
+}
+
+impl Default for OpenTelemetryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: "127.0.0.1:6831".to_string(),
+        }
+    }
+}
+
+impl Default for WorkerConfig {
+    fn default() -> Self {
+        Self {
+            gdal_config_options: None,
+            logging: WorkerLoggingConfig::default(),
+            open_telemetry: OpenTelemetryConfig::default(),
+        }
+    }
+}
+
 /// Spawns the IPC server process and establishes the communication channels.
 ///
 /// Returns a guard for the child process (which will automatically clean up on drop),
@@ -101,8 +167,9 @@ impl Drop for ChildProcessGuard {
 ///
 /// # Panics
 /// Panics if the current executable path cannot be determined, or if the executable has no parent directory, which should not happen under normal circumstances.
-pub fn spawn_ipc_server_process<S, R>()
--> Result<(ChildProcessGuard, IpcSender<S>, IpcReceiver<R>), IpcProcessError> {
+pub fn spawn_ipc_server_process<S, R>(
+    worker_config: &WorkerConfig,
+) -> Result<(ChildProcessGuard, IpcSender<S>, IpcReceiver<R>), IpcProcessError> {
     let (server, token) = ipc::IpcOneShotServer::<(IpcSender<S>, IpcReceiver<R>)>::new()
         .map_err(IpcProcessError::from)?;
 
@@ -110,9 +177,14 @@ pub fn spawn_ipc_server_process<S, R>()
 
     let exe_path = get_gdalsource_path();
 
+    let config_json =
+        serde_json::to_string(worker_config).expect("WorkerConfig should always serialize");
+
     let mut cmd = Command::new(exe_path);
 
-    cmd.arg(token).stderr(std::process::Stdio::inherit()); // This sends child logs to the parent's stderr;
+    cmd.arg(token)
+        .arg(&config_json)
+        .stderr(std::process::Stdio::inherit());
 
     if std::cfg!(debug_assertions) {
         // llcov inserts these env params. We need to remove them from the gdal-processor processes. Otherwise the processes overwrite the main process data and the files become corrupt.
@@ -834,8 +906,11 @@ mod tests {
 
         let msg = IpcChannelMessage::new_request_tile_message(payload);
 
-        let (_child_guard, sender, receiver) =
-            spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>().unwrap();
+        let (_child_guard, sender, receiver) = spawn_ipc_server_process::<
+            IpcChannelMessage,
+            IpcProcessRasterResult,
+        >(&WorkerConfig::default())
+        .unwrap();
 
         sender.send(msg).unwrap();
         let rx_result = receiver
