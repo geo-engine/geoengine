@@ -470,7 +470,7 @@ impl ConfigElement for Oidc {
 #[derive(Debug, Deserialize)]
 pub struct OpenTelemetry {
     pub enabled: bool,
-    pub endpoint: SocketAddr,
+    pub endpoint: String,
 }
 
 impl ConfigElement for OpenTelemetry {

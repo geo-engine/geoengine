@@ -73,8 +73,11 @@ async-stream = { workspace = true }
 approx = { workspace = true }
 criterion = { workspace = true }
 httptest = { workspace = true }
+opentelemetry-proto = { version = "0.31", features = ["gen-tonic-messages"] }
 tracing-subscriber = { workspace = true, features = ["json"] }
 rand = { workspace = true }
+tokio-stream = "0.1"
+tonic = "0.14"
 
 [[bench]]
 name = "ci_operators"

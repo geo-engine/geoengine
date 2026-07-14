@@ -193,6 +193,7 @@ time = "0.3"
 tokio = { version = "1.50", features = [
     "fs",
     "macros",
+    "net",
     "signal",
     "sync",
     "rt-multi-thread",

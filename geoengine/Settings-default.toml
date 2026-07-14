@@ -181,7 +181,7 @@ scopes = []
 
 [open_telemetry]
 enabled = false
-endpoint = "127.0.0.1:6831"
+endpoint = "http://127.0.0.1:4317"
 
 [gdal_process_pool_worker.gdal_config_options]
 # Process-global GDAL config options applied once when a GDAL worker process starts.
@@ -205,7 +205,7 @@ VSI_CACHE_SIZE = "67108864" # 64mb per worker! TODO: need to tune this!
 log_spec = "info"
 # Log level for the worker's stderr output. Set to "warn" to avoid drowning the main process's
 # stderr in worker trace messages when file logging is enabled.
-stderr_log_spec = "warn"
+stderr_log_spec = "info"
 log_to_file = false
 filename_prefix = "geo_engine_worker"
 # log_directory = "/var/log/"

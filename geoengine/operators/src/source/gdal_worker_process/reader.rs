@@ -1,13 +1,16 @@
 use gdal::raster::GdalType;
 use geoengine_datatypes::raster::{GridBoundingBox2D, GridOrEmpty, MaskedGrid, Pixel};
 use num::FromPrimitive;
+use opentelemetry::propagation::TextMapPropagator as _;
+use opentelemetry_sdk::propagation::TraceContextPropagator;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::source::gdal_worker_process::{
     FileNotFoundHandling, GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError,
     GridAndProperties,
     process_common::{
         GdalReadAdvise, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
-        IpcProcessGdalErrorKind,
+        IpcProcessGdalErrorKind, TraceContext, TraceContextCarrier,
     },
 };
 
@@ -52,10 +55,26 @@ impl GdalPoolReader {
         let file_not_found_as_no_data =
             dataset_params.file_not_found_handling == FileNotFoundHandling::NoData;
 
+        // Always inject the parent trace context — the overhead of propagator
+        // creation is negligible compared to the GDAL tile read itself. The
+        // worker independently decides whether OTel is enabled from its own
+        // config; if disabled it simply ignores the context.
+        let trace_context = {
+            let otel_context = tracing::Span::current().context();
+            let propagator = TraceContextPropagator::new();
+            let mut carrier = TraceContextCarrier::default();
+            propagator.inject_context(&otel_context, &mut carrier);
+            carrier.traceparent.map(|traceparent| TraceContext {
+                traceparent,
+                tracestate: carrier.tracestate,
+            })
+        };
+
         let message = IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
             dataset_params,
             read_advise,
             data_type: T::TYPE,
+            trace_context,
         });
 
         let res = self.dispatcher().read_data(message).await;

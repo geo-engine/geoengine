@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display, net::SocketAddr, path::PathBuf};
+use std::{collections::HashMap, fmt::Display, path::PathBuf};
 
 use config::{Config, Environment, File};
 use gdal::raster::GdalType;
@@ -6,14 +6,16 @@ use geoengine_datatypes::raster::Pixel;
 use geoengine_operators::source::gdal_worker_process::{
     process_common::{
         GdalIpcBytePayload, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
-        IpcProcessRasterResult,
+        IpcProcessRasterResult, TraceContextCarrier,
     },
     process_impl::{GdalDatasetHolder, GdalHandling, setup_client},
 };
 use ipc_channel::ipc::IpcSender;
 use num::FromPrimitive;
+use opentelemetry::propagation::TextMapPropagator as _;
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use serde::Deserialize;
 use tracing::Subscriber;
@@ -79,7 +81,7 @@ impl Default for WorkerLoggingConfig {
 #[derive(Debug, Deserialize)]
 struct OpenTelemetryConfig {
     enabled: bool,
-    endpoint: SocketAddr,
+    endpoint: String,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -189,6 +191,7 @@ fn init_subscriber(
     open_telemetry_config: &OpenTelemetryConfig,
     token: &str,
 ) -> (Option<SdkTracerProvider>, Option<WorkerGuard>) {
+    let otel_log_spec = &logging_config.log_spec;
     let stderr_layer = tracing_subscriber::fmt::layer()
         .with_writer(std::io::stderr)
         .with_filter(EnvFilter::new(&logging_config.stderr_log_spec));
@@ -227,8 +230,11 @@ fn init_subscriber(
             )
             .build();
 
-        let opentelemetry =
-            tracing_opentelemetry::layer().with_tracer(provider.tracer("gdal-worker"));
+        let otel_filter = EnvFilter::new(otel_log_spec);
+
+        let opentelemetry = tracing_opentelemetry::layer()
+            .with_tracer(provider.tracer("gdal-worker"))
+            .with_filter(otel_filter);
 
         tracing_subscriber::registry()
             .with(stderr_layer)
@@ -379,6 +385,33 @@ fn run(token: Token) {
     while let Ok(message) = receiver.recv() {
         let payload = message.0;
 
+        // Extract the parent's OTel trace context from the IPC message and attach it to
+        // the current thread so that the `tracing-opentelemetry` layer picks it up
+        // automatically as the parent of the `gdal_worker_read_tile` span — and transitively
+        // for all child spans (`gdal_dataset_open`, `gdal_load_tile_data`, …).
+        //
+        // We keep the attach guard alive until the tile has been processed so that any span
+        // created downstream sees the correct remote parent.
+        let _otel_context_guard = if let Some(trace_ctx) = &payload.trace_context {
+            let propagator = TraceContextPropagator::new();
+            let carrier = TraceContextCarrier {
+                traceparent: Some(trace_ctx.traceparent.clone()),
+                tracestate: trace_ctx.tracestate.clone(),
+            };
+            let parent_cx = propagator.extract(&carrier);
+            Some(parent_cx.attach())
+        } else {
+            None
+        };
+
+        let process_span = tracing::info_span!(
+            "gdal_worker_read_tile",
+            dataset = %payload.dataset_params.file_path.display(),
+            band = payload.dataset_params.rasterband_channel,
+        );
+
+        let _guard = process_span.enter();
+
         // If helper returns an error, it means the underlying IPC channel is completely broken
         if let Err(err) = raster_type_dispatch(payload, &mut dataset_cache, &sender) {
             eprintln!("Fatal IPC channel error: {err:?}. Exiting worker thread.");
@@ -392,6 +425,7 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
         dataset_params,
         read_advise,
         data_type: _,
+        trace_context: _,
     }: IpcChannelMessagePayload,
     dataset_cache: &mut GdalDatasetHolder,
     sender: &IpcSender<IpcProcessRasterResult>,

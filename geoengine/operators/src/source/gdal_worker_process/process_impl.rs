@@ -227,6 +227,12 @@ impl GdalDatasetHolder {
         if hit {
             Ok(self.dataset.as_mut().expect("Dataset must be set"))
         } else {
+            let _open_span = tracing::debug_span!(
+                "gdal_dataset_open",
+                path = %params.file_path.display(),
+            )
+            .entered();
+
             let _prev_dataset = self.clear(); // keep old dataset alive untill new one to keep Gdal internal cache alive
 
             let (ds, tlo) = Self::open_ex(params)?;
@@ -299,7 +305,6 @@ impl GdalHandling {
         let dp = &dataset_params;
 
         // Wrap both OPEN and READ actions inside the retry loop
-
         retry_sync(
             max_retries,
             GDAL_RETRY_INITIAL_BACKOFF_MS,
@@ -342,12 +347,28 @@ impl GdalHandling {
     {
         let gdal_out_shape = (out_shape.axis_size_x(), out_shape.axis_size_y());
 
-        let buffer = rasterband.read_as::<T>(
-            read_window.gdal_window_start(), // pixelspace origin
-            read_window.gdal_window_size(),  // pixelspace size
-            gdal_out_shape,                  // requested raster size
-            None,                            // sampling mode
-        )?;
+        let buffer = {
+            let _read_span = tracing::debug_span!(
+                "gdal_rasterband_read",
+                window = %format!("({},{})", read_window.size_x, read_window.size_y),
+            )
+            .entered();
+
+            let read_start = Instant::now();
+            let buffer = rasterband.read_as::<T>(
+                read_window.gdal_window_start(), // pixelspace origin
+                read_window.gdal_window_size(),  // pixelspace size
+                gdal_out_shape,                  // requested raster size
+                None,                            // sampling mode
+            )?;
+            let read_duration = read_start.elapsed();
+            tracing::debug!(
+                "GDAL rasterband read took {read_duration:?} for window size ({}, {})",
+                read_window.size_x,
+                read_window.size_y,
+            );
+            buffer
+        };
         let (_, buffer_data) = buffer.into_shape_and_vec();
 
         let dataset_mask_flags = rasterband.mask_flags()?;
@@ -475,6 +496,13 @@ impl GdalHandling {
     ) -> Result<GdalIpcPayload<T>, IpcProcessError> {
         let start = Instant::now();
 
+        let _load_span = tracing::debug_span!(
+            "gdal_load_tile_data",
+            data_type = ?T::TYPE,
+            window = ?read_advise.bounds_of_target,
+        )
+        .entered();
+
         debug!(
             "GridOrEmpty2D<{:?}> requested for {:?}.",
             T::TYPE,
@@ -550,7 +578,7 @@ mod tests {
         FileNotFoundHandling, GridAndProperties,
         process_common::{
             IpcChannelMessage, IpcChannelMessagePayload, IpcProcessGdalErrorKind,
-            IpcProcessRasterResult,
+            IpcProcessRasterResult, TraceContext,
         },
     };
     use super::*;
@@ -565,6 +593,39 @@ mod tests {
         util::{gdal::hide_gdal_errors, test::TestDefault},
     };
     use httptest::{Expectation, Server, matchers::request, responders};
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    /// A mock OTLP gRPC server that collects exported spans in memory for test assertions.
+    #[derive(Clone)]
+    struct MockOtlpServer {
+        spans: Arc<
+            Mutex<Vec<opentelemetry_proto::tonic::collector::trace::v1::ExportTraceServiceRequest>>,
+        >,
+    }
+
+    #[tonic::async_trait]
+    impl opentelemetry_proto::tonic::collector::trace::v1::trace_service_server::TraceService
+        for MockOtlpServer
+    {
+        async fn export(
+            &self,
+            request: tonic::Request<
+                opentelemetry_proto::tonic::collector::trace::v1::ExportTraceServiceRequest,
+            >,
+        ) -> Result<
+            tonic::Response<
+                opentelemetry_proto::tonic::collector::trace::v1::ExportTraceServiceResponse,
+            >,
+            tonic::Status,
+        > {
+            let mut spans = self.spans.lock().await;
+            spans.push(request.into_inner());
+            Ok(tonic::Response::new(
+                opentelemetry_proto::tonic::collector::trace::v1::ExportTraceServiceResponse::default(),
+            ))
+        }
+    }
 
     fn get_params() -> GdalDatasetParameters {
         GdalDatasetParameters {
@@ -766,6 +827,7 @@ mod tests {
                 retry: None,
             },
             read_advise,
+            trace_context: None,
         };
 
         let msg = IpcChannelMessage::new_request_tile_message(payload);
@@ -834,6 +896,7 @@ mod tests {
                 retry: None,
             },
             read_advise,
+            trace_context: None,
         };
 
         let msg = IpcChannelMessage::new_request_tile_message(payload);
@@ -1455,5 +1518,208 @@ mod tests {
 
         assert!(approx_eq!(f64, properties.offset(), 1.));
         assert!(approx_eq!(f64, properties.scale(), 2.));
+    }
+
+    /// Integration test that verifies the GDAL worker process sends OpenTelemetry spans to a
+    /// configured OTLP endpoint when `[open_telemetry]` is enabled.
+    ///
+    /// The test:
+    /// 1. Starts a mock OTLP gRPC server.
+    /// 2. Configures the worker to connect to it via environment variables.
+    /// 3. Spawns a real worker process and sends a tile read request with a W3C `traceparent`.
+    /// 4. Waits for the worker to export spans and inspects them on the mock server.
+    /// 5. Asserts the presence of GDAL-related spans (dataset open, tile load, rasterband read).
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_worker_sends_otel_traces_to_endpoint() {
+        use std::net::SocketAddr;
+
+        // ── 1. Start mock OTLP gRPC server ──────────────────────────────────
+        let spans_received: Arc<
+            Mutex<Vec<opentelemetry_proto::tonic::collector::trace::v1::ExportTraceServiceRequest>>,
+        > = Arc::new(Mutex::new(Vec::new()));
+        let spans_received_clone = spans_received.clone();
+
+        let mock = MockOtlpServer {
+            spans: spans_received_clone,
+        };
+
+        let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
+        let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+        let mock_addr = listener.local_addr().unwrap();
+        let endpoint_url = format!("http://{}", mock_addr);
+
+        let server_handle = tokio::spawn(async move {
+            tonic::transport::Server::builder()
+                .add_service(
+                    opentelemetry_proto::tonic::collector::trace::v1::trace_service_server::TraceServiceServer::new(
+                        mock,
+                    ),
+                )
+                .serve_with_incoming(
+                    tokio_stream::wrappers::TcpListenerStream::new(listener),
+                )
+                .await
+                .ok();
+        });
+
+        // Give the server a moment to start listening
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+        // ── 2. Determine parent trace IDs ─────────────────────────────────────
+        let trace_id_hex = "0af7651916cd43dd8448eb211c80319c";
+        let span_id_hex = "b7ad6b7169203331";
+        let traceparent_value = format!("00-{trace_id_hex}-{span_id_hex}-01");
+
+        // ── 3. Construct tile request WITH traceparent ───────────────────────
+        let output_shape: GridShape2D = [8, 8].into();
+        let read_advise = GdalReadAdvise {
+            gdal_read_widow: GdalReadWindow::new([0, 0].into(), output_shape),
+            read_window_bounds: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
+            bounds_of_target: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
+            flip_y: false,
+        };
+
+        let payload = IpcChannelMessagePayload {
+            data_type: RasterDataType::U8,
+            dataset_params: GdalDatasetParameters {
+                file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),
+                rasterband_channel: 1,
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: (-180., 90.).into(),
+                    x_pixel_size: 0.1,
+                    y_pixel_size: -0.1,
+                },
+                width: 3600,
+                height: 1800,
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value: Some(0.),
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: None,
+                allow_alphaband_as_mask: true,
+                retry: None,
+            },
+            read_advise,
+            trace_context: Some(TraceContext {
+                traceparent: traceparent_value,
+                tracestate: None,
+            }),
+        };
+
+        let msg = IpcChannelMessage::new_request_tile_message(payload);
+
+        // ── 4. Spawn worker with OTel env vars ───────────────────────────────
+        // Set env vars immediately before spawning (worker inherits at spawn time)
+        // and restore right after to minimise impact on parallel tests.
+        let prev_enabled = std::env::var("GEOENGINE__OPEN_TELEMETRY__ENABLED").ok();
+        let prev_endpoint = std::env::var("GEOENGINE__OPEN_TELEMETRY__ENDPOINT").ok();
+        // SAFETY: `#[serial_test::serial]` prevents concurrent env var modification.
+        unsafe {
+            std::env::set_var("GEOENGINE__OPEN_TELEMETRY__ENABLED", "true");
+            std::env::set_var("GEOENGINE__OPEN_TELEMETRY__ENDPOINT", &endpoint_url);
+        }
+
+        let spawn_result = spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>();
+
+        // Restore env vars immediately after spawn — the child process already
+        // inherited the values.
+        unsafe {
+            match prev_enabled {
+                Some(v) => std::env::set_var("GEOENGINE__OPEN_TELEMETRY__ENABLED", v),
+                None => std::env::remove_var("GEOENGINE__OPEN_TELEMETRY__ENABLED"),
+            }
+            match prev_endpoint {
+                Some(v) => std::env::set_var("GEOENGINE__OPEN_TELEMETRY__ENDPOINT", v),
+                None => std::env::remove_var("GEOENGINE__OPEN_TELEMETRY__ENDPOINT"),
+            }
+        }
+
+        let (_guard, sender, receiver) = spawn_result.unwrap();
+
+        sender.send(msg).unwrap();
+        let rx_result = receiver.recv();
+        assert!(
+            rx_result.is_ok(),
+            "Worker should return a valid result, got: {:?}",
+            rx_result,
+        );
+
+        // ── 5. Give the batch exporter time to flush spans ────────────────────
+        // The OTLP batch exporter flushes every ~5 s by default.  We wait up to
+        // 15 s, checking every 500 ms, so the test is fast in the common case.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        let mut spans_collected = false;
+        while std::time::Instant::now() < deadline {
+            let spans = spans_received.lock().await;
+            if !spans.is_empty() {
+                spans_collected = true;
+                break;
+            }
+            drop(spans);
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+
+        // ── 6. Assertions ─────────────────────────────────────────────────────
+        assert!(
+            spans_collected,
+            "Worker should have sent at least one ExportTraceServiceRequest \
+             to the mock OTLP endpoint at {endpoint_url} within 15 seconds"
+        );
+
+        let spans = spans_received.lock().await;
+        let total_spans: usize = spans
+            .iter()
+            .flat_map(|req| &req.resource_spans)
+            .flat_map(|rs| &rs.scope_spans)
+            .flat_map(|ss| &ss.spans)
+            .count();
+        assert!(
+            total_spans > 0,
+            "At least one OTel span should be present across all export requests"
+        );
+
+        // Collect all span names for diagnostic assertions
+        let span_names: Vec<String> = spans
+            .iter()
+            .flat_map(|req| &req.resource_spans)
+            .flat_map(|rs| &rs.scope_spans)
+            .flat_map(|ss| &ss.spans)
+            .map(|s| s.name.clone())
+            .collect();
+
+        // Verify that at least one span has the expected trace_id from our parent context
+        let expected_trace_id: Vec<u8> = (0..trace_id_hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&trace_id_hex[i..i + 2], 16))
+            .collect::<Result<Vec<_>, _>>()
+            .expect("valid hex trace_id");
+        let matching_trace = spans
+            .iter()
+            .flat_map(|req| &req.resource_spans)
+            .flat_map(|rs| &rs.scope_spans)
+            .flat_map(|ss| &ss.spans)
+            .any(|s| s.trace_id == expected_trace_id);
+        assert!(
+            matching_trace,
+            "At least one span should carry the trace_id we injected via traceparent. \
+             Spans received: {span_names:?}"
+        );
+
+        // Verify that GDAL-related spans are present (instrumented spans from process_impl.rs)
+        let has_gdal_span = span_names.iter().any(|name| {
+            name.contains("gdal_load_tile_data")
+                || name.contains("gdal_dataset_open")
+                || name.contains("gdal_worker_read_tile")
+        });
+        assert!(
+            has_gdal_span,
+            "Expected at least one GDAL-related span (gdal_load_tile_data, \
+             gdal_dataset_open, or gdal_worker_read_tile) \
+             from the worker. Got: {span_names:?}"
+        );
+
+        // ── 7. Cleanup ────────────────────────────────────────────────────────
+        server_handle.abort();
     }
 }

@@ -14,6 +14,20 @@ use std::{
 
 use super::{GdalDatasetParameters, GridAndProperties};
 
+/// W3C Trace Context propagated from the parent process to the GDAL worker
+/// so worker spans are nested under the parent operator's trace.
+///
+/// `traceparent` is required when a trace context exists; `tracestate` is an
+/// optional vendor-specific payload that extends the trace context.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TraceContext {
+    /// W3C Trace Context `traceparent` header (e.g. `00-<trace-id>-<span-id>-01`).
+    pub traceparent: String,
+    /// W3C Trace Context `tracestate` header, an optional vendor-specific payload.
+    #[serde(default)]
+    pub tracestate: Option<String>,
+}
+
 /// This struct is used to advise the GDAL reader how to read the data from the dataset.
 /// The Workflow is as follows:
 /// 1. The `gdal_read_window` is the window in the pixel space of the dataset that should be read.
@@ -71,6 +85,11 @@ pub struct IpcChannelMessagePayload {
     pub read_advise: GdalReadAdvise,
     /// We use this to know what type we serialize
     pub data_type: RasterDataType,
+    /// W3C Trace Context propagated from the parent process. When `Some`, the
+    /// worker attaches its spans under this trace so that GDAL operations are
+    /// correctly nested under the parent operator's span tree.
+    #[serde(default)]
+    pub trace_context: Option<TraceContext>,
 }
 
 pub type IpcProcessRasterResult = Result<GdalIpcBytePayload, IpcProcessError>;
@@ -542,5 +561,169 @@ impl IpcChannelMessage {
         // Hash read advise
         self.0.read_advise.hash(state);
         self.0.data_type.hash(state);
+    }
+}
+
+/// A simple carrier that implements `opentelemetry::propagation::Injector` and `Extractor`
+/// for propagating W3C Trace Context across IPC boundaries. Used to transmit the parent
+/// span's trace context from the main process to GDAL worker subprocesses.
+#[derive(Default)]
+pub struct TraceContextCarrier {
+    pub traceparent: Option<String>,
+    pub tracestate: Option<String>,
+}
+
+impl opentelemetry::propagation::Injector for TraceContextCarrier {
+    fn set(&mut self, key: &str, value: String) {
+        match key {
+            "traceparent" => self.traceparent = Some(value),
+            "tracestate" => self.tracestate = Some(value),
+            _ => {}
+        }
+    }
+}
+
+impl opentelemetry::propagation::Extractor for TraceContextCarrier {
+    fn get(&self, key: &str) -> Option<&str> {
+        match key {
+            "traceparent" => self.traceparent.as_deref(),
+            "tracestate" => self.tracestate.as_deref(),
+            _ => None,
+        }
+    }
+
+    fn keys(&self) -> Vec<&str> {
+        let mut keys = Vec::new();
+        if self.traceparent.is_some() {
+            keys.push("traceparent");
+        }
+        if self.tracestate.is_some() {
+            keys.push("tracestate");
+        }
+        keys
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::source::gdal_worker_process::{
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+    };
+    use geoengine_datatypes::raster::{GridBoundingBox2D, RasterDataType};
+    use opentelemetry::{
+        propagation::TextMapPropagator as _,
+        trace::{SpanContext, SpanId, TraceContextExt as _, TraceFlags, TraceId, TraceState},
+    };
+    use opentelemetry_sdk::propagation::TraceContextPropagator;
+    use std::path::PathBuf;
+
+    /// Verify that `TraceContextCarrier` can round-trip a valid W3C trace context
+    /// through inject → extract without losing information.
+    #[test]
+    fn test_trace_context_carrier_roundtrip() {
+        let propagator = TraceContextPropagator::new();
+
+        // Build a remote span context with known IDs
+        let span_context = SpanContext::new(
+            TraceId::from_hex("0af7651916cd43dd8448eb211c80319c").unwrap(),
+            SpanId::from_hex("deadbeefcafe1234").unwrap(),
+            TraceFlags::new(1),
+            true,
+            TraceState::default(),
+        );
+        let original_cx =
+            opentelemetry::Context::new().with_remote_span_context(span_context.clone());
+
+        // Inject
+        let mut carrier = TraceContextCarrier::default();
+        propagator.inject_context(&original_cx, &mut carrier);
+        assert!(
+            carrier.traceparent.is_some(),
+            "traceparent should be set after injection"
+        );
+
+        // Extract
+        let extracted_cx = propagator.extract(&carrier);
+        let extracted_span = extracted_cx.span();
+        let extracted_sc = extracted_span.span_context();
+
+        assert_eq!(
+            extracted_sc.trace_id(),
+            span_context.trace_id(),
+            "trace_id should match after round-trip"
+        );
+        assert_eq!(
+            extracted_sc.span_id(),
+            span_context.span_id(),
+            "span_id should match after round-trip"
+        );
+        assert!(
+            extracted_sc.is_remote(),
+            "extracted span should be marked remote"
+        );
+    }
+
+    /// Verify that `TraceContextCarrier` handles an empty (no span) context gracefully.
+    #[test]
+    fn test_trace_context_carrier_empty_context() {
+        let propagator = TraceContextPropagator::new();
+        let empty_cx = opentelemetry::Context::new();
+
+        let mut carrier = TraceContextCarrier::default();
+        propagator.inject_context(&empty_cx, &mut carrier);
+
+        // With no active span, the propagator may or may not inject a traceparent.
+        // The important thing is that extract does not panic.
+        let _extracted = propagator.extract(&carrier);
+    }
+
+    /// Verify that `IpcChannelMessagePayload` with `traceparent`/`tracestate` fields
+    /// survives an IPC channel round-trip.
+    #[test]
+    #[serial_test::serial]
+    fn test_ipc_message_with_trace_context_roundtrip() {
+        let payload = IpcChannelMessagePayload {
+            dataset_params: GdalDatasetParameters {
+                file_path: PathBuf::from("/some/test/file.tif"),
+                rasterband_channel: 1,
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: (0.0, 0.0).into(),
+                    x_pixel_size: 1.0,
+                    y_pixel_size: -1.0,
+                },
+                width: 100,
+                height: 100,
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value: Some(0.),
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: None,
+                allow_alphaband_as_mask: true,
+                retry: None,
+            },
+            read_advise: GdalReadAdvise {
+                gdal_read_widow: GdalReadWindow::new([0, 0].into(), [8, 8].into()),
+                read_window_bounds: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
+                bounds_of_target: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
+                flip_y: false,
+            },
+            data_type: RasterDataType::U8,
+            trace_context: Some(TraceContext {
+                traceparent: "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01".to_string(),
+                tracestate: Some("rojo=00f067aa0ba902b7".to_string()),
+            }),
+        };
+
+        let msg = IpcChannelMessage::new_request_tile_message(payload.clone());
+
+        let (sender, receiver) = ipc_channel::ipc::channel().unwrap();
+        sender.send(msg.clone()).unwrap();
+        let recv = receiver.recv().unwrap();
+
+        assert_eq!(
+            msg, recv,
+            "IPC message with trace context should round-trip unchanged"
+        );
     }
 }
