@@ -207,7 +207,7 @@ fn init_subscriber(
             .with_endpoint(endpoint)
             .build()
             .unwrap_or_else(|err| {
-                eprintln!("Failed to build OTLP exporter: {err}. Continuing without OTLP.");
+                eprintln!("Failed to build OTLP exporter: {err}. Exiting worker.");
                 std::process::exit(1);
             });
 
