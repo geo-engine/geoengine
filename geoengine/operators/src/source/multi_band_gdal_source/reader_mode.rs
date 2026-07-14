@@ -10,7 +10,6 @@ use tracing::trace;
 use crate::source::gdal_worker_process::process_common::{GdalReadAdvise, GdalReadWindow};
 pub use crate::source::gdal_worker_process::reader_mode::ReaderState;
 
-#[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
 pub enum GdalReaderMode {
     // read the original resolution
