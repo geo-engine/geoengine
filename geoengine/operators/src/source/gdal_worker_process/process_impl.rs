@@ -68,11 +68,7 @@ fn get_gdalsource_path() -> &'static Path {
             exe_path.pop();
         }
 
-        let binary_name = if cfg!(windows) {
-            "gdalsource-process.exe"
-        } else {
-            "gdalsource-process"
-        };
+        let binary_name = format!("gdalsource-process{}", std::env::consts::EXE_SUFFIX);
         exe_path.push(binary_name);
 
         tracing::debug!("Detected gdalsource-process path: {}", exe_path.display());
