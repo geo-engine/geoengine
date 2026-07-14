@@ -14,7 +14,10 @@ use geoengine_operators::processing::{
     Aggregation as OperatorsAggregation, BandFilter as OperatorsBandFilter,
     BandFilterParams as OperatorsBandFilterParameters,
     DeriveOutRasterSpecsSource as OperatorsDeriveOutRasterSpecsSource,
-    Expression as OperatorsExpression, ExpressionParams as OperatorsExpressionParameters,
+    Downsampling as OperatorsDownsampling, DownsamplingMethod as OperatorsDownsamplingMethod,
+    DownsamplingParams as OperatorsDownsamplingParameters,
+    DownsamplingResolution as OperatorsDownsamplingResolution, Expression as OperatorsExpression,
+    ExpressionParams as OperatorsExpressionParameters, Fraction as OperatorsFraction,
     Interpolation as OperatorsInterpolation, InterpolationMethod as OperatorsInterpolationMethod,
     InterpolationParams as OperatorsInterpolationParameters,
     InterpolationResolution as OperatorsInterpolationResolution,
@@ -234,7 +237,7 @@ pub enum InterpolationResolution {
     /// Explicit output resolution (`x`, `y`) in target coordinates.
     Resolution { x: f64, y: f64 },
     #[schema(title = "Fraction")]
-    /// Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).
+    /// Scaling factor in x/y direction.
     Fraction { x: f64, y: f64 },
 }
 
@@ -244,7 +247,9 @@ impl From<InterpolationResolution> for OperatorsInterpolationResolution {
             InterpolationResolution::Resolution { x, y } => {
                 Self::Resolution(geoengine_datatypes::primitives::SpatialResolution { x, y })
             }
-            InterpolationResolution::Fraction { x, y } => Self::Fraction { x, y },
+            InterpolationResolution::Fraction { x, y } => {
+                Self::Fraction(OperatorsFraction { x, y })
+            }
         }
     }
 }
@@ -618,6 +623,21 @@ impl TryFrom<RasterTypeConversion> for OperatorsRasterTypeConversion {
 /// ## Inputs
 ///
 /// The `Interpolation` operator expects exactly one _raster_ input.
+///
+/// ## Resolution
+///
+/// The target resolution can be specified either as an explicit `Resolution` (in pixel units)
+/// or as a `Fraction` that scales the input resolution.
+///
+/// ```rust,ignore
+/// // Scale the input resolution by a factor of 2 in both x and y directions
+/// InterpolationResolution::Fraction(Fraction { x: 2.0, y: 2.0 })
+/// ```
+///
+/// ```rust,ignore
+/// // Use an explicit resolution of 50×50 pixel units
+/// InterpolationResolution::Resolution(SpatialResolution { x: 50.0, y: 50.0 })
+/// ```
 #[api_operator(
     title = "Interpolation",
     examples(json!({
@@ -665,6 +685,121 @@ impl TryFrom<Interpolation> for OperatorsInterpolation {
         Ok(OperatorsInterpolation {
             params: OperatorsInterpolationParameters {
                 interpolation: value.params.interpolation.into(),
+                output_resolution: value.params.output_resolution.into(),
+                output_origin_reference: value.params.output_origin_reference.map(Into::into),
+            },
+            sources: (*value.sources).try_into()?,
+        })
+    }
+}
+
+/// The `Downsampling` operator decreases raster resolution by sampling values of an input raster.
+///
+/// If queried with a resolution that is finer than the input resolution,
+/// downsampling is not applicable and an error is returned.
+///
+/// ## Inputs
+///
+/// The `Downsampling` operator expects exactly one _raster_ input.
+///
+/// ## Resolution
+///
+/// The target resolution can be specified either as an explicit `Resolution` (in pixel units)
+/// or as a `Fraction` that scales the input resolution.
+///
+/// ```rust,ignore
+/// // Scale the input resolution by a factor of 2 in both x and y directions
+/// DownsamplingResolution::Fraction(Fraction { x: 2.0, y: 2.0 })
+/// ```
+///
+/// ```rust,ignore
+/// // Use an explicit resolution of 200×200 pixel units
+/// DownsamplingResolution::Resolution(SpatialResolution { x: 200.0, y: 200.0 })
+/// ```
+#[api_operator(
+    title = "Downsampling",
+    examples(json!({
+        "type": "Downsampling",
+        "params": {
+            "samplingMethod": "nearestNeighbor",
+            "outputResolution": {
+                "type": "fraction",
+                "x": 2.0,
+                "y": 2.0
+            }
+        },
+        "sources": {
+            "raster": {
+                "type": "MultiBandGdalSource",
+                "params": { "data": "sentinel-2-l2a_EPSG32632_U8_20" }
+            }
+        }
+    }))
+)]
+pub struct Downsampling {
+    pub params: DownsamplingParameters,
+    pub sources: Box<SingleRasterSource>,
+}
+
+/// Parameters for the `Downsampling` operator.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DownsamplingParameters {
+    /// Downsampling method.
+    #[schema(examples("nearestNeighbor"))]
+    pub sampling_method: DownsamplingMethod,
+    /// Target output resolution.
+    #[schema(examples(json!({ "type": "fraction", "x": 2.0, "y": 2.0 })))]
+    pub output_resolution: DownsamplingResolution,
+    /// Optional reference point used to align the output grid origin.
+    #[schema(examples(json!({ "x": 0.0, "y": 0.0 })))]
+    pub output_origin_reference: Option<crate::api::model::datatypes::Coordinate2D>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum DownsamplingMethod {
+    /// Nearest-neighbor downsampling.
+    NearestNeighbor,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum DownsamplingResolution {
+    #[schema(title = "Resolution")]
+    /// Explicit output resolution (`x`, `y`) in target coordinates.
+    Resolution { x: f64, y: f64 },
+    #[schema(title = "Fraction")]
+    /// Scaling factor in x/y direction.
+    Fraction { x: f64, y: f64 },
+}
+
+impl From<DownsamplingResolution> for OperatorsDownsamplingResolution {
+    fn from(value: DownsamplingResolution) -> Self {
+        match value {
+            DownsamplingResolution::Resolution { x, y } => {
+                Self::Resolution(geoengine_datatypes::primitives::SpatialResolution { x, y })
+            }
+            DownsamplingResolution::Fraction { x, y } => Self::Fraction(OperatorsFraction { x, y }),
+        }
+    }
+}
+
+impl From<DownsamplingMethod> for OperatorsDownsamplingMethod {
+    fn from(value: DownsamplingMethod) -> Self {
+        match value {
+            DownsamplingMethod::NearestNeighbor => Self::NearestNeighbor,
+        }
+    }
+}
+
+impl TryFrom<Downsampling> for OperatorsDownsampling {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Downsampling) -> Result<Self, Self::Error> {
+        Ok(OperatorsDownsampling {
+            params: OperatorsDownsamplingParameters {
+                sampling_method: value.params.sampling_method.into(),
                 output_resolution: value.params.output_resolution.into(),
                 output_origin_reference: value.params.output_origin_reference.map(Into::into),
             },
@@ -1105,10 +1240,54 @@ mod tests {
         ));
         assert!(matches!(
             ops.params.output_resolution,
-            geoengine_operators::processing::InterpolationResolution::Fraction { x, y }
+            geoengine_operators::processing::InterpolationResolution::Fraction(
+                geoengine_operators::processing::Fraction { x, y }
+            )
             if (x - 2.0).abs() < f64::EPSILON && (y - 2.0).abs() < f64::EPSILON
         ));
         assert!(ops.params.output_origin_reference.is_none());
+    }
+
+    #[test]
+    fn it_converts_downsampling_params() {
+        let api = Downsampling {
+            r#type: Default::default(),
+            params: DownsamplingParameters {
+                sampling_method: DownsamplingMethod::NearestNeighbor,
+                output_resolution: DownsamplingResolution::Fraction { x: 2.0, y: 2.0 },
+                output_origin_reference: Some(crate::api::model::datatypes::Coordinate2D {
+                    x: 0.0,
+                    y: 0.0,
+                }),
+            },
+            sources: Box::new(SingleRasterSource {
+                raster: RasterOperator::MultiBandGdalSource(MultiBandGdalSource {
+                    r#type: Default::default(),
+                    params: GdalSourceParameters {
+                        data: "example_data".to_string(),
+                        overview_level: None,
+                    },
+                }),
+            }),
+        };
+
+        let ops = OperatorsDownsampling::try_from(api).expect("conversion failed");
+
+        assert!(matches!(
+            ops.params.sampling_method,
+            geoengine_operators::processing::DownsamplingMethod::NearestNeighbor
+        ));
+        assert!(matches!(
+            ops.params.output_resolution,
+            geoengine_operators::processing::DownsamplingResolution::Fraction(
+                geoengine_operators::processing::Fraction { x, y }
+            )
+            if (x - 2.0).abs() < f64::EPSILON && (y - 2.0).abs() < f64::EPSILON
+        ));
+        assert_eq!(
+            ops.params.output_origin_reference,
+            Some(geoengine_datatypes::primitives::Coordinate2D::new(0.0, 0.0))
+        );
     }
 
     #[test]

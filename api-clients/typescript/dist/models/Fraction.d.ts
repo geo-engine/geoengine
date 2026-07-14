@@ -9,7 +9,7 @@
  * Do not edit the class manually.
  */
 /**
- * Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).
+ * Scaling factor in x/y direction.
  * @export
  * @interface Fraction
  */

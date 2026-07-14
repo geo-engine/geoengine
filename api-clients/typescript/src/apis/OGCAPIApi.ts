@@ -366,7 +366,7 @@ export class OGCAPIApi extends runtime.BaseAPI {
     }
 
     /**
-     * Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).
+     * Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).  Inside Geo Engine, every [`Layer`] gets its own OGC API endpoint. Inside this endpoint, this [`Layer`] is represented as a single [`Collection`](ogcapi_types::common::Collection). Therefore, the list of collections for a given layer will always contain exactly one collection, and the `collectionId` will always be the same as the [`LayerId`].  
      * OGC API Collections List
      */
     async collectionsRaw(requestParameters: CollectionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Collections>> {
@@ -377,7 +377,7 @@ export class OGCAPIApi extends runtime.BaseAPI {
     }
 
     /**
-     * Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).
+     * Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).  Inside Geo Engine, every [`Layer`] gets its own OGC API endpoint. Inside this endpoint, this [`Layer`] is represented as a single [`Collection`](ogcapi_types::common::Collection). Therefore, the list of collections for a given layer will always contain exactly one collection, and the `collectionId` will always be the same as the [`LayerId`].  
      * OGC API Collections List
      */
     async collections(requestParameters: CollectionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Collections> {

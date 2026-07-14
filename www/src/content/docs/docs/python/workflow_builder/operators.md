@@ -159,7 +159,8 @@ def __init__(source_operator: RasterOperator,
              output_y: float,
              output_method: Literal["resolution", "fraction"] = "resolution",
              interpolation: Literal["biLinear",
-                                    "nearestNeighbor"] = "biLinear")
+                                    "nearestNeighbor"] = "biLinear",
+             output_origin_reference: tuple[float, float] | None = None)
 ```
 
 Creates a new interpolation operator.
@@ -188,7 +189,8 @@ def __init__(source_operator: RasterOperator,
              output_x: float,
              output_y: float,
              output_method: Literal["resolution", "fraction"] = "resolution",
-             sample_method: Literal["nearestNeighbor"] = "nearestNeighbor")
+             sample_method: Literal["nearestNeighbor"] = "nearestNeighbor",
+             output_origin_reference: tuple[float, float] | None = None)
 ```
 
 Creates a new Downsampling operator.

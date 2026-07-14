@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 import { BandFilterFromJSONTyped, BandFilterToJSON, } from './BandFilter';
+import { DownsamplingFromJSONTyped, DownsamplingToJSON, } from './Downsampling';
 import { instanceOfExpression, ExpressionFromJSONTyped, ExpressionToJSON, } from './Expression';
 import { instanceOfGdalSource, GdalSourceFromJSONTyped, GdalSourceToJSON, } from './GdalSource';
 import { InterpolationFromJSONTyped, InterpolationToJSON, } from './Interpolation';
@@ -29,6 +30,8 @@ export function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
     switch (json['type']) {
         case 'BandFilter':
             return Object.assign({}, BandFilterFromJSONTyped(json, true), { type: 'BandFilter' });
+        case 'Downsampling':
+            return Object.assign({}, DownsamplingFromJSONTyped(json, true), { type: 'Downsampling' });
         case 'Expression':
             return Object.assign({}, ExpressionFromJSONTyped(json, true), { type: 'Expression' });
         case 'GdalSource':
@@ -59,6 +62,8 @@ export function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
     switch (value['type']) {
         case 'BandFilter':
             return Object.assign({}, BandFilterToJSON(value), { type: 'BandFilter' });
+        case 'Downsampling':
+            return Object.assign({}, DownsamplingToJSON(value), { type: 'Downsampling' });
         case 'Expression':
             return Object.assign({}, ExpressionToJSON(value), { type: 'Expression' });
         case 'GdalSource':

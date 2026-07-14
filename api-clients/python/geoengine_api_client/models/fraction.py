@@ -24,7 +24,7 @@ from typing_extensions import Self
 
 class Fraction(BaseModel):
     """
-    Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).
+    Scaling factor in x/y direction.
     """ # noqa: E501
     x: Union[StrictFloat, StrictInt]
     y: Union[StrictFloat, StrictInt]

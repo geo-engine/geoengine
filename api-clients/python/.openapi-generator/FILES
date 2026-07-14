@@ -59,6 +59,10 @@ docs/Default.md
 docs/DeriveOutRasterSpecsSource.md
 docs/DerivedColor.md
 docs/DerivedNumber.md
+docs/Downsampling.md
+docs/DownsamplingMethod.md
+docs/DownsamplingParameters.md
+docs/DownsamplingResolution.md
 docs/EbvPortalDataProviderDefinition.md
 docs/EdrDataProviderDefinition.md
 docs/EdrVectorSpec.md
@@ -448,6 +452,10 @@ geoengine_api_client/models/default.py
 geoengine_api_client/models/derive_out_raster_specs_source.py
 geoengine_api_client/models/derived_color.py
 geoengine_api_client/models/derived_number.py
+geoengine_api_client/models/downsampling.py
+geoengine_api_client/models/downsampling_method.py
+geoengine_api_client/models/downsampling_parameters.py
+geoengine_api_client/models/downsampling_resolution.py
 geoengine_api_client/models/ebv_portal_data_provider_definition.py
 geoengine_api_client/models/edr_data_provider_definition.py
 geoengine_api_client/models/edr_vector_spec.py
@@ -807,6 +815,10 @@ test/test_default.py
 test/test_derive_out_raster_specs_source.py
 test/test_derived_color.py
 test/test_derived_number.py
+test/test_downsampling.py
+test/test_downsampling_method.py
+test/test_downsampling_parameters.py
+test/test_downsampling_resolution.py
 test/test_ebv_portal_data_provider_definition.py
 test/test_edr_data_provider_definition.py
 test/test_edr_vector_spec.py

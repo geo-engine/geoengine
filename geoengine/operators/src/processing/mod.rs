@@ -32,7 +32,7 @@ pub use circle_merging_quadtree::{
 pub use column_range_filter::{ColumnRangeFilter, ColumnRangeFilterParams};
 pub use downsample::{
     Downsampling, DownsamplingError, DownsamplingMethod, DownsamplingParams,
-    DownsamplingResolution, InitializedDownsampling,
+    DownsamplingResolution, Fraction, InitializedDownsampling,
 };
 pub use expression::{
     Expression, ExpressionParams, RasterExpressionError, VectorExpression, VectorExpressionError,

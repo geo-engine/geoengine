@@ -99,6 +99,10 @@ __all__ = [
     "DeriveOutRasterSpecsSource",
     "DerivedColor",
     "DerivedNumber",
+    "Downsampling",
+    "DownsamplingMethod",
+    "DownsamplingParameters",
+    "DownsamplingResolution",
     "EbvPortalDataProviderDefinition",
     "EdrDataProviderDefinition",
     "EdrVectorSpec",
@@ -481,6 +485,10 @@ from geoengine_api_client.models.default import Default as Default
 from geoengine_api_client.models.derive_out_raster_specs_source import DeriveOutRasterSpecsSource as DeriveOutRasterSpecsSource
 from geoengine_api_client.models.derived_color import DerivedColor as DerivedColor
 from geoengine_api_client.models.derived_number import DerivedNumber as DerivedNumber
+from geoengine_api_client.models.downsampling import Downsampling as Downsampling
+from geoengine_api_client.models.downsampling_method import DownsamplingMethod as DownsamplingMethod
+from geoengine_api_client.models.downsampling_parameters import DownsamplingParameters as DownsamplingParameters
+from geoengine_api_client.models.downsampling_resolution import DownsamplingResolution as DownsamplingResolution
 from geoengine_api_client.models.ebv_portal_data_provider_definition import EbvPortalDataProviderDefinition as EbvPortalDataProviderDefinition
 from geoengine_api_client.models.edr_data_provider_definition import EdrDataProviderDefinition as EdrDataProviderDefinition
 from geoengine_api_client.models.edr_vector_spec import EdrVectorSpec as EdrVectorSpec

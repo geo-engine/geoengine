@@ -23,7 +23,7 @@ from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-RASTEROPERATOR_ONE_OF_SCHEMAS = ["BandFilter", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "RasterStacker", "RasterTypeConversion", "Reprojection", "TemporalRasterAggregation"]
+RASTEROPERATOR_ONE_OF_SCHEMAS = ["BandFilter", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "RasterStacker", "RasterTypeConversion", "Reprojection", "TemporalRasterAggregation"]
 
 class RasterOperator(BaseModel):
     """
@@ -31,24 +31,26 @@ class RasterOperator(BaseModel):
     """
     # data type: BandFilter
     oneof_schema_1_validator: Optional[BandFilter] = None
+    # data type: Downsampling
+    oneof_schema_2_validator: Optional[Downsampling] = None
     # data type: Expression
-    oneof_schema_2_validator: Optional[Expression] = None
+    oneof_schema_3_validator: Optional[Expression] = None
     # data type: GdalSource
-    oneof_schema_3_validator: Optional[GdalSource] = None
+    oneof_schema_4_validator: Optional[GdalSource] = None
     # data type: Interpolation
-    oneof_schema_4_validator: Optional[Interpolation] = None
+    oneof_schema_5_validator: Optional[Interpolation] = None
     # data type: MultiBandGdalSource
-    oneof_schema_5_validator: Optional[MultiBandGdalSource] = None
+    oneof_schema_6_validator: Optional[MultiBandGdalSource] = None
     # data type: RasterStacker
-    oneof_schema_6_validator: Optional[RasterStacker] = None
+    oneof_schema_7_validator: Optional[RasterStacker] = None
     # data type: RasterTypeConversion
-    oneof_schema_7_validator: Optional[RasterTypeConversion] = None
+    oneof_schema_8_validator: Optional[RasterTypeConversion] = None
     # data type: Reprojection
-    oneof_schema_8_validator: Optional[Reprojection] = None
+    oneof_schema_9_validator: Optional[Reprojection] = None
     # data type: TemporalRasterAggregation
-    oneof_schema_9_validator: Optional[TemporalRasterAggregation] = None
-    actual_instance: Optional[Union[BandFilter, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation]] = None
-    one_of_schemas: Set[str] = { "BandFilter", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "RasterStacker", "RasterTypeConversion", "Reprojection", "TemporalRasterAggregation" }
+    oneof_schema_10_validator: Optional[TemporalRasterAggregation] = None
+    actual_instance: Optional[Union[BandFilter, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation]] = None
+    one_of_schemas: Set[str] = { "BandFilter", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "RasterStacker", "RasterTypeConversion", "Reprojection", "TemporalRasterAggregation" }
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -77,6 +79,11 @@ class RasterOperator(BaseModel):
         # validate data type: BandFilter
         if not isinstance(v, BandFilter):
             error_messages.append(f"Error! Input type `{type(v)}` is not `BandFilter`")
+        else:
+            match += 1
+        # validate data type: Downsampling
+        if not isinstance(v, Downsampling):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `Downsampling`")
         else:
             match += 1
         # validate data type: Expression
@@ -121,10 +128,10 @@ class RasterOperator(BaseModel):
             match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in RasterOperator with oneOf schemas: BandFilter, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in RasterOperator with oneOf schemas: BandFilter, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in RasterOperator with oneOf schemas: BandFilter, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in RasterOperator with oneOf schemas: BandFilter, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -147,6 +154,11 @@ class RasterOperator(BaseModel):
         # check if data type is `BandFilter`
         if _data_type == "BandFilter":
             instance.actual_instance = BandFilter.from_json(json_str)
+            return instance
+
+        # check if data type is `Downsampling`
+        if _data_type == "Downsampling":
+            instance.actual_instance = Downsampling.from_json(json_str)
             return instance
 
         # check if data type is `Expression`
@@ -192,6 +204,12 @@ class RasterOperator(BaseModel):
         # deserialize data into BandFilter
         try:
             instance.actual_instance = BandFilter.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into Downsampling
+        try:
+            instance.actual_instance = Downsampling.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
@@ -246,10 +264,10 @@ class RasterOperator(BaseModel):
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into RasterOperator with oneOf schemas: BandFilter, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into RasterOperator with oneOf schemas: BandFilter, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into RasterOperator with oneOf schemas: BandFilter, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into RasterOperator with oneOf schemas: BandFilter, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -263,7 +281,7 @@ class RasterOperator(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], BandFilter, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], BandFilter, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None
@@ -279,6 +297,7 @@ class RasterOperator(BaseModel):
         return pprint.pformat(self.model_dump())
 
 from geoengine_api_client.models.band_filter import BandFilter
+from geoengine_api_client.models.downsampling import Downsampling
 from geoengine_api_client.models.expression import Expression
 from geoengine_api_client.models.interpolation import Interpolation
 from geoengine_api_client.models.raster_stacker import RasterStacker

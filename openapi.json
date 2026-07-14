@@ -7336,6 +7336,142 @@
           }
         }
       },
+      "Downsampling": {
+        "type": "object",
+        "title": "Downsampling",
+        "description": "The `Downsampling` operator decreases raster resolution by sampling values of an input raster.\n\nIf queried with a resolution that is finer than the input resolution,\ndownsampling is not applicable and an error is returned.\n\n## Inputs\n\nThe `Downsampling` operator expects exactly one _raster_ input.\n\n## Resolution\n\nThe target resolution can be specified either as an explicit `Resolution` (in pixel units)\nor as a `Fraction` that scales the input resolution.\n\n```rust,ignore\n// Scale the input resolution by a factor of 2 in both x and y directions\nDownsamplingResolution::Fraction(Fraction { x: 2.0, y: 2.0 })\n```\n\n```rust,ignore\n// Use an explicit resolution of 200×200 pixel units\nDownsamplingResolution::Resolution(SpatialResolution { x: 200.0, y: 200.0 })\n```",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "Downsampling"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/DownsamplingParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "Downsampling",
+            "params": {
+              "samplingMethod": "nearestNeighbor",
+              "outputResolution": {
+                "type": "fraction",
+                "x": 2.0,
+                "y": 2.0
+              }
+            },
+            "sources": {
+              "raster": {
+                "type": "MultiBandGdalSource",
+                "params": {
+                  "data": "sentinel-2-l2a_EPSG32632_U8_20"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "DownsamplingMethod": {
+        "type": "string",
+        "enum": [
+          "nearestNeighbor"
+        ]
+      },
+      "DownsamplingParameters": {
+        "type": "object",
+        "description": "Parameters for the `Downsampling` operator.",
+        "required": [
+          "samplingMethod",
+          "outputResolution"
+        ],
+        "properties": {
+          "samplingMethod": {
+            "$ref": "#/components/schemas/DownsamplingMethod",
+            "description": "Downsampling method."
+          },
+          "outputResolution": {
+            "$ref": "#/components/schemas/DownsamplingResolution",
+            "description": "Target output resolution."
+          },
+          "outputOriginReference": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Coordinate2D",
+                "description": "Optional reference point used to align the output grid origin."
+              }
+            ]
+          }
+        }
+      },
+      "DownsamplingResolution": {
+        "oneOf": [
+          {
+            "type": "object",
+            "title": "Resolution",
+            "description": "Explicit output resolution (`x`, `y`) in target coordinates.",
+            "required": [
+              "x",
+              "y",
+              "type"
+            ],
+            "properties": {
+              "x": {
+                "type": "number",
+                "format": "double"
+              },
+              "y": {
+                "type": "number",
+                "format": "double"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "resolution"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "Fraction",
+            "description": "Scaling factor in x/y direction.",
+            "required": [
+              "x",
+              "y",
+              "type"
+            ],
+            "properties": {
+              "x": {
+                "type": "number",
+                "format": "double"
+              },
+              "y": {
+                "type": "number",
+                "format": "double"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "fraction"
+                ]
+              }
+            }
+          }
+        ]
+      },
       "EbvPortalDataProviderDefinition": {
         "type": "object",
         "required": [
@@ -8599,7 +8735,7 @@
       "Interpolation": {
         "type": "object",
         "title": "Interpolation",
-        "description": "The `Interpolation` operator increases raster resolution by interpolating values of an input raster.\n\nIf queried with a resolution that is coarser than the input resolution,\ninterpolation is not applicable and an error is returned.\n\n## Inputs\n\nThe `Interpolation` operator expects exactly one _raster_ input.",
+        "description": "The `Interpolation` operator increases raster resolution by interpolating values of an input raster.\n\nIf queried with a resolution that is coarser than the input resolution,\ninterpolation is not applicable and an error is returned.\n\n## Inputs\n\nThe `Interpolation` operator expects exactly one _raster_ input.\n\n## Resolution\n\nThe target resolution can be specified either as an explicit `Resolution` (in pixel units)\nor as a `Fraction` that scales the input resolution.\n\n```rust,ignore\n// Scale the input resolution by a factor of 2 in both x and y directions\nInterpolationResolution::Fraction(Fraction { x: 2.0, y: 2.0 })\n```\n\n```rust,ignore\n// Use an explicit resolution of 50×50 pixel units\nInterpolationResolution::Resolution(SpatialResolution { x: 50.0, y: 50.0 })\n```",
         "required": [
           "type",
           "params",
@@ -8708,7 +8844,7 @@
           {
             "type": "object",
             "title": "Fraction",
-            "description": "Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).",
+            "description": "Scaling factor in x/y direction.",
             "required": [
               "x",
               "y",
@@ -10986,6 +11122,9 @@
             "$ref": "#/components/schemas/BandFilter"
           },
           {
+            "$ref": "#/components/schemas/Downsampling"
+          },
+          {
             "$ref": "#/components/schemas/Expression"
           },
           {
@@ -11015,6 +11154,7 @@
           "propertyName": "type",
           "mapping": {
             "BandFilter": "#/components/schemas/BandFilter",
+            "Downsampling": "#/components/schemas/Downsampling",
             "Expression": "#/components/schemas/Expression",
             "GdalSource": "#/components/schemas/GdalSource",
             "Interpolation": "#/components/schemas/Interpolation",
