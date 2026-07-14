@@ -170,7 +170,7 @@ fn reroute_gdal_logging() {
 fn set_gdal_process_global_options(options: &HashMap<String, String>) {
     for (key, value) in options {
         if let Err(err) = gdal::config::set_config_option(key, value) {
-            eprintln!("Failed to set GDAL config option {key}={value}: {err}");
+            tracing::warn!("Failed to set GDAL config option {key}={value}: {err}");
         }
     }
 }
