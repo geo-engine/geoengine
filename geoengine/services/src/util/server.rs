@@ -191,11 +191,12 @@ pub(crate) async fn server_info_handler() -> impl actix_web::Responder {
 pub(crate) fn server_info() -> ServerInfo {
     ServerInfo {
         build_date: env!("VERGEN_BUILD_DATE"),
-        commit_hash: env!("VERGEN_GIT_SHA"),
+        commit_hash: option_env!("VERGEN_GIT_SHA").unwrap_or("unknown"), // 'unknown' if not builded in git repository
         version: env!("CARGO_PKG_VERSION"),
         features: env!("VERGEN_CARGO_FEATURES"),
     }
 }
+
 /// Server availablity check.
 #[utoipa::path(
     tag = "General",
