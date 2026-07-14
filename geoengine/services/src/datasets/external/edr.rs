@@ -1280,8 +1280,7 @@ pub enum EdrProviderError {
 mod tests {
     use super::*;
     use crate::{
-        contexts::SessionContext,
-        contexts::{PostgresDb, PostgresSessionContext},
+        contexts::{PostgresDb, PostgresSessionContext, SessionContext},
         ge_context,
     };
     use futures::FutureExt;
@@ -1310,7 +1309,7 @@ mod tests {
             description: "Environmental Data Retrieval".to_string(),
             priority: None,
             id: DEMO_PROVIDER_ID,
-            base_url: Url::parse(server.url_str("").strip_suffix('/').unwrap()).unwrap(),
+            base_url: Url::parse(server.url_str("/").strip_suffix('/').unwrap()).unwrap(),
             vector_spec: Some(EdrVectorSpec {
                 x: "geometry".to_string(),
                 y: None,

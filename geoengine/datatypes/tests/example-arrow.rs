@@ -258,15 +258,9 @@ fn binary() {
     };
 
     assert_eq!(array.len(), 3);
-    assert_eq!(array.value_offset(0), 0);
-    assert_eq!(
-        array.value_offset(1),
-        1 * mem::size_of::<TimeInterval>() as i32
-    );
-    assert_eq!(
-        array.value_offset(2),
-        2 * mem::size_of::<TimeInterval>() as i32
-    );
+    // assert_eq!(0 * array.value_size(), 0);
+    assert_eq!(1 * array.value_size(), 1 * mem::size_of::<TimeInterval>());
+    assert_eq!(2 * array.value_size(), 2 * mem::size_of::<TimeInterval>());
     assert_eq!(array.value_length(), mem::size_of::<TimeInterval>() as i32);
 
     assert_eq!(

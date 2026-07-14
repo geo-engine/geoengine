@@ -74,8 +74,7 @@ pub(crate) fn calculate_max_blocking_threads_per_worker() -> usize {
 
     // Taken from `actix_server::ServerBuilder`.
     // By default, server uses number of available logical CPU as thread count.
-    let number_of_workers = std::thread::available_parallelism()
-        .map_or(1, NonZeroUsize::get);
+    let number_of_workers = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
 
     // Taken from `actix_server::ServerWorkerConfig`.
     let max_blocking_threads = std::cmp::max(512 / number_of_workers, 1);

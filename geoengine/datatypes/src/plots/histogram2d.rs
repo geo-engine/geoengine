@@ -43,17 +43,13 @@ impl HistogramDimension {
         ensure!(
             bucket_count > 0,
             error::Plot {
-                details: format!(
-                    "HistogramDimension {column} must have at least one bucket."
-                )
+                details: format!("HistogramDimension {column} must have at least one bucket.")
             }
         );
         ensure!(
             min.is_finite() && max.is_finite(),
             error::Plot {
-                details: format!(
-                    "HistogramDimension {column} must have finite min/max values."
-                )
+                details: format!("HistogramDimension {column} must have finite min/max values.")
             }
         );
         ensure!(

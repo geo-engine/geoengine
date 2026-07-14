@@ -57,8 +57,7 @@ impl RegularTimeDimension {
     }
 
     pub fn valid_step(&self, time: TimeInstance) -> bool {
-        self.snap_prev(time)
-            .is_ok_and(|snapped| snapped == time)
+        self.snap_prev(time).is_ok_and(|snapped| snapped == time)
     }
 
     pub fn valid_interval(&self, time: TimeInterval) -> bool {

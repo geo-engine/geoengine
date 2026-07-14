@@ -1,20 +1,20 @@
 use anyhow::Context;
-use vergen::{BuildBuilder, CargoBuilder, Emitter};
-use vergen_gitcl::GitclBuilder;
+use vergen::{Build, Cargo, Emitter};
+use vergen_gitcl::Gitcl;
 
 fn main() -> anyhow::Result<()> {
     Emitter::default()
         .add_instructions(
             // `VERGEN_BUILD_DATE`
-            &BuildBuilder::default().build_date(true).build()?,
+            &Build::builder().build_date(true).build(),
         )?
         .add_instructions(
             // `VERGEN_CARGO_FEATURES`
-            &CargoBuilder::all_cargo()?,
+            &Cargo::all_cargo_builder().build(),
         )?
         .add_instructions(
             // `VERGEN_GIT_SHA`
-            &GitclBuilder::default().sha(true).build()?,
+            &Gitcl::builder().sha(true).build(),
         )?
         .emit_and_set()
         .context("Unable to generate version info")

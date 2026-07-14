@@ -2724,7 +2724,7 @@ mod tests {
         );
 
         let mut importer = StacImporter::new(stac_params(
-            stac_server.url_str("").trim_end_matches('/').to_string(),
+            stac_server.url_str("/").trim_end_matches('/').to_string(),
             geo_server.url_str("/api").trim_end_matches('/').to_string(),
         ))
         .await
@@ -2868,7 +2868,7 @@ mod tests {
         );
 
         let mut params = stac_params(
-            stac_server.url_str("").trim_end_matches('/').to_string(),
+            stac_server.url_str("/").trim_end_matches('/').to_string(),
             geo_server.url_str("/api").trim_end_matches('/').to_string(),
         );
         params.s3_endpoint = Some("localhost:9000".to_string());
