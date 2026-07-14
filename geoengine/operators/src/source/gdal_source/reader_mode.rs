@@ -7,7 +7,6 @@ use num::Zero;
 use crate::source::gdal_worker_process::process_common::{GdalReadAdvise, GdalReadWindow};
 pub use crate::source::gdal_worker_process::reader_mode::ReaderState;
 
-#[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
 pub enum GdalReaderMode {
     // read the original resolution
@@ -100,15 +99,6 @@ impl OverviewReaderState {
         // The intersection uses the geo_transform of the gdal dataset which enables us to adress gdal pixels starting at 0,0
         let actual_bounds_to_use_original_resolution = actual_gdal_dataset_spatial_grid_definition
             .intersection(&self.original_dataset_grid)?;
-
-        // now we map the tile we want to fill to the original grid. First, we set the tile to use the same origin coordinate as the gdal file/dataset
-        /*
-            let tile_with_overview_resolution_in_actual_space = tile.with_moved_origin_exact_grid(
-                actual_gdal_dataset_spatial_grid_definition
-                    .geo_transform()
-                    .origin_coordinate(),
-            );
-        */
 
         let (tile_with_overview_resolution_in_actual_space, distance) = tile
             .with_moved_origin_to_nearest_grid_edge_with_distance(
