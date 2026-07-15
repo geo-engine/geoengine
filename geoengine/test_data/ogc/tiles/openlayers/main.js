@@ -74,7 +74,7 @@ async function urlToBlobUrl(url, sessionToken, interceptor) {
   return URL.createObjectURL(blob);
 }
 
-async function addWgs84TileLayer(map, sessionToken) {
+async function addWgs84TileLayer(map, sessionToken, tms = "Custom") {
   const collections = await (
     await fetch(
       `${SERVER_URL}/api/layers/collections/cbb21ee3-d15d-45c5-a175-66964adf4e85/tags%3A%2A?offset=0&limit=20`,
@@ -88,8 +88,6 @@ async function addWgs84TileLayer(map, sessionToken) {
   const collection = collections.items.find((c) => c.name === "NDVI");
   const dataConnectorId = collection.id.providerId;
   const layerId = collection.id.layerId;
-
-  const tms = "GeoEngineCustomTMS";
 
   const tileUrl = `${SERVER_URL}/api/ogc/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
   console.log("Layer WGS84:", dataConnectorId, layerId, "\n" + tileUrl);
@@ -124,7 +122,11 @@ async function addWgs84TileLayer(map, sessionToken) {
   );
 }
 
-async function addWebMercatorTileLayer(map, sessionToken) {
+async function addWebMercatorTileLayer(
+  map,
+  sessionToken,
+  tms = "WebMercatorQuad",
+) {
   const collections = await (
     await fetch(
       `${SERVER_URL}/api/layers/collections/cbb21ee3-d15d-45c5-a175-66964adf4e85/tags%3A%2A?offset=0&limit=20`,
@@ -138,8 +140,6 @@ async function addWebMercatorTileLayer(map, sessionToken) {
   const collection = collections.items.find((c) => c.name === "NDVI3857");
   const dataConnectorId = collection.id.providerId;
   const layerId = collection.id.layerId;
-
-  const tms = "GeoEngineCustomTMS";
 
   const tileUrl = `${SERVER_URL}/api/ogc/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
   console.log("Layer WebMercator:", dataConnectorId, layerId, "\n" + tileUrl);
@@ -176,8 +176,6 @@ async function addWebMercatorTileLayer(map, sessionToken) {
 
 function tileLoadFunction(sessionToken) {
   return async function (olTile, src) {
-    console.log("tileLoadFunction", olTile, src);
-
     try {
       const response = await fetch(src, {
         headers: {
@@ -266,50 +264,86 @@ async function addCitiesLayer(map) {
   );
 }
 
+function createView(tms, isWgs84) {
+  if (tms === "Custom") {
+    // For Custom: WGS84 uses 4326, WebMercator uses 3857
+    const projection = isWgs84 ? "EPSG:4326" : "EPSG:3857";
+    const extent = isWgs84
+      ? [-180, -85, 180, 85]
+      : [
+          -20037508.342789244, -20037508.342789244, 20037508.342789244,
+          20037508.342789244,
+        ];
+
+    return new View({
+      center: [0, 0],
+      extent: extent,
+      zoom: 0,
+      minZoom: 0,
+      projection: projection,
+      showFullExtent: true,
+      multiWorld: true,
+    });
+  } else {
+    // For WebMercatorQuad: both use 3857
+    return new View({
+      center: [0, 0],
+      extent: [
+        -20037508.342789244, -20037508.342789244, 20037508.342789244,
+        20037508.342789244,
+      ],
+      zoom: 0,
+      minZoom: 0,
+      projection: "EPSG:3857",
+      showFullExtent: true,
+      multiWorld: true,
+    });
+  }
+}
+
 const wgs84Map = new Map({
   target: "wgs84Map",
-  layers: [
-    // new TileLayer({
-    //   source: new OSM(),
-    // }),
-  ],
-  view: new View({
-    center: [0, 0],
-    extent: [-180, -85, 180, 85],
-    zoom: 0,
-    minZoom: 0,
-    projection: "EPSG:4326",
-    showFullExtent: true,
-    multiWorld: true,
-    showFullExtent: true,
-  }),
+  layers: [],
+  view: createView("Custom", true),
 });
 
 const webMercatorMap = new Map({
   target: "webMercatorMap",
-  layers: [
-    // new TileLayer({
-    //   source: new OSM(),
-    // }),
-  ],
-  view: new View({
-    center: [0, 0],
-    extent: [
-      -20037508.342789244, -20037508.342789244, 20037508.342789244,
-      20037508.342789244,
-    ],
-    zoom: 0,
-    minZoom: 0,
-    projection: "EPSG:3857",
-    showFullExtent: true,
-    multiWorld: true,
-    showFullExtent: true,
-  }),
+  layers: [],
+  view: createView("Custom", false),
 });
 
 const sessionToken = await getSessionToken();
+
+// Get TMS selector
+const tmsSelector = document.getElementById("tms-selector");
+const initialTms = tmsSelector.value;
+
+// Update views with correct projections for initial TMS
+wgs84Map.setView(createView(initialTms, true));
+webMercatorMap.setView(createView(initialTms, false));
+
 await Promise.all([
-  addWgs84TileLayer(wgs84Map, sessionToken),
-  addWebMercatorTileLayer(webMercatorMap, sessionToken),
+  addWgs84TileLayer(wgs84Map, sessionToken, initialTms),
+  addWebMercatorTileLayer(webMercatorMap, sessionToken, initialTms),
 ]);
 await Promise.all([addCitiesLayer(wgs84Map), addCitiesLayer(webMercatorMap)]);
+
+// Add change listener to reload both maps when TMS selection changes
+tmsSelector.addEventListener("change", async () => {
+  const tms = tmsSelector.value;
+
+  // Clear and reload layers
+  wgs84Map.getLayers().clear();
+  webMercatorMap.getLayers().clear();
+
+  // Update views with new projections
+  wgs84Map.setView(createView(tms, true));
+  webMercatorMap.setView(createView(tms, false));
+
+  await Promise.all([
+    addWgs84TileLayer(wgs84Map, sessionToken, tms),
+    addWebMercatorTileLayer(webMercatorMap, sessionToken, tms),
+  ]);
+  await Promise.all([addCitiesLayer(wgs84Map), addCitiesLayer(webMercatorMap)]);
+});

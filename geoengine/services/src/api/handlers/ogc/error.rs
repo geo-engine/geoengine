@@ -39,8 +39,21 @@ pub enum OgcApiError {
         reason: String,
     },
 
+    #[snafu(display("Tile matrix `{tile_matrix}` does not exist"))]
+    TileMatrixNotFound { tile_matrix: String },
+
     #[snafu(display("Invalid tile coordinates: matrix={matrix}, row={row}, col={col}"))]
     InvalidTileCoordinates { matrix: String, row: u32, col: u32 },
+
+    #[snafu(display(
+        "Tile grid bounding box computation failed for matrix={matrix}, row={row}, col={col}"
+    ))]
+    TileGridBboxComputationFailed { matrix: String, row: u32, col: u32 },
+
+    #[snafu(display(
+        "Tile coordinates exceed bounds for matrix={matrix}: row {row} >= max_row, col {col} >= max_col"
+    ))]
+    TileCoordinatesOutOfBounds { matrix: String, row: u32, col: u32 },
 
     #[snafu(display("Received 3D bounding box, but only 2D is supported."))]
     Unsupported3DBoundingBox { coords: [f64; 6] },
@@ -73,10 +86,13 @@ impl OgcApiError {
         match self {
             Self::CollectionNotFound { .. }
             | Self::LayerNotFound { .. }
-            | Self::TileMatrixSetNotFound { .. } => StatusCode::NOT_FOUND,
+            | Self::TileMatrixSetNotFound { .. }
+            | Self::TileMatrixNotFound { .. } => StatusCode::NOT_FOUND,
             Self::ExpectedRaster { .. }
             | Self::InvalidBoundingBox { .. }
             | Self::InvalidTileCoordinates { .. }
+            | Self::TileGridBboxComputationFailed { .. }
+            | Self::TileCoordinatesOutOfBounds { .. }
             | Self::MissingSpatialReference
             | Self::MissingTime
             | Self::Unsupported3DBoundingBox { .. } => StatusCode::BAD_REQUEST,
@@ -98,9 +114,14 @@ impl OgcApiError {
             Self::Internal { .. } => "An internal error occurred",
             Self::InvalidBoundingBox { .. } => "Invalid bounding box",
             Self::InvalidTileCoordinates { .. } => "Invalid tile coordinates",
+            Self::TileGridBboxComputationFailed { .. } => {
+                "Tile grid bounding box computation failed"
+            }
+            Self::TileCoordinatesOutOfBounds { .. } => "Tile coordinates out of bounds",
             Self::LayerNotFound { .. } => "Layer not found",
             Self::MissingSpatialReference => "Missing spatial reference",
             Self::MissingTime => "Missing time",
+            Self::TileMatrixNotFound { .. } => "Tile matrix not found",
             Self::TileMatrixSetDefinitionNotAvailable { .. } => {
                 "Tile matrix set definition not available"
             }

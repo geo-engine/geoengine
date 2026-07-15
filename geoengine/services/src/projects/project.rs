@@ -267,6 +267,13 @@ impl Symbology {
             _ => None,
         }
     }
+
+    pub fn as_raster_symbology(&self) -> Option<&RasterSymbology> {
+        match self {
+            Symbology::Raster(raster) => Some(raster),
+            _ => None,
+        }
+    }
 }
 
 #[type_tag(value = "raster")]

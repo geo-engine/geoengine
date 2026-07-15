@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-   contents: read
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -64,7 +64,7 @@ jobs:
 
   geoengine-lint:
     name: "geoengine / lint"
-    
+
     runs-on: ubuntu-24.04
     container: quay.io/geoengine/devcontainer:latest
 
@@ -97,7 +97,12 @@ jobs:
     name: "geoengine / build"
 
     runs-on: ubuntu-24.04
-    container: quay.io/geoengine/devcontainer:latest
+    container:
+      image: quay.io/geoengine/devcontainer:latest
+      options: --privileged --security-opt seccomp=unconfined --security-opt apparmor=unconfined --user root # for podman to run in the container
+
+    env:
+      CONTAINERS_STORAGE_DRIVER: vfs # for podman error 126
 
     permissions:
       contents: read
@@ -123,7 +128,92 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Build
         run: just backend build "${{ matrix.build }}"
-  
+      - name: Install dependencies for OGC validation
+        if: ${{ matrix.build == '' }}
+        run: |
+          apt-get update && apt-get -y install podman # required for ogc-validator
+          just backend install # install the request-logging-proxy binary
+          service postgresql start
+
+          # Fix nested Podman container execution barriers (Exit Code 126)
+          mkdir -p /etc/containers
+          cat <<- 'EOF' > /etc/containers/containers.conf
+          [containers]
+          cgroups = "disabled"
+          default_ulimits = []
+          EOF
+      - name: Start Geo Engine
+        if: ${{ matrix.build == '' }}
+        id: ge-instance
+        run: just backend run
+        background: true
+        env:
+          GEOENGINE__WEB__EXTERNAL_ADDRESS: "http://127.0.0.1:8123/api"
+      - name: Prepare service for validation
+        if: ${{ matrix.build == '' }}
+        id: prepare-service
+        env:
+          SERVER_PORT: 3030
+          SERVER_URL: "http://127.0.0.1:3030"
+        run: |
+          just common wait-for-port $SERVER_PORT
+
+          SESSION_TOKEN=$(curl -s -X POST $SERVER_URL/api/anonymous | jq -r '.id')
+          DATA_CONNECTOR_ID=cbb21ee3-d15d-45c5-a175-66964adf4e85
+          LAYER_ID=$(curl -s \
+              --header "Accept: application/json" \
+              --header "Authorization: Bearer $SESSION_TOKEN" \
+              "$SERVER_URL/api/layers/collections/$DATA_CONNECTOR_ID/tags%3A%2A?offset=0&limit=20" \
+              | jq -r '.items[] | select(.name == "NDVI") | .id.layerId')
+
+          echo "DATA_CONNECTOR_ID=$DATA_CONNECTOR_ID"
+          echo "LAYER_ID=$LAYER_ID"
+          echo "SESSION_TOKEN=$SESSION_TOKEN"
+
+          # set outputs for the next steps
+          echo "DATA_CONNECTOR_ID=$DATA_CONNECTOR_ID" >> $GITHUB_OUTPUT
+          echo "LAYER_ID=$LAYER_ID" >> $GITHUB_OUTPUT
+          echo "SESSION_TOKEN=$SESSION_TOKEN" >> $GITHUB_OUTPUT
+      - name: Start request-logging-proxy
+        if: ${{ matrix.build == '' }}
+        id: proxy-instance
+        run: |
+          request-logging-proxy \
+            --target-url $SERVER_URL \
+            --port $PROXY_PORT \
+            --override-bearer-auth $SESSION_TOKEN \
+            --logger dev-null
+        background: true
+        env:
+          SERVER_URL: "http://127.0.0.1:3030"
+          PROXY_PORT: 8123
+          SESSION_TOKEN: ${{ steps.prepare-service.outputs.SESSION_TOKEN }}
+      - run: just common wait-for-port $PROXY_PORT
+        if: ${{ matrix.build == '' }}
+        env:
+          PROXY_PORT: 8123
+      - name: Validate service
+        if: ${{ matrix.build == '' }}
+        uses: geo-engine/ogc-validator@v3
+        with:
+          teamengine-image: "teamengine-dev:1.0-SNAPSHOT"
+          ogc-api-processes: false
+          ogc-api-features: false
+          ogc-api-tiles: true
+          service-url: ${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}
+          ogc-api-tiles-tilematrixsetdefinitionurl: "http://www.opengis.net/def/tilematrixset/OGC/1.0/WebMercatorQuad"
+          ogc-api-tiles-urltemplatefortiles: "${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}/collections/${{ steps.prepare-service.outputs.LAYER_ID }}/map/tiles/WebMercatorQuad/{tileMatrix}/{tileRow}/{tileCol}?datetime=2014-04-01T00:00:00Z"
+          ogc-api-tiles-tilematrix: "1"
+          ogc-api-tiles-mintilerow: "0"
+          ogc-api-tiles-maxtilerow: "1"
+          ogc-api-tiles-mintilecol: "0"
+          ogc-api-tiles-maxtilecol: "1"
+          ogc-api-tiles-ignore: ""
+        env:
+          PROXY_URL: "http://127.0.0.1:8123"
+      - cancel: proxy-instance
+      - cancel: ge-instance
+
   python:
     runs-on: ubuntu-24.04
     container: quay.io/geoengine/devcontainer:latest
@@ -212,7 +302,7 @@ jobs:
           compression-level: 9
           retention-days: 1
           if-no-files-found: error
-  
+
   www:
     runs-on: ubuntu-24.04
     container: quay.io/geoengine/devcontainer:latest
@@ -221,17 +311,16 @@ jobs:
       contents: read
 
     steps:
-        - name: Checkout code
-          uses: actions/checkout@v6
-        - name: Install
-          run: just www install
-        - name: Check formatting and lints
-          run: just www lint
-        - name: Build
-          run: just www build
-        - name: Idempotency check
-          run: just common check-no-changes-in-git-repo
-
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Install
+        run: just www install
+      - name: Check formatting and lints
+        run: just www lint
+      - name: Build
+        run: just www build
+      - name: Idempotency check
+        run: just common check-no-changes-in-git-repo
 
   api-client-python:
     name: "api-client / python"
@@ -338,7 +427,7 @@ jobs:
           - dashboards/ebv-analyzer
           - dashboards/ecometrics
           - dashboards/esg-indicator-service
-    
+
     steps:
       - uses: actions/checkout@v6
       - name: Install Dependencies
@@ -347,7 +436,7 @@ jobs:
         run: just ui build ${{ matrix.app }}
         env:
           CI: true
-  
+
   ui-test:
     name: "ui / test"
     runs-on: ubuntu-24.04
@@ -405,7 +494,7 @@ jobs:
   repository-coverage:
     name: "repository / coverage"
 
-    needs: 
+    needs:
       - geoengine-test
       - python
 

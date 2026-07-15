@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use image::{DynamicImage, GenericImageView};
+
 /// Compare two images
 ///
 /// # Panics
@@ -13,7 +15,7 @@ pub fn assert_image_equals(expected: &Path, found: &[u8]) {
         image::load_from_memory(&left_buf).expect("Failed to make image from `expected` path");
     let right = image::load_from_memory(found).expect("Failed to make image from `found` bytes");
 
-    assert_eq!(left, right, "Images differ: {}", expected.display());
+    assert_image_equals_helper(&left, &right, expected);
 }
 
 /// Compare two images
@@ -35,7 +37,20 @@ pub fn assert_image_equals_with_format(expected: &Path, found: &[u8], format: Im
     let right = image::load_from_memory_with_format(found, format.into())
         .expect("Failed to make image from `found` bytes");
 
-    assert_eq!(left, right, "Images differ: {}", expected.display());
+    assert_image_equals_helper(&left, &right, expected);
+}
+
+fn assert_image_equals_helper(left: &DynamicImage, right: &DynamicImage, expected: &Path) {
+    assert!(
+        left.dimensions() == right.dimensions(),
+        "Images differ in dimensions: {} ({}x{}) vs ({}x{})",
+        expected.display(),
+        left.width(),
+        left.height(),
+        right.width(),
+        right.height()
+    );
+    assert!(left == right, "Images differ: {}", expected.display());
 }
 
 /// Compare two tiff images using GDAL compare
