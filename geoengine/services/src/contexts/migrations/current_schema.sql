@@ -590,7 +590,8 @@ CREATE TABLE project_versions (
     with time zone NOT NULL
 );
 
-CREATE INDEX project_version_idx ON project_versions (project_id, changed DESC);
+CREATE INDEX CONCURRENTLY project_version_idx ON project_versions
+(project_id, changed DESC);
 
 CREATE TYPE "LayerType" AS ENUM ('Raster', 'Vector');
 
@@ -1357,7 +1358,8 @@ CREATE TABLE quota_log (
     data text
 );
 
-CREATE INDEX ON quota_log (user_id, timestamp, computation_id);
+CREATE INDEX CONCURRENTLY ON quota_log
+(user_id, timestamp, computation_id);
 
 CREATE TABLE dataset_tiles (
     id uuid NOT NULL PRIMARY KEY,

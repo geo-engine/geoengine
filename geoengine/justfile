@@ -35,7 +35,7 @@ lint-rustfmt write="": common::_clear
 # Run sqlfluff.
 [group("lint")]
 lint-sql: common::_clear
-    pipx run sqlfluff==4.0.4 lint
+    pipx run sqlfluff==4.2.2 lint
 
 # Build in dev or release mode.
 [arg('mode', pattern='|--release')]
@@ -188,5 +188,7 @@ update-step2-minor-dependencies: common::_clear
 
 [group("update")]
 update-step3-aftermath: common::_clear
-    # SQLFluff
     `./.scripts/update-expression-deps.rs`
+
+    SQLFLUFF_VERSION=$(curl -s https://pypi.org/pypi/sqlfluff/json | jq -r '.info.version') && \
+    sed -i "s/sqlfluff==[0-9.]\+/sqlfluff==$SQLFLUFF_VERSION/" justfile
