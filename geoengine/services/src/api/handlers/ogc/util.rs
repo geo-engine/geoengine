@@ -29,7 +29,8 @@ use geoengine_datatypes::{
     spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption},
 };
 use geoengine_operators::engine::{
-    InitializedRasterOperator, RasterResultDescriptor, TypedResultDescriptor, WorkflowOperatorPath,
+    InitializedRasterOperator, RasterOperator as _, RasterResultDescriptor, TypedResultDescriptor,
+    WorkflowOperatorPath,
 };
 use ogcapi_types::common::{Authority, Bbox as OgcBbox, Crs, Datetime as OgcDatetime, Link};
 use serde::{Deserialize, de::Error as _};
@@ -235,7 +236,7 @@ pub fn processing_graph_with_reprojection(
         },
         Workflow::Legacy { operator } => match operator {
             geoengine_operators::engine::TypedOperator::Raster(operator) => Workflow::Legacy {
-                operator: geoengine_operators::engine::TypedOperator::Raster(Box::new(
+                operator: geoengine_operators::engine::TypedOperator::Raster(
                     geoengine_operators::processing::Reprojection {
                         params: geoengine_operators::processing::ReprojectionParams {
                             target_spatial_reference,
@@ -247,8 +248,9 @@ pub fn processing_graph_with_reprojection(
                                     operator.clone(),
                                 ),
                         },
-                    },
-                )),
+                    }
+                    .boxed(),
+                ),
             },
             geoengine_operators::engine::TypedOperator::Vector(_) => {
                 Err(OgcApiError::ExpectedRaster {
@@ -301,21 +303,21 @@ pub fn processing_graph_with_resampling(
         },
         Workflow::Legacy { operator } => match operator {
             geoengine_operators::engine::TypedOperator::Raster(operator) => Workflow::Legacy {
-                operator: geoengine_operators::engine::TypedOperator::Raster(Box::new(
+                operator: geoengine_operators::engine::TypedOperator::Raster(
                     geoengine_operators::processing::Interpolation {
                         params: geoengine_operators::processing::InterpolationParams {
                             interpolation: geoengine_operators::processing::InterpolationMethod::NearestNeighbor,
-                            output_resolution: geoengine_operators::processing::InterpolationResolution::Fraction {
+                            output_resolution: geoengine_operators::processing::InterpolationResolution::Fraction(geoengine_operators::processing::Fraction {
                                 x: target_resolution.x,
                                 y: target_resolution.y,
-                            },
+                            }),
                             output_origin_reference: Some(target_origin),
                         },
                         sources: geoengine_operators::engine::SingleRasterSource {
                             raster: operator.clone(),
                         },
-                    },
-                )),
+                    }.boxed(),
+                ),
             },
             geoengine_operators::engine::TypedOperator::Vector(_) => {
                 Err(OgcApiError::ExpectedRaster {
