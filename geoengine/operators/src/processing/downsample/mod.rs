@@ -36,10 +36,17 @@ pub struct DownsamplingParams {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+pub struct Fraction {
+    pub x: f64,
+    pub y: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum DownsamplingResolution {
     Resolution(SpatialResolution),
-    Fraction { x: f64, y: f64 },
+    Fraction(Fraction),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -133,13 +140,19 @@ impl<O: InitializedRasterOperator> InitializedDownsampling<O> {
                 res
             }
 
-            DownsamplingResolution::Fraction { x, y } => {
-                ensure!(x >= 1.0, error::FractionMustBeOneOrLarger { f: x });
-                ensure!(y >= 1.0, error::FractionMustBeOneOrLarger { f: y });
+            DownsamplingResolution::Fraction(fraction) => {
+                ensure!(
+                    fraction.x >= 1.0,
+                    error::FractionMustBeOneOrLarger { f: fraction.x }
+                );
+                ensure!(
+                    fraction.y >= 1.0,
+                    error::FractionMustBeOneOrLarger { f: fraction.y }
+                );
 
                 SpatialResolution::new_unchecked(
-                    in_spatial_grid.spatial_resolution().x * x,
-                    in_spatial_grid.spatial_resolution().y.abs() * y, // TODO: allow negative size
+                    in_spatial_grid.spatial_resolution().x * fraction.x,
+                    in_spatial_grid.spatial_resolution().y.abs() * fraction.y, // TODO: allow negative size
                 )
             }
         };

@@ -249,7 +249,7 @@ example().catch(console.error);
 
 OGC API Collections List
 
-Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).
+Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).  Inside Geo Engine, every [&#x60;Layer&#x60;] gets its own OGC API endpoint. Inside this endpoint, this [&#x60;Layer&#x60;] is represented as a single [&#x60;Collection&#x60;](ogcapi_types::common::Collection). Therefore, the list of collections for a given layer will always contain exactly one collection, and the &#x60;collectionId&#x60; will always be the same as the [&#x60;LayerId&#x60;].  
 
 ### Example
 

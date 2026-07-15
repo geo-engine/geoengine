@@ -207,7 +207,7 @@ pub async fn collection_tilesets(configuration: &configuration::Configuration, d
     }
 }
 
-/// Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).
+/// Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).  Inside Geo Engine, every [`Layer`] gets its own OGC API endpoint. Inside this endpoint, this [`Layer`] is represented as a single [`Collection`](ogcapi_types::common::Collection). Therefore, the list of collections for a given layer will always contain exactly one collection, and the `collectionId` will always be the same as the [`LayerId`].  
 pub async fn collections(configuration: &configuration::Configuration, data_connector_id: &str, layer_id: &str, datetime: Option<&str>, bbox: Option<&str>, limit: Option<i32>, f: Option<&str>) -> Result<models::Collections, Error<CollectionsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_data_connector_id = data_connector_id;

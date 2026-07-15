@@ -18,6 +18,7 @@ exports.RasterOperatorToJSON = RasterOperatorToJSON;
 exports.RasterOperatorToJSONTyped = RasterOperatorToJSONTyped;
 exports.instanceOfRasterOperator = instanceOfRasterOperator;
 const BandFilter_1 = require("./BandFilter");
+const Downsampling_1 = require("./Downsampling");
 const Expression_1 = require("./Expression");
 const GdalSource_1 = require("./GdalSource");
 const Interpolation_1 = require("./Interpolation");
@@ -36,6 +37,8 @@ function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
     switch (json['type']) {
         case 'BandFilter':
             return Object.assign({}, (0, BandFilter_1.BandFilterFromJSONTyped)(json, true), { type: 'BandFilter' });
+        case 'Downsampling':
+            return Object.assign({}, (0, Downsampling_1.DownsamplingFromJSONTyped)(json, true), { type: 'Downsampling' });
         case 'Expression':
             return Object.assign({}, (0, Expression_1.ExpressionFromJSONTyped)(json, true), { type: 'Expression' });
         case 'GdalSource':
@@ -66,6 +69,8 @@ function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
     switch (value['type']) {
         case 'BandFilter':
             return Object.assign({}, (0, BandFilter_1.BandFilterToJSON)(value), { type: 'BandFilter' });
+        case 'Downsampling':
+            return Object.assign({}, (0, Downsampling_1.DownsamplingToJSON)(value), { type: 'Downsampling' });
         case 'Expression':
             return Object.assign({}, (0, Expression_1.ExpressionToJSON)(value), { type: 'Expression' });
         case 'GdalSource':
