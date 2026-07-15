@@ -11,7 +11,7 @@ use crate::engine::{
 };
 use crate::optimization::{OptimizableOperator, OptimizationError};
 use crate::processing::{
-    Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
+    Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution, Fraction,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -41,7 +41,7 @@ pub struct InterpolationParams {
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum InterpolationResolution {
     Resolution(SpatialResolution),
-    Fraction { x: f64, y: f64 },
+    Fraction(Fraction),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -136,13 +136,19 @@ impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
                 res
             }
 
-            InterpolationResolution::Fraction { x, y } => {
-                ensure!(x >= 1.0, error::FractionMustBeOneOrLarger { f: x });
-                ensure!(y >= 1.0, error::FractionMustBeOneOrLarger { f: y });
+            InterpolationResolution::Fraction(fraction) => {
+                ensure!(
+                    fraction.x >= 1.0,
+                    error::FractionMustBeOneOrLarger { f: fraction.x }
+                );
+                ensure!(
+                    fraction.y >= 1.0,
+                    error::FractionMustBeOneOrLarger { f: fraction.y }
+                );
 
                 SpatialResolution::new_unchecked(
-                    in_spatial_grid.spatial_resolution().x / x,
-                    in_spatial_grid.spatial_resolution().y.abs() / y,
+                    in_spatial_grid.spatial_resolution().x / fraction.x,
+                    in_spatial_grid.spatial_resolution().y.abs() / fraction.y,
                 )
             }
         };

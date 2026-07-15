@@ -1,7 +1,7 @@
 
 # Fraction
 
-Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).
+Scaling factor in x/y direction.
 
 ## Properties
 

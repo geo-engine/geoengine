@@ -9,6 +9,7 @@
  * Do not edit the class manually.
  */
 import type { BandFilter } from './BandFilter';
+import type { Downsampling } from './Downsampling';
 import type { Expression } from './Expression';
 import type { GdalSource } from './GdalSource';
 import type { Interpolation } from './Interpolation';
@@ -25,6 +26,8 @@ import type { TemporalRasterAggregation } from './TemporalRasterAggregation';
 export type RasterOperator = {
     type: 'BandFilter';
 } & BandFilter | {
+    type: 'Downsampling';
+} & Downsampling | {
     type: 'Expression';
 } & Expression | {
     type: 'GdalSource';
