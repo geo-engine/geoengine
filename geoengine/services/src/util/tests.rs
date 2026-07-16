@@ -23,7 +23,7 @@ use crate::{
         upload::{UploadId, UploadRootPath},
     },
     layers::{
-        layer::AddLayer,
+        layer::{AddLayer, LayerDefinition},
         listing::LayerCollectionProvider,
         storage::{INTERNAL_PROVIDER_ID, LayerDb},
     },
@@ -531,6 +531,41 @@ pub async fn add_file_definition_to_datasets_and_return_layer<D: GeoEngineDb>(
     .unwrap();
 
     (INTERNAL_PROVIDER_ID, layer_id)
+}
+
+/// Add a definition from a file to the layers.
+#[allow(clippy::missing_panics_doc)]
+pub async fn add_file_definition_to_layers<D: GeoEngineDb>(
+    db: &D,
+    definition: &Path,
+) -> (DataProviderId, LayerId) {
+    let def: LayerDefinition =
+        serde_json::from_reader(BufReader::new(File::open(definition).unwrap())).unwrap();
+
+    let root_collection_id = db.get_root_layer_collection_id().await.unwrap();
+
+    db.add_layer_with_id(
+        &def.id,
+        AddLayer {
+            name: def.name,
+            description: def.description,
+            workflow: def.workflow,
+            symbology: def.symbology,
+            properties: def.properties,
+            metadata: def.metadata,
+        },
+        &root_collection_id,
+    )
+    .await
+    .unwrap();
+
+    for role in [Role::registered_user_role_id(), Role::anonymous_role_id()] {
+        db.add_permission(role, def.id.clone(), Permission::Read)
+            .await
+            .unwrap();
+    }
+
+    (INTERNAL_PROVIDER_ID, def.id)
 }
 
 /// Add a definition from a file to the datasets as admin.

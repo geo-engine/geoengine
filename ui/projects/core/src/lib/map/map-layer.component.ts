@@ -514,7 +514,7 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
     async tmsBlobUrl(): Promise<string> {
         const dataConnectorId = this.dataConnectorId();
         const layerId = this.dataLayerId();
-        const tms = 'GeoEngineCustomTMS';
+        const tms = 'Custom';
 
         const tmsUrl = `${this.backend.ogcApiBaseUrl}/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
 

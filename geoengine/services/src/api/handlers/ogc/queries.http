@@ -16,20 +16,7 @@ Authorization: Bearer {{token}}
 @endpoint = http://localhost:3030/api/ogc/{{dataConnectorId}}/{{layerId}}
 @collectionEndpoint = {{endpoint}}/collections/{{layerId}}
 
-###
-
-# # @name rasterProcessGraph
-# POST http://localhost:3030/api/workflow
-# Authorization: Bearer {{token}}
-# Content-Type: application/json
-
-# {
-#     "type": "Raster",
-#     "operator": {
-#         "type": "GdalSource",
-#         "params": {"data": "ndvi"}
-#     }
-# }
+@naturalEarthCollectionEndpoint = http://localhost:3030/api/ogc/ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74/83866f7b-dcee-47b8-9242-e5636ceaf402/collections/83866f7b-dcee-47b8-9242-e5636ceaf402
 
 ###
 
@@ -57,7 +44,13 @@ Authorization: Bearer {{token}}
 ###
 
 # Tile Matrix Set
-GET {{endpoint}}/tileMatrixSets/GeoEngineCustomTMS
+GET {{endpoint}}/tileMatrixSets/Custom
+Authorization: Bearer {{token}}
+
+###
+
+# Tile Matrix Set
+GET {{endpoint}}/tileMatrixSets/CustomWebMercator
 Authorization: Bearer {{token}}
 
 ###
@@ -81,23 +74,41 @@ Authorization: Bearer {{token}}
 ###
 
 # Tileset
-GET {{collectionEndpoint}}/map/tiles/GeoEngineCustomTMS
+GET {{collectionEndpoint}}/map/tiles/Custom
 Authorization: Bearer {{token}}
 
 ###
 
 # Tile
-GET {{collectionEndpoint}}/map/tiles/GeoEngineCustomTMS/0/0/0?datetime=2014-04-01T00:00:00Z
+GET {{collectionEndpoint}}/map/tiles/Custom/0/0/0?datetime=2014-04-01T00:00:00Z
 Authorization: Bearer {{token}}
 
 ###
 
 # Tile
-GET {{collectionEndpoint}}/map/tiles/GeoEngineCustomTMS/2/1/4?datetime=2014-04-01T00:00:00Z
+GET {{collectionEndpoint}}/map/tiles/Custom/2/1/4?datetime=2014-04-01T00:00:00Z
 Authorization: Bearer {{token}}
 
 ###
 
 # Tile
-GET {{collectionEndpoint}}/map/tiles/GeoEngineCustomTMS/1/0/0?datetime=2014-01-01T00:00:00Z
+GET {{collectionEndpoint}}/map/tiles/Custom/1/0/0?datetime=2014-01-01T00:00:00Z
+Authorization: Bearer {{token}}
+
+###
+
+# Tileset
+GET {{collectionEndpoint}}/map/tiles/CustomWebMercator
+Authorization: Bearer {{token}}
+
+###
+
+# Tile
+GET {{collectionEndpoint}}/map/tiles/CustomWebMercator/0/0/0?datetime=2014-01-01T00:00:00Z
+Authorization: Bearer {{token}}
+
+###
+
+# RGB Tile
+GET {{naturalEarthCollectionEndpoint}}/map/tiles/CustomWebMercator/1/0/1?datetime=2014-01-01T00:00:00Z
 Authorization: Bearer {{token}}

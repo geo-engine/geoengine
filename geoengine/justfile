@@ -119,6 +119,21 @@ validate-ogc-compliance requests-log-file="": common::_clear
     SERVER_URL="http://localhost:$SERVER_PORT"
     PROXY_URL="http://localhost:$PROXY_PORT"
 
+    wait_for_port() {
+        local HOST=$1
+        local PORT=$2
+
+        echo "Waiting for $HOST:$PORT..."
+
+        # The loop runs as long as the Python command returns a non-zero (fail) exit code
+        # 2>/dev/null hides the ugly Python traceback errors
+        while ! python3 -c "import socket; s = socket.socket(); s.settimeout(1); s.connect(('$HOST', $PORT))" 2>/dev/null; do
+            sleep 0.5
+        done
+
+        echo "$HOST:$PORT is up and running!"
+    }
+
     # 1. Start the cargo server in the background
     GEOENGINE__WEB__EXTERNAL_ADDRESS="$PROXY_URL/api" \
     cargo run & SERVER_PID=$!
@@ -128,9 +143,7 @@ validate-ogc-compliance requests-log-file="": common::_clear
 
     # 3. Poll the port until it is active
     echo "Waiting for Rust server to spin up..."
-    while ! nc -z localhost $SERVER_PORT; do 
-        sleep 0.5
-    done
+    wait_for_port "localhost" "$SERVER_PORT"
     echo "Server is up! Fetching session and layer information..."
 
     # 3. Get session and register processing graph
@@ -158,9 +171,7 @@ validate-ogc-compliance requests-log-file="": common::_clear
 
     # 6. Poll the proxy port until it is active
     echo "Waiting for proxy server to spin up..."
-    while ! nc -z localhost $PROXY_PORT; do 
-        sleep 0.5
-    done
+    wait_for_port "localhost" "$PROXY_PORT"
     echo "Proxy server is up! Starting compliance validation..."
 
     # 7. Run the OGC compliance validation action
@@ -192,3 +203,10 @@ update-step3-aftermath: common::_clear
 
     SQLFLUFF_VERSION=$(curl -s https://pypi.org/pypi/sqlfluff/json | jq -r '.info.version') && \
     sed -i "s/sqlfluff==[0-9.]\+/sqlfluff==$SQLFLUFF_VERSION/" justfile
+
+# Run an example OGC Tiles application with OpenLayers.
+[group("example")]
+[working-directory("test_data/ogc/tiles/openlayers")]
+example-ogc-tiles: common::_clear
+    npm install
+    npm run start
