@@ -964,3 +964,108 @@ impl GdalProcessPoolAccess for Arc<GdalProcessPool> {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use float_cmp::assert_approx_eq;
+    use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
+
+    /// Creates a window from min/max `[row, col]` indices.
+    fn window(min: [isize; 2], max: [isize; 2]) -> GridBoundingBox2D {
+        GridBoundingBox2D::new(GridIdx2D::new(min), GridIdx2D::new(max)).unwrap()
+    }
+
+    // --- calculate_grid_distance ---
+
+    #[test]
+    fn same_window() {
+        let w = window([0, 0], [7, 7]);
+        assert_approx_eq!(f64, calculate_grid_distance(&w, &w), 0.0);
+    }
+
+    #[test]
+    fn overlapping_windows() {
+        let a = window([0, 0], [7, 7]);
+        let b = window([4, 4], [11, 11]);
+        assert_approx_eq!(f64, calculate_grid_distance(&a, &b), 4.0);
+    }
+
+    #[test]
+    fn disjoint_far_apart() {
+        let a = window([0, 0], [7, 7]);
+        let b = window([100, 200], [107, 207]);
+        assert_approx_eq!(f64, calculate_grid_distance(&a, &b), 200.0);
+    }
+
+    #[test]
+    fn single_axis_offset() {
+        let a = window([0, 0], [7, 7]);
+        let b = window([50, 0], [57, 7]);
+        assert_approx_eq!(f64, calculate_grid_distance(&a, &b), 50.0);
+    }
+
+    // --- WorkerAffinity::calculate_score ---
+
+    fn make_affinity(dataset_hash: u64, band: usize, window: GridBoundingBox2D) -> WorkerAffinity {
+        WorkerAffinity {
+            dataset_hash,
+            band,
+            spatial_window: window,
+            timestamp: Instant::now(),
+        }
+    }
+
+    #[test]
+    fn score_exact_match_fresh() {
+        let w = window([100, 100], [200, 200]);
+        let aff = make_affinity(42, 1, w.clone());
+        let score = aff.calculate_score(42, 1, &w, aff.timestamp);
+
+        assert_approx_eq!(
+            f64,
+            score,
+            SCORE_DATASET_MATCH + SCORE_BAND_MATCH + SCORE_EXACT_WINDOW_MATCH
+        );
+    }
+
+    #[test]
+    fn score_nearby_window() {
+        let w = window([100, 100], [200, 200]);
+        let aff = make_affinity(42, 1, window([100, 101], [200, 201]));
+        let score = aff.calculate_score(42, 1, &w, aff.timestamp);
+
+        // Chebyshev(|100-100|, |101-100|) = 1
+        let expected =
+            SCORE_DATASET_MATCH + SCORE_BAND_MATCH + (SCORE_NEARBY_WINDOW_MAX / (1.0 + 1.0));
+        assert_approx_eq!(f64, score, expected);
+    }
+
+    #[test]
+    fn score_different_band_same_dataset() {
+        let w = window([0, 0], [7, 7]);
+        let aff = make_affinity(42, 1, w.clone());
+        let score = aff.calculate_score(42, 2, &w, aff.timestamp);
+
+        assert_approx_eq!(f64, score, SCORE_DATASET_MATCH);
+    }
+
+    #[test]
+    fn score_different_dataset() {
+        let w = window([0, 0], [7, 7]);
+        let aff = make_affinity(42, 1, w.clone());
+        let score = aff.calculate_score(99, 1, &w, aff.timestamp);
+
+        assert_approx_eq!(f64, score, 0.0);
+    }
+
+    #[test]
+    fn score_expired_cache() {
+        let w = window([0, 0], [7, 7]);
+        let mut aff = make_affinity(42, 1, w.clone());
+        aff.timestamp = Instant::now() - Duration::from_secs_f64(CACHE_TTL_SECS + 1.0);
+        let score = aff.calculate_score(42, 1, &w, Instant::now());
+
+        assert_approx_eq!(f64, score, 0.0);
+    }
+}
