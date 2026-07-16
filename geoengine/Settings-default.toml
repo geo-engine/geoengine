@@ -181,7 +181,7 @@ scopes = []
 
 [open_telemetry]
 enabled = false
-endpoint = "127.0.0.1:6831"
+endpoint = "http://127.0.0.1:4317"
 
 [gdal_process_pool.worker.gdal_config_options]
 # Process-global GDAL config options applied once when a GDAL worker process starts.

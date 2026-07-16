@@ -429,7 +429,7 @@ impl Default for OpenTelemetryConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            endpoint: "127.0.0.1:6831".to_string(),
+            endpoint: "http://127.0.0.1:4317".to_string(),
         }
     }
 }
@@ -550,7 +550,7 @@ impl ConfigElement for Oidc {
 #[derive(Debug, Deserialize)]
 pub struct OpenTelemetry {
     pub enabled: bool,
-    pub endpoint: SocketAddr,
+    pub endpoint: String,
 }
 
 impl ConfigElement for OpenTelemetry {
