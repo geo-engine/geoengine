@@ -548,7 +548,8 @@ CREATE TABLE project_versions (
     with time zone NOT NULL
 );
 
-CREATE INDEX CONCURRENTLY project_version_idx ON project_versions
+-- PG01: cannot use CONCURRENTLY in transaction block
+CREATE INDEX project_version_idx ON project_versions -- noqa: PG01
 (project_id, changed DESC);
 
 CREATE TYPE "LayerType" AS ENUM ('Raster', 'Vector');
@@ -1180,7 +1181,8 @@ CREATE TABLE quota_log (
     data text
 );
 
-CREATE INDEX CONCURRENTLY ON quota_log
+-- PG01: cannot use CONCURRENTLY in transaction block
+CREATE INDEX ON quota_log -- noqa: PG01
 (user_id, timestamp, computation_id);
 
 
