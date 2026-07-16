@@ -5,6 +5,7 @@ use crate::engine::{
 use crate::error::Error;
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
 use crate::source::GdalDatasetParameters;
+use crate::source::gdal_worker_process::{GdalReaderMode, OverviewReaderState, ReaderState};
 use crate::source::multi_band_gdal_source::reader::GdalPoolReader;
 use crate::{
     engine::{
@@ -30,7 +31,6 @@ use geoengine_datatypes::{
 };
 pub use loading_info::{GdalMultiBand, MultiBandGdalLoadingInfo, TileFile};
 use num::{FromPrimitive, integer::div_ceil, integer::div_floor};
-use reader_mode::{GdalReaderMode, OverviewReaderState, ReaderState};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
@@ -40,7 +40,6 @@ use tracing::{debug, trace};
 mod error;
 mod loading_info;
 mod reader;
-mod reader_mode;
 
 /// Parameters for the GDAL Source Operator
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]

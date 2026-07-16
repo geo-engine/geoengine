@@ -11,11 +11,11 @@ use tracing::{debug, trace};
 
 use crate::source::{
     MultiBandGdalLoadingInfo, MultiBandGdalSourceError,
+    gdal_worker_process::GdalReaderMode,
     gdal_worker_process::{
         GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError, GdalProcessReadResult,
         GridAndProperties, process_common::GdalReadAdvise,
     },
-    multi_band_gdal_source::reader_mode::GdalReaderMode,
 };
 
 pub(crate) struct GdalPoolReader(GdalPoolDispatcher);

@@ -5,6 +5,7 @@ use crate::engine::{
 };
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
 use crate::source::gdal_source::reader::GdalPoolReader;
+use crate::source::gdal_worker_process::{GdalReaderMode, OverviewReaderState, ReaderState};
 use crate::{
     engine::{
         InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
@@ -41,7 +42,6 @@ use num::{
     FromPrimitive,
     integer::{div_ceil, div_floor},
 };
-use reader_mode::{GdalReaderMode, OverviewReaderState, ReaderState};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
@@ -51,7 +51,6 @@ mod db_types;
 pub mod error;
 pub mod loading_info;
 mod reader;
-mod reader_mode;
 
 /// Parameters for the GDAL Source Operator
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -329,9 +328,12 @@ where
             None => GdalReaderMode::OriginalResolution(ReaderState {
                 dataset_spatial_grid: grid_produced_by_source,
             }),
-            Some(original_resolution_spatial_grid) => GdalReaderMode::OverviewLevel(
-                OverviewReaderState::new(original_resolution_spatial_grid),
-            ),
+            Some(original_resolution_spatial_grid) => {
+                GdalReaderMode::OverviewLevel(OverviewReaderState {
+                    original_dataset_grid: original_resolution_spatial_grid,
+                    overview_level: self.overview_level,
+                })
+            }
         };
 
         let loading_info = self.meta_data.loading_info(query.clone()).await?;

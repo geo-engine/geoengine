@@ -15,6 +15,7 @@ pub use grid_and_properties::GridAndProperties;
 pub use process_impl::{OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig};
 pub use process_pool::{GdalPoolDispatcher, GdalProcessPool, GdalProcessPoolError};
 pub use reader::{GdalPoolReader, GdalProcessReadResult};
+pub use reader_mode::{GdalReaderMode, OverviewReaderState, ReaderState};
 
 pub trait GdalProcessPoolAccess {
     fn get_gdal_pool(&self) -> &std::sync::Arc<GdalProcessPool>;
