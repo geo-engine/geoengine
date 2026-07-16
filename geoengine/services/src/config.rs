@@ -384,7 +384,7 @@ pub struct GdalProcessPool {
 #[derive(Debug, Default, Deserialize)]
 pub struct GdalProcessPoolWorkerConfig {
     #[serde(default)]
-    pub gdal_config_options: Option<Vec<(String, String)>>,
+    pub gdal_config_options: Option<std::collections::HashMap<String, String>>,
     #[serde(default)]
     pub logging: WorkerLoggingConfig,
     #[serde(default)]
@@ -434,8 +434,6 @@ impl Default for OpenTelemetryConfig {
     }
 }
 
-
-
 impl ConfigElement for GdalProcessPool {
     const KEY: &'static str = "gdal_process_pool";
 }
@@ -447,7 +445,7 @@ impl From<GdalProcessPoolWorkerConfig>
         config: GdalProcessPoolWorkerConfig,
     ) -> geoengine_operators::source::gdal_worker_process::WorkerConfig {
         geoengine_operators::source::gdal_worker_process::WorkerConfig {
-            gdal_config_options: config.gdal_config_options,
+            gdal_config_options: config.gdal_config_options.map(|m| m.into_iter().collect()),
             logging: geoengine_operators::source::gdal_worker_process::WorkerLoggingConfig {
                 log_spec: config.logging.log_spec,
                 stderr_log_spec: config.logging.stderr_log_spec,
