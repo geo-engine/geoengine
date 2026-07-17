@@ -203,9 +203,6 @@ VSI_CACHE_SIZE = "67108864" # 64mb per worker! TODO: need to tune this!
 # Logging for the GDAL worker processes. Independent from the main `[logging]` section because
 # there are many worker processes and their log volume differs from the main process.
 log_spec = "info"
-# Log level for the worker's stderr output. Set to "warn" to avoid drowning the main process's
-# stderr in worker trace messages when file logging is enabled.
-stderr_log_spec = "warn"
 log_to_file = false
 filename_prefix = "geo_engine_worker"
 # log_directory = "/var/log/"

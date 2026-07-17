@@ -395,8 +395,6 @@ pub struct GdalProcessPoolWorkerConfig {
 pub struct WorkerLoggingConfig {
     pub log_spec: String,
     #[serde(default)]
-    pub stderr_log_spec: String,
-    #[serde(default)]
     pub log_to_file: bool,
     #[serde(default = "default_worker_log_prefix")]
     pub filename_prefix: String,
@@ -411,7 +409,6 @@ impl Default for WorkerLoggingConfig {
     fn default() -> Self {
         Self {
             log_spec: "info".to_string(),
-            stderr_log_spec: "info".to_string(),
             log_to_file: false,
             filename_prefix: default_worker_log_prefix(),
             log_directory: None,
@@ -448,10 +445,10 @@ impl From<GdalProcessPoolWorkerConfig>
             gdal_config_options: config.gdal_config_options.map(|m| m.into_iter().collect()),
             logging: geoengine_operators::source::gdal_worker_process::WorkerLoggingConfig {
                 log_spec: config.logging.log_spec,
-                stderr_log_spec: config.logging.stderr_log_spec,
                 log_to_file: config.logging.log_to_file,
                 filename_prefix: config.logging.filename_prefix,
                 log_directory: config.logging.log_directory,
+                worker_id: 0,
             },
             open_telemetry: geoengine_operators::source::gdal_worker_process::OpenTelemetryConfig {
                 enabled: config.open_telemetry.enabled,

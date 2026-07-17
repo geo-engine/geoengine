@@ -82,6 +82,14 @@ pub struct ChildProcessGuard {
     child: std::process::Child,
 }
 
+#[cfg(test)]
+impl ChildProcessGuard {
+    /// Wraps an already-running child in a guard. For unit tests only.
+    pub(crate) fn from_child(child: std::process::Child) -> Self {
+        Self { child }
+    }
+}
+
 impl Drop for ChildProcessGuard {
     fn drop(&mut self) {
         // Forcefully kill the process when the guard is dropped
@@ -106,12 +114,12 @@ pub struct WorkerConfig {
 pub struct WorkerLoggingConfig {
     pub log_spec: String,
     #[serde(default)]
-    pub stderr_log_spec: String,
-    #[serde(default)]
     pub log_to_file: bool,
     #[serde(default = "default_worker_log_prefix")]
     pub filename_prefix: String,
     pub log_directory: Option<String>,
+    /// Set by the pool at spawn time. Used in log filenames to separate per-worker output.
+    pub worker_id: usize,
 }
 
 fn default_worker_log_prefix() -> String {
@@ -122,10 +130,10 @@ impl Default for WorkerLoggingConfig {
     fn default() -> Self {
         Self {
             log_spec: "info".to_string(),
-            stderr_log_spec: "info".to_string(),
             log_to_file: false,
             filename_prefix: default_worker_log_prefix(),
             log_directory: None,
+            worker_id: 0,
         }
     }
 }
@@ -293,9 +301,17 @@ impl GdalDatasetHolder {
         let hit = Self::is_hit(self.params.as_ref(), params);
 
         if hit {
+            let _span = tracing::debug_span!("gdal_dataset_cache_hit").entered();
             Ok(self.dataset.as_mut().expect("Dataset must be set"))
         } else {
             let _prev_dataset = self.clear(); // keep old dataset alive untill new one to keep Gdal internal cache alive
+
+            let _span = tracing::debug_span!(
+                "gdal_dataset_open",
+                path = %params.file_path.display(),
+                band = params.rasterband_channel,
+            )
+            .entered();
 
             let (ds, tlo) = Self::open_ex(params)?;
 
@@ -408,14 +424,26 @@ impl GdalHandling {
         T: Pixel + GdalType + Default + FromPrimitive,
         D: Clone + GridSize + PartialEq,
     {
+        let _span = tracing::debug_span!(
+            "gdal_rasterband_read",
+            window = %format!("({},{})", read_window.size_x, read_window.size_y),
+        )
+        .entered();
         let gdal_out_shape = (out_shape.axis_size_x(), out_shape.axis_size_y());
 
+        let read_start = Instant::now();
         let buffer = rasterband.read_as::<T>(
             read_window.gdal_window_start(), // pixelspace origin
             read_window.gdal_window_size(),  // pixelspace size
             gdal_out_shape,                  // requested raster size
             None,                            // sampling mode
         )?;
+        let read_duration = read_start.elapsed();
+        tracing::debug!(
+            "GDAL rasterband read took {read_duration:?} for window size ({}, {})",
+            read_window.size_x,
+            read_window.size_y,
+        );
         let (_, buffer_data) = buffer.into_shape_and_vec();
 
         let dataset_mask_flags = rasterband.mask_flags()?;
@@ -541,6 +569,12 @@ impl GdalHandling {
         dataset_params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
     ) -> Result<GdalIpcPayload<T>, IpcProcessError> {
+        let _span = tracing::debug_span!(
+            "gdal_load_tile_data",
+            data_type = ?T::TYPE,
+            window = ?read_advise.bounds_of_target,
+        )
+        .entered();
         let start = Instant::now();
 
         debug!(
@@ -834,6 +868,7 @@ mod tests {
                 retry: None,
             },
             read_advise,
+            read_id: None,
         };
 
         let msg = IpcChannelMessage::new_request_tile_message(payload);
@@ -902,6 +937,7 @@ mod tests {
                 retry: None,
             },
             read_advise,
+            read_id: None,
         };
 
         let msg = IpcChannelMessage::new_request_tile_message(payload);

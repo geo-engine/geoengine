@@ -71,6 +71,10 @@ pub struct IpcChannelMessagePayload {
     pub read_advise: GdalReadAdvise,
     /// We use this to know what type we serialize
     pub data_type: RasterDataType,
+    /// Correlation ID for tracing: `{hash}-{nanos}`. Used to link the main process
+    /// caller span with the worker process span for the same logical read.
+    #[serde(default)]
+    pub read_id: Option<String>,
 }
 
 pub type IpcProcessRasterResult = Result<GdalIpcBytePayload, IpcProcessError>;

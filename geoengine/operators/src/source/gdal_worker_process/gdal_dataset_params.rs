@@ -17,7 +17,12 @@ use std::{
     collections::HashMap,
     hash::{Hash, Hasher},
     path::PathBuf,
+    time::SystemTime,
 };
+
+use rustc_hash::FxHasher;
+
+use super::process_common::GdalReadAdvise;
 
 /// Parameters for loading data using Gdal
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
@@ -117,6 +122,24 @@ impl GdalDatasetParameters {
         if let Some(nd) = self.no_data_value {
             nd.to_bits().hash(state);
         }
+    }
+
+    /// Hash all fields that determine read identity, plus `read_advise`.
+    pub fn read_id_hash<H: Hasher>(&self, state: &mut H, read_advise: &GdalReadAdvise) {
+        self.full_hash(state);
+        read_advise.hash(state);
+    }
+
+    /// Generate a unique read ID: content hash + nanosecond timestamp.
+    pub fn create_read_id(&self, read_advise: &GdalReadAdvise) -> String {
+        let mut hasher = FxHasher::default();
+        self.read_id_hash(&mut hasher, read_advise);
+        let hash = hasher.finish();
+        let nanos = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("SystemTime before UNIX_EPOCH")
+            .as_nanos();
+        format!("{hash:x}-{nanos}")
     }
 }
 

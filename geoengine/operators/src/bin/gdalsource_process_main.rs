@@ -94,7 +94,7 @@ fn set_gdal_process_global_options(options: &[(String, String)]) {
     }
 }
 
-/// Initializes a tracing subscriber. Writes to stderr (filtered by `stderr_log_spec`) and,
+/// Initializes a tracing subscriber. Writes to stderr (filtered by `log_spec`) and,
 /// if enabled, to a per-worker rolling log file (filtered by `log_spec`). The filename includes
 /// the worker's IPC token so multiple workers do not corrupt a shared file.
 ///
@@ -102,18 +102,22 @@ fn set_gdal_process_global_options(options: &[(String, String)]) {
 /// tracer provider is returned so it can be flushed on shutdown.
 ///
 /// # Panics
-/// Panics if `log_spec` or `stderr_log_spec` cannot be parsed as an `EnvFilter`.
+/// Panics if `log_spec` cannot be parsed as an `EnvFilter`.
 fn init_subscriber(
     logging_config: &WorkerLoggingConfig,
     open_telemetry_config: &OpenTelemetryConfig,
     token: &str,
 ) -> (Option<SdkTracerProvider>, Option<WorkerGuard>) {
     let stderr_layer = tracing_subscriber::fmt::layer()
+        .pretty()
+        .with_file(false)
+        .with_target(true)
+        .with_ansi(true)
         .with_writer(std::io::stderr)
-        .with_filter(EnvFilter::new(&logging_config.stderr_log_spec));
+        .with_filter(EnvFilter::new(&logging_config.log_spec));
 
     let (file_layer, file_guard) = if logging_config.log_to_file {
-        let (layer, guard) = file_layer_with_filter(logging_config, token);
+        let (layer, guard) = file_layer_with_filter(logging_config);
         (Some(layer), Some(guard))
     } else {
         (None, None)
@@ -146,8 +150,10 @@ fn init_subscriber(
             )
             .build();
 
-        let opentelemetry =
-            tracing_opentelemetry::layer().with_tracer(provider.tracer("gdal-worker"));
+        let opentelemetry_filter = EnvFilter::new(&logging_config.log_spec);
+        let opentelemetry = tracing_opentelemetry::layer()
+            .with_tracer(provider.tracer("gdal-worker"))
+            .with_filter(opentelemetry_filter);
 
         tracing_subscriber::registry()
             .with(stderr_layer)
@@ -181,7 +187,6 @@ impl<'writer> FormatFields<'writer> for FileFormatterWorkaround {
 
 fn file_layer_with_filter<S>(
     logging_config: &WorkerLoggingConfig,
-    token: &str,
 ) -> (impl Layer<S> + use<S>, WorkerGuard)
 where
     S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
@@ -189,7 +194,10 @@ where
     // ponytail: short retention because number_of_processes workers each produce rotated files.
     let file_appender = RollingFileAppender::builder()
         .max_log_files(3)
-        .filename_prefix(format!("{}-{}", logging_config.filename_prefix, token))
+        .filename_prefix(format!(
+            "{}-{}",
+            logging_config.filename_prefix, logging_config.worker_id,
+        ))
         .filename_suffix("log")
         .rotation(Rotation::DAILY)
         .build(logging_config.log_directory.as_deref().unwrap_or("./"))
@@ -293,6 +301,14 @@ fn run(token: Token) {
     while let Ok(message) = receiver.recv() {
         let payload = message.0;
 
+        let _span = tracing::debug_span!(
+            "gdal_worker_request",
+            read_id = payload.read_id.as_deref().unwrap_or(""),
+            dataset = %payload.dataset_params.file_path.display(),
+            band = payload.dataset_params.rasterband_channel,
+        )
+        .entered();
+
         // If helper returns an error, it means the underlying IPC channel is completely broken
         if let Err(err) = raster_type_dispatch(payload, &mut dataset_cache, &sender) {
             eprintln!("Fatal IPC channel error: {err:?}. Exiting worker thread.");
@@ -306,6 +322,7 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
         dataset_params,
         read_advise,
         data_type: _,
+        read_id: _,
     }: IpcChannelMessagePayload,
     dataset_cache: &mut GdalDatasetHolder,
     sender: &IpcSender<IpcProcessRasterResult>,

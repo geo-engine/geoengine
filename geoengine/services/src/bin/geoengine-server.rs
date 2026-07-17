@@ -60,7 +60,10 @@ pub async fn start_server() -> Result<()> {
     // create a telemetry layer for output to opentelemetry and add it to the registry
     let open_telemetry_config: geoengine_services::config::OpenTelemetry = get_config_element()?;
     let opentelemetry_layer = if open_telemetry_config.enabled {
-        Some(open_telemetry_layer(&open_telemetry_config)?)
+        Some(open_telemetry_layer(
+            &open_telemetry_config,
+            &logging_config.log_spec,
+        )?)
     } else {
         None
     };
@@ -74,12 +77,8 @@ pub async fn start_server() -> Result<()> {
 
 fn open_telemetry_layer<S>(
     open_telemetry_config: &geoengine_services::config::OpenTelemetry,
-) -> Result<
-    tracing_opentelemetry::OpenTelemetryLayer<
-        S,
-        impl opentelemetry::trace::Tracer<Span: Send + Sync> + use<S>,
-    >,
->
+    log_spec: &str,
+) -> Result<impl Layer<S>>
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
@@ -104,8 +103,11 @@ where
         .build();
 
     let tracer = provider.tracer("Geo Engine");
+    let opentelemetry_filter = EnvFilter::new(log_spec);
 
-    let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+    let opentelemetry = tracing_opentelemetry::layer()
+        .with_tracer(tracer)
+        .with_filter(opentelemetry_filter);
     Ok(opentelemetry)
 }
 

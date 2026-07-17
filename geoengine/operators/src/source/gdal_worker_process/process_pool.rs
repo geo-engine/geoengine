@@ -385,8 +385,11 @@ impl GdalProcessPool {
         ),
         GdalProcessPoolError,
     > {
+        let mut config = worker_config.clone();
+        config.logging.worker_id = worker_id;
+
         let (guard, tx, rx) =
-            spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>(worker_config)?;
+            spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>(&config)?;
 
         let (job_tx, mut job_rx) = mpsc::unbounded_channel();
 
@@ -411,6 +414,15 @@ impl GdalProcessPool {
             let window = job.request.0.read_advise.read_window_bounds;
             let band = job.request.0.dataset_params.rasterband_channel;
             let dataset_hash = job.dataset_hash;
+
+            let _span = tracing::info_span!(
+                "gdal_worker_companion",
+                worker_id = worker_id,
+                read_id = job.request.0.read_id.as_deref().unwrap_or(""),
+                dataset = %job.request.0.dataset_params.file_path.display(),
+                band = band,
+            )
+            .entered();
 
             let res = sender
                 .send(job.request)
@@ -741,11 +753,21 @@ impl BrokerState {
             self.global_active_count += 1;
             slot.active_count += 1;
 
-            let _ = worker.job_tx.send(WorkerJob {
-                request: req.request,
-                respond_to: req.respond_to,
-                dataset_hash: req.dataset_hash,
-            });
+            {
+                let _span = tracing::debug_span!(
+                    "gdal_broker_dispatch",
+                    worker_id = worker_id,
+                    dataset = %req.request.0.dataset_params.file_path.display(),
+                    read_id = req.request.0.read_id.as_deref().unwrap_or(""),
+                )
+                .entered();
+
+                let _ = worker.job_tx.send(WorkerJob {
+                    request: req.request,
+                    respond_to: req.respond_to,
+                    dataset_hash: req.dataset_hash,
+                });
+            }
 
             slot.clean_canceled_front();
 
@@ -1067,5 +1089,229 @@ mod tests {
         let score = aff.calculate_score(42, 1, &w, Instant::now());
 
         assert_approx_eq!(f64, score, 0.0);
+    }
+
+    // --- BrokerState dispatch tests ---
+
+    use crate::source::gdal_worker_process::gdal_dataset_params::{
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+    };
+    use crate::source::gdal_worker_process::process_common::{
+        GdalDataGridByteVariant, GdalIpcRasterProperties, GdalReadAdvise, GdalReadWindow,
+        IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
+    };
+    use geoengine_datatypes::primitives::Coordinate2D;
+    use geoengine_datatypes::raster::{GridShape2D, RasterDataType};
+
+    /// Spawns an immediately-exited process wrapped in `ChildProcessGuard`.
+    /// The `mpsc::unbounded_channel()` receiver captures dispatched `WorkerJob`s.
+    fn dummy_worker(id: usize) -> (WorkerProcess, mpsc::UnboundedReceiver<WorkerJob>) {
+        let child = std::process::Command::new("true")
+            .spawn()
+            .expect("failed to spawn dummy process");
+        let (job_tx, job_rx) = mpsc::unbounded_channel();
+        let wp = WorkerProcess {
+            _id: id,
+            job_tx,
+            child_guard: ChildProcessGuard::from_child(child),
+            affinity: None,
+        };
+        (wp, job_rx)
+    }
+
+    fn make_params(file_path: &str, band: usize) -> GdalDatasetParameters {
+        GdalDatasetParameters {
+            file_path: file_path.into(),
+            rasterband_channel: band,
+            geo_transform: GdalDatasetGeoTransform {
+                origin_coordinate: Coordinate2D::new(0.0, 0.0),
+                x_pixel_size: 1.0,
+                y_pixel_size: -1.0,
+            },
+            width: 256,
+            height: 256,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: Some(0.0),
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: false,
+            retry: None,
+        }
+    }
+
+    fn make_request(
+        dataset_hash: u64,
+        band: usize,
+        w: GridBoundingBox2D,
+    ) -> (
+        Box<QueuedRequest>,
+        oneshot::Receiver<Result<IpcProcessRasterResult, GdalProcessPoolError>>,
+    ) {
+        let (tx, rx) = oneshot::channel();
+        let msg = IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
+            dataset_params: make_params("test.tif", band),
+            read_advise: GdalReadAdvise {
+                gdal_read_widow: GdalReadWindow::new(
+                    GridIdx2D::new([0, 0]),
+                    GridShape2D::new([256, 256]),
+                ),
+                read_window_bounds: w.clone(),
+                bounds_of_target: w.clone(),
+                flip_y: false,
+            },
+            data_type: RasterDataType::U8,
+            read_id: None,
+        });
+        let req = Box::new(QueuedRequest {
+            dataset_hash,
+            request: msg,
+            respond_to: tx,
+        });
+        (req, rx)
+    }
+
+    #[test]
+    fn dispatch_single_request() {
+        let (w0, mut rx0) = dummy_worker(0);
+        let (w1, _rx1) = dummy_worker(1);
+
+        let mut state = BrokerState::new(vec![w0, w1], 2, 4, SchedulingStrategy::GlobalMatrix);
+        let w = window([0, 0], [255, 255]);
+        let (req, _resp_rx) = make_request(100, 1, w);
+
+        state.enqueue_request(req);
+        assert_eq!(state.global_active_count, 0);
+
+        state.try_dispatch();
+
+        assert_eq!(state.global_active_count, 1);
+        assert!(state.idle_workers.len() < 2);
+
+        let job = rx0.try_recv().expect("worker 0 should have received a job");
+        assert_eq!(job.dataset_hash, 100);
+    }
+
+    #[test]
+    fn release_returns_worker_to_idle() {
+        let (w0, mut rx0) = dummy_worker(0);
+        let mut state = BrokerState::new(vec![w0], 2, 4, SchedulingStrategy::GlobalMatrix);
+        let w = window([0, 0], [255, 255]);
+        let (req, _resp_rx) = make_request(100, 1, w);
+
+        state.enqueue_request(req);
+        state.try_dispatch();
+        let job = rx0.try_recv().unwrap();
+
+        assert_eq!(state.idle_workers.len(), 0);
+        assert_eq!(state.global_active_count, 1);
+
+        state.release_worker(0, job.dataset_hash, 1, window([0, 0], [255, 255]));
+
+        assert_eq!(state.idle_workers.len(), 1);
+        assert_eq!(state.idle_workers[0], 0);
+        assert_eq!(state.global_active_count, 0);
+        assert!(state.workers[0].affinity.is_some());
+    }
+
+    #[test]
+    fn round_robin_across_datasets() {
+        let (w0, mut rx0) = dummy_worker(0);
+        let mut state = BrokerState::new(vec![w0], 2, 4, SchedulingStrategy::GlobalMatrix);
+
+        let wa = window([0, 0], [255, 255]);
+        let wb = window([0, 0], [255, 255]);
+        let (req_a, resp_a) = make_request(100, 1, wa);
+        let (req_b, resp_b) = make_request(200, 1, wb);
+
+        state.enqueue_request(req_a);
+        state.enqueue_request(req_b);
+
+        state.try_dispatch();
+        let first = rx0.try_recv().unwrap().dataset_hash;
+        assert_eq!(state.global_active_count, 1);
+
+        state.release_worker(0, first, 1, window([0, 0], [255, 255]));
+        state.try_dispatch();
+        let second = rx0.try_recv().unwrap().dataset_hash;
+
+        assert_ne!(first, second);
+        assert_eq!(state.global_active_count, 1);
+
+        drop((resp_a, resp_b));
+    }
+
+    #[test]
+    fn affinity_preference() {
+        let (mut w0, mut rx0) = dummy_worker(0);
+        w0.affinity = Some(make_affinity(100, 1, window([0, 0], [255, 255])));
+        let (w1, _rx1) = dummy_worker(1);
+
+        let mut state = BrokerState::new(vec![w0, w1], 2, 4, SchedulingStrategy::GlobalMatrix);
+        let w = window([0, 0], [255, 255]);
+        let (req, _resp) = make_request(100, 1, w);
+
+        state.enqueue_request(req);
+        state.try_dispatch();
+
+        let job = rx0
+            .try_recv()
+            .expect("worker 0 should have received the job (affinity match)");
+        assert_eq!(job.dataset_hash, 100);
+    }
+
+    // --- Leader/follower dedup test ---
+
+    #[tokio::test]
+    async fn dedup_sends_only_one_broker_read() {
+        let (broker_tx, mut broker_rx) = mpsc::channel::<BrokerCommand>(64);
+        let read_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let read_count_clone = read_count.clone();
+
+        let pool = Arc::new(GdalProcessPool {
+            broker_tx,
+            dedup_requests: true,
+            in_flight_tiles: Mutex::new(FastHashMap::default()),
+        });
+
+        // Mock broker: respond to every Read with a fixed success result.
+        tokio::spawn(async move {
+            while let Some(cmd) = broker_rx.recv().await {
+                if let BrokerCommand::Read(req) = cmd {
+                    read_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    let _ = req.respond_to.send(Ok(Ok(GdalIpcBytePayload {
+                        dimensions: window([0, 0], [7, 7]),
+                        properties: GdalIpcRasterProperties {
+                            offset: None,
+                            scale: None,
+                            description: None,
+                            properties_map: vec![],
+                        },
+                        data_variant: GdalDataGridByteVariant::Empty,
+                    })));
+                }
+            }
+        });
+
+        let dispatcher = GdalPoolDispatcher::new(pool);
+
+        let w = window([0, 0], [255, 255]);
+        let (msg_a, _) = make_request(42, 1, w.clone());
+        let (msg_b, _) = make_request(42, 1, w);
+
+        let d1 = dispatcher.clone();
+        let d2 = dispatcher.clone();
+        let (r1, r2) = tokio::join!(
+            async move { d1.read_data::<u8>(msg_a.request).await },
+            async move { d2.read_data::<u8>(msg_b.request).await },
+        );
+
+        assert!(r1.is_ok());
+        assert!(r2.is_ok());
+        assert_eq!(
+            read_count.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "only one BrokerCommand::Read should have been sent (dedup)"
+        );
     }
 }

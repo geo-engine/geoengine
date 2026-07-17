@@ -1,6 +1,7 @@
 use gdal::raster::GdalType;
 use geoengine_datatypes::raster::{GridBoundingBox2D, GridOrEmpty, MaskedGrid, Pixel};
 use num::FromPrimitive;
+use tracing::Instrument;
 
 use crate::source::gdal_worker_process::{
     FileNotFoundHandling, GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError,
@@ -52,13 +53,30 @@ impl GdalPoolReader {
         let file_not_found_as_no_data =
             dataset_params.file_not_found_handling == FileNotFoundHandling::NoData;
 
-        let message = IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
-            dataset_params,
-            read_advise,
-            data_type: T::TYPE,
-        });
+        // Compute a read_id from request content hash + timestamp.
+        // Deduped concurrent reads share the same read_id (leader's timestamp).
+        // Re-reads of the same tile later get a different read_id (different timestamp).
+        let read_id = dataset_params.create_read_id(&read_advise);
 
-        let res = self.dispatcher().read_data(message).await;
+        let span = tracing::info_span!(
+            "gdal_pool_read",
+            read_id = %read_id,
+            dataset = %dataset_params.file_path.display(),
+            band = dataset_params.rasterband_channel,
+        );
+
+        let res = self
+            .dispatcher()
+            .read_data(IpcChannelMessage::new_request_tile_message(
+                IpcChannelMessagePayload {
+                    dataset_params,
+                    read_advise,
+                    data_type: T::TYPE,
+                    read_id: Some(read_id),
+                },
+            ))
+            .instrument(span)
+            .await;
 
         match res {
             Ok(t) => {
