@@ -78,7 +78,7 @@ actix-rt = "2.11"
 actix-web = "4.14"
 actix-web-httpauth = "0.8"
 actix-ws = "0.4"
-aes-gcm = "=0.10.3"
+aes-gcm = "0.11.0"
 anyhow = "1.0"
 approx = "0.5"
 arrow = { version = "59.1", features = ["ipc_compression"] }
@@ -121,7 +121,7 @@ indoc = "2.0"
 itertools = "0.15"
 libloading = "0.9"
 lru = "0.18"
-lz4_flex = "0.13"
+lz4_flex = "0.14"
 mime = "0.3"
 ndarray = { version = "0.17", features = ["approx"] }     # has to match with `ort`
 num = "0.4"
@@ -182,7 +182,7 @@ strum_macros = "0.28"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
 tempfile = "3.27"
 time = "0.3"
-tokio = { version = "1.52", features = [
+tokio = { version = "1.53", features = [
     "fs",
     "macros",
     "signal",
