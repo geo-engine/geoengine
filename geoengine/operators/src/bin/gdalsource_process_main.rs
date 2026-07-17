@@ -103,6 +103,7 @@ fn set_gdal_process_global_options(options: &[(String, String)]) {
 ///
 /// # Panics
 /// Panics if `log_spec` cannot be parsed as an `EnvFilter`.
+#[allow(clippy::print_stderr)] // subscriber not yet initialized
 fn init_subscriber(
     logging_config: &WorkerLoggingConfig,
     open_telemetry_config: &OpenTelemetryConfig,
@@ -225,7 +226,7 @@ fn main() {
         .build()
         .expect("Failed to create tokio runtime for telemetry");
 
-    let _runtime_guard = runtime.enter();
+    let runtime_guard = runtime.enter();
     let (provider, _file_guard) = init_subscriber(
         &worker_config.logging,
         &worker_config.open_telemetry,
@@ -238,11 +239,11 @@ fn main() {
     reroute_gdal_logging();
     run(token);
 
-    drop(_runtime_guard);
-    if let Some(provider) = provider {
-        if let Err(err) = provider.shutdown() {
-            eprintln!("Failed to flush OpenTelemetry provider: {err}");
-        }
+    drop(runtime_guard);
+    if let Some(provider) = provider
+        && let Err(err) = provider.shutdown()
+    {
+        tracing::error!("Failed to flush OpenTelemetry provider: {err}");
     }
 }
 

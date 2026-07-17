@@ -102,7 +102,6 @@ layer_collection_defs_path = "./test_data/layer_collection_defs"
 number_of_processes = 32
 max_active_processes = 16
 max_dataset_processes = 8
-dedup_requests = true
 
 [gdal]
 # TODO: find good default

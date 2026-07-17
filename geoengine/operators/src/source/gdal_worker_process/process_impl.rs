@@ -100,7 +100,7 @@ impl Drop for ChildProcessGuard {
 
 /// Configuration passed from the main process to each GDAL worker at spawn time via a JSON CLI argument.
 /// The worker binary deserializes this instead of reading config files from disk.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WorkerConfig {
     #[serde(default)]
     pub gdal_config_options: Option<Vec<(String, String)>>,
@@ -149,16 +149,6 @@ impl Default for OpenTelemetryConfig {
         Self {
             enabled: false,
             endpoint: "http://127.0.0.1:4317".to_string(),
-        }
-    }
-}
-
-impl Default for WorkerConfig {
-    fn default() -> Self {
-        Self {
-            gdal_config_options: None,
-            logging: WorkerLoggingConfig::default(),
-            open_telemetry: OpenTelemetryConfig::default(),
         }
     }
 }

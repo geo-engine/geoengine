@@ -119,7 +119,7 @@ impl TestDefault for MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification: TilingSpecification::test_default(),
-            gdal_process_pool: GdalProcessPool::new(2, 2, 2, true, WorkerConfig::default()),
+            gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
         }
     }
 }
@@ -140,7 +140,6 @@ impl MockExecutionContext {
                 2,
                 2,
                 2,
-                true,
                 WorkerConfig::default(),
             ),
         }
@@ -153,7 +152,7 @@ impl MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification,
-            gdal_process_pool: GdalProcessPool::new(2, 2, 2, true, WorkerConfig::default()),
+            gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
         }
     }
 
@@ -167,7 +166,7 @@ impl MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification,
-            gdal_process_pool: GdalProcessPool::new(2, 2, 2, true, WorkerConfig::default()),
+            gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
         }
     }
 

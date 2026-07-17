@@ -100,7 +100,6 @@ where
             gdal_process_pool_config.number_of_processes as usize,
             gdal_process_pool_config.max_active_processes as usize,
             gdal_process_pool_config.max_dataset_processes as usize,
-            gdal_process_pool_config.dedup_requests,
             gdal_process_pool_config.worker.into(),
         );
 
@@ -145,7 +144,6 @@ where
             gdal_process_pool_config.number_of_processes as usize,
             gdal_process_pool_config.max_active_processes as usize,
             gdal_process_pool_config.max_dataset_processes as usize,
-            gdal_process_pool_config.dedup_requests,
             gdal_process_pool_config.worker.into(),
         );
 
@@ -200,7 +198,6 @@ where
             gdal_process_pool_config.number_of_processes as usize,
             gdal_process_pool_config.max_active_processes as usize,
             gdal_process_pool_config.max_dataset_processes as usize,
-            gdal_process_pool_config.dedup_requests,
             gdal_process_pool_config.worker.into(),
         );
 

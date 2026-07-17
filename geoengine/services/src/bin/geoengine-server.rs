@@ -86,7 +86,7 @@ where
     use opentelemetry_otlp::WithExportConfig;
     use opentelemetry_sdk::trace::Sampler;
     use opentelemetry_sdk::trace::SdkTracerProvider;
-    let endpoint = open_telemetry_config.endpoint.to_string();
+    let endpoint = open_telemetry_config.endpoint.clone();
 
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()

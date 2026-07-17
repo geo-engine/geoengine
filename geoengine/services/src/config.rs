@@ -367,7 +367,6 @@ impl ConfigElement for Gdal {
 /// - `number_of_processes`: The total number of GDAL worker processes to spawn and maintain in the pool.
 /// - `max_active_processes`: The maximum number of active (in-flight) requests allowed across all datasets at any given time.
 /// - `max_dataset_processes`: The maximum number of active requests allowed concurrently for the same dataset, enforcing per-dataset concurrency limits.
-/// - `dedup_requests`: Whether to deduplicate identical concurrent tile requests via a leader/follower mechanism.
 /// - `worker`: Configuration passed to each GDAL worker process at spawn time.
 #[derive(Debug, Deserialize)]
 #[allow(clippy::struct_field_names)]
@@ -375,7 +374,6 @@ pub struct GdalProcessPool {
     pub number_of_processes: u64,
     pub max_active_processes: u64,
     pub max_dataset_processes: u64,
-    pub dedup_requests: bool,
     #[serde(default)]
     pub worker: GdalProcessPoolWorkerConfig,
 }

@@ -45,7 +45,7 @@ impl GdalPoolReader {
             .read_tile_data::<T>(dataset_params, read_advise)
             .await?
         {
-            GdalProcessReadResult::Grid(grid_and_properties) => grid_and_properties,
+            GdalProcessReadResult::Grid(grid_and_properties) => *grid_and_properties,
             GdalProcessReadResult::FileNotFoundAsNoData => GridAndProperties {
                 grid: GridOrEmpty::new_empty_shape(read_advise.bounds_of_target),
                 properties: RasterProperties::default(),
@@ -180,7 +180,7 @@ mod tests {
         let tile_information =
             tile_information_with_partition_and_shape(output_bounds, output_shape);
 
-        let gpp = GdalProcessPool::new(2, 2, 2, true, WorkerConfig::default());
+        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
         let gw = gpp.get_gdal_worker();
 
         let RasterTile2D {

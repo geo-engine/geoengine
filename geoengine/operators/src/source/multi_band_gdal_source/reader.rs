@@ -51,7 +51,7 @@ impl GdalPoolReader {
             .read_tile_data::<T>(dataset_params, local_read_advise)
             .await?
         {
-            GdalProcessReadResult::Grid(grid_and_properties) => Ok(Some(grid_and_properties)),
+            GdalProcessReadResult::Grid(grid_and_properties) => Ok(Some(*grid_and_properties)),
             GdalProcessReadResult::FileNotFoundAsNoData => Ok(None),
         }
     }

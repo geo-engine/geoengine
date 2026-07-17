@@ -131,6 +131,9 @@ impl GdalDatasetParameters {
     }
 
     /// Generate a unique read ID: content hash + nanosecond timestamp.
+    ///
+    /// # Panics
+    /// Panics if `SystemTime::now()` is before the UNIX epoch.
     pub fn create_read_id(&self, read_advise: &GdalReadAdvise) -> String {
         let mut hasher = FxHasher::default();
         self.read_id_hash(&mut hasher, read_advise);

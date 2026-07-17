@@ -15,7 +15,7 @@ use crate::source::gdal_worker_process::{
 /// Result of reading a tile through the GDAL worker process.
 pub enum GdalProcessReadResult<T: Pixel> {
     /// The tile data was read successfully.
-    Grid(GridAndProperties<T, GridBoundingBox2D>),
+    Grid(Box<GridAndProperties<T, GridBoundingBox2D>>),
     /// The file was not found and the dataset is configured to treat that as no-data.
     FileNotFoundAsNoData,
 }
@@ -45,6 +45,9 @@ impl GdalPoolReader {
     /// # Errors
     /// Returns a `GdalProcessPoolError` if the worker returns an error, or if the response
     /// cannot be converted to a raster tile.
+    ///
+    /// # Panics
+    /// Panics if the Y-axis flipped grid cannot be wrapped in a `MaskedGrid`.
     pub async fn read_tile_data<T: Pixel + GdalType + FromPrimitive>(
         &self,
         dataset_params: GdalDatasetParameters,
@@ -100,10 +103,10 @@ impl GdalPoolReader {
                 } else {
                     grid
                 };
-                Ok(GdalProcessReadResult::Grid(GridAndProperties {
+                Ok(GdalProcessReadResult::Grid(Box::new(GridAndProperties {
                     grid,
                     properties,
-                }))
+                })))
             }
             Err(GdalProcessPoolError::IpcProcessError {
                 source:
