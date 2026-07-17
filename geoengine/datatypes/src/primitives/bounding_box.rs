@@ -601,12 +601,7 @@ impl TryFrom<BoundingBox2D> for gdal::vector::Geometry {
 
 impl From<BoundingBox2D> for geojson::Geometry {
     fn from(bounds: BoundingBox2D) -> Self {
-        let value = geojson::Value::Polygon(vec![
-            bounds
-                .coords_counter_clockwise()
-                .map(|c| vec![c.x, c.y])
-                .collect(),
-        ]);
+        let value = geojson::GeometryValue::new_polygon([bounds.coords_counter_clockwise()]);
         geojson::Geometry {
             bbox: None,
             value,
@@ -640,10 +635,9 @@ pub fn bboxes_extent<I: Iterator<Item = Option<BoundingBox2D>>>(
     };
 
     for bbox in bboxes {
-        if let Some(bbox) = bbox {
+        {
+            let bbox = bbox?;
             extent = extent.union(&bbox);
-        } else {
-            return None;
         }
     }
 

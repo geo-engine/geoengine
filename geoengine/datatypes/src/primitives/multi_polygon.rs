@@ -1,14 +1,3 @@
-use arrow::array::BooleanArray;
-use arrow::error::ArrowError;
-use fallible_iterator::FallibleIterator;
-use float_cmp::{ApproxEq, F64Margin};
-use geo::intersects::Intersects;
-use postgres_types::{FromSql, ToSql};
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
-use std::convert::TryFrom;
-use wkt::{ToWkt, Wkt};
-
 use super::MultiPoint;
 use crate::collections::VectorDataType;
 use crate::error::Error;
@@ -18,7 +7,17 @@ use crate::primitives::{
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::Result;
 use crate::util::arrow::{ArrowTyped, downcast_array, padded_buffer_size};
+use arrow::array::BooleanArray;
 use arrow::datatypes::DataType;
+use arrow::error::ArrowError;
+use fallible_iterator::FallibleIterator;
+use float_cmp::{ApproxEq, F64Margin};
+use geo::intersects::Intersects;
+use postgres_types::{FromSql, ToSql};
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
+use std::convert::TryFrom;
+use wkt::{ToWkt, Wkt};
 
 /// A trait that allows a common access to polygons of `MultiPolygon`s and its references
 pub trait MultiPolygonAccess {
@@ -654,24 +653,15 @@ impl<'g> From<MultiPolygonRef<'g>> for geojson::Geometry {
         geojson::Geometry::new(match geometry.polygons.len() {
             1 => {
                 let polygon = &geometry.polygons[0];
-                geojson::Value::Polygon(
-                    polygon
-                        .iter()
-                        .map(|coordinates| coordinates.iter().map(|c| vec![c.x, c.y]).collect())
-                        .collect(),
+                geojson::GeometryValue::new_polygon(
+                    polygon.iter().map(|coordinates| coordinates.iter()),
                 )
             }
-            _ => geojson::Value::MultiPolygon(
+            _ => geojson::GeometryValue::new_multi_polygon(
                 geometry
                     .polygons
                     .iter()
-                    .map(|polygon| {
-                        polygon
-                            .iter()
-                            .map(|coordinates| coordinates.iter().map(|c| vec![c.x, c.y]).collect())
-                            .collect()
-                    })
-                    .collect(),
+                    .map(|polygon| polygon.iter().map(|coordinates| coordinates.iter())),
             ),
         })
     }

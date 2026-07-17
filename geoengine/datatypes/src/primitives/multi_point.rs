@@ -381,20 +381,8 @@ impl ToWkt<f64> for MultiPointRef<'_> {
 impl<'g> From<MultiPointRef<'g>> for geojson::Geometry {
     fn from(geometry: MultiPointRef<'g>) -> geojson::Geometry {
         geojson::Geometry::new(match geometry.point_coordinates.len() {
-            1 => {
-                let floats: [f64; 2] = geometry.point_coordinates[0].into();
-                geojson::Value::Point(floats.to_vec())
-            }
-            _ => geojson::Value::MultiPoint(
-                geometry
-                    .point_coordinates
-                    .iter()
-                    .map(|&c| {
-                        let floats: [f64; 2] = c.into();
-                        floats.to_vec()
-                    })
-                    .collect(),
-            ),
+            1 => geojson::GeometryValue::new_point(geometry.point_coordinates[0]),
+            _ => geojson::GeometryValue::new_multi_point(geometry.point_coordinates.iter()),
         })
     }
 }

@@ -21,19 +21,21 @@ generate-openapi-spec: common::_clear
 lint: common::_clear lint-rustfmt lint-clippy lint-sql
 
 # Run clippy for all features and all targets.
+[arg('fix', long='fix', value='--fix', help='Automatically apply fixes where possible.')]
 [group("lint")]
-lint-clippy: common::_clear
-    cargo clippy --all-features --all-targets
+lint-clippy fix="": common::_clear
+    cargo clippy --all-features --all-targets {{ if fix == "--fix" { "--fix --allow-dirty" } else { "" } }}
 
 # Run rustfmt
+[arg('write', long='write', value='--write', help='Write changes to files instead of checking.')]
 [group("lint")]
-lint-rustfmt: common::_clear
-    cargo fmt --all -- --check
+lint-rustfmt write="": common::_clear
+    cargo fmt --all -- {{ if write == "--write" { "" } else { "--check" } }}
 
 # Run sqlfluff.
 [group("lint")]
 lint-sql: common::_clear
-    pipx run sqlfluff==4.0.4 lint
+    pipx run sqlfluff==4.2.2 lint
 
 # Build in dev or release mode.
 [arg('mode', pattern='|--release')]
@@ -81,6 +83,11 @@ test filter="": common::_clear
 [group("test")]
 test-datatypes filter="": common::_clear
     cargo test --package geoengine-datatypes -- {{ filter }} --nocapture
+
+# Run the tests for the geoengine-operators package. Optionally, a filter can be provided to run only a subset of the tests. Example: just test-operators workflows::workflow::tests
+[group("test")]
+test-operators filter="": common::_clear
+    cargo test --package geoengine-operators -- {{ filter }} --nocapture
 
 # Run the tests for the geoengine-services package. Optionally, a filter can be provided to run only a subset of the tests. Example: just test-services workflows::workflow::tests
 [group("test")]
@@ -176,6 +183,26 @@ validate-ogc-compliance requests-log-file="": common::_clear
     touch step_summary.md
     npm install
     npx @github/local-action ./node_modules/ogc-validator src/main.ts .env
+
+[group("update")]
+update-step1-rust: common::_clear && (lint-clippy "--fix")
+    LATEST_STABLE=$(curl -sSL https://static.rust-lang.org/dist/channel-rust-stable.toml \
+    | grep -A 1 '\[pkg.rust\]' \
+    | grep 'version =' \
+    | sed -E 's/version = "([0-9.]+).*/\1/') && \
+    sed -i -E "s/(channel[[:space:]]*=[[:space:]]*\")[^\"]*/\1$LATEST_STABLE/" rust-toolchain.toml
+
+[group("update")]
+update-step2-minor-dependencies: common::_clear
+    cargo upgrade --incompatible allow --pinned ignore
+    cargo update
+
+[group("update")]
+update-step3-aftermath: common::_clear
+    `./.scripts/update-expression-deps.rs`
+
+    SQLFLUFF_VERSION=$(curl -s https://pypi.org/pypi/sqlfluff/json | jq -r '.info.version') && \
+    sed -i "s/sqlfluff==[0-9.]\+/sqlfluff==$SQLFLUFF_VERSION/" justfile
 
 # Run an example OGC Tiles application with OpenLayers.
 [group("example")]

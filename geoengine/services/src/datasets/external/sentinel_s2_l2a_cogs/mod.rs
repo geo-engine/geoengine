@@ -930,8 +930,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 mod tests {
     use super::*;
     use crate::{
-        contexts::{ApplicationContext, SessionContext},
-        contexts::{PostgresContext, PostgresDb},
+        contexts::{ApplicationContext, PostgresContext, PostgresDb, SessionContext},
         ge_context,
         layers::storage::{LayerProviderDb, LayerProviderListing, LayerProviderListingOptions},
         test_data,
@@ -1448,7 +1447,7 @@ mod tests {
             .unwrap()
             .replace(
                 "https://sentinel-cogs.s3.us-west-2.amazonaws.com/",
-                &server.url_str(""),
+                &server.url_str("/"),
             )
             .into();
         // add a low `GDAL_HTTP_TIMEOUT` value to test timeouts

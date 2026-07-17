@@ -544,7 +544,7 @@ mod tests {
             .method(method)
             .uri(&format!(
                 "/projects?{}",
-                &serde_urlencoded::to_string([
+                serde_urlencoded::to_string([
                     (
                         "permissions",
                         serde_json::json! {["Read", "Write", "Owner"]}
@@ -592,7 +592,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!(
                 "/projects?{}",
-                &serde_urlencoded::to_string([
+                serde_urlencoded::to_string([
                     (
                         "permissions",
                         serde_json::json! {["Read", "Write", "Owner"]}
