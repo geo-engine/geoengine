@@ -939,16 +939,21 @@ mod tests {
     };
     use futures::StreamExt;
     use geoengine_datatypes::{
-        dataset::ExternalDataId,
+        dataset::{DatasetId, ExternalDataId},
         primitives::{BandSelection, SpatialPartition2D},
-        util::test::TestDefault,
+        util::{Identifier, gdal::hide_gdal_errors, test::TestDefault},
     };
     use geoengine_operators::{
         engine::{
             ChunkByteSize, ExecutionContext, MockExecutionContext, RasterOperator,
             WorkflowOperatorPath,
         },
-        source::{FileNotFoundHandling, GdalSource, GdalSourceParameters},
+        source::{FileNotFoundHandling, GdalMetaDataStatic, GdalSource, GdalSourceParameters},
+    };
+    use httptest::{
+        Expectation, Server, all_of,
+        matchers::{contains, request, url_decoded},
+        responders,
     };
     use std::{fs::File, io::BufReader, str::FromStr};
     use tokio_postgres::NoTls;
