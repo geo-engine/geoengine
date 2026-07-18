@@ -28,16 +28,10 @@ import {
 export interface RasterDatasetFromWorkflow {
     /**
      * 
-     * @type {boolean}
-     * @memberof RasterDatasetFromWorkflow
-     */
-    asCog?: boolean;
-    /**
-     * 
      * @type {string}
      * @memberof RasterDatasetFromWorkflow
      */
-    description?: string | null;
+    name?: string | null;
     /**
      * 
      * @type {string}
@@ -49,13 +43,19 @@ export interface RasterDatasetFromWorkflow {
      * @type {string}
      * @memberof RasterDatasetFromWorkflow
      */
-    name?: string | null;
+    description?: string | null;
     /**
      * 
      * @type {RasterToDatasetQueryRectangle}
      * @memberof RasterDatasetFromWorkflow
      */
     query: RasterToDatasetQueryRectangle;
+    /**
+     * 
+     * @type {boolean}
+     * @memberof RasterDatasetFromWorkflow
+     */
+    asCog?: boolean;
 }
 
 /**
@@ -77,11 +77,11 @@ export function RasterDatasetFromWorkflowFromJSONTyped(json: any, ignoreDiscrimi
     }
     return {
         
-        'asCog': json['asCog'] == null ? undefined : json['asCog'],
-        'description': json['description'] == null ? undefined : json['description'],
-        'displayName': json['displayName'],
         'name': json['name'] == null ? undefined : json['name'],
+        'displayName': json['displayName'],
+        'description': json['description'] == null ? undefined : json['description'],
         'query': RasterToDatasetQueryRectangleFromJSON(json['query']),
+        'asCog': json['asCog'] == null ? undefined : json['asCog'],
     };
 }
 
@@ -96,11 +96,11 @@ export function RasterDatasetFromWorkflowToJSONTyped(value?: RasterDatasetFromWo
 
     return {
         
-        'asCog': value['asCog'],
-        'description': value['description'],
-        'displayName': value['displayName'],
         'name': value['name'],
+        'displayName': value['displayName'],
+        'description': value['description'],
         'query': RasterToDatasetQueryRectangleToJSON(value['query']),
+        'asCog': value['asCog'],
     };
 }
 

@@ -17,10 +17,10 @@ import type { ProviderLayerCollectionId } from './ProviderLayerCollectionId';
 export interface LayerCollectionListing {
     /**
      *
-     * @type {string}
+     * @type {LayerCollectionListingTypeEnum}
      * @memberof LayerCollectionListing
      */
-    description: string;
+    type: LayerCollectionListingTypeEnum;
     /**
      *
      * @type {ProviderLayerCollectionId}
@@ -35,16 +35,16 @@ export interface LayerCollectionListing {
     name: string;
     /**
      *
+     * @type {string}
+     * @memberof LayerCollectionListing
+     */
+    description: string;
+    /**
+     *
      * @type {Array<Array<string>>}
      * @memberof LayerCollectionListing
      */
     properties?: Array<Array<string>>;
-    /**
-     *
-     * @type {LayerCollectionListingTypeEnum}
-     * @memberof LayerCollectionListing
-     */
-    type: LayerCollectionListingTypeEnum;
 }
 /**
  * @export

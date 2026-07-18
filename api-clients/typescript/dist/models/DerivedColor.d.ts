@@ -17,6 +17,12 @@ import type { Colorizer } from './Colorizer';
 export interface DerivedColor {
     /**
      *
+     * @type {DerivedColorTypeEnum}
+     * @memberof DerivedColor
+     */
+    type: DerivedColorTypeEnum;
+    /**
+     *
      * @type {string}
      * @memberof DerivedColor
      */
@@ -27,12 +33,6 @@ export interface DerivedColor {
      * @memberof DerivedColor
      */
     colorizer: Colorizer;
-    /**
-     *
-     * @type {DerivedColorTypeEnum}
-     * @memberof DerivedColor
-     */
-    type: DerivedColorTypeEnum;
 }
 /**
  * @export

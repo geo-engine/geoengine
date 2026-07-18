@@ -6,13 +6,13 @@
 
 Name | Type
 ------------ | -------------
-`created` | Date
 `id` | string
-`project` | string
-`roles` | Array&lt;string&gt;
 `user` | [UserInfo](UserInfo.md)
+`created` | Date
 `validUntil` | Date
+`project` | string
 `view` | [STRectangle](STRectangle.md)
+`roles` | Array&lt;string&gt;
 
 ## Example
 
@@ -21,13 +21,13 @@ import type { UserSession } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "created": null,
   "id": null,
-  "project": null,
-  "roles": null,
   "user": null,
+  "created": null,
   "validUntil": null,
+  "project": null,
   "view": null,
+  "roles": null,
 } satisfies UserSession
 
 console.log(example)

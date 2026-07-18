@@ -18,16 +18,16 @@ import type { DataId } from './DataId';
 export interface ProvenanceEntry {
     /**
      *
-     * @type {Array<DataId>}
-     * @memberof ProvenanceEntry
-     */
-    data: Array<DataId>;
-    /**
-     *
      * @type {Provenance}
      * @memberof ProvenanceEntry
      */
     provenance: Provenance;
+    /**
+     *
+     * @type {Array<DataId>}
+     * @memberof ProvenanceEntry
+     */
+    data: Array<DataId>;
 }
 /**
  * Check if a given object implements the ProvenanceEntry interface.

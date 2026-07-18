@@ -20,13 +20,13 @@ export const PaletteColorizerTypeEnum = {
  * Check if a given object implements the PaletteColorizer interface.
  */
 export function instanceOfPaletteColorizer(value) {
-    if (!('colors' in value) || value['colors'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
-    if (!('defaultColor' in value) || value['defaultColor'] === undefined)
+    if (!('colors' in value) || value['colors'] === undefined)
         return false;
     if (!('noDataColor' in value) || value['noDataColor'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('defaultColor' in value) || value['defaultColor'] === undefined)
         return false;
     return true;
 }
@@ -38,10 +38,10 @@ export function PaletteColorizerFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'colors': json['colors'],
-        'defaultColor': json['defaultColor'],
-        'noDataColor': json['noDataColor'],
         'type': json['type'],
+        'colors': json['colors'],
+        'noDataColor': json['noDataColor'],
+        'defaultColor': json['defaultColor'],
     };
 }
 export function PaletteColorizerToJSON(json) {
@@ -52,9 +52,9 @@ export function PaletteColorizerToJSONTyped(value, ignoreDiscriminator = false) 
         return value;
     }
     return {
-        'colors': value['colors'],
-        'defaultColor': value['defaultColor'],
-        'noDataColor': value['noDataColor'],
         'type': value['type'],
+        'colors': value['colors'],
+        'noDataColor': value['noDataColor'],
+        'defaultColor': value['defaultColor'],
     };
 }

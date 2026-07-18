@@ -35,13 +35,13 @@ class TestGridIdx2D(unittest.TestCase):
         model = GridIdx2D()
         if include_optional:
             return GridIdx2D(
-                x_idx = 56,
-                y_idx = 56
+                y_idx = 56,
+                x_idx = 56
             )
         else:
             return GridIdx2D(
-                x_idx = 56,
                 y_idx = 56,
+                x_idx = 56,
         )
         """
 

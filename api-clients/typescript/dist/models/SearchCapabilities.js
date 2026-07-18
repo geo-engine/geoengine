@@ -22,9 +22,9 @@ const SearchTypes_1 = require("./SearchTypes");
  * Check if a given object implements the SearchCapabilities interface.
  */
 function instanceOfSearchCapabilities(value) {
-    if (!('autocomplete' in value) || value['autocomplete'] === undefined)
-        return false;
     if (!('searchTypes' in value) || value['searchTypes'] === undefined)
+        return false;
+    if (!('autocomplete' in value) || value['autocomplete'] === undefined)
         return false;
     return true;
 }
@@ -36,9 +36,9 @@ function SearchCapabilitiesFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'searchTypes': (0, SearchTypes_1.SearchTypesFromJSON)(json['searchTypes']),
         'autocomplete': json['autocomplete'],
         'filters': json['filters'] == null ? undefined : json['filters'],
-        'searchTypes': (0, SearchTypes_1.SearchTypesFromJSON)(json['searchTypes']),
     };
 }
 function SearchCapabilitiesToJSON(json) {
@@ -49,8 +49,8 @@ function SearchCapabilitiesToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
+        'searchTypes': (0, SearchTypes_1.SearchTypesToJSON)(value['searchTypes']),
         'autocomplete': value['autocomplete'],
         'filters': value['filters'],
-        'searchTypes': (0, SearchTypes_1.SearchTypesToJSON)(value['searchTypes']),
     };
 }

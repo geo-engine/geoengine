@@ -12,18 +12,18 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UpdateProject {
-    #[serde(rename = "bounds", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub bounds: Option<Option<Box<models::StRectangle>>>,
-    #[serde(rename = "description", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub description: Option<Option<String>>,
     #[serde(rename = "id")]
     pub id: uuid::Uuid,
-    #[serde(rename = "layers", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub layers: Option<Option<Vec<models::VecUpdate>>>,
     #[serde(rename = "name", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub name: Option<Option<String>>,
+    #[serde(rename = "description", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub description: Option<Option<String>>,
+    #[serde(rename = "layers", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub layers: Option<Option<Vec<models::VecUpdate>>>,
     #[serde(rename = "plots", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub plots: Option<Option<Vec<models::VecUpdate>>>,
+    #[serde(rename = "bounds", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub bounds: Option<Option<Box<models::StRectangle>>>,
     #[serde(rename = "timeStep", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub time_step: Option<Option<Box<models::TimeStep>>>,
 }
@@ -31,12 +31,12 @@ pub struct UpdateProject {
 impl UpdateProject {
     pub fn new(id: uuid::Uuid) -> UpdateProject {
         UpdateProject {
-            bounds: None,
-            description: None,
             id,
-            layers: None,
             name: None,
+            description: None,
+            layers: None,
             plots: None,
+            bounds: None,
             time_step: None,
         }
     }

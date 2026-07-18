@@ -17,16 +17,10 @@ import type { RasterToDatasetQueryRectangle } from './RasterToDatasetQueryRectan
 export interface RasterDatasetFromWorkflow {
     /**
      *
-     * @type {boolean}
-     * @memberof RasterDatasetFromWorkflow
-     */
-    asCog?: boolean;
-    /**
-     *
      * @type {string}
      * @memberof RasterDatasetFromWorkflow
      */
-    description?: string | null;
+    name?: string | null;
     /**
      *
      * @type {string}
@@ -38,13 +32,19 @@ export interface RasterDatasetFromWorkflow {
      * @type {string}
      * @memberof RasterDatasetFromWorkflow
      */
-    name?: string | null;
+    description?: string | null;
     /**
      *
      * @type {RasterToDatasetQueryRectangle}
      * @memberof RasterDatasetFromWorkflow
      */
     query: RasterToDatasetQueryRectangle;
+    /**
+     *
+     * @type {boolean}
+     * @memberof RasterDatasetFromWorkflow
+     */
+    asCog?: boolean;
 }
 /**
  * Check if a given object implements the RasterDatasetFromWorkflow interface.

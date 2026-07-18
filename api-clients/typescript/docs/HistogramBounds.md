@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`max` | number
 `min` | number
+`max` | number
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { HistogramBounds } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "max": null,
   "min": null,
+  "max": null,
 } satisfies HistogramBounds
 
 console.log(example)

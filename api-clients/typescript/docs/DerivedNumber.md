@@ -6,10 +6,10 @@
 
 Name | Type
 ------------ | -------------
-`attribute` | string
-`defaultValue` | number
-`factor` | number
 `type` | string
+`attribute` | string
+`factor` | number
+`defaultValue` | number
 
 ## Example
 
@@ -18,10 +18,10 @@ import type { DerivedNumber } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "attribute": null,
-  "defaultValue": null,
-  "factor": null,
   "type": null,
+  "attribute": null,
+  "factor": null,
+  "defaultValue": null,
 } satisfies DerivedNumber
 
 console.log(example)

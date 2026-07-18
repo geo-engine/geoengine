@@ -19,13 +19,13 @@ export interface ProviderLayerCollectionId {
      * @type {string}
      * @memberof ProviderLayerCollectionId
      */
-    collectionId: string;
+    providerId: string;
     /**
      *
      * @type {string}
      * @memberof ProviderLayerCollectionId
      */
-    providerId: string;
+    collectionId: string;
 }
 /**
  * Check if a given object implements the ProviderLayerCollectionId interface.

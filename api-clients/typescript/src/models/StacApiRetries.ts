@@ -23,7 +23,7 @@ export interface StacApiRetries {
      * @type {number}
      * @memberof StacApiRetries
      */
-    exponentialBackoffFactor: number;
+    numberOfRetries: number;
     /**
      * 
      * @type {number}
@@ -35,16 +35,16 @@ export interface StacApiRetries {
      * @type {number}
      * @memberof StacApiRetries
      */
-    numberOfRetries: number;
+    exponentialBackoffFactor: number;
 }
 
 /**
  * Check if a given object implements the StacApiRetries interface.
  */
 export function instanceOfStacApiRetries(value: object): value is StacApiRetries {
-    if (!('exponentialBackoffFactor' in value) || value['exponentialBackoffFactor'] === undefined) return false;
-    if (!('initialDelayMs' in value) || value['initialDelayMs'] === undefined) return false;
     if (!('numberOfRetries' in value) || value['numberOfRetries'] === undefined) return false;
+    if (!('initialDelayMs' in value) || value['initialDelayMs'] === undefined) return false;
+    if (!('exponentialBackoffFactor' in value) || value['exponentialBackoffFactor'] === undefined) return false;
     return true;
 }
 
@@ -58,9 +58,9 @@ export function StacApiRetriesFromJSONTyped(json: any, ignoreDiscriminator: bool
     }
     return {
         
-        'exponentialBackoffFactor': json['exponentialBackoffFactor'],
-        'initialDelayMs': json['initialDelayMs'],
         'numberOfRetries': json['numberOfRetries'],
+        'initialDelayMs': json['initialDelayMs'],
+        'exponentialBackoffFactor': json['exponentialBackoffFactor'],
     };
 }
 
@@ -75,9 +75,9 @@ export function StacApiRetriesToJSONTyped(value?: StacApiRetries | null, ignoreD
 
     return {
         
-        'exponentialBackoffFactor': value['exponentialBackoffFactor'],
-        'initialDelayMs': value['initialDelayMs'],
         'numberOfRetries': value['numberOfRetries'],
+        'initialDelayMs': value['initialDelayMs'],
+        'exponentialBackoffFactor': value['exponentialBackoffFactor'],
     };
 }
 

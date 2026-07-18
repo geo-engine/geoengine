@@ -20,16 +20,16 @@ import { mapValues } from '../runtime';
 export interface ContinuousMeasurement {
     /**
      * 
-     * @type {string}
-     * @memberof ContinuousMeasurement
-     */
-    measurement: string;
-    /**
-     * 
      * @type {ContinuousMeasurementTypeEnum}
      * @memberof ContinuousMeasurement
      */
     type: ContinuousMeasurementTypeEnum;
+    /**
+     * 
+     * @type {string}
+     * @memberof ContinuousMeasurement
+     */
+    measurement: string;
     /**
      * 
      * @type {string}
@@ -52,8 +52,8 @@ export type ContinuousMeasurementTypeEnum = typeof ContinuousMeasurementTypeEnum
  * Check if a given object implements the ContinuousMeasurement interface.
  */
 export function instanceOfContinuousMeasurement(value: object): value is ContinuousMeasurement {
-    if (!('measurement' in value) || value['measurement'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('measurement' in value) || value['measurement'] === undefined) return false;
     return true;
 }
 
@@ -67,8 +67,8 @@ export function ContinuousMeasurementFromJSONTyped(json: any, ignoreDiscriminato
     }
     return {
         
-        'measurement': json['measurement'],
         'type': json['type'],
+        'measurement': json['measurement'],
         'unit': json['unit'] == null ? undefined : json['unit'],
     };
 }
@@ -84,8 +84,8 @@ export function ContinuousMeasurementToJSONTyped(value?: ContinuousMeasurement |
 
     return {
         
-        'measurement': value['measurement'],
         'type': value['type'],
+        'measurement': value['measurement'],
         'unit': value['unit'],
     };
 }

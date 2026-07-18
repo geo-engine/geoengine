@@ -42,22 +42,10 @@ import {
 export interface Layer {
     /**
      * 
-     * @type {string}
-     * @memberof Layer
-     */
-    description: string;
-    /**
-     * 
      * @type {ProviderLayerId}
      * @memberof Layer
      */
     id: ProviderLayerId;
-    /**
-     * metadata used for loading the data
-     * @type {{ [key: string]: string; }}
-     * @memberof Layer
-     */
-    metadata?: { [key: string]: string; };
     /**
      * 
      * @type {string}
@@ -65,11 +53,17 @@ export interface Layer {
      */
     name: string;
     /**
-     * properties, for instance, to be rendered in the UI
-     * @type {Array<Array<string>>}
+     * 
+     * @type {string}
      * @memberof Layer
      */
-    properties?: Array<Array<string>>;
+    description: string;
+    /**
+     * 
+     * @type {Workflow}
+     * @memberof Layer
+     */
+    workflow: Workflow;
     /**
      * 
      * @type {Symbology}
@@ -77,20 +71,26 @@ export interface Layer {
      */
     symbology?: Symbology | null;
     /**
-     * 
-     * @type {Workflow}
+     * properties, for instance, to be rendered in the UI
+     * @type {Array<Array<string>>}
      * @memberof Layer
      */
-    workflow: Workflow;
+    properties?: Array<Array<string>>;
+    /**
+     * metadata used for loading the data
+     * @type {{ [key: string]: string; }}
+     * @memberof Layer
+     */
+    metadata?: { [key: string]: string; };
 }
 
 /**
  * Check if a given object implements the Layer interface.
  */
 export function instanceOfLayer(value: object): value is Layer {
-    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('workflow' in value) || value['workflow'] === undefined) return false;
     return true;
 }
@@ -105,13 +105,13 @@ export function LayerFromJSONTyped(json: any, ignoreDiscriminator: boolean): Lay
     }
     return {
         
-        'description': json['description'],
         'id': ProviderLayerIdFromJSON(json['id']),
-        'metadata': json['metadata'] == null ? undefined : json['metadata'],
         'name': json['name'],
-        'properties': json['properties'] == null ? undefined : json['properties'],
-        'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
+        'description': json['description'],
         'workflow': WorkflowFromJSON(json['workflow']),
+        'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
+        'properties': json['properties'] == null ? undefined : json['properties'],
+        'metadata': json['metadata'] == null ? undefined : json['metadata'],
     };
 }
 
@@ -126,13 +126,13 @@ export function LayerToJSONTyped(value?: Layer | null, ignoreDiscriminator: bool
 
     return {
         
-        'description': value['description'],
         'id': ProviderLayerIdToJSON(value['id']),
-        'metadata': value['metadata'],
         'name': value['name'],
-        'properties': value['properties'],
-        'symbology': SymbologyToJSON(value['symbology']),
+        'description': value['description'],
         'workflow': WorkflowToJSON(value['workflow']),
+        'symbology': SymbologyToJSON(value['symbology']),
+        'properties': value['properties'],
+        'metadata': value['metadata'],
     };
 }
 

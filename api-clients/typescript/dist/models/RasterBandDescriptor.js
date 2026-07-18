@@ -22,9 +22,9 @@ const Measurement_1 = require("./Measurement");
  * Check if a given object implements the RasterBandDescriptor interface.
  */
 function instanceOfRasterBandDescriptor(value) {
-    if (!('measurement' in value) || value['measurement'] === undefined)
-        return false;
     if (!('name' in value) || value['name'] === undefined)
+        return false;
+    if (!('measurement' in value) || value['measurement'] === undefined)
         return false;
     return true;
 }
@@ -36,8 +36,8 @@ function RasterBandDescriptorFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'measurement': (0, Measurement_1.MeasurementFromJSON)(json['measurement']),
         'name': json['name'],
+        'measurement': (0, Measurement_1.MeasurementFromJSON)(json['measurement']),
     };
 }
 function RasterBandDescriptorToJSON(json) {
@@ -48,7 +48,7 @@ function RasterBandDescriptorToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'measurement': (0, Measurement_1.MeasurementToJSON)(value['measurement']),
         'name': value['name'],
+        'measurement': (0, Measurement_1.MeasurementToJSON)(value['measurement']),
     };
 }

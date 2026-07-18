@@ -35,14 +35,14 @@ class TestEdrVectorSpec(unittest.TestCase):
         model = EdrVectorSpec()
         if include_optional:
             return EdrVectorSpec(
-                time = '',
                 x = '',
-                y = ''
+                y = '',
+                time = ''
             )
         else:
             return EdrVectorSpec(
-                time = '',
                 x = '',
+                time = '',
         )
         """
 

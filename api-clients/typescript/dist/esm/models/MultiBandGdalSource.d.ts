@@ -17,16 +17,16 @@ import type { GdalSourceParameters } from './GdalSourceParameters';
 export interface MultiBandGdalSource {
     /**
      *
-     * @type {GdalSourceParameters}
-     * @memberof MultiBandGdalSource
-     */
-    params: GdalSourceParameters;
-    /**
-     *
      * @type {MultiBandGdalSourceTypeEnum}
      * @memberof MultiBandGdalSource
      */
     type: MultiBandGdalSourceTypeEnum;
+    /**
+     *
+     * @type {GdalSourceParameters}
+     * @memberof MultiBandGdalSource
+     */
+    params: GdalSourceParameters;
 }
 /**
  * @export

@@ -44,11 +44,11 @@ export interface ExpressionParameters {
      */
     expression: string;
     /**
-     * Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA.
-     * @type {boolean}
+     * A raster data type for the output
+     * @type {RasterDataType}
      * @memberof ExpressionParameters
      */
-    mapNoData: boolean;
+    outputType: RasterDataType;
     /**
      * Description about the output
      * @type {RasterBandDescriptor}
@@ -56,11 +56,11 @@ export interface ExpressionParameters {
      */
     outputBand?: RasterBandDescriptor;
     /**
-     * A raster data type for the output
-     * @type {RasterDataType}
+     * Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA.
+     * @type {boolean}
      * @memberof ExpressionParameters
      */
-    outputType: RasterDataType;
+    mapNoData: boolean;
 }
 
 
@@ -70,8 +70,8 @@ export interface ExpressionParameters {
  */
 export function instanceOfExpressionParameters(value: object): value is ExpressionParameters {
     if (!('expression' in value) || value['expression'] === undefined) return false;
-    if (!('mapNoData' in value) || value['mapNoData'] === undefined) return false;
     if (!('outputType' in value) || value['outputType'] === undefined) return false;
+    if (!('mapNoData' in value) || value['mapNoData'] === undefined) return false;
     return true;
 }
 
@@ -86,9 +86,9 @@ export function ExpressionParametersFromJSONTyped(json: any, ignoreDiscriminator
     return {
         
         'expression': json['expression'],
-        'mapNoData': json['mapNoData'],
-        'outputBand': json['outputBand'] == null ? undefined : RasterBandDescriptorFromJSON(json['outputBand']),
         'outputType': RasterDataTypeFromJSON(json['outputType']),
+        'outputBand': json['outputBand'] == null ? undefined : RasterBandDescriptorFromJSON(json['outputBand']),
+        'mapNoData': json['mapNoData'],
     };
 }
 
@@ -104,9 +104,9 @@ export function ExpressionParametersToJSONTyped(value?: ExpressionParameters | n
     return {
         
         'expression': value['expression'],
-        'mapNoData': value['mapNoData'],
-        'outputBand': RasterBandDescriptorToJSON(value['outputBand']),
         'outputType': RasterDataTypeToJSON(value['outputType']),
+        'outputBand': RasterBandDescriptorToJSON(value['outputBand']),
+        'mapNoData': value['mapNoData'],
     };
 }
 

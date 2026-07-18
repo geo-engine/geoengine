@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`resultDescriptor` | [RasterResultDescriptor](RasterResultDescriptor.md)
 `type` | string
+`resultDescriptor` | [RasterResultDescriptor](RasterResultDescriptor.md)
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { GdalMultiBand } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "resultDescriptor": null,
   "type": null,
+  "resultDescriptor": null,
 } satisfies GdalMultiBand
 
 console.log(example)

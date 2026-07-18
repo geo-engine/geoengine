@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`changed` | Date
 `id` | string
+`changed` | Date
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { ProjectVersion } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "changed": null,
   "id": null,
+  "changed": null,
 } satisfies ProjectVersion
 
 console.log(example)

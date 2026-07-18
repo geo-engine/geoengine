@@ -6,10 +6,10 @@
 
 Name | Type
 ------------ | -------------
-`duration` | [OgrSourceDurationSpec](OgrSourceDurationSpec.md)
+`type` | string
 `startField` | string
 `startFormat` | [OgrSourceTimeFormat](OgrSourceTimeFormat.md)
-`type` | string
+`duration` | [OgrSourceDurationSpec](OgrSourceDurationSpec.md)
 
 ## Example
 
@@ -18,10 +18,10 @@ import type { OgrSourceDatasetTimeTypeStart } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "duration": null,
+  "type": null,
   "startField": null,
   "startFormat": null,
-  "type": null,
+  "duration": null,
 } satisfies OgrSourceDatasetTimeTypeStart
 
 console.log(example)

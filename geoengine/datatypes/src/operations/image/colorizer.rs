@@ -1,5 +1,6 @@
 use crate::error::{self, Error};
 use crate::operations::image::RgbaTransmutable;
+use crate::primitives::BandSelection;
 use crate::raster::Pixel;
 use crate::util::Result;
 use crate::util::test::TestDefault;
@@ -52,6 +53,27 @@ impl RasterColorizer {
         match self {
             RasterColorizer::SingleBand { band_colorizer, .. } => band_colorizer.no_data_color(),
             RasterColorizer::MultiBand { rgb_params, .. } => rgb_params.no_data_color,
+        }
+    }
+
+    pub fn band_selection(&self) -> BandSelection {
+        match self {
+            Self::SingleBand { band, .. } => BandSelection::new_single(*band),
+            Self::MultiBand {
+                red_band,
+                green_band,
+                blue_band,
+                ..
+            } => {
+                let mut bands = Vec::with_capacity(3);
+                for band in [*red_band, *green_band, *blue_band] {
+                    if !bands.contains(&band) {
+                        bands.push(band);
+                    }
+                }
+                bands.sort_unstable(); // bands will be returned in ascending order anyway
+                BandSelection::new_unchecked(bands)
+            }
         }
     }
 }

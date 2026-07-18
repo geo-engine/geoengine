@@ -27,9 +27,9 @@ class GridBoundingBox2D(BaseModel):
     """
     GridBoundingBox2D
     """ # noqa: E501
-    bottom_right_idx: GridIdx2D = Field(alias="bottomRightIdx")
     top_left_idx: GridIdx2D = Field(alias="topLeftIdx")
-    __properties: ClassVar[List[str]] = ["bottomRightIdx", "topLeftIdx"]
+    bottom_right_idx: GridIdx2D = Field(alias="bottomRightIdx")
+    __properties: ClassVar[List[str]] = ["topLeftIdx", "bottomRightIdx"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -70,12 +70,12 @@ class GridBoundingBox2D(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of bottom_right_idx
-        if self.bottom_right_idx:
-            _dict['bottomRightIdx'] = self.bottom_right_idx.to_dict()
         # override the default output from pydantic by calling `to_dict()` of top_left_idx
         if self.top_left_idx:
             _dict['topLeftIdx'] = self.top_left_idx.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of bottom_right_idx
+        if self.bottom_right_idx:
+            _dict['bottomRightIdx'] = self.bottom_right_idx.to_dict()
         return _dict
 
     @classmethod
@@ -88,8 +88,8 @@ class GridBoundingBox2D(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "bottomRightIdx": GridIdx2D.from_dict(obj["bottomRightIdx"]) if obj.get("bottomRightIdx") is not None else None,
-            "topLeftIdx": GridIdx2D.from_dict(obj["topLeftIdx"]) if obj.get("topLeftIdx") is not None else None
+            "topLeftIdx": GridIdx2D.from_dict(obj["topLeftIdx"]) if obj.get("topLeftIdx") is not None else None,
+            "bottomRightIdx": GridIdx2D.from_dict(obj["bottomRightIdx"]) if obj.get("bottomRightIdx") is not None else None
         })
         return _obj
 

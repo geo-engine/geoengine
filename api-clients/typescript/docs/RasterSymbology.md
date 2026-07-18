@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
+`type` | string
 `opacity` | number
 `rasterColorizer` | [RasterColorizer](RasterColorizer.md)
-`type` | string
 
 ## Example
 
@@ -17,9 +17,9 @@ import type { RasterSymbology } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "opacity": null,
   "rasterColorizer": null,
-  "type": null,
 } satisfies RasterSymbology
 
 console.log(example)

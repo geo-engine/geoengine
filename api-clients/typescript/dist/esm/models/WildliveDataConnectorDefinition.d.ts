@@ -16,16 +16,10 @@
 export interface WildliveDataConnectorDefinition {
     /**
      *
-     * @type {string}
+     * @type {WildliveDataConnectorDefinitionTypeEnum}
      * @memberof WildliveDataConnectorDefinition
      */
-    description: string;
-    /**
-     *
-     * @type {Date}
-     * @memberof WildliveDataConnectorDefinition
-     */
-    expiryDate?: Date | null;
+    type: WildliveDataConnectorDefinitionTypeEnum;
     /**
      *
      * @type {string}
@@ -40,10 +34,16 @@ export interface WildliveDataConnectorDefinition {
     name: string;
     /**
      *
-     * @type {number}
+     * @type {string}
      * @memberof WildliveDataConnectorDefinition
      */
-    priority?: number | null;
+    description: string;
+    /**
+     *
+     * @type {string}
+     * @memberof WildliveDataConnectorDefinition
+     */
+    user?: string | null;
     /**
      * A wrapper type that serializes to "*****" and can be deserialized from any string.
      * If the inner value is "*****", it is considered unknown and `as_option` returns `None`.
@@ -54,16 +54,16 @@ export interface WildliveDataConnectorDefinition {
     refreshToken?: string | null;
     /**
      *
-     * @type {WildliveDataConnectorDefinitionTypeEnum}
+     * @type {Date}
      * @memberof WildliveDataConnectorDefinition
      */
-    type: WildliveDataConnectorDefinitionTypeEnum;
+    expiryDate?: Date | null;
     /**
      *
-     * @type {string}
+     * @type {number}
      * @memberof WildliveDataConnectorDefinition
      */
-    user?: string | null;
+    priority?: number | null;
 }
 /**
  * @export

@@ -28,12 +28,12 @@ class LayerListing(BaseModel):
     """
     LayerListing
     """ # noqa: E501
-    description: StrictStr
+    type: StrictStr
     id: ProviderLayerId
     name: StrictStr
+    description: StrictStr
     properties: Optional[List[Annotated[List[StrictStr], Field(min_length=2, max_length=2)]]] = Field(default=None, description="properties, for instance, to be rendered in the UI")
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["description", "id", "name", "properties", "type"]
+    __properties: ClassVar[List[str]] = ["type", "id", "name", "description", "properties"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -96,11 +96,11 @@ class LayerListing(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "description": obj.get("description"),
+            "type": obj.get("type"),
             "id": ProviderLayerId.from_dict(obj["id"]) if obj.get("id") is not None else None,
             "name": obj.get("name"),
-            "properties": obj.get("properties"),
-            "type": obj.get("type")
+            "description": obj.get("description"),
+            "properties": obj.get("properties")
         })
         return _obj
 

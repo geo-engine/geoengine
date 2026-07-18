@@ -334,7 +334,7 @@ mod tests {
             name: "Pangaea".to_string(),
             description: "Pangaea".to_string(),
             priority: None,
-            base_url: Url::parse(server.url_str("").strip_suffix('/').unwrap()).unwrap(),
+            base_url: Url::parse(server.url_str("/").strip_suffix('/').unwrap()).unwrap(),
             cache_ttl: Default::default(),
         })
         .initialize(db)
@@ -373,7 +373,7 @@ mod tests {
         // Let download urls point to test server
         let body = body.replace(
             "https://doi.pangaea.de",
-            server.url_str("").strip_suffix('/').unwrap(),
+            server.url_str("/").strip_suffix('/').unwrap(),
         );
 
         let responder = status_code(200)

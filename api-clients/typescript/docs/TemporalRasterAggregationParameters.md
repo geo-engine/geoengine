@@ -8,9 +8,9 @@ Parameters for the `TemporalRasterAggregation` operator.
 Name | Type
 ------------ | -------------
 `aggregation` | [Aggregation](Aggregation.md)
-`outputType` | [RasterDataType](RasterDataType.md)
 `window` | [TimeStep](TimeStep.md)
 `windowReference` | number
+`outputType` | [RasterDataType](RasterDataType.md)
 
 ## Example
 
@@ -20,9 +20,9 @@ import type { TemporalRasterAggregationParameters } from '@geoengine/api-client'
 // TODO: Update the object below with actual values
 const example = {
   "aggregation": null,
-  "outputType": null,
   "window": null,
   "windowReference": null,
+  "outputType": null,
 } satisfies TemporalRasterAggregationParameters
 
 console.log(example)

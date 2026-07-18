@@ -30,15 +30,15 @@ class GdalMetadataNetCdfCf(BaseModel):
     """
     Meta data for 4D `NetCDF` CF datasets
     """ # noqa: E501
+    type: StrictStr
+    result_descriptor: RasterResultDescriptor = Field(alias="resultDescriptor")
+    params: GdalDatasetParameters
+    start: StrictInt
+    end: StrictInt = Field(description="We use the end to specify the last, non-inclusive valid time point. Queries behind this point return no data. TODO: Alternatively, we could think about using the number of possible time steps in the future.")
+    step: TimeStep
     band_offset: Annotated[int, Field(strict=True, ge=0)] = Field(description="A band offset specifies the first band index to use for the first point in time. All other time steps are added to this offset.", alias="bandOffset")
     cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
-    end: StrictInt = Field(description="We use the end to specify the last, non-inclusive valid time point. Queries behind this point return no data. TODO: Alternatively, we could think about using the number of possible time steps in the future.")
-    params: GdalDatasetParameters
-    result_descriptor: RasterResultDescriptor = Field(alias="resultDescriptor")
-    start: StrictInt
-    step: TimeStep
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["bandOffset", "cacheTtl", "end", "params", "resultDescriptor", "start", "step", "type"]
+    __properties: ClassVar[List[str]] = ["type", "resultDescriptor", "params", "start", "end", "step", "bandOffset", "cacheTtl"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -86,12 +86,12 @@ class GdalMetadataNetCdfCf(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of params
-        if self.params:
-            _dict['params'] = self.params.to_dict()
         # override the default output from pydantic by calling `to_dict()` of result_descriptor
         if self.result_descriptor:
             _dict['resultDescriptor'] = self.result_descriptor.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of params
+        if self.params:
+            _dict['params'] = self.params.to_dict()
         # override the default output from pydantic by calling `to_dict()` of step
         if self.step:
             _dict['step'] = self.step.to_dict()
@@ -107,14 +107,14 @@ class GdalMetadataNetCdfCf(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "bandOffset": obj.get("bandOffset"),
-            "cacheTtl": obj.get("cacheTtl"),
-            "end": obj.get("end"),
-            "params": GdalDatasetParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
+            "type": obj.get("type"),
             "resultDescriptor": RasterResultDescriptor.from_dict(obj["resultDescriptor"]) if obj.get("resultDescriptor") is not None else None,
+            "params": GdalDatasetParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
             "start": obj.get("start"),
+            "end": obj.get("end"),
             "step": TimeStep.from_dict(obj["step"]) if obj.get("step") is not None else None,
-            "type": obj.get("type")
+            "bandOffset": obj.get("bandOffset"),
+            "cacheTtl": obj.get("cacheTtl")
         })
         return _obj
 

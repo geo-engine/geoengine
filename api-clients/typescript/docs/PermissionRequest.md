@@ -7,9 +7,9 @@ Request for adding a new permission to the given role on the given resource
 
 Name | Type
 ------------ | -------------
-`permission` | [Permission](Permission.md)
 `resource` | [Resource](Resource.md)
 `roleId` | string
+`permission` | [Permission](Permission.md)
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { PermissionRequest } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "permission": null,
   "resource": null,
   "roleId": null,
+  "permission": null,
 } satisfies PermissionRequest
 
 console.log(example)

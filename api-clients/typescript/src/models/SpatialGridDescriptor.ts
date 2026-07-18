@@ -35,16 +35,16 @@ import {
 export interface SpatialGridDescriptor {
     /**
      * 
-     * @type {SpatialGridDescriptorState}
-     * @memberof SpatialGridDescriptor
-     */
-    descriptor: SpatialGridDescriptorState;
-    /**
-     * 
      * @type {SpatialGridDefinition}
      * @memberof SpatialGridDescriptor
      */
     spatialGrid: SpatialGridDefinition;
+    /**
+     * 
+     * @type {SpatialGridDescriptorState}
+     * @memberof SpatialGridDescriptor
+     */
+    descriptor: SpatialGridDescriptorState;
 }
 
 
@@ -53,8 +53,8 @@ export interface SpatialGridDescriptor {
  * Check if a given object implements the SpatialGridDescriptor interface.
  */
 export function instanceOfSpatialGridDescriptor(value: object): value is SpatialGridDescriptor {
-    if (!('descriptor' in value) || value['descriptor'] === undefined) return false;
     if (!('spatialGrid' in value) || value['spatialGrid'] === undefined) return false;
+    if (!('descriptor' in value) || value['descriptor'] === undefined) return false;
     return true;
 }
 
@@ -68,8 +68,8 @@ export function SpatialGridDescriptorFromJSONTyped(json: any, ignoreDiscriminato
     }
     return {
         
-        'descriptor': SpatialGridDescriptorStateFromJSON(json['descriptor']),
         'spatialGrid': SpatialGridDefinitionFromJSON(json['spatialGrid']),
+        'descriptor': SpatialGridDescriptorStateFromJSON(json['descriptor']),
     };
 }
 
@@ -84,8 +84,8 @@ export function SpatialGridDescriptorToJSONTyped(value?: SpatialGridDescriptor |
 
     return {
         
-        'descriptor': SpatialGridDescriptorStateToJSON(value['descriptor']),
         'spatialGrid': SpatialGridDefinitionToJSON(value['spatialGrid']),
+        'descriptor': SpatialGridDescriptorStateToJSON(value['descriptor']),
     };
 }
 

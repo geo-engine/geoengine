@@ -13,27 +13,27 @@ use serde::{Deserialize, Serialize};
 /// RasterResultDescriptor : A `ResultDescriptor` for raster queries
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RasterResultDescriptor {
-    #[serde(rename = "bands")]
-    pub bands: Vec<models::RasterBandDescriptor>,
     #[serde(rename = "dataType")]
     pub data_type: models::RasterDataType,
-    #[serde(rename = "spatialGrid")]
-    pub spatial_grid: Box<models::SpatialGridDescriptor>,
     #[serde(rename = "spatialReference")]
     pub spatial_reference: String,
     #[serde(rename = "time")]
     pub time: Box<models::TimeDescriptor>,
+    #[serde(rename = "spatialGrid")]
+    pub spatial_grid: Box<models::SpatialGridDescriptor>,
+    #[serde(rename = "bands")]
+    pub bands: Vec<models::RasterBandDescriptor>,
 }
 
 impl RasterResultDescriptor {
     /// A `ResultDescriptor` for raster queries
-    pub fn new(bands: Vec<models::RasterBandDescriptor>, data_type: models::RasterDataType, spatial_grid: models::SpatialGridDescriptor, spatial_reference: String, time: models::TimeDescriptor) -> RasterResultDescriptor {
+    pub fn new(data_type: models::RasterDataType, spatial_reference: String, time: models::TimeDescriptor, spatial_grid: models::SpatialGridDescriptor, bands: Vec<models::RasterBandDescriptor>) -> RasterResultDescriptor {
         RasterResultDescriptor {
-            bands,
             data_type,
-            spatial_grid: Box::new(spatial_grid),
             spatial_reference,
             time: Box::new(time),
+            spatial_grid: Box::new(spatial_grid),
+            bands,
         }
     }
 }

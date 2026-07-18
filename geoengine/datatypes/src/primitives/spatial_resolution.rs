@@ -47,6 +47,22 @@ impl SpatialResolution {
             native_resolution.y * f64::from(gdal_overview_level),
         )
     }
+
+    #[must_use]
+    pub fn div_floor(self, rhs: Self) -> Self {
+        SpatialResolution {
+            x: (self.x / rhs.x).floor(),
+            y: (self.y / rhs.y).floor(),
+        }
+    }
+
+    #[must_use]
+    pub fn div_ceil(self, rhs: Self) -> Self {
+        SpatialResolution {
+            x: (self.x / rhs.x).ceil(),
+            y: (self.y / rhs.y).ceil(),
+        }
+    }
 }
 
 impl TryFrom<(f64, f64)> for SpatialResolution {

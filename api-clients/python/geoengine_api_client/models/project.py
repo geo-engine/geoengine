@@ -32,15 +32,15 @@ class Project(BaseModel):
     """
     Project
     """ # noqa: E501
-    bounds: STRectangle
-    description: StrictStr
     id: UUID
-    layers: List[ProjectLayer]
-    name: StrictStr
-    plots: List[Plot]
-    time_step: TimeStep = Field(alias="timeStep")
     version: ProjectVersion
-    __properties: ClassVar[List[str]] = ["bounds", "description", "id", "layers", "name", "plots", "timeStep", "version"]
+    name: StrictStr
+    description: StrictStr
+    layers: List[ProjectLayer]
+    plots: List[Plot]
+    bounds: STRectangle
+    time_step: TimeStep = Field(alias="timeStep")
+    __properties: ClassVar[List[str]] = ["id", "version", "name", "description", "layers", "plots", "bounds", "timeStep"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -81,9 +81,9 @@ class Project(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of bounds
-        if self.bounds:
-            _dict['bounds'] = self.bounds.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of version
+        if self.version:
+            _dict['version'] = self.version.to_dict()
         # override the default output from pydantic by calling `to_dict()` of each item in layers (list)
         _items = []
         if self.layers:
@@ -98,12 +98,12 @@ class Project(BaseModel):
                 if _item_plots:
                     _items.append(_item_plots.to_dict())
             _dict['plots'] = _items
+        # override the default output from pydantic by calling `to_dict()` of bounds
+        if self.bounds:
+            _dict['bounds'] = self.bounds.to_dict()
         # override the default output from pydantic by calling `to_dict()` of time_step
         if self.time_step:
             _dict['timeStep'] = self.time_step.to_dict()
-        # override the default output from pydantic by calling `to_dict()` of version
-        if self.version:
-            _dict['version'] = self.version.to_dict()
         return _dict
 
     @classmethod
@@ -116,14 +116,14 @@ class Project(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "bounds": STRectangle.from_dict(obj["bounds"]) if obj.get("bounds") is not None else None,
-            "description": obj.get("description"),
             "id": obj.get("id"),
-            "layers": [ProjectLayer.from_dict(_item) for _item in obj["layers"]] if obj.get("layers") is not None else None,
+            "version": ProjectVersion.from_dict(obj["version"]) if obj.get("version") is not None else None,
             "name": obj.get("name"),
+            "description": obj.get("description"),
+            "layers": [ProjectLayer.from_dict(_item) for _item in obj["layers"]] if obj.get("layers") is not None else None,
             "plots": [Plot.from_dict(_item) for _item in obj["plots"]] if obj.get("plots") is not None else None,
-            "timeStep": TimeStep.from_dict(obj["timeStep"]) if obj.get("timeStep") is not None else None,
-            "version": ProjectVersion.from_dict(obj["version"]) if obj.get("version") is not None else None
+            "bounds": STRectangle.from_dict(obj["bounds"]) if obj.get("bounds") is not None else None,
+            "timeStep": TimeStep.from_dict(obj["timeStep"]) if obj.get("timeStep") is not None else None
         })
         return _obj
 

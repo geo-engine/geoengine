@@ -20,11 +20,11 @@ export const ResolutionTypeEnum = {
  * Check if a given object implements the Resolution interface.
  */
 export function instanceOfResolution(value) {
-    if (!('type' in value) || value['type'] === undefined)
-        return false;
     if (!('x' in value) || value['x'] === undefined)
         return false;
     if (!('y' in value) || value['y'] === undefined)
+        return false;
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -36,9 +36,9 @@ export function ResolutionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'type': json['type'],
         'x': json['x'],
         'y': json['y'],
+        'type': json['type'],
     };
 }
 export function ResolutionToJSON(json) {
@@ -49,8 +49,8 @@ export function ResolutionToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'type': value['type'],
         'x': value['x'],
         'y': value['y'],
+        'type': value['type'],
     };
 }

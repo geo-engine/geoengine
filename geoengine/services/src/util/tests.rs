@@ -1,40 +1,50 @@
 #![allow(clippy::unwrap_used)] // okay in tests
 
-use super::postgres::DatabaseConnectionConfig;
-use crate::api::model::responses::ErrorResponse;
-use crate::config::{Postgres, get_config_element};
-use crate::contexts::ApplicationContext;
-use crate::contexts::GeoEngineDb;
-use crate::contexts::PostgresContext;
-use crate::datasets::AddDataset;
-use crate::datasets::DatasetIdAndName;
-use crate::datasets::DatasetName;
-use crate::datasets::listing::Provenance;
-use crate::datasets::storage::DatasetStore;
-use crate::datasets::upload::UploadId;
-use crate::datasets::upload::UploadRootPath;
-use crate::permissions::Permission;
-use crate::permissions::PermissionDb;
-use crate::permissions::Role;
-use crate::projects::{
-    CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology, STRectangle,
-    Symbology, UpdateProject,
-};
-use crate::users::OidcManager;
-use crate::util::Identifier;
-use crate::util::middleware::OutputRequestId;
-use crate::util::server::{configure_extractors, render_404, render_405};
-use crate::workflows::registry::WorkflowRegistry;
-use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::{
-    api::handlers,
-    contexts::SessionContext,
-    datasets::storage::{DatasetDefinition, MetaDataDefinition},
-};
-use crate::{
-    config::Quota,
-    contexts::SessionId,
-    users::{UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
+    api::{
+        handlers::{self},
+        model::{
+            processing_graphs::{
+                DeriveOutRasterSpecsSource, GdalSource as NewGdalSource,
+                GdalSourceParameters as NewGdalSourceParameters,
+                RasterOperator as NewRasterOperator, Reprojection, ReprojectionParameters,
+                SingleRasterOrVectorOperator, SingleRasterOrVectorSource,
+                TypedOperator as NewTypedOperator,
+            },
+            responses::ErrorResponse,
+        },
+    },
+    config::{Postgres, Quota, get_config_element},
+    contexts::{ApplicationContext, GeoEngineDb, PostgresContext, SessionContext, SessionId},
+    datasets::{
+        AddDataset, DatasetIdAndName, DatasetName,
+        listing::Provenance,
+        storage::{DatasetDefinition, DatasetStore, MetaDataDefinition},
+        upload::{UploadId, UploadRootPath},
+    },
+    layers::{
+        layer::{AddLayer, LayerDefinition},
+        listing::LayerCollectionProvider,
+        storage::{INTERNAL_PROVIDER_ID, LayerDb},
+    },
+    permissions::{Permission, PermissionDb, Role},
+    projects::{
+        CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology,
+        STRectangle, Symbology, UpdateProject,
+    },
+    users::{
+        OidcManager, UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession,
+    },
+    util::{
+        Identifier,
+        middleware::OutputRequestId,
+        postgres::DatabaseConnectionConfig,
+        server::{configure_extractors, render_404, render_405},
+    },
+    workflows::{
+        registry::WorkflowRegistry,
+        workflow::{Workflow, WorkflowId},
+    },
 };
 use actix_web::dev::ServiceResponse;
 use actix_web::{
@@ -44,39 +54,31 @@ use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::bb8::ManageConnection;
 use flexi_logger::Logger;
 use futures_util::Future;
-use geoengine_datatypes::dataset::DatasetId;
-use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::operations::image::Colorizer;
-use geoengine_datatypes::operations::image::RasterColorizer;
-use geoengine_datatypes::operations::image::RgbaColor;
-use geoengine_datatypes::primitives::CacheTtlSeconds;
-use geoengine_datatypes::primitives::Coordinate2D;
-use geoengine_datatypes::raster::GeoTransform;
-use geoengine_datatypes::raster::GridBoundingBox2D;
-use geoengine_datatypes::raster::RasterDataType;
-use geoengine_datatypes::raster::RenameBands;
-use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
-use geoengine_datatypes::test_data;
-use geoengine_datatypes::util::test::TestDefault;
-use geoengine_datatypes::{primitives::DateTime, raster::TilingSpecification};
-use geoengine_operators::engine::RasterBandDescriptor;
-use geoengine_operators::engine::RasterBandDescriptors;
-use geoengine_operators::engine::RasterResultDescriptor;
-use geoengine_operators::engine::SpatialGridDescriptor;
-use geoengine_operators::engine::WorkflowOperatorPath;
-use geoengine_operators::engine::{ChunkByteSize, MultipleRasterSources};
-use geoengine_operators::engine::{QueryContext, TimeDescriptor};
-use geoengine_operators::engine::{RasterOperator, TypedOperator};
-use geoengine_operators::meta::quota::QuotaTracking;
-use geoengine_operators::processing::RasterStacker;
-use geoengine_operators::processing::RasterStackerParams;
-use geoengine_operators::source::GdalDatasetGeoTransform;
-use geoengine_operators::source::GdalMetaDataStatic;
-use geoengine_operators::source::{FileNotFoundHandling, GdalDatasetParameters};
-use geoengine_operators::source::{GdalSource, GdalSourceParameters};
-use geoengine_operators::util::gdal::create_ndvi_meta_data_with_cache_ttl;
-use geoengine_operators::util::gdal::{create_ndvi_meta_data, create_ports_meta_data};
+use geoengine_datatypes::{
+    dataset::{DataProviderId, DatasetId, LayerId, NamedData},
+    operations::image::{Colorizer, RasterColorizer, RgbaColor},
+    primitives::{CacheTtlSeconds, Coordinate2D, DateTime},
+    raster::{GeoTransform, GridBoundingBox2D, RasterDataType, RenameBands, TilingSpecification},
+    spatial_reference::{SpatialReference, SpatialReferenceOption},
+    test_data,
+    util::test::TestDefault,
+};
+use geoengine_operators::{
+    engine::{
+        ChunkByteSize, MultipleRasterSources, QueryContext, RasterBandDescriptor,
+        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
+        TimeDescriptor, TypedOperator, WorkflowOperatorPath,
+    },
+    meta::quota::QuotaTracking,
+    processing::{RasterStacker, RasterStackerParams},
+    source::{
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataStatic,
+        GdalSource, GdalSourceParameters,
+    },
+    util::gdal::{
+        create_ndvi_meta_data, create_ndvi_meta_data_with_cache_ttl, create_ports_meta_data,
+    },
+};
 use rand::Rng;
 use std::fs::File;
 use std::io::BufReader;
@@ -488,6 +490,84 @@ pub async fn add_file_definition_to_datasets<D: GeoEngineDb>(
     dataset
 }
 
+/// Add a definition from a file to the datasets.
+#[allow(clippy::missing_panics_doc)]
+pub async fn add_file_definition_to_datasets_and_return_layer<D: GeoEngineDb>(
+    db: &D,
+    definition: &Path,
+    symbology: Option<Symbology>,
+) -> (DataProviderId, LayerId) {
+    let dataset: DatasetIdAndName = add_file_definition_to_datasets(db, definition).await;
+    let layer_id = LayerId(dataset.id.to_string());
+
+    let root_collection_id = db.get_root_layer_collection_id().await.unwrap();
+
+    let dataset_metadata = db.load_dataset(&dataset.id).await.unwrap();
+
+    let operator = match dataset_metadata.source_operator.as_str() {
+        "GdalSource" => NewTypedOperator::Raster(NewRasterOperator::GdalSource(NewGdalSource {
+            r#type: Default::default(),
+            params: NewGdalSourceParameters {
+                data: dataset.name.to_string(),
+                overview_level: None,
+            },
+        })),
+        _ => panic!("Only GdalSource is supported in this helper function"),
+    };
+
+    db.add_layer_with_id(
+        &layer_id,
+        AddLayer {
+            name: dataset_metadata.display_name,
+            description: dataset_metadata.description,
+            workflow: Workflow::Typed { operator },
+            symbology,
+            properties: vec![],
+            metadata: Default::default(),
+        },
+        &root_collection_id,
+    )
+    .await
+    .unwrap();
+
+    (INTERNAL_PROVIDER_ID, layer_id)
+}
+
+/// Add a definition from a file to the layers.
+#[allow(clippy::missing_panics_doc)]
+pub async fn add_file_definition_to_layers<D: GeoEngineDb>(
+    db: &D,
+    definition: &Path,
+) -> (DataProviderId, LayerId) {
+    let def: LayerDefinition =
+        serde_json::from_reader(BufReader::new(File::open(definition).unwrap())).unwrap();
+
+    let root_collection_id = db.get_root_layer_collection_id().await.unwrap();
+
+    db.add_layer_with_id(
+        &def.id,
+        AddLayer {
+            name: def.name,
+            description: def.description,
+            workflow: def.workflow,
+            symbology: def.symbology,
+            properties: def.properties,
+            metadata: def.metadata,
+        },
+        &root_collection_id,
+    )
+    .await
+    .unwrap();
+
+    for role in [Role::registered_user_role_id(), Role::anonymous_role_id()] {
+        db.add_permission(role, def.id.clone(), Permission::Read)
+            .await
+            .unwrap();
+    }
+
+    (INTERNAL_PROVIDER_ID, def.id)
+}
+
 /// Add a definition from a file to the datasets as admin.
 #[allow(clippy::missing_panics_doc)]
 pub async fn add_pro_file_definition_to_datasets_as_admin(
@@ -588,6 +668,7 @@ pub fn create_test_app(
         .configure(handlers::wms::init_wms_routes::<PostgresContext<NoTls>>)
         .configure(handlers::workflows::init_workflow_routes::<PostgresContext<NoTls>>)
         .configure(handlers::machine_learning::init_ml_routes::<PostgresContext<NoTls>>)
+        .configure(handlers::ogc::init_ogc_routes::<PostgresContext<NoTls>>)
         .service(dummy_handler)
 }
 
@@ -732,7 +813,7 @@ pub(crate) async fn setup_db() -> (OwnedSemaphorePermit, DatabaseConnectionConfi
         .connect()
         .await
         .unwrap()
-        .batch_execute(&format!("CREATE SCHEMA {};", &db_config.schema))
+        .batch_execute(&format!("CREATE SCHEMA {};", db_config.schema))
         .await
         .unwrap();
 
@@ -902,6 +983,395 @@ pub async fn add_ndvi_to_datasets2<C: ApplicationContext<Session = UserSession>>
     }
 
     (dataset_id, dataset_name.into())
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub async fn add_ndvi_to_layers<C: ApplicationContext<Session = UserSession>>(
+    app_ctx: &C,
+) -> (DataProviderId, LayerId) {
+    let (dataset_id, named_data) = add_ndvi_to_datasets2(app_ctx, true, true).await;
+    let layer_id = LayerId(dataset_id.to_string());
+
+    let system_session = UserSession::admin_session();
+    let db = app_ctx.session_context(system_session).db();
+
+    let root_collection_id = db.get_root_layer_collection_id().await.unwrap();
+
+    db.add_layer_with_id(
+        &layer_id,
+        AddLayer {
+            name: "NDVI".to_string(),
+            description: "NDVI Layer".to_string(),
+            workflow: Workflow::Typed {
+                operator: NewTypedOperator::Raster(NewRasterOperator::GdalSource(NewGdalSource {
+                    r#type: Default::default(),
+                    params: NewGdalSourceParameters {
+                        data: named_data.to_string(),
+                        overview_level: None,
+                    },
+                })),
+            },
+            symbology: Some(Symbology::Raster(RasterSymbology {
+                r#type: Default::default(),
+                opacity: 1.0,
+                raster_colorizer: RasterColorizer::SingleBand {
+                    band: 0,
+                    band_colorizer: ndvi_255_colorizer(),
+                },
+            })),
+            properties: vec![],
+            metadata: Default::default(),
+        },
+        &root_collection_id,
+    )
+    .await
+    .unwrap();
+
+    (INTERNAL_PROVIDER_ID, layer_id)
+}
+
+pub fn ndvi_255_symbology() -> Symbology {
+    Symbology::Raster(RasterSymbology {
+        r#type: Default::default(),
+        opacity: 1.0,
+        raster_colorizer: RasterColorizer::SingleBand {
+            band: 0,
+            band_colorizer: ndvi_255_colorizer(),
+        },
+    })
+}
+
+#[allow(
+    clippy::missing_panics_doc,
+    clippy::too_many_lines,
+    reason = "Test function"
+)]
+pub fn ndvi_255_colorizer() -> Colorizer {
+    let breakpoints = [
+        (0, [236, 224, 215, 0]),
+        (1, [235, 223, 214, 255]),
+        (2, [234, 222, 212, 255]),
+        (3, [234, 221, 211, 255]),
+        (4, [233, 221, 209, 255]),
+        (5, [232, 220, 208, 255]),
+        (6, [231, 219, 206, 255]),
+        (7, [231, 218, 205, 255]),
+        (8, [230, 217, 204, 255]),
+        (9, [229, 216, 202, 255]),
+        (10, [228, 215, 201, 255]),
+        (11, [227, 214, 199, 255]),
+        (12, [227, 214, 198, 255]),
+        (13, [226, 213, 197, 255]),
+        (14, [225, 212, 195, 255]),
+        (15, [224, 211, 194, 255]),
+        (16, [224, 210, 192, 255]),
+        (17, [223, 209, 191, 255]),
+        (18, [222, 208, 189, 255]),
+        (19, [221, 207, 188, 255]),
+        (20, [221, 207, 187, 255]),
+        (21, [220, 206, 185, 255]),
+        (22, [219, 205, 184, 255]),
+        (23, [218, 204, 182, 255]),
+        (24, [217, 203, 181, 255]),
+        (25, [217, 202, 180, 255]),
+        (26, [216, 201, 178, 255]),
+        (27, [215, 200, 177, 255]),
+        (28, [214, 200, 175, 255]),
+        (29, [214, 199, 174, 255]),
+        (30, [213, 198, 172, 255]),
+        (31, [212, 197, 171, 255]),
+        (32, [211, 196, 170, 255]),
+        (33, [210, 195, 168, 255]),
+        (34, [209, 195, 167, 255]),
+        (35, [209, 194, 165, 255]),
+        (36, [208, 193, 164, 255]),
+        (37, [207, 192, 162, 255]),
+        (38, [206, 192, 161, 255]),
+        (39, [205, 191, 159, 255]),
+        (40, [204, 190, 158, 255]),
+        (41, [204, 189, 156, 255]),
+        (42, [203, 188, 155, 255]),
+        (43, [202, 188, 153, 255]),
+        (44, [201, 187, 152, 255]),
+        (45, [200, 186, 150, 255]),
+        (46, [199, 185, 149, 255]),
+        (47, [199, 185, 148, 255]),
+        (48, [198, 184, 146, 255]),
+        (49, [197, 183, 145, 255]),
+        (50, [196, 182, 143, 255]),
+        (51, [195, 181, 142, 255]),
+        (52, [194, 181, 140, 255]),
+        (53, [193, 180, 139, 255]),
+        (54, [193, 179, 137, 255]),
+        (55, [192, 178, 136, 255]),
+        (56, [191, 177, 134, 255]),
+        (57, [190, 177, 133, 255]),
+        (58, [189, 176, 131, 255]),
+        (59, [188, 175, 130, 255]),
+        (60, [188, 174, 128, 255]),
+        (61, [187, 174, 127, 255]),
+        (62, [186, 173, 125, 255]),
+        (63, [185, 172, 124, 255]),
+        (64, [184, 171, 122, 255]),
+        (65, [183, 171, 121, 255]),
+        (66, [182, 170, 119, 255]),
+        (67, [181, 169, 117, 255]),
+        (68, [180, 169, 116, 255]),
+        (69, [179, 168, 114, 255]),
+        (70, [178, 167, 112, 255]),
+        (71, [177, 167, 111, 255]),
+        (72, [176, 166, 109, 255]),
+        (73, [175, 165, 107, 255]),
+        (74, [174, 164, 105, 255]),
+        (75, [173, 164, 104, 255]),
+        (76, [172, 163, 102, 255]),
+        (77, [171, 162, 100, 255]),
+        (78, [170, 162, 99, 255]),
+        (79, [170, 161, 97, 255]),
+        (80, [169, 160, 95, 255]),
+        (81, [168, 160, 94, 255]),
+        (82, [167, 159, 92, 255]),
+        (83, [166, 158, 90, 255]),
+        (84, [165, 158, 89, 255]),
+        (85, [164, 157, 87, 255]),
+        (86, [163, 156, 85, 255]),
+        (87, [162, 156, 84, 255]),
+        (88, [161, 155, 82, 255]),
+        (89, [160, 154, 80, 255]),
+        (90, [159, 153, 78, 255]),
+        (91, [158, 153, 77, 255]),
+        (92, [157, 152, 75, 255]),
+        (93, [156, 151, 73, 255]),
+        (94, [155, 151, 72, 255]),
+        (95, [154, 150, 70, 255]),
+        (96, [153, 149, 69, 255]),
+        (97, [152, 149, 68, 255]),
+        (98, [151, 148, 66, 255]),
+        (99, [150, 147, 65, 255]),
+        (100, [149, 147, 64, 255]),
+        (101, [147, 146, 63, 255]),
+        (102, [146, 145, 61, 255]),
+        (103, [145, 145, 60, 255]),
+        (104, [144, 144, 59, 255]),
+        (105, [143, 143, 58, 255]),
+        (106, [142, 142, 56, 255]),
+        (107, [141, 142, 55, 255]),
+        (108, [140, 141, 54, 255]),
+        (109, [139, 140, 53, 255]),
+        (110, [138, 140, 51, 255]),
+        (111, [137, 139, 50, 255]),
+        (112, [135, 138, 49, 255]),
+        (113, [134, 138, 48, 255]),
+        (114, [133, 137, 46, 255]),
+        (115, [132, 136, 45, 255]),
+        (116, [131, 136, 44, 255]),
+        (117, [130, 135, 43, 255]),
+        (118, [129, 134, 41, 255]),
+        (119, [128, 134, 40, 255]),
+        (120, [127, 133, 39, 255]),
+        (121, [126, 132, 38, 255]),
+        (122, [124, 131, 36, 255]),
+        (123, [123, 131, 35, 255]),
+        (124, [122, 130, 34, 255]),
+        (125, [121, 129, 33, 255]),
+        (126, [120, 129, 31, 255]),
+        (127, [119, 128, 30, 255]),
+        (128, [118, 127, 30, 255]),
+        (129, [117, 127, 30, 255]),
+        (130, [116, 126, 30, 255]),
+        (131, [115, 125, 30, 255]),
+        (132, [114, 124, 30, 255]),
+        (133, [113, 124, 31, 255]),
+        (134, [112, 123, 31, 255]),
+        (135, [111, 122, 31, 255]),
+        (136, [110, 121, 31, 255]),
+        (137, [109, 121, 31, 255]),
+        (138, [108, 120, 31, 255]),
+        (139, [107, 119, 31, 255]),
+        (140, [106, 118, 31, 255]),
+        (141, [105, 118, 31, 255]),
+        (142, [104, 117, 31, 255]),
+        (143, [103, 116, 32, 255]),
+        (144, [102, 115, 32, 255]),
+        (145, [101, 115, 32, 255]),
+        (146, [100, 114, 32, 255]),
+        (147, [99, 113, 32, 255]),
+        (148, [98, 112, 32, 255]),
+        (149, [97, 112, 32, 255]),
+        (150, [96, 111, 32, 255]),
+        (151, [95, 110, 32, 255]),
+        (152, [94, 109, 32, 255]),
+        (153, [93, 109, 32, 255]),
+        (154, [92, 108, 33, 255]),
+        (155, [91, 107, 33, 255]),
+        (156, [90, 106, 33, 255]),
+        (157, [89, 106, 33, 255]),
+        (158, [88, 105, 33, 255]),
+        (159, [87, 104, 33, 255]),
+        (160, [86, 103, 33, 255]),
+        (161, [85, 102, 33, 255]),
+        (162, [85, 102, 33, 255]),
+        (163, [84, 101, 33, 255]),
+        (164, [83, 100, 33, 255]),
+        (165, [82, 99, 33, 255]),
+        (166, [81, 99, 33, 255]),
+        (167, [81, 98, 33, 255]),
+        (168, [80, 97, 33, 255]),
+        (169, [79, 96, 33, 255]),
+        (170, [78, 95, 33, 255]),
+        (171, [77, 95, 33, 255]),
+        (172, [76, 94, 33, 255]),
+        (173, [76, 93, 33, 255]),
+        (174, [75, 92, 33, 255]),
+        (175, [74, 92, 33, 255]),
+        (176, [73, 91, 33, 255]),
+        (177, [72, 90, 33, 255]),
+        (178, [72, 89, 33, 255]),
+        (179, [71, 88, 33, 255]),
+        (180, [70, 88, 33, 255]),
+        (181, [69, 87, 33, 255]),
+        (182, [68, 86, 33, 255]),
+        (183, [68, 85, 33, 255]),
+        (184, [67, 84, 33, 255]),
+        (185, [66, 84, 33, 255]),
+        (186, [65, 83, 33, 255]),
+        (187, [64, 82, 33, 255]),
+        (188, [63, 81, 33, 255]),
+        (189, [63, 81, 33, 255]),
+        (190, [62, 80, 33, 255]),
+        (191, [61, 79, 33, 255]),
+        (192, [60, 78, 32, 255]),
+        (193, [59, 78, 31, 255]),
+        (194, [58, 77, 30, 255]),
+        (195, [57, 76, 29, 255]),
+        (196, [56, 76, 28, 255]),
+        (197, [55, 75, 27, 255]),
+        (198, [54, 74, 26, 255]),
+        (199, [53, 74, 25, 255]),
+        (200, [52, 73, 24, 255]),
+        (201, [51, 72, 23, 255]),
+        (202, [50, 72, 22, 255]),
+        (203, [49, 71, 21, 255]),
+        (204, [48, 70, 20, 255]),
+        (205, [47, 70, 19, 255]),
+        (206, [46, 69, 18, 255]),
+        (207, [46, 69, 17, 255]),
+        (208, [45, 68, 15, 255]),
+        (209, [44, 67, 14, 255]),
+        (210, [43, 67, 13, 255]),
+        (211, [42, 66, 12, 255]),
+        (212, [41, 65, 11, 255]),
+        (213, [40, 65, 10, 255]),
+        (214, [39, 64, 9, 255]),
+        (215, [38, 63, 8, 255]),
+        (216, [37, 63, 7, 255]),
+        (217, [36, 62, 6, 255]),
+        (218, [35, 61, 5, 255]),
+        (219, [34, 61, 4, 255]),
+        (220, [33, 60, 3, 255]),
+        (221, [32, 59, 2, 255]),
+        (222, [31, 59, 1, 255]),
+        (223, [30, 58, 0, 255]),
+        (224, [29, 57, 0, 255]),
+        (225, [29, 57, 0, 255]),
+        (226, [28, 56, 0, 255]),
+        (227, [28, 55, 0, 255]),
+        (228, [27, 54, 0, 255]),
+        (229, [26, 54, 1, 255]),
+        (230, [26, 53, 1, 255]),
+        (231, [25, 52, 1, 255]),
+        (232, [24, 52, 1, 255]),
+        (233, [24, 51, 1, 255]),
+        (234, [23, 50, 1, 255]),
+        (235, [23, 49, 1, 255]),
+        (236, [22, 49, 1, 255]),
+        (237, [21, 48, 1, 255]),
+        (238, [21, 47, 1, 255]),
+        (239, [20, 47, 2, 255]),
+        (240, [19, 46, 2, 255]),
+        (241, [19, 45, 2, 255]),
+        (242, [18, 44, 2, 255]),
+        (243, [18, 44, 2, 255]),
+        (244, [17, 43, 2, 255]),
+        (245, [16, 42, 2, 255]),
+        (246, [16, 41, 2, 255]),
+        (247, [15, 41, 2, 255]),
+        (248, [14, 40, 2, 255]),
+        (249, [14, 39, 2, 255]),
+        (250, [13, 39, 3, 255]),
+        (251, [13, 38, 3, 255]),
+        (252, [12, 37, 3, 255]),
+        (253, [11, 36, 3, 255]),
+        (254, [11, 36, 3, 255]),
+        (255, [0, 0, 0, 255]),
+    ];
+
+    Colorizer::palette(
+        breakpoints
+            .into_iter()
+            .map(|(value, [r, g, b, a])| (value.into(), RgbaColor::new(r, g, b, a)))
+            .collect(),
+        RgbaColor::transparent(),
+        RgbaColor::transparent(),
+    )
+    .unwrap()
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub async fn add_ndvi_3857_to_layers<C: ApplicationContext<Session = UserSession>>(
+    app_ctx: &C,
+) -> (DataProviderId, LayerId) {
+    let (dataset_id, named_data) = add_ndvi_to_datasets2(app_ctx, true, true).await;
+    let layer_id = LayerId(dataset_id.to_string());
+
+    let system_session = UserSession::admin_session();
+    let db = app_ctx.session_context(system_session).db();
+
+    let root_collection_id = db.get_root_layer_collection_id().await.unwrap();
+
+    db.add_layer_with_id(
+        &layer_id,
+        AddLayer {
+            name: "NDVI".to_string(),
+            description: "NDVI Layer".to_string(),
+            workflow: Workflow::Typed {
+                operator: NewTypedOperator::Raster(NewRasterOperator::Reprojection(Reprojection {
+                    r#type: Default::default(),
+                    params: ReprojectionParameters {
+                        target_spatial_reference: SpatialReference::web_mercator().into(),
+                        derive_out_spec: DeriveOutRasterSpecsSource::DataBounds,
+                    },
+                    sources: SingleRasterOrVectorSource {
+                        source: SingleRasterOrVectorOperator::Raster(
+                            NewRasterOperator::GdalSource(NewGdalSource {
+                                r#type: Default::default(),
+                                params: NewGdalSourceParameters {
+                                    data: named_data.to_string(),
+                                    overview_level: None,
+                                },
+                            }),
+                        ),
+                    }
+                    .into(),
+                })),
+            },
+            symbology: Some(Symbology::Raster(RasterSymbology {
+                r#type: Default::default(),
+                opacity: 1.0,
+                raster_colorizer: RasterColorizer::SingleBand {
+                    band: 0,
+                    band_colorizer: ndvi_255_colorizer(),
+                },
+            })),
+            properties: vec![],
+            metadata: Default::default(),
+        },
+        &root_collection_id,
+    )
+    .await
+    .unwrap();
+
+    (INTERNAL_PROVIDER_ID, layer_id)
 }
 
 #[allow(clippy::missing_panics_doc)]
@@ -1189,7 +1659,7 @@ pub(crate) mod mock_oidc {
                 email: Some(EndUserEmail::new("robin@dummy_db.com".to_string())),
                 name,
                 nonce: Some(Nonce::new(SINGLE_NONCE.to_string())),
-                duration: Some(core::time::Duration::from_secs(1800)),
+                duration: Some(core::time::Duration::from_mins(30)),
                 access: ACCESS_TOKEN.to_string(),
                 access_for_id: ACCESS_TOKEN.to_string(),
                 refresh: None,

@@ -19,11 +19,11 @@ import { BoundingBox2DFromJSON, BoundingBox2DToJSON, } from './BoundingBox2D';
  * Check if a given object implements the VectorResultDescriptor interface.
  */
 export function instanceOfVectorResultDescriptor(value) {
-    if (!('columns' in value) || value['columns'] === undefined)
-        return false;
     if (!('dataType' in value) || value['dataType'] === undefined)
         return false;
     if (!('spatialReference' in value) || value['spatialReference'] === undefined)
+        return false;
+    if (!('columns' in value) || value['columns'] === undefined)
         return false;
     return true;
 }
@@ -35,11 +35,11 @@ export function VectorResultDescriptorFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'bbox': json['bbox'] == null ? undefined : BoundingBox2DFromJSON(json['bbox']),
-        'columns': (mapValues(json['columns'], VectorColumnInfoFromJSON)),
         'dataType': VectorDataTypeFromJSON(json['dataType']),
         'spatialReference': json['spatialReference'],
+        'columns': (mapValues(json['columns'], VectorColumnInfoFromJSON)),
         'time': json['time'] == null ? undefined : TimeIntervalFromJSON(json['time']),
+        'bbox': json['bbox'] == null ? undefined : BoundingBox2DFromJSON(json['bbox']),
     };
 }
 export function VectorResultDescriptorToJSON(json) {
@@ -50,10 +50,10 @@ export function VectorResultDescriptorToJSONTyped(value, ignoreDiscriminator = f
         return value;
     }
     return {
-        'bbox': BoundingBox2DToJSON(value['bbox']),
-        'columns': (mapValues(value['columns'], VectorColumnInfoToJSON)),
         'dataType': VectorDataTypeToJSON(value['dataType']),
         'spatialReference': value['spatialReference'],
+        'columns': (mapValues(value['columns'], VectorColumnInfoToJSON)),
         'time': TimeIntervalToJSON(value['time']),
+        'bbox': BoundingBox2DToJSON(value['bbox']),
     };
 }

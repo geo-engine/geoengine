@@ -13,30 +13,30 @@ use serde::{Deserialize, Serialize};
 /// SpatialReferenceSpecification : The specification of a spatial reference, where extent and axis labels are given in natural order (x, y) = (east, north)
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SpatialReferenceSpecification {
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "spatialReference")]
+    pub spatial_reference: String,
+    #[serde(rename = "projString")]
+    pub proj_string: String,
+    #[serde(rename = "extent")]
+    pub extent: Box<models::BoundingBox2D>,
     #[serde(rename = "axisLabels", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub axis_labels: Option<Option<Vec<String>>>,
     #[serde(rename = "axisOrder", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub axis_order: Option<Option<models::AxisOrder>>,
-    #[serde(rename = "extent")]
-    pub extent: Box<models::BoundingBox2D>,
-    #[serde(rename = "name")]
-    pub name: String,
-    #[serde(rename = "projString")]
-    pub proj_string: String,
-    #[serde(rename = "spatialReference")]
-    pub spatial_reference: String,
 }
 
 impl SpatialReferenceSpecification {
     /// The specification of a spatial reference, where extent and axis labels are given in natural order (x, y) = (east, north)
-    pub fn new(extent: models::BoundingBox2D, name: String, proj_string: String, spatial_reference: String) -> SpatialReferenceSpecification {
+    pub fn new(name: String, spatial_reference: String, proj_string: String, extent: models::BoundingBox2D) -> SpatialReferenceSpecification {
         SpatialReferenceSpecification {
+            name,
+            spatial_reference,
+            proj_string,
+            extent: Box::new(extent),
             axis_labels: None,
             axis_order: None,
-            extent: Box::new(extent),
-            name,
-            proj_string,
-            spatial_reference,
         }
     }
 }

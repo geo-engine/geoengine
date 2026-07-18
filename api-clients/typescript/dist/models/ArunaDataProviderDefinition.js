@@ -28,21 +28,21 @@ exports.ArunaDataProviderDefinitionTypeEnum = {
  * Check if a given object implements the ArunaDataProviderDefinition interface.
  */
 function instanceOfArunaDataProviderDefinition(value) {
-    if (!('apiToken' in value) || value['apiToken'] === undefined)
-        return false;
-    if (!('apiUrl' in value) || value['apiUrl'] === undefined)
-        return false;
-    if (!('description' in value) || value['description'] === undefined)
-        return false;
-    if (!('filterLabel' in value) || value['filterLabel'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
+    if (!('description' in value) || value['description'] === undefined)
+        return false;
+    if (!('apiUrl' in value) || value['apiUrl'] === undefined)
+        return false;
     if (!('projectId' in value) || value['projectId'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('apiToken' in value) || value['apiToken'] === undefined)
+        return false;
+    if (!('filterLabel' in value) || value['filterLabel'] === undefined)
         return false;
     return true;
 }
@@ -54,16 +54,16 @@ function ArunaDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'apiToken': json['apiToken'],
-        'apiUrl': json['apiUrl'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
-        'description': json['description'],
-        'filterLabel': json['filterLabel'],
+        'type': json['type'],
         'id': json['id'],
         'name': json['name'],
+        'description': json['description'],
         'priority': json['priority'] == null ? undefined : json['priority'],
+        'apiUrl': json['apiUrl'],
         'projectId': json['projectId'],
-        'type': json['type'],
+        'apiToken': json['apiToken'],
+        'filterLabel': json['filterLabel'],
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 function ArunaDataProviderDefinitionToJSON(json) {
@@ -74,15 +74,15 @@ function ArunaDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator = fal
         return value;
     }
     return {
-        'apiToken': value['apiToken'],
-        'apiUrl': value['apiUrl'],
-        'cacheTtl': value['cacheTtl'],
-        'description': value['description'],
-        'filterLabel': value['filterLabel'],
+        'type': value['type'],
         'id': value['id'],
         'name': value['name'],
+        'description': value['description'],
         'priority': value['priority'],
+        'apiUrl': value['apiUrl'],
         'projectId': value['projectId'],
-        'type': value['type'],
+        'apiToken': value['apiToken'],
+        'filterLabel': value['filterLabel'],
+        'cacheTtl': value['cacheTtl'],
     };
 }

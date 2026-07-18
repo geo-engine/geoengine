@@ -14,9 +14,9 @@
  * Check if a given object implements the AddLayerCollection interface.
  */
 export function instanceOfAddLayerCollection(value) {
-    if (!('description' in value) || value['description'] === undefined)
-        return false;
     if (!('name' in value) || value['name'] === undefined)
+        return false;
+    if (!('description' in value) || value['description'] === undefined)
         return false;
     return true;
 }
@@ -28,8 +28,8 @@ export function AddLayerCollectionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'description': json['description'],
         'name': json['name'],
+        'description': json['description'],
         'properties': json['properties'] == null ? undefined : json['properties'],
     };
 }
@@ -41,8 +41,8 @@ export function AddLayerCollectionToJSONTyped(value, ignoreDiscriminator = false
         return value;
     }
     return {
-        'description': value['description'],
         'name': value['name'],
+        'description': value['description'],
         'properties': value['properties'],
     };
 }

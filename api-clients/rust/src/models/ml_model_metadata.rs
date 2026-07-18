@@ -12,29 +12,29 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MlModelMetadata {
-    #[serde(rename = "inputNoDataHandling")]
-    pub input_no_data_handling: Box<models::MlModelInputNoDataHandling>,
-    #[serde(rename = "inputShape")]
-    pub input_shape: Box<models::MlTensorShape3D>,
     #[serde(rename = "inputType")]
     pub input_type: models::RasterDataType,
-    #[serde(rename = "outputNoDataHandling")]
-    pub output_no_data_handling: Box<models::MlModelOutputNoDataHandling>,
-    #[serde(rename = "outputShape")]
-    pub output_shape: Box<models::MlTensorShape3D>,
     #[serde(rename = "outputType")]
     pub output_type: models::RasterDataType,
+    #[serde(rename = "inputShape")]
+    pub input_shape: Box<models::MlTensorShape3D>,
+    #[serde(rename = "outputShape")]
+    pub output_shape: Box<models::MlTensorShape3D>,
+    #[serde(rename = "inputNoDataHandling")]
+    pub input_no_data_handling: Box<models::MlModelInputNoDataHandling>,
+    #[serde(rename = "outputNoDataHandling")]
+    pub output_no_data_handling: Box<models::MlModelOutputNoDataHandling>,
 }
 
 impl MlModelMetadata {
-    pub fn new(input_no_data_handling: models::MlModelInputNoDataHandling, input_shape: models::MlTensorShape3D, input_type: models::RasterDataType, output_no_data_handling: models::MlModelOutputNoDataHandling, output_shape: models::MlTensorShape3D, output_type: models::RasterDataType) -> MlModelMetadata {
+    pub fn new(input_type: models::RasterDataType, output_type: models::RasterDataType, input_shape: models::MlTensorShape3D, output_shape: models::MlTensorShape3D, input_no_data_handling: models::MlModelInputNoDataHandling, output_no_data_handling: models::MlModelOutputNoDataHandling) -> MlModelMetadata {
         MlModelMetadata {
-            input_no_data_handling: Box::new(input_no_data_handling),
-            input_shape: Box::new(input_shape),
             input_type,
-            output_no_data_handling: Box::new(output_no_data_handling),
-            output_shape: Box::new(output_shape),
             output_type,
+            input_shape: Box::new(input_shape),
+            output_shape: Box::new(output_shape),
+            input_no_data_handling: Box::new(input_no_data_handling),
+            output_no_data_handling: Box::new(output_no_data_handling),
         }
     }
 }

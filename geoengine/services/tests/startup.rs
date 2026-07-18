@@ -112,7 +112,7 @@ async fn it_starts_without_warnings_and_accepts_connections() {
     });
 
     client
-        .batch_execute(&format!("DROP SCHEMA {SCHEMA_NAME};",))
+        .batch_execute(&format!("DROP SCHEMA {SCHEMA_NAME};"))
         .await
         .unwrap();
 

@@ -29,9 +29,9 @@ exports.OgrSourceTypeEnum = {
  * Check if a given object implements the OgrSource interface.
  */
 function instanceOfOgrSource(value) {
-    if (!('params' in value) || value['params'] === undefined)
-        return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('params' in value) || value['params'] === undefined)
         return false;
     return true;
 }
@@ -43,8 +43,8 @@ function OgrSourceFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'params': (0, OgrSourceParameters_1.OgrSourceParametersFromJSON)(json['params']),
         'type': json['type'],
+        'params': (0, OgrSourceParameters_1.OgrSourceParametersFromJSON)(json['params']),
     };
 }
 function OgrSourceToJSON(json) {
@@ -55,7 +55,7 @@ function OgrSourceToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'params': (0, OgrSourceParameters_1.OgrSourceParametersToJSON)(value['params']),
         'type': value['type'],
+        'params': (0, OgrSourceParameters_1.OgrSourceParametersToJSON)(value['params']),
     };
 }

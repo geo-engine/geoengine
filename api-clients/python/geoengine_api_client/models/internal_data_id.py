@@ -27,9 +27,9 @@ class InternalDataId(BaseModel):
     """
     InternalDataId
     """ # noqa: E501
-    dataset_id: UUID = Field(alias="datasetId")
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["datasetId", "type"]
+    dataset_id: UUID = Field(alias="datasetId")
+    __properties: ClassVar[List[str]] = ["type", "datasetId"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -89,8 +89,8 @@ class InternalDataId(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "datasetId": obj.get("datasetId"),
-            "type": obj.get("type")
+            "type": obj.get("type"),
+            "datasetId": obj.get("datasetId")
         })
         return _obj
 

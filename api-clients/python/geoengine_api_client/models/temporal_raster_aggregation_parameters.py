@@ -30,10 +30,10 @@ class TemporalRasterAggregationParameters(BaseModel):
     Parameters for the `TemporalRasterAggregation` operator.
     """ # noqa: E501
     aggregation: Aggregation = Field(description="Aggregation method for values within each time window.  Encountering NO DATA makes the aggregation result NO DATA unless `ignoreNoData` is `true` for the selected aggregation variant.")
-    output_type: Optional[RasterDataType] = Field(default=None, description="Optional output raster data type.", alias="outputType")
     window: TimeStep = Field(description="Window size and granularity for the output time series.")
     window_reference: Optional[StrictInt] = Field(default=None, description="Optional reference timestamp used as the anchor for window boundaries.  If omitted, windows are anchored at `1970-01-01T00:00:00Z`.", alias="windowReference")
-    __properties: ClassVar[List[str]] = ["aggregation", "outputType", "window", "windowReference"]
+    output_type: Optional[RasterDataType] = Field(default=None, description="Optional output raster data type.", alias="outputType")
+    __properties: ClassVar[List[str]] = ["aggregation", "window", "windowReference", "outputType"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -80,15 +80,15 @@ class TemporalRasterAggregationParameters(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of window
         if self.window:
             _dict['window'] = self.window.to_dict()
-        # set to None if output_type (nullable) is None
-        # and model_fields_set contains the field
-        if self.output_type is None and "output_type" in self.model_fields_set:
-            _dict['outputType'] = None
-
         # set to None if window_reference (nullable) is None
         # and model_fields_set contains the field
         if self.window_reference is None and "window_reference" in self.model_fields_set:
             _dict['windowReference'] = None
+
+        # set to None if output_type (nullable) is None
+        # and model_fields_set contains the field
+        if self.output_type is None and "output_type" in self.model_fields_set:
+            _dict['outputType'] = None
 
         return _dict
 
@@ -103,9 +103,9 @@ class TemporalRasterAggregationParameters(BaseModel):
 
         _obj = cls.model_validate({
             "aggregation": Aggregation.from_dict(obj["aggregation"]) if obj.get("aggregation") is not None else None,
-            "outputType": obj.get("outputType"),
             "window": TimeStep.from_dict(obj["window"]) if obj.get("window") is not None else None,
-            "windowReference": obj.get("windowReference")
+            "windowReference": obj.get("windowReference"),
+            "outputType": obj.get("outputType")
         })
         return _obj
 

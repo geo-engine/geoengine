@@ -35,25 +35,25 @@ class TestTemporalRasterAggregation(unittest.TestCase):
         model = TemporalRasterAggregation()
         if include_optional:
             return TemporalRasterAggregation(
+                type = 'TemporalRasterAggregation',
                 params = geoengine_api_client.models.temporal_raster_aggregation_parameters.TemporalRasterAggregationParameters(
                     aggregation = null, 
-                    output_type = null, 
                     window = null, 
-                    window_reference = null, ),
+                    window_reference = null, 
+                    output_type = null, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
-                    raster = null, ),
-                type = 'TemporalRasterAggregation'
+                    raster = null, )
             )
         else:
             return TemporalRasterAggregation(
+                type = 'TemporalRasterAggregation',
                 params = geoengine_api_client.models.temporal_raster_aggregation_parameters.TemporalRasterAggregationParameters(
                     aggregation = null, 
-                    output_type = null, 
                     window = null, 
-                    window_reference = null, ),
+                    window_reference = null, 
+                    output_type = null, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
                     raster = null, ),
-                type = 'TemporalRasterAggregation',
         )
         """
 

@@ -20,10 +20,16 @@ import type { RasterDataType } from './RasterDataType';
 export interface MlModelMetadata {
     /**
      *
-     * @type {MlModelInputNoDataHandling}
+     * @type {RasterDataType}
      * @memberof MlModelMetadata
      */
-    inputNoDataHandling: MlModelInputNoDataHandling;
+    inputType: RasterDataType;
+    /**
+     *
+     * @type {RasterDataType}
+     * @memberof MlModelMetadata
+     */
+    outputType: RasterDataType;
     /**
      *
      * @type {MlTensorShape3D}
@@ -32,28 +38,22 @@ export interface MlModelMetadata {
     inputShape: MlTensorShape3D;
     /**
      *
-     * @type {RasterDataType}
-     * @memberof MlModelMetadata
-     */
-    inputType: RasterDataType;
-    /**
-     *
-     * @type {MlModelOutputNoDataHandling}
-     * @memberof MlModelMetadata
-     */
-    outputNoDataHandling: MlModelOutputNoDataHandling;
-    /**
-     *
      * @type {MlTensorShape3D}
      * @memberof MlModelMetadata
      */
     outputShape: MlTensorShape3D;
     /**
      *
-     * @type {RasterDataType}
+     * @type {MlModelInputNoDataHandling}
      * @memberof MlModelMetadata
      */
-    outputType: RasterDataType;
+    inputNoDataHandling: MlModelInputNoDataHandling;
+    /**
+     *
+     * @type {MlModelOutputNoDataHandling}
+     * @memberof MlModelMetadata
+     */
+    outputNoDataHandling: MlModelOutputNoDataHandling;
 }
 /**
  * Check if a given object implements the MlModelMetadata interface.

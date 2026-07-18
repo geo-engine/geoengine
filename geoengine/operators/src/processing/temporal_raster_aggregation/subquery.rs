@@ -86,7 +86,7 @@ where
             self.time
         );
 
-        debug_assert!(self.state_grid.grid_shape() == in_tile.grid_shape());
+        debug_assert_eq!(self.state_grid.grid_shape(), in_tile.grid_shape());
 
         let in_tile_grid = match in_tile.grid_array {
             GridOrEmpty::Grid(g) => g,
@@ -146,7 +146,7 @@ where
             self.time
         );
 
-        debug_assert!(self.state_grid.grid_shape() == in_tile.grid_shape());
+        debug_assert_eq!(self.state_grid.grid_shape(), in_tile.grid_shape());
 
         let in_tile_grid = match in_tile.grid_array {
             GridOrEmpty::Grid(g) => g,

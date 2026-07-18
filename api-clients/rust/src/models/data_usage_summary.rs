@@ -12,20 +12,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DataUsageSummary {
-    #[serde(rename = "count")]
-    pub count: i64,
-    #[serde(rename = "data")]
-    pub data: String,
     #[serde(rename = "timestamp")]
     pub timestamp: String,
+    #[serde(rename = "data")]
+    pub data: String,
+    #[serde(rename = "count")]
+    pub count: i64,
 }
 
 impl DataUsageSummary {
-    pub fn new(count: i64, data: String, timestamp: String) -> DataUsageSummary {
+    pub fn new(timestamp: String, data: String, count: i64) -> DataUsageSummary {
         DataUsageSummary {
-            count,
-            data,
             timestamp,
+            data,
+            count,
         }
     }
 }

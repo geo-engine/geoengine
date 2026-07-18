@@ -36,9 +36,9 @@ class TestOgrSourceDatasetTimeType(unittest.TestCase):
         if include_optional:
             return OgrSourceDatasetTimeType(
                 type = 'none',
-                duration = None,
                 start_field = '',
                 start_format = None,
+                duration = None,
                 end_field = '',
                 end_format = None,
                 duration_field = ''
@@ -46,9 +46,9 @@ class TestOgrSourceDatasetTimeType(unittest.TestCase):
         else:
             return OgrSourceDatasetTimeType(
                 type = 'none',
-                duration = None,
                 start_field = '',
                 start_format = None,
+                duration = None,
                 end_field = '',
                 end_format = None,
                 duration_field = '',

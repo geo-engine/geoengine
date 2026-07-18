@@ -28,16 +28,16 @@ import {
 export interface GeoJson {
     /**
      * 
-     * @type {Array<any>}
-     * @memberof GeoJson
-     */
-    features: Array<any>;
-    /**
-     * 
      * @type {CollectionType}
      * @memberof GeoJson
      */
     type: CollectionType;
+    /**
+     * 
+     * @type {Array<any>}
+     * @memberof GeoJson
+     */
+    features: Array<any>;
 }
 
 
@@ -46,8 +46,8 @@ export interface GeoJson {
  * Check if a given object implements the GeoJson interface.
  */
 export function instanceOfGeoJson(value: object): value is GeoJson {
-    if (!('features' in value) || value['features'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('features' in value) || value['features'] === undefined) return false;
     return true;
 }
 
@@ -61,8 +61,8 @@ export function GeoJsonFromJSONTyped(json: any, ignoreDiscriminator: boolean): G
     }
     return {
         
-        'features': json['features'],
         'type': CollectionTypeFromJSON(json['type']),
+        'features': json['features'],
     };
 }
 
@@ -77,8 +77,8 @@ export function GeoJsonToJSONTyped(value?: GeoJson | null, ignoreDiscriminator: 
 
     return {
         
-        'features': value['features'],
         'type': CollectionTypeToJSON(value['type']),
+        'features': value['features'],
     };
 }
 

@@ -12,26 +12,26 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct LayerCollectionListing {
-    #[serde(rename = "description")]
-    pub description: String,
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "id")]
     pub id: Box<models::ProviderLayerCollectionId>,
     #[serde(rename = "name")]
     pub name: String,
+    #[serde(rename = "description")]
+    pub description: String,
     #[serde(rename = "properties", skip_serializing_if = "Option::is_none")]
     pub properties: Option<Vec<Vec<String>>>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
 }
 
 impl LayerCollectionListing {
-    pub fn new(description: String, id: models::ProviderLayerCollectionId, name: String, r#type: Type) -> LayerCollectionListing {
+    pub fn new(r#type: Type, id: models::ProviderLayerCollectionId, name: String, description: String) -> LayerCollectionListing {
         LayerCollectionListing {
-            description,
+            r#type,
             id: Box::new(id),
             name,
+            description,
             properties: None,
-            r#type,
         }
     }
 }

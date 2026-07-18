@@ -12,29 +12,29 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GfbioAbcdDataProviderDefinition {
-    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
-    pub cache_ttl: Option<i32>,
-    #[serde(rename = "dbConfig")]
-    pub db_config: Box<models::DatabaseConnectionConfig>,
-    #[serde(rename = "description")]
-    pub description: String,
-    #[serde(rename = "name")]
-    pub name: String,
-    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub priority: Option<Option<i32>>,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "description")]
+    pub description: String,
+    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Option<i32>>,
+    #[serde(rename = "dbConfig")]
+    pub db_config: Box<models::DatabaseConnectionConfig>,
+    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<i32>,
 }
 
 impl GfbioAbcdDataProviderDefinition {
-    pub fn new(db_config: models::DatabaseConnectionConfig, description: String, name: String, r#type: Type) -> GfbioAbcdDataProviderDefinition {
+    pub fn new(r#type: Type, name: String, description: String, db_config: models::DatabaseConnectionConfig) -> GfbioAbcdDataProviderDefinition {
         GfbioAbcdDataProviderDefinition {
-            cache_ttl: None,
-            db_config: Box::new(db_config),
-            description,
-            name,
-            priority: None,
             r#type,
+            name,
+            description,
+            priority: None,
+            db_config: Box::new(db_config),
+            cache_ttl: None,
         }
     }
 }

@@ -21,7 +21,31 @@ export interface AddLayer {
      * @type {string}
      * @memberof AddLayer
      */
+    name: string;
+    /**
+     *
+     * @type {string}
+     * @memberof AddLayer
+     */
     description: string;
+    /**
+     *
+     * @type {Workflow}
+     * @memberof AddLayer
+     */
+    workflow: Workflow;
+    /**
+     *
+     * @type {Symbology}
+     * @memberof AddLayer
+     */
+    symbology?: Symbology | null;
+    /**
+     * properties, for instance, to be rendered in the UI
+     * @type {Array<Array<string>>}
+     * @memberof AddLayer
+     */
+    properties?: Array<Array<string>>;
     /**
      * metadata used for loading the data
      * @type {{ [key: string]: string; }}
@@ -30,30 +54,6 @@ export interface AddLayer {
     metadata?: {
         [key: string]: string;
     };
-    /**
-     *
-     * @type {string}
-     * @memberof AddLayer
-     */
-    name: string;
-    /**
-     * properties, for instance, to be rendered in the UI
-     * @type {Array<Array<string>>}
-     * @memberof AddLayer
-     */
-    properties?: Array<Array<string>>;
-    /**
-     *
-     * @type {Symbology}
-     * @memberof AddLayer
-     */
-    symbology?: Symbology | null;
-    /**
-     *
-     * @type {Workflow}
-     * @memberof AddLayer
-     */
-    workflow: Workflow;
 }
 /**
  * Check if a given object implements the AddLayer interface.

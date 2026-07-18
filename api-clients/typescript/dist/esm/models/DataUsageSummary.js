@@ -14,11 +14,11 @@
  * Check if a given object implements the DataUsageSummary interface.
  */
 export function instanceOfDataUsageSummary(value) {
-    if (!('count' in value) || value['count'] === undefined)
+    if (!('timestamp' in value) || value['timestamp'] === undefined)
         return false;
     if (!('data' in value) || value['data'] === undefined)
         return false;
-    if (!('timestamp' in value) || value['timestamp'] === undefined)
+    if (!('count' in value) || value['count'] === undefined)
         return false;
     return true;
 }
@@ -30,9 +30,9 @@ export function DataUsageSummaryFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'count': json['count'],
-        'data': json['data'],
         'timestamp': (new Date(json['timestamp'])),
+        'data': json['data'],
+        'count': json['count'],
     };
 }
 export function DataUsageSummaryToJSON(json) {
@@ -43,8 +43,8 @@ export function DataUsageSummaryToJSONTyped(value, ignoreDiscriminator = false) 
         return value;
     }
     return {
-        'count': value['count'],
-        'data': value['data'],
         'timestamp': value['timestamp'].toISOString(),
+        'data': value['data'],
+        'count': value['count'],
     };
 }

@@ -20,16 +20,22 @@ import type { ColorParam } from './ColorParam';
 export interface PointSymbology {
     /**
      *
-     * @type {ColorParam}
+     * @type {PointSymbologyTypeEnum}
      * @memberof PointSymbology
      */
-    fillColor: ColorParam;
+    type: PointSymbologyTypeEnum;
     /**
      *
      * @type {NumberParam}
      * @memberof PointSymbology
      */
     radius: NumberParam;
+    /**
+     *
+     * @type {ColorParam}
+     * @memberof PointSymbology
+     */
+    fillColor: ColorParam;
     /**
      *
      * @type {StrokeParam}
@@ -42,12 +48,6 @@ export interface PointSymbology {
      * @memberof PointSymbology
      */
     text?: TextSymbology | null;
-    /**
-     *
-     * @type {PointSymbologyTypeEnum}
-     * @memberof PointSymbology
-     */
-    type: PointSymbologyTypeEnum;
 }
 /**
  * @export

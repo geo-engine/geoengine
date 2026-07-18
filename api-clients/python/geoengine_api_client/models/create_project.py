@@ -28,11 +28,11 @@ class CreateProject(BaseModel):
     """
     CreateProject
     """ # noqa: E501
-    bounds: STRectangle
-    description: StrictStr
     name: StrictStr
+    description: StrictStr
+    bounds: STRectangle
     time_step: Optional[TimeStep] = Field(default=None, alias="timeStep")
-    __properties: ClassVar[List[str]] = ["bounds", "description", "name", "timeStep"]
+    __properties: ClassVar[List[str]] = ["name", "description", "bounds", "timeStep"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -96,9 +96,9 @@ class CreateProject(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "bounds": STRectangle.from_dict(obj["bounds"]) if obj.get("bounds") is not None else None,
-            "description": obj.get("description"),
             "name": obj.get("name"),
+            "description": obj.get("description"),
+            "bounds": STRectangle.from_dict(obj["bounds"]) if obj.get("bounds") is not None else None,
             "timeStep": TimeStep.from_dict(obj["timeStep"]) if obj.get("timeStep") is not None else None
         })
         return _obj

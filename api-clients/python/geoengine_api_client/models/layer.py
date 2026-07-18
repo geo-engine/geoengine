@@ -30,14 +30,14 @@ class Layer(BaseModel):
     """
     Layer
     """ # noqa: E501
-    description: StrictStr
     id: ProviderLayerId
-    metadata: Optional[Dict[str, StrictStr]] = Field(default=None, description="metadata used for loading the data")
     name: StrictStr
-    properties: Optional[List[Annotated[List[StrictStr], Field(min_length=2, max_length=2)]]] = Field(default=None, description="properties, for instance, to be rendered in the UI")
-    symbology: Optional[Symbology] = None
+    description: StrictStr
     workflow: Workflow
-    __properties: ClassVar[List[str]] = ["description", "id", "metadata", "name", "properties", "symbology", "workflow"]
+    symbology: Optional[Symbology] = None
+    properties: Optional[List[Annotated[List[StrictStr], Field(min_length=2, max_length=2)]]] = Field(default=None, description="properties, for instance, to be rendered in the UI")
+    metadata: Optional[Dict[str, StrictStr]] = Field(default=None, description="metadata used for loading the data")
+    __properties: ClassVar[List[str]] = ["id", "name", "description", "workflow", "symbology", "properties", "metadata"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -81,12 +81,12 @@ class Layer(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of id
         if self.id:
             _dict['id'] = self.id.to_dict()
-        # override the default output from pydantic by calling `to_dict()` of symbology
-        if self.symbology:
-            _dict['symbology'] = self.symbology.to_dict()
         # override the default output from pydantic by calling `to_dict()` of workflow
         if self.workflow:
             _dict['workflow'] = self.workflow.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of symbology
+        if self.symbology:
+            _dict['symbology'] = self.symbology.to_dict()
         # set to None if symbology (nullable) is None
         # and model_fields_set contains the field
         if self.symbology is None and "symbology" in self.model_fields_set:
@@ -104,13 +104,13 @@ class Layer(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "description": obj.get("description"),
             "id": ProviderLayerId.from_dict(obj["id"]) if obj.get("id") is not None else None,
-            "metadata": obj.get("metadata"),
             "name": obj.get("name"),
-            "properties": obj.get("properties"),
+            "description": obj.get("description"),
+            "workflow": Workflow.from_dict(obj["workflow"]) if obj.get("workflow") is not None else None,
             "symbology": Symbology.from_dict(obj["symbology"]) if obj.get("symbology") is not None else None,
-            "workflow": Workflow.from_dict(obj["workflow"]) if obj.get("workflow") is not None else None
+            "properties": obj.get("properties"),
+            "metadata": obj.get("metadata")
         })
         return _obj
 

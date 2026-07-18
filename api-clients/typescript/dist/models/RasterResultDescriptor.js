@@ -25,15 +25,15 @@ const RasterDataType_1 = require("./RasterDataType");
  * Check if a given object implements the RasterResultDescriptor interface.
  */
 function instanceOfRasterResultDescriptor(value) {
-    if (!('bands' in value) || value['bands'] === undefined)
-        return false;
     if (!('dataType' in value) || value['dataType'] === undefined)
-        return false;
-    if (!('spatialGrid' in value) || value['spatialGrid'] === undefined)
         return false;
     if (!('spatialReference' in value) || value['spatialReference'] === undefined)
         return false;
     if (!('time' in value) || value['time'] === undefined)
+        return false;
+    if (!('spatialGrid' in value) || value['spatialGrid'] === undefined)
+        return false;
+    if (!('bands' in value) || value['bands'] === undefined)
         return false;
     return true;
 }
@@ -45,11 +45,11 @@ function RasterResultDescriptorFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'bands': (json['bands'].map(RasterBandDescriptor_1.RasterBandDescriptorFromJSON)),
         'dataType': (0, RasterDataType_1.RasterDataTypeFromJSON)(json['dataType']),
-        'spatialGrid': (0, SpatialGridDescriptor_1.SpatialGridDescriptorFromJSON)(json['spatialGrid']),
         'spatialReference': json['spatialReference'],
         'time': (0, TimeDescriptor_1.TimeDescriptorFromJSON)(json['time']),
+        'spatialGrid': (0, SpatialGridDescriptor_1.SpatialGridDescriptorFromJSON)(json['spatialGrid']),
+        'bands': (json['bands'].map(RasterBandDescriptor_1.RasterBandDescriptorFromJSON)),
     };
 }
 function RasterResultDescriptorToJSON(json) {
@@ -60,10 +60,10 @@ function RasterResultDescriptorToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'bands': (value['bands'].map(RasterBandDescriptor_1.RasterBandDescriptorToJSON)),
         'dataType': (0, RasterDataType_1.RasterDataTypeToJSON)(value['dataType']),
-        'spatialGrid': (0, SpatialGridDescriptor_1.SpatialGridDescriptorToJSON)(value['spatialGrid']),
         'spatialReference': value['spatialReference'],
         'time': (0, TimeDescriptor_1.TimeDescriptorToJSON)(value['time']),
+        'spatialGrid': (0, SpatialGridDescriptor_1.SpatialGridDescriptorToJSON)(value['spatialGrid']),
+        'bands': (value['bands'].map(RasterBandDescriptor_1.RasterBandDescriptorToJSON)),
     };
 }

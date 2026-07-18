@@ -20,9 +20,9 @@ export const ProjectResourceTypeEnum = {
  * Check if a given object implements the ProjectResource interface.
  */
 export function instanceOfProjectResource(value) {
-    if (!('id' in value) || value['id'] === undefined)
-        return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('id' in value) || value['id'] === undefined)
         return false;
     return true;
 }
@@ -34,8 +34,8 @@ export function ProjectResourceFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'id': json['id'],
         'type': json['type'],
+        'id': json['id'],
     };
 }
 export function ProjectResourceToJSON(json) {
@@ -46,7 +46,7 @@ export function ProjectResourceToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'id': value['id'],
         'type': value['type'],
+        'id': value['id'],
     };
 }

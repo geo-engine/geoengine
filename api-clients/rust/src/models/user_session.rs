@@ -12,32 +12,32 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UserSession {
-    #[serde(rename = "created")]
-    pub created: String,
     #[serde(rename = "id")]
     pub id: uuid::Uuid,
-    #[serde(rename = "project", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub project: Option<Option<uuid::Uuid>>,
-    #[serde(rename = "roles")]
-    pub roles: Vec<uuid::Uuid>,
     #[serde(rename = "user")]
     pub user: Box<models::UserInfo>,
+    #[serde(rename = "created")]
+    pub created: String,
     #[serde(rename = "validUntil")]
     pub valid_until: String,
+    #[serde(rename = "project", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub project: Option<Option<uuid::Uuid>>,
     #[serde(rename = "view", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub view: Option<Option<Box<models::StRectangle>>>,
+    #[serde(rename = "roles")]
+    pub roles: Vec<uuid::Uuid>,
 }
 
 impl UserSession {
-    pub fn new(created: String, id: uuid::Uuid, roles: Vec<uuid::Uuid>, user: models::UserInfo, valid_until: String) -> UserSession {
+    pub fn new(id: uuid::Uuid, user: models::UserInfo, created: String, valid_until: String, roles: Vec<uuid::Uuid>) -> UserSession {
         UserSession {
-            created,
             id,
-            project: None,
-            roles,
             user: Box::new(user),
+            created,
             valid_until,
+            project: None,
             view: None,
+            roles,
         }
     }
 }

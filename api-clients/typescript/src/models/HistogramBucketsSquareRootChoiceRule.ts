@@ -20,16 +20,16 @@ import { mapValues } from '../runtime';
 export interface HistogramBucketsSquareRootChoiceRule {
     /**
      * 
-     * @type {number}
-     * @memberof HistogramBucketsSquareRootChoiceRule
-     */
-    maxNumberOfBuckets?: number;
-    /**
-     * 
      * @type {HistogramBucketsSquareRootChoiceRuleTypeEnum}
      * @memberof HistogramBucketsSquareRootChoiceRule
      */
     type: HistogramBucketsSquareRootChoiceRuleTypeEnum;
+    /**
+     * 
+     * @type {number}
+     * @memberof HistogramBucketsSquareRootChoiceRule
+     */
+    maxNumberOfBuckets?: number;
 }
 
 
@@ -60,8 +60,8 @@ export function HistogramBucketsSquareRootChoiceRuleFromJSONTyped(json: any, ign
     }
     return {
         
-        'maxNumberOfBuckets': json['maxNumberOfBuckets'] == null ? undefined : json['maxNumberOfBuckets'],
         'type': json['type'],
+        'maxNumberOfBuckets': json['maxNumberOfBuckets'] == null ? undefined : json['maxNumberOfBuckets'],
     };
 }
 
@@ -76,8 +76,8 @@ export function HistogramBucketsSquareRootChoiceRuleToJSONTyped(value?: Histogra
 
     return {
         
-        'maxNumberOfBuckets': value['maxNumberOfBuckets'],
         'type': value['type'],
+        'maxNumberOfBuckets': value['maxNumberOfBuckets'],
     };
 }
 

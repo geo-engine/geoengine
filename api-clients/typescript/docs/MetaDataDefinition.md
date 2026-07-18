@@ -6,18 +6,18 @@
 
 Name | Type
 ------------ | -------------
+`type` | string
 `loadingInfo` | [OgrSourceDataset](OgrSourceDataset.md)
 `resultDescriptor` | [RasterResultDescriptor](RasterResultDescriptor.md)
-`type` | string
-`cacheTtl` | number
-`dataTime` | [TimeInterval](TimeInterval.md)
 `params` | [Array&lt;GdalLoadingInfoTemporalSlice&gt;](GdalLoadingInfoTemporalSlice.md)
-`step` | [TimeStep](TimeStep.md)
 `timePlaceholders` | [{ [key: string]: GdalSourceTimePlaceholder; }](GdalSourceTimePlaceholder.md)
+`dataTime` | [TimeInterval](TimeInterval.md)
+`step` | [TimeStep](TimeStep.md)
+`cacheTtl` | number
 `time` | [TimeInterval](TimeInterval.md)
-`bandOffset` | number
-`end` | number
 `start` | number
+`end` | number
+`bandOffset` | number
 
 ## Example
 
@@ -26,18 +26,18 @@ import type { MetaDataDefinition } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "loadingInfo": null,
   "resultDescriptor": null,
-  "type": null,
-  "cacheTtl": null,
-  "dataTime": null,
   "params": null,
-  "step": null,
   "timePlaceholders": null,
+  "dataTime": null,
+  "step": null,
+  "cacheTtl": null,
   "time": null,
-  "bandOffset": null,
-  "end": null,
   "start": null,
+  "end": null,
+  "bandOffset": null,
 } satisfies MetaDataDefinition
 
 console.log(example)

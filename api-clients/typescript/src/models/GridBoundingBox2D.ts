@@ -31,21 +31,21 @@ export interface GridBoundingBox2D {
      * @type {GridIdx2D}
      * @memberof GridBoundingBox2D
      */
-    bottomRightIdx: GridIdx2D;
+    topLeftIdx: GridIdx2D;
     /**
      * 
      * @type {GridIdx2D}
      * @memberof GridBoundingBox2D
      */
-    topLeftIdx: GridIdx2D;
+    bottomRightIdx: GridIdx2D;
 }
 
 /**
  * Check if a given object implements the GridBoundingBox2D interface.
  */
 export function instanceOfGridBoundingBox2D(value: object): value is GridBoundingBox2D {
-    if (!('bottomRightIdx' in value) || value['bottomRightIdx'] === undefined) return false;
     if (!('topLeftIdx' in value) || value['topLeftIdx'] === undefined) return false;
+    if (!('bottomRightIdx' in value) || value['bottomRightIdx'] === undefined) return false;
     return true;
 }
 
@@ -59,8 +59,8 @@ export function GridBoundingBox2DFromJSONTyped(json: any, ignoreDiscriminator: b
     }
     return {
         
-        'bottomRightIdx': GridIdx2DFromJSON(json['bottomRightIdx']),
         'topLeftIdx': GridIdx2DFromJSON(json['topLeftIdx']),
+        'bottomRightIdx': GridIdx2DFromJSON(json['bottomRightIdx']),
     };
 }
 
@@ -75,8 +75,8 @@ export function GridBoundingBox2DToJSONTyped(value?: GridBoundingBox2D | null, i
 
     return {
         
-        'bottomRightIdx': GridIdx2DToJSON(value['bottomRightIdx']),
         'topLeftIdx': GridIdx2DToJSON(value['topLeftIdx']),
+        'bottomRightIdx': GridIdx2DToJSON(value['bottomRightIdx']),
     };
 }
 

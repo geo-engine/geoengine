@@ -20,16 +20,16 @@ import { mapValues } from '../runtime';
 export interface StaticColor {
     /**
      * 
-     * @type {Array<number>}
-     * @memberof StaticColor
-     */
-    color: Array<number>;
-    /**
-     * 
      * @type {StaticColorTypeEnum}
      * @memberof StaticColor
      */
     type: StaticColorTypeEnum;
+    /**
+     * 
+     * @type {Array<number>}
+     * @memberof StaticColor
+     */
+    color: Array<number>;
 }
 
 
@@ -46,8 +46,8 @@ export type StaticColorTypeEnum = typeof StaticColorTypeEnum[keyof typeof Static
  * Check if a given object implements the StaticColor interface.
  */
 export function instanceOfStaticColor(value: object): value is StaticColor {
-    if (!('color' in value) || value['color'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('color' in value) || value['color'] === undefined) return false;
     return true;
 }
 
@@ -61,8 +61,8 @@ export function StaticColorFromJSONTyped(json: any, ignoreDiscriminator: boolean
     }
     return {
         
-        'color': json['color'],
         'type': json['type'],
+        'color': json['color'],
     };
 }
 
@@ -77,8 +77,8 @@ export function StaticColorToJSONTyped(value?: StaticColor | null, ignoreDiscrim
 
     return {
         
-        'color': value['color'],
         'type': value['type'],
+        'color': value['color'],
     };
 }
 

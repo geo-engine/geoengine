@@ -35,6 +35,7 @@ class TestStatistics(unittest.TestCase):
         model = Statistics()
         if include_optional:
             return Statistics(
+                type = 'Statistics',
                 params = geoengine_api_client.models.statistics_parameters.StatisticsParameters(
                     column_names = [
                         ''
@@ -43,11 +44,11 @@ class TestStatistics(unittest.TestCase):
                         1.337
                         ], ),
                 sources = geoengine_api_client.models.multiple_raster_or_single_vector_source.MultipleRasterOrSingleVectorSource(
-                    source = null, ),
-                type = 'Statistics'
+                    source = null, )
             )
         else:
             return Statistics(
+                type = 'Statistics',
                 params = geoengine_api_client.models.statistics_parameters.StatisticsParameters(
                     column_names = [
                         ''
@@ -57,7 +58,6 @@ class TestStatistics(unittest.TestCase):
                         ], ),
                 sources = geoengine_api_client.models.multiple_raster_or_single_vector_source.MultipleRasterOrSingleVectorSource(
                     source = null, ),
-                type = 'Statistics',
         )
         """
 

@@ -7,9 +7,9 @@
 Name | Type
 ------------ | -------------
 `type` | string
-`duration` | [OgrSourceDurationSpec](OgrSourceDurationSpec.md)
 `startField` | string
 `startFormat` | [OgrSourceTimeFormat](OgrSourceTimeFormat.md)
+`duration` | [OgrSourceDurationSpec](OgrSourceDurationSpec.md)
 `endField` | string
 `endFormat` | [OgrSourceTimeFormat](OgrSourceTimeFormat.md)
 `durationField` | string
@@ -22,9 +22,9 @@ import type { OgrSourceDatasetTimeType } from '@geoengine/api-client'
 // TODO: Update the object below with actual values
 const example = {
   "type": null,
-  "duration": null,
   "startField": null,
   "startFormat": null,
+  "duration": null,
   "endField": null,
   "endFormat": null,
   "durationField": null,

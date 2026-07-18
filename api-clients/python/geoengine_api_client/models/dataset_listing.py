@@ -29,15 +29,15 @@ class DatasetListing(BaseModel):
     """
     DatasetListing
     """ # noqa: E501
-    description: StrictStr
-    display_name: StrictStr = Field(alias="displayName")
     id: UUID
     name: StrictStr
-    result_descriptor: TypedResultDescriptor = Field(alias="resultDescriptor")
-    source_operator: StrictStr = Field(alias="sourceOperator")
-    symbology: Optional[Symbology] = None
+    display_name: StrictStr = Field(alias="displayName")
+    description: StrictStr
     tags: List[StrictStr]
-    __properties: ClassVar[List[str]] = ["description", "displayName", "id", "name", "resultDescriptor", "sourceOperator", "symbology", "tags"]
+    source_operator: StrictStr = Field(alias="sourceOperator")
+    result_descriptor: TypedResultDescriptor = Field(alias="resultDescriptor")
+    symbology: Optional[Symbology] = None
+    __properties: ClassVar[List[str]] = ["id", "name", "displayName", "description", "tags", "sourceOperator", "resultDescriptor", "symbology"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -101,14 +101,14 @@ class DatasetListing(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "description": obj.get("description"),
-            "displayName": obj.get("displayName"),
             "id": obj.get("id"),
             "name": obj.get("name"),
-            "resultDescriptor": TypedResultDescriptor.from_dict(obj["resultDescriptor"]) if obj.get("resultDescriptor") is not None else None,
+            "displayName": obj.get("displayName"),
+            "description": obj.get("description"),
+            "tags": obj.get("tags"),
             "sourceOperator": obj.get("sourceOperator"),
-            "symbology": Symbology.from_dict(obj["symbology"]) if obj.get("symbology") is not None else None,
-            "tags": obj.get("tags")
+            "resultDescriptor": TypedResultDescriptor.from_dict(obj["resultDescriptor"]) if obj.get("resultDescriptor") is not None else None,
+            "symbology": Symbology.from_dict(obj["symbology"]) if obj.get("symbology") is not None else None
         })
         return _obj
 

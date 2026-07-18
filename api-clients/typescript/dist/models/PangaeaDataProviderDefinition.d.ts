@@ -16,6 +16,30 @@
 export interface PangaeaDataProviderDefinition {
     /**
      *
+     * @type {PangaeaDataProviderDefinitionTypeEnum}
+     * @memberof PangaeaDataProviderDefinition
+     */
+    type: PangaeaDataProviderDefinitionTypeEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof PangaeaDataProviderDefinition
+     */
+    name: string;
+    /**
+     *
+     * @type {string}
+     * @memberof PangaeaDataProviderDefinition
+     */
+    description: string;
+    /**
+     *
+     * @type {number}
+     * @memberof PangaeaDataProviderDefinition
+     */
+    priority?: number | null;
+    /**
+     *
      * @type {string}
      * @memberof PangaeaDataProviderDefinition
      */
@@ -26,30 +50,6 @@ export interface PangaeaDataProviderDefinition {
      * @memberof PangaeaDataProviderDefinition
      */
     cacheTtl: number;
-    /**
-     *
-     * @type {string}
-     * @memberof PangaeaDataProviderDefinition
-     */
-    description: string;
-    /**
-     *
-     * @type {string}
-     * @memberof PangaeaDataProviderDefinition
-     */
-    name: string;
-    /**
-     *
-     * @type {number}
-     * @memberof PangaeaDataProviderDefinition
-     */
-    priority?: number | null;
-    /**
-     *
-     * @type {PangaeaDataProviderDefinitionTypeEnum}
-     * @memberof PangaeaDataProviderDefinition
-     */
-    type: PangaeaDataProviderDefinitionTypeEnum;
 }
 /**
  * @export

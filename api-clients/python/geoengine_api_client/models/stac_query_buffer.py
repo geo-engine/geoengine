@@ -26,9 +26,9 @@ class StacQueryBuffer(BaseModel):
     """
     A struct that represents buffers to apply to stac requests
     """ # noqa: E501
-    end_seconds: StrictInt = Field(alias="endSeconds")
     start_seconds: StrictInt = Field(alias="startSeconds")
-    __properties: ClassVar[List[str]] = ["endSeconds", "startSeconds"]
+    end_seconds: StrictInt = Field(alias="endSeconds")
+    __properties: ClassVar[List[str]] = ["startSeconds", "endSeconds"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -81,8 +81,8 @@ class StacQueryBuffer(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "endSeconds": obj.get("endSeconds"),
-            "startSeconds": obj.get("startSeconds")
+            "startSeconds": obj.get("startSeconds"),
+            "endSeconds": obj.get("endSeconds")
         })
         return _obj
 

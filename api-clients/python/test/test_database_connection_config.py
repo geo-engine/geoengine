@@ -35,21 +35,21 @@ class TestDatabaseConnectionConfig(unittest.TestCase):
         model = DatabaseConnectionConfig()
         if include_optional:
             return DatabaseConnectionConfig(
-                database = '',
                 host = '',
-                password = '',
                 port = 0,
+                database = '',
                 var_schema = '',
-                user = ''
+                user = '',
+                password = ''
             )
         else:
             return DatabaseConnectionConfig(
-                database = '',
                 host = '',
-                password = '',
                 port = 0,
+                database = '',
                 var_schema = '',
                 user = '',
+                password = '',
         )
         """
 

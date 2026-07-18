@@ -26,11 +26,11 @@ class DerivedNumber(BaseModel):
     """
     DerivedNumber
     """ # noqa: E501
-    attribute: StrictStr
-    default_value: Union[StrictFloat, StrictInt] = Field(alias="defaultValue")
-    factor: Union[StrictFloat, StrictInt]
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["attribute", "defaultValue", "factor", "type"]
+    attribute: StrictStr
+    factor: Union[StrictFloat, StrictInt]
+    default_value: Union[StrictFloat, StrictInt] = Field(alias="defaultValue")
+    __properties: ClassVar[List[str]] = ["type", "attribute", "factor", "defaultValue"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -90,10 +90,10 @@ class DerivedNumber(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "type": obj.get("type"),
             "attribute": obj.get("attribute"),
-            "defaultValue": obj.get("defaultValue"),
             "factor": obj.get("factor"),
-            "type": obj.get("type")
+            "defaultValue": obj.get("defaultValue")
         })
         return _obj
 

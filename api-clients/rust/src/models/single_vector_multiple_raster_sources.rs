@@ -13,18 +13,18 @@ use serde::{Deserialize, Serialize};
 /// SingleVectorMultipleRasterSources : A single vector operator and one or more raster operators as source for this operator.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SingleVectorMultipleRasterSources {
-    #[serde(rename = "rasters")]
-    pub rasters: Vec<models::RasterOperator>,
     #[serde(rename = "vector")]
     pub vector: Box<models::VectorOperator>,
+    #[serde(rename = "rasters")]
+    pub rasters: Vec<models::RasterOperator>,
 }
 
 impl SingleVectorMultipleRasterSources {
     /// A single vector operator and one or more raster operators as source for this operator.
-    pub fn new(rasters: Vec<models::RasterOperator>, vector: models::VectorOperator) -> SingleVectorMultipleRasterSources {
+    pub fn new(vector: models::VectorOperator, rasters: Vec<models::RasterOperator>) -> SingleVectorMultipleRasterSources {
         SingleVectorMultipleRasterSources {
-            rasters,
             vector: Box::new(vector),
+            rasters,
         }
     }
 }

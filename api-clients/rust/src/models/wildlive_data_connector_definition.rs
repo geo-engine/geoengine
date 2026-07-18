@@ -12,36 +12,36 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WildliveDataConnectorDefinition {
-    #[serde(rename = "description")]
-    pub description: String,
-    #[serde(rename = "expiryDate", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub expiry_date: Option<Option<String>>,
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "id")]
     pub id: uuid::Uuid,
     #[serde(rename = "name")]
     pub name: String,
-    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub priority: Option<Option<i32>>,
+    #[serde(rename = "description")]
+    pub description: String,
+    #[serde(rename = "user", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub user: Option<Option<String>>,
     /// A wrapper type that serializes to \"*****\" and can be deserialized from any string. If the inner value is \"*****\", it is considered unknown and `as_option` returns `None`. This is useful for secrets that should not be exposed in API responses, but can be set in API requests.
     #[serde(rename = "refreshToken", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub refresh_token: Option<Option<String>>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
-    #[serde(rename = "user", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub user: Option<Option<String>>,
+    #[serde(rename = "expiryDate", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub expiry_date: Option<Option<String>>,
+    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Option<i32>>,
 }
 
 impl WildliveDataConnectorDefinition {
-    pub fn new(description: String, id: uuid::Uuid, name: String, r#type: Type) -> WildliveDataConnectorDefinition {
+    pub fn new(r#type: Type, id: uuid::Uuid, name: String, description: String) -> WildliveDataConnectorDefinition {
         WildliveDataConnectorDefinition {
-            description,
-            expiry_date: None,
+            r#type,
             id,
             name,
-            priority: None,
-            refresh_token: None,
-            r#type,
+            description,
             user: None,
+            refresh_token: None,
+            expiry_date: None,
+            priority: None,
         }
     }
 }

@@ -6,11 +6,11 @@
 
 Name | Type
 ------------ | -------------
-`autoSimplified` | boolean
+`type` | string
 `fillColor` | [ColorParam](ColorParam.md)
 `stroke` | [StrokeParam](StrokeParam.md)
 `text` | [TextSymbology](TextSymbology.md)
-`type` | string
+`autoSimplified` | boolean
 
 ## Example
 
@@ -19,11 +19,11 @@ import type { PolygonSymbology } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "autoSimplified": null,
+  "type": null,
   "fillColor": null,
   "stroke": null,
   "text": null,
-  "type": null,
+  "autoSimplified": null,
 } satisfies PolygonSymbology
 
 console.log(example)

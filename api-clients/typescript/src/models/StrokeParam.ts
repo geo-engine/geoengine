@@ -35,24 +35,24 @@ import {
 export interface StrokeParam {
     /**
      * 
-     * @type {ColorParam}
-     * @memberof StrokeParam
-     */
-    color: ColorParam;
-    /**
-     * 
      * @type {NumberParam}
      * @memberof StrokeParam
      */
     width: NumberParam;
+    /**
+     * 
+     * @type {ColorParam}
+     * @memberof StrokeParam
+     */
+    color: ColorParam;
 }
 
 /**
  * Check if a given object implements the StrokeParam interface.
  */
 export function instanceOfStrokeParam(value: object): value is StrokeParam {
-    if (!('color' in value) || value['color'] === undefined) return false;
     if (!('width' in value) || value['width'] === undefined) return false;
+    if (!('color' in value) || value['color'] === undefined) return false;
     return true;
 }
 
@@ -66,8 +66,8 @@ export function StrokeParamFromJSONTyped(json: any, ignoreDiscriminator: boolean
     }
     return {
         
-        'color': ColorParamFromJSON(json['color']),
         'width': NumberParamFromJSON(json['width']),
+        'color': ColorParamFromJSON(json['color']),
     };
 }
 
@@ -82,8 +82,8 @@ export function StrokeParamToJSONTyped(value?: StrokeParam | null, ignoreDiscrim
 
     return {
         
-        'color': ColorParamToJSON(value['color']),
         'width': NumberParamToJSON(value['width']),
+        'color': ColorParamToJSON(value['color']),
     };
 }
 

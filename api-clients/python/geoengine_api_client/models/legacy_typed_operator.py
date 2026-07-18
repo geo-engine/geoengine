@@ -27,9 +27,9 @@ class LegacyTypedOperator(BaseModel):
     """
     An enum to differentiate between `Operator` variants
     """ # noqa: E501
-    operator: LegacyTypedOperatorOperator
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["operator", "type"]
+    operator: LegacyTypedOperatorOperator
+    __properties: ClassVar[List[str]] = ["type", "operator"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -92,8 +92,8 @@ class LegacyTypedOperator(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "operator": LegacyTypedOperatorOperator.from_dict(obj["operator"]) if obj.get("operator") is not None else None,
-            "type": obj.get("type")
+            "type": obj.get("type"),
+            "operator": LegacyTypedOperatorOperator.from_dict(obj["operator"]) if obj.get("operator") is not None else None
         })
         return _obj
 

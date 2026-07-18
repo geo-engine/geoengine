@@ -35,28 +35,27 @@ class TestMetaDataDefinition(unittest.TestCase):
         model = MetaDataDefinition()
         if include_optional:
             return MetaDataDefinition(
+                type = 'MockMetaData',
                 loading_info = geoengine_api_client.models.ogr_source_dataset.OgrSourceDataset(
-                    attribute_query = '', 
-                    cache_ttl = 0, 
-                    columns = null, 
-                    data_type = null, 
-                    default_geometry = null, 
                     file_name = '', 
-                    force_ogr_spatial_filter = True, 
-                    force_ogr_time_filter = True, 
                     layer_name = '', 
+                    data_type = null, 
+                    time = null, 
+                    default_geometry = null, 
+                    columns = null, 
+                    force_ogr_time_filter = True, 
+                    force_ogr_spatial_filter = True, 
                     on_error = 'ignore', 
                     sql_query = '', 
-                    time = null, ),
+                    attribute_query = '', 
+                    cache_ttl = 0, ),
                 result_descriptor = geoengine_api_client.models.raster_result_descriptor.RasterResultDescriptor(
-                    bands = [
-                        geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
-                            measurement = null, 
-                            name = '', )
-                        ], 
                     data_type = 'U8', 
+                    spatial_reference = '', 
+                    time = geoengine_api_client.models.time_descriptor.TimeDescriptor(
+                        bounds = null, 
+                        dimension = null, ), 
                     spatial_grid = geoengine_api_client.models.spatial_grid_descriptor.SpatialGridDescriptor(
-                        descriptor = 'source', 
                         spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(
                             geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
                                 origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
@@ -65,67 +64,67 @@ class TestMetaDataDefinition(unittest.TestCase):
                                 x_pixel_size = 1.337, 
                                 y_pixel_size = 1.337, ), 
                             grid_bounds = geoengine_api_client.models.grid_bounding_box2_d.GridBoundingBox2D(
-                                bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                    x_idx = 56, 
-                                    y_idx = 56, ), 
                                 top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                    x_idx = 56, 
-                                    y_idx = 56, ), ), ), ), 
-                    spatial_reference = '', 
-                    time = geoengine_api_client.models.time_descriptor.TimeDescriptor(
-                        bounds = null, 
-                        dimension = null, ), ),
-                type = 'MockMetaData',
-                cache_ttl = 0,
-                data_time = geoengine_api_client.models.time_interval.TimeInterval(
-                    end = 56, 
-                    start = 56, ),
+                                    y_idx = 56, 
+                                    x_idx = 56, ), 
+                                bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                                    y_idx = 56, 
+                                    x_idx = 56, ), ), ), 
+                        descriptor = 'source', ), 
+                    bands = [
+                        geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
+                            name = '', 
+                            measurement = null, )
+                        ], ),
                 params = [
                     geoengine_api_client.models.gdal_loading_info_temporal_slice.GdalLoadingInfoTemporalSlice(
-                        cache_ttl = 0, 
                         time = geoengine_api_client.models.time_interval.TimeInterval(
-                            end = 56, 
-                            start = 56, ), )
+                            start = 56, 
+                            end = 56, ), 
+                        cache_ttl = 0, )
                     ],
-                step = geoengine_api_client.models.time_step.TimeStep(
-                    granularity = 'millis', 
-                    step = 0, ),
                 time_placeholders = {
                     'key' : geoengine_api_client.models.gdal_source_time_placeholder.GdalSourceTimePlaceholder(
                         format = '', 
                         reference = 'start', )
                     },
+                data_time = geoengine_api_client.models.time_interval.TimeInterval(
+                    start = 56, 
+                    end = 56, ),
+                step = geoengine_api_client.models.time_step.TimeStep(
+                    granularity = 'millis', 
+                    step = 0, ),
+                cache_ttl = 0,
                 time = geoengine_api_client.models.time_interval.TimeInterval(
-                    end = 56, 
-                    start = 56, ),
-                band_offset = 0,
+                    start = 56, 
+                    end = 56, ),
+                start = 56,
                 end = 56,
-                start = 56
+                band_offset = 0
             )
         else:
             return MetaDataDefinition(
+                type = 'MockMetaData',
                 loading_info = geoengine_api_client.models.ogr_source_dataset.OgrSourceDataset(
-                    attribute_query = '', 
-                    cache_ttl = 0, 
-                    columns = null, 
-                    data_type = null, 
-                    default_geometry = null, 
                     file_name = '', 
-                    force_ogr_spatial_filter = True, 
-                    force_ogr_time_filter = True, 
                     layer_name = '', 
+                    data_type = null, 
+                    time = null, 
+                    default_geometry = null, 
+                    columns = null, 
+                    force_ogr_time_filter = True, 
+                    force_ogr_spatial_filter = True, 
                     on_error = 'ignore', 
                     sql_query = '', 
-                    time = null, ),
+                    attribute_query = '', 
+                    cache_ttl = 0, ),
                 result_descriptor = geoengine_api_client.models.raster_result_descriptor.RasterResultDescriptor(
-                    bands = [
-                        geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
-                            measurement = null, 
-                            name = '', )
-                        ], 
                     data_type = 'U8', 
+                    spatial_reference = '', 
+                    time = geoengine_api_client.models.time_descriptor.TimeDescriptor(
+                        bounds = null, 
+                        dimension = null, ), 
                     spatial_grid = geoengine_api_client.models.spatial_grid_descriptor.SpatialGridDescriptor(
-                        descriptor = 'source', 
                         spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(
                             geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
                                 origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
@@ -134,38 +133,39 @@ class TestMetaDataDefinition(unittest.TestCase):
                                 x_pixel_size = 1.337, 
                                 y_pixel_size = 1.337, ), 
                             grid_bounds = geoengine_api_client.models.grid_bounding_box2_d.GridBoundingBox2D(
-                                bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                    x_idx = 56, 
-                                    y_idx = 56, ), 
                                 top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                    x_idx = 56, 
-                                    y_idx = 56, ), ), ), ), 
-                    spatial_reference = '', 
-                    time = geoengine_api_client.models.time_descriptor.TimeDescriptor(
-                        bounds = null, 
-                        dimension = null, ), ),
-                type = 'MockMetaData',
-                data_time = geoengine_api_client.models.time_interval.TimeInterval(
-                    end = 56, 
-                    start = 56, ),
+                                    y_idx = 56, 
+                                    x_idx = 56, ), 
+                                bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                                    y_idx = 56, 
+                                    x_idx = 56, ), ), ), 
+                        descriptor = 'source', ), 
+                    bands = [
+                        geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
+                            name = '', 
+                            measurement = null, )
+                        ], ),
                 params = [
                     geoengine_api_client.models.gdal_loading_info_temporal_slice.GdalLoadingInfoTemporalSlice(
-                        cache_ttl = 0, 
                         time = geoengine_api_client.models.time_interval.TimeInterval(
-                            end = 56, 
-                            start = 56, ), )
+                            start = 56, 
+                            end = 56, ), 
+                        cache_ttl = 0, )
                     ],
-                step = geoengine_api_client.models.time_step.TimeStep(
-                    granularity = 'millis', 
-                    step = 0, ),
                 time_placeholders = {
                     'key' : geoengine_api_client.models.gdal_source_time_placeholder.GdalSourceTimePlaceholder(
                         format = '', 
                         reference = 'start', )
                     },
-                band_offset = 0,
-                end = 56,
+                data_time = geoengine_api_client.models.time_interval.TimeInterval(
+                    start = 56, 
+                    end = 56, ),
+                step = geoengine_api_client.models.time_step.TimeStep(
+                    granularity = 'millis', 
+                    step = 0, ),
                 start = 56,
+                end = 56,
+                band_offset = 0,
         )
         """
 

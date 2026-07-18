@@ -35,25 +35,25 @@ class TestRasterOperator(unittest.TestCase):
         model = RasterOperator()
         if include_optional:
             return RasterOperator(
+                type = 'BandFilter',
                 params = geoengine_api_client.models.temporal_raster_aggregation_parameters.TemporalRasterAggregationParameters(
                     aggregation = null, 
-                    output_type = null, 
                     window = null, 
-                    window_reference = null, ),
+                    window_reference = null, 
+                    output_type = null, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
-                    raster = null, ),
-                type = 'BandFilter'
+                    raster = null, )
             )
         else:
             return RasterOperator(
+                type = 'BandFilter',
                 params = geoengine_api_client.models.temporal_raster_aggregation_parameters.TemporalRasterAggregationParameters(
                     aggregation = null, 
-                    output_type = null, 
                     window = null, 
-                    window_reference = null, ),
+                    window_reference = null, 
+                    output_type = null, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
                     raster = null, ),
-                type = 'BandFilter',
         )
         """
 

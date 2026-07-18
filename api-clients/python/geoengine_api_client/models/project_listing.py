@@ -28,13 +28,13 @@ class ProjectListing(BaseModel):
     """
     ProjectListing
     """ # noqa: E501
-    changed: datetime
-    description: StrictStr
     id: UUID
-    layer_names: List[StrictStr] = Field(alias="layerNames")
     name: StrictStr
+    description: StrictStr
+    layer_names: List[StrictStr] = Field(alias="layerNames")
     plot_names: List[StrictStr] = Field(alias="plotNames")
-    __properties: ClassVar[List[str]] = ["changed", "description", "id", "layerNames", "name", "plotNames"]
+    changed: datetime
+    __properties: ClassVar[List[str]] = ["id", "name", "description", "layerNames", "plotNames", "changed"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -87,12 +87,12 @@ class ProjectListing(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "changed": obj.get("changed"),
-            "description": obj.get("description"),
             "id": obj.get("id"),
-            "layerNames": obj.get("layerNames"),
             "name": obj.get("name"),
-            "plotNames": obj.get("plotNames")
+            "description": obj.get("description"),
+            "layerNames": obj.get("layerNames"),
+            "plotNames": obj.get("plotNames"),
+            "changed": obj.get("changed")
         })
         return _obj
 

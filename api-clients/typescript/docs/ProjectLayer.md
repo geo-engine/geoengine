@@ -6,10 +6,10 @@
 
 Name | Type
 ------------ | -------------
-`name` | string
-`symbology` | [Symbology](Symbology.md)
-`visibility` | [LayerVisibility](LayerVisibility.md)
 `workflow` | string
+`name` | string
+`visibility` | [LayerVisibility](LayerVisibility.md)
+`symbology` | [Symbology](Symbology.md)
 
 ## Example
 
@@ -18,10 +18,10 @@ import type { ProjectLayer } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "name": null,
-  "symbology": null,
-  "visibility": null,
   "workflow": null,
+  "name": null,
+  "visibility": null,
+  "symbology": null,
 } satisfies ProjectLayer
 
 console.log(example)

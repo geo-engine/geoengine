@@ -27,6 +27,12 @@ import {
  */
 export interface ReprojectionParameters {
     /**
+     * Target spatial reference system.
+     * @type {string}
+     * @memberof ReprojectionParameters
+     */
+    targetSpatialReference: string;
+    /**
      * Controls how raster output bounds are derived.
      * 
      * The default `projectionBounds` usually keeps a projection-aligned target grid,
@@ -35,12 +41,6 @@ export interface ReprojectionParameters {
      * @memberof ReprojectionParameters
      */
     deriveOutSpec?: DeriveOutRasterSpecsSource;
-    /**
-     * Target spatial reference system.
-     * @type {string}
-     * @memberof ReprojectionParameters
-     */
-    targetSpatialReference: string;
 }
 
 
@@ -63,8 +63,8 @@ export function ReprojectionParametersFromJSONTyped(json: any, ignoreDiscriminat
     }
     return {
         
-        'deriveOutSpec': json['deriveOutSpec'] == null ? undefined : DeriveOutRasterSpecsSourceFromJSON(json['deriveOutSpec']),
         'targetSpatialReference': json['targetSpatialReference'],
+        'deriveOutSpec': json['deriveOutSpec'] == null ? undefined : DeriveOutRasterSpecsSourceFromJSON(json['deriveOutSpec']),
     };
 }
 
@@ -79,8 +79,8 @@ export function ReprojectionParametersToJSONTyped(value?: ReprojectionParameters
 
     return {
         
-        'deriveOutSpec': DeriveOutRasterSpecsSourceToJSON(value['deriveOutSpec']),
         'targetSpatialReference': value['targetSpatialReference'],
+        'deriveOutSpec': DeriveOutRasterSpecsSourceToJSON(value['deriveOutSpec']),
     };
 }
 

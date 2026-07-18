@@ -135,6 +135,15 @@ Class | Method | HTTP request | Description
 *MLApi* | [**add_ml_model**](docs/MLApi.md#add_ml_model) | **POST** /ml/models | Create a new ml model.
 *MLApi* | [**get_ml_model**](docs/MLApi.md#get_ml_model) | **GET** /ml/models/{model_name} | Get ml model by name.
 *MLApi* | [**list_ml_models**](docs/MLApi.md#list_ml_models) | **GET** /ml/models | List ml models.
+*OGCAPIApi* | [**collection**](docs/OGCAPIApi.md#collection) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId} | OGC API Collection Metadata
+*OGCAPIApi* | [**collection_tileset**](docs/OGCAPIApi.md#collection_tileset) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId} | OGC API Collection Tileset Metadata
+*OGCAPIApi* | [**collection_tilesets**](docs/OGCAPIApi.md#collection_tilesets) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles | OGC API Collection Tilesets List
+*OGCAPIApi* | [**collections**](docs/OGCAPIApi.md#collections) | **GET** /ogc/{dataConnectorId}/{layerId}/collections | OGC API Collections List
+*OGCAPIApi* | [**conformance**](docs/OGCAPIApi.md#conformance) | **GET** /ogc/{dataConnectorId}/{layerId}/conformance | OGC API Conformance Classes
+*OGCAPIApi* | [**landing_page**](docs/OGCAPIApi.md#landing_page) | **GET** /ogc/{dataConnectorId}/{layerId}/ | OGC API Landing Page
+*OGCAPIApi* | [**tile**](docs/OGCAPIApi.md#tile) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol} | OGC API Tile
+*OGCAPIApi* | [**tile_matrix_set**](docs/OGCAPIApi.md#tile_matrix_set) | **GET** /ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId} | OGC API Tile Matrix Set Definition
+*OGCAPIApi* | [**tile_matrix_sets**](docs/OGCAPIApi.md#tile_matrix_sets) | **GET** /ogc/{dataConnectorId}/{layerId}/tileMatrixSets | OGC API Tile Matrix Set List
 *OGCWCSApi* | [**wcs_handler**](docs/OGCWCSApi.md#wcs_handler) | **GET** /wcs/{workflow} | OGC WCS endpoint
 *OGCWFSApi* | [**wfs_handler**](docs/OGCWFSApi.md#wfs_handler) | **GET** /wfs/{workflow} | OGC WFS endpoint
 *OGCWMSApi* | [**wms_handler**](docs/OGCWMSApi.md#wms_handler) | **GET** /wms/{workflow} | OGC WMS endpoint
@@ -189,6 +198,7 @@ Class | Method | HTTP request | Description
 
 ## Documentation For Models
 
+ - [AccessConstraints](docs/AccessConstraints.md)
  - [AddDataset](docs/AddDataset.md)
  - [AddLayer](docs/AddLayer.md)
  - [AddLayerCollection](docs/AddLayerCollection.md)
@@ -205,15 +215,20 @@ Class | Method | HTTP request | Description
  - [BoundingBox2D](docs/BoundingBox2D.md)
  - [Breakpoint](docs/Breakpoint.md)
  - [ClassificationMeasurement](docs/ClassificationMeasurement.md)
+ - [Collection](docs/Collection.md)
  - [CollectionItem](docs/CollectionItem.md)
  - [CollectionType](docs/CollectionType.md)
+ - [Collections](docs/Collections.md)
+ - [CollectionsResponseFormat](docs/CollectionsResponseFormat.md)
  - [ColorParam](docs/ColorParam.md)
  - [Colorizer](docs/Colorizer.md)
  - [ColumnNames](docs/ColumnNames.md)
  - [ComputationQuota](docs/ComputationQuota.md)
+ - [Conformance](docs/Conformance.md)
  - [ContinuousMeasurement](docs/ContinuousMeasurement.md)
  - [Coordinate2D](docs/Coordinate2D.md)
  - [CopernicusDataspaceDataProviderDefinition](docs/CopernicusDataspaceDataProviderDefinition.md)
+ - [CornerOfOrigin](docs/CornerOfOrigin.md)
  - [CountAggregation](docs/CountAggregation.md)
  - [CreateDataset](docs/CreateDataset.md)
  - [CreateProject](docs/CreateProject.md)
@@ -238,12 +253,17 @@ Class | Method | HTTP request | Description
  - [DeriveOutRasterSpecsSource](docs/DeriveOutRasterSpecsSource.md)
  - [DerivedColor](docs/DerivedColor.md)
  - [DerivedNumber](docs/DerivedNumber.md)
+ - [Downsampling](docs/Downsampling.md)
+ - [DownsamplingMethod](docs/DownsamplingMethod.md)
+ - [DownsamplingParameters](docs/DownsamplingParameters.md)
+ - [DownsamplingResolution](docs/DownsamplingResolution.md)
  - [EbvPortalDataProviderDefinition](docs/EbvPortalDataProviderDefinition.md)
  - [EdrDataProviderDefinition](docs/EdrDataProviderDefinition.md)
  - [EdrVectorSpec](docs/EdrVectorSpec.md)
  - [ErrorResponse](docs/ErrorResponse.md)
  - [Expression](docs/Expression.md)
  - [ExpressionParameters](docs/ExpressionParameters.md)
+ - [Extent](docs/Extent.md)
  - [ExternalDataId](docs/ExternalDataId.md)
  - [FeatureAggregationMethod](docs/FeatureAggregationMethod.md)
  - [FeatureDataType](docs/FeatureDataType.md)
@@ -266,6 +286,10 @@ Class | Method | HTTP request | Description
  - [GdalSourceTimePlaceholder](docs/GdalSourceTimePlaceholder.md)
  - [GeoJson](docs/GeoJson.md)
  - [GeoTransform](docs/GeoTransform.md)
+ - [GeometryDimension](docs/GeometryDimension.md)
+ - [GeospatialData](docs/GeospatialData.md)
+ - [GeospatialDataDataType](docs/GeospatialDataDataType.md)
+ - [GeospatialDataDataTypeOneOf](docs/GeospatialDataDataTypeOneOf.md)
  - [GetCoverageFormat](docs/GetCoverageFormat.md)
  - [GetMapExceptionFormat](docs/GetMapExceptionFormat.md)
  - [GfbioAbcdDataProviderDefinition](docs/GfbioAbcdDataProviderDefinition.md)
@@ -286,6 +310,7 @@ Class | Method | HTTP request | Description
  - [InterpolationParameters](docs/InterpolationParameters.md)
  - [InterpolationResolution](docs/InterpolationResolution.md)
  - [Irregular](docs/Irregular.md)
+ - [LandingPage](docs/LandingPage.md)
  - [LastAggregation](docs/LastAggregation.md)
  - [Layer](docs/Layer.md)
  - [LayerCollection](docs/LayerCollection.md)
@@ -299,6 +324,7 @@ Class | Method | HTTP request | Description
  - [LegacyTypedOperatorOperator](docs/LegacyTypedOperatorOperator.md)
  - [LineSymbology](docs/LineSymbology.md)
  - [LinearGradient](docs/LinearGradient.md)
+ - [Link](docs/Link.md)
  - [LogarithmicGradient](docs/LogarithmicGradient.md)
  - [MaxAggregation](docs/MaxAggregation.md)
  - [MeanAggregation](docs/MeanAggregation.md)
@@ -419,6 +445,7 @@ Class | Method | HTTP request | Description
  - [SpatialBoundsDeriveBounds](docs/SpatialBoundsDeriveBounds.md)
  - [SpatialBoundsDeriveDerive](docs/SpatialBoundsDeriveDerive.md)
  - [SpatialBoundsDeriveNone](docs/SpatialBoundsDeriveNone.md)
+ - [SpatialExtent](docs/SpatialExtent.md)
  - [SpatialGridDefinition](docs/SpatialGridDefinition.md)
  - [SpatialGridDescriptor](docs/SpatialGridDescriptor.md)
  - [SpatialGridDescriptorState](docs/SpatialGridDescriptorState.md)
@@ -436,6 +463,7 @@ Class | Method | HTTP request | Description
  - [Statistics](docs/Statistics.md)
  - [StatisticsParameters](docs/StatisticsParameters.md)
  - [StrokeParam](docs/StrokeParam.md)
+ - [Style](docs/Style.md)
  - [Suffix](docs/Suffix.md)
  - [SuggestMetaData](docs/SuggestMetaData.md)
  - [SumAggregation](docs/SumAggregation.md)
@@ -449,9 +477,25 @@ Class | Method | HTTP request | Description
  - [TaskStatusRunning](docs/TaskStatusRunning.md)
  - [TaskStatusWithId](docs/TaskStatusWithId.md)
  - [TemporalAggregationMethod](docs/TemporalAggregationMethod.md)
+ - [TemporalExtent](docs/TemporalExtent.md)
  - [TemporalRasterAggregation](docs/TemporalRasterAggregation.md)
  - [TemporalRasterAggregationParameters](docs/TemporalRasterAggregationParameters.md)
  - [TextSymbology](docs/TextSymbology.md)
+ - [TileMatrix](docs/TileMatrix.md)
+ - [TileMatrixLimits](docs/TileMatrixLimits.md)
+ - [TileMatrixSet](docs/TileMatrixSet.md)
+ - [TileMatrixSetId](docs/TileMatrixSetId.md)
+ - [TileMatrixSetIdOneOf](docs/TileMatrixSetIdOneOf.md)
+ - [TileMatrixSetItem](docs/TileMatrixSetItem.md)
+ - [TileMatrixSets](docs/TileMatrixSets.md)
+ - [TilePoint](docs/TilePoint.md)
+ - [TileSet](docs/TileSet.md)
+ - [TileSetItem](docs/TileSetItem.md)
+ - [TileSets](docs/TileSets.md)
+ - [TilesCrs](docs/TilesCrs.md)
+ - [TilesCrsOneOf](docs/TilesCrsOneOf.md)
+ - [TilesCrsOneOf1](docs/TilesCrsOneOf1.md)
+ - [TilesCrsOneOf2](docs/TilesCrsOneOf2.md)
  - [TimeDescriptor](docs/TimeDescriptor.md)
  - [TimeDimension](docs/TimeDimension.md)
  - [TimeGranularity](docs/TimeGranularity.md)
@@ -486,6 +530,7 @@ Class | Method | HTTP request | Description
  - [UserInfo](docs/UserInfo.md)
  - [UserRegistration](docs/UserRegistration.md)
  - [UserSession](docs/UserSession.md)
+ - [VariableMatrixWidth](docs/VariableMatrixWidth.md)
  - [VecUpdate](docs/VecUpdate.md)
  - [VectorColumnInfo](docs/VectorColumnInfo.md)
  - [VectorDataType](docs/VectorDataType.md)

@@ -12,25 +12,25 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct LogarithmicGradient {
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "breakpoints")]
     pub breakpoints: Vec<models::Breakpoint>,
     #[serde(rename = "noDataColor")]
     pub no_data_color: Vec<i32>,
     #[serde(rename = "overColor")]
     pub over_color: Vec<i32>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
     #[serde(rename = "underColor")]
     pub under_color: Vec<i32>,
 }
 
 impl LogarithmicGradient {
-    pub fn new(breakpoints: Vec<models::Breakpoint>, no_data_color: Vec<i32>, over_color: Vec<i32>, r#type: Type, under_color: Vec<i32>) -> LogarithmicGradient {
+    pub fn new(r#type: Type, breakpoints: Vec<models::Breakpoint>, no_data_color: Vec<i32>, over_color: Vec<i32>, under_color: Vec<i32>) -> LogarithmicGradient {
         LogarithmicGradient {
+            r#type,
             breakpoints,
             no_data_color,
             over_color,
-            r#type,
             under_color,
         }
     }

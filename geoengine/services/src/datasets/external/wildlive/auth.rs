@@ -295,7 +295,7 @@ mod tests {
         let mut mock_token_config = MockTokenConfig::create_from_tokens(
             server_url.clone(),
             "geoengine".into(),
-            std::time::Duration::from_secs(300),
+            std::time::Duration::from_mins(5),
             "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJsbkF4V0NqY2lhX3I3cFBySUtTSGd6OVhyRGxzcGY4MHUxMDJpdENoelE4In0".into(),
             "eyJhbGciOiJIUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICI0MWFlNzYxMC1jNzIyLTRmOWQtOGJhNi02ZTc2MmRkNDIxOWIifQ.eyJleHAiOjE3NTYxMzI5NTcsImlhdCI6MTc1NjEzMTE1NywianRpIjoiOTIwYTljM2EtMjZkMC00Y2NiLWIxYWQtNDRlNWU2NzZmZWU4IiwiaXNzIjoiaHR0cHM6Ly93ZWJhcHAuc2VuY2tlbmJlcmcuZGUvYXV0aC9yZWFsbXMvd2lsZGxpdmUtcG9ydGFsIiwiYXVkIjoiaHR0cHM6Ly93ZWJhcHAuc2VuY2tlbmJlcmcuZGUvYXV0aC9yZWFsbXMvd2lsZGxpdmUtcG9ydGFsIiwic3ViIjoiMmRhZDgxZGYtOTVhZS00Y2E4LWE4NTktZWQyZjM0OWRlOWY2IiwidHlwIjoiUmVmcmVzaCIsImF6cCI6IndpbGRsaXZlLWZyb250ZW5kIiwic2Vzc2lvbl9zdGF0ZSI6ImFhNjljMDkzLTQ4YTUtNDg1Zi1iMWZkLTQ4MTE4YmY2YmI1NSIsInNjb3BlIjoiZW1haWwgcHJvZmlsZSIsInNpZCI6ImFhNjljMDkzLTQ4YTUtNDg1Zi1iMWZkLTQ4MTE4YmY2YmI1NSJ9.COoMWxp6IZ_IKTQ-GGAb22CIcybY32II5wn9beaSoyw".into(),
         );

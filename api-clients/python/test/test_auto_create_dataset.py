@@ -35,21 +35,21 @@ class TestAutoCreateDataset(unittest.TestCase):
         model = AutoCreateDataset()
         if include_optional:
             return AutoCreateDataset(
-                dataset_description = '',
+                upload = '',
                 dataset_name = '',
-                layer_name = '',
+                dataset_description = '',
                 main_file = '',
+                layer_name = '',
                 tags = [
                     ''
-                    ],
-                upload = ''
+                    ]
             )
         else:
             return AutoCreateDataset(
-                dataset_description = '',
-                dataset_name = '',
-                main_file = '',
                 upload = '',
+                dataset_name = '',
+                dataset_description = '',
+                main_file = '',
         )
         """
 

@@ -540,8 +540,8 @@ async fn anonymous_token(api: &Configuration) -> Result<Uuid> {
 async fn register_harvest_workflow(api: &Configuration) -> Result<Uuid> {
     let params = models::GdalSourceParameters::new("sentinel-2-l2a_EPSG32632_U16_60".to_owned());
     let source = models::MultiBandGdalSource::new(
-        params,
         models::multi_band_gdal_source::Type::MultiBandGdalSource,
+        params,
     );
     let raster_operator = models::RasterOperator::MultiBandGdalSource(Box::new(source));
     let typed_raster = models::TypedRasterOperator::new(

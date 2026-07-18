@@ -19,12 +19,6 @@ export interface EdrVectorSpec {
      * @type {string}
      * @memberof EdrVectorSpec
      */
-    time: string;
-    /**
-     *
-     * @type {string}
-     * @memberof EdrVectorSpec
-     */
     x: string;
     /**
      *
@@ -32,6 +26,12 @@ export interface EdrVectorSpec {
      * @memberof EdrVectorSpec
      */
     y?: string | null;
+    /**
+     *
+     * @type {string}
+     * @memberof EdrVectorSpec
+     */
+    time: string;
 }
 /**
  * Check if a given object implements the EdrVectorSpec interface.

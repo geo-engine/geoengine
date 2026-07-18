@@ -13,18 +13,18 @@ use serde::{Deserialize, Serialize};
 /// SpatialPartition2D : A partition of space that include the upper left but excludes the lower right coordinate
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SpatialPartition2D {
-    #[serde(rename = "lowerRightCoordinate")]
-    pub lower_right_coordinate: Box<models::Coordinate2D>,
     #[serde(rename = "upperLeftCoordinate")]
     pub upper_left_coordinate: Box<models::Coordinate2D>,
+    #[serde(rename = "lowerRightCoordinate")]
+    pub lower_right_coordinate: Box<models::Coordinate2D>,
 }
 
 impl SpatialPartition2D {
     /// A partition of space that include the upper left but excludes the lower right coordinate
-    pub fn new(lower_right_coordinate: models::Coordinate2D, upper_left_coordinate: models::Coordinate2D) -> SpatialPartition2D {
+    pub fn new(upper_left_coordinate: models::Coordinate2D, lower_right_coordinate: models::Coordinate2D) -> SpatialPartition2D {
         SpatialPartition2D {
-            lower_right_coordinate: Box::new(lower_right_coordinate),
             upper_left_coordinate: Box::new(upper_left_coordinate),
+            lower_right_coordinate: Box::new(lower_right_coordinate),
         }
     }
 }

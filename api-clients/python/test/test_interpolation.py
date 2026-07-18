@@ -35,23 +35,23 @@ class TestInterpolation(unittest.TestCase):
         model = Interpolation()
         if include_optional:
             return Interpolation(
+                type = 'Interpolation',
                 params = geoengine_api_client.models.interpolation_parameters.InterpolationParameters(
                     interpolation = null, 
-                    output_origin_reference = null, 
-                    output_resolution = null, ),
+                    output_resolution = null, 
+                    output_origin_reference = null, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
-                    raster = null, ),
-                type = 'Interpolation'
+                    raster = null, )
             )
         else:
             return Interpolation(
+                type = 'Interpolation',
                 params = geoengine_api_client.models.interpolation_parameters.InterpolationParameters(
                     interpolation = null, 
-                    output_origin_reference = null, 
-                    output_resolution = null, ),
+                    output_resolution = null, 
+                    output_origin_reference = null, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
                     raster = null, ),
-                type = 'Interpolation',
         )
         """
 

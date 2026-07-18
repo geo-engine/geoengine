@@ -28,10 +28,10 @@ class Histogram(BaseModel):
     """
     The `Histogram` is a _plot operator_ that computes a histogram plot either over attributes of a vector dataset or values of a raster source. The output is a plot in [Vega-Lite](https://vega.github.io/vega-lite/) specification.  For instance, you want to plot the data distribution of numeric attributes of a feature collection. Then you can use a histogram with a suitable number of buckets to visualize and assess this.  ## Errors  The operator returns an error if the selected column (`columnName`) does not exist or is not numeric.  ## Notes  If `bounds` or `buckets` are not defined, the operator will determine these values by itself which requires processing the data twice.  If the `buckets` parameter is set to `squareRootChoiceRule`, the operator estimates it using the square root of the number of elements in the data. 
     """ # noqa: E501
+    type: StrictStr
     params: HistogramParameters
     sources: SingleVectorOrRasterSource
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["params", "sources", "type"]
+    __properties: ClassVar[List[str]] = ["type", "params", "sources"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -97,9 +97,9 @@ class Histogram(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "type": obj.get("type"),
             "params": HistogramParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
-            "sources": SingleVectorOrRasterSource.from_dict(obj["sources"]) if obj.get("sources") is not None else None,
-            "type": obj.get("type")
+            "sources": SingleVectorOrRasterSource.from_dict(obj["sources"]) if obj.get("sources") is not None else None
         })
         return _obj
 

@@ -35,29 +35,29 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
         model = TypedDataProviderDefinition()
         if include_optional:
             return TypedDataProviderDefinition(
-                api_token = '',
-                api_url = '',
-                cache_ttl = 0,
-                description = '',
-                filter_label = '',
+                type = 'Aruna',
                 id = '',
                 name = '',
+                description = '',
                 priority = 56,
+                api_url = '',
                 project_id = '',
-                type = 'Aruna',
+                api_token = '',
+                filter_label = '',
+                cache_ttl = 0,
+                stac_url = '',
+                s3_url = '',
+                s3_access_key = '',
+                s3_secret_key = '',
                 gdal_config = [
                     [
                         ''
                         ]
                     ],
-                s3_access_key = '',
-                s3_secret_key = '',
-                s3_url = '',
-                stac_url = '',
                 collections = [
                     geoengine_api_client.models.dataset_layer_listing_collection.DatasetLayerListingCollection(
-                        description = '', 
                         name = '', 
+                        description = '', 
                         tags = [
                             ''
                             ], )
@@ -65,6 +65,10 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                 base_url = '',
                 data = '',
                 overviews = '',
+                vector_spec = geoengine_api_client.models.edr_vector_spec.EdrVectorSpec(
+                    x = '', 
+                    y = '', 
+                    time = '', ),
                 discrete_vrs = [
                     ''
                     ],
@@ -74,56 +78,51 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                         license = '', 
                         uri = '', )
                     ],
-                vector_spec = geoengine_api_client.models.edr_vector_spec.EdrVectorSpec(
-                    time = '', 
-                    x = '', 
-                    y = '', ),
+                db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
+                    host = '', 
+                    port = 0, 
+                    database = '', 
+                    schema = '', 
+                    user = '', 
+                    password = '', ),
                 autocomplete_timeout = 56,
                 columns = [
                     ''
                     ],
-                db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
-                    database = '', 
-                    host = '', 
-                    password = '', 
-                    port = 0, 
-                    schema = '', 
-                    user = '', ),
-                abcd_db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
-                    database = '', 
-                    host = '', 
-                    password = '', 
-                    port = 0, 
-                    schema = '', 
-                    user = '', ),
-                collection_api_auth_token = '',
                 collection_api_url = '',
+                collection_api_auth_token = '',
+                abcd_db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
+                    host = '', 
+                    port = 0, 
+                    database = '', 
+                    schema = '', 
+                    user = '', 
+                    password = '', ),
                 pangaea_url = '',
+                stac_api_retries = geoengine_api_client.models.stac_api_retries.StacApiRetries(
+                    number_of_retries = 0, 
+                    initial_delay_ms = 0, 
+                    exponential_backoff_factor = 1.337, ),
                 gdal_retries = 0,
                 query_buffer = geoengine_api_client.models.stac_query_buffer.StacQueryBuffer(
-                    end_seconds = 56, 
-                    start_seconds = 56, ),
-                stac_api_retries = geoengine_api_client.models.stac_api_retries.StacApiRetries(
-                    exponential_backoff_factor = 1.337, 
-                    initial_delay_ms = 0, 
-                    number_of_retries = 0, ),
+                    start_seconds = 56, 
+                    end_seconds = 56, ),
                 collection_name = '',
+                s3_config = geoengine_api_client.models.stac_provider_s3_config.StacProviderS3Config(
+                    endpoint = '', 
+                    access_key = null, 
+                    secret_key = null, ),
+                time_dimension = None,
                 datasets = [
                     geoengine_api_client.models.stac_provider_dataset.StacProviderDataset(
-                        bands = [
-                            geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
-                                asset_title = '', 
-                                band_name = '', )
-                            ], 
-                        data_type = 'U8', 
-                        description = '', 
                         name = '', 
-                        projection = '', 
+                        description = '', 
+                        data_type = 'U8', 
                         resolution = geoengine_api_client.models.spatial_resolution.SpatialResolution(
                             x = 1.337, 
                             y = 1.337, ), 
+                        projection = '', 
                         spatial_grid = geoengine_api_client.models.spatial_grid_descriptor.SpatialGridDescriptor(
-                            descriptor = 'source', 
                             spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(
                                 geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
                                     origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
@@ -132,46 +131,47 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                                     x_pixel_size = 1.337, 
                                     y_pixel_size = 1.337, ), 
                                 grid_bounds = geoengine_api_client.models.grid_bounding_box2_d.GridBoundingBox2D(
-                                    bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                        x_idx = 56, 
-                                        y_idx = 56, ), 
                                     top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                        x_idx = 56, 
-                                        y_idx = 56, ), ), ), ), )
+                                        y_idx = 56, 
+                                        x_idx = 56, ), 
+                                    bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                                        y_idx = 56, 
+                                        x_idx = 56, ), ), ), 
+                            descriptor = 'source', ), 
+                        bands = [
+                            geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
+                                asset_title = '', 
+                                band_name = '', )
+                            ], )
                     ],
-                s3_config = geoengine_api_client.models.stac_provider_s3_config.StacProviderS3Config(
-                    access_key = '', 
-                    endpoint = '', 
-                    secret_key = '', ),
-                time_dimension = None,
-                expiry_date = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
+                user = '',
                 refresh_token = '',
-                user = ''
+                expiry_date = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f')
             )
         else:
             return TypedDataProviderDefinition(
-                api_token = '',
-                api_url = '',
-                cache_ttl = 0,
-                description = '',
-                filter_label = '',
+                type = 'Aruna',
                 id = '',
                 name = '',
+                description = '',
+                api_url = '',
                 project_id = '',
-                type = 'Aruna',
+                api_token = '',
+                filter_label = '',
+                cache_ttl = 0,
+                stac_url = '',
+                s3_url = '',
+                s3_access_key = '',
+                s3_secret_key = '',
                 gdal_config = [
                     [
                         ''
                         ]
                     ],
-                s3_access_key = '',
-                s3_secret_key = '',
-                s3_url = '',
-                stac_url = '',
                 collections = [
                     geoengine_api_client.models.dataset_layer_listing_collection.DatasetLayerListingCollection(
-                        description = '', 
                         name = '', 
+                        description = '', 
                         tags = [
                             ''
                             ], )
@@ -179,44 +179,39 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                 base_url = '',
                 data = '',
                 overviews = '',
+                db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
+                    host = '', 
+                    port = 0, 
+                    database = '', 
+                    schema = '', 
+                    user = '', 
+                    password = '', ),
                 autocomplete_timeout = 56,
                 columns = [
                     ''
                     ],
-                db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
-                    database = '', 
-                    host = '', 
-                    password = '', 
-                    port = 0, 
-                    schema = '', 
-                    user = '', ),
-                abcd_db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
-                    database = '', 
-                    host = '', 
-                    password = '', 
-                    port = 0, 
-                    schema = '', 
-                    user = '', ),
-                collection_api_auth_token = '',
                 collection_api_url = '',
+                collection_api_auth_token = '',
+                abcd_db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
+                    host = '', 
+                    port = 0, 
+                    database = '', 
+                    schema = '', 
+                    user = '', 
+                    password = '', ),
                 pangaea_url = '',
                 collection_name = '',
+                time_dimension = None,
                 datasets = [
                     geoengine_api_client.models.stac_provider_dataset.StacProviderDataset(
-                        bands = [
-                            geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
-                                asset_title = '', 
-                                band_name = '', )
-                            ], 
-                        data_type = 'U8', 
-                        description = '', 
                         name = '', 
-                        projection = '', 
+                        description = '', 
+                        data_type = 'U8', 
                         resolution = geoengine_api_client.models.spatial_resolution.SpatialResolution(
                             x = 1.337, 
                             y = 1.337, ), 
+                        projection = '', 
                         spatial_grid = geoengine_api_client.models.spatial_grid_descriptor.SpatialGridDescriptor(
-                            descriptor = 'source', 
                             spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(
                                 geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
                                     origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
@@ -225,14 +220,19 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                                     x_pixel_size = 1.337, 
                                     y_pixel_size = 1.337, ), 
                                 grid_bounds = geoengine_api_client.models.grid_bounding_box2_d.GridBoundingBox2D(
-                                    bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                        x_idx = 56, 
-                                        y_idx = 56, ), 
                                     top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                        x_idx = 56, 
-                                        y_idx = 56, ), ), ), ), )
+                                        y_idx = 56, 
+                                        x_idx = 56, ), 
+                                    bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                                        y_idx = 56, 
+                                        x_idx = 56, ), ), ), 
+                            descriptor = 'source', ), 
+                        bands = [
+                            geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
+                                asset_title = '', 
+                                band_name = '', )
+                            ], )
                     ],
-                time_dimension = None,
         )
         """
 

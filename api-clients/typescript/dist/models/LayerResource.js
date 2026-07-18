@@ -28,9 +28,9 @@ exports.LayerResourceTypeEnum = {
  * Check if a given object implements the LayerResource interface.
  */
 function instanceOfLayerResource(value) {
-    if (!('id' in value) || value['id'] === undefined)
-        return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('id' in value) || value['id'] === undefined)
         return false;
     return true;
 }
@@ -42,8 +42,8 @@ function LayerResourceFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'id': json['id'],
         'type': json['type'],
+        'id': json['id'],
     };
 }
 function LayerResourceToJSON(json) {
@@ -54,7 +54,7 @@ function LayerResourceToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'id': value['id'],
         'type': value['type'],
+        'id': value['id'],
     };
 }

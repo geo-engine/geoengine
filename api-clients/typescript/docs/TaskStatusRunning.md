@@ -6,12 +6,12 @@
 
 Name | Type
 ------------ | -------------
-`description` | string
-`estimatedTimeRemaining` | string
-`info` | any
-`pctComplete` | string
 `status` | string
 `taskType` | string
+`description` | string
+`info` | any
+`pctComplete` | string
+`estimatedTimeRemaining` | string
 `timeStarted` | string
 
 ## Example
@@ -21,12 +21,12 @@ import type { TaskStatusRunning } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "description": null,
-  "estimatedTimeRemaining": null,
-  "info": null,
-  "pctComplete": null,
   "status": null,
   "taskType": null,
+  "description": null,
+  "info": null,
+  "pctComplete": null,
+  "estimatedTimeRemaining": null,
   "timeStarted": null,
 } satisfies TaskStatusRunning
 

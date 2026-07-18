@@ -12,23 +12,23 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct LineSymbology {
-    #[serde(rename = "autoSimplified")]
-    pub auto_simplified: bool,
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "stroke")]
     pub stroke: Box<models::StrokeParam>,
     #[serde(rename = "text", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub text: Option<Option<Box<models::TextSymbology>>>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
+    #[serde(rename = "autoSimplified")]
+    pub auto_simplified: bool,
 }
 
 impl LineSymbology {
-    pub fn new(auto_simplified: bool, stroke: models::StrokeParam, r#type: Type) -> LineSymbology {
+    pub fn new(r#type: Type, stroke: models::StrokeParam, auto_simplified: bool) -> LineSymbology {
         LineSymbology {
-            auto_simplified,
+            r#type,
             stroke: Box::new(stroke),
             text: None,
-            r#type,
+            auto_simplified,
         }
     }
 }

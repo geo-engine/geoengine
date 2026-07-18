@@ -27,10 +27,10 @@ class RasterTypeConversion(BaseModel):
     """
     The `RasterTypeConversion` operator changes the data type of raster pixels.  Applying this conversion may cause precision loss. For example, converting `F32` value `3.1` to `U8` results in `3`.  If a value is outside of the range of the target data type, it is clipped to the valid range of that type. For example, converting `F32` value `300.0` to `U8` results in `255`.  ## Inputs  The `RasterTypeConversion` operator expects exactly one _raster_ input.
     """ # noqa: E501
+    type: StrictStr
     params: RasterTypeConversionParameters
     sources: SingleRasterSource
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["params", "sources", "type"]
+    __properties: ClassVar[List[str]] = ["type", "params", "sources"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -96,9 +96,9 @@ class RasterTypeConversion(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "type": obj.get("type"),
             "params": RasterTypeConversionParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
-            "sources": SingleRasterSource.from_dict(obj["sources"]) if obj.get("sources") is not None else None,
-            "type": obj.get("type")
+            "sources": SingleRasterSource.from_dict(obj["sources"]) if obj.get("sources") is not None else None
         })
         return _obj
 

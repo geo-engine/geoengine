@@ -67,7 +67,7 @@ where
     A: AsRef<[isize]>,
 {
     fn contains(&self, rhs: &GridIdx<A>) -> bool {
-        debug_assert!(self.min_index().as_slice().len() == rhs.as_slice().len()); // this must never fail since the array type A has a fixed size. However, one might implement that for a Vec so better check it here.
+        debug_assert_eq!(self.min_index().as_slice().len(), rhs.as_slice().len()); // this must never fail since the array type A has a fixed size. However, one might implement that for a Vec so better check it here.
 
         self.min_index()
             .as_slice()

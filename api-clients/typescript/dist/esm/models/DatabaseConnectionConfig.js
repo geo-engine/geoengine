@@ -14,17 +14,17 @@
  * Check if a given object implements the DatabaseConnectionConfig interface.
  */
 export function instanceOfDatabaseConnectionConfig(value) {
-    if (!('database' in value) || value['database'] === undefined)
-        return false;
     if (!('host' in value) || value['host'] === undefined)
         return false;
-    if (!('password' in value) || value['password'] === undefined)
-        return false;
     if (!('port' in value) || value['port'] === undefined)
+        return false;
+    if (!('database' in value) || value['database'] === undefined)
         return false;
     if (!('schema' in value) || value['schema'] === undefined)
         return false;
     if (!('user' in value) || value['user'] === undefined)
+        return false;
+    if (!('password' in value) || value['password'] === undefined)
         return false;
     return true;
 }
@@ -36,12 +36,12 @@ export function DatabaseConnectionConfigFromJSONTyped(json, ignoreDiscriminator)
         return json;
     }
     return {
-        'database': json['database'],
         'host': json['host'],
-        'password': json['password'],
         'port': json['port'],
+        'database': json['database'],
         'schema': json['schema'],
         'user': json['user'],
+        'password': json['password'],
     };
 }
 export function DatabaseConnectionConfigToJSON(json) {
@@ -52,11 +52,11 @@ export function DatabaseConnectionConfigToJSONTyped(value, ignoreDiscriminator =
         return value;
     }
     return {
-        'database': value['database'],
         'host': value['host'],
-        'password': value['password'],
         'port': value['port'],
+        'database': value['database'],
         'schema': value['schema'],
         'user': value['user'],
+        'password': value['password'],
     };
 }

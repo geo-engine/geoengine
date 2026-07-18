@@ -9,6 +9,7 @@ install:
     cargo install --locked cargo-llvm-cov
     cargo install --locked cargo-edit
     cargo install --locked git-cliff
+    cargo install --locked request-logging-proxy
 
 # Generate OpenAPI specification as JSON file. The file is generated in the current directory.
 [group("build")]
@@ -20,19 +21,21 @@ generate-openapi-spec: common::_clear
 lint: common::_clear lint-rustfmt lint-clippy lint-sql
 
 # Run clippy for all features and all targets.
+[arg('fix', long='fix', value='--fix', help='Automatically apply fixes where possible.')]
 [group("lint")]
-lint-clippy: common::_clear
-    cargo clippy --all-features --all-targets
+lint-clippy fix="": common::_clear
+    cargo clippy --all-features --all-targets {{ if fix == "--fix" { "--fix --allow-dirty" } else { "" } }}
 
 # Run rustfmt
+[arg('write', long='write', value='--write', help='Write changes to files instead of checking.')]
 [group("lint")]
-lint-rustfmt: common::_clear
-    cargo fmt --all -- --check
+lint-rustfmt write="": common::_clear
+    cargo fmt --all -- {{ if write == "--write" { "" } else { "--check" } }}
 
 # Run sqlfluff.
 [group("lint")]
 lint-sql: common::_clear
-    pipx run sqlfluff==4.0.4 lint
+    pipx run sqlfluff==4.2.2 lint
 
 # Build in dev or release mode.
 [arg('mode', pattern='|--release')]
@@ -59,6 +62,16 @@ test-coverage output_path="lcov.info":
     	--lcov \
     	--output-path {{ output_path }}
 
+[group("ci")]
+test-coverage-services filter="": common::_clear
+    cargo llvm-cov \
+    	--locked \
+    	--all-features \
+        --package geoengine-services \
+    	--profile ci \
+    	--html \
+        -- {{ filter }}
+
 # Run the application.
 [arg('mode', pattern='|--release')]
 [group("run")]
@@ -66,10 +79,25 @@ run mode="": common::_clear
     cargo build --bin gdalsource-process {{ mode }}
     cargo run {{ mode }}
 
+# Run the CLI
+[group("run")]
+cli *parameters: common::_clear
+    cargo run --bin geoengine-cli -- {{ parameters }}
+
 # Run the tests. Optionally, a filter can be provided to run only a subset of the tests.
 [group("test")]
 test filter="": common::_clear
     cargo test -- {{ filter }} --nocapture
+
+# Run the tests for the geoengine-datatypes package. Optionally, a filter can be provided to run only a subset of the tests. Example: just test-datatypes workflows::workflow::tests
+[group("test")]
+test-datatypes filter="": common::_clear
+    cargo test --package geoengine-datatypes -- {{ filter }} --nocapture
+
+# Run the tests for the geoengine-operators package. Optionally, a filter can be provided to run only a subset of the tests. Example: just test-operators workflows::workflow::tests
+[group("test")]
+test-operators filter="": common::_clear
+    cargo test --package geoengine-operators -- {{ filter }} --nocapture
 
 # Run the tests for the geoengine-services package. Optionally, a filter can be provided to run only a subset of the tests. Example: just test-services workflows::workflow::tests
 [group("test")]
@@ -85,3 +113,110 @@ test-macros filter="": common::_clear
 [group("test")]
 test-doc:
     cargo test --doc --all-features --profile ci --locked
+
+# Show module after macro expansion. Example: just expand-macro geoengine-services api::handlers::ogc::error
+[group("debug")]
+expand-macro crate macro_path:
+    cargo expand --locked -p {{ crate }} --lib {{ macro_path }}
+
+[arg("requests-log-file", long="requests-log-file", help="Path to the file where the requests will be logged.")]
+[group("run")]
+[script("bash")]
+validate-ogc-compliance requests-log-file="": common::_clear
+    # 0. Setup environment variables for the Rust server and proxy server
+    SERVER_PORT=3030
+    PROXY_PORT=8123
+    SERVER_URL="http://localhost:$SERVER_PORT"
+    PROXY_URL="http://localhost:$PROXY_PORT"
+
+    wait_for_port() {
+        local HOST=$1
+        local PORT=$2
+
+        echo "Waiting for $HOST:$PORT..."
+
+        # The loop runs as long as the Python command returns a non-zero (fail) exit code
+        # 2>/dev/null hides the ugly Python traceback errors
+        while ! python3 -c "import socket; s = socket.socket(); s.settimeout(1); s.connect(('$HOST', $PORT))" 2>/dev/null; do
+            sleep 0.5
+        done
+
+        echo "$HOST:$PORT is up and running!"
+    }
+
+    # 1. Start the cargo server in the background
+    GEOENGINE__WEB__EXTERNAL_ADDRESS="$PROXY_URL/api" \
+    cargo run & SERVER_PID=$!
+
+    # 2. Trap exits (success or failure) to kill the server process
+    trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+
+    # 3. Poll the port until it is active
+    echo "Waiting for Rust server to spin up..."
+    wait_for_port "localhost" "$SERVER_PORT"
+    echo "Server is up! Fetching session and layer information..."
+
+    # 3. Get session and register processing graph
+    SESSION_TOKEN=$(curl -s -X POST $SERVER_URL/api/anonymous | jq -r '.id')
+    DATA_CONNECTOR_ID=cbb21ee3-d15d-45c5-a175-66964adf4e85
+    LAYER_ID=$(curl -s \
+        --header "Accept: application/json" \
+        --header "Authorization: Bearer $SESSION_TOKEN" \
+        "$SERVER_URL/api/layers/collections/$DATA_CONNECTOR_ID/tags%3A%2A?offset=0&limit=20" \
+        | jq -r '.items[] | select(.name == "NDVI") | .id.layerId')
+    echo "Got session token: $SESSION_TOKEN"
+    echo "Using data connector ID: $DATA_CONNECTOR_ID"
+    echo "Using layer ID: $LAYER_ID"
+
+    # 4. Start proxy server in the background
+    request-logging-proxy \
+        --target-url $SERVER_URL \
+        --port $PROXY_PORT \
+        --override-bearer-auth $SESSION_TOKEN \
+        {{ if requests-log-file == "" { "--logger dev-null" } else { "--logger vscode > " + requests-log-file } }} \
+        & PROXY_PID=$!
+
+    # 5. Trap exits also for proxy process (replaces previous trap)
+    trap 'kill $SERVER_PID $PROXY_PID 2>/dev/null || true' EXIT
+
+    # 6. Poll the proxy port until it is active
+    echo "Waiting for proxy server to spin up..."
+    wait_for_port "localhost" "$PROXY_PORT"
+    echo "Proxy server is up! Starting compliance validation..."
+
+    # 7. Run the OGC compliance validation action
+    cd ../.ogc-validator
+
+    cp .env.template .env
+    sed -i "s|\$DATA_CONNECTOR_ID|$DATA_CONNECTOR_ID|g" .env
+    sed -i "s|\$LAYER_ID|$LAYER_ID|g" .env
+    touch step_summary.md
+    npm install
+    npx @github/local-action ./node_modules/ogc-validator src/main.ts .env
+
+[group("update")]
+update-step1-rust: common::_clear && (lint-clippy "--fix")
+    LATEST_STABLE=$(curl -sSL https://static.rust-lang.org/dist/channel-rust-stable.toml \
+    | grep -A 1 '\[pkg.rust\]' \
+    | grep 'version =' \
+    | sed -E 's/version = "([0-9.]+).*/\1/') && \
+    sed -i -E "s/(channel[[:space:]]*=[[:space:]]*\")[^\"]*/\1$LATEST_STABLE/" rust-toolchain.toml
+
+[group("update")]
+update-step2-minor-dependencies: common::_clear
+    cargo upgrade --incompatible allow --pinned ignore
+    cargo update
+
+[group("update")]
+update-step3-aftermath: common::_clear
+    `./.scripts/update-expression-deps.rs`
+
+    SQLFLUFF_VERSION=$(curl -s https://pypi.org/pypi/sqlfluff/json | jq -r '.info.version') && \
+    sed -i "s/sqlfluff==[0-9.]\+/sqlfluff==$SQLFLUFF_VERSION/" justfile
+
+# Run an example OGC Tiles application with OpenLayers.
+[group("example")]
+[working-directory("test_data/ogc/tiles/openlayers")]
+example-ogc-tiles: common::_clear
+    npm install
+    npm run start

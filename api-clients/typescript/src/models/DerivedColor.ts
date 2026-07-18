@@ -28,6 +28,12 @@ import {
 export interface DerivedColor {
     /**
      * 
+     * @type {DerivedColorTypeEnum}
+     * @memberof DerivedColor
+     */
+    type: DerivedColorTypeEnum;
+    /**
+     * 
      * @type {string}
      * @memberof DerivedColor
      */
@@ -38,12 +44,6 @@ export interface DerivedColor {
      * @memberof DerivedColor
      */
     colorizer: Colorizer;
-    /**
-     * 
-     * @type {DerivedColorTypeEnum}
-     * @memberof DerivedColor
-     */
-    type: DerivedColorTypeEnum;
 }
 
 
@@ -60,9 +60,9 @@ export type DerivedColorTypeEnum = typeof DerivedColorTypeEnum[keyof typeof Deri
  * Check if a given object implements the DerivedColor interface.
  */
 export function instanceOfDerivedColor(value: object): value is DerivedColor {
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('attribute' in value) || value['attribute'] === undefined) return false;
     if (!('colorizer' in value) || value['colorizer'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -76,9 +76,9 @@ export function DerivedColorFromJSONTyped(json: any, ignoreDiscriminator: boolea
     }
     return {
         
+        'type': json['type'],
         'attribute': json['attribute'],
         'colorizer': ColorizerFromJSON(json['colorizer']),
-        'type': json['type'],
     };
 }
 
@@ -93,9 +93,9 @@ export function DerivedColorToJSONTyped(value?: DerivedColor | null, ignoreDiscr
 
     return {
         
+        'type': value['type'],
         'attribute': value['attribute'],
         'colorizer': ColorizerToJSON(value['colorizer']),
-        'type': value['type'],
     };
 }
 

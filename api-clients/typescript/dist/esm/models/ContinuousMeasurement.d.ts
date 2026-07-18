@@ -16,16 +16,16 @@
 export interface ContinuousMeasurement {
     /**
      *
-     * @type {string}
-     * @memberof ContinuousMeasurement
-     */
-    measurement: string;
-    /**
-     *
      * @type {ContinuousMeasurementTypeEnum}
      * @memberof ContinuousMeasurement
      */
     type: ContinuousMeasurementTypeEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof ContinuousMeasurement
+     */
+    measurement: string;
     /**
      *
      * @type {string}

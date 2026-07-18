@@ -17,12 +17,6 @@ import type { PlotOutputFormat } from './PlotOutputFormat';
 export interface WrappedPlotOutput {
     /**
      *
-     * @type {object}
-     * @memberof WrappedPlotOutput
-     */
-    data: object;
-    /**
-     *
      * @type {PlotOutputFormat}
      * @memberof WrappedPlotOutput
      */
@@ -33,6 +27,12 @@ export interface WrappedPlotOutput {
      * @memberof WrappedPlotOutput
      */
     plotType: string;
+    /**
+     *
+     * @type {object}
+     * @memberof WrappedPlotOutput
+     */
+    data: object;
 }
 /**
  * Check if a given object implements the WrappedPlotOutput interface.

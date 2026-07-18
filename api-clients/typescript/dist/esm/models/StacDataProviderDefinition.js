@@ -23,21 +23,21 @@ export const StacDataProviderDefinitionTypeEnum = {
  * Check if a given object implements the StacDataProviderDefinition interface.
  */
 export function instanceOfStacDataProviderDefinition(value) {
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('name' in value) || value['name'] === undefined)
+        return false;
+    if (!('id' in value) || value['id'] === undefined)
+        return false;
+    if (!('description' in value) || value['description'] === undefined)
+        return false;
     if (!('apiUrl' in value) || value['apiUrl'] === undefined)
         return false;
     if (!('collectionName' in value) || value['collectionName'] === undefined)
         return false;
-    if (!('datasets' in value) || value['datasets'] === undefined)
-        return false;
-    if (!('description' in value) || value['description'] === undefined)
-        return false;
-    if (!('id' in value) || value['id'] === undefined)
-        return false;
-    if (!('name' in value) || value['name'] === undefined)
-        return false;
     if (!('timeDimension' in value) || value['timeDimension'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('datasets' in value) || value['datasets'] === undefined)
         return false;
     return true;
 }
@@ -49,16 +49,16 @@ export function StacDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminato
         return json;
     }
     return {
+        'type': json['type'],
+        'name': json['name'],
+        'id': json['id'],
+        'description': json['description'],
+        'priority': json['priority'] == null ? undefined : json['priority'],
         'apiUrl': json['apiUrl'],
         'collectionName': json['collectionName'],
-        'datasets': (json['datasets'].map(StacProviderDatasetFromJSON)),
-        'description': json['description'],
-        'id': json['id'],
-        'name': json['name'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
         's3Config': json['s3Config'] == null ? undefined : StacProviderS3ConfigFromJSON(json['s3Config']),
         'timeDimension': TimeDimensionFromJSON(json['timeDimension']),
-        'type': json['type'],
+        'datasets': (json['datasets'].map(StacProviderDatasetFromJSON)),
     };
 }
 export function StacDataProviderDefinitionToJSON(json) {
@@ -69,15 +69,15 @@ export function StacDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator
         return value;
     }
     return {
+        'type': value['type'],
+        'name': value['name'],
+        'id': value['id'],
+        'description': value['description'],
+        'priority': value['priority'],
         'apiUrl': value['apiUrl'],
         'collectionName': value['collectionName'],
-        'datasets': (value['datasets'].map(StacProviderDatasetToJSON)),
-        'description': value['description'],
-        'id': value['id'],
-        'name': value['name'],
-        'priority': value['priority'],
         's3Config': StacProviderS3ConfigToJSON(value['s3Config']),
         'timeDimension': TimeDimensionToJSON(value['timeDimension']),
-        'type': value['type'],
+        'datasets': (value['datasets'].map(StacProviderDatasetToJSON)),
     };
 }

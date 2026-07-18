@@ -28,10 +28,10 @@ import {
 export interface OgrSourceDatasetTimeTypeStartDuration {
     /**
      * 
-     * @type {string}
+     * @type {OgrSourceDatasetTimeTypeStartDurationTypeEnum}
      * @memberof OgrSourceDatasetTimeTypeStartDuration
      */
-    durationField: string;
+    type: OgrSourceDatasetTimeTypeStartDurationTypeEnum;
     /**
      * 
      * @type {string}
@@ -46,10 +46,10 @@ export interface OgrSourceDatasetTimeTypeStartDuration {
     startFormat: OgrSourceTimeFormat;
     /**
      * 
-     * @type {OgrSourceDatasetTimeTypeStartDurationTypeEnum}
+     * @type {string}
      * @memberof OgrSourceDatasetTimeTypeStartDuration
      */
-    type: OgrSourceDatasetTimeTypeStartDurationTypeEnum;
+    durationField: string;
 }
 
 
@@ -66,10 +66,10 @@ export type OgrSourceDatasetTimeTypeStartDurationTypeEnum = typeof OgrSourceData
  * Check if a given object implements the OgrSourceDatasetTimeTypeStartDuration interface.
  */
 export function instanceOfOgrSourceDatasetTimeTypeStartDuration(value: object): value is OgrSourceDatasetTimeTypeStartDuration {
-    if (!('durationField' in value) || value['durationField'] === undefined) return false;
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('startField' in value) || value['startField'] === undefined) return false;
     if (!('startFormat' in value) || value['startFormat'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('durationField' in value) || value['durationField'] === undefined) return false;
     return true;
 }
 
@@ -83,10 +83,10 @@ export function OgrSourceDatasetTimeTypeStartDurationFromJSONTyped(json: any, ig
     }
     return {
         
-        'durationField': json['durationField'],
+        'type': json['type'],
         'startField': json['startField'],
         'startFormat': OgrSourceTimeFormatFromJSON(json['startFormat']),
-        'type': json['type'],
+        'durationField': json['durationField'],
     };
 }
 
@@ -101,10 +101,10 @@ export function OgrSourceDatasetTimeTypeStartDurationToJSONTyped(value?: OgrSour
 
     return {
         
-        'durationField': value['durationField'],
+        'type': value['type'],
         'startField': value['startField'],
         'startFormat': OgrSourceTimeFormatToJSON(value['startFormat']),
-        'type': value['type'],
+        'durationField': value['durationField'],
     };
 }
 

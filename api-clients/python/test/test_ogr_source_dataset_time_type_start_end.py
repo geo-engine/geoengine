@@ -35,19 +35,19 @@ class TestOgrSourceDatasetTimeTypeStartEnd(unittest.TestCase):
         model = OgrSourceDatasetTimeTypeStartEnd()
         if include_optional:
             return OgrSourceDatasetTimeTypeStartEnd(
-                end_field = '',
-                end_format = None,
+                type = 'start+end',
                 start_field = '',
                 start_format = None,
-                type = 'start+end'
+                end_field = '',
+                end_format = None
             )
         else:
             return OgrSourceDatasetTimeTypeStartEnd(
-                end_field = '',
-                end_format = None,
+                type = 'start+end',
                 start_field = '',
                 start_format = None,
-                type = 'start+end',
+                end_field = '',
+                end_format = None,
         )
         """
 

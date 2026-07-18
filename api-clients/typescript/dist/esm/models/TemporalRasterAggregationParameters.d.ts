@@ -27,12 +27,6 @@ export interface TemporalRasterAggregationParameters {
      */
     aggregation: Aggregation;
     /**
-     * Optional output raster data type.
-     * @type {RasterDataType}
-     * @memberof TemporalRasterAggregationParameters
-     */
-    outputType?: RasterDataType | null;
-    /**
      * Window size and granularity for the output time series.
      * @type {TimeStep}
      * @memberof TemporalRasterAggregationParameters
@@ -46,6 +40,12 @@ export interface TemporalRasterAggregationParameters {
      * @memberof TemporalRasterAggregationParameters
      */
     windowReference?: number | null;
+    /**
+     * Optional output raster data type.
+     * @type {RasterDataType}
+     * @memberof TemporalRasterAggregationParameters
+     */
+    outputType?: RasterDataType | null;
 }
 /**
  * Check if a given object implements the TemporalRasterAggregationParameters interface.

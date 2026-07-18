@@ -25,12 +25,12 @@ from typing_extensions import Self
 
 class Interpolation(BaseModel):
     """
-    The `Interpolation` operator increases raster resolution by interpolating values of an input raster.  If queried with a resolution that is coarser than the input resolution, interpolation is not applicable and an error is returned.  ## Inputs  The `Interpolation` operator expects exactly one _raster_ input.
+    The `Interpolation` operator increases raster resolution by interpolating values of an input raster.  If queried with a resolution that is coarser than the input resolution, interpolation is not applicable and an error is returned.  ## Inputs  The `Interpolation` operator expects exactly one _raster_ input.  ## Resolution  The target resolution can be specified either as an explicit `Resolution` (in pixel units) or as a `Fraction` that scales the input resolution.  ```rust,ignore // Scale the input resolution by a factor of 2 in both x and y directions InterpolationResolution::Fraction(Fraction { x: 2.0, y: 2.0 }) ```  ```rust,ignore // Use an explicit resolution of 50×50 pixel units InterpolationResolution::Resolution(SpatialResolution { x: 50.0, y: 50.0 }) ```
     """ # noqa: E501
+    type: StrictStr
     params: InterpolationParameters
     sources: SingleRasterSource
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["params", "sources", "type"]
+    __properties: ClassVar[List[str]] = ["type", "params", "sources"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -96,9 +96,9 @@ class Interpolation(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "type": obj.get("type"),
             "params": InterpolationParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
-            "sources": SingleRasterSource.from_dict(obj["sources"]) if obj.get("sources") is not None else None,
-            "type": obj.get("type")
+            "sources": SingleRasterSource.from_dict(obj["sources"]) if obj.get("sources") is not None else None
         })
         return _obj
 

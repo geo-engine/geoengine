@@ -27,9 +27,9 @@ class ReprojectionParameters(BaseModel):
     """
     Parameters for the `Reprojection` operator.
     """ # noqa: E501
-    derive_out_spec: Optional[DeriveOutRasterSpecsSource] = Field(default=None, description="Controls how raster output bounds are derived.  The default `projectionBounds` usually keeps a projection-aligned target grid, while `dataBounds` derives it directly from source data bounds.", alias="deriveOutSpec")
     target_spatial_reference: StrictStr = Field(description="Target spatial reference system.", alias="targetSpatialReference")
-    __properties: ClassVar[List[str]] = ["deriveOutSpec", "targetSpatialReference"]
+    derive_out_spec: Optional[DeriveOutRasterSpecsSource] = Field(default=None, description="Controls how raster output bounds are derived.  The default `projectionBounds` usually keeps a projection-aligned target grid, while `dataBounds` derives it directly from source data bounds.", alias="deriveOutSpec")
+    __properties: ClassVar[List[str]] = ["targetSpatialReference", "deriveOutSpec"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -82,8 +82,8 @@ class ReprojectionParameters(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "deriveOutSpec": obj.get("deriveOutSpec"),
-            "targetSpatialReference": obj.get("targetSpatialReference")
+            "targetSpatialReference": obj.get("targetSpatialReference"),
+            "deriveOutSpec": obj.get("deriveOutSpec")
         })
         return _obj
 

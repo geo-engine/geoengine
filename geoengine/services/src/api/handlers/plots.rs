@@ -316,7 +316,7 @@ mod tests {
             .uri(&format!(
                 "/plot/{}?{}",
                 id,
-                &serde_urlencoded::to_string(params).unwrap()
+                serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, app_ctx).await;
@@ -387,7 +387,7 @@ mod tests {
             .uri(&format!(
                 "/plot/{}?{}",
                 id,
-                &serde_urlencoded::to_string(params).unwrap()
+                serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, app_ctx).await;
@@ -511,7 +511,7 @@ mod tests {
                 .uri(&format!(
                     "/plot/{}?{}",
                     id,
-                    &serde_urlencoded::to_string(params).unwrap()
+                    serde_urlencoded::to_string(params).unwrap()
                 ))
                 .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
             send_test_request(req, app_ctx).await

@@ -1,15 +1,15 @@
 
 # Fraction
 
-Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).
+Scaling factor in x/y direction.
 
 ## Properties
 
 Name | Type
 ------------ | -------------
-`type` | string
 `x` | number
 `y` | number
+`type` | string
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { Fraction } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "type": null,
   "x": null,
   "y": null,
+  "type": null,
 } satisfies Fraction
 
 console.log(example)

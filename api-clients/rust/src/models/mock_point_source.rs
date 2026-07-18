@@ -13,18 +13,18 @@ use serde::{Deserialize, Serialize};
 /// MockPointSource : The [`MockPointSource`] is a source operator that provides mock vector point data for testing and development purposes. 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MockPointSource {
-    #[serde(rename = "params")]
-    pub params: Box<models::MockPointSourceParameters>,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "params")]
+    pub params: Box<models::MockPointSourceParameters>,
 }
 
 impl MockPointSource {
     /// The [`MockPointSource`] is a source operator that provides mock vector point data for testing and development purposes. 
-    pub fn new(params: models::MockPointSourceParameters, r#type: Type) -> MockPointSource {
+    pub fn new(r#type: Type, params: models::MockPointSourceParameters) -> MockPointSource {
         MockPointSource {
-            params: Box::new(params),
             r#type,
+            params: Box::new(params),
         }
     }
 }

@@ -35,24 +35,24 @@ import {
 export interface SingleVectorMultipleRasterSources {
     /**
      * 
-     * @type {Array<RasterOperator>}
-     * @memberof SingleVectorMultipleRasterSources
-     */
-    rasters: Array<RasterOperator>;
-    /**
-     * 
      * @type {VectorOperator}
      * @memberof SingleVectorMultipleRasterSources
      */
     vector: VectorOperator;
+    /**
+     * 
+     * @type {Array<RasterOperator>}
+     * @memberof SingleVectorMultipleRasterSources
+     */
+    rasters: Array<RasterOperator>;
 }
 
 /**
  * Check if a given object implements the SingleVectorMultipleRasterSources interface.
  */
 export function instanceOfSingleVectorMultipleRasterSources(value: object): value is SingleVectorMultipleRasterSources {
-    if (!('rasters' in value) || value['rasters'] === undefined) return false;
     if (!('vector' in value) || value['vector'] === undefined) return false;
+    if (!('rasters' in value) || value['rasters'] === undefined) return false;
     return true;
 }
 
@@ -66,8 +66,8 @@ export function SingleVectorMultipleRasterSourcesFromJSONTyped(json: any, ignore
     }
     return {
         
-        'rasters': ((json['rasters'] as Array<any>).map(RasterOperatorFromJSON)),
         'vector': VectorOperatorFromJSON(json['vector']),
+        'rasters': ((json['rasters'] as Array<any>).map(RasterOperatorFromJSON)),
     };
 }
 
@@ -82,8 +82,8 @@ export function SingleVectorMultipleRasterSourcesToJSONTyped(value?: SingleVecto
 
     return {
         
-        'rasters': ((value['rasters'] as Array<any>).map(RasterOperatorToJSON)),
         'vector': VectorOperatorToJSON(value['vector']),
+        'rasters': ((value['rasters'] as Array<any>).map(RasterOperatorToJSON)),
     };
 }
 

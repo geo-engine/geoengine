@@ -6,13 +6,13 @@
 
 Name | Type
 ------------ | -------------
-`cacheTtl` | number
-`data` | string
-`description` | string
-`name` | string
-`overviews` | string
-`priority` | number
 `type` | string
+`name` | string
+`description` | string
+`priority` | number
+`data` | string
+`overviews` | string
+`cacheTtl` | number
 
 ## Example
 
@@ -21,13 +21,13 @@ import type { NetCdfCfDataProviderDefinition } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "cacheTtl": null,
-  "data": null,
-  "description": null,
-  "name": null,
-  "overviews": null,
-  "priority": null,
   "type": null,
+  "name": null,
+  "description": null,
+  "priority": null,
+  "data": null,
+  "overviews": null,
+  "cacheTtl": null,
 } satisfies NetCdfCfDataProviderDefinition
 
 console.log(example)

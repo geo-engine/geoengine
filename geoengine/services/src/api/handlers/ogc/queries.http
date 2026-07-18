@@ -1,0 +1,114 @@
+# Login
+# @name session
+POST http://localhost:3030/api/anonymous
+
+@token = {{session.response.body.$.id}}
+
+###
+
+# @name collections
+GET http://localhost:3030/api/layers/collections/cbb21ee3-d15d-45c5-a175-66964adf4e85/tags%3A%2A?offset=0&limit=20
+Authorization: Bearer {{token}}
+
+@dataConnectorId = {{collections.response.body.$.items[?(@.name=='NDVI')].id.providerId}}
+@layerId = {{collections.response.body.$.items[?(@.name=='NDVI')].id.layerId}}
+
+@endpoint = http://localhost:3030/api/ogc/{{dataConnectorId}}/{{layerId}}
+@collectionEndpoint = {{endpoint}}/collections/{{layerId}}
+
+@naturalEarthCollectionEndpoint = http://localhost:3030/api/ogc/ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74/83866f7b-dcee-47b8-9242-e5636ceaf402/collections/83866f7b-dcee-47b8-9242-e5636ceaf402
+
+###
+
+# Landing Page
+GET {{endpoint}}
+Authorization: Bearer {{token}}
+
+###
+
+HEAD {{endpoint}}
+Authorization: Bearer {{token}}
+
+###
+
+# Conformance Classes
+GET {{endpoint}}/conformance
+Authorization: Bearer {{token}}
+
+###
+
+# Tile Matrix Sets
+GET {{endpoint}}/tileMatrixSets
+Authorization: Bearer {{token}}
+
+###
+
+# Tile Matrix Set
+GET {{endpoint}}/tileMatrixSets/Custom
+Authorization: Bearer {{token}}
+
+###
+
+# Tile Matrix Set
+GET {{endpoint}}/tileMatrixSets/CustomWebMercator
+Authorization: Bearer {{token}}
+
+###
+
+# Collections
+GET {{endpoint}}/collections
+Authorization: Bearer {{token}}
+
+###
+
+# Collection
+GET {{collectionEndpoint}}
+Authorization: Bearer {{token}}
+
+###
+
+# Tiles
+GET {{collectionEndpoint}}/map/tiles
+Authorization: Bearer {{token}}
+
+###
+
+# Tileset
+GET {{collectionEndpoint}}/map/tiles/Custom
+Authorization: Bearer {{token}}
+
+###
+
+# Tile
+GET {{collectionEndpoint}}/map/tiles/Custom/0/0/0?datetime=2014-04-01T00:00:00Z
+Authorization: Bearer {{token}}
+
+###
+
+# Tile
+GET {{collectionEndpoint}}/map/tiles/Custom/2/1/4?datetime=2014-04-01T00:00:00Z
+Authorization: Bearer {{token}}
+
+###
+
+# Tile
+GET {{collectionEndpoint}}/map/tiles/Custom/1/0/0?datetime=2014-01-01T00:00:00Z
+Authorization: Bearer {{token}}
+
+###
+
+# Tileset
+GET {{collectionEndpoint}}/map/tiles/CustomWebMercator
+Authorization: Bearer {{token}}
+
+###
+
+# Tile
+GET {{collectionEndpoint}}/map/tiles/CustomWebMercator/0/0/0?datetime=2014-01-01T00:00:00Z
+Authorization: Bearer {{token}}
+
+###
+
+# RGB Tile
+GET {{naturalEarthCollectionEndpoint}}/map/tiles/CustomWebMercator/1/0/1?datetime=2014-01-01T00:00:00Z
+Authorization: Bearer {{token}}

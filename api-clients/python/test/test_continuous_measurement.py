@@ -35,14 +35,14 @@ class TestContinuousMeasurement(unittest.TestCase):
         model = ContinuousMeasurement()
         if include_optional:
             return ContinuousMeasurement(
-                measurement = '',
                 type = 'continuous',
+                measurement = '',
                 unit = ''
             )
         else:
             return ContinuousMeasurement(
-                measurement = '',
                 type = 'continuous',
+                measurement = '',
         )
         """
 

@@ -35,17 +35,17 @@ class TestSingleVectorMultipleRasterSources(unittest.TestCase):
         model = SingleVectorMultipleRasterSources()
         if include_optional:
             return SingleVectorMultipleRasterSources(
+                vector = None,
                 rasters = [
                     null
-                    ],
-                vector = None
+                    ]
             )
         else:
             return SingleVectorMultipleRasterSources(
+                vector = None,
                 rasters = [
                     null
                     ],
-                vector = None,
         )
         """
 

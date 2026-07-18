@@ -24,28 +24,28 @@
         },
         "dimension": {
           "regular": {
-              "origin": "2014-01-01T00:00:00.000Z",
-              "step": {
-                "granularity": "months",
-                "step": 1
-              }
+            "origin": "2014-01-01T00:00:00.000Z",
+            "step": {
+              "granularity": "months",
+              "step": 1
             }
+          }
         }
       },
       "spatialGrid": {
         "state": "source",
-        "spatialGrid":{
+        "spatialGrid": {
           "geoTransform": {
             "originCoordinate": {
               "x": -20037508.3427892439067364,
               "y": 19971868.8804085627198219
             },
-            "xPixelSize":14052.95025804873876,
-            "yPixelSize":-14057.88111778840539
+            "xPixelSize": 14052.9502580487387604,
+            "yPixelSize": -14057.8811177884053905
           },
           "gridBounds": {
             "min": [0, 0],
-            "max": [1799, 3599]
+            "max": [2851, 2841]
           }
         }
       },
@@ -63,11 +63,11 @@
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
-          "x": -20037508.342789243906736,
-          "y": 19971868.880408562719822
+          "x": -20037508.3427892439067364,
+          "y": 19971868.8804085627198219
         },
-        "xPixelSize": 14052.95025804873876,
-        "yPixelSize": -14057.88111778840539
+        "xPixelSize": 14052.9502580487387604,
+        "yPixelSize": -14057.8811177884053905
       },
       "width": 2851,
       "height": 2841,

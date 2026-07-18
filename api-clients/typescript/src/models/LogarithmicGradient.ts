@@ -28,6 +28,12 @@ import {
 export interface LogarithmicGradient {
     /**
      * 
+     * @type {LogarithmicGradientTypeEnum}
+     * @memberof LogarithmicGradient
+     */
+    type: LogarithmicGradientTypeEnum;
+    /**
+     * 
      * @type {Array<Breakpoint>}
      * @memberof LogarithmicGradient
      */
@@ -44,12 +50,6 @@ export interface LogarithmicGradient {
      * @memberof LogarithmicGradient
      */
     overColor: Array<number>;
-    /**
-     * 
-     * @type {LogarithmicGradientTypeEnum}
-     * @memberof LogarithmicGradient
-     */
-    type: LogarithmicGradientTypeEnum;
     /**
      * 
      * @type {Array<number>}
@@ -72,10 +72,10 @@ export type LogarithmicGradientTypeEnum = typeof LogarithmicGradientTypeEnum[key
  * Check if a given object implements the LogarithmicGradient interface.
  */
 export function instanceOfLogarithmicGradient(value: object): value is LogarithmicGradient {
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('breakpoints' in value) || value['breakpoints'] === undefined) return false;
     if (!('noDataColor' in value) || value['noDataColor'] === undefined) return false;
     if (!('overColor' in value) || value['overColor'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('underColor' in value) || value['underColor'] === undefined) return false;
     return true;
 }
@@ -90,10 +90,10 @@ export function LogarithmicGradientFromJSONTyped(json: any, ignoreDiscriminator:
     }
     return {
         
+        'type': json['type'],
         'breakpoints': ((json['breakpoints'] as Array<any>).map(BreakpointFromJSON)),
         'noDataColor': json['noDataColor'],
         'overColor': json['overColor'],
-        'type': json['type'],
         'underColor': json['underColor'],
     };
 }
@@ -109,10 +109,10 @@ export function LogarithmicGradientToJSONTyped(value?: LogarithmicGradient | nul
 
     return {
         
+        'type': value['type'],
         'breakpoints': ((value['breakpoints'] as Array<any>).map(BreakpointToJSON)),
         'noDataColor': value['noDataColor'],
         'overColor': value['overColor'],
-        'type': value['type'],
         'underColor': value['underColor'],
     };
 }

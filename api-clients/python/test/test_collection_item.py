@@ -35,26 +35,26 @@ class TestCollectionItem(unittest.TestCase):
         model = CollectionItem()
         if include_optional:
             return CollectionItem(
-                description = '',
+                type = 'collection',
                 id = geoengine_api_client.models.provider_layer_id.ProviderLayerId(
-                    layer_id = '', 
-                    provider_id = '', ),
+                    provider_id = '', 
+                    layer_id = '', ),
                 name = '',
+                description = '',
                 properties = [
                     [
                         ''
                         ]
-                    ],
-                type = 'collection'
+                    ]
             )
         else:
             return CollectionItem(
-                description = '',
-                id = geoengine_api_client.models.provider_layer_id.ProviderLayerId(
-                    layer_id = '', 
-                    provider_id = '', ),
-                name = '',
                 type = 'collection',
+                id = geoengine_api_client.models.provider_layer_id.ProviderLayerId(
+                    provider_id = '', 
+                    layer_id = '', ),
+                name = '',
+                description = '',
         )
         """
 

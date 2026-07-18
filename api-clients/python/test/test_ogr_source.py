@@ -35,21 +35,21 @@ class TestOgrSource(unittest.TestCase):
         model = OgrSource()
         if include_optional:
             return OgrSource(
+                type = 'OgrSource',
                 params = geoengine_api_client.models.ogr_source_parameters.OgrSourceParameters(
+                    data = '', 
                     attribute_projection = [
                         ''
-                        ], 
-                    data = '', ),
-                type = 'OgrSource'
+                        ], )
             )
         else:
             return OgrSource(
+                type = 'OgrSource',
                 params = geoengine_api_client.models.ogr_source_parameters.OgrSourceParameters(
+                    data = '', 
                     attribute_projection = [
                         ''
-                        ], 
-                    data = '', ),
-                type = 'OgrSource',
+                        ], ),
         )
         """
 

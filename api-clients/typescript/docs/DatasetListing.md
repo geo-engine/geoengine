@@ -6,14 +6,14 @@
 
 Name | Type
 ------------ | -------------
-`description` | string
-`displayName` | string
 `id` | string
 `name` | string
-`resultDescriptor` | [TypedResultDescriptor](TypedResultDescriptor.md)
-`sourceOperator` | string
-`symbology` | [Symbology](Symbology.md)
+`displayName` | string
+`description` | string
 `tags` | Array&lt;string&gt;
+`sourceOperator` | string
+`resultDescriptor` | [TypedResultDescriptor](TypedResultDescriptor.md)
+`symbology` | [Symbology](Symbology.md)
 
 ## Example
 
@@ -22,14 +22,14 @@ import type { DatasetListing } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "description": null,
-  "displayName": null,
   "id": null,
   "name": null,
-  "resultDescriptor": null,
-  "sourceOperator": null,
-  "symbology": null,
+  "displayName": null,
+  "description": null,
   "tags": null,
+  "sourceOperator": null,
+  "resultDescriptor": null,
+  "symbology": null,
 } satisfies DatasetListing
 
 console.log(example)

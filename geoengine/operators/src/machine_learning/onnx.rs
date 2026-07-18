@@ -383,7 +383,7 @@ where
                 // extract the values as a raw vector because we expect one prediction per pixel.
                 // this works for 1d tensors as well as 2d tensors with a single column
                 let (shape, out_tensor_data) = predictions.to_owned();
-                debug_assert!(shape.num_elements() == width*height); // TODO: use shape directly to check
+                debug_assert_eq!(shape.num_elements(), width * height); // TODO: use shape directly to check
 
                 // transform the output intp a grid
                 let out_grid = Grid2D::new([width, height].into(), Vec::from(out_tensor_data))?;

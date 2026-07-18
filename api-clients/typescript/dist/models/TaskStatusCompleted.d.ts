@@ -16,18 +16,6 @@
 export interface TaskStatusCompleted {
     /**
      *
-     * @type {string}
-     * @memberof TaskStatusCompleted
-     */
-    description?: string;
-    /**
-     *
-     * @type {any}
-     * @memberof TaskStatusCompleted
-     */
-    info?: any | null;
-    /**
-     *
      * @type {TaskStatusCompletedStatusEnum}
      * @memberof TaskStatusCompleted
      */
@@ -43,13 +31,25 @@ export interface TaskStatusCompleted {
      * @type {string}
      * @memberof TaskStatusCompleted
      */
-    timeStarted: string;
+    description?: string;
+    /**
+     *
+     * @type {any}
+     * @memberof TaskStatusCompleted
+     */
+    info?: any | null;
     /**
      *
      * @type {string}
      * @memberof TaskStatusCompleted
      */
     timeTotal: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TaskStatusCompleted
+     */
+    timeStarted: string;
 }
 /**
  * @export

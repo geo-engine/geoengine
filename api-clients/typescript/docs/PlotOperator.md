@@ -7,9 +7,9 @@ An operator that produces plot data.
 
 Name | Type
 ------------ | -------------
+`type` | string
 `params` | [StatisticsParameters](StatisticsParameters.md)
 `sources` | [MultipleRasterOrSingleVectorSource](MultipleRasterOrSingleVectorSource.md)
-`type` | string
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { PlotOperator } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "params": null,
   "sources": null,
-  "type": null,
 } satisfies PlotOperator
 
 console.log(example)

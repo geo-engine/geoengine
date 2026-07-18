@@ -19,13 +19,13 @@ export interface HistogramBoundsValues {
      * @type {number}
      * @memberof HistogramBoundsValues
      */
-    max: number;
+    min: number;
     /**
      *
      * @type {number}
      * @memberof HistogramBoundsValues
      */
-    min: number;
+    max: number;
 }
 /**
  * Check if a given object implements the HistogramBoundsValues interface.

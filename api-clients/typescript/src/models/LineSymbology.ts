@@ -35,10 +35,10 @@ import {
 export interface LineSymbology {
     /**
      * 
-     * @type {boolean}
+     * @type {LineSymbologyTypeEnum}
      * @memberof LineSymbology
      */
-    autoSimplified: boolean;
+    type: LineSymbologyTypeEnum;
     /**
      * 
      * @type {StrokeParam}
@@ -53,10 +53,10 @@ export interface LineSymbology {
     text?: TextSymbology | null;
     /**
      * 
-     * @type {LineSymbologyTypeEnum}
+     * @type {boolean}
      * @memberof LineSymbology
      */
-    type: LineSymbologyTypeEnum;
+    autoSimplified: boolean;
 }
 
 
@@ -73,9 +73,9 @@ export type LineSymbologyTypeEnum = typeof LineSymbologyTypeEnum[keyof typeof Li
  * Check if a given object implements the LineSymbology interface.
  */
 export function instanceOfLineSymbology(value: object): value is LineSymbology {
-    if (!('autoSimplified' in value) || value['autoSimplified'] === undefined) return false;
-    if (!('stroke' in value) || value['stroke'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('stroke' in value) || value['stroke'] === undefined) return false;
+    if (!('autoSimplified' in value) || value['autoSimplified'] === undefined) return false;
     return true;
 }
 
@@ -89,10 +89,10 @@ export function LineSymbologyFromJSONTyped(json: any, ignoreDiscriminator: boole
     }
     return {
         
-        'autoSimplified': json['autoSimplified'],
+        'type': json['type'],
         'stroke': StrokeParamFromJSON(json['stroke']),
         'text': json['text'] == null ? undefined : TextSymbologyFromJSON(json['text']),
-        'type': json['type'],
+        'autoSimplified': json['autoSimplified'],
     };
 }
 
@@ -107,10 +107,10 @@ export function LineSymbologyToJSONTyped(value?: LineSymbology | null, ignoreDis
 
     return {
         
-        'autoSimplified': value['autoSimplified'],
+        'type': value['type'],
         'stroke': StrokeParamToJSON(value['stroke']),
         'text': TextSymbologyToJSON(value['text']),
-        'type': value['type'],
+        'autoSimplified': value['autoSimplified'],
     };
 }
 

@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`layerName` | string
 `mainFile` | string
+`layerName` | string
 `metaData` | [MetaDataDefinition](MetaDataDefinition.md)
 
 ## Example
@@ -17,8 +17,8 @@ import type { MetaDataSuggestion } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "layerName": null,
   "mainFile": null,
+  "layerName": null,
   "metaData": null,
 } satisfies MetaDataSuggestion
 

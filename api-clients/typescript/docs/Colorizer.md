@@ -7,10 +7,10 @@ A colorizer specifies a mapping between raster values and an output image There 
 
 Name | Type
 ------------ | -------------
+`type` | string
 `breakpoints` | [Array&lt;Breakpoint&gt;](Breakpoint.md)
 `noDataColor` | Array&lt;number&gt;
 `overColor` | Array&lt;number&gt;
-`type` | string
 `underColor` | Array&lt;number&gt;
 `colors` | { [key: string]: Array&lt;number&gt;; }
 `defaultColor` | Array&lt;number&gt;
@@ -22,10 +22,10 @@ import type { Colorizer } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "breakpoints": null,
   "noDataColor": null,
   "overColor": null,
-  "type": null,
   "underColor": null,
   "colors": null,
   "defaultColor": null,

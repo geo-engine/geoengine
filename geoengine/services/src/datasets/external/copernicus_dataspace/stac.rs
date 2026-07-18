@@ -165,7 +165,7 @@ pub fn resolve_datetime_duplicates(items: &mut [stac::Item]) -> Result<(), Coper
         return Ok(());
     }
 
-    items.sort_by(|a, b| a.properties.datetime.cmp(&b.properties.datetime));
+    items.sort_by_key(|a| a.properties.datetime);
 
     let current_time = items
         .first()

@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`collectionId` | string
 `providerId` | string
+`collectionId` | string
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { ProviderLayerCollectionId } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "collectionId": null,
   "providerId": null,
+  "collectionId": null,
 } satisfies ProviderLayerCollectionId
 
 console.log(example)

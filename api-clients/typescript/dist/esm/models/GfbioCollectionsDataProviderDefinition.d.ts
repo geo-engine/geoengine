@@ -17,34 +17,10 @@ import type { DatabaseConnectionConfig } from './DatabaseConnectionConfig';
 export interface GfbioCollectionsDataProviderDefinition {
     /**
      *
-     * @type {DatabaseConnectionConfig}
+     * @type {GfbioCollectionsDataProviderDefinitionTypeEnum}
      * @memberof GfbioCollectionsDataProviderDefinition
      */
-    abcdDbConfig: DatabaseConnectionConfig;
-    /**
-     *
-     * @type {number}
-     * @memberof GfbioCollectionsDataProviderDefinition
-     */
-    cacheTtl?: number;
-    /**
-     *
-     * @type {string}
-     * @memberof GfbioCollectionsDataProviderDefinition
-     */
-    collectionApiAuthToken: string;
-    /**
-     *
-     * @type {string}
-     * @memberof GfbioCollectionsDataProviderDefinition
-     */
-    collectionApiUrl: string;
-    /**
-     *
-     * @type {string}
-     * @memberof GfbioCollectionsDataProviderDefinition
-     */
-    description: string;
+    type: GfbioCollectionsDataProviderDefinitionTypeEnum;
     /**
      *
      * @type {string}
@@ -56,7 +32,7 @@ export interface GfbioCollectionsDataProviderDefinition {
      * @type {string}
      * @memberof GfbioCollectionsDataProviderDefinition
      */
-    pangaeaUrl: string;
+    description: string;
     /**
      *
      * @type {number}
@@ -65,10 +41,34 @@ export interface GfbioCollectionsDataProviderDefinition {
     priority?: number | null;
     /**
      *
-     * @type {GfbioCollectionsDataProviderDefinitionTypeEnum}
+     * @type {string}
      * @memberof GfbioCollectionsDataProviderDefinition
      */
-    type: GfbioCollectionsDataProviderDefinitionTypeEnum;
+    collectionApiUrl: string;
+    /**
+     *
+     * @type {string}
+     * @memberof GfbioCollectionsDataProviderDefinition
+     */
+    collectionApiAuthToken: string;
+    /**
+     *
+     * @type {DatabaseConnectionConfig}
+     * @memberof GfbioCollectionsDataProviderDefinition
+     */
+    abcdDbConfig: DatabaseConnectionConfig;
+    /**
+     *
+     * @type {string}
+     * @memberof GfbioCollectionsDataProviderDefinition
+     */
+    pangaeaUrl: string;
+    /**
+     *
+     * @type {number}
+     * @memberof GfbioCollectionsDataProviderDefinition
+     */
+    cacheTtl?: number;
 }
 /**
  * @export

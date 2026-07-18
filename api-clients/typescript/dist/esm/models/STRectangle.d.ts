@@ -18,16 +18,16 @@ import type { BoundingBox2D } from './BoundingBox2D';
 export interface STRectangle {
     /**
      *
-     * @type {BoundingBox2D}
-     * @memberof STRectangle
-     */
-    boundingBox: BoundingBox2D;
-    /**
-     *
      * @type {string}
      * @memberof STRectangle
      */
     spatialReference: string;
+    /**
+     *
+     * @type {BoundingBox2D}
+     * @memberof STRectangle
+     */
+    boundingBox: BoundingBox2D;
     /**
      *
      * @type {TimeInterval}

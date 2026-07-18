@@ -36,11 +36,11 @@ function RasterDatasetFromWorkflowFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'asCog': json['asCog'] == null ? undefined : json['asCog'],
-        'description': json['description'] == null ? undefined : json['description'],
-        'displayName': json['displayName'],
         'name': json['name'] == null ? undefined : json['name'],
+        'displayName': json['displayName'],
+        'description': json['description'] == null ? undefined : json['description'],
         'query': (0, RasterToDatasetQueryRectangle_1.RasterToDatasetQueryRectangleFromJSON)(json['query']),
+        'asCog': json['asCog'] == null ? undefined : json['asCog'],
     };
 }
 function RasterDatasetFromWorkflowToJSON(json) {
@@ -51,10 +51,10 @@ function RasterDatasetFromWorkflowToJSONTyped(value, ignoreDiscriminator = false
         return value;
     }
     return {
-        'asCog': value['asCog'],
-        'description': value['description'],
-        'displayName': value['displayName'],
         'name': value['name'],
+        'displayName': value['displayName'],
+        'description': value['description'],
         'query': (0, RasterToDatasetQueryRectangle_1.RasterToDatasetQueryRectangleToJSON)(value['query']),
+        'asCog': value['asCog'],
     };
 }

@@ -37,6 +37,6 @@
         return _obj
 
         _obj = cls.model_validate({
+             "status": obj.get("status"),
+             "taskType": obj.get("taskType"),
              "description": obj.get("description"),
-             "estimatedTimeRemaining": obj.get("estimatedTimeRemaining"),
-             "info": obj.get("info"),

@@ -13,21 +13,21 @@ use serde::{Deserialize, Serialize};
 /// BandFilter : The `BandFilter` operator selects bands from a raster source by band names or band indices.  It removes all non-selected bands while preserving the original order of remaining bands.  ## Inputs  The `BandFilter` operator expects exactly one _raster_ input.  ## Errors  The operator returns an error if no bands are selected or if selected band names/indices cannot be mapped to existing input bands.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BandFilter {
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "params")]
     pub params: Box<models::BandFilterParameters>,
     #[serde(rename = "sources")]
     pub sources: Box<models::SingleRasterSource>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
 }
 
 impl BandFilter {
     /// The `BandFilter` operator selects bands from a raster source by band names or band indices.  It removes all non-selected bands while preserving the original order of remaining bands.  ## Inputs  The `BandFilter` operator expects exactly one _raster_ input.  ## Errors  The operator returns an error if no bands are selected or if selected band names/indices cannot be mapped to existing input bands.
-    pub fn new(params: models::BandFilterParameters, sources: models::SingleRasterSource, r#type: Type) -> BandFilter {
+    pub fn new(r#type: Type, params: models::BandFilterParameters, sources: models::SingleRasterSource) -> BandFilter {
         BandFilter {
+            r#type,
             params: Box::new(params),
             sources: Box::new(sources),
-            r#type,
         }
     }
 }

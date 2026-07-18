@@ -35,15 +35,15 @@ class TestPermissionRequest(unittest.TestCase):
         model = PermissionRequest()
         if include_optional:
             return PermissionRequest(
-                permission = 'Read',
                 resource = None,
-                role_id = ''
+                role_id = '',
+                permission = 'Read'
             )
         else:
             return PermissionRequest(
-                permission = 'Read',
                 resource = None,
                 role_id = '',
+                permission = 'Read',
         )
         """
 

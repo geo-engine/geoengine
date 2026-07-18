@@ -26,10 +26,10 @@ class DatasetLayerListingCollection(BaseModel):
     """
     DatasetLayerListingCollection
     """ # noqa: E501
-    description: StrictStr
     name: StrictStr
+    description: StrictStr
     tags: List[StrictStr]
-    __properties: ClassVar[List[str]] = ["description", "name", "tags"]
+    __properties: ClassVar[List[str]] = ["name", "description", "tags"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -82,8 +82,8 @@ class DatasetLayerListingCollection(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "description": obj.get("description"),
             "name": obj.get("name"),
+            "description": obj.get("description"),
             "tags": obj.get("tags")
         })
         return _obj

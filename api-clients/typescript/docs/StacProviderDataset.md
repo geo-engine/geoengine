@@ -6,13 +6,13 @@
 
 Name | Type
 ------------ | -------------
-`bands` | [Array&lt;StacProviderDatasetBand&gt;](StacProviderDatasetBand.md)
-`dataType` | [RasterDataType](RasterDataType.md)
-`description` | string
 `name` | string
-`projection` | string
+`description` | string
+`dataType` | [RasterDataType](RasterDataType.md)
 `resolution` | [SpatialResolution](SpatialResolution.md)
+`projection` | string
 `spatialGrid` | [SpatialGridDescriptor](SpatialGridDescriptor.md)
+`bands` | [Array&lt;StacProviderDatasetBand&gt;](StacProviderDatasetBand.md)
 
 ## Example
 
@@ -21,13 +21,13 @@ import type { StacProviderDataset } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "bands": null,
-  "dataType": null,
-  "description": null,
   "name": null,
-  "projection": null,
+  "description": null,
+  "dataType": null,
   "resolution": null,
+  "projection": null,
   "spatialGrid": null,
+  "bands": null,
 } satisfies StacProviderDataset
 
 console.log(example)

@@ -9,17 +9,11 @@
  * Do not edit the class manually.
  */
 /**
- * Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).
+ * Scaling factor in x/y direction.
  * @export
  * @interface Fraction
  */
 export interface Fraction {
-    /**
-     *
-     * @type {FractionTypeEnum}
-     * @memberof Fraction
-     */
-    type: FractionTypeEnum;
     /**
      *
      * @type {number}
@@ -32,6 +26,12 @@ export interface Fraction {
      * @memberof Fraction
      */
     y: number;
+    /**
+     *
+     * @type {FractionTypeEnum}
+     * @memberof Fraction
+     */
+    type: FractionTypeEnum;
 }
 /**
  * @export

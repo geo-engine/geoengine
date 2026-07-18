@@ -37,25 +37,25 @@ class TestProviderCapabilities(unittest.TestCase):
             return ProviderCapabilities(
                 listing = True,
                 search = geoengine_api_client.models.search_capabilities.SearchCapabilities(
+                    search_types = geoengine_api_client.models.search_types.SearchTypes(
+                        fulltext = True, 
+                        prefix = True, ), 
                     autocomplete = True, 
                     filters = [
                         ''
-                        ], 
-                    search_types = geoengine_api_client.models.search_types.SearchTypes(
-                        fulltext = True, 
-                        prefix = True, ), )
+                        ], )
             )
         else:
             return ProviderCapabilities(
                 listing = True,
                 search = geoengine_api_client.models.search_capabilities.SearchCapabilities(
+                    search_types = geoengine_api_client.models.search_types.SearchTypes(
+                        fulltext = True, 
+                        prefix = True, ), 
                     autocomplete = True, 
                     filters = [
                         ''
-                        ], 
-                    search_types = geoengine_api_client.models.search_types.SearchTypes(
-                        fulltext = True, 
-                        prefix = True, ), ),
+                        ], ),
         )
         """
 

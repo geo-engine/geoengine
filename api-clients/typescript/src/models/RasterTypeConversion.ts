@@ -46,6 +46,12 @@ import {
 export interface RasterTypeConversion {
     /**
      * 
+     * @type {RasterTypeConversionTypeEnum}
+     * @memberof RasterTypeConversion
+     */
+    type: RasterTypeConversionTypeEnum;
+    /**
+     * 
      * @type {RasterTypeConversionParameters}
      * @memberof RasterTypeConversion
      */
@@ -56,12 +62,6 @@ export interface RasterTypeConversion {
      * @memberof RasterTypeConversion
      */
     sources: SingleRasterSource;
-    /**
-     * 
-     * @type {RasterTypeConversionTypeEnum}
-     * @memberof RasterTypeConversion
-     */
-    type: RasterTypeConversionTypeEnum;
 }
 
 
@@ -78,9 +78,9 @@ export type RasterTypeConversionTypeEnum = typeof RasterTypeConversionTypeEnum[k
  * Check if a given object implements the RasterTypeConversion interface.
  */
 export function instanceOfRasterTypeConversion(value: object): value is RasterTypeConversion {
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -94,9 +94,9 @@ export function RasterTypeConversionFromJSONTyped(json: any, ignoreDiscriminator
     }
     return {
         
+        'type': json['type'],
         'params': RasterTypeConversionParametersFromJSON(json['params']),
         'sources': SingleRasterSourceFromJSON(json['sources']),
-        'type': json['type'],
     };
 }
 
@@ -111,9 +111,9 @@ export function RasterTypeConversionToJSONTyped(value?: RasterTypeConversion | n
 
     return {
         
+        'type': value['type'],
         'params': RasterTypeConversionParametersToJSON(value['params']),
         'sources': SingleRasterSourceToJSON(value['sources']),
-        'type': value['type'],
     };
 }
 

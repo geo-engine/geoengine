@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Plot {
-    #[serde(rename = "name")]
-    pub name: String,
     #[serde(rename = "workflow")]
     pub workflow: uuid::Uuid,
+    #[serde(rename = "name")]
+    pub name: String,
 }
 
 impl Plot {
-    pub fn new(name: String, workflow: uuid::Uuid) -> Plot {
+    pub fn new(workflow: uuid::Uuid, name: String) -> Plot {
         Plot {
-            name,
             workflow,
+            name,
         }
     }
 }

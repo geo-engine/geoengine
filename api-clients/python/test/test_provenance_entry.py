@@ -35,23 +35,23 @@ class TestProvenanceEntry(unittest.TestCase):
         model = ProvenanceEntry()
         if include_optional:
             return ProvenanceEntry(
-                data = [
-                    null
-                    ],
-                provenance = geoengine_api_client.models.provenance.Provenance(
-                    citation = '', 
-                    license = '', 
-                    uri = '', )
-            )
-        else:
-            return ProvenanceEntry(
-                data = [
-                    null
-                    ],
                 provenance = geoengine_api_client.models.provenance.Provenance(
                     citation = '', 
                     license = '', 
                     uri = '', ),
+                data = [
+                    null
+                    ]
+            )
+        else:
+            return ProvenanceEntry(
+                provenance = geoengine_api_client.models.provenance.Provenance(
+                    citation = '', 
+                    license = '', 
+                    uri = '', ),
+                data = [
+                    null
+                    ],
         )
         """
 

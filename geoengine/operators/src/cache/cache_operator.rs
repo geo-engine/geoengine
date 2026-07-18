@@ -533,7 +533,7 @@ mod tests {
         let tiles = tiles.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
         // wait for the cache to be filled, which happens asynchronously
-        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         // delete the dataset to make sure the result is served from the cache
         exe_ctx.delete_meta_data(&ndvi_id);
@@ -646,7 +646,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         // wait for the cache to be filled, which happens asynchronously
-        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         // delete the dataset to make sure the result is served from the cache
         exe_ctx.delete_meta_data(&ndvi_id);
@@ -758,7 +758,7 @@ mod tests {
         );
 
         // wait for the cache to be filled, which happens asynchronously
-        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         // delete the dataset to make sure the result is served from the cache
         exe_ctx.delete_meta_data(&ndvi_id);

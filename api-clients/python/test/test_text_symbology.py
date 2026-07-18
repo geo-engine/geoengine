@@ -38,16 +38,16 @@ class TestTextSymbology(unittest.TestCase):
                 attribute = '',
                 fill_color = None,
                 stroke = geoengine_api_client.models.stroke_param.StrokeParam(
-                    color = null, 
-                    width = null, )
+                    width = null, 
+                    color = null, )
             )
         else:
             return TextSymbology(
                 attribute = '',
                 fill_color = None,
                 stroke = geoengine_api_client.models.stroke_param.StrokeParam(
-                    color = null, 
-                    width = null, ),
+                    width = null, 
+                    color = null, ),
         )
         """
 

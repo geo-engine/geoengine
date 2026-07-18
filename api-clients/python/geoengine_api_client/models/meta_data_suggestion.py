@@ -27,10 +27,10 @@ class MetaDataSuggestion(BaseModel):
     """
     MetaDataSuggestion
     """ # noqa: E501
-    layer_name: StrictStr = Field(alias="layerName")
     main_file: StrictStr = Field(alias="mainFile")
+    layer_name: StrictStr = Field(alias="layerName")
     meta_data: MetaDataDefinition = Field(alias="metaData")
-    __properties: ClassVar[List[str]] = ["layerName", "mainFile", "metaData"]
+    __properties: ClassVar[List[str]] = ["mainFile", "layerName", "metaData"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -86,8 +86,8 @@ class MetaDataSuggestion(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "layerName": obj.get("layerName"),
             "mainFile": obj.get("mainFile"),
+            "layerName": obj.get("layerName"),
             "metaData": MetaDataDefinition.from_dict(obj["metaData"]) if obj.get("metaData") is not None else None
         })
         return _obj

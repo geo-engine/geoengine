@@ -450,6 +450,7 @@ use utoipa::{Modify, OpenApi};
     ),
     nest(
         (path = "/processingGraphs", api = crate::api::model::processing_graphs::OperatorsApi),
+        (path = "/ogc", api = crate::api::handlers::ogc::OgcApiDoc),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &DeriveDiscriminatorMapping),
     external_docs(url = "https://docs.geoengine.io", description = "Geo Engine Docs")

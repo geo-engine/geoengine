@@ -35,10 +35,10 @@ import {
 export interface OgrSourceDatasetTimeTypeStart {
     /**
      * 
-     * @type {OgrSourceDurationSpec}
+     * @type {OgrSourceDatasetTimeTypeStartTypeEnum}
      * @memberof OgrSourceDatasetTimeTypeStart
      */
-    duration: OgrSourceDurationSpec;
+    type: OgrSourceDatasetTimeTypeStartTypeEnum;
     /**
      * 
      * @type {string}
@@ -53,10 +53,10 @@ export interface OgrSourceDatasetTimeTypeStart {
     startFormat: OgrSourceTimeFormat;
     /**
      * 
-     * @type {OgrSourceDatasetTimeTypeStartTypeEnum}
+     * @type {OgrSourceDurationSpec}
      * @memberof OgrSourceDatasetTimeTypeStart
      */
-    type: OgrSourceDatasetTimeTypeStartTypeEnum;
+    duration: OgrSourceDurationSpec;
 }
 
 
@@ -73,10 +73,10 @@ export type OgrSourceDatasetTimeTypeStartTypeEnum = typeof OgrSourceDatasetTimeT
  * Check if a given object implements the OgrSourceDatasetTimeTypeStart interface.
  */
 export function instanceOfOgrSourceDatasetTimeTypeStart(value: object): value is OgrSourceDatasetTimeTypeStart {
-    if (!('duration' in value) || value['duration'] === undefined) return false;
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('startField' in value) || value['startField'] === undefined) return false;
     if (!('startFormat' in value) || value['startFormat'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('duration' in value) || value['duration'] === undefined) return false;
     return true;
 }
 
@@ -90,10 +90,10 @@ export function OgrSourceDatasetTimeTypeStartFromJSONTyped(json: any, ignoreDisc
     }
     return {
         
-        'duration': OgrSourceDurationSpecFromJSON(json['duration']),
+        'type': json['type'],
         'startField': json['startField'],
         'startFormat': OgrSourceTimeFormatFromJSON(json['startFormat']),
-        'type': json['type'],
+        'duration': OgrSourceDurationSpecFromJSON(json['duration']),
     };
 }
 
@@ -108,10 +108,10 @@ export function OgrSourceDatasetTimeTypeStartToJSONTyped(value?: OgrSourceDatase
 
     return {
         
-        'duration': OgrSourceDurationSpecToJSON(value['duration']),
+        'type': value['type'],
         'startField': value['startField'],
         'startFormat': OgrSourceTimeFormatToJSON(value['startFormat']),
-        'type': value['type'],
+        'duration': OgrSourceDurationSpecToJSON(value['duration']),
     };
 }
 

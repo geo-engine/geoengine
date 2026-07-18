@@ -7,9 +7,9 @@ The `Statistics` operator is a _plot operator_ that computes count statistics ov
 
 Name | Type
 ------------ | -------------
+`type` | string
 `params` | [StatisticsParameters](StatisticsParameters.md)
 `sources` | [MultipleRasterOrSingleVectorSource](MultipleRasterOrSingleVectorSource.md)
-`type` | string
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { Statistics } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "params": null,
   "sources": null,
-  "type": null,
 } satisfies Statistics
 
 console.log(example)

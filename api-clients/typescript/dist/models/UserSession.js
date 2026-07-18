@@ -23,15 +23,15 @@ const UserInfo_1 = require("./UserInfo");
  * Check if a given object implements the UserSession interface.
  */
 function instanceOfUserSession(value) {
-    if (!('created' in value) || value['created'] === undefined)
-        return false;
     if (!('id' in value) || value['id'] === undefined)
-        return false;
-    if (!('roles' in value) || value['roles'] === undefined)
         return false;
     if (!('user' in value) || value['user'] === undefined)
         return false;
+    if (!('created' in value) || value['created'] === undefined)
+        return false;
     if (!('validUntil' in value) || value['validUntil'] === undefined)
+        return false;
+    if (!('roles' in value) || value['roles'] === undefined)
         return false;
     return true;
 }
@@ -43,13 +43,13 @@ function UserSessionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'created': (new Date(json['created'])),
         'id': json['id'],
-        'project': json['project'] == null ? undefined : json['project'],
-        'roles': json['roles'],
         'user': (0, UserInfo_1.UserInfoFromJSON)(json['user']),
+        'created': (new Date(json['created'])),
         'validUntil': (new Date(json['validUntil'])),
+        'project': json['project'] == null ? undefined : json['project'],
         'view': json['view'] == null ? undefined : (0, STRectangle_1.STRectangleFromJSON)(json['view']),
+        'roles': json['roles'],
     };
 }
 function UserSessionToJSON(json) {
@@ -60,12 +60,12 @@ function UserSessionToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'created': value['created'].toISOString(),
         'id': value['id'],
-        'project': value['project'],
-        'roles': value['roles'],
         'user': (0, UserInfo_1.UserInfoToJSON)(value['user']),
+        'created': value['created'].toISOString(),
         'validUntil': value['validUntil'].toISOString(),
+        'project': value['project'],
         'view': (0, STRectangle_1.STRectangleToJSON)(value['view']),
+        'roles': value['roles'],
     };
 }

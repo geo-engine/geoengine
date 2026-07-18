@@ -35,23 +35,23 @@ class TestUpdateLayer(unittest.TestCase):
         model = UpdateLayer()
         if include_optional:
             return UpdateLayer(
-                description = 'Example layer description',
-                metadata = {
-                    'key' : ''
-                    },
                 name = 'Example Layer',
+                description = 'Example layer description',
+                workflow = None,
+                symbology = None,
                 properties = [
                     [
                         ''
                         ]
                     ],
-                symbology = None,
-                workflow = None
+                metadata = {
+                    'key' : ''
+                    }
             )
         else:
             return UpdateLayer(
-                description = 'Example layer description',
                 name = 'Example Layer',
+                description = 'Example layer description',
                 workflow = None,
         )
         """

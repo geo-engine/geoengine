@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`bottomRightIdx` | [GridIdx2D](GridIdx2D.md)
 `topLeftIdx` | [GridIdx2D](GridIdx2D.md)
+`bottomRightIdx` | [GridIdx2D](GridIdx2D.md)
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { GridBoundingBox2D } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "bottomRightIdx": null,
   "topLeftIdx": null,
+  "bottomRightIdx": null,
 } satisfies GridBoundingBox2D
 
 console.log(example)

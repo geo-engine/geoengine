@@ -22,9 +22,9 @@ const GridIdx2D_1 = require("./GridIdx2D");
  * Check if a given object implements the GridBoundingBox2D interface.
  */
 function instanceOfGridBoundingBox2D(value) {
-    if (!('bottomRightIdx' in value) || value['bottomRightIdx'] === undefined)
-        return false;
     if (!('topLeftIdx' in value) || value['topLeftIdx'] === undefined)
+        return false;
+    if (!('bottomRightIdx' in value) || value['bottomRightIdx'] === undefined)
         return false;
     return true;
 }
@@ -36,8 +36,8 @@ function GridBoundingBox2DFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'bottomRightIdx': (0, GridIdx2D_1.GridIdx2DFromJSON)(json['bottomRightIdx']),
         'topLeftIdx': (0, GridIdx2D_1.GridIdx2DFromJSON)(json['topLeftIdx']),
+        'bottomRightIdx': (0, GridIdx2D_1.GridIdx2DFromJSON)(json['bottomRightIdx']),
     };
 }
 function GridBoundingBox2DToJSON(json) {
@@ -48,7 +48,7 @@ function GridBoundingBox2DToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'bottomRightIdx': (0, GridIdx2D_1.GridIdx2DToJSON)(value['bottomRightIdx']),
         'topLeftIdx': (0, GridIdx2D_1.GridIdx2DToJSON)(value['topLeftIdx']),
+        'bottomRightIdx': (0, GridIdx2D_1.GridIdx2DToJSON)(value['bottomRightIdx']),
     };
 }

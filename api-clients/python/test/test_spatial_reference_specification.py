@@ -35,23 +35,26 @@ class TestSpatialReferenceSpecification(unittest.TestCase):
         model = SpatialReferenceSpecification()
         if include_optional:
             return SpatialReferenceSpecification(
+                name = '',
+                spatial_reference = '',
+                proj_string = '',
+                extent = geoengine_api_client.models.bounding_box2_d.BoundingBox2D(
+                    lower_left_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
+                        x = 1.337, 
+                        y = 1.337, ), 
+                    upper_right_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
+                        x = 1.337, 
+                        y = 1.337, ), ),
                 axis_labels = [
                     ''
                     ],
-                axis_order = 'northEast',
-                extent = geoengine_api_client.models.bounding_box2_d.BoundingBox2D(
-                    lower_left_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
-                        x = 1.337, 
-                        y = 1.337, ), 
-                    upper_right_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
-                        x = 1.337, 
-                        y = 1.337, ), ),
-                name = '',
-                proj_string = '',
-                spatial_reference = ''
+                axis_order = 'northEast'
             )
         else:
             return SpatialReferenceSpecification(
+                name = '',
+                spatial_reference = '',
+                proj_string = '',
                 extent = geoengine_api_client.models.bounding_box2_d.BoundingBox2D(
                     lower_left_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                         x = 1.337, 
@@ -59,9 +62,6 @@ class TestSpatialReferenceSpecification(unittest.TestCase):
                     upper_right_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                         x = 1.337, 
                         y = 1.337, ), ),
-                name = '',
-                proj_string = '',
-                spatial_reference = '',
         )
         """
 

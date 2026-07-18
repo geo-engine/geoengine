@@ -35,29 +35,29 @@ class TestSentinelS2L2ACogsProviderDefinition(unittest.TestCase):
         model = SentinelS2L2ACogsProviderDefinition()
         if include_optional:
             return SentinelS2L2ACogsProviderDefinition(
-                api_url = '',
-                cache_ttl = 0,
-                description = '',
-                gdal_retries = 0,
-                id = '',
+                type = 'SentinelS2L2ACogs',
                 name = '',
+                id = '',
+                description = '',
                 priority = 56,
-                query_buffer = geoengine_api_client.models.stac_query_buffer.StacQueryBuffer(
-                    end_seconds = 56, 
-                    start_seconds = 56, ),
+                api_url = '',
                 stac_api_retries = geoengine_api_client.models.stac_api_retries.StacApiRetries(
-                    exponential_backoff_factor = 1.337, 
+                    number_of_retries = 0, 
                     initial_delay_ms = 0, 
-                    number_of_retries = 0, ),
-                type = 'SentinelS2L2ACogs'
+                    exponential_backoff_factor = 1.337, ),
+                gdal_retries = 0,
+                cache_ttl = 0,
+                query_buffer = geoengine_api_client.models.stac_query_buffer.StacQueryBuffer(
+                    start_seconds = 56, 
+                    end_seconds = 56, )
             )
         else:
             return SentinelS2L2ACogsProviderDefinition(
-                api_url = '',
-                description = '',
-                id = '',
-                name = '',
                 type = 'SentinelS2L2ACogs',
+                name = '',
+                id = '',
+                description = '',
+                api_url = '',
         )
         """
 

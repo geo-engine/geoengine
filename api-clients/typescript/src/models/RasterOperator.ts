@@ -18,6 +18,13 @@ import {
     BandFilterFromJSONTyped,
     BandFilterToJSON,
 } from './BandFilter';
+import type { Downsampling } from './Downsampling';
+import {
+    instanceOfDownsampling,
+    DownsamplingFromJSON,
+    DownsamplingFromJSONTyped,
+    DownsamplingToJSON,
+} from './Downsampling';
 import type { Expression } from './Expression';
 import {
     instanceOfExpression,
@@ -80,7 +87,7 @@ import {
  * An operator that produces raster data.
  * @export
  */
-export type RasterOperator = { type: 'BandFilter' } & BandFilter | { type: 'Expression' } & Expression | { type: 'GdalSource' } & GdalSource | { type: 'Interpolation' } & Interpolation | { type: 'MultiBandGdalSource' } & MultiBandGdalSource | { type: 'RasterStacker' } & RasterStacker | { type: 'RasterTypeConversion' } & RasterTypeConversion | { type: 'Reprojection' } & Reprojection | { type: 'TemporalRasterAggregation' } & TemporalRasterAggregation;
+export type RasterOperator = { type: 'BandFilter' } & BandFilter | { type: 'Downsampling' } & Downsampling | { type: 'Expression' } & Expression | { type: 'GdalSource' } & GdalSource | { type: 'Interpolation' } & Interpolation | { type: 'MultiBandGdalSource' } & MultiBandGdalSource | { type: 'RasterStacker' } & RasterStacker | { type: 'RasterTypeConversion' } & RasterTypeConversion | { type: 'Reprojection' } & Reprojection | { type: 'TemporalRasterAggregation' } & TemporalRasterAggregation;
 
 export function RasterOperatorFromJSON(json: any): RasterOperator {
     return RasterOperatorFromJSONTyped(json, false);
@@ -93,6 +100,8 @@ export function RasterOperatorFromJSONTyped(json: any, ignoreDiscriminator: bool
     switch (json['type']) {
         case 'BandFilter':
             return Object.assign({}, BandFilterFromJSONTyped(json, true), { type: 'BandFilter' } as const);
+        case 'Downsampling':
+            return Object.assign({}, DownsamplingFromJSONTyped(json, true), { type: 'Downsampling' } as const);
         case 'Expression':
             return Object.assign({}, ExpressionFromJSONTyped(json, true), { type: 'Expression' } as const);
         case 'GdalSource':
@@ -125,6 +134,8 @@ export function RasterOperatorToJSONTyped(value?: RasterOperator | null, ignoreD
     switch (value['type']) {
         case 'BandFilter':
             return Object.assign({}, BandFilterToJSON(value), { type: 'BandFilter' } as const);
+        case 'Downsampling':
+            return Object.assign({}, DownsamplingToJSON(value), { type: 'Downsampling' } as const);
         case 'Expression':
             return Object.assign({}, ExpressionToJSON(value), { type: 'Expression' } as const);
         case 'GdalSource':

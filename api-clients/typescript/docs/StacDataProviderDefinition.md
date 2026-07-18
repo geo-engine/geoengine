@@ -6,16 +6,16 @@
 
 Name | Type
 ------------ | -------------
+`type` | string
+`name` | string
+`id` | string
+`description` | string
+`priority` | number
 `apiUrl` | string
 `collectionName` | string
-`datasets` | [Array&lt;StacProviderDataset&gt;](StacProviderDataset.md)
-`description` | string
-`id` | string
-`name` | string
-`priority` | number
 `s3Config` | [StacProviderS3Config](StacProviderS3Config.md)
 `timeDimension` | [TimeDimension](TimeDimension.md)
-`type` | string
+`datasets` | [Array&lt;StacProviderDataset&gt;](StacProviderDataset.md)
 
 ## Example
 
@@ -24,16 +24,16 @@ import type { StacDataProviderDefinition } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
+  "name": null,
+  "id": null,
+  "description": null,
+  "priority": null,
   "apiUrl": null,
   "collectionName": null,
-  "datasets": null,
-  "description": null,
-  "id": null,
-  "name": null,
-  "priority": null,
   "s3Config": null,
   "timeDimension": null,
-  "type": null,
+  "datasets": null,
 } satisfies StacDataProviderDefinition
 
 console.log(example)

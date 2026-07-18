@@ -10,24 +10,24 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// Interpolation : The `Interpolation` operator increases raster resolution by interpolating values of an input raster.  If queried with a resolution that is coarser than the input resolution, interpolation is not applicable and an error is returned.  ## Inputs  The `Interpolation` operator expects exactly one _raster_ input.
+/// Interpolation : The `Interpolation` operator increases raster resolution by interpolating values of an input raster.  If queried with a resolution that is coarser than the input resolution, interpolation is not applicable and an error is returned.  ## Inputs  The `Interpolation` operator expects exactly one _raster_ input.  ## Resolution  The target resolution can be specified either as an explicit `Resolution` (in pixel units) or as a `Fraction` that scales the input resolution.  ```rust,ignore // Scale the input resolution by a factor of 2 in both x and y directions InterpolationResolution::Fraction(Fraction { x: 2.0, y: 2.0 }) ```  ```rust,ignore // Use an explicit resolution of 50×50 pixel units InterpolationResolution::Resolution(SpatialResolution { x: 50.0, y: 50.0 }) ```
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Interpolation {
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "params")]
     pub params: Box<models::InterpolationParameters>,
     #[serde(rename = "sources")]
     pub sources: Box<models::SingleRasterSource>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
 }
 
 impl Interpolation {
-    /// The `Interpolation` operator increases raster resolution by interpolating values of an input raster.  If queried with a resolution that is coarser than the input resolution, interpolation is not applicable and an error is returned.  ## Inputs  The `Interpolation` operator expects exactly one _raster_ input.
-    pub fn new(params: models::InterpolationParameters, sources: models::SingleRasterSource, r#type: Type) -> Interpolation {
+    /// The `Interpolation` operator increases raster resolution by interpolating values of an input raster.  If queried with a resolution that is coarser than the input resolution, interpolation is not applicable and an error is returned.  ## Inputs  The `Interpolation` operator expects exactly one _raster_ input.  ## Resolution  The target resolution can be specified either as an explicit `Resolution` (in pixel units) or as a `Fraction` that scales the input resolution.  ```rust,ignore // Scale the input resolution by a factor of 2 in both x and y directions InterpolationResolution::Fraction(Fraction { x: 2.0, y: 2.0 }) ```  ```rust,ignore // Use an explicit resolution of 50×50 pixel units InterpolationResolution::Resolution(SpatialResolution { x: 50.0, y: 50.0 }) ```
+    pub fn new(r#type: Type, params: models::InterpolationParameters, sources: models::SingleRasterSource) -> Interpolation {
         Interpolation {
+            r#type,
             params: Box::new(params),
             sources: Box::new(sources),
-            r#type,
         }
     }
 }

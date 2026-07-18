@@ -26,9 +26,9 @@ class TaskStatusAborted(BaseModel):
     """
     TaskStatusAborted
     """ # noqa: E501
-    clean_up: Optional[Any] = Field(alias="cleanUp")
     status: StrictStr
-    __properties: ClassVar[List[str]] = ["cleanUp", "status"]
+    clean_up: Optional[Any] = Field(alias="cleanUp")
+    __properties: ClassVar[List[str]] = ["status", "cleanUp"]
 
     @field_validator('status')
     def status_validate_enum(cls, value):
@@ -93,8 +93,8 @@ class TaskStatusAborted(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "cleanUp": obj.get("cleanUp"),
-            "status": obj.get("status")
+            "status": obj.get("status"),
+            "cleanUp": obj.get("cleanUp")
         })
         return _obj
 

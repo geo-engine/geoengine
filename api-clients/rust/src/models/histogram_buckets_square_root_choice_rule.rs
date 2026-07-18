@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct HistogramBucketsSquareRootChoiceRule {
-    #[serde(rename = "maxNumberOfBuckets", skip_serializing_if = "Option::is_none")]
-    pub max_number_of_buckets: Option<i32>,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "maxNumberOfBuckets", skip_serializing_if = "Option::is_none")]
+    pub max_number_of_buckets: Option<i32>,
 }
 
 impl HistogramBucketsSquareRootChoiceRule {
     pub fn new(r#type: Type) -> HistogramBucketsSquareRootChoiceRule {
         HistogramBucketsSquareRootChoiceRule {
-            max_number_of_buckets: None,
             r#type,
+            max_number_of_buckets: None,
         }
     }
 }

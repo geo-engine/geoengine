@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`boundingBox` | [BoundingBox2D](BoundingBox2D.md)
 `spatialReference` | string
+`boundingBox` | [BoundingBox2D](BoundingBox2D.md)
 `timeInterval` | [TimeInterval](TimeInterval.md)
 
 ## Example
@@ -17,8 +17,8 @@ import type { STRectangle } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "boundingBox": null,
   "spatialReference": null,
+  "boundingBox": null,
   "timeInterval": null,
 } satisfies STRectangle
 

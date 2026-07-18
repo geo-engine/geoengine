@@ -13,15 +13,15 @@ use serde::{Deserialize, Serialize};
 /// HistogramParameters : The parameter spec for `Histogram`
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct HistogramParameters {
+    /// Name of the (numeric) vector attribute or raster band to compute the histogram on.
+    #[serde(rename = "columnName")]
+    pub column_name: String,
     /// If `data`, it computes the bounds of the underlying data. If `{ \"min\": ..., \"max\": ... }`, one can specify custom bounds.
     #[serde(rename = "bounds")]
     pub bounds: Box<models::HistogramBounds>,
     /// The number of buckets. The value can be specified or calculated.
     #[serde(rename = "buckets")]
     pub buckets: Box<models::HistogramBuckets>,
-    /// Name of the (numeric) vector attribute or raster band to compute the histogram on.
-    #[serde(rename = "columnName")]
-    pub column_name: String,
     /// Flag, if the histogram should have user interactions for a range selection. It is `false` by default.
     #[serde(rename = "interactive", skip_serializing_if = "Option::is_none")]
     pub interactive: Option<bool>,
@@ -29,11 +29,11 @@ pub struct HistogramParameters {
 
 impl HistogramParameters {
     /// The parameter spec for `Histogram`
-    pub fn new(bounds: models::HistogramBounds, buckets: models::HistogramBuckets, column_name: String) -> HistogramParameters {
+    pub fn new(column_name: String, bounds: models::HistogramBounds, buckets: models::HistogramBuckets) -> HistogramParameters {
         HistogramParameters {
+            column_name,
             bounds: Box::new(bounds),
             buckets: Box::new(buckets),
-            column_name,
             interactive: None,
         }
     }

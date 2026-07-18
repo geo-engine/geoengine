@@ -36,12 +36,12 @@ function UpdateProjectFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'bounds': json['bounds'] == null ? undefined : (0, STRectangle_1.STRectangleFromJSON)(json['bounds']),
-        'description': json['description'] == null ? undefined : json['description'],
         'id': json['id'],
-        'layers': json['layers'] == null ? undefined : (json['layers'].map(VecUpdate_1.VecUpdateFromJSON)),
         'name': json['name'] == null ? undefined : json['name'],
+        'description': json['description'] == null ? undefined : json['description'],
+        'layers': json['layers'] == null ? undefined : (json['layers'].map(VecUpdate_1.VecUpdateFromJSON)),
         'plots': json['plots'] == null ? undefined : (json['plots'].map(VecUpdate_1.VecUpdateFromJSON)),
+        'bounds': json['bounds'] == null ? undefined : (0, STRectangle_1.STRectangleFromJSON)(json['bounds']),
         'timeStep': json['timeStep'] == null ? undefined : (0, TimeStep_1.TimeStepFromJSON)(json['timeStep']),
     };
 }
@@ -53,12 +53,12 @@ function UpdateProjectToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'bounds': (0, STRectangle_1.STRectangleToJSON)(value['bounds']),
-        'description': value['description'],
         'id': value['id'],
-        'layers': value['layers'] == null ? undefined : (value['layers'].map(VecUpdate_1.VecUpdateToJSON)),
         'name': value['name'],
+        'description': value['description'],
+        'layers': value['layers'] == null ? undefined : (value['layers'].map(VecUpdate_1.VecUpdateToJSON)),
         'plots': value['plots'] == null ? undefined : (value['plots'].map(VecUpdate_1.VecUpdateToJSON)),
+        'bounds': (0, STRectangle_1.STRectangleToJSON)(value['bounds']),
         'timeStep': (0, TimeStep_1.TimeStepToJSON)(value['timeStep']),
     };
 }

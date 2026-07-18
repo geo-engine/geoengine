@@ -19,34 +19,16 @@ import type { GeoTransform } from './GeoTransform';
 export interface GdalDatasetParameters {
     /**
      *
-     * @type {boolean}
-     * @memberof GdalDatasetParameters
-     */
-    allowAlphabandAsMask?: boolean;
-    /**
-     *
-     * @type {FileNotFoundHandling}
-     * @memberof GdalDatasetParameters
-     */
-    fileNotFoundHandling: FileNotFoundHandling;
-    /**
-     *
      * @type {string}
      * @memberof GdalDatasetParameters
      */
     filePath: string;
     /**
      *
-     * @type {Array<Array<string>>}
+     * @type {number}
      * @memberof GdalDatasetParameters
      */
-    gdalConfigOptions?: Array<Array<string>> | null;
-    /**
-     *
-     * @type {Array<string>}
-     * @memberof GdalDatasetParameters
-     */
-    gdalOpenOptions?: Array<string> | null;
+    rasterbandChannel: number;
     /**
      *
      * @type {GeoTransform}
@@ -58,7 +40,19 @@ export interface GdalDatasetParameters {
      * @type {number}
      * @memberof GdalDatasetParameters
      */
+    width: number;
+    /**
+     *
+     * @type {number}
+     * @memberof GdalDatasetParameters
+     */
     height: number;
+    /**
+     *
+     * @type {FileNotFoundHandling}
+     * @memberof GdalDatasetParameters
+     */
+    fileNotFoundHandling: FileNotFoundHandling;
     /**
      *
      * @type {number}
@@ -73,16 +67,22 @@ export interface GdalDatasetParameters {
     propertiesMapping?: Array<GdalMetadataMapping> | null;
     /**
      *
-     * @type {number}
+     * @type {Array<string>}
      * @memberof GdalDatasetParameters
      */
-    rasterbandChannel: number;
+    gdalOpenOptions?: Array<string> | null;
     /**
      *
-     * @type {number}
+     * @type {Array<Array<string>>}
      * @memberof GdalDatasetParameters
      */
-    width: number;
+    gdalConfigOptions?: Array<Array<string>> | null;
+    /**
+     *
+     * @type {boolean}
+     * @memberof GdalDatasetParameters
+     */
+    allowAlphabandAsMask?: boolean;
 }
 /**
  * Check if a given object implements the GdalDatasetParameters interface.

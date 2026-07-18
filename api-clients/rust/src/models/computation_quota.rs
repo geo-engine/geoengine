@@ -12,23 +12,23 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ComputationQuota {
-    #[serde(rename = "computationId")]
-    pub computation_id: uuid::Uuid,
-    #[serde(rename = "count")]
-    pub count: i64,
     #[serde(rename = "timestamp")]
     pub timestamp: String,
+    #[serde(rename = "computationId")]
+    pub computation_id: uuid::Uuid,
     #[serde(rename = "workflowId")]
     pub workflow_id: uuid::Uuid,
+    #[serde(rename = "count")]
+    pub count: i64,
 }
 
 impl ComputationQuota {
-    pub fn new(computation_id: uuid::Uuid, count: i64, timestamp: String, workflow_id: uuid::Uuid) -> ComputationQuota {
+    pub fn new(timestamp: String, computation_id: uuid::Uuid, workflow_id: uuid::Uuid, count: i64) -> ComputationQuota {
         ComputationQuota {
-            computation_id,
-            count,
             timestamp,
+            computation_id,
             workflow_id,
+            count,
         }
     }
 }

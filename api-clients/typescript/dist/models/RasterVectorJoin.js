@@ -30,11 +30,11 @@ exports.RasterVectorJoinTypeEnum = {
  * Check if a given object implements the RasterVectorJoin interface.
  */
 function instanceOfRasterVectorJoin(value) {
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;
     if (!('sources' in value) || value['sources'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -46,9 +46,9 @@ function RasterVectorJoinFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'type': json['type'],
         'params': (0, RasterVectorJoinParameters_1.RasterVectorJoinParametersFromJSON)(json['params']),
         'sources': (0, SingleVectorMultipleRasterSources_1.SingleVectorMultipleRasterSourcesFromJSON)(json['sources']),
-        'type': json['type'],
     };
 }
 function RasterVectorJoinToJSON(json) {
@@ -59,8 +59,8 @@ function RasterVectorJoinToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
+        'type': value['type'],
         'params': (0, RasterVectorJoinParameters_1.RasterVectorJoinParametersToJSON)(value['params']),
         'sources': (0, SingleVectorMultipleRasterSources_1.SingleVectorMultipleRasterSourcesToJSON)(value['sources']),
-        'type': value['type'],
     };
 }

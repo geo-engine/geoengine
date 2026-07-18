@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 pub enum RasterOperator {
     #[serde(rename="BandFilter")]
     BandFilter(Box<models::BandFilter>),
+    #[serde(rename="Downsampling")]
+    Downsampling(Box<models::Downsampling>),
     #[serde(rename="Expression")]
     Expression(Box<models::Expression>),
     #[serde(rename="GdalSource")]

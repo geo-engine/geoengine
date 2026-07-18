@@ -25,19 +25,19 @@ const RasterDataType_1 = require("./RasterDataType");
  * Check if a given object implements the StacProviderDataset interface.
  */
 function instanceOfStacProviderDataset(value) {
-    if (!('bands' in value) || value['bands'] === undefined)
-        return false;
-    if (!('dataType' in value) || value['dataType'] === undefined)
+    if (!('name' in value) || value['name'] === undefined)
         return false;
     if (!('description' in value) || value['description'] === undefined)
         return false;
-    if (!('name' in value) || value['name'] === undefined)
-        return false;
-    if (!('projection' in value) || value['projection'] === undefined)
+    if (!('dataType' in value) || value['dataType'] === undefined)
         return false;
     if (!('resolution' in value) || value['resolution'] === undefined)
         return false;
+    if (!('projection' in value) || value['projection'] === undefined)
+        return false;
     if (!('spatialGrid' in value) || value['spatialGrid'] === undefined)
+        return false;
+    if (!('bands' in value) || value['bands'] === undefined)
         return false;
     return true;
 }
@@ -49,13 +49,13 @@ function StacProviderDatasetFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'bands': (json['bands'].map(StacProviderDatasetBand_1.StacProviderDatasetBandFromJSON)),
-        'dataType': (0, RasterDataType_1.RasterDataTypeFromJSON)(json['dataType']),
-        'description': json['description'],
         'name': json['name'],
-        'projection': json['projection'],
+        'description': json['description'],
+        'dataType': (0, RasterDataType_1.RasterDataTypeFromJSON)(json['dataType']),
         'resolution': (0, SpatialResolution_1.SpatialResolutionFromJSON)(json['resolution']),
+        'projection': json['projection'],
         'spatialGrid': (0, SpatialGridDescriptor_1.SpatialGridDescriptorFromJSON)(json['spatialGrid']),
+        'bands': (json['bands'].map(StacProviderDatasetBand_1.StacProviderDatasetBandFromJSON)),
     };
 }
 function StacProviderDatasetToJSON(json) {
@@ -66,12 +66,12 @@ function StacProviderDatasetToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'bands': (value['bands'].map(StacProviderDatasetBand_1.StacProviderDatasetBandToJSON)),
-        'dataType': (0, RasterDataType_1.RasterDataTypeToJSON)(value['dataType']),
-        'description': value['description'],
         'name': value['name'],
-        'projection': value['projection'],
+        'description': value['description'],
+        'dataType': (0, RasterDataType_1.RasterDataTypeToJSON)(value['dataType']),
         'resolution': (0, SpatialResolution_1.SpatialResolutionToJSON)(value['resolution']),
+        'projection': value['projection'],
         'spatialGrid': (0, SpatialGridDescriptor_1.SpatialGridDescriptorToJSON)(value['spatialGrid']),
+        'bands': (value['bands'].map(StacProviderDatasetBand_1.StacProviderDatasetBandToJSON)),
     };
 }

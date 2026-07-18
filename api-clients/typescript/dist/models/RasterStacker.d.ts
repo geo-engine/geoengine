@@ -28,6 +28,12 @@ import type { RasterStackerParameters } from './RasterStackerParameters';
 export interface RasterStacker {
     /**
      *
+     * @type {RasterStackerTypeEnum}
+     * @memberof RasterStacker
+     */
+    type: RasterStackerTypeEnum;
+    /**
+     *
      * @type {RasterStackerParameters}
      * @memberof RasterStacker
      */
@@ -38,12 +44,6 @@ export interface RasterStacker {
      * @memberof RasterStacker
      */
     sources: MultipleRasterSources;
-    /**
-     *
-     * @type {RasterStackerTypeEnum}
-     * @memberof RasterStacker
-     */
-    type: RasterStackerTypeEnum;
 }
 /**
  * @export

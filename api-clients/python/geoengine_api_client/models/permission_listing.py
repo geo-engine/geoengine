@@ -29,10 +29,10 @@ class PermissionListing(BaseModel):
     """
     PermissionListing
     """ # noqa: E501
-    permission: Permission
     resource: Resource
     role: Role
-    __properties: ClassVar[List[str]] = ["permission", "resource", "role"]
+    permission: Permission
+    __properties: ClassVar[List[str]] = ["resource", "role", "permission"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -91,9 +91,9 @@ class PermissionListing(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "permission": obj.get("permission"),
             "resource": Resource.from_dict(obj["resource"]) if obj.get("resource") is not None else None,
-            "role": Role.from_dict(obj["role"]) if obj.get("role") is not None else None
+            "role": Role.from_dict(obj["role"]) if obj.get("role") is not None else None,
+            "permission": obj.get("permission")
         })
         return _obj
 

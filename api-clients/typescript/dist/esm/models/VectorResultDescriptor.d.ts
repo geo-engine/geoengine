@@ -20,20 +20,6 @@ import type { BoundingBox2D } from './BoundingBox2D';
 export interface VectorResultDescriptor {
     /**
      *
-     * @type {BoundingBox2D}
-     * @memberof VectorResultDescriptor
-     */
-    bbox?: BoundingBox2D | null;
-    /**
-     *
-     * @type {{ [key: string]: VectorColumnInfo; }}
-     * @memberof VectorResultDescriptor
-     */
-    columns: {
-        [key: string]: VectorColumnInfo;
-    };
-    /**
-     *
      * @type {VectorDataType}
      * @memberof VectorResultDescriptor
      */
@@ -46,10 +32,24 @@ export interface VectorResultDescriptor {
     spatialReference: string;
     /**
      *
+     * @type {{ [key: string]: VectorColumnInfo; }}
+     * @memberof VectorResultDescriptor
+     */
+    columns: {
+        [key: string]: VectorColumnInfo;
+    };
+    /**
+     *
      * @type {TimeInterval}
      * @memberof VectorResultDescriptor
      */
     time?: TimeInterval | null;
+    /**
+     *
+     * @type {BoundingBox2D}
+     * @memberof VectorResultDescriptor
+     */
+    bbox?: BoundingBox2D | null;
 }
 /**
  * Check if a given object implements the VectorResultDescriptor interface.

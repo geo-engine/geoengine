@@ -6,12 +6,12 @@
 
 Name | Type
 ------------ | -------------
-`description` | string
-`displayName` | string
-`fileName` | string
-`metadata` | [MlModelMetadata](MlModelMetadata.md)
 `name` | string
+`displayName` | string
+`description` | string
 `upload` | string
+`metadata` | [MlModelMetadata](MlModelMetadata.md)
+`fileName` | string
 
 ## Example
 
@@ -20,12 +20,12 @@ import type { MlModel } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "description": null,
-  "displayName": null,
-  "fileName": null,
-  "metadata": null,
   "name": null,
+  "displayName": null,
+  "description": null,
   "upload": null,
+  "metadata": null,
+  "fileName": null,
 } satisfies MlModel
 
 console.log(example)

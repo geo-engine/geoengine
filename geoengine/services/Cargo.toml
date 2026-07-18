@@ -64,6 +64,7 @@ tracing-appender = { workspace = true }
 mime = { workspace = true }
 num-traits = { workspace = true }
 oauth2 = { workspace = true }
+ogcapi-types = { workspace = true }
 openidconnect = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true }
@@ -108,7 +109,7 @@ wkt = { workspace = true }
 zip = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-nix = { version = "0.30", features = ["socket"] }
+nix = { version = "0.31", features = ["socket"] }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }

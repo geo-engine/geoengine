@@ -35,7 +35,28 @@ class TestProject(unittest.TestCase):
         model = Project()
         if include_optional:
             return Project(
+                id = '',
+                version = geoengine_api_client.models.project_version.ProjectVersion(
+                    id = '', 
+                    changed = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'), ),
+                name = '',
+                description = '',
+                layers = [
+                    geoengine_api_client.models.project_layer.ProjectLayer(
+                        workflow = '', 
+                        name = '', 
+                        visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
+                            data = True, 
+                            legend = True, ), 
+                        symbology = null, )
+                    ],
+                plots = [
+                    geoengine_api_client.models.plot.Plot(
+                        workflow = '', 
+                        name = '', )
+                    ],
                 bounds = geoengine_api_client.models.st_rectangle.STRectangle(
+                    spatial_reference = '', 
                     bounding_box = geoengine_api_client.models.bounding_box2_d.BoundingBox2D(
                         lower_left_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                             x = 1.337, 
@@ -43,37 +64,37 @@ class TestProject(unittest.TestCase):
                         upper_right_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                             x = 1.337, 
                             y = 1.337, ), ), 
-                    spatial_reference = '', 
                     time_interval = geoengine_api_client.models.time_interval.TimeInterval(
-                        end = 56, 
-                        start = 56, ), ),
-                description = '',
-                id = '',
-                layers = [
-                    geoengine_api_client.models.project_layer.ProjectLayer(
-                        name = '', 
-                        symbology = null, 
-                        visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
-                            data = True, 
-                            legend = True, ), 
-                        workflow = '', )
-                    ],
-                name = '',
-                plots = [
-                    geoengine_api_client.models.plot.Plot(
-                        name = '', 
-                        workflow = '', )
-                    ],
+                        start = 56, 
+                        end = 56, ), ),
                 time_step = geoengine_api_client.models.time_step.TimeStep(
                     granularity = 'millis', 
-                    step = 0, ),
-                version = geoengine_api_client.models.project_version.ProjectVersion(
-                    changed = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'), 
-                    id = '', )
+                    step = 0, )
             )
         else:
             return Project(
+                id = '',
+                version = geoengine_api_client.models.project_version.ProjectVersion(
+                    id = '', 
+                    changed = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'), ),
+                name = '',
+                description = '',
+                layers = [
+                    geoengine_api_client.models.project_layer.ProjectLayer(
+                        workflow = '', 
+                        name = '', 
+                        visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
+                            data = True, 
+                            legend = True, ), 
+                        symbology = null, )
+                    ],
+                plots = [
+                    geoengine_api_client.models.plot.Plot(
+                        workflow = '', 
+                        name = '', )
+                    ],
                 bounds = geoengine_api_client.models.st_rectangle.STRectangle(
+                    spatial_reference = '', 
                     bounding_box = geoengine_api_client.models.bounding_box2_d.BoundingBox2D(
                         lower_left_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                             x = 1.337, 
@@ -81,33 +102,12 @@ class TestProject(unittest.TestCase):
                         upper_right_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                             x = 1.337, 
                             y = 1.337, ), ), 
-                    spatial_reference = '', 
                     time_interval = geoengine_api_client.models.time_interval.TimeInterval(
-                        end = 56, 
-                        start = 56, ), ),
-                description = '',
-                id = '',
-                layers = [
-                    geoengine_api_client.models.project_layer.ProjectLayer(
-                        name = '', 
-                        symbology = null, 
-                        visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
-                            data = True, 
-                            legend = True, ), 
-                        workflow = '', )
-                    ],
-                name = '',
-                plots = [
-                    geoengine_api_client.models.plot.Plot(
-                        name = '', 
-                        workflow = '', )
-                    ],
+                        start = 56, 
+                        end = 56, ), ),
                 time_step = geoengine_api_client.models.time_step.TimeStep(
                     granularity = 'millis', 
                     step = 0, ),
-                version = geoengine_api_client.models.project_version.ProjectVersion(
-                    changed = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'), 
-                    id = '', ),
         )
         """
 

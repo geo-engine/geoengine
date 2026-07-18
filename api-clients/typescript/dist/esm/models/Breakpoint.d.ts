@@ -16,16 +16,16 @@
 export interface Breakpoint {
     /**
      *
-     * @type {Array<number>}
-     * @memberof Breakpoint
-     */
-    color: Array<number>;
-    /**
-     *
      * @type {number}
      * @memberof Breakpoint
      */
     value: number;
+    /**
+     *
+     * @type {Array<number>}
+     * @memberof Breakpoint
+     */
+    color: Array<number>;
 }
 /**
  * Check if a given object implements the Breakpoint interface.

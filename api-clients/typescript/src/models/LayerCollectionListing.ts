@@ -28,10 +28,10 @@ import {
 export interface LayerCollectionListing {
     /**
      * 
-     * @type {string}
+     * @type {LayerCollectionListingTypeEnum}
      * @memberof LayerCollectionListing
      */
-    description: string;
+    type: LayerCollectionListingTypeEnum;
     /**
      * 
      * @type {ProviderLayerCollectionId}
@@ -46,16 +46,16 @@ export interface LayerCollectionListing {
     name: string;
     /**
      * 
+     * @type {string}
+     * @memberof LayerCollectionListing
+     */
+    description: string;
+    /**
+     * 
      * @type {Array<Array<string>>}
      * @memberof LayerCollectionListing
      */
     properties?: Array<Array<string>>;
-    /**
-     * 
-     * @type {LayerCollectionListingTypeEnum}
-     * @memberof LayerCollectionListing
-     */
-    type: LayerCollectionListingTypeEnum;
 }
 
 
@@ -72,10 +72,10 @@ export type LayerCollectionListingTypeEnum = typeof LayerCollectionListingTypeEn
  * Check if a given object implements the LayerCollectionListing interface.
  */
 export function instanceOfLayerCollectionListing(value: object): value is LayerCollectionListing {
-    if (!('description' in value) || value['description'] === undefined) return false;
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
     return true;
 }
 
@@ -89,11 +89,11 @@ export function LayerCollectionListingFromJSONTyped(json: any, ignoreDiscriminat
     }
     return {
         
-        'description': json['description'],
+        'type': json['type'],
         'id': ProviderLayerCollectionIdFromJSON(json['id']),
         'name': json['name'],
+        'description': json['description'],
         'properties': json['properties'] == null ? undefined : json['properties'],
-        'type': json['type'],
     };
 }
 
@@ -108,11 +108,11 @@ export function LayerCollectionListingToJSONTyped(value?: LayerCollectionListing
 
     return {
         
-        'description': value['description'],
+        'type': value['type'],
         'id': ProviderLayerCollectionIdToJSON(value['id']),
         'name': value['name'],
+        'description': value['description'],
         'properties': value['properties'],
-        'type': value['type'],
     };
 }
 

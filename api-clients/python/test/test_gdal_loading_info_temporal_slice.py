@@ -35,26 +35,21 @@ class TestGdalLoadingInfoTemporalSlice(unittest.TestCase):
         model = GdalLoadingInfoTemporalSlice()
         if include_optional:
             return GdalLoadingInfoTemporalSlice(
-                cache_ttl = 0,
+                time = geoengine_api_client.models.time_interval.TimeInterval(
+                    start = 56, 
+                    end = 56, ),
                 params = geoengine_api_client.models.gdal_dataset_parameters.GdalDatasetParameters(
-                    allow_alphaband_as_mask = True, 
-                    file_not_found_handling = 'NoData', 
                     file_path = '', 
-                    gdal_config_options = [
-                        [
-                            ''
-                            ]
-                        ], 
-                    gdal_open_options = [
-                        ''
-                        ], 
+                    rasterband_channel = 0, 
                     geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
                         origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                             x = 1.337, 
                             y = 1.337, ), 
                         x_pixel_size = 1.337, 
                         y_pixel_size = 1.337, ), 
+                    width = 0, 
                     height = 0, 
+                    file_not_found_handling = 'NoData', 
                     no_data_value = 1.337, 
                     properties_mapping = [
                         geoengine_api_client.models.gdal_metadata_mapping.GdalMetadataMapping(
@@ -66,17 +61,22 @@ class TestGdalLoadingInfoTemporalSlice(unittest.TestCase):
                                 key = '', ), 
                             target_type = 'Number', )
                         ], 
-                    rasterband_channel = 0, 
-                    width = 0, ),
-                time = geoengine_api_client.models.time_interval.TimeInterval(
-                    end = 56, 
-                    start = 56, )
+                    gdal_open_options = [
+                        ''
+                        ], 
+                    gdal_config_options = [
+                        [
+                            ''
+                            ]
+                        ], 
+                    allow_alphaband_as_mask = True, ),
+                cache_ttl = 0
             )
         else:
             return GdalLoadingInfoTemporalSlice(
                 time = geoengine_api_client.models.time_interval.TimeInterval(
-                    end = 56, 
-                    start = 56, ),
+                    start = 56, 
+                    end = 56, ),
         )
         """
 

@@ -3,10 +3,10 @@
 #![allow(deprecated)]
 
 use crate::error::Result;
+use aes_gcm::aead::array::Array;
 use aes_gcm::aead::consts::U12;
-use aes_gcm::aead::generic_array::GenericArray;
-use aes_gcm::aead::{Aead, OsRng};
-use aes_gcm::{AeadCore, Aes256Gcm, Key, KeyInit, Nonce};
+use aes_gcm::aead::{Aead, Generate};
+use aes_gcm::{Aes256Gcm, Key, KeyInit, Nonce};
 use bytes::BytesMut;
 use pbkdf2::pbkdf2_hmac_array;
 use postgres_types::{FromSql, IsNull, ToSql, Type, accepts};
@@ -50,7 +50,7 @@ impl From<FromUtf8Error> for EncryptionError {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct U96(GenericArray<u8, U12>);
+pub struct U96(Array<u8, U12>);
 
 impl From<Nonce<U12>> for U96 {
     fn from(value: Nonce<U12>) -> Self {
@@ -79,7 +79,7 @@ impl ToSql for U96 {
 
 impl<'a> FromSql<'a> for U96 {
     fn from_sql(_ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
-        Ok(U96(*GenericArray::from_slice(raw)))
+        Ok(U96(*Array::from_slice(raw)))
     }
 
     accepts!(BYTEA);
@@ -106,7 +106,7 @@ impl AesGcmStringPasswordEncryption {
         let key = Key::<Aes256Gcm>::from_slice(&self.encryption_key);
         let cipher = Aes256Gcm::new(key);
 
-        let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+        let nonce = Nonce::<U12>::generate();
         let ciphertext = cipher.encrypt(&nonce, value.as_bytes())?;
 
         let result = EncryptedString {

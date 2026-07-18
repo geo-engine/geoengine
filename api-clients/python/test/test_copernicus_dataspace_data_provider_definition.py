@@ -35,36 +35,36 @@ class TestCopernicusDataspaceDataProviderDefinition(unittest.TestCase):
         model = CopernicusDataspaceDataProviderDefinition()
         if include_optional:
             return CopernicusDataspaceDataProviderDefinition(
+                type = 'CopernicusDataspace',
+                name = '',
                 description = '',
+                id = '',
+                stac_url = '',
+                s3_url = '',
+                s3_access_key = '',
+                s3_secret_key = '',
                 gdal_config = [
                     [
                         ''
                         ]
                     ],
-                id = '',
-                name = '',
-                priority = 56,
-                s3_access_key = '',
-                s3_secret_key = '',
-                s3_url = '',
-                stac_url = '',
-                type = 'CopernicusDataspace'
+                priority = 56
             )
         else:
             return CopernicusDataspaceDataProviderDefinition(
+                type = 'CopernicusDataspace',
+                name = '',
                 description = '',
+                id = '',
+                stac_url = '',
+                s3_url = '',
+                s3_access_key = '',
+                s3_secret_key = '',
                 gdal_config = [
                     [
                         ''
                         ]
                     ],
-                id = '',
-                name = '',
-                s3_access_key = '',
-                s3_secret_key = '',
-                s3_url = '',
-                stac_url = '',
-                type = 'CopernicusDataspace',
         )
         """
 

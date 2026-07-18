@@ -519,7 +519,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!(
                 "/wcs/{}?{}",
-                &workflow_id.to_string(),
+                workflow_id,
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
@@ -604,7 +604,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!(
                 "/wcs/{}?{}",
-                &workflow_id.to_string(),
+                workflow_id,
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
@@ -693,7 +693,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!(
                 "/wcs/{}?{}",
-                &id.to_string(),
+                id,
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
@@ -735,7 +735,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!(
                 "/wcs/{}?{}",
-                &id.to_string(),
+                id,
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));

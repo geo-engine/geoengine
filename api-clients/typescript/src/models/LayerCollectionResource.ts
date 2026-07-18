@@ -20,16 +20,16 @@ import { mapValues } from '../runtime';
 export interface LayerCollectionResource {
     /**
      * 
-     * @type {string}
-     * @memberof LayerCollectionResource
-     */
-    id: string;
-    /**
-     * 
      * @type {LayerCollectionResourceTypeEnum}
      * @memberof LayerCollectionResource
      */
     type: LayerCollectionResourceTypeEnum;
+    /**
+     * 
+     * @type {string}
+     * @memberof LayerCollectionResource
+     */
+    id: string;
 }
 
 
@@ -46,8 +46,8 @@ export type LayerCollectionResourceTypeEnum = typeof LayerCollectionResourceType
  * Check if a given object implements the LayerCollectionResource interface.
  */
 export function instanceOfLayerCollectionResource(value: object): value is LayerCollectionResource {
-    if (!('id' in value) || value['id'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('id' in value) || value['id'] === undefined) return false;
     return true;
 }
 
@@ -61,8 +61,8 @@ export function LayerCollectionResourceFromJSONTyped(json: any, ignoreDiscrimina
     }
     return {
         
-        'id': json['id'],
         'type': json['type'],
+        'id': json['id'],
     };
 }
 
@@ -77,8 +77,8 @@ export function LayerCollectionResourceToJSONTyped(value?: LayerCollectionResour
 
     return {
         
-        'id': value['id'],
         'type': value['type'],
+        'id': value['id'],
     };
 }
 

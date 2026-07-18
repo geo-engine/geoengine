@@ -31,9 +31,9 @@ exports.LegacyTypedOperatorTypeEnum = {
  * Check if a given object implements the LegacyTypedOperator interface.
  */
 function instanceOfLegacyTypedOperator(value) {
-    if (!('operator' in value) || value['operator'] === undefined)
-        return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('operator' in value) || value['operator'] === undefined)
         return false;
     return true;
 }
@@ -45,8 +45,8 @@ function LegacyTypedOperatorFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'operator': (0, LegacyTypedOperatorOperator_1.LegacyTypedOperatorOperatorFromJSON)(json['operator']),
         'type': json['type'],
+        'operator': (0, LegacyTypedOperatorOperator_1.LegacyTypedOperatorOperatorFromJSON)(json['operator']),
     };
 }
 function LegacyTypedOperatorToJSON(json) {
@@ -57,7 +57,7 @@ function LegacyTypedOperatorToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'operator': (0, LegacyTypedOperatorOperator_1.LegacyTypedOperatorOperatorToJSON)(value['operator']),
         'type': value['type'],
+        'operator': (0, LegacyTypedOperatorOperator_1.LegacyTypedOperatorOperatorToJSON)(value['operator']),
     };
 }

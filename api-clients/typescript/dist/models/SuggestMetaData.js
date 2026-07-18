@@ -35,8 +35,8 @@ function SuggestMetaDataFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'dataPath': (0, DataPath_1.DataPathFromJSON)(json['dataPath']),
-        'layerName': json['layerName'] == null ? undefined : json['layerName'],
         'mainFile': json['mainFile'] == null ? undefined : json['mainFile'],
+        'layerName': json['layerName'] == null ? undefined : json['layerName'],
     };
 }
 function SuggestMetaDataToJSON(json) {
@@ -48,7 +48,7 @@ function SuggestMetaDataToJSONTyped(value, ignoreDiscriminator = false) {
     }
     return {
         'dataPath': (0, DataPath_1.DataPathToJSON)(value['dataPath']),
-        'layerName': value['layerName'],
         'mainFile': value['mainFile'],
+        'layerName': value['layerName'],
     };
 }

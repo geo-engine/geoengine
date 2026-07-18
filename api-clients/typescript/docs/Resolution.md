@@ -7,9 +7,9 @@ Explicit output resolution (`x`, `y`) in target coordinates.
 
 Name | Type
 ------------ | -------------
-`type` | string
 `x` | number
 `y` | number
+`type` | string
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { Resolution } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "type": null,
   "x": null,
   "y": null,
+  "type": null,
 } satisfies Resolution
 
 console.log(example)

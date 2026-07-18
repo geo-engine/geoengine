@@ -471,9 +471,7 @@ fn validate_list_limit(value: u32) -> Result<(), ValidationError> {
 }
 
 fn task_list_limit_default() -> u32 {
-    get_config_element::<crate::config::TaskManager>()
-        .map(|config| config.list_default_limit)
-        .unwrap_or(1)
+    get_config_element::<crate::config::TaskManager>().map_or(1, |config| config.list_default_limit)
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]

@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
-`exponentialBackoffFactor` | number
-`initialDelayMs` | number
 `numberOfRetries` | number
+`initialDelayMs` | number
+`exponentialBackoffFactor` | number
 
 ## Example
 
@@ -17,9 +17,9 @@ import type { StacApiRetries } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "exponentialBackoffFactor": null,
-  "initialDelayMs": null,
   "numberOfRetries": null,
+  "initialDelayMs": null,
+  "exponentialBackoffFactor": null,
 } satisfies StacApiRetries
 
 console.log(example)

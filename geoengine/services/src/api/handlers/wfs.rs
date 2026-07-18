@@ -1059,7 +1059,7 @@ x;y
         let req = test::TestRequest::with_uri(&format!(
             "/wfs/{}?{}",
             workflow_id,
-            &serde_urlencoded::to_string(params).unwrap()
+            serde_urlencoded::to_string(params).unwrap()
         ))
         .method(method)
         .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
@@ -1142,7 +1142,7 @@ x;y
         let req = test::TestRequest::get()
             .uri(&format!(
                 "/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988?{}",
-                &serde_urlencoded::to_string(params).unwrap()
+                serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, app_ctx).await;
@@ -1240,7 +1240,7 @@ x;y
             .uri(&format!(
                 "/wfs/{}?{}",
                 workflow_id,
-                &serde_urlencoded::to_string(params).unwrap()
+                serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, app_ctx).await;

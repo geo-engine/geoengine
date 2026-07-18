@@ -16,9 +16,9 @@ import { SpatialGridDescriptorStateFromJSON, SpatialGridDescriptorStateToJSON, }
  * Check if a given object implements the SpatialGridDescriptor interface.
  */
 export function instanceOfSpatialGridDescriptor(value) {
-    if (!('descriptor' in value) || value['descriptor'] === undefined)
-        return false;
     if (!('spatialGrid' in value) || value['spatialGrid'] === undefined)
+        return false;
+    if (!('descriptor' in value) || value['descriptor'] === undefined)
         return false;
     return true;
 }
@@ -30,8 +30,8 @@ export function SpatialGridDescriptorFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'descriptor': SpatialGridDescriptorStateFromJSON(json['descriptor']),
         'spatialGrid': SpatialGridDefinitionFromJSON(json['spatialGrid']),
+        'descriptor': SpatialGridDescriptorStateFromJSON(json['descriptor']),
     };
 }
 export function SpatialGridDescriptorToJSON(json) {
@@ -42,7 +42,7 @@ export function SpatialGridDescriptorToJSONTyped(value, ignoreDiscriminator = fa
         return value;
     }
     return {
-        'descriptor': SpatialGridDescriptorStateToJSON(value['descriptor']),
         'spatialGrid': SpatialGridDefinitionToJSON(value['spatialGrid']),
+        'descriptor': SpatialGridDescriptorStateToJSON(value['descriptor']),
     };
 }

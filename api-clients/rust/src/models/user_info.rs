@@ -12,10 +12,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UserInfo {
-    #[serde(rename = "email", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub email: Option<Option<String>>,
     #[serde(rename = "id")]
     pub id: uuid::Uuid,
+    #[serde(rename = "email", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub email: Option<Option<String>>,
     #[serde(rename = "realName", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub real_name: Option<Option<String>>,
 }
@@ -23,8 +23,8 @@ pub struct UserInfo {
 impl UserInfo {
     pub fn new(id: uuid::Uuid) -> UserInfo {
         UserInfo {
-            email: None,
             id,
+            email: None,
             real_name: None,
         }
     }

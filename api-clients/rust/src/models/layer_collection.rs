@@ -12,29 +12,29 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct LayerCollection {
+    #[serde(rename = "id")]
+    pub id: Box<models::ProviderLayerCollectionId>,
+    #[serde(rename = "name")]
+    pub name: String,
     #[serde(rename = "description")]
     pub description: String,
+    #[serde(rename = "items")]
+    pub items: Vec<models::CollectionItem>,
     /// a common label for the collection's entries, if there is any
     #[serde(rename = "entryLabel", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub entry_label: Option<Option<String>>,
-    #[serde(rename = "id")]
-    pub id: Box<models::ProviderLayerCollectionId>,
-    #[serde(rename = "items")]
-    pub items: Vec<models::CollectionItem>,
-    #[serde(rename = "name")]
-    pub name: String,
     #[serde(rename = "properties")]
     pub properties: Vec<Vec<String>>,
 }
 
 impl LayerCollection {
-    pub fn new(description: String, id: models::ProviderLayerCollectionId, items: Vec<models::CollectionItem>, name: String, properties: Vec<Vec<String>>) -> LayerCollection {
+    pub fn new(id: models::ProviderLayerCollectionId, name: String, description: String, items: Vec<models::CollectionItem>, properties: Vec<Vec<String>>) -> LayerCollection {
         LayerCollection {
-            description,
-            entry_label: None,
             id: Box::new(id),
-            items,
             name,
+            description,
+            items,
+            entry_label: None,
             properties,
         }
     }

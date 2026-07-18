@@ -15,9 +15,9 @@ import { MeasurementFromJSON, MeasurementToJSON, } from './Measurement';
  * Check if a given object implements the RasterBandDescriptor interface.
  */
 export function instanceOfRasterBandDescriptor(value) {
-    if (!('measurement' in value) || value['measurement'] === undefined)
-        return false;
     if (!('name' in value) || value['name'] === undefined)
+        return false;
+    if (!('measurement' in value) || value['measurement'] === undefined)
         return false;
     return true;
 }
@@ -29,8 +29,8 @@ export function RasterBandDescriptorFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'measurement': MeasurementFromJSON(json['measurement']),
         'name': json['name'],
+        'measurement': MeasurementFromJSON(json['measurement']),
     };
 }
 export function RasterBandDescriptorToJSON(json) {
@@ -41,7 +41,7 @@ export function RasterBandDescriptorToJSONTyped(value, ignoreDiscriminator = fal
         return value;
     }
     return {
-        'measurement': MeasurementToJSON(value['measurement']),
         'name': value['name'],
+        'measurement': MeasurementToJSON(value['measurement']),
     };
 }

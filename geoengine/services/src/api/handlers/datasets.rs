@@ -1023,7 +1023,7 @@ fn suggest_main_file(upload: &Upload) -> Option<String> {
     }
 
     let mut sorted_files = upload.files.clone();
-    sorted_files.sort_by(|a, b| b.byte_size.cmp(&a.byte_size));
+    sorted_files.sort_by_key(|b| std::cmp::Reverse(b.byte_size));
 
     for file in sorted_files {
         if known_extensions.iter().any(|ext| file.name.ends_with(ext)) {
@@ -1306,8 +1306,7 @@ fn detect_vector_geometry(layer: &Layer) -> DetectedGeometry {
                         let s: Result<SpatialReference> = s.try_into().map_err(Into::into);
                         s
                     })
-                    .map(Into::into)
-                    .unwrap_or(SpatialReferenceOption::Unreferenced),
+                    .map_or(SpatialReferenceOption::Unreferenced, Into::into),
             };
         }
     }
@@ -1756,7 +1755,7 @@ mod tests {
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
                 "/datasets?{}",
-                &serde_urlencoded::to_string([
+                serde_urlencoded::to_string([
                     ("order", "NameAsc"),
                     ("offset", "0"),
                     ("limit", "2"),

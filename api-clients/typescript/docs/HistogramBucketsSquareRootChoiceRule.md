@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`maxNumberOfBuckets` | number
 `type` | string
+`maxNumberOfBuckets` | number
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { HistogramBucketsSquareRootChoiceRule } from '@geoengine/api-client
 
 // TODO: Update the object below with actual values
 const example = {
-  "maxNumberOfBuckets": null,
   "type": null,
+  "maxNumberOfBuckets": null,
 } satisfies HistogramBucketsSquareRootChoiceRule
 
 console.log(example)

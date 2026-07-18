@@ -12,20 +12,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SearchCapabilities {
+    #[serde(rename = "searchTypes")]
+    pub search_types: Box<models::SearchTypes>,
     #[serde(rename = "autocomplete")]
     pub autocomplete: bool,
     #[serde(rename = "filters", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub filters: Option<Option<Vec<String>>>,
-    #[serde(rename = "searchTypes")]
-    pub search_types: Box<models::SearchTypes>,
 }
 
 impl SearchCapabilities {
-    pub fn new(autocomplete: bool, search_types: models::SearchTypes) -> SearchCapabilities {
+    pub fn new(search_types: models::SearchTypes, autocomplete: bool) -> SearchCapabilities {
         SearchCapabilities {
+            search_types: Box::new(search_types),
             autocomplete,
             filters: None,
-            search_types: Box::new(search_types),
         }
     }
 }

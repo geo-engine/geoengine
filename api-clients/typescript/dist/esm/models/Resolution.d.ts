@@ -16,12 +16,6 @@
 export interface Resolution {
     /**
      *
-     * @type {ResolutionTypeEnum}
-     * @memberof Resolution
-     */
-    type: ResolutionTypeEnum;
-    /**
-     *
      * @type {number}
      * @memberof Resolution
      */
@@ -32,6 +26,12 @@ export interface Resolution {
      * @memberof Resolution
      */
     y: number;
+    /**
+     *
+     * @type {ResolutionTypeEnum}
+     * @memberof Resolution
+     */
+    type: ResolutionTypeEnum;
 }
 /**
  * @export

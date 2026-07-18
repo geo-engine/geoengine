@@ -36,10 +36,10 @@ class TestInterpolationParameters(unittest.TestCase):
         if include_optional:
             return InterpolationParameters(
                 interpolation = 'nearestNeighbor',
+                output_resolution = None,
                 output_origin_reference = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                     x = 1.337, 
-                    y = 1.337, ),
-                output_resolution = None
+                    y = 1.337, )
             )
         else:
             return InterpolationParameters(

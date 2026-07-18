@@ -34,17 +34,17 @@ exports.GdalMetaDataRegularTypeEnum = {
  * Check if a given object implements the GdalMetaDataRegular interface.
  */
 function instanceOfGdalMetaDataRegular(value) {
-    if (!('dataTime' in value) || value['dataTime'] === undefined)
-        return false;
-    if (!('params' in value) || value['params'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
         return false;
-    if (!('step' in value) || value['step'] === undefined)
+    if (!('params' in value) || value['params'] === undefined)
         return false;
     if (!('timePlaceholders' in value) || value['timePlaceholders'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('dataTime' in value) || value['dataTime'] === undefined)
+        return false;
+    if (!('step' in value) || value['step'] === undefined)
         return false;
     return true;
 }
@@ -56,13 +56,13 @@ function GdalMetaDataRegularFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
-        'dataTime': (0, TimeInterval_1.TimeIntervalFromJSON)(json['dataTime']),
-        'params': (0, GdalDatasetParameters_1.GdalDatasetParametersFromJSON)(json['params']),
-        'resultDescriptor': (0, RasterResultDescriptor_1.RasterResultDescriptorFromJSON)(json['resultDescriptor']),
-        'step': (0, TimeStep_1.TimeStepFromJSON)(json['step']),
-        'timePlaceholders': ((0, runtime_1.mapValues)(json['timePlaceholders'], GdalSourceTimePlaceholder_1.GdalSourceTimePlaceholderFromJSON)),
         'type': json['type'],
+        'resultDescriptor': (0, RasterResultDescriptor_1.RasterResultDescriptorFromJSON)(json['resultDescriptor']),
+        'params': (0, GdalDatasetParameters_1.GdalDatasetParametersFromJSON)(json['params']),
+        'timePlaceholders': ((0, runtime_1.mapValues)(json['timePlaceholders'], GdalSourceTimePlaceholder_1.GdalSourceTimePlaceholderFromJSON)),
+        'dataTime': (0, TimeInterval_1.TimeIntervalFromJSON)(json['dataTime']),
+        'step': (0, TimeStep_1.TimeStepFromJSON)(json['step']),
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 function GdalMetaDataRegularToJSON(json) {
@@ -73,12 +73,12 @@ function GdalMetaDataRegularToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'cacheTtl': value['cacheTtl'],
-        'dataTime': (0, TimeInterval_1.TimeIntervalToJSON)(value['dataTime']),
-        'params': (0, GdalDatasetParameters_1.GdalDatasetParametersToJSON)(value['params']),
-        'resultDescriptor': (0, RasterResultDescriptor_1.RasterResultDescriptorToJSON)(value['resultDescriptor']),
-        'step': (0, TimeStep_1.TimeStepToJSON)(value['step']),
-        'timePlaceholders': ((0, runtime_1.mapValues)(value['timePlaceholders'], GdalSourceTimePlaceholder_1.GdalSourceTimePlaceholderToJSON)),
         'type': value['type'],
+        'resultDescriptor': (0, RasterResultDescriptor_1.RasterResultDescriptorToJSON)(value['resultDescriptor']),
+        'params': (0, GdalDatasetParameters_1.GdalDatasetParametersToJSON)(value['params']),
+        'timePlaceholders': ((0, runtime_1.mapValues)(value['timePlaceholders'], GdalSourceTimePlaceholder_1.GdalSourceTimePlaceholderToJSON)),
+        'dataTime': (0, TimeInterval_1.TimeIntervalToJSON)(value['dataTime']),
+        'step': (0, TimeStep_1.TimeStepToJSON)(value['step']),
+        'cacheTtl': value['cacheTtl'],
     };
 }

@@ -81,6 +81,12 @@ import type { StatisticsParameters } from './StatisticsParameters';
 export interface Statistics {
     /**
      *
+     * @type {StatisticsTypeEnum}
+     * @memberof Statistics
+     */
+    type: StatisticsTypeEnum;
+    /**
+     *
      * @type {StatisticsParameters}
      * @memberof Statistics
      */
@@ -91,12 +97,6 @@ export interface Statistics {
      * @memberof Statistics
      */
     sources: MultipleRasterOrSingleVectorSource;
-    /**
-     *
-     * @type {StatisticsTypeEnum}
-     * @memberof Statistics
-     */
-    type: StatisticsTypeEnum;
 }
 /**
  * @export

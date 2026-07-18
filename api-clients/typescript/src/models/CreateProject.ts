@@ -35,10 +35,10 @@ import {
 export interface CreateProject {
     /**
      * 
-     * @type {STRectangle}
+     * @type {string}
      * @memberof CreateProject
      */
-    bounds: STRectangle;
+    name: string;
     /**
      * 
      * @type {string}
@@ -47,10 +47,10 @@ export interface CreateProject {
     description: string;
     /**
      * 
-     * @type {string}
+     * @type {STRectangle}
      * @memberof CreateProject
      */
-    name: string;
+    bounds: STRectangle;
     /**
      * 
      * @type {TimeStep}
@@ -63,9 +63,9 @@ export interface CreateProject {
  * Check if a given object implements the CreateProject interface.
  */
 export function instanceOfCreateProject(value: object): value is CreateProject {
-    if (!('bounds' in value) || value['bounds'] === undefined) return false;
-    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
+    if (!('bounds' in value) || value['bounds'] === undefined) return false;
     return true;
 }
 
@@ -79,9 +79,9 @@ export function CreateProjectFromJSONTyped(json: any, ignoreDiscriminator: boole
     }
     return {
         
-        'bounds': STRectangleFromJSON(json['bounds']),
-        'description': json['description'],
         'name': json['name'],
+        'description': json['description'],
+        'bounds': STRectangleFromJSON(json['bounds']),
         'timeStep': json['timeStep'] == null ? undefined : TimeStepFromJSON(json['timeStep']),
     };
 }
@@ -97,9 +97,9 @@ export function CreateProjectToJSONTyped(value?: CreateProject | null, ignoreDis
 
     return {
         
-        'bounds': STRectangleToJSON(value['bounds']),
-        'description': value['description'],
         'name': value['name'],
+        'description': value['description'],
+        'bounds': STRectangleToJSON(value['bounds']),
         'timeStep': TimeStepToJSON(value['timeStep']),
     };
 }

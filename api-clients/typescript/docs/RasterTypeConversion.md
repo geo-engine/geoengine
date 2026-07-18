@@ -7,9 +7,9 @@ The `RasterTypeConversion` operator changes the data type of raster pixels.  App
 
 Name | Type
 ------------ | -------------
+`type` | string
 `params` | [RasterTypeConversionParameters](RasterTypeConversionParameters.md)
 `sources` | [SingleRasterSource](SingleRasterSource.md)
-`type` | string
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { RasterTypeConversion } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "params": null,
   "sources": null,
-  "type": null,
 } satisfies RasterTypeConversion
 
 console.log(example)

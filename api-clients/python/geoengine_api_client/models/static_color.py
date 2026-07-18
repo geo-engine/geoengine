@@ -27,9 +27,9 @@ class StaticColor(BaseModel):
     """
     StaticColor
     """ # noqa: E501
-    color: Annotated[List[StrictInt], Field(min_length=4, max_length=4)]
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["color", "type"]
+    color: Annotated[List[StrictInt], Field(min_length=4, max_length=4)]
+    __properties: ClassVar[List[str]] = ["type", "color"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -89,8 +89,8 @@ class StaticColor(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "color": obj.get("color"),
-            "type": obj.get("type")
+            "type": obj.get("type"),
+            "color": obj.get("color")
         })
         return _obj
 

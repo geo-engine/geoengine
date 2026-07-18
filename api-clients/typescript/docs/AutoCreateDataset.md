@@ -6,12 +6,12 @@
 
 Name | Type
 ------------ | -------------
-`datasetDescription` | string
-`datasetName` | string
-`layerName` | string
-`mainFile` | string
-`tags` | Array&lt;string&gt;
 `upload` | string
+`datasetName` | string
+`datasetDescription` | string
+`mainFile` | string
+`layerName` | string
+`tags` | Array&lt;string&gt;
 
 ## Example
 
@@ -20,12 +20,12 @@ import type { AutoCreateDataset } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "datasetDescription": null,
-  "datasetName": null,
-  "layerName": null,
-  "mainFile": null,
-  "tags": null,
   "upload": null,
+  "datasetName": null,
+  "datasetDescription": null,
+  "mainFile": null,
+  "layerName": null,
+  "tags": null,
 } satisfies AutoCreateDataset
 
 console.log(example)

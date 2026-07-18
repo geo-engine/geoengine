@@ -46,6 +46,12 @@ import {
 export interface BandFilter {
     /**
      * 
+     * @type {BandFilterTypeEnum}
+     * @memberof BandFilter
+     */
+    type: BandFilterTypeEnum;
+    /**
+     * 
      * @type {BandFilterParameters}
      * @memberof BandFilter
      */
@@ -56,12 +62,6 @@ export interface BandFilter {
      * @memberof BandFilter
      */
     sources: SingleRasterSource;
-    /**
-     * 
-     * @type {BandFilterTypeEnum}
-     * @memberof BandFilter
-     */
-    type: BandFilterTypeEnum;
 }
 
 
@@ -78,9 +78,9 @@ export type BandFilterTypeEnum = typeof BandFilterTypeEnum[keyof typeof BandFilt
  * Check if a given object implements the BandFilter interface.
  */
 export function instanceOfBandFilter(value: object): value is BandFilter {
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -94,9 +94,9 @@ export function BandFilterFromJSONTyped(json: any, ignoreDiscriminator: boolean)
     }
     return {
         
+        'type': json['type'],
         'params': BandFilterParametersFromJSON(json['params']),
         'sources': SingleRasterSourceFromJSON(json['sources']),
-        'type': json['type'],
     };
 }
 
@@ -111,9 +111,9 @@ export function BandFilterToJSONTyped(value?: BandFilter | null, ignoreDiscrimin
 
     return {
         
+        'type': value['type'],
         'params': BandFilterParametersToJSON(value['params']),
         'sources': SingleRasterSourceToJSON(value['sources']),
-        'type': value['type'],
     };
 }
 

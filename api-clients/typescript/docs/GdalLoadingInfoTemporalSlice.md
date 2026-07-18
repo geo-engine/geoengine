@@ -7,9 +7,9 @@ one temporal slice of the dataset that requires reading from exactly one Gdal da
 
 Name | Type
 ------------ | -------------
-`cacheTtl` | number
-`params` | [GdalDatasetParameters](GdalDatasetParameters.md)
 `time` | [TimeInterval](TimeInterval.md)
+`params` | [GdalDatasetParameters](GdalDatasetParameters.md)
+`cacheTtl` | number
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { GdalLoadingInfoTemporalSlice } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "cacheTtl": null,
-  "params": null,
   "time": null,
+  "params": null,
+  "cacheTtl": null,
 } satisfies GdalLoadingInfoTemporalSlice
 
 console.log(example)

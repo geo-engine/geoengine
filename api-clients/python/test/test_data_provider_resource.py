@@ -35,13 +35,13 @@ class TestDataProviderResource(unittest.TestCase):
         model = DataProviderResource()
         if include_optional:
             return DataProviderResource(
-                id = '',
-                type = 'provider'
+                type = 'provider',
+                id = ''
             )
         else:
             return DataProviderResource(
-                id = '',
                 type = 'provider',
+                id = '',
         )
         """
 

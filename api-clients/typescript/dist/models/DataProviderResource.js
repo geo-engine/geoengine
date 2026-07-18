@@ -28,9 +28,9 @@ exports.DataProviderResourceTypeEnum = {
  * Check if a given object implements the DataProviderResource interface.
  */
 function instanceOfDataProviderResource(value) {
-    if (!('id' in value) || value['id'] === undefined)
-        return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('id' in value) || value['id'] === undefined)
         return false;
     return true;
 }
@@ -42,8 +42,8 @@ function DataProviderResourceFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'id': json['id'],
         'type': json['type'],
+        'id': json['id'],
     };
 }
 function DataProviderResourceToJSON(json) {
@@ -54,7 +54,7 @@ function DataProviderResourceToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'id': value['id'],
         'type': value['type'],
+        'id': value['id'],
     };
 }

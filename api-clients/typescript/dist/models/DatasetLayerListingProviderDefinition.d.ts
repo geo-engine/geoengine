@@ -17,16 +17,10 @@ import type { DatasetLayerListingCollection } from './DatasetLayerListingCollect
 export interface DatasetLayerListingProviderDefinition {
     /**
      *
-     * @type {Array<DatasetLayerListingCollection>}
+     * @type {DatasetLayerListingProviderDefinitionTypeEnum}
      * @memberof DatasetLayerListingProviderDefinition
      */
-    collections: Array<DatasetLayerListingCollection>;
-    /**
-     *
-     * @type {string}
-     * @memberof DatasetLayerListingProviderDefinition
-     */
-    description: string;
+    type: DatasetLayerListingProviderDefinitionTypeEnum;
     /**
      *
      * @type {string}
@@ -41,16 +35,22 @@ export interface DatasetLayerListingProviderDefinition {
     name: string;
     /**
      *
+     * @type {string}
+     * @memberof DatasetLayerListingProviderDefinition
+     */
+    description: string;
+    /**
+     *
      * @type {number}
      * @memberof DatasetLayerListingProviderDefinition
      */
     priority?: number | null;
     /**
      *
-     * @type {DatasetLayerListingProviderDefinitionTypeEnum}
+     * @type {Array<DatasetLayerListingCollection>}
      * @memberof DatasetLayerListingProviderDefinition
      */
-    type: DatasetLayerListingProviderDefinitionTypeEnum;
+    collections: Array<DatasetLayerListingCollection>;
 }
 /**
  * @export

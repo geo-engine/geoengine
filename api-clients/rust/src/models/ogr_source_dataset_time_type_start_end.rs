@@ -12,26 +12,26 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct OgrSourceDatasetTimeTypeStartEnd {
-    #[serde(rename = "endField")]
-    pub end_field: String,
-    #[serde(rename = "endFormat")]
-    pub end_format: Box<models::OgrSourceTimeFormat>,
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "startField")]
     pub start_field: String,
     #[serde(rename = "startFormat")]
     pub start_format: Box<models::OgrSourceTimeFormat>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
+    #[serde(rename = "endField")]
+    pub end_field: String,
+    #[serde(rename = "endFormat")]
+    pub end_format: Box<models::OgrSourceTimeFormat>,
 }
 
 impl OgrSourceDatasetTimeTypeStartEnd {
-    pub fn new(end_field: String, end_format: models::OgrSourceTimeFormat, start_field: String, start_format: models::OgrSourceTimeFormat, r#type: Type) -> OgrSourceDatasetTimeTypeStartEnd {
+    pub fn new(r#type: Type, start_field: String, start_format: models::OgrSourceTimeFormat, end_field: String, end_format: models::OgrSourceTimeFormat) -> OgrSourceDatasetTimeTypeStartEnd {
         OgrSourceDatasetTimeTypeStartEnd {
-            end_field,
-            end_format: Box::new(end_format),
+            r#type,
             start_field,
             start_format: Box::new(start_format),
-            r#type,
+            end_field,
+            end_format: Box::new(end_format),
         }
     }
 }

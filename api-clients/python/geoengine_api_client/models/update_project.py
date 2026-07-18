@@ -30,14 +30,14 @@ class UpdateProject(BaseModel):
     """
     UpdateProject
     """ # noqa: E501
-    bounds: Optional[STRectangle] = None
-    description: Optional[StrictStr] = None
     id: UUID
-    layers: Optional[List[VecUpdate]] = None
     name: Optional[StrictStr] = None
+    description: Optional[StrictStr] = None
+    layers: Optional[List[VecUpdate]] = None
     plots: Optional[List[VecUpdate]] = None
+    bounds: Optional[STRectangle] = None
     time_step: Optional[TimeStep] = Field(default=None, alias="timeStep")
-    __properties: ClassVar[List[str]] = ["bounds", "description", "id", "layers", "name", "plots", "timeStep"]
+    __properties: ClassVar[List[str]] = ["id", "name", "description", "layers", "plots", "bounds", "timeStep"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -78,9 +78,6 @@ class UpdateProject(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of bounds
-        if self.bounds:
-            _dict['bounds'] = self.bounds.to_dict()
         # override the default output from pydantic by calling `to_dict()` of each item in layers (list)
         _items = []
         if self.layers:
@@ -95,13 +92,16 @@ class UpdateProject(BaseModel):
                 if _item_plots:
                     _items.append(_item_plots.to_dict())
             _dict['plots'] = _items
+        # override the default output from pydantic by calling `to_dict()` of bounds
+        if self.bounds:
+            _dict['bounds'] = self.bounds.to_dict()
         # override the default output from pydantic by calling `to_dict()` of time_step
         if self.time_step:
             _dict['timeStep'] = self.time_step.to_dict()
-        # set to None if bounds (nullable) is None
+        # set to None if name (nullable) is None
         # and model_fields_set contains the field
-        if self.bounds is None and "bounds" in self.model_fields_set:
-            _dict['bounds'] = None
+        if self.name is None and "name" in self.model_fields_set:
+            _dict['name'] = None
 
         # set to None if description (nullable) is None
         # and model_fields_set contains the field
@@ -113,15 +113,15 @@ class UpdateProject(BaseModel):
         if self.layers is None and "layers" in self.model_fields_set:
             _dict['layers'] = None
 
-        # set to None if name (nullable) is None
-        # and model_fields_set contains the field
-        if self.name is None and "name" in self.model_fields_set:
-            _dict['name'] = None
-
         # set to None if plots (nullable) is None
         # and model_fields_set contains the field
         if self.plots is None and "plots" in self.model_fields_set:
             _dict['plots'] = None
+
+        # set to None if bounds (nullable) is None
+        # and model_fields_set contains the field
+        if self.bounds is None and "bounds" in self.model_fields_set:
+            _dict['bounds'] = None
 
         # set to None if time_step (nullable) is None
         # and model_fields_set contains the field
@@ -140,12 +140,12 @@ class UpdateProject(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "bounds": STRectangle.from_dict(obj["bounds"]) if obj.get("bounds") is not None else None,
-            "description": obj.get("description"),
             "id": obj.get("id"),
-            "layers": [VecUpdate.from_dict(_item) for _item in obj["layers"]] if obj.get("layers") is not None else None,
             "name": obj.get("name"),
+            "description": obj.get("description"),
+            "layers": [VecUpdate.from_dict(_item) for _item in obj["layers"]] if obj.get("layers") is not None else None,
             "plots": [VecUpdate.from_dict(_item) for _item in obj["plots"]] if obj.get("plots") is not None else None,
+            "bounds": STRectangle.from_dict(obj["bounds"]) if obj.get("bounds") is not None else None,
             "timeStep": TimeStep.from_dict(obj["timeStep"]) if obj.get("timeStep") is not None else None
         })
         return _obj

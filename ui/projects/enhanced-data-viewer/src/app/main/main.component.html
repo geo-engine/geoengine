@@ -161,6 +161,31 @@
                         ></geoengine-ol-raster-layer>
                     }
                 }
+                @let mapTileLayer = landCover.value();
+                @let currentSessionToken = sessionToken();
+                @let currentSpatialReference = spatialReference();
+                @let mapTileDate = currentTime();
+                @if (mapTileLayer && currentSessionToken && currentSpatialReference && mapTileDate) {
+                    <geoengine-ol-ogc-api-map-tile-layer
+                        [layerId]="0"
+                        [dataConnectorId]="mapTileLayer.dataConnectorId"
+                        [dataLayerId]="mapTileLayer.layerId"
+                        [sessionToken]="currentSessionToken"
+                        [spatialReference]="currentSpatialReference"
+                        [time]="mapTileDate"
+                        [isVisible]="testIsVisible()"
+                    ></geoengine-ol-ogc-api-map-tile-layer>
+                    <geoengine-ol-ogc-api-map-tile-layer
+                        [layerId]="0"
+                        [dataConnectorId]="mapTileLayer.dataConnectorId"
+                        [dataLayerId]="mapTileLayer.layerId"
+                        [sessionToken]="currentSessionToken"
+                        [spatialReference]="currentSpatialReference"
+                        [time]="mapTileDate"
+                        [isVisible]="testIsVisible()"
+                        [debug]="true"
+                    ></geoengine-ol-ogc-api-map-tile-layer>
+                }
             }
         </geoengine-map-container>
 

@@ -17,16 +17,16 @@ import type { CollectionType } from './CollectionType';
 export interface GeoJson {
     /**
      *
-     * @type {Array<any>}
-     * @memberof GeoJson
-     */
-    features: Array<any>;
-    /**
-     *
      * @type {CollectionType}
      * @memberof GeoJson
      */
     type: CollectionType;
+    /**
+     *
+     * @type {Array<any>}
+     * @memberof GeoJson
+     */
+    features: Array<any>;
 }
 /**
  * Check if a given object implements the GeoJson interface.

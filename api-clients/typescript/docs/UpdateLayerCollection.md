@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`description` | string
 `name` | string
+`description` | string
 `properties` | Array&lt;Array&lt;string&gt;&gt;
 
 ## Example
@@ -17,8 +17,8 @@ import type { UpdateLayerCollection } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "description": A description for an example collection,
   "name": Example Collection,
+  "description": A description for an example collection,
   "properties": null,
 } satisfies UpdateLayerCollection
 

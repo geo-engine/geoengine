@@ -36,28 +36,28 @@ class TestRasterToDatasetQueryRectangle(unittest.TestCase):
         if include_optional:
             return RasterToDatasetQueryRectangle(
                 spatial_bounds = geoengine_api_client.models.spatial_partition2_d.SpatialPartition2D(
-                    lower_right_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
+                    upper_left_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                         x = 1.337, 
                         y = 1.337, ), 
-                    upper_left_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
+                    lower_right_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                         x = 1.337, 
                         y = 1.337, ), ),
                 time_interval = geoengine_api_client.models.time_interval.TimeInterval(
-                    end = 56, 
-                    start = 56, )
+                    start = 56, 
+                    end = 56, )
             )
         else:
             return RasterToDatasetQueryRectangle(
                 spatial_bounds = geoengine_api_client.models.spatial_partition2_d.SpatialPartition2D(
-                    lower_right_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
+                    upper_left_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                         x = 1.337, 
                         y = 1.337, ), 
-                    upper_left_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
+                    lower_right_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                         x = 1.337, 
                         y = 1.337, ), ),
                 time_interval = geoengine_api_client.models.time_interval.TimeInterval(
-                    end = 56, 
-                    start = 56, ),
+                    start = 56, 
+                    end = 56, ),
         )
         """
 

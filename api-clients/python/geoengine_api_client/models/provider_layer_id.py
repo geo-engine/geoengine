@@ -27,9 +27,9 @@ class ProviderLayerId(BaseModel):
     """
     ProviderLayerId
     """ # noqa: E501
-    layer_id: StrictStr = Field(alias="layerId")
     provider_id: UUID = Field(alias="providerId")
-    __properties: ClassVar[List[str]] = ["layerId", "providerId"]
+    layer_id: StrictStr = Field(alias="layerId")
+    __properties: ClassVar[List[str]] = ["providerId", "layerId"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -82,8 +82,8 @@ class ProviderLayerId(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "layerId": obj.get("layerId"),
-            "providerId": obj.get("providerId")
+            "providerId": obj.get("providerId"),
+            "layerId": obj.get("layerId")
         })
         return _obj
 

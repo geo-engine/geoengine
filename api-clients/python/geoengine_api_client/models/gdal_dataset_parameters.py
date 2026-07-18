@@ -30,18 +30,18 @@ class GdalDatasetParameters(BaseModel):
     """
     Parameters for loading data using Gdal
     """ # noqa: E501
-    allow_alphaband_as_mask: Optional[StrictBool] = Field(default=None, alias="allowAlphabandAsMask")
-    file_not_found_handling: FileNotFoundHandling = Field(alias="fileNotFoundHandling")
     file_path: StrictStr = Field(alias="filePath")
-    gdal_config_options: Optional[List[Annotated[List[StrictStr], Field(min_length=2, max_length=2)]]] = Field(default=None, alias="gdalConfigOptions")
-    gdal_open_options: Optional[List[StrictStr]] = Field(default=None, alias="gdalOpenOptions")
+    rasterband_channel: Annotated[int, Field(strict=True, ge=0)] = Field(alias="rasterbandChannel")
     geo_transform: GeoTransform = Field(alias="geoTransform")
+    width: Annotated[int, Field(strict=True, ge=0)]
     height: Annotated[int, Field(strict=True, ge=0)]
+    file_not_found_handling: FileNotFoundHandling = Field(alias="fileNotFoundHandling")
     no_data_value: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, alias="noDataValue")
     properties_mapping: Optional[List[GdalMetadataMapping]] = Field(default=None, alias="propertiesMapping")
-    rasterband_channel: Annotated[int, Field(strict=True, ge=0)] = Field(alias="rasterbandChannel")
-    width: Annotated[int, Field(strict=True, ge=0)]
-    __properties: ClassVar[List[str]] = ["allowAlphabandAsMask", "fileNotFoundHandling", "filePath", "gdalConfigOptions", "gdalOpenOptions", "geoTransform", "height", "noDataValue", "propertiesMapping", "rasterbandChannel", "width"]
+    gdal_open_options: Optional[List[StrictStr]] = Field(default=None, alias="gdalOpenOptions")
+    gdal_config_options: Optional[List[Annotated[List[StrictStr], Field(min_length=2, max_length=2)]]] = Field(default=None, alias="gdalConfigOptions")
+    allow_alphaband_as_mask: Optional[StrictBool] = Field(default=None, alias="allowAlphabandAsMask")
+    __properties: ClassVar[List[str]] = ["filePath", "rasterbandChannel", "geoTransform", "width", "height", "fileNotFoundHandling", "noDataValue", "propertiesMapping", "gdalOpenOptions", "gdalConfigOptions", "allowAlphabandAsMask"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -92,16 +92,6 @@ class GdalDatasetParameters(BaseModel):
                 if _item_properties_mapping:
                     _items.append(_item_properties_mapping.to_dict())
             _dict['propertiesMapping'] = _items
-        # set to None if gdal_config_options (nullable) is None
-        # and model_fields_set contains the field
-        if self.gdal_config_options is None and "gdal_config_options" in self.model_fields_set:
-            _dict['gdalConfigOptions'] = None
-
-        # set to None if gdal_open_options (nullable) is None
-        # and model_fields_set contains the field
-        if self.gdal_open_options is None and "gdal_open_options" in self.model_fields_set:
-            _dict['gdalOpenOptions'] = None
-
         # set to None if no_data_value (nullable) is None
         # and model_fields_set contains the field
         if self.no_data_value is None and "no_data_value" in self.model_fields_set:
@@ -111,6 +101,16 @@ class GdalDatasetParameters(BaseModel):
         # and model_fields_set contains the field
         if self.properties_mapping is None and "properties_mapping" in self.model_fields_set:
             _dict['propertiesMapping'] = None
+
+        # set to None if gdal_open_options (nullable) is None
+        # and model_fields_set contains the field
+        if self.gdal_open_options is None and "gdal_open_options" in self.model_fields_set:
+            _dict['gdalOpenOptions'] = None
+
+        # set to None if gdal_config_options (nullable) is None
+        # and model_fields_set contains the field
+        if self.gdal_config_options is None and "gdal_config_options" in self.model_fields_set:
+            _dict['gdalConfigOptions'] = None
 
         return _dict
 
@@ -124,17 +124,17 @@ class GdalDatasetParameters(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "allowAlphabandAsMask": obj.get("allowAlphabandAsMask"),
-            "fileNotFoundHandling": obj.get("fileNotFoundHandling"),
             "filePath": obj.get("filePath"),
-            "gdalConfigOptions": obj.get("gdalConfigOptions"),
-            "gdalOpenOptions": obj.get("gdalOpenOptions"),
+            "rasterbandChannel": obj.get("rasterbandChannel"),
             "geoTransform": GeoTransform.from_dict(obj["geoTransform"]) if obj.get("geoTransform") is not None else None,
+            "width": obj.get("width"),
             "height": obj.get("height"),
+            "fileNotFoundHandling": obj.get("fileNotFoundHandling"),
             "noDataValue": obj.get("noDataValue"),
             "propertiesMapping": [GdalMetadataMapping.from_dict(_item) for _item in obj["propertiesMapping"]] if obj.get("propertiesMapping") is not None else None,
-            "rasterbandChannel": obj.get("rasterbandChannel"),
-            "width": obj.get("width")
+            "gdalOpenOptions": obj.get("gdalOpenOptions"),
+            "gdalConfigOptions": obj.get("gdalConfigOptions"),
+            "allowAlphabandAsMask": obj.get("allowAlphabandAsMask")
         })
         return _obj
 

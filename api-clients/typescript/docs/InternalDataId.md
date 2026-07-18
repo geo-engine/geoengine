@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`datasetId` | string
 `type` | string
+`datasetId` | string
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { InternalDataId } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "datasetId": null,
   "type": null,
+  "datasetId": null,
 } satisfies InternalDataId
 
 console.log(example)

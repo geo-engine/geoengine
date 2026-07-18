@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DatasetResource {
-    #[serde(rename = "id")]
-    pub id: String,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "id")]
+    pub id: String,
 }
 
 impl DatasetResource {
-    pub fn new(id: String, r#type: Type) -> DatasetResource {
+    pub fn new(r#type: Type, id: String) -> DatasetResource {
         DatasetResource {
-            id,
             r#type,
+            id,
         }
     }
 }

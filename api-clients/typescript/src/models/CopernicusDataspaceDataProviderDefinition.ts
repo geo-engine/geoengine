@@ -20,16 +20,22 @@ import { mapValues } from '../runtime';
 export interface CopernicusDataspaceDataProviderDefinition {
     /**
      * 
+     * @type {CopernicusDataspaceDataProviderDefinitionTypeEnum}
+     * @memberof CopernicusDataspaceDataProviderDefinition
+     */
+    type: CopernicusDataspaceDataProviderDefinitionTypeEnum;
+    /**
+     * 
+     * @type {string}
+     * @memberof CopernicusDataspaceDataProviderDefinition
+     */
+    name: string;
+    /**
+     * 
      * @type {string}
      * @memberof CopernicusDataspaceDataProviderDefinition
      */
     description: string;
-    /**
-     * 
-     * @type {Array<Array<string>>}
-     * @memberof CopernicusDataspaceDataProviderDefinition
-     */
-    gdalConfig: Array<Array<string>>;
     /**
      * 
      * @type {string}
@@ -41,13 +47,13 @@ export interface CopernicusDataspaceDataProviderDefinition {
      * @type {string}
      * @memberof CopernicusDataspaceDataProviderDefinition
      */
-    name: string;
+    stacUrl: string;
     /**
      * 
-     * @type {number}
+     * @type {string}
      * @memberof CopernicusDataspaceDataProviderDefinition
      */
-    priority?: number | null;
+    s3Url: string;
     /**
      * 
      * @type {string}
@@ -62,22 +68,16 @@ export interface CopernicusDataspaceDataProviderDefinition {
     s3SecretKey: string;
     /**
      * 
-     * @type {string}
+     * @type {Array<Array<string>>}
      * @memberof CopernicusDataspaceDataProviderDefinition
      */
-    s3Url: string;
+    gdalConfig: Array<Array<string>>;
     /**
      * 
-     * @type {string}
+     * @type {number}
      * @memberof CopernicusDataspaceDataProviderDefinition
      */
-    stacUrl: string;
-    /**
-     * 
-     * @type {CopernicusDataspaceDataProviderDefinitionTypeEnum}
-     * @memberof CopernicusDataspaceDataProviderDefinition
-     */
-    type: CopernicusDataspaceDataProviderDefinitionTypeEnum;
+    priority?: number | null;
 }
 
 
@@ -94,15 +94,15 @@ export type CopernicusDataspaceDataProviderDefinitionTypeEnum = typeof Copernicu
  * Check if a given object implements the CopernicusDataspaceDataProviderDefinition interface.
  */
 export function instanceOfCopernicusDataspaceDataProviderDefinition(value: object): value is CopernicusDataspaceDataProviderDefinition {
-    if (!('description' in value) || value['description'] === undefined) return false;
-    if (!('gdalConfig' in value) || value['gdalConfig'] === undefined) return false;
-    if (!('id' in value) || value['id'] === undefined) return false;
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
+    if (!('id' in value) || value['id'] === undefined) return false;
+    if (!('stacUrl' in value) || value['stacUrl'] === undefined) return false;
+    if (!('s3Url' in value) || value['s3Url'] === undefined) return false;
     if (!('s3AccessKey' in value) || value['s3AccessKey'] === undefined) return false;
     if (!('s3SecretKey' in value) || value['s3SecretKey'] === undefined) return false;
-    if (!('s3Url' in value) || value['s3Url'] === undefined) return false;
-    if (!('stacUrl' in value) || value['stacUrl'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('gdalConfig' in value) || value['gdalConfig'] === undefined) return false;
     return true;
 }
 
@@ -116,16 +116,16 @@ export function CopernicusDataspaceDataProviderDefinitionFromJSONTyped(json: any
     }
     return {
         
-        'description': json['description'],
-        'gdalConfig': json['gdalConfig'],
-        'id': json['id'],
+        'type': json['type'],
         'name': json['name'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'description': json['description'],
+        'id': json['id'],
+        'stacUrl': json['stacUrl'],
+        's3Url': json['s3Url'],
         's3AccessKey': json['s3AccessKey'],
         's3SecretKey': json['s3SecretKey'],
-        's3Url': json['s3Url'],
-        'stacUrl': json['stacUrl'],
-        'type': json['type'],
+        'gdalConfig': json['gdalConfig'],
+        'priority': json['priority'] == null ? undefined : json['priority'],
     };
 }
 
@@ -140,16 +140,16 @@ export function CopernicusDataspaceDataProviderDefinitionToJSONTyped(value?: Cop
 
     return {
         
-        'description': value['description'],
-        'gdalConfig': value['gdalConfig'],
-        'id': value['id'],
+        'type': value['type'],
         'name': value['name'],
-        'priority': value['priority'],
+        'description': value['description'],
+        'id': value['id'],
+        'stacUrl': value['stacUrl'],
+        's3Url': value['s3Url'],
         's3AccessKey': value['s3AccessKey'],
         's3SecretKey': value['s3SecretKey'],
-        's3Url': value['s3Url'],
-        'stacUrl': value['stacUrl'],
-        'type': value['type'],
+        'gdalConfig': value['gdalConfig'],
+        'priority': value['priority'],
     };
 }
 

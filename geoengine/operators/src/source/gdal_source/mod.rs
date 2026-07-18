@@ -38,10 +38,8 @@ pub use loading_info::{
     GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
 };
-use num::{
-    FromPrimitive,
-    integer::{div_ceil, div_floor},
-};
+use num::FromPrimitive;
+use num::integer::div_floor;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
@@ -510,7 +508,7 @@ fn overview_level_spatial_grid(
                 source_spatial_grid.grid_bounds.y_min(),
                 overview_level as isize,
             ),
-            div_ceil(
+            div_floor(
                 source_spatial_grid.grid_bounds.y_max(),
                 overview_level as isize,
             ),
@@ -518,7 +516,7 @@ fn overview_level_spatial_grid(
                 source_spatial_grid.grid_bounds.x_min(),
                 overview_level as isize,
             ),
-            div_ceil(
+            div_floor(
                 source_spatial_grid.grid_bounds.x_max(),
                 overview_level as isize,
             ),
@@ -824,18 +822,17 @@ mod tests {
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
         GdalProcessPoolAccess, GdalSourceTimePlaceholder, TimeReference, WorkerConfig,
     };
-    use crate::util::{Result, gdal::add_ndvi_dataset};
-    use geoengine_datatypes::primitives::AxisAlignedRectangle;
-    use geoengine_datatypes::{
-        hashmap,
-        primitives::{DateTimeParseFormat, SpatialPartition2D, TimeInstance},
-        raster::{
-            BoundedGrid, EmptyGrid2D, GridBounds, GridIdx2D, GridShape2D, GridSize,
-            RasterPropertiesEntryType, RasterPropertiesKey, SpatialGridDefinition, TileInformation,
-            TilesEqualIgnoringCacheHint, TilingStrategy,
-        },
-        util::{gdal::hide_gdal_errors, test::TestDefault},
+    use crate::util::Result;
+    use crate::util::gdal::add_ndvi_dataset;
+    use geoengine_datatypes::hashmap;
+    use geoengine_datatypes::primitives::DateTimeParseFormat;
+    use geoengine_datatypes::primitives::{AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, TimeInstance};
+    use geoengine_datatypes::raster::{
+        BoundedGrid, EmptyGrid2D, GridBoundingBox, GridBounds, GridIdx2D, GridShape2D, GridSize,
+        RasterPropertiesEntryType, RasterPropertiesKey, SpatialGridDefinition, TileInformation,
+        TilesEqualIgnoringCacheHint, TilingStrategy,
     };
+    use geoengine_datatypes::util::{gdal::hide_gdal_errors, test::TestDefault};
 
     async fn query_gdal_source(
         exe_ctx: &MockExecutionContext,
@@ -1457,5 +1454,46 @@ mod tests {
         );
 
         assert!(tile.unwrap().tiles_equal_ignoring_cache_hint(&expected));
+    }
+
+    #[test]
+    fn it_computes_spatial_grids_for_overviews() {
+        let spatial_grid_definition = SpatialGridDefinition::new(
+            GeoTransform::new(Coordinate2D::new(0., 0.), 0.1, -0.1),
+            GridBoundingBox::new([-900, -1800], [899, 1799]).unwrap(),
+        );
+
+        let spatial_grid_definition_2x =
+            overview_level_spatial_grid(spatial_grid_definition, 2).unwrap();
+        let expected_spatial_grid_definition_2x = SpatialGridDefinition::new(
+            GeoTransform::new(Coordinate2D::new(0., 0.), 0.2, -0.2),
+            GridBoundingBox::new([-450, -900], [449, 899]).unwrap(),
+        );
+        assert_eq!(
+            spatial_grid_definition_2x,
+            expected_spatial_grid_definition_2x
+        );
+
+        let spatial_grid_definition_4x =
+            overview_level_spatial_grid(spatial_grid_definition, 4).unwrap();
+        let expected_spatial_grid_definition_4x = SpatialGridDefinition::new(
+            GeoTransform::new(Coordinate2D::new(0., 0.), 0.4, -0.4),
+            GridBoundingBox::new([-225, -450], [224, 449]).unwrap(),
+        );
+        assert_eq!(
+            spatial_grid_definition_4x,
+            expected_spatial_grid_definition_4x
+        );
+
+        let spatial_grid_definition_8x =
+            overview_level_spatial_grid(spatial_grid_definition, 8).unwrap();
+        let expected_spatial_grid_definition_8x = SpatialGridDefinition::new(
+            GeoTransform::new(Coordinate2D::new(0., 0.), 0.8, -0.8),
+            GridBoundingBox::new([-113, -225], [112, 224]).unwrap(),
+        );
+        assert_eq!(
+            spatial_grid_definition_8x,
+            expected_spatial_grid_definition_8x
+        );
     }
 }

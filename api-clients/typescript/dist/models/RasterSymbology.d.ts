@@ -17,6 +17,12 @@ import type { RasterColorizer } from './RasterColorizer';
 export interface RasterSymbology {
     /**
      *
+     * @type {RasterSymbologyTypeEnum}
+     * @memberof RasterSymbology
+     */
+    type: RasterSymbologyTypeEnum;
+    /**
+     *
      * @type {number}
      * @memberof RasterSymbology
      */
@@ -27,12 +33,6 @@ export interface RasterSymbology {
      * @memberof RasterSymbology
      */
     rasterColorizer: RasterColorizer;
-    /**
-     *
-     * @type {RasterSymbologyTypeEnum}
-     * @memberof RasterSymbology
-     */
-    type: RasterSymbologyTypeEnum;
 }
 /**
  * @export

@@ -16,19 +16,19 @@ pub struct ServerInfo {
     pub build_date: String,
     #[serde(rename = "commitHash")]
     pub commit_hash: String,
-    #[serde(rename = "features")]
-    pub features: String,
     #[serde(rename = "version")]
     pub version: String,
+    #[serde(rename = "features")]
+    pub features: String,
 }
 
 impl ServerInfo {
-    pub fn new(build_date: String, commit_hash: String, features: String, version: String) -> ServerInfo {
+    pub fn new(build_date: String, commit_hash: String, version: String, features: String) -> ServerInfo {
         ServerInfo {
             build_date,
             commit_hash,
-            features,
             version,
+            features,
         }
     }
 }

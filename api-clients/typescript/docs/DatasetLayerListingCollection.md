@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`description` | string
 `name` | string
+`description` | string
 `tags` | Array&lt;string&gt;
 
 ## Example
@@ -17,8 +17,8 @@ import type { DatasetLayerListingCollection } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "description": null,
   "name": null,
+  "description": null,
   "tags": null,
 } satisfies DatasetLayerListingCollection
 

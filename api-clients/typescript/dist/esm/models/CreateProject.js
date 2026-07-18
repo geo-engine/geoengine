@@ -16,11 +16,11 @@ import { STRectangleFromJSON, STRectangleToJSON, } from './STRectangle';
  * Check if a given object implements the CreateProject interface.
  */
 export function instanceOfCreateProject(value) {
-    if (!('bounds' in value) || value['bounds'] === undefined)
+    if (!('name' in value) || value['name'] === undefined)
         return false;
     if (!('description' in value) || value['description'] === undefined)
         return false;
-    if (!('name' in value) || value['name'] === undefined)
+    if (!('bounds' in value) || value['bounds'] === undefined)
         return false;
     return true;
 }
@@ -32,9 +32,9 @@ export function CreateProjectFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'bounds': STRectangleFromJSON(json['bounds']),
-        'description': json['description'],
         'name': json['name'],
+        'description': json['description'],
+        'bounds': STRectangleFromJSON(json['bounds']),
         'timeStep': json['timeStep'] == null ? undefined : TimeStepFromJSON(json['timeStep']),
     };
 }
@@ -46,9 +46,9 @@ export function CreateProjectToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'bounds': STRectangleToJSON(value['bounds']),
-        'description': value['description'],
         'name': value['name'],
+        'description': value['description'],
+        'bounds': STRectangleToJSON(value['bounds']),
         'timeStep': TimeStepToJSON(value['timeStep']),
     };
 }

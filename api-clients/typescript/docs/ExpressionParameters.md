@@ -8,9 +8,9 @@
 Name | Type
 ------------ | -------------
 `expression` | string
-`mapNoData` | boolean
-`outputBand` | [RasterBandDescriptor](RasterBandDescriptor.md)
 `outputType` | [RasterDataType](RasterDataType.md)
+`outputBand` | [RasterBandDescriptor](RasterBandDescriptor.md)
+`mapNoData` | boolean
 
 ## Example
 
@@ -20,9 +20,9 @@ import type { ExpressionParameters } from '@geoengine/api-client'
 // TODO: Update the object below with actual values
 const example = {
   "expression": null,
-  "mapNoData": null,
-  "outputBand": null,
   "outputType": null,
+  "outputBand": null,
+  "mapNoData": null,
 } satisfies ExpressionParameters
 
 console.log(example)

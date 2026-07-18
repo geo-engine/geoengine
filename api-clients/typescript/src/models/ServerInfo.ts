@@ -35,13 +35,13 @@ export interface ServerInfo {
      * @type {string}
      * @memberof ServerInfo
      */
-    features: string;
+    version: string;
     /**
      * 
      * @type {string}
      * @memberof ServerInfo
      */
-    version: string;
+    features: string;
 }
 
 /**
@@ -50,8 +50,8 @@ export interface ServerInfo {
 export function instanceOfServerInfo(value: object): value is ServerInfo {
     if (!('buildDate' in value) || value['buildDate'] === undefined) return false;
     if (!('commitHash' in value) || value['commitHash'] === undefined) return false;
-    if (!('features' in value) || value['features'] === undefined) return false;
     if (!('version' in value) || value['version'] === undefined) return false;
+    if (!('features' in value) || value['features'] === undefined) return false;
     return true;
 }
 
@@ -67,8 +67,8 @@ export function ServerInfoFromJSONTyped(json: any, ignoreDiscriminator: boolean)
         
         'buildDate': json['buildDate'],
         'commitHash': json['commitHash'],
-        'features': json['features'],
         'version': json['version'],
+        'features': json['features'],
     };
 }
 
@@ -85,8 +85,8 @@ export function ServerInfoToJSONTyped(value?: ServerInfo | null, ignoreDiscrimin
         
         'buildDate': value['buildDate'],
         'commitHash': value['commitHash'],
-        'features': value['features'],
         'version': value['version'],
+        'features': value['features'],
     };
 }
 

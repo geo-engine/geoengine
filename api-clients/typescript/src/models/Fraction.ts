@@ -13,17 +13,11 @@
 
 import { mapValues } from '../runtime';
 /**
- * Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).
+ * Scaling factor in x/y direction.
  * @export
  * @interface Fraction
  */
 export interface Fraction {
-    /**
-     * 
-     * @type {FractionTypeEnum}
-     * @memberof Fraction
-     */
-    type: FractionTypeEnum;
     /**
      * 
      * @type {number}
@@ -36,6 +30,12 @@ export interface Fraction {
      * @memberof Fraction
      */
     y: number;
+    /**
+     * 
+     * @type {FractionTypeEnum}
+     * @memberof Fraction
+     */
+    type: FractionTypeEnum;
 }
 
 
@@ -52,9 +52,9 @@ export type FractionTypeEnum = typeof FractionTypeEnum[keyof typeof FractionType
  * Check if a given object implements the Fraction interface.
  */
 export function instanceOfFraction(value: object): value is Fraction {
-    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('x' in value) || value['x'] === undefined) return false;
     if (!('y' in value) || value['y'] === undefined) return false;
+    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -68,9 +68,9 @@ export function FractionFromJSONTyped(json: any, ignoreDiscriminator: boolean): 
     }
     return {
         
-        'type': json['type'],
         'x': json['x'],
         'y': json['y'],
+        'type': json['type'],
     };
 }
 
@@ -85,9 +85,9 @@ export function FractionToJSONTyped(value?: Fraction | null, ignoreDiscriminator
 
     return {
         
-        'type': value['type'],
         'x': value['x'],
         'y': value['y'],
+        'type': value['type'],
     };
 }
 

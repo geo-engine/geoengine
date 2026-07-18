@@ -178,8 +178,8 @@ impl TryFrom<RasterPropertiesEntry> for f64 {
 impl Display for RasterPropertiesKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.domain {
-            Some(prefix) => write!(f, "{}.{}", prefix, &self.key),
-            None => write!(f, "{}", &self.key),
+            Some(prefix) => write!(f, "{}.{}", prefix, self.key),
+            None => write!(f, "{}", self.key),
         }
     }
 }

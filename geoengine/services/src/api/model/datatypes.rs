@@ -1409,7 +1409,7 @@ impl core::fmt::Debug for TimeInterval {
             f,
             "TimeInterval [{}, {})",
             self.start.inner(),
-            &self.end.inner()
+            self.end.inner()
         )
     }
 }

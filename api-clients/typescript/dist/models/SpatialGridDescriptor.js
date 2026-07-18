@@ -23,9 +23,9 @@ const SpatialGridDescriptorState_1 = require("./SpatialGridDescriptorState");
  * Check if a given object implements the SpatialGridDescriptor interface.
  */
 function instanceOfSpatialGridDescriptor(value) {
-    if (!('descriptor' in value) || value['descriptor'] === undefined)
-        return false;
     if (!('spatialGrid' in value) || value['spatialGrid'] === undefined)
+        return false;
+    if (!('descriptor' in value) || value['descriptor'] === undefined)
         return false;
     return true;
 }
@@ -37,8 +37,8 @@ function SpatialGridDescriptorFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'descriptor': (0, SpatialGridDescriptorState_1.SpatialGridDescriptorStateFromJSON)(json['descriptor']),
         'spatialGrid': (0, SpatialGridDefinition_1.SpatialGridDefinitionFromJSON)(json['spatialGrid']),
+        'descriptor': (0, SpatialGridDescriptorState_1.SpatialGridDescriptorStateFromJSON)(json['descriptor']),
     };
 }
 function SpatialGridDescriptorToJSON(json) {
@@ -49,7 +49,7 @@ function SpatialGridDescriptorToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'descriptor': (0, SpatialGridDescriptorState_1.SpatialGridDescriptorStateToJSON)(value['descriptor']),
         'spatialGrid': (0, SpatialGridDefinition_1.SpatialGridDefinitionToJSON)(value['spatialGrid']),
+        'descriptor': (0, SpatialGridDescriptorState_1.SpatialGridDescriptorStateToJSON)(value['descriptor']),
     };
 }

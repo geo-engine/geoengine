@@ -12,19 +12,19 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AuthCodeResponse {
-    #[serde(rename = "code")]
-    pub code: String,
     #[serde(rename = "sessionState")]
     pub session_state: String,
+    #[serde(rename = "code")]
+    pub code: String,
     #[serde(rename = "state")]
     pub state: String,
 }
 
 impl AuthCodeResponse {
-    pub fn new(code: String, session_state: String, state: String) -> AuthCodeResponse {
+    pub fn new(session_state: String, code: String, state: String) -> AuthCodeResponse {
         AuthCodeResponse {
-            code,
             session_state,
+            code,
             state,
         }
     }

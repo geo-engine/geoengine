@@ -152,7 +152,7 @@ class MlModelTests(unittest.TestCase):
                     ),
                 )
             self.assertEqual(
-                str(exception.exception), "Input shape bands=2 x=1 y=1 and metadata bands=4 x=1 y=1 not equal!"
+                str(exception.exception), "Input shape y=1 x=1 bands=2 and metadata y=1 x=1 bands=4 not equal!"
             )
 
             with self.assertRaises(ge.InputException) as exception:

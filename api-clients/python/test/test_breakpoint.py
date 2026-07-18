@@ -35,17 +35,17 @@ class TestBreakpoint(unittest.TestCase):
         model = Breakpoint()
         if include_optional:
             return Breakpoint(
+                value = 1.337,
                 color = [
                     56
-                    ],
-                value = 1.337
+                    ]
             )
         else:
             return Breakpoint(
+                value = 1.337,
                 color = [
                     56
                     ],
-                value = 1.337,
         )
         """
 

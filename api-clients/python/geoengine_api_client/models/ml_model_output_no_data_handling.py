@@ -27,9 +27,9 @@ class MlModelOutputNoDataHandling(BaseModel):
     """
     MlModelOutputNoDataHandling
     """ # noqa: E501
-    no_data_value: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, alias="noDataValue")
     variant: MlModelOutputNoDataHandlingVariant
-    __properties: ClassVar[List[str]] = ["noDataValue", "variant"]
+    no_data_value: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, alias="noDataValue")
+    __properties: ClassVar[List[str]] = ["variant", "noDataValue"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -87,8 +87,8 @@ class MlModelOutputNoDataHandling(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "noDataValue": obj.get("noDataValue"),
-            "variant": obj.get("variant")
+            "variant": obj.get("variant"),
+            "noDataValue": obj.get("noDataValue")
         })
         return _obj
 

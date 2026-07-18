@@ -166,6 +166,18 @@ impl From<&Coordinate2D> for geo::Coord<f64> {
     }
 }
 
+impl From<Coordinate2D> for geojson::Position {
+    fn from(coordinate: Coordinate2D) -> geojson::Position {
+        geojson::Position::from(vec![coordinate.x, coordinate.y])
+    }
+}
+
+impl From<&Coordinate2D> for geojson::Position {
+    fn from(coordinate: &Coordinate2D) -> geojson::Position {
+        geojson::Position::from(vec![coordinate.x, coordinate.y])
+    }
+}
+
 impl From<geo::Coord<f64>> for Coordinate2D {
     fn from(coordinate: geo::Coord<f64>) -> Coordinate2D {
         Coordinate2D {

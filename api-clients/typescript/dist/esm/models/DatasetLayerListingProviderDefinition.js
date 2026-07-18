@@ -21,15 +21,15 @@ export const DatasetLayerListingProviderDefinitionTypeEnum = {
  * Check if a given object implements the DatasetLayerListingProviderDefinition interface.
  */
 export function instanceOfDatasetLayerListingProviderDefinition(value) {
-    if (!('collections' in value) || value['collections'] === undefined)
-        return false;
-    if (!('description' in value) || value['description'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('description' in value) || value['description'] === undefined)
+        return false;
+    if (!('collections' in value) || value['collections'] === undefined)
         return false;
     return true;
 }
@@ -41,12 +41,12 @@ export function DatasetLayerListingProviderDefinitionFromJSONTyped(json, ignoreD
         return json;
     }
     return {
-        'collections': (json['collections'].map(DatasetLayerListingCollectionFromJSON)),
-        'description': json['description'],
+        'type': json['type'],
         'id': json['id'],
         'name': json['name'],
+        'description': json['description'],
         'priority': json['priority'] == null ? undefined : json['priority'],
-        'type': json['type'],
+        'collections': (json['collections'].map(DatasetLayerListingCollectionFromJSON)),
     };
 }
 export function DatasetLayerListingProviderDefinitionToJSON(json) {
@@ -57,11 +57,11 @@ export function DatasetLayerListingProviderDefinitionToJSONTyped(value, ignoreDi
         return value;
     }
     return {
-        'collections': (value['collections'].map(DatasetLayerListingCollectionToJSON)),
-        'description': value['description'],
+        'type': value['type'],
         'id': value['id'],
         'name': value['name'],
+        'description': value['description'],
         'priority': value['priority'],
-        'type': value['type'],
+        'collections': (value['collections'].map(DatasetLayerListingCollectionToJSON)),
     };
 }

@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`accessKey` | string
 `endpoint` | string
+`accessKey` | string
 `secretKey` | string
 
 ## Example
@@ -17,8 +17,8 @@ import type { StacProviderS3Config } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "accessKey": null,
   "endpoint": null,
+  "accessKey": null,
   "secretKey": null,
 } satisfies StacProviderS3Config
 

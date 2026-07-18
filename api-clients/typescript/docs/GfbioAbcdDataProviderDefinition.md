@@ -6,12 +6,12 @@
 
 Name | Type
 ------------ | -------------
-`cacheTtl` | number
-`dbConfig` | [DatabaseConnectionConfig](DatabaseConnectionConfig.md)
-`description` | string
-`name` | string
-`priority` | number
 `type` | string
+`name` | string
+`description` | string
+`priority` | number
+`dbConfig` | [DatabaseConnectionConfig](DatabaseConnectionConfig.md)
+`cacheTtl` | number
 
 ## Example
 
@@ -20,12 +20,12 @@ import type { GfbioAbcdDataProviderDefinition } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "cacheTtl": null,
-  "dbConfig": null,
-  "description": null,
-  "name": null,
-  "priority": null,
   "type": null,
+  "name": null,
+  "description": null,
+  "priority": null,
+  "dbConfig": null,
+  "cacheTtl": null,
 } satisfies GfbioAbcdDataProviderDefinition
 
 console.log(example)

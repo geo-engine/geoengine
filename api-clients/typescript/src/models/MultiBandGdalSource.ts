@@ -28,16 +28,16 @@ import {
 export interface MultiBandGdalSource {
     /**
      * 
-     * @type {GdalSourceParameters}
-     * @memberof MultiBandGdalSource
-     */
-    params: GdalSourceParameters;
-    /**
-     * 
      * @type {MultiBandGdalSourceTypeEnum}
      * @memberof MultiBandGdalSource
      */
     type: MultiBandGdalSourceTypeEnum;
+    /**
+     * 
+     * @type {GdalSourceParameters}
+     * @memberof MultiBandGdalSource
+     */
+    params: GdalSourceParameters;
 }
 
 
@@ -54,8 +54,8 @@ export type MultiBandGdalSourceTypeEnum = typeof MultiBandGdalSourceTypeEnum[key
  * Check if a given object implements the MultiBandGdalSource interface.
  */
 export function instanceOfMultiBandGdalSource(value: object): value is MultiBandGdalSource {
-    if (!('params' in value) || value['params'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('params' in value) || value['params'] === undefined) return false;
     return true;
 }
 
@@ -69,8 +69,8 @@ export function MultiBandGdalSourceFromJSONTyped(json: any, ignoreDiscriminator:
     }
     return {
         
-        'params': GdalSourceParametersFromJSON(json['params']),
         'type': json['type'],
+        'params': GdalSourceParametersFromJSON(json['params']),
     };
 }
 
@@ -85,8 +85,8 @@ export function MultiBandGdalSourceToJSONTyped(value?: MultiBandGdalSource | nul
 
     return {
         
-        'params': GdalSourceParametersToJSON(value['params']),
         'type': value['type'],
+        'params': GdalSourceParametersToJSON(value['params']),
     };
 }
 

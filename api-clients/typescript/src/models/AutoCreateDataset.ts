@@ -23,7 +23,7 @@ export interface AutoCreateDataset {
      * @type {string}
      * @memberof AutoCreateDataset
      */
-    datasetDescription: string;
+    upload: string;
     /**
      * 
      * @type {string}
@@ -35,7 +35,7 @@ export interface AutoCreateDataset {
      * @type {string}
      * @memberof AutoCreateDataset
      */
-    layerName?: string | null;
+    datasetDescription: string;
     /**
      * 
      * @type {string}
@@ -44,26 +44,26 @@ export interface AutoCreateDataset {
     mainFile: string;
     /**
      * 
+     * @type {string}
+     * @memberof AutoCreateDataset
+     */
+    layerName?: string | null;
+    /**
+     * 
      * @type {Array<string>}
      * @memberof AutoCreateDataset
      */
     tags?: Array<string> | null;
-    /**
-     * 
-     * @type {string}
-     * @memberof AutoCreateDataset
-     */
-    upload: string;
 }
 
 /**
  * Check if a given object implements the AutoCreateDataset interface.
  */
 export function instanceOfAutoCreateDataset(value: object): value is AutoCreateDataset {
-    if (!('datasetDescription' in value) || value['datasetDescription'] === undefined) return false;
-    if (!('datasetName' in value) || value['datasetName'] === undefined) return false;
-    if (!('mainFile' in value) || value['mainFile'] === undefined) return false;
     if (!('upload' in value) || value['upload'] === undefined) return false;
+    if (!('datasetName' in value) || value['datasetName'] === undefined) return false;
+    if (!('datasetDescription' in value) || value['datasetDescription'] === undefined) return false;
+    if (!('mainFile' in value) || value['mainFile'] === undefined) return false;
     return true;
 }
 
@@ -77,12 +77,12 @@ export function AutoCreateDatasetFromJSONTyped(json: any, ignoreDiscriminator: b
     }
     return {
         
-        'datasetDescription': json['datasetDescription'],
-        'datasetName': json['datasetName'],
-        'layerName': json['layerName'] == null ? undefined : json['layerName'],
-        'mainFile': json['mainFile'],
-        'tags': json['tags'] == null ? undefined : json['tags'],
         'upload': json['upload'],
+        'datasetName': json['datasetName'],
+        'datasetDescription': json['datasetDescription'],
+        'mainFile': json['mainFile'],
+        'layerName': json['layerName'] == null ? undefined : json['layerName'],
+        'tags': json['tags'] == null ? undefined : json['tags'],
     };
 }
 
@@ -97,12 +97,12 @@ export function AutoCreateDatasetToJSONTyped(value?: AutoCreateDataset | null, i
 
     return {
         
-        'datasetDescription': value['datasetDescription'],
-        'datasetName': value['datasetName'],
-        'layerName': value['layerName'],
-        'mainFile': value['mainFile'],
-        'tags': value['tags'],
         'upload': value['upload'],
+        'datasetName': value['datasetName'],
+        'datasetDescription': value['datasetDescription'],
+        'mainFile': value['mainFile'],
+        'layerName': value['layerName'],
+        'tags': value['tags'],
     };
 }
 

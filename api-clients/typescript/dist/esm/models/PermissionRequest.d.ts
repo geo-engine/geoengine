@@ -18,12 +18,6 @@ import type { Resource } from './Resource';
 export interface PermissionRequest {
     /**
      *
-     * @type {Permission}
-     * @memberof PermissionRequest
-     */
-    permission: Permission;
-    /**
-     *
      * @type {Resource}
      * @memberof PermissionRequest
      */
@@ -34,6 +28,12 @@ export interface PermissionRequest {
      * @memberof PermissionRequest
      */
     roleId: string;
+    /**
+     *
+     * @type {Permission}
+     * @memberof PermissionRequest
+     */
+    permission: Permission;
 }
 /**
  * Check if a given object implements the PermissionRequest interface.

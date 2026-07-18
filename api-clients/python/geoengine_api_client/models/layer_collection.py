@@ -29,13 +29,13 @@ class LayerCollection(BaseModel):
     """
     LayerCollection
     """ # noqa: E501
-    description: StrictStr
-    entry_label: Optional[StrictStr] = Field(default=None, description="a common label for the collection's entries, if there is any", alias="entryLabel")
     id: ProviderLayerCollectionId
-    items: List[CollectionItem]
     name: StrictStr
+    description: StrictStr
+    items: List[CollectionItem]
+    entry_label: Optional[StrictStr] = Field(default=None, description="a common label for the collection's entries, if there is any", alias="entryLabel")
     properties: List[Annotated[List[StrictStr], Field(min_length=2, max_length=2)]]
-    __properties: ClassVar[List[str]] = ["description", "entryLabel", "id", "items", "name", "properties"]
+    __properties: ClassVar[List[str]] = ["id", "name", "description", "items", "entryLabel", "properties"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -103,11 +103,11 @@ class LayerCollection(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "description": obj.get("description"),
-            "entryLabel": obj.get("entryLabel"),
             "id": ProviderLayerCollectionId.from_dict(obj["id"]) if obj.get("id") is not None else None,
-            "items": [CollectionItem.from_dict(_item) for _item in obj["items"]] if obj.get("items") is not None else None,
             "name": obj.get("name"),
+            "description": obj.get("description"),
+            "items": [CollectionItem.from_dict(_item) for _item in obj["items"]] if obj.get("items") is not None else None,
+            "entryLabel": obj.get("entryLabel"),
             "properties": obj.get("properties")
         })
         return _obj

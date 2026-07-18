@@ -19,21 +19,21 @@ import { ProjectLayerFromJSON, ProjectLayerToJSON, } from './ProjectLayer';
  * Check if a given object implements the Project interface.
  */
 export function instanceOfProject(value) {
-    if (!('bounds' in value) || value['bounds'] === undefined)
-        return false;
-    if (!('description' in value) || value['description'] === undefined)
-        return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;
-    if (!('layers' in value) || value['layers'] === undefined)
+    if (!('version' in value) || value['version'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
+    if (!('description' in value) || value['description'] === undefined)
+        return false;
+    if (!('layers' in value) || value['layers'] === undefined)
+        return false;
     if (!('plots' in value) || value['plots'] === undefined)
         return false;
-    if (!('timeStep' in value) || value['timeStep'] === undefined)
+    if (!('bounds' in value) || value['bounds'] === undefined)
         return false;
-    if (!('version' in value) || value['version'] === undefined)
+    if (!('timeStep' in value) || value['timeStep'] === undefined)
         return false;
     return true;
 }
@@ -45,14 +45,14 @@ export function ProjectFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'bounds': STRectangleFromJSON(json['bounds']),
-        'description': json['description'],
         'id': json['id'],
-        'layers': (json['layers'].map(ProjectLayerFromJSON)),
-        'name': json['name'],
-        'plots': (json['plots'].map(PlotFromJSON)),
-        'timeStep': TimeStepFromJSON(json['timeStep']),
         'version': ProjectVersionFromJSON(json['version']),
+        'name': json['name'],
+        'description': json['description'],
+        'layers': (json['layers'].map(ProjectLayerFromJSON)),
+        'plots': (json['plots'].map(PlotFromJSON)),
+        'bounds': STRectangleFromJSON(json['bounds']),
+        'timeStep': TimeStepFromJSON(json['timeStep']),
     };
 }
 export function ProjectToJSON(json) {
@@ -63,13 +63,13 @@ export function ProjectToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'bounds': STRectangleToJSON(value['bounds']),
-        'description': value['description'],
         'id': value['id'],
-        'layers': (value['layers'].map(ProjectLayerToJSON)),
-        'name': value['name'],
-        'plots': (value['plots'].map(PlotToJSON)),
-        'timeStep': TimeStepToJSON(value['timeStep']),
         'version': ProjectVersionToJSON(value['version']),
+        'name': value['name'],
+        'description': value['description'],
+        'layers': (value['layers'].map(ProjectLayerToJSON)),
+        'plots': (value['plots'].map(PlotToJSON)),
+        'bounds': STRectangleToJSON(value['bounds']),
+        'timeStep': TimeStepToJSON(value['timeStep']),
     };
 }

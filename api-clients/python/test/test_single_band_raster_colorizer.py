@@ -35,15 +35,15 @@ class TestSingleBandRasterColorizer(unittest.TestCase):
         model = SingleBandRasterColorizer()
         if include_optional:
             return SingleBandRasterColorizer(
+                type = 'singleBand',
                 band = 0,
-                band_colorizer = None,
-                type = 'singleBand'
+                band_colorizer = None
             )
         else:
             return SingleBandRasterColorizer(
+                type = 'singleBand',
                 band = 0,
                 band_colorizer = None,
-                type = 'singleBand',
         )
         """
 

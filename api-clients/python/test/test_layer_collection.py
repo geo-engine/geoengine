@@ -35,15 +35,15 @@ class TestLayerCollection(unittest.TestCase):
         model = LayerCollection()
         if include_optional:
             return LayerCollection(
-                description = '',
-                entry_label = '',
                 id = geoengine_api_client.models.provider_layer_collection_id.ProviderLayerCollectionId(
-                    collection_id = '', 
-                    provider_id = '', ),
+                    provider_id = '', 
+                    collection_id = '', ),
+                name = '',
+                description = '',
                 items = [
                     null
                     ],
-                name = '',
+                entry_label = '',
                 properties = [
                     [
                         ''
@@ -52,14 +52,14 @@ class TestLayerCollection(unittest.TestCase):
             )
         else:
             return LayerCollection(
-                description = '',
                 id = geoengine_api_client.models.provider_layer_collection_id.ProviderLayerCollectionId(
-                    collection_id = '', 
-                    provider_id = '', ),
+                    provider_id = '', 
+                    collection_id = '', ),
+                name = '',
+                description = '',
                 items = [
                     null
                     ],
-                name = '',
                 properties = [
                     [
                         ''

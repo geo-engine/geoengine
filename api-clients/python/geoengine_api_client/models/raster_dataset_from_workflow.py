@@ -27,12 +27,12 @@ class RasterDatasetFromWorkflow(BaseModel):
     """
     parameter for the dataset from workflow handler (body)
     """ # noqa: E501
-    as_cog: Optional[StrictBool] = Field(default=True, alias="asCog")
-    description: Optional[StrictStr] = None
-    display_name: StrictStr = Field(alias="displayName")
     name: Optional[StrictStr] = None
+    display_name: StrictStr = Field(alias="displayName")
+    description: Optional[StrictStr] = None
     query: RasterToDatasetQueryRectangle
-    __properties: ClassVar[List[str]] = ["asCog", "description", "displayName", "name", "query"]
+    as_cog: Optional[StrictBool] = Field(default=True, alias="asCog")
+    __properties: ClassVar[List[str]] = ["name", "displayName", "description", "query", "asCog"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -76,15 +76,15 @@ class RasterDatasetFromWorkflow(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of query
         if self.query:
             _dict['query'] = self.query.to_dict()
-        # set to None if description (nullable) is None
-        # and model_fields_set contains the field
-        if self.description is None and "description" in self.model_fields_set:
-            _dict['description'] = None
-
         # set to None if name (nullable) is None
         # and model_fields_set contains the field
         if self.name is None and "name" in self.model_fields_set:
             _dict['name'] = None
+
+        # set to None if description (nullable) is None
+        # and model_fields_set contains the field
+        if self.description is None and "description" in self.model_fields_set:
+            _dict['description'] = None
 
         return _dict
 
@@ -98,11 +98,11 @@ class RasterDatasetFromWorkflow(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "asCog": obj.get("asCog") if obj.get("asCog") is not None else True,
-            "description": obj.get("description"),
-            "displayName": obj.get("displayName"),
             "name": obj.get("name"),
-            "query": RasterToDatasetQueryRectangle.from_dict(obj["query"]) if obj.get("query") is not None else None
+            "displayName": obj.get("displayName"),
+            "description": obj.get("description"),
+            "query": RasterToDatasetQueryRectangle.from_dict(obj["query"]) if obj.get("query") is not None else None,
+            "asCog": obj.get("asCog") if obj.get("asCog") is not None else True
         })
         return _obj
 

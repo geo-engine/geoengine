@@ -35,57 +35,57 @@ class TestOgrMetaData(unittest.TestCase):
         model = OgrMetaData()
         if include_optional:
             return OgrMetaData(
+                type = 'OgrMetaData',
                 loading_info = geoengine_api_client.models.ogr_source_dataset.OgrSourceDataset(
-                    attribute_query = '', 
-                    cache_ttl = 0, 
-                    columns = null, 
-                    data_type = null, 
-                    default_geometry = null, 
                     file_name = '', 
-                    force_ogr_spatial_filter = True, 
-                    force_ogr_time_filter = True, 
                     layer_name = '', 
+                    data_type = null, 
+                    time = null, 
+                    default_geometry = null, 
+                    columns = null, 
+                    force_ogr_time_filter = True, 
+                    force_ogr_spatial_filter = True, 
                     on_error = 'ignore', 
                     sql_query = '', 
-                    time = null, ),
+                    attribute_query = '', 
+                    cache_ttl = 0, ),
                 result_descriptor = geoengine_api_client.models.vector_result_descriptor.VectorResultDescriptor(
-                    bbox = null, 
+                    data_type = 'Data', 
+                    spatial_reference = '', 
                     columns = {
                         'key' : geoengine_api_client.models.vector_column_info.VectorColumnInfo(
                             data_type = 'category', 
                             measurement = null, )
                         }, 
-                    data_type = 'Data', 
-                    spatial_reference = '', 
-                    time = null, ),
-                type = 'OgrMetaData'
+                    time = null, 
+                    bbox = null, )
             )
         else:
             return OgrMetaData(
+                type = 'OgrMetaData',
                 loading_info = geoengine_api_client.models.ogr_source_dataset.OgrSourceDataset(
-                    attribute_query = '', 
-                    cache_ttl = 0, 
-                    columns = null, 
-                    data_type = null, 
-                    default_geometry = null, 
                     file_name = '', 
-                    force_ogr_spatial_filter = True, 
-                    force_ogr_time_filter = True, 
                     layer_name = '', 
+                    data_type = null, 
+                    time = null, 
+                    default_geometry = null, 
+                    columns = null, 
+                    force_ogr_time_filter = True, 
+                    force_ogr_spatial_filter = True, 
                     on_error = 'ignore', 
                     sql_query = '', 
-                    time = null, ),
+                    attribute_query = '', 
+                    cache_ttl = 0, ),
                 result_descriptor = geoengine_api_client.models.vector_result_descriptor.VectorResultDescriptor(
-                    bbox = null, 
+                    data_type = 'Data', 
+                    spatial_reference = '', 
                     columns = {
                         'key' : geoengine_api_client.models.vector_column_info.VectorColumnInfo(
                             data_type = 'category', 
                             measurement = null, )
                         }, 
-                    data_type = 'Data', 
-                    spatial_reference = '', 
-                    time = null, ),
-                type = 'OgrMetaData',
+                    time = null, 
+                    bbox = null, ),
         )
         """
 

@@ -38,7 +38,13 @@ export interface DatasetListing {
      * @type {string}
      * @memberof DatasetListing
      */
-    description: string;
+    id: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof DatasetListing
+     */
+    name: string;
     /**
      * 
      * @type {string}
@@ -50,19 +56,13 @@ export interface DatasetListing {
      * @type {string}
      * @memberof DatasetListing
      */
-    id: string;
+    description: string;
     /**
      * 
-     * @type {string}
+     * @type {Array<string>}
      * @memberof DatasetListing
      */
-    name: string;
-    /**
-     * 
-     * @type {TypedResultDescriptor}
-     * @memberof DatasetListing
-     */
-    resultDescriptor: TypedResultDescriptor;
+    tags: Array<string>;
     /**
      * 
      * @type {string}
@@ -71,29 +71,29 @@ export interface DatasetListing {
     sourceOperator: string;
     /**
      * 
+     * @type {TypedResultDescriptor}
+     * @memberof DatasetListing
+     */
+    resultDescriptor: TypedResultDescriptor;
+    /**
+     * 
      * @type {Symbology}
      * @memberof DatasetListing
      */
     symbology?: Symbology | null;
-    /**
-     * 
-     * @type {Array<string>}
-     * @memberof DatasetListing
-     */
-    tags: Array<string>;
 }
 
 /**
  * Check if a given object implements the DatasetListing interface.
  */
 export function instanceOfDatasetListing(value: object): value is DatasetListing {
-    if (!('description' in value) || value['description'] === undefined) return false;
-    if (!('displayName' in value) || value['displayName'] === undefined) return false;
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
-    if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined) return false;
-    if (!('sourceOperator' in value) || value['sourceOperator'] === undefined) return false;
+    if (!('displayName' in value) || value['displayName'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('tags' in value) || value['tags'] === undefined) return false;
+    if (!('sourceOperator' in value) || value['sourceOperator'] === undefined) return false;
+    if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined) return false;
     return true;
 }
 
@@ -107,14 +107,14 @@ export function DatasetListingFromJSONTyped(json: any, ignoreDiscriminator: bool
     }
     return {
         
-        'description': json['description'],
-        'displayName': json['displayName'],
         'id': json['id'],
         'name': json['name'],
-        'resultDescriptor': TypedResultDescriptorFromJSON(json['resultDescriptor']),
-        'sourceOperator': json['sourceOperator'],
-        'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
+        'displayName': json['displayName'],
+        'description': json['description'],
         'tags': json['tags'],
+        'sourceOperator': json['sourceOperator'],
+        'resultDescriptor': TypedResultDescriptorFromJSON(json['resultDescriptor']),
+        'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
     };
 }
 
@@ -129,14 +129,14 @@ export function DatasetListingToJSONTyped(value?: DatasetListing | null, ignoreD
 
     return {
         
-        'description': value['description'],
-        'displayName': value['displayName'],
         'id': value['id'],
         'name': value['name'],
-        'resultDescriptor': TypedResultDescriptorToJSON(value['resultDescriptor']),
-        'sourceOperator': value['sourceOperator'],
-        'symbology': SymbologyToJSON(value['symbology']),
+        'displayName': value['displayName'],
+        'description': value['description'],
         'tags': value['tags'],
+        'sourceOperator': value['sourceOperator'],
+        'resultDescriptor': TypedResultDescriptorToJSON(value['resultDescriptor']),
+        'symbology': SymbologyToJSON(value['symbology']),
     };
 }
 

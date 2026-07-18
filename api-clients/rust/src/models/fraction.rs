@@ -10,24 +10,24 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// Fraction : Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).
+/// Fraction : Scaling factor in x/y direction.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Fraction {
-    #[serde(rename = "type")]
-    pub r#type: Type,
     #[serde(rename = "x")]
     pub x: f64,
     #[serde(rename = "y")]
     pub y: f64,
+    #[serde(rename = "type")]
+    pub r#type: Type,
 }
 
 impl Fraction {
-    /// Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).
-    pub fn new(r#type: Type, x: f64, y: f64) -> Fraction {
+    /// Scaling factor in x/y direction.
+    pub fn new(x: f64, y: f64, r#type: Type) -> Fraction {
         Fraction {
-            r#type,
             x,
             y,
+            r#type,
         }
     }
 }

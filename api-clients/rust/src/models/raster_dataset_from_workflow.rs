@@ -13,27 +13,27 @@ use serde::{Deserialize, Serialize};
 /// RasterDatasetFromWorkflow : parameter for the dataset from workflow handler (body)
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RasterDatasetFromWorkflow {
-    #[serde(rename = "asCog", skip_serializing_if = "Option::is_none")]
-    pub as_cog: Option<bool>,
-    #[serde(rename = "description", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub description: Option<Option<String>>,
-    #[serde(rename = "displayName")]
-    pub display_name: String,
     #[serde(rename = "name", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub name: Option<Option<String>>,
+    #[serde(rename = "displayName")]
+    pub display_name: String,
+    #[serde(rename = "description", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub description: Option<Option<String>>,
     #[serde(rename = "query")]
     pub query: Box<models::RasterToDatasetQueryRectangle>,
+    #[serde(rename = "asCog", skip_serializing_if = "Option::is_none")]
+    pub as_cog: Option<bool>,
 }
 
 impl RasterDatasetFromWorkflow {
     /// parameter for the dataset from workflow handler (body)
     pub fn new(display_name: String, query: models::RasterToDatasetQueryRectangle) -> RasterDatasetFromWorkflow {
         RasterDatasetFromWorkflow {
-            as_cog: None,
-            description: None,
-            display_name,
             name: None,
+            display_name,
+            description: None,
             query: Box::new(query),
+            as_cog: None,
         }
     }
 }

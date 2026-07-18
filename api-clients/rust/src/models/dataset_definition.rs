@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DatasetDefinition {
-    #[serde(rename = "metaData")]
-    pub meta_data: Box<models::MetaDataDefinition>,
     #[serde(rename = "properties")]
     pub properties: Box<models::AddDataset>,
+    #[serde(rename = "metaData")]
+    pub meta_data: Box<models::MetaDataDefinition>,
 }
 
 impl DatasetDefinition {
-    pub fn new(meta_data: models::MetaDataDefinition, properties: models::AddDataset) -> DatasetDefinition {
+    pub fn new(properties: models::AddDataset, meta_data: models::MetaDataDefinition) -> DatasetDefinition {
         DatasetDefinition {
-            meta_data: Box::new(meta_data),
             properties: Box::new(properties),
+            meta_data: Box::new(meta_data),
         }
     }
 }

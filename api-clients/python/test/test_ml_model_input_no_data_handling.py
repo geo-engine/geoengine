@@ -35,8 +35,8 @@ class TestMlModelInputNoDataHandling(unittest.TestCase):
         model = MlModelInputNoDataHandling()
         if include_optional:
             return MlModelInputNoDataHandling(
-                no_data_value = 1.337,
-                variant = 'encodedNoData'
+                variant = 'encodedNoData',
+                no_data_value = 1.337
             )
         else:
             return MlModelInputNoDataHandling(

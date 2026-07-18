@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>OGC Map Tiles</title>
+    <link rel="stylesheet" href="node_modules/ol/ol.css" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        padding: 12px;
+        box-sizing: border-box;
+        min-height: 100vh;
+      }
+
+      .controls {
+        margin-bottom: 12px;
+      }
+
+      .controls label {
+        margin-right: 8px;
+        font: 600 14px/1.4 sans-serif;
+      }
+
+      .controls select {
+        padding: 4px 8px;
+        font-size: 14px;
+      }
+
+      .maps-container {
+        display: flex;
+        gap: 12px;
+        flex: 1;
+      }
+
+      .map-panel {
+        flex: 1 1 0;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .map-title {
+        margin: 0 0 8px 0;
+        font: 600 16px/1.4 sans-serif;
+      }
+
+      .map {
+        width: 100%;
+        height: 100%;
+      }
+
+      @media (max-width: 900px) {
+        .maps-container {
+          flex-direction: column;
+        }
+
+        .map {
+          height: 50vh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="controls">
+      <label for="tms-selector">TMS:</label>
+      <select id="tms-selector">
+        <option value="Custom">Custom</option>
+        <option value="CustomWebMercator">CustomWebMercator</option>
+        <option value="WebMercatorQuad">WebMercatorQuad</option>
+      </select>
+    </div>
+    <div class="maps-container">
+      <section class="map-panel">
+        <h2 class="map-title">WGS84</h2>
+        <div id="wgs84Map" class="map"></div>
+      </section>
+      <section class="map-panel">
+        <h2 class="map-title">WebMercator</h2>
+        <div id="webMercatorMap" class="map"></div>
+      </section>
+    </div>
+
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

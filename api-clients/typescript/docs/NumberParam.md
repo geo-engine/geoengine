@@ -9,8 +9,8 @@ Name | Type
 `type` | string
 `value` | number
 `attribute` | string
-`defaultValue` | number
 `factor` | number
+`defaultValue` | number
 
 ## Example
 
@@ -22,8 +22,8 @@ const example = {
   "type": null,
   "value": null,
   "attribute": null,
-  "defaultValue": null,
   "factor": null,
+  "defaultValue": null,
 } satisfies NumberParam
 
 console.log(example)

@@ -16,25 +16,25 @@ pub struct ExpressionParameters {
     /// Expression script  Example: `\"(A - B) / (A + B)\"`
     #[serde(rename = "expression")]
     pub expression: String,
-    /// Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA.
-    #[serde(rename = "mapNoData")]
-    pub map_no_data: bool,
-    /// Description about the output
-    #[serde(rename = "outputBand", skip_serializing_if = "Option::is_none")]
-    pub output_band: Option<Box<models::RasterBandDescriptor>>,
     /// A raster data type for the output
     #[serde(rename = "outputType")]
     pub output_type: models::RasterDataType,
+    /// Description about the output
+    #[serde(rename = "outputBand", skip_serializing_if = "Option::is_none")]
+    pub output_band: Option<Box<models::RasterBandDescriptor>>,
+    /// Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA.
+    #[serde(rename = "mapNoData")]
+    pub map_no_data: bool,
 }
 
 impl ExpressionParameters {
     /// ## Types  The following describes the types used in the parameters.
-    pub fn new(expression: String, map_no_data: bool, output_type: models::RasterDataType) -> ExpressionParameters {
+    pub fn new(expression: String, output_type: models::RasterDataType, map_no_data: bool) -> ExpressionParameters {
         ExpressionParameters {
             expression,
-            map_no_data,
-            output_band: None,
             output_type,
+            output_band: None,
+            map_no_data,
         }
     }
 }

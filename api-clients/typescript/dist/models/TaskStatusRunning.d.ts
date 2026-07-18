@@ -16,16 +16,22 @@
 export interface TaskStatusRunning {
     /**
      *
-     * @type {string}
+     * @type {TaskStatusRunningStatusEnum}
      * @memberof TaskStatusRunning
      */
-    description?: string;
+    status: TaskStatusRunningStatusEnum;
     /**
      *
      * @type {string}
      * @memberof TaskStatusRunning
      */
-    estimatedTimeRemaining: string;
+    taskType: string;
+    /**
+     *
+     * @type {string}
+     * @memberof TaskStatusRunning
+     */
+    description?: string;
     /**
      *
      * @type {any}
@@ -40,16 +46,10 @@ export interface TaskStatusRunning {
     pctComplete: string;
     /**
      *
-     * @type {TaskStatusRunningStatusEnum}
-     * @memberof TaskStatusRunning
-     */
-    status: TaskStatusRunningStatusEnum;
-    /**
-     *
      * @type {string}
      * @memberof TaskStatusRunning
      */
-    taskType: string;
+    estimatedTimeRemaining: string;
     /**
      *
      * @type {string}

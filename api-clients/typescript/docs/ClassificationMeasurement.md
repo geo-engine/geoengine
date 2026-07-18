@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
-`classes` | { [key: string]: string; }
-`measurement` | string
 `type` | string
+`measurement` | string
+`classes` | { [key: string]: string; }
 
 ## Example
 
@@ -17,9 +17,9 @@ import type { ClassificationMeasurement } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "classes": null,
-  "measurement": null,
   "type": null,
+  "measurement": null,
+  "classes": null,
 } satisfies ClassificationMeasurement
 
 console.log(example)

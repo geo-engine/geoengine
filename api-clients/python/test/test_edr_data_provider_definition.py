@@ -35,34 +35,34 @@ class TestEdrDataProviderDefinition(unittest.TestCase):
         model = EdrDataProviderDefinition()
         if include_optional:
             return EdrDataProviderDefinition(
-                base_url = '',
-                cache_ttl = 0,
+                type = 'Edr',
+                name = '',
                 description = '',
+                priority = 56,
+                id = '',
+                base_url = '',
+                vector_spec = geoengine_api_client.models.edr_vector_spec.EdrVectorSpec(
+                    x = '', 
+                    y = '', 
+                    time = '', ),
+                cache_ttl = 0,
                 discrete_vrs = [
                     ''
                     ],
-                id = '',
-                name = '',
-                priority = 56,
                 provenance = [
                     geoengine_api_client.models.provenance.Provenance(
                         citation = '', 
                         license = '', 
                         uri = '', )
-                    ],
-                type = 'Edr',
-                vector_spec = geoengine_api_client.models.edr_vector_spec.EdrVectorSpec(
-                    time = '', 
-                    x = '', 
-                    y = '', )
+                    ]
             )
         else:
             return EdrDataProviderDefinition(
-                base_url = '',
+                type = 'Edr',
+                name = '',
                 description = '',
                 id = '',
-                name = '',
-                type = 'Edr',
+                base_url = '',
         )
         """
 

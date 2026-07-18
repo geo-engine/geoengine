@@ -27,9 +27,9 @@ class RasterBandDescriptor(BaseModel):
     """
     RasterBandDescriptor
     """ # noqa: E501
-    measurement: Measurement
     name: StrictStr
-    __properties: ClassVar[List[str]] = ["measurement", "name"]
+    measurement: Measurement
+    __properties: ClassVar[List[str]] = ["name", "measurement"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -85,8 +85,8 @@ class RasterBandDescriptor(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "measurement": Measurement.from_dict(obj["measurement"]) if obj.get("measurement") is not None else None,
-            "name": obj.get("name")
+            "name": obj.get("name"),
+            "measurement": Measurement.from_dict(obj["measurement"]) if obj.get("measurement") is not None else None
         })
         return _obj
 

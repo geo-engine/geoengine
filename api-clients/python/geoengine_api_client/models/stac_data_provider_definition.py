@@ -30,17 +30,17 @@ class StacDataProviderDefinition(BaseModel):
     """
     StacDataProviderDefinition
     """ # noqa: E501
+    type: StrictStr
+    name: StrictStr
+    id: UUID
+    description: StrictStr
+    priority: Optional[StrictInt] = None
     api_url: StrictStr = Field(alias="apiUrl")
     collection_name: StrictStr = Field(alias="collectionName")
-    datasets: List[StacProviderDataset]
-    description: StrictStr
-    id: UUID
-    name: StrictStr
-    priority: Optional[StrictInt] = None
     s3_config: Optional[StacProviderS3Config] = Field(default=None, alias="s3Config")
     time_dimension: TimeDimension = Field(alias="timeDimension")
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["apiUrl", "collectionName", "datasets", "description", "id", "name", "priority", "s3Config", "timeDimension", "type"]
+    datasets: List[StacProviderDataset]
+    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "collectionName", "s3Config", "timeDimension", "datasets"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -88,6 +88,12 @@ class StacDataProviderDefinition(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of s3_config
+        if self.s3_config:
+            _dict['s3Config'] = self.s3_config.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of time_dimension
+        if self.time_dimension:
+            _dict['timeDimension'] = self.time_dimension.to_dict()
         # override the default output from pydantic by calling `to_dict()` of each item in datasets (list)
         _items = []
         if self.datasets:
@@ -95,12 +101,6 @@ class StacDataProviderDefinition(BaseModel):
                 if _item_datasets:
                     _items.append(_item_datasets.to_dict())
             _dict['datasets'] = _items
-        # override the default output from pydantic by calling `to_dict()` of s3_config
-        if self.s3_config:
-            _dict['s3Config'] = self.s3_config.to_dict()
-        # override the default output from pydantic by calling `to_dict()` of time_dimension
-        if self.time_dimension:
-            _dict['timeDimension'] = self.time_dimension.to_dict()
         # set to None if priority (nullable) is None
         # and model_fields_set contains the field
         if self.priority is None and "priority" in self.model_fields_set:
@@ -123,16 +123,16 @@ class StacDataProviderDefinition(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "type": obj.get("type"),
+            "name": obj.get("name"),
+            "id": obj.get("id"),
+            "description": obj.get("description"),
+            "priority": obj.get("priority"),
             "apiUrl": obj.get("apiUrl"),
             "collectionName": obj.get("collectionName"),
-            "datasets": [StacProviderDataset.from_dict(_item) for _item in obj["datasets"]] if obj.get("datasets") is not None else None,
-            "description": obj.get("description"),
-            "id": obj.get("id"),
-            "name": obj.get("name"),
-            "priority": obj.get("priority"),
             "s3Config": StacProviderS3Config.from_dict(obj["s3Config"]) if obj.get("s3Config") is not None else None,
             "timeDimension": TimeDimension.from_dict(obj["timeDimension"]) if obj.get("timeDimension") is not None else None,
-            "type": obj.get("type")
+            "datasets": [StacProviderDataset.from_dict(_item) for _item in obj["datasets"]] if obj.get("datasets") is not None else None
         })
         return _obj
 

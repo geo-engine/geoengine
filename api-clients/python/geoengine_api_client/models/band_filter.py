@@ -27,10 +27,10 @@ class BandFilter(BaseModel):
     """
     The `BandFilter` operator selects bands from a raster source by band names or band indices.  It removes all non-selected bands while preserving the original order of remaining bands.  ## Inputs  The `BandFilter` operator expects exactly one _raster_ input.  ## Errors  The operator returns an error if no bands are selected or if selected band names/indices cannot be mapped to existing input bands.
     """ # noqa: E501
+    type: StrictStr
     params: BandFilterParameters
     sources: SingleRasterSource
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["params", "sources", "type"]
+    __properties: ClassVar[List[str]] = ["type", "params", "sources"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -96,9 +96,9 @@ class BandFilter(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "type": obj.get("type"),
             "params": BandFilterParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
-            "sources": SingleRasterSource.from_dict(obj["sources"]) if obj.get("sources") is not None else None,
-            "type": obj.get("type")
+            "sources": SingleRasterSource.from_dict(obj["sources"]) if obj.get("sources") is not None else None
         })
         return _obj
 

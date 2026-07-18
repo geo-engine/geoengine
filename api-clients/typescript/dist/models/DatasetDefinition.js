@@ -23,9 +23,9 @@ const AddDataset_1 = require("./AddDataset");
  * Check if a given object implements the DatasetDefinition interface.
  */
 function instanceOfDatasetDefinition(value) {
-    if (!('metaData' in value) || value['metaData'] === undefined)
-        return false;
     if (!('properties' in value) || value['properties'] === undefined)
+        return false;
+    if (!('metaData' in value) || value['metaData'] === undefined)
         return false;
     return true;
 }
@@ -37,8 +37,8 @@ function DatasetDefinitionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'metaData': (0, MetaDataDefinition_1.MetaDataDefinitionFromJSON)(json['metaData']),
         'properties': (0, AddDataset_1.AddDatasetFromJSON)(json['properties']),
+        'metaData': (0, MetaDataDefinition_1.MetaDataDefinitionFromJSON)(json['metaData']),
     };
 }
 function DatasetDefinitionToJSON(json) {
@@ -49,7 +49,7 @@ function DatasetDefinitionToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'metaData': (0, MetaDataDefinition_1.MetaDataDefinitionToJSON)(value['metaData']),
         'properties': (0, AddDataset_1.AddDatasetToJSON)(value['properties']),
+        'metaData': (0, MetaDataDefinition_1.MetaDataDefinitionToJSON)(value['metaData']),
     };
 }

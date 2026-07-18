@@ -20,16 +20,10 @@ import { mapValues } from '../runtime';
 export interface WildliveDataConnectorDefinition {
     /**
      * 
-     * @type {string}
+     * @type {WildliveDataConnectorDefinitionTypeEnum}
      * @memberof WildliveDataConnectorDefinition
      */
-    description: string;
-    /**
-     * 
-     * @type {Date}
-     * @memberof WildliveDataConnectorDefinition
-     */
-    expiryDate?: Date | null;
+    type: WildliveDataConnectorDefinitionTypeEnum;
     /**
      * 
      * @type {string}
@@ -44,10 +38,16 @@ export interface WildliveDataConnectorDefinition {
     name: string;
     /**
      * 
-     * @type {number}
+     * @type {string}
      * @memberof WildliveDataConnectorDefinition
      */
-    priority?: number | null;
+    description: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof WildliveDataConnectorDefinition
+     */
+    user?: string | null;
     /**
      * A wrapper type that serializes to "*****" and can be deserialized from any string.
      * If the inner value is "*****", it is considered unknown and `as_option` returns `None`.
@@ -58,16 +58,16 @@ export interface WildliveDataConnectorDefinition {
     refreshToken?: string | null;
     /**
      * 
-     * @type {WildliveDataConnectorDefinitionTypeEnum}
+     * @type {Date}
      * @memberof WildliveDataConnectorDefinition
      */
-    type: WildliveDataConnectorDefinitionTypeEnum;
+    expiryDate?: Date | null;
     /**
      * 
-     * @type {string}
+     * @type {number}
      * @memberof WildliveDataConnectorDefinition
      */
-    user?: string | null;
+    priority?: number | null;
 }
 
 
@@ -84,10 +84,10 @@ export type WildliveDataConnectorDefinitionTypeEnum = typeof WildliveDataConnect
  * Check if a given object implements the WildliveDataConnectorDefinition interface.
  */
 export function instanceOfWildliveDataConnectorDefinition(value: object): value is WildliveDataConnectorDefinition {
-    if (!('description' in value) || value['description'] === undefined) return false;
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
     return true;
 }
 
@@ -101,14 +101,14 @@ export function WildliveDataConnectorDefinitionFromJSONTyped(json: any, ignoreDi
     }
     return {
         
-        'description': json['description'],
-        'expiryDate': json['expiryDate'] == null ? undefined : (new Date(json['expiryDate'])),
+        'type': json['type'],
         'id': json['id'],
         'name': json['name'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
-        'refreshToken': json['refreshToken'] == null ? undefined : json['refreshToken'],
-        'type': json['type'],
+        'description': json['description'],
         'user': json['user'] == null ? undefined : json['user'],
+        'refreshToken': json['refreshToken'] == null ? undefined : json['refreshToken'],
+        'expiryDate': json['expiryDate'] == null ? undefined : (new Date(json['expiryDate'])),
+        'priority': json['priority'] == null ? undefined : json['priority'],
     };
 }
 
@@ -123,14 +123,14 @@ export function WildliveDataConnectorDefinitionToJSONTyped(value?: WildliveDataC
 
     return {
         
-        'description': value['description'],
-        'expiryDate': value['expiryDate'] == null ? value['expiryDate'] : value['expiryDate'].toISOString(),
+        'type': value['type'],
         'id': value['id'],
         'name': value['name'],
-        'priority': value['priority'],
-        'refreshToken': value['refreshToken'],
-        'type': value['type'],
+        'description': value['description'],
         'user': value['user'],
+        'refreshToken': value['refreshToken'],
+        'expiryDate': value['expiryDate'] == null ? value['expiryDate'] : value['expiryDate'].toISOString(),
+        'priority': value['priority'],
     };
 }
 

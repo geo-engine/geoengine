@@ -12,31 +12,31 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UpdateLayer {
-    #[serde(rename = "description")]
-    pub description: String,
-    /// metadata used for loading the data
-    #[serde(rename = "metadata", skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<std::collections::HashMap<String, String>>,
     #[serde(rename = "name")]
     pub name: String,
+    #[serde(rename = "description")]
+    pub description: String,
+    #[serde(rename = "workflow")]
+    pub workflow: Box<models::Workflow>,
+    #[serde(rename = "symbology", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub symbology: Option<Option<Box<models::Symbology>>>,
     /// properties, for instance, to be rendered in the UI
     #[serde(rename = "properties", skip_serializing_if = "Option::is_none")]
     pub properties: Option<Vec<Vec<String>>>,
-    #[serde(rename = "symbology", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub symbology: Option<Option<Box<models::Symbology>>>,
-    #[serde(rename = "workflow")]
-    pub workflow: Box<models::Workflow>,
+    /// metadata used for loading the data
+    #[serde(rename = "metadata", skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<std::collections::HashMap<String, String>>,
 }
 
 impl UpdateLayer {
-    pub fn new(description: String, name: String, workflow: models::Workflow) -> UpdateLayer {
+    pub fn new(name: String, description: String, workflow: models::Workflow) -> UpdateLayer {
         UpdateLayer {
-            description,
-            metadata: None,
             name,
-            properties: None,
-            symbology: None,
+            description,
             workflow: Box::new(workflow),
+            symbology: None,
+            properties: None,
+            metadata: None,
         }
     }
 }

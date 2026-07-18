@@ -21,9 +21,9 @@ export const GdalSourceTypeEnum = {
  * Check if a given object implements the GdalSource interface.
  */
 export function instanceOfGdalSource(value) {
-    if (!('params' in value) || value['params'] === undefined)
-        return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('params' in value) || value['params'] === undefined)
         return false;
     return true;
 }
@@ -35,8 +35,8 @@ export function GdalSourceFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'params': GdalSourceParametersFromJSON(json['params']),
         'type': json['type'],
+        'params': GdalSourceParametersFromJSON(json['params']),
     };
 }
 export function GdalSourceToJSON(json) {
@@ -47,7 +47,7 @@ export function GdalSourceToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'params': GdalSourceParametersToJSON(value['params']),
         'type': value['type'],
+        'params': GdalSourceParametersToJSON(value['params']),
     };
 }

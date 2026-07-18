@@ -16,18 +16,6 @@
 export interface ComputationQuota {
     /**
      *
-     * @type {string}
-     * @memberof ComputationQuota
-     */
-    computationId: string;
-    /**
-     *
-     * @type {number}
-     * @memberof ComputationQuota
-     */
-    count: number;
-    /**
-     *
      * @type {Date}
      * @memberof ComputationQuota
      */
@@ -37,7 +25,19 @@ export interface ComputationQuota {
      * @type {string}
      * @memberof ComputationQuota
      */
+    computationId: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ComputationQuota
+     */
     workflowId: string;
+    /**
+     *
+     * @type {number}
+     * @memberof ComputationQuota
+     */
+    count: number;
 }
 /**
  * Check if a given object implements the ComputationQuota interface.

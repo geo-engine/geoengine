@@ -42,18 +42,18 @@ function OgrSourceDatasetFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'attributeQuery': json['attributeQuery'] == null ? undefined : json['attributeQuery'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
-        'columns': json['columns'] == null ? undefined : (0, OgrSourceColumnSpec_1.OgrSourceColumnSpecFromJSON)(json['columns']),
-        'dataType': json['dataType'] == null ? undefined : (0, VectorDataType_1.VectorDataTypeFromJSON)(json['dataType']),
-        'defaultGeometry': json['defaultGeometry'] == null ? undefined : (0, TypedGeometry_1.TypedGeometryFromJSON)(json['defaultGeometry']),
         'fileName': json['fileName'],
-        'forceOgrSpatialFilter': json['forceOgrSpatialFilter'] == null ? undefined : json['forceOgrSpatialFilter'],
-        'forceOgrTimeFilter': json['forceOgrTimeFilter'] == null ? undefined : json['forceOgrTimeFilter'],
         'layerName': json['layerName'],
+        'dataType': json['dataType'] == null ? undefined : (0, VectorDataType_1.VectorDataTypeFromJSON)(json['dataType']),
+        'time': json['time'] == null ? undefined : (0, OgrSourceDatasetTimeType_1.OgrSourceDatasetTimeTypeFromJSON)(json['time']),
+        'defaultGeometry': json['defaultGeometry'] == null ? undefined : (0, TypedGeometry_1.TypedGeometryFromJSON)(json['defaultGeometry']),
+        'columns': json['columns'] == null ? undefined : (0, OgrSourceColumnSpec_1.OgrSourceColumnSpecFromJSON)(json['columns']),
+        'forceOgrTimeFilter': json['forceOgrTimeFilter'] == null ? undefined : json['forceOgrTimeFilter'],
+        'forceOgrSpatialFilter': json['forceOgrSpatialFilter'] == null ? undefined : json['forceOgrSpatialFilter'],
         'onError': (0, OgrSourceErrorSpec_1.OgrSourceErrorSpecFromJSON)(json['onError']),
         'sqlQuery': json['sqlQuery'] == null ? undefined : json['sqlQuery'],
-        'time': json['time'] == null ? undefined : (0, OgrSourceDatasetTimeType_1.OgrSourceDatasetTimeTypeFromJSON)(json['time']),
+        'attributeQuery': json['attributeQuery'] == null ? undefined : json['attributeQuery'],
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 function OgrSourceDatasetToJSON(json) {
@@ -64,17 +64,17 @@ function OgrSourceDatasetToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'attributeQuery': value['attributeQuery'],
-        'cacheTtl': value['cacheTtl'],
-        'columns': (0, OgrSourceColumnSpec_1.OgrSourceColumnSpecToJSON)(value['columns']),
-        'dataType': (0, VectorDataType_1.VectorDataTypeToJSON)(value['dataType']),
-        'defaultGeometry': (0, TypedGeometry_1.TypedGeometryToJSON)(value['defaultGeometry']),
         'fileName': value['fileName'],
-        'forceOgrSpatialFilter': value['forceOgrSpatialFilter'],
-        'forceOgrTimeFilter': value['forceOgrTimeFilter'],
         'layerName': value['layerName'],
+        'dataType': (0, VectorDataType_1.VectorDataTypeToJSON)(value['dataType']),
+        'time': (0, OgrSourceDatasetTimeType_1.OgrSourceDatasetTimeTypeToJSON)(value['time']),
+        'defaultGeometry': (0, TypedGeometry_1.TypedGeometryToJSON)(value['defaultGeometry']),
+        'columns': (0, OgrSourceColumnSpec_1.OgrSourceColumnSpecToJSON)(value['columns']),
+        'forceOgrTimeFilter': value['forceOgrTimeFilter'],
+        'forceOgrSpatialFilter': value['forceOgrSpatialFilter'],
         'onError': (0, OgrSourceErrorSpec_1.OgrSourceErrorSpecToJSON)(value['onError']),
         'sqlQuery': value['sqlQuery'],
-        'time': (0, OgrSourceDatasetTimeType_1.OgrSourceDatasetTimeTypeToJSON)(value['time']),
+        'attributeQuery': value['attributeQuery'],
+        'cacheTtl': value['cacheTtl'],
     };
 }

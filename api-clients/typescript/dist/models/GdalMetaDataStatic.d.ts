@@ -19,10 +19,16 @@ import type { GdalDatasetParameters } from './GdalDatasetParameters';
 export interface GdalMetaDataStatic {
     /**
      *
-     * @type {number}
+     * @type {GdalMetaDataStaticTypeEnum}
      * @memberof GdalMetaDataStatic
      */
-    cacheTtl?: number;
+    type: GdalMetaDataStaticTypeEnum;
+    /**
+     *
+     * @type {TimeInterval}
+     * @memberof GdalMetaDataStatic
+     */
+    time?: TimeInterval | null;
     /**
      *
      * @type {GdalDatasetParameters}
@@ -37,16 +43,10 @@ export interface GdalMetaDataStatic {
     resultDescriptor: RasterResultDescriptor;
     /**
      *
-     * @type {TimeInterval}
+     * @type {number}
      * @memberof GdalMetaDataStatic
      */
-    time?: TimeInterval | null;
-    /**
-     *
-     * @type {GdalMetaDataStaticTypeEnum}
-     * @memberof GdalMetaDataStatic
-     */
-    type: GdalMetaDataStaticTypeEnum;
+    cacheTtl?: number;
 }
 /**
  * @export

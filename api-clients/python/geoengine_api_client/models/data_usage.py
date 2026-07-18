@@ -29,12 +29,12 @@ class DataUsage(BaseModel):
     """
     DataUsage
     """ # noqa: E501
-    computation_id: UUID = Field(alias="computationId")
-    count: Annotated[int, Field(strict=True, ge=0)]
-    data: StrictStr
     timestamp: datetime
     user_id: UUID = Field(alias="userId")
-    __properties: ClassVar[List[str]] = ["computationId", "count", "data", "timestamp", "userId"]
+    computation_id: UUID = Field(alias="computationId")
+    data: StrictStr
+    count: Annotated[int, Field(strict=True, ge=0)]
+    __properties: ClassVar[List[str]] = ["timestamp", "userId", "computationId", "data", "count"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -87,11 +87,11 @@ class DataUsage(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "computationId": obj.get("computationId"),
-            "count": obj.get("count"),
-            "data": obj.get("data"),
             "timestamp": obj.get("timestamp"),
-            "userId": obj.get("userId")
+            "userId": obj.get("userId"),
+            "computationId": obj.get("computationId"),
+            "data": obj.get("data"),
+            "count": obj.get("count")
         })
         return _obj
 

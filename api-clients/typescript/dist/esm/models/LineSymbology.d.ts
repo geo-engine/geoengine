@@ -18,10 +18,10 @@ import type { StrokeParam } from './StrokeParam';
 export interface LineSymbology {
     /**
      *
-     * @type {boolean}
+     * @type {LineSymbologyTypeEnum}
      * @memberof LineSymbology
      */
-    autoSimplified: boolean;
+    type: LineSymbologyTypeEnum;
     /**
      *
      * @type {StrokeParam}
@@ -36,10 +36,10 @@ export interface LineSymbology {
     text?: TextSymbology | null;
     /**
      *
-     * @type {LineSymbologyTypeEnum}
+     * @type {boolean}
      * @memberof LineSymbology
      */
-    type: LineSymbologyTypeEnum;
+    autoSimplified: boolean;
 }
 /**
  * @export

@@ -12,19 +12,19 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StRectangle {
-    #[serde(rename = "boundingBox")]
-    pub bounding_box: Box<models::BoundingBox2D>,
     #[serde(rename = "spatialReference")]
     pub spatial_reference: String,
+    #[serde(rename = "boundingBox")]
+    pub bounding_box: Box<models::BoundingBox2D>,
     #[serde(rename = "timeInterval")]
     pub time_interval: Box<models::TimeInterval>,
 }
 
 impl StRectangle {
-    pub fn new(bounding_box: models::BoundingBox2D, spatial_reference: String, time_interval: models::TimeInterval) -> StRectangle {
+    pub fn new(spatial_reference: String, bounding_box: models::BoundingBox2D, time_interval: models::TimeInterval) -> StRectangle {
         StRectangle {
-            bounding_box: Box::new(bounding_box),
             spatial_reference,
+            bounding_box: Box::new(bounding_box),
             time_interval: Box::new(time_interval),
         }
     }

@@ -29,11 +29,11 @@ exports.SingleBandRasterColorizerTypeEnum = {
  * Check if a given object implements the SingleBandRasterColorizer interface.
  */
 function instanceOfSingleBandRasterColorizer(value) {
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
     if (!('band' in value) || value['band'] === undefined)
         return false;
     if (!('bandColorizer' in value) || value['bandColorizer'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -45,9 +45,9 @@ function SingleBandRasterColorizerFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'type': json['type'],
         'band': json['band'],
         'bandColorizer': (0, Colorizer_1.ColorizerFromJSON)(json['bandColorizer']),
-        'type': json['type'],
     };
 }
 function SingleBandRasterColorizerToJSON(json) {
@@ -58,8 +58,8 @@ function SingleBandRasterColorizerToJSONTyped(value, ignoreDiscriminator = false
         return value;
     }
     return {
+        'type': value['type'],
         'band': value['band'],
         'bandColorizer': (0, Colorizer_1.ColorizerToJSON)(value['bandColorizer']),
-        'type': value['type'],
     };
 }
