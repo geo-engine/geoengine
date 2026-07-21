@@ -826,7 +826,9 @@ mod tests {
     use crate::util::gdal::add_ndvi_dataset;
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::DateTimeParseFormat;
-    use geoengine_datatypes::primitives::{AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, TimeInstance};
+    use geoengine_datatypes::primitives::{
+        AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, TimeInstance,
+    };
     use geoengine_datatypes::raster::{
         BoundedGrid, EmptyGrid2D, GridBoundingBox, GridBounds, GridIdx2D, GridShape2D, GridSize,
         RasterPropertiesEntryType, RasterPropertiesKey, SpatialGridDefinition, TileInformation,

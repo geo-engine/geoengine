@@ -104,7 +104,7 @@ pub enum SchedulingStrategy {
 
 struct WorkerJob {
     request: IpcChannelMessage,
-    respond_to: oneshot::Sender<Result<IpcProcessRasterResult, GdalProcessPoolError>>,
+    respond_to: oneshot::Sender<ReadResult>,
     dataset_hash: u64,
 }
 
@@ -205,7 +205,15 @@ impl DatasetSlot {
 struct QueuedRequest {
     dataset_hash: u64,
     request: IpcChannelMessage,
-    respond_to: oneshot::Sender<Result<IpcProcessRasterResult, GdalProcessPoolError>>,
+    respond_to: oneshot::Sender<ReadResult>,
+}
+
+/// Result of a read operation, carrying the IPC payload and the companion
+/// span so callers can create `follows_from` links. The `Span` handle keeps
+/// the companion span alive in the subscriber until all receivers drop it.
+struct ReadResult {
+    result: Result<IpcProcessRasterResult, GdalProcessPoolError>,
+    companion_span: Option<tracing::Span>,
 }
 
 enum BrokerCommand {
@@ -227,7 +235,12 @@ enum BrokerCommand {
     },
 }
 
-type SharedResult = Option<Arc<Result<GdalIpcBytePayload, GdalProcessPoolError>>>;
+type SharedResult = Option<
+    Arc<(
+        Result<GdalIpcBytePayload, GdalProcessPoolError>,
+        Option<tracing::Span>,
+    )>,
+>;
 
 pub struct GdalProcessPool {
     broker_tx: mpsc::Sender<BrokerCommand>,
@@ -419,13 +432,18 @@ impl GdalProcessPool {
             )
             .entered();
 
+            let companion_span = Some(tracing::Span::current());
+
             let res = sender
                 .send(job.request)
                 .map_err(GdalProcessPoolError::from)
                 .and_then(|()| receiver.recv().map_err(GdalProcessPoolError::from));
 
             let is_dead = res.is_err();
-            let _ = job.respond_to.send(res);
+            let _ = job.respond_to.send(ReadResult {
+                result: res,
+                companion_span,
+            });
 
             if is_dead {
                 let _ = broker_tx.blocking_send(BrokerCommand::WorkerDied {
@@ -856,6 +874,7 @@ impl GdalPoolDispatcher {
 
                 let pool_clone = self.pool.clone();
                 let request_clone = request.clone();
+                let parent_span = tracing::Span::current();
 
                 // DETACHED LEADER: Guaranteed to run to completion even if the parent stream is suspended or dropped!
                 tokio::spawn(async move {
@@ -879,18 +898,31 @@ impl GdalPoolDispatcher {
                         })))
                         .await;
 
-                    let leader_res = if dispatched.is_ok() {
-                        oneshot_rx
-                            .await
-                            .map_err(|_| GdalProcessPoolError::WorkerPanic)
-                            .flatten()
-                            .and_then(|ipc_res| ipc_res.map_err(GdalProcessPoolError::from))
+                    let (leader_res, companion_span) = if dispatched.is_ok() {
+                        match oneshot_rx.await {
+                            Ok(read_result) => {
+                                let result = read_result
+                                    .result
+                                    .map_err(|_| GdalProcessPoolError::WorkerPanic)
+                                    .and_then(|ipc_res| {
+                                        ipc_res.map_err(GdalProcessPoolError::from)
+                                    });
+                                (result, read_result.companion_span)
+                            }
+                            Err(_) => (Err(GdalProcessPoolError::WorkerPanic), None),
+                        }
                     } else {
-                        Err(GdalProcessPoolError::WorkerPanic)
+                        (Err(GdalProcessPoolError::WorkerPanic), None)
                     };
 
+                    // ponytail: link caller's span to the companion's independent trace.
+                    // The Span handle keeps the companion span alive in the subscriber.
+                    if let Some(ref span) = companion_span {
+                        parent_span.follows_from(span.id());
+                    }
+
                     // Broadcast to all waiting tasks. (Arc preserves perfect memory alignment)
-                    let _ = tx.send(Some(std::sync::Arc::new(leader_res)));
+                    let _ = tx.send(Some(std::sync::Arc::new((leader_res, companion_span))));
                 });
 
                 rx
@@ -911,9 +943,15 @@ impl GdalPoolDispatcher {
             .expect("Watch channel must contain a value after changed() yields")
             .clone();
 
+        // ponytail: link follower's span to the companion's independent trace.
+        // Cloning the Span handle keeps the companion span alive in the subscriber.
+        if let Some(ref span) = shared_res.1 {
+            tracing::Span::current().follows_from(span.id());
+        }
+
         let byte_payload_ref =
             shared_res
-                .as_ref()
+                .0
                 .as_ref()
                 .map_err(|e| GdalProcessPoolError::IpcProcessError {
                     source: IpcProcessError::IpcOther { msg: e.to_string() },
@@ -1098,10 +1136,7 @@ mod tests {
         dataset_hash: u64,
         band: usize,
         w: GridBoundingBox2D,
-    ) -> (
-        Box<QueuedRequest>,
-        oneshot::Receiver<Result<IpcProcessRasterResult, GdalProcessPoolError>>,
-    ) {
+    ) -> (Box<QueuedRequest>, oneshot::Receiver<ReadResult>) {
         let (tx, rx) = oneshot::channel();
         let msg = IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
             dataset_params: make_params("test.tif", band),
@@ -1232,16 +1267,19 @@ mod tests {
             while let Some(cmd) = broker_rx.recv().await {
                 if let BrokerCommand::Read(req) = cmd {
                     read_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                    let _ = req.respond_to.send(Ok(Ok(GdalIpcBytePayload {
-                        dimensions: window([0, 0], [7, 7]),
-                        properties: GdalIpcRasterProperties {
-                            offset: None,
-                            scale: None,
-                            description: None,
-                            properties_map: vec![],
-                        },
-                        data_variant: GdalDataGridByteVariant::Empty,
-                    })));
+                    let _ = req.respond_to.send(ReadResult {
+                        result: Ok(Ok(GdalIpcBytePayload {
+                            dimensions: window([0, 0], [7, 7]),
+                            properties: GdalIpcRasterProperties {
+                                offset: None,
+                                scale: None,
+                                description: None,
+                                properties_map: vec![],
+                            },
+                            data_variant: GdalDataGridByteVariant::Empty,
+                        })),
+                        companion_span: None,
+                    });
                 }
             }
         });
