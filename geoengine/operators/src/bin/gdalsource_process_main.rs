@@ -233,6 +233,9 @@ fn main() {
         &token,
     );
 
+    let _worker_span =
+        tracing::info_span!("gdal_worker", worker_id = worker_config.logging.worker_id,).entered();
+
     if let Some(ref opts) = worker_config.gdal_config_options {
         set_gdal_process_global_options(opts);
     }
