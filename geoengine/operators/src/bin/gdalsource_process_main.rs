@@ -192,7 +192,7 @@ fn file_layer_with_filter<S>(
 where
     S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
 {
-    // ponytail: short retention because number_of_processes workers each produce rotated files.
+    // short retention because number_of_processes workers each produce rotated files.
     let file_appender = RollingFileAppender::builder()
         .max_log_files(3)
         .filename_prefix(format!(

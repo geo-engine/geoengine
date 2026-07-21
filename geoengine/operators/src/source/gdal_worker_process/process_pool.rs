@@ -261,7 +261,7 @@ impl GdalProcessPool {
     /// - `max_parallel_per_dataset`: The maximum number of active requests allowed concurrently for the same dataset, enforcing per-dataset concurrency limits.
     /// # Panics
     /// This function will panic if any of the worker processes fail to spawn successfully.
-    #[allow(clippy::needless_pass_by_value)] // ponytail: value is cloned into spawn block, ref would need lifetime gymnastics
+    #[allow(clippy::needless_pass_by_value)] // value is cloned into spawn block, ref would need lifetime workaround
     pub fn new_with_tokio_handle(
         handle: &tokio::runtime::Handle,
         number_of_processes: usize,
@@ -329,7 +329,7 @@ impl GdalProcessPool {
     /// This function will panic if any of the worker processes fail to spawn successfully.
     /// It is designed to be called during application initialization, and assumes that the system has sufficient resources to spawn the specified number of worker processes.
     ///
-    #[allow(clippy::needless_pass_by_value)] // ponytail: value is cloned into spawn block, ref would need lifetime gymnastics
+    #[allow(clippy::needless_pass_by_value)] // value is cloned into spawn block, ref would need lifetime workaround
     pub fn new(
         number_of_processes: usize,
         max_active_processes: usize,
@@ -915,7 +915,7 @@ impl GdalPoolDispatcher {
                         (Err(GdalProcessPoolError::WorkerPanic), None)
                     };
 
-                    // ponytail: link companion's span to the caller's trace.
+                    // link companion's span to the caller's trace.
                     // The Span handle keeps the companion span alive in the subscriber.
                     if let Some(ref span) = companion_span {
                         span.follows_from(parent_span.id());
@@ -943,7 +943,7 @@ impl GdalPoolDispatcher {
             .expect("Watch channel must contain a value after changed() yields")
             .clone();
 
-        // ponytail: link follower's span to the companion's independent trace.
+        // link follower's span to the companion's independent trace.
         // Cloning the Span handle keeps the companion span alive in the subscriber.
         if let Some(ref span) = shared_res.1 {
             tracing::Span::current().follows_from(span.id());
