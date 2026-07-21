@@ -306,7 +306,7 @@ fn run(token: Token) {
         let payload = message.0;
 
         let _span = tracing::debug_span!(
-            "gdal_worker_request",
+            "gdal_worker_read_tile",
             read_id = payload.read_id.as_deref().unwrap_or(""),
             dataset = %payload.dataset_params.file_path.display(),
             band = payload.dataset_params.rasterband_channel,

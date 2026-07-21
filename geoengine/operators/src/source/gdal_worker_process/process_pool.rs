@@ -915,10 +915,10 @@ impl GdalPoolDispatcher {
                         (Err(GdalProcessPoolError::WorkerPanic), None)
                     };
 
-                    // ponytail: link caller's span to the companion's independent trace.
+                    // ponytail: link companion's span to the caller's trace.
                     // The Span handle keeps the companion span alive in the subscriber.
                     if let Some(ref span) = companion_span {
-                        parent_span.follows_from(span.id());
+                        span.follows_from(parent_span.id());
                     }
 
                     // Broadcast to all waiting tasks. (Arc preserves perfect memory alignment)
