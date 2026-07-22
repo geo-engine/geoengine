@@ -11,10 +11,15 @@ repository.workspace = true
 [lib]
 bench = false
 
+[[bin]]
+name = "gdalsource-process"
+path = "src/bin/gdalsource_process_main.rs"
+
 [dependencies]
 arrow = { workspace = true }
 async-trait = { workspace = true }
 bb8-postgres = { workspace = true }
+bytemuck = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 csv = { workspace = true }
@@ -26,13 +31,18 @@ geo = { workspace = true }
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-expression = { path = "../expression" }
 itertools = { workspace = true }
+ipc-channel = { workspace = true }
 libloading = { workspace = true }
 tracing = { workspace = true }
+tracing-appender = { workspace = true }
 lru = { workspace = true }
 lz4_flex = { workspace = true }
 ndarray = { workspace = true }
 num-traits = { workspace = true }
 num = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-otlp = { workspace = true }
 ouroboros = { workspace = true }
 ordered-float = { workspace = true }
 ort = { workspace = true }
@@ -43,12 +53,16 @@ postgres-types = { workspace = true }
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 serde_json = { workspace = true }
+serial_test = { workspace = true }
 snafu = { workspace = true }
 stream-cancel = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-postgres = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 typetag = { workspace = true }
 uuid = { workspace = true }
 strum = { workspace = true }
@@ -64,6 +78,7 @@ rand = { workspace = true }
 [[bench]]
 name = "ci_operators"
 harness = false
+
 
 [lints]
 workspace = true

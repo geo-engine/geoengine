@@ -1,48 +1,37 @@
+use super::gdal_worker_process::{GdalDatasetParameters, GdalPoolDispatcher, GridAndProperties};
 use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor,
     SpatialGridDescriptor, WorkflowOperatorPath,
 };
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
-use crate::source::gdal_source::reader::ReaderState;
-use crate::util::TemporaryGdalThreadLocalConfigOptions;
-use crate::util::gdal::gdal_open_dataset_ex;
-use crate::util::input::float_option_with_nan;
-use crate::util::retry::retry;
+use crate::source::gdal_source::reader::GdalPoolReader;
+use crate::source::gdal_worker_process::{GdalReaderMode, OverviewReaderState, ReaderState};
 use crate::{
     engine::{
         InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
         SourceOperator, TypedRasterQueryProcessor,
     },
-    error::Error,
     util::Result,
 };
 use async_trait::async_trait;
 pub use error::GdalSourceError;
-use float_cmp::{ApproxEq, approx_eq};
-use futures::{Future, TryStreamExt};
+use futures::{Future, TryFutureExt, TryStreamExt};
 use futures::{
     Stream,
     stream::{self, BoxStream, StreamExt},
 };
-use gdal::errors::GdalError;
-use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
-use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
-use gdal_sys::VSICurlPartialClearCache;
-use geoengine_datatypes::primitives::{SpatialResolution, find_next_best_overview_level};
+use gdal::raster::GdalType;
+use geoengine_datatypes::raster::ChangeGridBounds;
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
-        BandSelection, CacheHint, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
-        TimeInterval, TryIrregularTimeFillIterExt, TryRegularTimeFillIterExt,
+        BandSelection, CacheHint, RasterQueryRectangle, SpatialResolution, TimeInterval,
+        TryIrregularTimeFillIterExt, TryRegularTimeFillIterExt, find_next_best_overview_level,
     },
     raster::{
-        ChangeGridBounds, EmptyGrid, GeoTransform, Grid, GridBlit, GridBoundingBox2D, GridOrEmpty,
-        GridOrEmpty2D, GridShapeAccess, GridSize, MapElements, MaskedGrid, NoDataValueGrid, Pixel,
-        RasterDataType, RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType,
-        RasterPropertiesKey, RasterTile2D, SpatialGridDefinition, TileInformation,
-        TilingSpecification, TilingStrategy,
+        EmptyGrid, GeoTransform, GridBoundingBox2D, Pixel, RasterDataType, RasterProperties,
+        RasterTile2D, SpatialGridDefinition, TileInformation, TilingSpecification, TilingStrategy,
     },
-    util::test::TestDefault,
 };
 use itertools::Itertools;
 pub use loading_info::{
@@ -51,28 +40,15 @@ pub use loading_info::{
 };
 use num::FromPrimitive;
 use num::integer::div_floor;
-use postgres_types::{FromSql, ToSql};
-use reader::{
-    GdalReadAdvise, GdalReadWindow, GdalReaderMode, GridAndProperties, OverviewReaderState,
-};
 use serde::{Deserialize, Serialize};
-use snafu::{ResultExt, ensure};
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::ffi::CString;
+use snafu::ensure;
 use std::marker::PhantomData;
-use std::path::{Path, PathBuf};
-use std::time::Instant;
 use tracing::{debug, warn};
 
 mod db_types;
-mod error;
-mod loading_info;
+pub mod error;
+pub mod loading_info;
 mod reader;
-
-static GDAL_RETRY_INITIAL_BACKOFF_MS: u64 = 1000;
-static GDAL_RETRY_MAX_BACKOFF_MS: u64 = 60 * 60 * 1000;
-static GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
 
 /// Parameters for the GDAL Source Operator
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -116,194 +92,135 @@ impl OperatorData for GdalSourceParameters {
 type GdalMetaData =
     Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromSql, ToSql)]
-#[serde(rename_all = "camelCase")]
-pub struct GdalSourceTimePlaceholder {
-    pub format: DateTimeParseFormat,
-    pub reference: TimeReference,
-}
+pub struct GdalRasterLoader;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, FromSql, ToSql)]
-#[serde(rename_all = "camelCase")]
-pub enum TimeReference {
-    Start,
-    End,
-}
+impl GdalRasterLoader {
+    pub async fn load_tile_grid_props<T: Pixel + GdalType + FromPrimitive>(
+        dataset_params: GdalDatasetParameters,
+        reader_mode: GdalReaderMode,
+        tile_information: TileInformation,
+        gdal_worker: GdalPoolDispatcher,
+    ) -> Result<Option<GridAndProperties<T, GridBoundingBox2D>>, GdalSourceError> {
+        tracing::trace!(
+            "Loading tile {:?}, from {}, band: {}",
+            &tile_information,
+            dataset_params.file_path.display(),
+            dataset_params.rasterband_channel
+        );
 
-/// Parameters for loading data using Gdal
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct GdalDatasetParameters {
-    pub file_path: PathBuf,
-    pub rasterband_channel: usize,
-    pub geo_transform: GdalDatasetGeoTransform, // TODO: discuss if we need this at all
-    pub width: usize,
-    pub height: usize,
-    pub file_not_found_handling: FileNotFoundHandling,
-    #[serde(default)]
-    #[serde(with = "float_option_with_nan")]
-    pub no_data_value: Option<f64>,
-    pub properties_mapping: Option<Vec<GdalMetadataMapping>>,
-    // Dataset open option as strings, e.g. `vec!["UserPwd=geoengine:pwd".to_owned(), "HttpAuth=BASIC".to_owned()]`
-    pub gdal_open_options: Option<Vec<String>>,
-    // Configs as key, value pairs that will be set as thread local config options, e.g.
-    // `vec!["AWS_REGION".to_owned(), "eu-central-1".to_owned()]` and unset afterwards
-    // TODO: validate the config options: only allow specific keys and specific values
-    pub gdal_config_options: Option<Vec<(String, String)>>,
-    #[serde(default)]
-    pub allow_alphaband_as_mask: bool,
-    pub retry: Option<GdalRetryOptions>,
-}
+        let ds_spatial_grid = dataset_params.spatial_grid_definition();
+        let tile_spatial_grid = tile_information.spatial_grid_definition();
+        tracing::trace!(
+            "ds_spatial_grid: {:?}, tile_spatial_grid {:?}",
+            ds_spatial_grid,
+            tile_spatial_grid
+        );
+        let gdal_read_advise =
+            reader_mode.tiling_to_dataset_read_advise(&ds_spatial_grid, &tile_spatial_grid);
 
-impl GdalDatasetParameters {
-    pub fn dataset_bounds(&self) -> GridBoundingBox2D {
-        GridBoundingBox2D::new_unchecked(
-            [0, 0],
-            [self.height as isize - 1, self.width as isize - 1],
+        let Some(gdal_read_advise) = gdal_read_advise else {
+            tracing::trace!(
+                "Tile {:?} not intersecting dataset grid or gdal grid {:?}",
+                &tile_information,
+                dataset_params.file_path
+            );
+            return Ok(None);
+        };
+
+        let res = GdalPoolReader::from(gdal_worker)
+            .load_tile_data_process(dataset_params, gdal_read_advise)
+            .await?;
+
+        Ok(Some(res))
+    }
+
+    /// Load a single tile using the process manager.
+    async fn load_tile_async<T: Pixel + GdalType + FromPrimitive>(
+        dataset_params: Option<GdalDatasetParameters>,
+        reader_mode: GdalReaderMode,
+        tile_information: TileInformation,
+        tile_time: TimeInterval,
+        cache_hint: CacheHint,
+        gdal_worker: GdalPoolDispatcher,
+    ) -> Result<RasterTile2D<T>, GdalSourceError> {
+        match dataset_params {
+            // TODO: discuss if we need this check here. The metadata provider should only pass on loading infos if the query intersects the datasets bounds! And the tiling strategy should only generate tiles that intersect the querys bbox.
+            Some(ds) => {
+                let grid_and_props =
+                    Self::load_tile_grid_props(ds, reader_mode, tile_information, gdal_worker)
+                        .await?;
+                let tile = match grid_and_props {
+                    Some(gp) => RasterTile2D::new_with_tile_info_and_properties(
+                        tile_time,
+                        tile_information,
+                        0,
+                        gp.grid.unbounded(),
+                        gp.properties,
+                        cache_hint,
+                    ),
+                    None => {
+                        debug!(
+                            "Tile {:?} not intersecting dataset grid or gdal grid",
+                            &tile_information.global_tile_position
+                        );
+                        Self::create_no_data_tile(tile_information, tile_time, cache_hint)
+                    }
+                };
+                Ok(tile)
+            }
+            _ => {
+                debug!(
+                    "Skipping tile without GdalDatasetParameters {:?}",
+                    &tile_information
+                );
+
+                Ok(Self::create_no_data_tile(
+                    tile_information,
+                    tile_time,
+                    cache_hint,
+                ))
+            }
+        }
+    }
+
+    fn create_no_data_tile<T: Pixel>(
+        tile_info: TileInformation,
+        tile_time: TimeInterval,
+        cache_hint: CacheHint,
+    ) -> RasterTile2D<T> {
+        RasterTile2D::new_with_tile_info_and_properties(
+            tile_time,
+            tile_info,
+            0,
+            EmptyGrid::new(tile_info.tile_size_in_pixels).into(),
+            RasterProperties::default(),
+            cache_hint,
         )
     }
-
-    pub fn gdal_geo_transform(&self) -> GdalDatasetGeoTransform {
-        self.geo_transform
-    }
-
-    /// Returns the `SpatialGridDefinition` of the Gdal dataset.
-    ///
-    /// Note: This allows upside down datasets (where `GeoTransform` `y_pixel_size` is positive)!
-    ///
-    /// # Panics
-    /// Panics if the `GdalDatasetParameters` are faulty.
-    pub fn spatial_grid_definition(&self) -> SpatialGridDefinition {
-        let gdal_geo_transform = GeoTransform::new(
-            self.gdal_geo_transform().origin_coordinate,
-            self.gdal_geo_transform().x_pixel_size,
-            self.gdal_geo_transform().y_pixel_size,
-        );
-
-        SpatialGridDefinition::new(gdal_geo_transform, self.dataset_bounds())
-    }
 }
 
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, Copy)]
-#[serde(rename_all = "camelCase")]
-pub struct GdalRetryOptions {
-    pub max_retries: usize,
-}
-
-/// A user friendly representation of Gdal's geo transform. In contrast to [`GeoTransform`] this
-/// geo transform allows arbitrary pixel sizes and can thus also represent rasters where the origin is not located
-/// in the upper left corner. It should only be used for loading rasters with Gdal and not internally.
-/// The GDAL pixel space is usually anchored at the "top-left" corner of the data spatial bounds. Therefore the raster data is stored with spatial coordinate y-values decreasing with the rasters rows. This is represented by a negative pixel size.
-/// However, there are datasets where the data is stored "upside-down". If this is the case, the pixel size is positive.
-#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, FromSql, ToSql)]
-#[serde(rename_all = "camelCase")]
-pub struct GdalDatasetGeoTransform {
-    pub origin_coordinate: Coordinate2D,
-    pub x_pixel_size: f64,
-    pub y_pixel_size: f64,
-}
-
-/// Default implementation for testing purposes where geo transform doesn't matter
-impl TestDefault for GdalDatasetGeoTransform {
-    fn test_default() -> Self {
-        Self {
-            origin_coordinate: (0.0, 0.0).into(),
-            x_pixel_size: 1.0,
-            y_pixel_size: -1.0,
-        }
-    }
-}
-
-impl ApproxEq for GdalDatasetGeoTransform {
-    type Margin = float_cmp::F64Margin;
-
-    fn approx_eq<M>(self, other: Self, margin: M) -> bool
-    where
-        M: Into<Self::Margin>,
-    {
-        let m = margin.into();
-        self.origin_coordinate.approx_eq(other.origin_coordinate, m)
-            && self.x_pixel_size.approx_eq(other.x_pixel_size, m)
-            && self.y_pixel_size.approx_eq(other.y_pixel_size, m)
-    }
-}
-
-/// Direct conversion from `GdalDatasetGeoTransform` to [`GeoTransform`] only works if origin is located in the upper left corner.
-impl TryFrom<GdalDatasetGeoTransform> for GeoTransform {
-    type Error = Error;
-
-    fn try_from(dataset_geo_transform: GdalDatasetGeoTransform) -> Result<Self> {
-        ensure!(
-            dataset_geo_transform.x_pixel_size != 0.0 && dataset_geo_transform.y_pixel_size != 0.0,
-            crate::error::GeoTransformOrigin // TODO new name?
-        );
-
-        Ok(GeoTransform::new(
-            dataset_geo_transform.origin_coordinate,
-            dataset_geo_transform.x_pixel_size,
-            dataset_geo_transform.y_pixel_size,
-        ))
-    }
-}
-
-impl From<gdal::GeoTransform> for GdalDatasetGeoTransform {
-    fn from(gdal_geo_transform: gdal::GeoTransform) -> Self {
-        Self {
-            origin_coordinate: (gdal_geo_transform[0], gdal_geo_transform[3]).into(),
-            x_pixel_size: gdal_geo_transform[1],
-            y_pixel_size: gdal_geo_transform[5],
-        }
-    }
-}
-
-impl GridShapeAccess for GdalDatasetParameters {
-    type ShapeArray = [usize; 2];
-
-    fn grid_shape_array(&self) -> Self::ShapeArray {
-        [self.height, self.width]
-    }
-}
-
-/// How to handle file not found errors
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, FromSql, ToSql)]
-pub enum FileNotFoundHandling {
-    NoData, // output tiles filled with nodata
-    Error,  // return error tile
-}
-
-impl GdalDatasetParameters {
-    /// Placeholders are replaced by formatted time value.
-    /// E.g. `%my_placeholder%` could be replaced by `2014-04-01` depending on the format and time input.
-    pub fn replace_time_placeholders(
-        &self,
-        placeholders: &HashMap<String, GdalSourceTimePlaceholder>,
-        time: TimeInterval,
-    ) -> Result<Self> {
-        let mut file_path: String = self.file_path.to_string_lossy().into();
-
-        for (placeholder, time_placeholder) in placeholders {
-            let time = match time_placeholder.reference {
-                TimeReference::Start => time.start(),
-                TimeReference::End => time.end(),
-            };
-            let time_string = time
-                .as_date_time()
-                .ok_or(Error::TimeInstanceNotDisplayable)?
-                .format(&time_placeholder.format);
-
-            // TODO: use more efficient algorithm for replacing multiple placeholders, e.g. aho-corasick
-            file_path = file_path.replace(placeholder, &time_string);
-        }
-
-        Ok(Self {
-            file_not_found_handling: self.file_not_found_handling,
-            file_path: file_path.into(),
-            properties_mapping: self.properties_mapping.clone(),
-            gdal_open_options: self.gdal_open_options.clone(),
-            gdal_config_options: self.gdal_config_options.clone(),
-            ..*self
-        })
-    }
+// This is where the source attaches!
+/// A stream of futures producing `RasterTile2D` for a single slice in time
+fn temporal_slice_tile_future_stream<T: Pixel + GdalType + FromPrimitive>(
+    spatial_bounds: GridBoundingBox2D,
+    info: GdalLoadingInfoTemporalSlice,
+    tiling_strategy: TilingStrategy,
+    reader_mode: GdalReaderMode,
+    gdal_worker: GdalPoolDispatcher,
+) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> + use<T> {
+    stream::iter(tiling_strategy.tile_information_iterator_from_pixel_bounds(spatial_bounds)).map(
+        move |tile| {
+            GdalRasterLoader::load_tile_async(
+                info.params.clone(),
+                reader_mode,
+                tile,
+                info.time,
+                info.cache_ttl.into(),
+                gdal_worker.clone(),
+            )
+            .map_err(Into::into)
+        },
+    )
 }
 
 pub struct GdalSourceProcessor<T>
@@ -318,299 +235,41 @@ where
     pub _phantom_data: PhantomData<T>,
 }
 
-struct GdalRasterLoader {}
-
-impl GdalRasterLoader {
-    ///
-    /// A method to async load single tiles from a GDAL dataset.
-    ///
-    async fn load_tile_data_async<T: Pixel + GdalType + FromPrimitive>(
-        dataset_params: GdalDatasetParameters,
-        read_advise: GdalReadAdvise,
-    ) -> Result<Option<GridAndProperties<T>>> {
-        // TODO: detect usage of vsi curl properly, e.g. also check for `/vsicurl_streaming` and combinations with `/vsizip`
-        let is_vsi_curl = dataset_params.file_path.starts_with("/vsicurl/");
-
-        retry(
-            dataset_params
-                .retry
-                .map(|r| r.max_retries)
-                .unwrap_or_default(),
-            GDAL_RETRY_INITIAL_BACKOFF_MS,
-            GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR,
-            Some(GDAL_RETRY_MAX_BACKOFF_MS),
-            move || {
-                let ds = dataset_params.clone();
-                let file_path = ds.file_path.clone();
-
-                async move {
-                    let load_tile_result =
-                        crate::util::spawn_blocking(move || Self::load_tile_data(&ds, read_advise))
-                            .await
-                            .context(crate::error::TokioJoin);
-
-                    match load_tile_result {
-                        Ok(Ok(r)) => Ok(r),
-                        Ok(Err(e)) | Err(e) => {
-                            if is_vsi_curl {
-                                // clear the VSICurl cache, to force GDAL to try to re-download the file
-                                // otherwise it will assume any observed error will happen again
-                                clear_gdal_vsi_cache_for_path(file_path.as_path());
-                            }
-
-                            Err(e)
-                        }
-                    }
-                }
-            },
-        )
-        .await
-    }
-
-    async fn load_tile_async<T: Pixel + GdalType + FromPrimitive>(
-        dataset_params: Option<GdalDatasetParameters>,
-        reader_mode: GdalReaderMode,
-        tile_information: TileInformation,
-        tile_time: TimeInterval,
-        cache_hint: CacheHint,
-    ) -> Result<RasterTile2D<T>> {
-        let tile_spatial_grid = tile_information.spatial_grid_definition();
-
-        match dataset_params {
-            // TODO: discuss if we need this check here. The metadata provider should only pass on loading infos if the query intersects the datasets bounds! And the tiling strategy should only generate tiles that intersect the querys bbox.
-            Some(ds) => {
-                debug!(
-                    "Loading tile {:?}, from {}, band: {}",
-                    &tile_information,
-                    ds.file_path.display(),
-                    ds.rasterband_channel
-                );
-                let ds_spatial_grid = ds.spatial_grid_definition();
-                tracing::trace!(
-                    "ds_spatial_grid: {:?}, tile_spatial_grid {:?}",
-                    &ds_spatial_grid,
-                    &tile_spatial_grid
-                );
-
-                let gdal_read_advise: Option<GdalReadAdvise> =
-                    reader_mode.tiling_to_dataset_read_advise(&ds_spatial_grid, &tile_spatial_grid);
-
-                let Some(gdal_read_advise) = gdal_read_advise else {
-                    debug!(
-                        "Tile {:?} not intersecting dataset grid or gdal grid {:?}",
-                        &tile_information, ds.file_path
-                    );
-                    return Ok(create_no_data_tile(tile_information, tile_time, cache_hint));
-                };
-
-                let grid = Self::load_tile_data_async(ds, gdal_read_advise).await?;
-
-                match grid {
-                    Some(grid) => Ok(RasterTile2D::new_with_properties(
-                        tile_time,
-                        tile_information.global_tile_position,
-                        0,
-                        tile_information.global_geo_transform,
-                        grid.grid,
-                        grid.properties,
-                        cache_hint,
-                    )),
-                    None => Ok(create_no_data_tile(tile_information, tile_time, cache_hint)),
-                }
-            }
-            _ => {
-                debug!(
-                    "Skipping tile without GdalDatasetParameters {:?}",
-                    &tile_information
-                );
-
-                Ok(create_no_data_tile(tile_information, tile_time, cache_hint))
-            }
+impl<T> GdalSourceProcessor<T>
+where
+    T: gdal::raster::GdalType + Pixel,
+{
+    pub fn new(
+        produced_result_descriptor: RasterResultDescriptor,
+        tiling_specification: TilingSpecification,
+        meta_data: GdalMetaData,
+        overview_level: u32,
+        original_resolution_spatial_grid: Option<SpatialGridDefinition>,
+    ) -> Self {
+        Self {
+            produced_result_descriptor,
+            tiling_specification,
+            meta_data,
+            overview_level,
+            original_resolution_spatial_grid,
+            _phantom_data: PhantomData,
         }
     }
 
-    ///
-    /// A method to load single tiles from a GDAL dataset.
-    ///
-    fn load_tile_data<T: Pixel + GdalType + FromPrimitive>(
-        dataset_params: &GdalDatasetParameters,
-        read_advise: GdalReadAdvise,
-    ) -> Result<Option<GridAndProperties<T>>> {
-        let start = Instant::now();
-
-        debug!(
-            "GridOrEmpty2D<{:?}> requested for {:?}.",
-            T::TYPE,
-            &read_advise.bounds_of_target,
-        );
-
-        let options = dataset_params
-            .gdal_open_options
-            .as_ref()
-            .map(|o| o.iter().map(String::as_str).collect::<Vec<_>>());
-
-        // reverts the thread local configs on drop
-        let _thread_local_configs = dataset_params
-            .gdal_config_options
-            .as_ref()
-            .map(|config_options| TemporaryGdalThreadLocalConfigOptions::new(config_options));
-
-        let dataset_result = gdal_open_dataset_ex(
-            &dataset_params.file_path,
-            DatasetOptions {
-                open_flags: GdalOpenFlags::GDAL_OF_RASTER,
-                open_options: options.as_deref(),
-                ..DatasetOptions::default()
-            },
-        );
-
-        if let Err(error) = &dataset_result {
-            let is_file_not_found = error_is_gdal_file_not_found(error);
-
-            let err_result = match dataset_params.file_not_found_handling {
-                FileNotFoundHandling::NoData if is_file_not_found => Ok(None),
-                _ => Err(crate::error::Error::CouldNotOpenGdalDataset {
-                    file_path: dataset_params.file_path.to_string_lossy().to_string(),
-                }),
-            };
-            let elapsed = start.elapsed();
-            debug!(
-                "error opening dataset: {:?} -> returning error = {}, took: {:?}, file: {}",
-                error,
-                err_result.is_err(),
-                elapsed,
-                dataset_params.file_path.display()
-            );
-            return err_result;
-        }
-
-        let dataset = dataset_result.expect("checked");
-
-        let rasterband = dataset.rasterband(dataset_params.rasterband_channel)?;
-
-        let gdal_dataset_geotransform = GdalDatasetGeoTransform::from(dataset.geo_transform()?);
-        // check that the dataset geo transform is the same as the one we get from GDAL
-        debug_assert!(
-            approx_eq!(
-                Coordinate2D,
-                gdal_dataset_geotransform.origin_coordinate,
-                dataset_params.geo_transform.origin_coordinate
-            ),
-            "expected dataset geo transform origin coordinate {:?} to be approximately equal to GDAL dataset geo transform origin coordinate {:?}",
-            dataset_params.geo_transform.origin_coordinate,
-            gdal_dataset_geotransform.origin_coordinate
-        );
-
-        debug_assert!(
-            approx_eq!(
-                f64,
-                gdal_dataset_geotransform.x_pixel_size,
-                dataset_params.geo_transform.x_pixel_size
-            ),
-            "expected dataset geo transform x pixel size {:?} to be approximately equal to GDAL dataset geo transform x pixel size {:?}",
-            dataset_params.geo_transform.x_pixel_size,
-            gdal_dataset_geotransform.x_pixel_size
-        );
-
-        debug_assert!(
-            approx_eq!(
-                f64,
-                gdal_dataset_geotransform.y_pixel_size,
-                dataset_params.geo_transform.y_pixel_size
-            ),
-            "expected dataset geo transform y pixel size {:?} to be approximately equal to GDAL dataset geo transform y pixel size {:?}",
-            dataset_params.geo_transform.y_pixel_size,
-            gdal_dataset_geotransform.y_pixel_size
-        );
-
-        let (gdal_dataset_pixels_x, gdal_dataset_pixels_y) = dataset.raster_size();
-        // check that the dataset pixel size is the same as the one we get from GDAL
-        debug_assert_eq!(gdal_dataset_pixels_x, dataset_params.width);
-        debug_assert_eq!(gdal_dataset_pixels_y, dataset_params.height);
-
-        let result_grid =
-            read_grid_and_handle_edges(&dataset, &rasterband, dataset_params, read_advise)?;
-
-        let properties = read_raster_properties(&dataset, dataset_params, &rasterband);
-
-        let elapsed = start.elapsed();
-        debug!("data loaded -> returning data grid, took {elapsed:?}");
-
-        Ok(Some(GridAndProperties {
-            grid: result_grid,
-            properties,
-        }))
-    }
-
-    ///
-    /// A stream of futures producing `RasterTile2D` for a single slice in time
-    ///
-    fn temporal_slice_tile_future_stream<T: Pixel + GdalType + FromPrimitive>(
-        spatial_query: GridBoundingBox2D,
-        info: GdalLoadingInfoTemporalSlice,
-        tiling_strategy: TilingStrategy,
-        reader_mode: GdalReaderMode,
-    ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> + use<T> {
-        stream::iter(
-            tiling_strategy
-                .tile_information_iterator_from_pixel_bounds(spatial_query)
-                .map(move |tile| {
-                    GdalRasterLoader::load_tile_async(
-                        info.params.clone(),
-                        reader_mode,
-                        tile,
-                        info.time,
-                        info.cache_ttl.into(),
-                    )
-                }),
+    pub fn new_no_overview(
+        produced_result_descriptor: RasterResultDescriptor,
+        tiling_specification: TilingSpecification,
+        meta_data: GdalMetaData,
+    ) -> Self {
+        Self::new(
+            produced_result_descriptor,
+            tiling_specification,
+            meta_data,
+            0,
+            None,
         )
     }
-
-    fn loading_info_to_tile_stream<
-        T: Pixel + GdalType + FromPrimitive,
-        S: Stream<Item = Result<GdalLoadingInfoTemporalSlice>>,
-    >(
-        loading_info_stream: S,
-        spatial_query: GridBoundingBox2D,
-        tiling_strategy: TilingStrategy,
-        reader_mode: GdalReaderMode,
-    ) -> impl Stream<Item = Result<RasterTile2D<T>>> + use<S, T> {
-        loading_info_stream
-            .map_ok(move |info| {
-                GdalRasterLoader::temporal_slice_tile_future_stream(
-                    spatial_query,
-                    info,
-                    tiling_strategy,
-                    reader_mode,
-                )
-                .map(Result::Ok)
-            })
-            .try_flatten()
-            .try_buffered(16) // TODO: make this configurable
-    }
 }
-
-fn error_is_gdal_file_not_found(error: &Error) -> bool {
-    matches!(
-        error,
-        Error::Gdal {
-            source: GdalError::NullPointer {
-                method_name,
-                msg
-            },
-        } if *method_name == "GDALOpenEx" && (*msg == "HTTP response code: 404" || msg.ends_with("No such file or directory"))
-    )
-}
-
-fn clear_gdal_vsi_cache_for_path(file_path: &Path) {
-    unsafe {
-        if let Some(Some(c_string)) = file_path.to_str().map(|s| CString::new(s).ok()) {
-            VSICurlPartialClearCache(c_string.as_ptr());
-        }
-    }
-}
-
-impl<T> GdalSourceProcessor<T> where T: gdal::raster::GdalType + Pixel {}
 
 #[async_trait]
 impl<P> QueryProcessor for GdalSourceProcessor<P>
@@ -625,13 +284,13 @@ where
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
-        _ctx: &'a dyn crate::engine::QueryContext,
+        ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<BoxStream<Result<Self::Output>>> {
         ensure!(
             query.attributes().as_slice() == [0],
             crate::error::GdalSourceDoesNotSupportQueryingOtherBandsThanTheFirstOneYet
         );
-        tracing::debug!(
+        tracing::trace!(
             "Querying GdalSourceProcessor<{:?}> with: {:?}.",
             P::TYPE,
             &query
@@ -667,23 +326,23 @@ where
             None => GdalReaderMode::OriginalResolution(ReaderState {
                 dataset_spatial_grid: grid_produced_by_source,
             }),
-            Some(original_resolution_spatial_grid) => GdalReaderMode::OverviewLevel(
-                OverviewReaderState::new(original_resolution_spatial_grid),
-            ),
+            Some(original_resolution_spatial_grid) => {
+                GdalReaderMode::OverviewLevel(OverviewReaderState {
+                    original_dataset_grid: original_resolution_spatial_grid,
+                    overview_level: self.overview_level,
+                })
+            }
         };
-
-        tracing::debug!(
-            "Creating reader mode: {:?}. Original grid: {:?} and target grid: {:?}",
-            reader_mode,
-            self.original_resolution_spatial_grid,
-            produced_tiling_grid
-        );
 
         let loading_info = self.meta_data.loading_info(query.clone()).await?;
 
-        debug!(
-            "GdalSource _query loading info: start_time_of_output_stream: {:?}, end_time_of_output_stream: {:?}",
-            loading_info.start_time_of_output_stream, loading_info.end_time_of_output_stream
+        tracing::trace!(
+            "Reader mode: {:?}. Original grid: {:?} and target grid: {:?}. Loadinginfo  start_time_of_output_stream: {:?}, end_time_of_output_stream: {:?}",
+            reader_mode,
+            self.original_resolution_spatial_grid,
+            produced_tiling_grid,
+            loading_info.start_time_of_output_stream,
+            loading_info.end_time_of_output_stream
         );
 
         debug_assert!(
@@ -719,23 +378,26 @@ where
             }
         };
 
-        let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
-            filled_loading_info_stream
-                .inspect_ok(move |r| {
-                    debug!("GdalSource _query now producing time slice: {:?}", r.time);
-                    if !r.time.intersects(&query_time) {
-                        warn!(
-                            "GdalSource _query producing time slice that does not intersect query time: {:?} vs {:?}",
-                            r.time, query_time
-                        );
-                    }
-                }),
+        let stream = filled_loading_info_stream
+                        .inspect_ok(move |r| {
+                            tracing::trace!("GdalSource _query now producing time slice: {:?}", r.time);
+                            if !r.time.intersects(&query_time) {
+                                warn!(
+                                    "GdalSource _query producing time slice that does not intersect query time: {:?} vs {:?}",
+                                    r.time, query_time
+                                );
+                            }
+                        });
+
+        let loaded_source_stream = load_source_stream::<P, _>(
+            stream,
             query.spatial_bounds(),
             tiling_strategy,
             reader_mode,
+            ctx.get_gdal_worker(),
         );
 
-        Ok(source_stream.boxed())
+        Ok(loaded_source_stream.boxed())
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
@@ -791,7 +453,9 @@ where
         };
 
         Ok(res_stream
-            .inspect_ok(|ti| debug!("GdalSource time_query producing time interval: {:?}", ti))
+            .inspect_ok(|ti| {
+                tracing::trace!("GdalSource time_query producing time interval: {:?}", ti);
+            })
             .boxed())
     }
 }
@@ -802,12 +466,38 @@ impl OperatorName for GdalSource {
     const TYPE_NAME: &'static str = "GdalSource";
 }
 
+fn load_source_stream<P, S>(
+    source_stream: S,
+    spatial_query: GridBoundingBox2D,
+    tiling_strategy: TilingStrategy,
+    reader_mode: GdalReaderMode,
+    gdal_worker: GdalPoolDispatcher,
+) -> impl Stream<Item = Result<RasterTile2D<P>>> + use<P, S>
+where
+    P: Pixel + GdalType + FromPrimitive,
+    S: Stream<Item = Result<GdalLoadingInfoTemporalSlice>>,
+{
+    source_stream
+        .map_ok(move |info| {
+            temporal_slice_tile_future_stream(
+                spatial_query,
+                info,
+                tiling_strategy,
+                reader_mode,
+                gdal_worker.clone(),
+            )
+            .map(Result::Ok)
+        })
+        .try_flatten()
+        .try_buffered(8) // TODO: make this configurable
+}
+
 fn overview_level_spatial_grid(
     source_spatial_grid: SpatialGridDefinition,
     overview_level: u32,
 ) -> Option<SpatialGridDefinition> {
     if overview_level > 0 {
-        debug!("Using overview level {overview_level}");
+        tracing::trace!("Using overview level {overview_level}");
         let geo_transform = GeoTransform::new(
             source_spatial_grid.geo_transform.origin_coordinate,
             source_spatial_grid.geo_transform.x_pixel_size() * f64::from(overview_level),
@@ -835,7 +525,7 @@ fn overview_level_spatial_grid(
 
         Some(SpatialGridDefinition::new(geo_transform, grid_bounds))
     } else {
-        debug!("Using original resolution (ov = 0)");
+        tracing::trace!("Using original resolution (ov = 0)");
         None
     }
 }
@@ -851,8 +541,11 @@ impl RasterOperator for GdalSource {
         let data_id = context.resolve_named_data(&self.params.data).await?;
         let meta_data: GdalMetaData = context.meta_data(&data_id).await?;
 
-        debug!("Initializing GdalSource for {:?}.", &self.params.data);
-        debug!("GdalSource path: {:?}", path);
+        tracing::trace!(
+            "Initializing GdalSource for {:?}. GdalSource path: {:?}",
+            &self.params.data,
+            path
+        );
 
         let meta_data_result_descriptor = meta_data.result_descriptor().await?;
 
@@ -919,6 +612,12 @@ impl InitializedGdalSourceOperator {
         }
     }
 
+    /// Initializes the operator with a result descriptor that incorporates the overview level. The original resolution spatial grid is stored in the operator for later use in the query processor when reading the data.
+    /// If the overview level is 0, this method behaves the same as `initialize_original_resolution`.
+    ///
+    /// # Panics
+    /// Panics if the result descriptor does not contain a source spatial grid definition or if the overview level is greater than 0 but the overview level spatial grid could not be created.
+    /// The latter can only happen if the overview level is greater than 0 but the source spatial grid is smaller than the overview level, which should not happen in practice.
     pub fn initialize_with_overview_level(
         name: CanonicOperatorName,
         path: WorkflowOperatorPath,
@@ -963,6 +662,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
         &self.produced_result_descriptor
     }
 
+    #[allow(clippy::too_many_lines)]
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         Ok(match self.result_descriptor().data_type {
             RasterDataType::U8 => TypedRasterQueryProcessor::U8(
@@ -1114,265 +814,27 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
     }
 }
 
-/// This method reads the data for a single grid with a specified size from the GDAL dataset.
-/// It fails if the tile is not within the dataset.
-#[allow(clippy::float_cmp)]
-fn read_grid_from_raster<T, D>(
-    rasterband: &GdalRasterBand,
-    read_window: &GdalReadWindow,
-    out_shape: D,
-    dataset_params: &GdalDatasetParameters,
-    flip_y_axis: bool,
-) -> Result<GridOrEmpty<D, T>>
-where
-    T: Pixel + GdalType + Default + FromPrimitive,
-    D: Clone + GridSize + PartialEq,
-{
-    let gdal_out_shape = (out_shape.axis_size_x(), out_shape.axis_size_y());
-
-    let buffer = rasterband.read_as::<T>(
-        read_window.gdal_window_start(), // pixelspace origin
-        read_window.gdal_window_size(),  // pixelspace size
-        gdal_out_shape,                  // requested raster size
-        None,                            // sampling mode
-    )?;
-    let (_, buffer_data) = buffer.into_shape_and_vec();
-    let data_grid = Grid::new(out_shape.clone(), buffer_data)?;
-
-    let data_grid = if flip_y_axis {
-        data_grid.reversed_y_axis_grid()
-    } else {
-        data_grid
-    };
-
-    let dataset_mask_flags = rasterband.mask_flags()?;
-
-    if dataset_mask_flags.is_all_valid() {
-        debug!("all pixels are valid --> skip no-data and mask handling.");
-        return Ok(MaskedGrid::new_with_data(data_grid).into());
-    }
-
-    if dataset_mask_flags.is_nodata() {
-        debug!("raster uses a no-data value --> use no-data handling.");
-        let no_data_value = dataset_params
-            .no_data_value
-            .or_else(|| rasterband.no_data_value())
-            .and_then(FromPrimitive::from_f64);
-        let no_data_value_grid = NoDataValueGrid::new(data_grid, no_data_value);
-        let grid_or_empty = GridOrEmpty::from(no_data_value_grid);
-        return Ok(grid_or_empty);
-    }
-
-    if dataset_mask_flags.is_alpha() {
-        debug!("raster uses alpha band to mask pixels.");
-        if !dataset_params.allow_alphaband_as_mask {
-            return Err(Error::AlphaBandAsMaskNotAllowed);
-        }
-    }
-
-    debug!("use mask based no-data handling.");
-
-    let mask_band = rasterband.open_mask_band()?;
-    let mask_buffer = mask_band.read_as::<u8>(
-        read_window.gdal_window_start(), // pixelspace origin
-        read_window.gdal_window_size(),  // pixelspace size
-        gdal_out_shape,                  // requested raster size
-        None,                            // sampling mode
-    )?;
-    let (_, mask_buffer_data) = mask_buffer.into_shape_and_vec();
-    let mask_grid = Grid::new(out_shape, mask_buffer_data)?.map_elements(|p: u8| p > 0);
-
-    let mask_grid = if flip_y_axis {
-        mask_grid.reversed_y_axis_grid()
-    } else {
-        mask_grid
-    };
-
-    let masked_grid = MaskedGrid::new(data_grid, mask_grid)?;
-    Ok(GridOrEmpty::from(masked_grid))
-}
-
-/// This method reads the data for a single tile with a specified size from the GDAL dataset.
-/// It handles conversion to grid coordinates.
-/// If the tile is inside the dataset it uses the `read_grid_from_raster` method.
-/// If the tile overlaps the borders of the dataset it uses the `read_partial_grid_from_raster` method.  
-fn read_grid_and_handle_edges<T>(
-    _dataset: &GdalDataset,
-    rasterband: &GdalRasterBand,
-    dataset_params: &GdalDatasetParameters,
-    gdal_read_advice: GdalReadAdvise,
-) -> Result<GridOrEmpty2D<T>>
-where
-    T: Pixel + GdalType + Default + FromPrimitive,
-{
-    let result_grid = if gdal_read_advice.direct_read() {
-        read_grid_from_raster(
-            rasterband,
-            &gdal_read_advice.gdal_read_widow,
-            gdal_read_advice.read_window_bounds.grid_shape(),
-            dataset_params,
-            gdal_read_advice.flip_y,
-        )?
-    } else {
-        let r: GridOrEmpty<GridBoundingBox2D, T> = read_grid_from_raster(
-            rasterband,
-            &gdal_read_advice.gdal_read_widow,
-            gdal_read_advice.read_window_bounds,
-            dataset_params,
-            gdal_read_advice.flip_y,
-        )?;
-        let mut tile_raster = GridOrEmpty::from(EmptyGrid::new(gdal_read_advice.bounds_of_target));
-        tile_raster.grid_blit_from(&r);
-        tile_raster.unbounded()
-    };
-
-    Ok(result_grid)
-}
-
-/// This method reads the data for a single tile with a specified size from the GDAL dataset and adds the requested metadata as properties to the tile.
-fn read_raster_properties(
-    dataset: &GdalDataset,
-    dataset_params: &GdalDatasetParameters,
-    rasterband: &GdalRasterBand,
-) -> RasterProperties {
-    let mut properties = RasterProperties::default();
-
-    // always read the scale and offset values from the rasterband
-    properties_from_band(&mut properties, rasterband);
-
-    // read the properties from the dataset and rasterband metadata
-    if let Some(properties_mapping) = dataset_params.properties_mapping.as_ref() {
-        properties_from_gdal_metadata(&mut properties, dataset, properties_mapping);
-        properties_from_gdal_metadata(&mut properties, rasterband, properties_mapping);
-    }
-
-    properties
-}
-
-fn create_no_data_tile<T: Pixel>(
-    tile_info: TileInformation,
-    tile_time: TimeInterval,
-    cache_hint: CacheHint,
-) -> RasterTile2D<T> {
-    // TODO: add cache_hint
-    RasterTile2D::new_with_tile_info_and_properties(
-        tile_time,
-        tile_info,
-        0,
-        EmptyGrid::new(tile_info.tile_size_in_pixels).into(),
-        RasterProperties::default(),
-        cache_hint,
-    )
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromSql, ToSql)]
-pub struct GdalMetadataMapping {
-    pub source_key: RasterPropertiesKey,
-    pub target_key: RasterPropertiesKey,
-    pub target_type: RasterPropertiesEntryType,
-}
-
-impl GdalMetadataMapping {
-    pub fn identity(
-        key: RasterPropertiesKey,
-        target_type: RasterPropertiesEntryType,
-    ) -> GdalMetadataMapping {
-        GdalMetadataMapping {
-            source_key: key.clone(),
-            target_key: key,
-            target_type,
-        }
-    }
-}
-
-fn properties_from_gdal_metadata<'a, I, M>(
-    properties: &mut RasterProperties,
-    gdal_dataset: &M,
-    properties_mapping: I,
-) where
-    I: IntoIterator<Item = &'a GdalMetadataMapping>,
-    M: GdalMetadata,
-{
-    let mapping_iter = properties_mapping.into_iter();
-
-    for m in mapping_iter {
-        let data = if let Some(domain) = &m.source_key.domain {
-            gdal_dataset.metadata_item(&m.source_key.key, domain)
-        } else {
-            gdal_dataset.metadata_item(&m.source_key.key, "")
-        };
-
-        if let Some(d) = data {
-            let entry = match m.target_type {
-                RasterPropertiesEntryType::Number => d.parse::<f64>().map_or_else(
-                    |_| RasterPropertiesEntry::String(d),
-                    RasterPropertiesEntry::Number,
-                ),
-                RasterPropertiesEntryType::String => RasterPropertiesEntry::String(d),
-            };
-
-            debug!(
-                "gdal properties key \"{:?}\" => target key \"{:?}\". Value: {:?} ",
-                &m.source_key, &m.target_key, &entry
-            );
-
-            properties.insert_property(m.target_key.clone(), entry);
-        }
-    }
-}
-
-fn properties_from_band(properties: &mut RasterProperties, gdal_dataset: &GdalRasterBand) {
-    if let Some(scale) = gdal_dataset.scale() {
-        properties.set_scale(scale);
-    }
-    if let Some(offset) = gdal_dataset.offset() {
-        properties.set_offset(offset);
-    }
-
-    // ignore if there is no description
-    if let Ok(description) = gdal_dataset.description() {
-        properties.set_description(description);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext};
-    use crate::test_data;
+    use crate::source::gdal_worker_process::{
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
+        GdalProcessPoolAccess, GdalSourceTimePlaceholder, TimeReference, WorkerConfig,
+    };
     use crate::util::Result;
     use crate::util::gdal::add_ndvi_dataset;
-    use float_cmp::assert_approx_eq;
     use geoengine_datatypes::hashmap;
-    use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
-    use geoengine_datatypes::raster::{
-        BoundedGrid, GridBoundingBox, GridShape2D, SpatialGridDefinition,
+    use geoengine_datatypes::primitives::DateTimeParseFormat;
+    use geoengine_datatypes::primitives::{
+        AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, TimeInstance,
     };
     use geoengine_datatypes::raster::{
-        EmptyGrid2D, GridBounds, GridIdx2D, TilesEqualIgnoringCacheHint,
+        BoundedGrid, EmptyGrid2D, GridBoundingBox, GridBounds, GridIdx2D, GridShape2D, GridSize,
+        RasterPropertiesEntryType, RasterPropertiesKey, SpatialGridDefinition, TileInformation,
+        TilesEqualIgnoringCacheHint, TilingStrategy,
     };
-    use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
-    use geoengine_datatypes::util::gdal::hide_gdal_errors;
-    use httptest::matchers::request;
-    use httptest::{Expectation, Server, responders};
-    use reader::{GdalReadAdvise, GdalReadWindow};
-
-    fn tile_information_with_partition_and_shape(
-        partition: SpatialPartition2D,
-        shape: GridShape2D,
-    ) -> TileInformation {
-        let real_geotransform = GeoTransform::new(
-            partition.upper_left(),
-            partition.size_x() / shape.axis_size_x() as f64,
-            -partition.size_y() / shape.axis_size_y() as f64,
-        );
-
-        TileInformation {
-            tile_size_in_pixels: shape,
-            global_tile_position: [0, 0].into(),
-            global_geo_transform: real_geotransform,
-        }
-    }
+    use geoengine_datatypes::util::{gdal::hide_gdal_errors, test::TestDefault};
 
     async fn query_gdal_source(
         exe_ctx: &MockExecutionContext,
@@ -1403,47 +865,6 @@ mod tests {
             .unwrap()
             .collect()
             .await
-    }
-
-    // This method loads raster data from a cropped MODIS NDVI raster.
-    // To inspect the byte values first convert the file to XYZ with GDAL:
-    // 'gdal_translate -of xyz MOD13A2_M_NDVI_2014-04-01_30X30.tif MOD13A2_M_NDVI_2014-04-01_30x30.xyz'
-    // Then you can convert them to gruped bytes:
-    // 'cut -d ' ' -f 1,2 --complement MOD13A2_M_NDVI_2014-04-01_30x30.xyz | xargs -n 30 > MOD13A2_M_NDVI_2014-04-01_30x30_bytes.txt'.
-    fn load_ndvi_apr_2014_cropped(
-        gdal_read_advice: GdalReadAdvise,
-    ) -> Result<Option<GridAndProperties<u8>>> {
-        let dataset_params = GdalDatasetParameters {
-            file_path: test_data!("raster/modis_ndvi/cropped/MOD13A2_M_NDVI_2014-04-01_30x30.tif")
-                .into(),
-            rasterband_channel: 1,
-            geo_transform: GdalDatasetGeoTransform {
-                origin_coordinate: (8.0, 57.4).into(),
-                x_pixel_size: 0.1,
-                y_pixel_size: -0.1,
-            },
-            width: 30,
-            height: 30,
-            file_not_found_handling: FileNotFoundHandling::NoData,
-            no_data_value: Some(255.),
-            properties_mapping: Some(vec![GdalMetadataMapping {
-                source_key: RasterPropertiesKey {
-                    domain: None,
-                    key: "AREA_OR_POINT".to_string(),
-                },
-                target_type: RasterPropertiesEntryType::String,
-                target_key: RasterPropertiesKey {
-                    domain: None,
-                    key: "AREA_OR_POINT".to_string(),
-                },
-            }]),
-            gdal_open_options: None,
-            gdal_config_options: None,
-            allow_alphaband_as_mask: true,
-            retry: None,
-        };
-
-        GdalRasterLoader::load_tile_data::<u8>(&dataset_params, gdal_read_advice)
     }
 
     #[test]
@@ -1670,105 +1091,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_load_tile_data_top_left() {
-        let gdal_read_advice = GdalReadAdvise {
-            gdal_read_widow: GdalReadWindow::new([0, 0].into(), [8, 8].into()),
-            read_window_bounds: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
-            bounds_of_target: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
-            flip_y: false,
-        };
-
-        let GridAndProperties { grid, properties } = load_ndvi_apr_2014_cropped(gdal_read_advice)
-            .unwrap()
-            .unwrap();
-
-        assert!(!grid.is_empty());
-
-        let grid = grid.into_materialized_masked_grid();
-
-        assert_eq!(grid.inner_grid.data.len(), 64);
-        // pixel value are the top left 8x8 block from MOD13A2_M_NDVI_2014-04-01_27x27_bytes.txt
-        assert_eq!(
-            grid.inner_grid.data,
-            &[
-                255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-                255, 255, 255, 255, 255, 255, 127, 107, 255, 255, 255, 255, 255, 164, 185, 182,
-                255, 255, 255, 175, 186, 190, 167, 140, 255, 255, 161, 175, 184, 173, 170, 188,
-                255, 255, 128, 177, 165, 145, 191, 174, 255, 117, 100, 174, 159, 147, 99, 135
-            ]
-        );
-
-        assert_eq!(grid.validity_mask.data.len(), 64);
-        // pixel mask is pixel > 0 from the top left 8x8 block from MOD13A2_M_NDVI_2014-04-01_27x27_bytes.txt
-        assert_eq!(
-            grid.validity_mask.data,
-            &[
-                false, false, false, false, false, false, false, false, false, false, false, false,
-                false, false, false, false, false, false, false, false, false, false, true, true,
-                false, false, false, false, false, true, true, true, false, false, false, true,
-                true, true, true, true, false, false, true, true, true, true, true, true, false,
-                false, true, true, true, true, true, true, false, true, true, true, true, true,
-                true, true
-            ]
-        );
-
-        assert_eq!(
-            properties.get_property(&RasterPropertiesKey {
-                key: "AREA_OR_POINT".to_string(),
-                domain: None,
-            }),
-            Some(&RasterPropertiesEntry::String("Area".to_string()))
-        );
-    }
-
-    #[test]
-    fn test_load_tile_data_overlaps_dataset_bounds_top_left_out1() {
-        // shift world bbox one pixel up and to the left
-        let gdal_read_advice = GdalReadAdvise {
-            gdal_read_widow: GdalReadWindow::new([0, 0].into(), [7, 7].into()), // this is the data we can read
-            read_window_bounds: GridBoundingBox2D::new([1, 1], [7, 7]).unwrap(), // this is the area we can fill in target
-            bounds_of_target: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(), // this is the area of the target
-            flip_y: false,
-        };
-
-        let GridAndProperties {
-            grid,
-            properties: _properties,
-        } = load_ndvi_apr_2014_cropped(gdal_read_advice)
-            .unwrap()
-            .unwrap();
-
-        assert!(!grid.is_empty());
-
-        let x = grid.into_materialized_masked_grid();
-
-        assert_eq!(x.inner_grid.data.len(), 64);
-        assert_eq!(
-            x.inner_grid.data,
-            &[
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 0, 255, 255, 255,
-                255, 255, 255, 255, 0, 255, 255, 255, 255, 255, 255, 127, 0, 255, 255, 255, 255,
-                255, 164, 185, 0, 255, 255, 255, 175, 186, 190, 167, 0, 255, 255, 161, 175, 184,
-                173, 170, 0, 255, 255, 128, 177, 165, 145, 191,
-            ]
-        );
-
-        assert_eq!(x.validity_mask.data.len(), 64);
-        // pixel mask is pixel == 255 from the top left 8x8 block from MOD13A2_M_NDVI_2014-04-01_27x27_bytes.txt
-        assert_eq!(
-            x.validity_mask.data,
-            &[
-                false, false, false, false, false, false, false, false, false, false, false, false,
-                false, false, false, false, false, false, false, false, false, false, false, false,
-                false, false, false, false, false, false, false, true, false, false, false, false,
-                false, false, true, true, false, false, false, false, true, true, true, true,
-                false, false, false, true, true, true, true, true, false, false, false, true, true,
-                true, true, true,
-            ]
-        );
-    }
-
     #[tokio::test]
     async fn test_query_single_time_slice() {
         let mut exe_ctx = MockExecutionContext::test_default();
@@ -1901,6 +1223,23 @@ mod tests {
         assert!(tile_1.is_empty());
     }
 
+    fn tile_information_with_partition_and_shape(
+        partition: SpatialPartition2D,
+        shape: GridShape2D,
+    ) -> TileInformation {
+        let real_geotransform = GeoTransform::new(
+            partition.upper_left(),
+            partition.size_x() / shape.axis_size_x() as f64,
+            -partition.size_y() / shape.axis_size_y() as f64,
+        );
+
+        TileInformation {
+            tile_size_in_pixels: shape,
+            global_tile_position: [0, 0].into(),
+            global_geo_transform: real_geotransform,
+        }
+    }
+
     #[tokio::test]
     async fn timestep_without_params() {
         let output_bounds =
@@ -1917,12 +1256,16 @@ mod tests {
             ),
         });
 
+        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gw: GdalPoolDispatcher = gpp.get_gdal_worker();
+
         let tile = GdalRasterLoader::load_tile_async::<f64>(
             params,
             reader_mode,
             tile_info,
             time_interval,
             CacheHint::default(),
+            gw,
         )
         .await;
 
@@ -1937,26 +1280,6 @@ mod tests {
         );
 
         assert!(tile.unwrap().tiles_equal_ignoring_cache_hint(&expected));
-    }
-
-    #[test]
-    fn it_reverts_config_options() {
-        let config_options = vec![("foo".to_owned(), "bar".to_owned())];
-
-        {
-            let _config =
-                TemporaryGdalThreadLocalConfigOptions::new(config_options.as_slice()).unwrap();
-
-            assert_eq!(
-                gdal::config::get_config_option("foo", "default").unwrap(),
-                "bar".to_owned()
-            );
-        }
-
-        assert_eq!(
-            gdal::config::get_config_option("foo", "").unwrap(),
-            String::new()
-        );
     }
 
     #[test]
@@ -2094,428 +1417,6 @@ mod tests {
         );
     }
 
-    #[test]
-    #[allow(clippy::too_many_lines)]
-    fn read_up_side_down_raster() {
-        let up_side_down_params = GdalDatasetParameters {
-            file_path: test_data!(
-                "raster/modis_ndvi/flipped_axis_y/MOD13A2_M_NDVI_2014-01-01_flipped_y.tiff"
-            )
-            .into(),
-            rasterband_channel: 1,
-            geo_transform: GdalDatasetGeoTransform {
-                origin_coordinate: (-180., -90.).into(),
-                x_pixel_size: 0.1,
-                y_pixel_size: 0.1,
-            },
-            width: 3600,
-            height: 1800,
-            file_not_found_handling: FileNotFoundHandling::NoData,
-            no_data_value: Some(0.),
-            properties_mapping: Some(vec![
-                GdalMetadataMapping {
-                    source_key: RasterPropertiesKey {
-                        domain: None,
-                        key: "AREA_OR_POINT".to_string(),
-                    },
-                    target_type: RasterPropertiesEntryType::String,
-                    target_key: RasterPropertiesKey {
-                        domain: None,
-                        key: "AREA_OR_POINT".to_string(),
-                    },
-                },
-                GdalMetadataMapping {
-                    source_key: RasterPropertiesKey {
-                        domain: Some("IMAGE_STRUCTURE".to_string()),
-                        key: "COMPRESSION".to_string(),
-                    },
-                    target_type: RasterPropertiesEntryType::String,
-                    target_key: RasterPropertiesKey {
-                        domain: Some("IMAGE_STRUCTURE_INFO".to_string()),
-                        key: "COMPRESSION".to_string(),
-                    },
-                },
-            ]),
-            gdal_open_options: None,
-            gdal_config_options: None,
-            allow_alphaband_as_mask: true,
-            retry: None,
-        };
-
-        let ge_global_dataset_grid = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(-180., 90.), 0.1, -0.1),
-            GridBoundingBox2D::new_min_max(0, 1799, 0, 3599).unwrap(),
-        );
-
-        let gdal_dataset_grid = ge_global_dataset_grid.flip_axis_y(); // first, flip axis
-        assert_approx_eq!(
-            Coordinate2D,
-            gdal_dataset_grid.geo_transform().origin_coordinate,
-            Coordinate2D::new(-180., 90.)
-        );
-        assert_approx_eq!(f64, gdal_dataset_grid.geo_transform.y_pixel_size(), 0.1);
-        assert_approx_eq!(f64, gdal_dataset_grid.geo_transform.x_pixel_size(), 0.1);
-        assert_eq!(
-            gdal_dataset_grid.grid_bounds,
-            GridBoundingBox2D::new_min_max(-1800, -1, 0, 3599).unwrap()
-        );
-
-        let gdal_dataset_grid = gdal_dataset_grid
-            .with_moved_origin_exact_grid(Coordinate2D::new(-180., -90.))
-            .unwrap(); // second, move origin (to other side of axis)
-        assert_approx_eq!(
-            Coordinate2D,
-            gdal_dataset_grid.geo_transform().origin_coordinate,
-            Coordinate2D::new(-180., -90.)
-        );
-        assert_approx_eq!(f64, gdal_dataset_grid.geo_transform.y_pixel_size(), 0.1);
-        assert_approx_eq!(f64, gdal_dataset_grid.geo_transform.x_pixel_size(), 0.1);
-        assert_eq!(
-            gdal_dataset_grid.grid_bounds,
-            GridBoundingBox2D::new_min_max(0, 1799, 0, 3599).unwrap()
-        );
-
-        let ovr = OverviewReaderState::new(ge_global_dataset_grid);
-
-        let tile = SpatialGridDefinition::new(
-            ge_global_dataset_grid.geo_transform,
-            GridBoundingBox2D::new_min_max(326, 326 + 7, 1880, 1880 + 7).unwrap(),
-        );
-
-        let gdal_read_advice = ovr
-            .tiling_to_dataset_read_advise(&gdal_dataset_grid, &tile)
-            .unwrap();
-
-        let exp_gdal_read_advice = GdalReadAdvise {
-            gdal_read_widow: GdalReadWindow::new([1466, 1880].into(), [8, 8].into()),
-            read_window_bounds: GridBoundingBox2D::new([326, 1880], [326 + 7, 1880 + 7]).unwrap(),
-            bounds_of_target: GridBoundingBox2D::new([326, 1880], [326 + 7, 1880 + 7]).unwrap(),
-            flip_y: true,
-        };
-
-        assert_eq!(gdal_read_advice, exp_gdal_read_advice);
-
-        let GridAndProperties { grid, properties } =
-            GdalRasterLoader::load_tile_data::<u8>(&up_side_down_params, gdal_read_advice)
-                .unwrap()
-                .unwrap();
-
-        assert!(!grid.is_empty());
-        let grid = grid.into_materialized_masked_grid();
-
-        assert_eq!(grid.inner_grid.data.len(), 64);
-        assert_eq!(
-            grid.inner_grid.data,
-            &[
-                // TODO: check in tiff!
-                255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-                255, 255, 255, 255, 255, 53, 47, 255, 255, 255, 255, 255, 68, 81, 93, 255, 255,
-                255, 97, 102, 91, 73, 72, 255, 255, 91, 97, 100, 86, 78, 106, 255, 255, 59, 95, 85,
-                66, 105, 104, 255, 47, 42, 82, 81, 76, 73, 98
-            ]
-        );
-
-        assert_eq!(grid.validity_mask.data.len(), 64);
-        assert_eq!(grid.validity_mask.data, &[true; 64]);
-
-        assert!(properties.offset_option().is_none());
-        assert!(properties.scale_option().is_none());
-    }
-
-    #[test]
-    fn read_raster_and_offset_scale() {
-        let up_side_down_params = GdalDatasetParameters {
-            file_path: test_data!("raster/modis_ndvi/cropped/MOD13A2_M_NDVI_2014-04-01_30x30.tif")
-                .into(),
-            rasterband_channel: 1,
-            geo_transform: GdalDatasetGeoTransform {
-                origin_coordinate: (8.0, 57.4).into(),
-                x_pixel_size: 0.1,
-                y_pixel_size: -0.1,
-            },
-            width: 30,
-            height: 30,
-            file_not_found_handling: FileNotFoundHandling::NoData,
-            no_data_value: Some(255.),
-            properties_mapping: None,
-            gdal_open_options: None,
-            gdal_config_options: None,
-            allow_alphaband_as_mask: true,
-            retry: None,
-        };
-
-        let gdal_read_advice = GdalReadAdvise {
-            gdal_read_widow: GdalReadWindow::new([0, 0].into(), [8, 8].into()),
-            read_window_bounds: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
-            bounds_of_target: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
-            flip_y: false,
-        };
-
-        let GridAndProperties { grid, properties } =
-            GdalRasterLoader::load_tile_data::<u8>(&up_side_down_params, gdal_read_advice)
-                .unwrap()
-                .unwrap();
-
-        assert!(!grid.is_empty());
-
-        let grid = grid.into_materialized_masked_grid();
-
-        assert_eq!(grid.inner_grid.data.len(), 64);
-        // pixel value are the top left 8x8 block from MOD13A2_M_NDVI_2014-04-01_27x27_bytes.txt
-        assert_eq!(
-            grid.inner_grid.data,
-            &[
-                255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-                255, 255, 255, 255, 255, 255, 127, 107, 255, 255, 255, 255, 255, 164, 185, 182,
-                255, 255, 255, 175, 186, 190, 167, 140, 255, 255, 161, 175, 184, 173, 170, 188,
-                255, 255, 128, 177, 165, 145, 191, 174, 255, 117, 100, 174, 159, 147, 99, 135
-            ]
-        );
-
-        assert_eq!(grid.validity_mask.data.len(), 64);
-        // pixel mask is pixel > 0 from the top left 8x8 block from MOD13A2_M_NDVI_2014-04-01_27x27_bytes.txt
-        assert_eq!(
-            grid.validity_mask.data,
-            &[
-                false, false, false, false, false, false, false, false, false, false, false, false,
-                false, false, false, false, false, false, false, false, false, false, true, true,
-                false, false, false, false, false, true, true, true, false, false, false, true,
-                true, true, true, true, false, false, true, true, true, true, true, true, false,
-                false, true, true, true, true, true, true, false, true, true, true, true, true,
-                true, true
-            ]
-        );
-
-        assert_eq!(properties.offset_option(), Some(1.));
-        assert_eq!(properties.scale_option(), Some(2.));
-
-        assert!(approx_eq!(f64, properties.offset(), 1.));
-        assert!(approx_eq!(f64, properties.scale(), 2.));
-    }
-
-    #[test]
-    fn it_creates_no_data_only_for_missing_files() {
-        hide_gdal_errors();
-
-        let ds = GdalDatasetParameters {
-            file_path: "nonexisting_file.tif".into(),
-            rasterband_channel: 1,
-            geo_transform: TestDefault::test_default(),
-            width: 100,
-            height: 100,
-            file_not_found_handling: FileNotFoundHandling::NoData,
-            no_data_value: None,
-            properties_mapping: None,
-            gdal_open_options: None,
-            gdal_config_options: None,
-            allow_alphaband_as_mask: true,
-            retry: None,
-        };
-
-        let gdal_read_advice = GdalReadAdvise {
-            gdal_read_widow: GdalReadWindow::new([0, 0].into(), [8, 8].into()),
-            read_window_bounds: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
-            bounds_of_target: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
-            flip_y: false,
-        };
-
-        let res = GdalRasterLoader::load_tile_data::<u8>(&ds, gdal_read_advice);
-
-        assert!(res.is_ok());
-
-        let res = res.unwrap();
-
-        assert!(res.is_none());
-
-        let ds = GdalDatasetParameters {
-            file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),
-            rasterband_channel: 100, // invalid channel
-            geo_transform: TestDefault::test_default(),
-            width: 100,
-            height: 100,
-            file_not_found_handling: FileNotFoundHandling::NoData,
-            no_data_value: None,
-            properties_mapping: None,
-            gdal_open_options: None,
-            gdal_config_options: None,
-            allow_alphaband_as_mask: true,
-            retry: None,
-        };
-
-        // invalid channel => error
-        let result = GdalRasterLoader::load_tile_data::<u8>(&ds, gdal_read_advice);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn it_creates_no_data_only_for_http_404() {
-        let server = Server::run();
-
-        server.expect(
-            Expectation::matching(request::method_path("HEAD", "/non_existing.tif"))
-                .times(1)
-                .respond_with(responders::cycle![responders::status_code(404),]),
-        );
-
-        server.expect(
-            Expectation::matching(request::method_path("HEAD", "/internal_error.tif"))
-                .times(1)
-                .respond_with(responders::cycle![responders::status_code(500),]),
-        );
-
-        let ds = GdalDatasetParameters {
-            file_path: format!("/vsicurl/{}", server.url_str("/non_existing.tif")).into(),
-            rasterband_channel: 1,
-            geo_transform: TestDefault::test_default(),
-            width: 100,
-            height: 100,
-            file_not_found_handling: FileNotFoundHandling::NoData,
-            no_data_value: None,
-            properties_mapping: None,
-            gdal_open_options: None,
-            gdal_config_options: Some(vec![
-                (
-                    "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
-                    ".tif".to_owned(),
-                ),
-                (
-                    "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
-                    "EMPTY_DIR".to_owned(),
-                ),
-                ("GDAL_HTTP_NETRC".to_owned(), "NO".to_owned()),
-                ("GDAL_HTTP_MAX_RETRY".to_owned(), "0".to_string()),
-            ]),
-            allow_alphaband_as_mask: true,
-            retry: None,
-        };
-
-        // 404 => no data
-        let gdal_read_advice = GdalReadAdvise {
-            gdal_read_widow: GdalReadWindow::new([0, 0].into(), [8, 8].into()),
-            read_window_bounds: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
-            bounds_of_target: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
-            flip_y: false,
-        };
-
-        let res = GdalRasterLoader::load_tile_data::<u8>(&ds, gdal_read_advice);
-        assert!(res.is_ok());
-        let res = res.unwrap();
-        assert!(res.is_none());
-
-        let ds = GdalDatasetParameters {
-            file_path: format!("/vsicurl/{}", server.url_str("/internal_error.tif")).into(),
-            rasterband_channel: 1,
-            geo_transform: TestDefault::test_default(),
-            width: 100,
-            height: 100,
-            file_not_found_handling: FileNotFoundHandling::NoData,
-            no_data_value: None,
-            properties_mapping: None,
-            gdal_open_options: None,
-            gdal_config_options: Some(vec![
-                (
-                    "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
-                    ".tif".to_owned(),
-                ),
-                (
-                    "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
-                    "EMPTY_DIR".to_owned(),
-                ),
-                ("GDAL_HTTP_NETRC".to_owned(), "NO".to_owned()),
-                ("GDAL_HTTP_MAX_RETRY".to_owned(), "0".to_string()),
-            ]),
-            allow_alphaband_as_mask: true,
-            retry: None,
-        };
-
-        // 500 => error
-        let res = GdalRasterLoader::load_tile_data::<u8>(&ds, gdal_read_advice);
-        assert!(res.is_err());
-    }
-
-    #[test]
-    fn it_retries_only_after_clearing_vsi_cache() {
-        hide_gdal_errors();
-
-        let server = Server::run();
-
-        server.expect(
-            Expectation::matching(request::method_path("HEAD", "/foo.tif"))
-                .times(2)
-                .respond_with(responders::cycle![
-                    // first generic error
-                    responders::status_code(500),
-                    // then 404 file not found
-                    responders::status_code(404)
-                ]),
-        );
-
-        let file_path: PathBuf = format!("/vsicurl/{}", server.url_str("/foo.tif")).into();
-
-        let options = Some(vec![
-            (
-                "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
-                ".tif".to_owned(),
-            ),
-            (
-                "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
-                "EMPTY_DIR".to_owned(),
-            ),
-            ("GDAL_HTTP_NETRC".to_owned(), "NO".to_owned()),
-            ("GDAL_HTTP_MAX_RETRY".to_owned(), "0".to_string()),
-        ]);
-
-        let _thread_local_configs = options
-            .as_ref()
-            .map(|config_options| TemporaryGdalThreadLocalConfigOptions::new(config_options));
-
-        // first fail
-        let result = gdal_open_dataset_ex(
-            file_path.as_path(),
-            DatasetOptions {
-                open_flags: GdalOpenFlags::GDAL_OF_RASTER,
-                ..DatasetOptions::default()
-            },
-        );
-
-        // it failed, but not with file not found
-        assert!(result.is_err());
-        if let Err(error) = result {
-            assert!(!error_is_gdal_file_not_found(&error));
-        }
-
-        // second fail doesn't even try, so still not "file not found", even though it should be now
-        let result = gdal_open_dataset_ex(
-            file_path.as_path(),
-            DatasetOptions {
-                open_flags: GdalOpenFlags::GDAL_OF_RASTER,
-                ..DatasetOptions::default()
-            },
-        );
-
-        assert!(result.is_err());
-        if let Err(error) = result {
-            assert!(!error_is_gdal_file_not_found(&error));
-        }
-
-        clear_gdal_vsi_cache_for_path(file_path.as_path());
-
-        // after clearing the cache, it tries again
-        let result = gdal_open_dataset_ex(
-            file_path.as_path(),
-            DatasetOptions {
-                open_flags: GdalOpenFlags::GDAL_OF_RASTER,
-                ..DatasetOptions::default()
-            },
-        );
-
-        // now we get the file not found error
-        assert!(result.is_err());
-        if let Err(error) = result {
-            assert!(error_is_gdal_file_not_found(&error));
-        }
-    }
-
     #[tokio::test]
     async fn it_attaches_cache_hint() {
         let output_bounds =
@@ -2525,6 +1426,9 @@ mod tests {
         let tile_info = tile_information_with_partition_and_shape(output_bounds, output_shape);
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_391_212_800_000); // 2014-01-01 - 2014-01-15
         let params = None;
+
+        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gw: GdalPoolDispatcher = gpp.get_gdal_worker();
 
         let tile = GdalRasterLoader::load_tile_async::<f64>(
             params,
@@ -2537,6 +1441,7 @@ mod tests {
             tile_info,
             time_interval,
             CacheHint::seconds(1234),
+            gw,
         )
         .await;
 

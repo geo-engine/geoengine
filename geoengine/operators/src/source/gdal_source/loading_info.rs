@@ -1,4 +1,4 @@
-use super::{GdalDatasetParameters, GdalSourceTimePlaceholder};
+use super::super::gdal_worker_process::{GdalDatasetParameters, GdalSourceTimePlaceholder};
 use crate::{
     engine::{MetaData, RasterResultDescriptor},
     error::Error,
@@ -665,7 +665,9 @@ mod tests {
 
     use crate::{
         engine::{RasterBandDescriptors, SpatialGridDescriptor, TimeDescriptor},
-        source::{FileNotFoundHandling, GdalDatasetGeoTransform, TimeReference},
+        source::gdal_worker_process::{
+            FileNotFoundHandling, GdalDatasetGeoTransform, TimeReference,
+        },
     };
 
     use super::*;
