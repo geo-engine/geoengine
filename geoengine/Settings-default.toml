@@ -203,7 +203,7 @@ VSI_CACHE_SIZE = "67108864" # 64mb per worker! TODO: need to tune this!
 # Logging for the GDAL worker processes. Independent from the main `[logging]` section because
 # there are many worker processes and their log volume differs from the main process.
 # Must include `gdalsource_process` (the binary crate) to export worker-level spans.
-log_spec = "gdalsource_process=info,info"
+log_spec = "gdalsource_process=info,geoengine=info,info"
 log_to_file = false
 filename_prefix = "geo_engine_worker"
 # log_directory = "/var/log/"
