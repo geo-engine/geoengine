@@ -79,11 +79,8 @@
                 <div>
                     <h4>Data Source</h4>
                     <mat-radio-group class="data-sources" [value]="selectedDataSource()" (change)="setSelectedDataSource($event.value)">
-                        @for (group of dataSourceGroups(); track group.groupName) {
-                            <span class="data-source-group-label">{{ group.groupName }}</span>
-                            @for (ds of group.items; track ds.key) {
-                                <mat-radio-button [value]="ds.key">{{ ds.name }}</mat-radio-button>
-                            }
+                        @for (ds of dataSources; track ds.key) {
+                            <mat-radio-button [value]="ds.key">{{ ds.name }}</mat-radio-button>
                         }
                     </mat-radio-group>
                 </div>
@@ -91,6 +88,7 @@
 
                 <div class="time-selection">
                     <h4>Time Selection</h4>
+                    <mat-checkbox [checked]="autoSelectTime()" (change)="autoSelectTime.set($event.checked)">Auto select time</mat-checkbox>
                     <div>
                         <button
                             mat-icon-button
@@ -116,15 +114,18 @@
                 <div>
                     <h4>Vizualization Presets</h4>
                     <mat-nav-list class="visualization-presets">
-                        @for (preset of currentPresets(); track $index) {
-                            <mat-list-item
-                                [activated]="$index === selectedPresetIndex()"
-                                [class.preset-active]="$index === selectedPresetIndex()"
-                                (click)="selectPreset($index)"
-                            >
-                                <img matListItemTitle [src]="preset.backgroundImage" [alt]="preset.displayName" class="preset-icon" />
-                                <span matListItemTitle>{{ preset.displayName }}</span>
-                            </mat-list-item>
+                        @for (group of presetGroups(); track group.category) {
+                            <span class="preset-group-label">{{ group.label }}</span>
+                            @for (preset of group.presets; track $index) {
+                                <mat-list-item
+                                    [activated]="currentPresets().indexOf(preset) === selectedPresetIndex()"
+                                    [class.preset-active]="currentPresets().indexOf(preset) === selectedPresetIndex()"
+                                    (click)="selectPreset(currentPresets().indexOf(preset))"
+                                >
+                                    <img matListItemTitle [src]="preset.backgroundImage" [alt]="preset.displayName" class="preset-icon" />
+                                    <span matListItemTitle>{{ preset.displayName }}</span>
+                                </mat-list-item>
+                            }
                         }
                     </mat-nav-list>
                 </div>

@@ -111,6 +111,20 @@ mat-drawer {
                 flex-wrap: wrap;
                 gap: 0.5rem;
 
+                .preset-group-label {
+                    width: 100%;
+                    font-size: 0.75rem;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                    color: var(--geoengine-primary-color, #2f6dff);
+                    margin-top: 0.5rem;
+
+                    &:first-child {
+                        margin-top: 0;
+                    }
+                }
+
                 width: 100%;
                 border: none;
 
