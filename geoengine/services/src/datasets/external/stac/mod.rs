@@ -11,6 +11,7 @@ use geoengine_operators::engine::SpatialGridDescriptor;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
+pub(crate) mod common;
 mod listing;
 mod loading_info;
 

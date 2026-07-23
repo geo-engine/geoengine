@@ -1960,9 +1960,21 @@ impl DatasetKey {
             })
             .collect::<String>();
 
+        let resolution_str = format!("{}", self.resolution);
+        let clean_resolution: String = resolution_str
+            .chars()
+            .map(|c| {
+                if geoengine_datatypes::dataset::is_invalid_name_char(c) {
+                    '_'
+                } else {
+                    c
+                }
+            })
+            .collect();
+
         format!(
             "{}_EPSG{}_{:?}_{}",
-            cleaned_name, self.epsg, self.data_type, self.resolution
+            cleaned_name, self.epsg, self.data_type, clean_resolution
         )
     }
 }
@@ -2741,6 +2753,8 @@ mod tests {
             s3_secret_key: None,
             file_types: vec![ImportFileType::Cog],
             filter_item_fields: false,
+            no_data_value: None,
+            gdal_retries: None,
         }
     }
 

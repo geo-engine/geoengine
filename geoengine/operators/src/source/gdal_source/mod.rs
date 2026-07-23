@@ -815,23 +815,23 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
 mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext};
-    use crate::test_data;
+    use crate::source::gdal_in::{
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
+        GdalProcessPoolAccess, GdalSourceTimePlaceholder, TimeReference,
+    };
     use crate::util::Result;
     use crate::util::gdal::add_ndvi_dataset;
-    use float_cmp::assert_approx_eq;
     use geoengine_datatypes::hashmap;
-    use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
-    use geoengine_datatypes::raster::{
-        BoundedGrid, GridBoundingBox, GridShape2D, SpatialGridDefinition,
+    use geoengine_datatypes::primitives::{
+        AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat, SpatialPartition2D, TimeInstance,
     };
     use geoengine_datatypes::raster::{
-        EmptyGrid2D, GridBounds, GridIdx2D, TilesEqualIgnoringCacheHint,
+        BoundedGrid, EmptyGrid2D, GridBoundingBox, GridBounds, GridIdx2D, GridShape2D,
+        GridShapeAccess, GridSize, RasterPropertiesEntryType, RasterPropertiesKey,
+        SpatialGridDefinition, TileInformation, TilesEqualIgnoringCacheHint, TilingStrategy,
     };
-    use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
     use geoengine_datatypes::util::gdal::hide_gdal_errors;
-    use httptest::matchers::request;
-    use httptest::{Expectation, Server, responders};
-    use reader::{GdalReadAdvise, GdalReadWindow};
+    use geoengine_datatypes::util::test::TestDefault;
 
     fn tile_information_with_partition_and_shape(
         partition: SpatialPartition2D,
@@ -1235,23 +1235,6 @@ mod tests {
         );
 
         assert!(tile_1.is_empty());
-    }
-
-    fn tile_information_with_partition_and_shape(
-        partition: SpatialPartition2D,
-        shape: GridShape2D,
-    ) -> TileInformation {
-        let real_geotransform = GeoTransform::new(
-            partition.upper_left(),
-            partition.size_x() / shape.axis_size_x() as f64,
-            -partition.size_y() / shape.axis_size_y() as f64,
-        );
-
-        TileInformation {
-            tile_size_in_pixels: shape,
-            global_tile_position: [0, 0].into(),
-            global_geo_transform: real_geotransform,
-        }
     }
 
     #[tokio::test]
