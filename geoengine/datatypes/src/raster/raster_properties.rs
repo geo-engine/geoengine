@@ -16,12 +16,12 @@ use std::fmt::{Display, Formatter};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterProperties {
-    scale: Option<f64>,
-    offset: Option<f64>,
-    description: Option<String>,
+    pub scale: Option<f64>,
+    pub offset: Option<f64>,
+    pub description: Option<String>,
     // serialize as a list of tuples because `RasterPropertiesKey` cannot be used as a key in a JSON dict
     #[serde_as(as = "Vec<(_, _)>")]
-    properties_map: HashMap<RasterPropertiesKey, RasterPropertiesEntry>,
+    pub properties_map: HashMap<RasterPropertiesKey, RasterPropertiesEntry>,
 }
 
 impl ByteSize for RasterProperties {

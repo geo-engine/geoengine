@@ -98,6 +98,11 @@ provider_defs_path = "./test_data/provider_defs"
 layer_defs_path = "./test_data/layer_defs"
 layer_collection_defs_path = "./test_data/layer_collection_defs"
 
+[gdal_process_pool]
+number_of_processes = 32
+max_active_processes = 16
+max_dataset_processes = 8
+
 [gdal]
 # TODO: find good default
 # Use 0 for `ALL_CPUS` option or a number >0 for a specific number of threads.
@@ -176,7 +181,36 @@ scopes = []
 
 [open_telemetry]
 enabled = false
-endpoint = "127.0.0.1:6831"
+endpoint = "http://127.0.0.1:4317"
+
+[gdal_process_pool.worker.gdal_config_options]
+# Process-global GDAL config options applied once when a GDAL worker process starts.
+#
+# Two categories:
+# 1. Frozen at first /vsicurl/ use (changing these requires restarting the worker process):
+#    - VSI_CACHE, VSI_CACHE_SIZE
+#    - CPL_VSIL_CURL_CHUNK_SIZE
+# 2. Read per dataset open (can also be overridden per request via gdal_config_options):
+#    - GDAL_DISABLE_READDIR_ON_OPEN
+#    - CPL_VSIL_CURL_ALLOWED_EXTENSIONS
+GDAL_DISABLE_READDIR_ON_OPEN = "EMPTY_DIR"
+CPL_VSIL_CURL_ALLOWED_EXTENSIONS = ".tif,.tiff,.TIF,.jp2,.ovr"
+CPL_VSIL_CURL_CHUNK_SIZE = "1048576" # 1mb TODO: need to tune this!
+VSI_CACHE = "TRUE"
+VSI_CACHE_SIZE = "67108864" # 64mb per worker! TODO: need to tune this!
+
+[gdal_process_pool.worker.logging]
+# Logging for the GDAL worker processes. Independent from the main `[logging]` section because
+# there are many worker processes and their log volume differs from the main process.
+# Must include `gdalsource_process` (the binary crate) to export worker-level spans.
+log_spec = "gdalsource_process=info,geoengine=info,info"
+log_to_file = false
+filename_prefix = "geo_engine_worker"
+# log_directory = "/var/log/"
+
+[gdal_process_pool.worker.open_telemetry]
+enabled = false
+endpoint = "http://127.0.0.1:4317"
 
 [data]
 volumes = { test_data = "test_data/" }
