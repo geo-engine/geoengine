@@ -102,6 +102,7 @@ from geoengine_api_client.models.gdal_source_time_placeholder import GdalSourceT
 from geoengine_api_client.models.geo_json import GeoJson
 from geoengine_api_client.models.geo_transform import GeoTransform
 from geoengine_api_client.models.geometry_dimension import GeometryDimension
+from geoengine_api_client.models.geometry_output_column import GeometryOutputColumn
 from geoengine_api_client.models.geospatial_data import GeospatialData
 from geoengine_api_client.models.geospatial_data_data_type import GeospatialDataDataType
 from geoengine_api_client.models.geospatial_data_data_type_one_of import GeospatialDataDataTypeOneOf
@@ -170,6 +171,7 @@ from geoengine_api_client.models.multiple_raster_or_single_vector_source import 
 from geoengine_api_client.models.multiple_raster_sources import MultipleRasterSources
 from geoengine_api_client.models.names import Names
 from geoengine_api_client.models.net_cdf_cf_data_provider_definition import NetCdfCfDataProviderDefinition
+from geoengine_api_client.models.new_output_column import NewOutputColumn
 from geoengine_api_client.models.number_param import NumberParam
 from geoengine_api_client.models.ogr_meta_data import OgrMetaData
 from geoengine_api_client.models.ogr_source import OgrSource
@@ -192,6 +194,7 @@ from geoengine_api_client.models.ogr_source_time_format_custom import OgrSourceT
 from geoengine_api_client.models.ogr_source_time_format_unix_time_stamp import OgrSourceTimeFormatUnixTimeStamp
 from geoengine_api_client.models.operator_quota import OperatorQuota
 from geoengine_api_client.models.order_by import OrderBy
+from geoengine_api_client.models.output_column import OutputColumn
 from geoengine_api_client.models.palette_colorizer import PaletteColorizer
 from geoengine_api_client.models.pangaea_data_provider_definition import PangaeaDataProviderDefinition
 from geoengine_api_client.models.percentile_estimate_aggregation import PercentileEstimateAggregation
@@ -256,6 +259,7 @@ from geoengine_api_client.models.single_raster_or_vector_source import SingleRas
 from geoengine_api_client.models.single_raster_source import SingleRasterSource
 from geoengine_api_client.models.single_vector_multiple_raster_sources import SingleVectorMultipleRasterSources
 from geoengine_api_client.models.single_vector_or_raster_source import SingleVectorOrRasterSource
+from geoengine_api_client.models.single_vector_source import SingleVectorSource
 from geoengine_api_client.models.spatial_bounds_derive import SpatialBoundsDerive
 from geoengine_api_client.models.spatial_bounds_derive_bounds import SpatialBoundsDeriveBounds
 from geoengine_api_client.models.spatial_bounds_derive_derive import SpatialBoundsDeriveDerive
@@ -349,6 +353,8 @@ from geoengine_api_client.models.variable_matrix_width import VariableMatrixWidt
 from geoengine_api_client.models.vec_update import VecUpdate
 from geoengine_api_client.models.vector_column_info import VectorColumnInfo
 from geoengine_api_client.models.vector_data_type import VectorDataType
+from geoengine_api_client.models.vector_expression import VectorExpression
+from geoengine_api_client.models.vector_expression_parameters import VectorExpressionParameters
 from geoengine_api_client.models.vector_operator import VectorOperator
 from geoengine_api_client.models.vector_result_descriptor import VectorResultDescriptor
 from geoengine_api_client.models.volume import Volume

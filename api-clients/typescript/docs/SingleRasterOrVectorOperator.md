@@ -8,8 +8,8 @@ It is either a set of `RasterOperator` or a single `VectorOperator`
 Name | Type
 ------------ | -------------
 `type` | string
-`params` | [ReprojectionParameters](ReprojectionParameters.md)
-`sources` | [SingleRasterOrVectorSource](SingleRasterOrVectorSource.md)
+`params` | [VectorExpressionParameters](VectorExpressionParameters.md)
+`sources` | [SingleVectorSource](SingleVectorSource.md)
 
 ## Example
 

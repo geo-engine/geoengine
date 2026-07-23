@@ -14,6 +14,7 @@ import { instanceOfMockPointSource, MockPointSourceFromJSONTyped, MockPointSourc
 import { OgrSourceFromJSONTyped, OgrSourceToJSON, } from './OgrSource';
 import { instanceOfRasterVectorJoin, RasterVectorJoinFromJSONTyped, RasterVectorJoinToJSON, } from './RasterVectorJoin';
 import { ReprojectionFromJSONTyped, ReprojectionToJSON, } from './Reprojection';
+import { VectorExpressionFromJSONTyped, VectorExpressionToJSON, } from './VectorExpression';
 export function VectorOperatorFromJSON(json) {
     return VectorOperatorFromJSONTyped(json, false);
 }
@@ -30,6 +31,8 @@ export function VectorOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, RasterVectorJoinFromJSONTyped(json, true), { type: 'RasterVectorJoin' });
         case 'Reprojection':
             return Object.assign({}, ReprojectionFromJSONTyped(json, true), { type: 'Reprojection' });
+        case 'VectorExpression':
+            return Object.assign({}, VectorExpressionFromJSONTyped(json, true), { type: 'VectorExpression' });
         default:
             return json;
     }
@@ -50,6 +53,8 @@ export function VectorOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, RasterVectorJoinToJSON(value), { type: 'RasterVectorJoin' });
         case 'Reprojection':
             return Object.assign({}, ReprojectionToJSON(value), { type: 'Reprojection' });
+        case 'VectorExpression':
+            return Object.assign({}, VectorExpressionToJSON(value), { type: 'VectorExpression' });
         default:
             return value;
     }

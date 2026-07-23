@@ -1,4 +1,4 @@
-use crate::api::model::datatypes::Coordinate2D;
+use crate::api::model::datatypes::{Coordinate2D, VectorDataType};
 use anyhow::Context;
 use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize, Serializer};
@@ -415,6 +415,18 @@ impl TryFrom<BoundingBox2D> for geoengine_datatypes::primitives::BoundingBox2D {
         )
         .context("invalid bounding box")
     }
+}
+
+/// Specify the output of a vector expression.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(tag = "type", content = "value", rename_all = "camelCase")]
+pub enum OutputColumn {
+    /// The expression will override the current geometry
+    #[schema(title = "GeometryOutputColumn")]
+    Geometry(VectorDataType),
+    /// The expression will append a new `Float` column
+    #[schema(title = "NewOutputColumn")]
+    Column(String),
 }
 
 #[cfg(test)]
