@@ -415,6 +415,11 @@ export class OlRasterLayerComponent
 }
 
 /**
+ * All TMS ids that are supported by the backend. The TMS id is used to request the correct tile matrix set from the backend.
+ */
+export type TMSId = 'Custom' | 'CustomWebMercator' | 'WebMercatorQuad';
+
+/**
  * This component renders a raster layer on the map by using the OGC API Map Tiles standard.
  */
 @Component({
@@ -437,6 +442,7 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
     readonly sessionToken = input.required<UUID>();
     readonly spatialReference = input.required<SpatialReference>(); // TODO: do we need this?
     readonly time = input.required<Time>();
+    readonly tmsId = input<TMSId>('Custom');
 
     // Show tile debug info instead of the actual layer. This is useful for debugging tile loading issues.
     readonly debug = input(false);
@@ -514,7 +520,7 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
     async tmsBlobUrl(): Promise<string> {
         const dataConnectorId = this.dataConnectorId();
         const layerId = this.dataLayerId();
-        const tms = 'Custom';
+        const tms = this.tmsId();
 
         const tmsUrl = `${this.backend.ogcApiBaseUrl}/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
 
