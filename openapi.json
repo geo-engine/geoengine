@@ -10463,6 +10463,53 @@
           "NameDesc"
         ]
       },
+      "OutputColumn": {
+        "oneOf": [
+          {
+            "type": "object",
+            "title": "GeometryOutputColumn",
+            "description": "The expression will override the current geometry",
+            "required": [
+              "value",
+              "type"
+            ],
+            "properties": {
+              "value": {
+                "$ref": "#/components/schemas/VectorDataType",
+                "description": "The expression will override the current geometry"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "geometry"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "NewOutputColumn",
+            "description": "The expression will append a new `Float` column",
+            "required": [
+              "value",
+              "type"
+            ],
+            "properties": {
+              "value": {
+                "type": "string",
+                "description": "The expression will append a new `Float` column"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "column"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Specify the output of a vector expression."
+      },
       "Palette": {
         "type": "object",
         "description": "A map from value to color\n\nIt is assumed that is has at least one and at most 256 entries.",
@@ -11925,6 +11972,18 @@
         "properties": {
           "vector": {
             "$ref": "#/components/schemas/SingleRasterOrVectorOperator"
+          }
+        }
+      },
+      "SingleVectorSource": {
+        "type": "object",
+        "description": "A single vector operator as a source for this operator.",
+        "required": [
+          "vector"
+        ],
+        "properties": {
+          "vector": {
+            "$ref": "#/components/schemas/VectorOperator"
           }
         }
       },
@@ -14290,6 +14349,124 @@
           "MultiPolygon"
         ]
       },
+      "VectorExpression": {
+        "type": "object",
+        "title": "Vector Expression",
+        "description": "The `VectorExpression` operator performs a feature-wise expression function on a feature collection of a vector source.\nThe expression is specified as a user-defined script in a very simple language.\nThe output is a feature collection with the result of the expression and with time intervals that are the same as for the inputs.\nUsers can either add a new column or replace the geometry column with the outputs of the expression.\nInternally, the expression is evaluated using floating-point numbers.\n\nAn example usage scenario is to calculate a population density from an `area` and a `population_size` column.\nThe expression uses a feature collection with two columns, referred to with their column names `area` and a `population_size`, and calculates the formula `area / population_size`.\nThe output feature collection contains the result of the density expression in a new column.\n\nAnother example is to calculate the centroid of a polygon geometry.\nThe expression uses a feature collection with a geometry column and calculates the formula `centroid(geom)`.\nThe output feature collection contains the result of the centroid expression replacing the original geometries.\n\n## Types\n\nThe following describes the types used in the parameters.\n\n### Expression\n\nExpressions are simple scripts to perform feature-wise computations.\nOne can refer to the columns with their name, e.g., `area` and a `population_size`.\nFurthermore, expressions can check with `A IS NODATA`, `B IS NODATA`, etc. for empty or NO DATA values.\nFinally, the value `NODATA` can be used to output empty or NO DATA.\n\nUsers can think of this implicit function signature for, e.g., two inputs:\n\n```rust,ignore\nfn (A: f64, B: f64) -> f64\n```\n\nAs a start, expressions contain algebraic operations and mathematical functions.\n\n```rust,ignore\n(A + B) / 2\n```\n\nIn addition, branches can be used to check for conditions.\n\n```rust,ignore\nif A IS NODATA {\n    B\n} else {\n    A\n}\n```\n\nTo generate more complex expressions, it is possible to have variable assignments.\n\n```rust,ignore\nlet mean = (A + B) / 2;\nlet coefficient = 0.357;\nmean * coefficient\n```\n\nNote, that all assignments are separated by semicolons.\nHowever, the last expression must be without a semicolon.\n\n#### Numbers\n\nFunction calls can be used to access utility functions.\n\n```rust,ignore\nmax(A, 0)\n```\n\nCurrently, the following functions are available:\n\n- `abs(a)`: absolute value\n- `min(a, b)`, `min(a, b, c)`: minimum value\n- `max(a, b)`, `max(a, b, c)`: maximum value\n- `sqrt(a)`: square root\n- `ln(a)`: natural logarithm\n- `log10(a)`: base 10 logarithm\n- `cos(a)`, `sin(a)`, `tan(a)`, `acos(a)`, `asin(a)`, `atan(a)`: trigonometric functions\n- `pi()`, `e()`: mathematical constants\n- `round(a)`, `ceil(a)`, `floor(a)`: rounding functions\n- `mod(a, b)`: division remainder\n- `to_degrees(a)`, `to_radians(a)`: conversion to degrees or radians\n\n#### Geometries\n\nGeometries can be referred to using the `geometryColumnName`, which is `geom` by default.\nThere are several functions to work with geometries:\n\n- `centroid(geom)`: returns the centroid of the geometry\n- `area(geom)`: returns the area of the geometry\n\nAn example expression to calculate the centroid of a geometry is:\n\n```rust,ignore\ncentroid(geom)\n```\n\n## Inputs\n\nThe `VectorExpression` operator expects one vector input with at most 8 bands.\n\n| Parameter | Type                 |\n| --------- | -------------------- |\n| `vector`  | `SingleVectorSource` |\n\n## Errors\n\nThe parsing of the expression can fail if there are, e.g., syntax errors.\n",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "VectorExpression"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/VectorExpressionParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleVectorSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "VectorExpression",
+            "params": {
+              "inputColumns": [
+                "area",
+                "population_size"
+              ],
+              "outputColumn": {
+                "type": "column",
+                "value": "density"
+              },
+              "expression": "area /  population_size",
+              "outputMeasurement": {
+                "type": "unitless"
+              }
+            },
+            "sources": {
+              "vector": {
+                "type": "OgrSource",
+                "params": {
+                  "data": "areas"
+                }
+              }
+            }
+          },
+          {
+            "type": "VectorExpression",
+            "params": {
+              "inputColumns": [],
+              "outputColumn": {
+                "type": "geometry",
+                "value": "MultiPoint"
+              },
+              "expression": "centroid(geom)",
+              "geometryColumnName": "geom"
+            },
+            "sources": {
+              "vector": {
+                "type": "OgrSource",
+                "params": {
+                  "data": "areas"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "VectorExpressionParameters": {
+        "type": "object",
+        "description": "Parameters for the `VectorExpression` operator.",
+        "required": [
+          "inputColumns",
+          "expression",
+          "outputColumn",
+          "outputMeasurement"
+        ],
+        "properties": {
+          "inputColumns": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "examples": [
+                [
+                  "temperature",
+                  "humidity"
+                ]
+              ]
+            },
+            "description": "The columns to use as variables in the expression.\n\nFor usage in the expression, all special characters are replaced by underscores.\nE.g., `precipitation.cm` becomes `precipitation_cm`.\nIf the column name starts with a number, an underscore is prepended.\nE.g., `1column` becomes `_1column`."
+          },
+          "expression": {
+            "type": "string",
+            "description": "The expression to evaluate.",
+            "examples": [
+              "temperature * (1 + humidity / 100)"
+            ]
+          },
+          "outputColumn": {
+            "$ref": "#/components/schemas/OutputColumn",
+            "description": "The type and name of the new column."
+          },
+          "geometryColumnName": {
+            "type": "string",
+            "description": "The variable name of the geometry column.\nThe default is `geom`.",
+            "examples": [
+              "geom"
+            ]
+          },
+          "outputMeasurement": {
+            "$ref": "#/components/schemas/Measurement",
+            "description": "The measurement of the new column.\nThe default is unitless."
+          }
+        }
+      },
       "VectorOperator": {
         "oneOf": [
           {
@@ -14303,6 +14480,9 @@
           },
           {
             "$ref": "#/components/schemas/Reprojection"
+          },
+          {
+            "$ref": "#/components/schemas/VectorExpression"
           }
         ],
         "description": "An operator that produces vector data.",
@@ -14312,7 +14492,8 @@
             "MockPointSource": "#/components/schemas/MockPointSource",
             "OgrSource": "#/components/schemas/OgrSource",
             "RasterVectorJoin": "#/components/schemas/RasterVectorJoin",
-            "Reprojection": "#/components/schemas/Reprojection"
+            "Reprojection": "#/components/schemas/Reprojection",
+            "VectorExpression": "#/components/schemas/VectorExpression"
           }
         }
       },

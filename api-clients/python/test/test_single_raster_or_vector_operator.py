@@ -36,20 +36,30 @@ class TestSingleRasterOrVectorOperator(unittest.TestCase):
         if include_optional:
             return SingleRasterOrVectorOperator(
                 type = 'TemporalRasterAggregation',
-                params = geoengine_api_client.models.reprojection_parameters.ReprojectionParameters(
-                    target_spatial_reference = '', 
-                    derive_out_spec = null, ),
-                sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
-                    source = null, )
+                params = geoengine_api_client.models.vector_expression_parameters.VectorExpressionParameters(
+                    input_columns = [
+                        ''
+                        ], 
+                    expression = '', 
+                    output_column = null, 
+                    geometry_column_name = '', 
+                    output_measurement = null, ),
+                sources = geoengine_api_client.models.single_vector_source.SingleVectorSource(
+                    vector = null, )
             )
         else:
             return SingleRasterOrVectorOperator(
                 type = 'TemporalRasterAggregation',
-                params = geoengine_api_client.models.reprojection_parameters.ReprojectionParameters(
-                    target_spatial_reference = '', 
-                    derive_out_spec = null, ),
-                sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
-                    source = null, ),
+                params = geoengine_api_client.models.vector_expression_parameters.VectorExpressionParameters(
+                    input_columns = [
+                        ''
+                        ], 
+                    expression = '', 
+                    output_column = null, 
+                    geometry_column_name = '', 
+                    output_measurement = null, ),
+                sources = geoengine_api_client.models.single_vector_source.SingleVectorSource(
+                    vector = null, ),
         )
         """
 

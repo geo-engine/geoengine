@@ -93,6 +93,7 @@ docs/GeneralApi.md
 docs/GeoJson.md
 docs/GeoTransform.md
 docs/GeometryDimension.md
+docs/GeometryOutputColumn.md
 docs/GeospatialData.md
 docs/GeospatialDataDataType.md
 docs/GeospatialDataDataTypeOneOf.md
@@ -163,6 +164,7 @@ docs/MultipleRasterOrSingleVectorSource.md
 docs/MultipleRasterSources.md
 docs/Names.md
 docs/NetCdfCfDataProviderDefinition.md
+docs/NewOutputColumn.md
 docs/NumberParam.md
 docs/OgcapiApi.md
 docs/OgcwcsApi.md
@@ -189,6 +191,7 @@ docs/OgrSourceTimeFormatCustom.md
 docs/OgrSourceTimeFormatUnixTimeStamp.md
 docs/OperatorQuota.md
 docs/OrderBy.md
+docs/OutputColumn.md
 docs/PaletteColorizer.md
 docs/PangaeaDataProviderDefinition.md
 docs/PercentileEstimateAggregation.md
@@ -256,6 +259,7 @@ docs/SingleRasterOrVectorSource.md
 docs/SingleRasterSource.md
 docs/SingleVectorMultipleRasterSources.md
 docs/SingleVectorOrRasterSource.md
+docs/SingleVectorSource.md
 docs/SpatialBoundsDerive.md
 docs/SpatialBoundsDeriveBounds.md
 docs/SpatialBoundsDeriveDerive.md
@@ -354,6 +358,8 @@ docs/VariableMatrixWidth.md
 docs/VecUpdate.md
 docs/VectorColumnInfo.md
 docs/VectorDataType.md
+docs/VectorExpression.md
+docs/VectorExpressionParameters.md
 docs/VectorOperator.md
 docs/VectorResultDescriptor.md
 docs/Volume.md
@@ -482,6 +488,7 @@ src/models/gdal_source_time_placeholder.rs
 src/models/geo_json.rs
 src/models/geo_transform.rs
 src/models/geometry_dimension.rs
+src/models/geometry_output_column.rs
 src/models/geospatial_data.rs
 src/models/geospatial_data_data_type.rs
 src/models/geospatial_data_data_type_one_of.rs
@@ -551,6 +558,7 @@ src/models/multiple_raster_or_single_vector_source.rs
 src/models/multiple_raster_sources.rs
 src/models/names.rs
 src/models/net_cdf_cf_data_provider_definition.rs
+src/models/new_output_column.rs
 src/models/number_param.rs
 src/models/ogr_meta_data.rs
 src/models/ogr_source.rs
@@ -573,6 +581,7 @@ src/models/ogr_source_time_format_custom.rs
 src/models/ogr_source_time_format_unix_time_stamp.rs
 src/models/operator_quota.rs
 src/models/order_by.rs
+src/models/output_column.rs
 src/models/palette_colorizer.rs
 src/models/pangaea_data_provider_definition.rs
 src/models/percentile_estimate_aggregation.rs
@@ -636,6 +645,7 @@ src/models/single_raster_or_vector_source.rs
 src/models/single_raster_source.rs
 src/models/single_vector_multiple_raster_sources.rs
 src/models/single_vector_or_raster_source.rs
+src/models/single_vector_source.rs
 src/models/spatial_bounds_derive.rs
 src/models/spatial_bounds_derive_bounds.rs
 src/models/spatial_bounds_derive_derive.rs
@@ -730,6 +740,8 @@ src/models/variable_matrix_width.rs
 src/models/vec_update.rs
 src/models/vector_column_info.rs
 src/models/vector_data_type.rs
+src/models/vector_expression.rs
+src/models/vector_expression_parameters.rs
 src/models/vector_operator.rs
 src/models/vector_result_descriptor.rs
 src/models/volume.rs
