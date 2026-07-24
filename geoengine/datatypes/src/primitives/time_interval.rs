@@ -347,7 +347,7 @@ impl Debug for TimeInterval {
             f,
             "TimeInterval [{}, {})",
             self.start.inner(),
-            &self.end.inner()
+            self.end.inner()
         )
     }
 }
@@ -539,10 +539,9 @@ pub fn time_interval_extent<I: Iterator<Item = Option<TimeInterval>>>(
     };
 
     for time in times {
-        if let Some(time) = time {
+        {
+            let time = time?;
             extent = extent.extend(&time);
-        } else {
-            return None;
         }
     }
 
@@ -551,6 +550,8 @@ pub fn time_interval_extent<I: Iterator<Item = Option<TimeInterval>>>(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use crate::primitives::DateTime;
 
     use super::*;
@@ -792,5 +793,26 @@ mod tests {
                 assert_eq!(builder_byte_size, array.get_array_memory_size(), "{i}");
             }
         }
+    }
+
+    #[test]
+    fn serialize_time_interval_with_serde() {
+        let time_interval = TimeInterval::new(1, 2).expect("time interval was created succesfully");
+        let hin = serde_json::to_string(&time_interval).expect("serilization works");
+        let back: TimeInterval = serde_json::from_str(&hin).expect("deserialization works");
+        assert_eq!(time_interval, back);
+    }
+
+    #[test]
+    fn serialize_time_interval_as_string_with_serde() {
+        let time_instance1 = TimeInstance::from_str("2000-01-01T12:00:00Z")
+            .expect("input should bee a valid date time string");
+        let time_instance2 = TimeInstance::from_str("2030-01-01T12:00:00Z")
+            .expect("input should bee a valid date time string");
+        let time_interval = TimeInterval::new(time_instance1, time_instance2)
+            .expect("time interval was created succesfully");
+        let hin = serde_json::to_string(&time_interval).expect("serilization works");
+        let back: TimeInterval = serde_json::from_str(&hin).expect("deserialization works");
+        assert_eq!(time_interval, back);
     }
 }

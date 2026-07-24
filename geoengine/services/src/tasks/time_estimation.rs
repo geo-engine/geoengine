@@ -85,7 +85,7 @@ impl Display for TimeEstimation {
             "?".to_string()
         };
 
-        write!(f, "{mean} (± {std_dev})",)
+        write!(f, "{mean} (± {std_dev})")
     }
 }
 

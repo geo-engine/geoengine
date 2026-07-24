@@ -74,9 +74,7 @@ pub(crate) fn calculate_max_blocking_threads_per_worker() -> usize {
 
     // Taken from `actix_server::ServerBuilder`.
     // By default, server uses number of available logical CPU as thread count.
-    let number_of_workers = std::thread::available_parallelism()
-        .map(NonZeroUsize::get)
-        .unwrap_or(1);
+    let number_of_workers = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
 
     // Taken from `actix_server::ServerWorkerConfig`.
     let max_blocking_threads = std::cmp::max(512 / number_of_workers, 1);
@@ -193,11 +191,12 @@ pub(crate) async fn server_info_handler() -> impl actix_web::Responder {
 pub(crate) fn server_info() -> ServerInfo {
     ServerInfo {
         build_date: env!("VERGEN_BUILD_DATE"),
-        commit_hash: env!("VERGEN_GIT_SHA"),
+        commit_hash: option_env!("VERGEN_GIT_SHA").unwrap_or("unknown"), // 'unknown' if not builded in git repository
         version: env!("CARGO_PKG_VERSION"),
         features: env!("VERGEN_CARGO_FEATURES"),
     }
 }
+
 /// Server availablity check.
 #[utoipa::path(
     tag = "General",
@@ -425,7 +424,7 @@ impl CacheControlHeader for CacheHint {
                 .expect("should be a valid header value according to the HTTP standard"),
             0 => HeaderValue::from_str("no-cache")
                 .expect("should be a valid header value according to the HTTP standard"),
-            s => HeaderValue::from_str(&format!("private, max-age={s}",))
+            s => HeaderValue::from_str(&format!("private, max-age={s}"))
                 .expect("should be a valid header value according to the HTTP standard"),
         };
 

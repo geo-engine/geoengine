@@ -1059,7 +1059,6 @@ fn geotiff_to_cog(
 
 #[cfg(test)]
 mod tests {
-    use std::marker::PhantomData;
     use std::ops::Add;
 
     use crate::engine::{MockExecutionContext, RasterResultDescriptor, TimeDescriptor};
@@ -1084,14 +1083,11 @@ mod tests {
 
         let metadata = create_ndvi_meta_data();
 
-        let gdal_source = GdalSourceProcessor::<u8> {
-            produced_result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification: ctx.tiling_specification(),
-            overview_level: 0,
-            meta_data: Box::new(metadata),
-            original_resolution_spatial_grid: None,
-            _phantom_data: PhantomData,
-        };
+        let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
+            metadata.result_descriptor.clone(),
+            ctx.tiling_specification(),
+            Box::new(metadata),
+        );
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
@@ -1137,14 +1133,11 @@ mod tests {
 
         let metadata = create_ndvi_meta_data();
 
-        let gdal_source = GdalSourceProcessor::<u8> {
-            produced_result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification: ctx.tiling_specification(),
-            overview_level: 0,
-            meta_data: Box::new(metadata),
-            original_resolution_spatial_grid: None,
-            _phantom_data: PhantomData,
-        };
+        let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
+            metadata.result_descriptor.clone(),
+            ctx.tiling_specification(),
+            Box::new(metadata),
+        );
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
@@ -1185,14 +1178,11 @@ mod tests {
 
         let metadata = create_ndvi_meta_data();
 
-        let gdal_source = GdalSourceProcessor::<u8> {
-            produced_result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification: ctx.tiling_specification(),
-            overview_level: 0,
-            meta_data: Box::new(metadata),
-            original_resolution_spatial_grid: None,
-            _phantom_data: PhantomData,
-        };
+        let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
+            metadata.result_descriptor.clone(),
+            ctx.tiling_specification(),
+            Box::new(metadata),
+        );
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
@@ -1238,14 +1228,11 @@ mod tests {
 
         let metadata = create_ndvi_meta_data();
 
-        let gdal_source = GdalSourceProcessor::<u8> {
-            produced_result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification: ctx.tiling_specification(),
-            overview_level: 0,
-            meta_data: Box::new(metadata),
-            original_resolution_spatial_grid: None,
-            _phantom_data: PhantomData,
-        };
+        let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
+            metadata.result_descriptor.clone(),
+            ctx.tiling_specification(),
+            Box::new(metadata),
+        );
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
@@ -1293,14 +1280,11 @@ mod tests {
 
         let metadata = create_ndvi_meta_data();
 
-        let gdal_source = GdalSourceProcessor::<u8> {
-            produced_result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification: ctx.tiling_specification(),
-            overview_level: 0,
-            meta_data: Box::new(metadata),
-            original_resolution_spatial_grid: None,
-            _phantom_data: PhantomData,
-        };
+        let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
+            metadata.result_descriptor.clone(),
+            ctx.tiling_specification(),
+            Box::new(metadata),
+        );
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
@@ -1348,14 +1332,11 @@ mod tests {
 
         let metadata = create_ndvi_meta_data();
 
-        let gdal_source = GdalSourceProcessor::<u8> {
-            produced_result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification: ctx.tiling_specification(),
-            overview_level: 0,
-            meta_data: Box::new(metadata),
-            original_resolution_spatial_grid: None,
-            _phantom_data: PhantomData,
-        };
+        let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
+            metadata.result_descriptor.clone(),
+            ctx.tiling_specification(),
+            Box::new(metadata),
+        );
 
         let mut bytes = raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
@@ -1423,14 +1404,11 @@ mod tests {
 
         let metadata = create_ndvi_meta_data();
 
-        let gdal_source = GdalSourceProcessor::<u8> {
-            produced_result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification: ctx.tiling_specification(),
-            overview_level: 0,
-            meta_data: Box::new(metadata),
-            original_resolution_spatial_grid: None,
-            _phantom_data: PhantomData,
-        };
+        let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
+            metadata.result_descriptor.clone(),
+            ctx.tiling_specification(),
+            Box::new(metadata),
+        );
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
@@ -1466,14 +1444,11 @@ mod tests {
 
         let metadata = create_ndvi_meta_data();
 
-        let gdal_source = GdalSourceProcessor::<u8> {
-            produced_result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification: ctx.tiling_specification(),
-            overview_level: 0,
-            meta_data: Box::new(metadata),
-            original_resolution_spatial_grid: None,
-            _phantom_data: PhantomData,
-        };
+        let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
+            metadata.result_descriptor.clone(),
+            ctx.tiling_specification(),
+            Box::new(metadata),
+        );
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
@@ -1519,14 +1494,11 @@ mod tests {
             .tiling_geo_transform()
             .spatial_to_grid_bounds(&query_bbox);
 
-        let gdal_source = GdalSourceProcessor::<u8> {
-            produced_result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification: ctx.tiling_specification(),
-            overview_level: 0,
-            meta_data: Box::new(metadata),
-            original_resolution_spatial_grid: None,
-            _phantom_data: PhantomData,
-        };
+        let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
+            metadata.result_descriptor.clone(),
+            ctx.tiling_specification(),
+            Box::new(metadata),
+        );
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
@@ -1736,14 +1708,11 @@ mod tests {
 
         let tiling_specification = TilingSpecification::new([512, 512].into());
 
-        let gdal_source = GdalSourceProcessor::<u8> {
-            produced_result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification,
-            overview_level: 0,
-            meta_data: Box::new(metadata),
-            original_resolution_spatial_grid: None,
-            _phantom_data: PhantomData,
-        };
+        let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
+            metadata.result_descriptor.clone(),
+            ctx.tiling_specification(),
+            Box::new(metadata),
+        );
 
         let (mut bytes, _) = raster_stream_to_multiband_geotiff_bytes(
             gdal_source.boxed(),

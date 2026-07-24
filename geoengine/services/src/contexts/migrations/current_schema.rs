@@ -27,7 +27,7 @@ impl CurrentSchemaMigration {
         let schema_name = &config.schema;
 
         if schema_name != "pg_temp" {
-            tx.batch_execute(&format!("CREATE SCHEMA IF NOT EXISTS {schema_name};",))
+            tx.batch_execute(&format!("CREATE SCHEMA IF NOT EXISTS {schema_name};"))
                 .await?;
         }
 

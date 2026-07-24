@@ -141,7 +141,7 @@ impl TryFrom<serde_json::Value> for Feature {
     type Error = StacError;
 
     fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
-        geojson::Feature::from_json_value(value)
+        serde_json::from_value::<geojson::Feature>(value)
             .map_err(StacError::from)
             .and_then(Feature::try_from)
     }

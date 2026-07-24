@@ -24,5 +24,5 @@ doc = false
 proc-macro = false
 
 [dependencies]
-geo = "0.32.0"
-geo-types = "0.7.17" # important for compatibility when linking
+geo = "0.33.1"
+geo-types = "0.7.19" # important for compatibility when linking

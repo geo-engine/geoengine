@@ -353,7 +353,7 @@ pub async fn collection<C: ApplicationContext>(
     let (data_connector_id, layer_id, collection_id) = path.into_inner();
 
     if layer_id != collection_id {
-        return Err(OgcApiError::CollectionNotFound { collection_id })?;
+        Err(OgcApiError::CollectionNotFound { collection_id })?;
     }
 
     let ctx = app_ctx.session_context(session);

@@ -201,10 +201,10 @@ mod tests {
         let tile_size = tile.byte_size();
         let mut size = CacheSize::new(100_000);
         size.add_element_bytes(&tile);
-        assert!(size.byte_size_used() == tile_size);
-        assert!(size.byte_size_free() == 100_000 - tile_size);
+        assert_eq!(size.byte_size_used(), tile_size);
+        assert_eq!(size.byte_size_free(), 100_000 - tile_size);
         size.remove_element_bytes(&tile);
-        assert!(size.byte_size_used() == 0);
+        assert_eq!(size.byte_size_used(), 0);
     }
 
     #[test]

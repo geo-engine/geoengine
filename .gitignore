@@ -1,5 +1,8 @@
 # IDEs
 .vscode
 
+# Local tooling
+.opencode
+
 # Language-specific files that are somehow put to root
 .mypy_cache

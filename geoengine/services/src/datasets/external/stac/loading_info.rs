@@ -884,7 +884,7 @@ mod tests {
             .add_layer_provider(
                 make_stac_provider_def(
                     provider_id,
-                    server.url_str("").trim_end_matches('/').to_owned(),
+                    server.url_str("/").trim_end_matches('/').to_owned(),
                 )
                 .into(),
             )
@@ -1010,7 +1010,7 @@ mod tests {
             id: provider_id,
             description: "Test STAC provider for NDVI workflow".to_owned(),
             priority: Some(50),
-            api_url: server.url_str(""),
+            api_url: server.url_str("/"),
             collection_name: "sentinel-2-l2a".to_owned(),
             s3_config: None,
             time_dimension: TimeDimension::Regular(RegularTimeDimension::new_with_epoch_origin(

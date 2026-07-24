@@ -72,7 +72,7 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
         .collect::<Vec<usize>>();
 
     if band_positions.len() != required_bands.len() {
-        return Err(PngCreationError::ColorizerBandsMustBePresentInQuery {
+        Err(PngCreationError::ColorizerBandsMustBePresentInQuery {
             bands_present: query_rect.attributes().as_vec(),
             required_bands,
         })?;
@@ -192,7 +192,7 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
             let chunk = chunk.boxed_context(error::QueryDidNotProduceNextChunk)?;
 
             if chunk.len() != rgb_channel_count {
-                return Err(PngCreationError::RgbChunkIsNotEnoughBands)?;
+                Err(PngCreationError::RgbChunkIsNotEnoughBands)?;
             }
 
             let rgb_tile = crate::util::spawn_blocking(move || {
@@ -348,7 +348,6 @@ pub enum PngCreationError {
 
 #[cfg(test)]
 mod tests {
-    use std::marker::PhantomData;
 
     use crate::engine::{MockExecutionContext, RasterQueryProcessor};
     use crate::{source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data};
@@ -385,14 +384,11 @@ mod tests {
 
         let meta_data = create_ndvi_meta_data();
 
-        let gdal_source = GdalSourceProcessor::<u8> {
-            produced_result_descriptor: meta_data.result_descriptor.clone(),
+        let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
+            meta_data.result_descriptor.clone(),
             tiling_specification,
-            overview_level: 0,
-            meta_data: Box::new(meta_data),
-            original_resolution_spatial_grid: None,
-            _phantom_data: PhantomData,
-        };
+            Box::new(meta_data),
+        );
 
         let query = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-800, -100], [-199, 499]).unwrap(),

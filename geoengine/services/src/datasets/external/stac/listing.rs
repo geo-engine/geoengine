@@ -275,7 +275,7 @@ impl StacDataProvider {
                         )),
                     },
                     name: display.clone(),
-                    description: format!("Datasets with {} {}", first_dimension.label(), display,),
+                    description: format!("Datasets with {} {}", first_dimension.label(), display),
                     properties: vec![],
                 })
             })

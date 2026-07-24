@@ -42,6 +42,83 @@ root: [openapi.json](../openapi.json).
 - Use `RUST_LOG` to control runtime logging verbosity (e.g. `RUST_LOG=debug`).
 - Many common development tasks are exposed via the top-level `justfile`.
 
+## Updating Rust and Dependencies
+
+To update Rust to the latest stable version, do the following steps, accompanied by helper commands:
+
+1. Update Rust toolchain:
+
+```bash
+just backend update-step1-rust
+```
+
+Then go and run:
+
+```bash
+just backend lint-clippy --fix
+```
+
+Fix any issues that arise from the update.
+Then, run:
+
+```bash
+just backend lint-rustfmt --write
+```
+
+Run tests and fix any issues that arise from the update:
+
+```bash
+just backend test
+```
+
+Commit the changes.
+
+1. Update dependencies:
+
+First, run:
+
+```bash
+just backend update-step2-minor-dependencies
+```
+
+Then go and run:
+
+```bash
+just backend lint-clippy
+```
+
+Fix any issues that arise from the updates.
+
+Then, see if major versions need to be updated.
+Manually update the `Cargo.toml` files to the latest versions of dependencies.
+Then, run clippy again and fix any issues.
+
+Run tests and fix any issues that arise from the update:
+
+```bash
+just backend test
+```
+
+Commit the changes.
+
+1. Aftermath:
+
+First, run:
+
+```bash
+just backend update-step3-aftermath
+```
+
+Then go and run:
+
+```bash
+just backend lint
+```
+
+Fix any issues that arise from the updates.
+
+Commit the changes.
+
 ## Troubleshooting
 
 ### Lints

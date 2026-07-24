@@ -29,7 +29,6 @@ use num;
 use rayon::ThreadPool;
 use rayon::iter::{IndexedParallelIterator, ParallelIterator};
 use rayon::slice::{ParallelSlice, ParallelSliceMut};
-use tracing::debug;
 
 use super::{FoldTileAccu, FoldTileAccuMut, SubQueryTileAggregator};
 
@@ -194,31 +193,19 @@ fn projected_coordinate_grid_parallel(
 
     let start = std::time::Instant::now();
 
-    let res = pool.install(|| {
-        // get all pixel idxs and coordinates.
-        debug!(
-            "projected_coordinate_grid_parallel {:?}",
-            &tile_info.global_tile_position
-        );
+    let parallelism = pool.current_num_threads();
+    let par_chunk_split =
+        num::integer::div_ceil(tile_info.tile_size_in_pixels.axis_size_y(), parallelism)
+            .max(min_rows_in_par_chunk); // don't go below MIN_ROWS_IN_PAR_CHUNK lines per chunk.
+    let par_chunk_size = tile_info.tile_size_in_pixels.axis_size_x() * par_chunk_split;
 
+    let res = pool.install(|| {
         let mut in_coord_grid: Grid2D<Option<Coordinate2D>> =
             Grid2D::new_filled(tile_info.tile_size_in_pixels, None);
 
         let out_coords = tile_info
             .spatial_grid_definition()
             .generate_coord_grid_pixel_center();
-
-        let parallelism = pool.current_num_threads();
-        let par_chunk_split =
-            num::integer::div_ceil(tile_info.tile_size_in_pixels.axis_size_y(), parallelism)
-                .max(min_rows_in_par_chunk); // don't go below MIN_ROWS_IN_PAR_CHUNK lines per chunk.
-        let par_chunk_size = tile_info.tile_size_in_pixels.axis_size_x() * par_chunk_split;
-        debug!(
-            "parallelism: threads={} par_chunk_split={} par_chunk_size={}",
-            pool.current_num_threads(),
-            par_chunk_split,
-            par_chunk_size
-        );
 
         in_coord_grid
             .data
@@ -233,7 +220,7 @@ fn projected_coordinate_grid_parallel(
                 let chunk_bounds = BoundingBox2D::from_coord_ref_iter(out_coord_slice.iter());
 
                 if chunk_bounds.is_none() {
-                    debug!("reprojection early exit");
+                    tracing::trace!("reprojection early exit");
                     return Ok(());
                 }
 
@@ -243,14 +230,14 @@ fn projected_coordinate_grid_parallel(
                 let proj = CoordinateProjector::from_known_srs(out_srs, in_srs)?;
 
                 if valid_out_area.contains_bbox(&chunk_bounds) {
-                    debug!("reproject whole tile chunk");
+                    tracing::trace!("reproject whole tile chunk");
                     let in_coords = proj.project_coordinates(out_coord_slice)?;
                     in_coord_slice
                         .iter_mut()
-                        .zip(in_coords.into_iter())
+                        .zip(in_coords)
                         .for_each(|(a, b)| *a = Some(b));
                 } else if valid_out_area.intersects_bbox(&chunk_bounds) {
-                    debug!("reproject part of tile chunk");
+                    tracing::trace!("reproject part of tile chunk");
                     in_coord_slice
                         .iter_mut()
                         .zip(out_coord_slice.iter())
@@ -268,8 +255,12 @@ fn projected_coordinate_grid_parallel(
             })?;
         Ok(in_coord_grid)
     });
-    debug!(
-        "projected_coordinate_grid_parallel took {} (ns)",
+    tracing::trace!(
+        "projected_coordinate_grid_parallel {:?}, parallelism: threads={} par_chunk_split={} par_chunk_size={} took {} (ns) ",
+        &tile_info.global_tile_position,
+        pool.current_num_threads(),
+        par_chunk_split,
+        par_chunk_size,
         start.elapsed().as_nanos()
     );
     res
