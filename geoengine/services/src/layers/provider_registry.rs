@@ -36,11 +36,9 @@ pub struct DataProviderRegistry {
 impl Default for DataProviderRegistry {
     fn default() -> Self {
         let config = get_config_element::<ProviderCache>().ok();
-        let max_entries = config
-            .map_or(DEFAULT_MAX_ENTRIES, |c| c.max_entries);
-        let max_idle = Duration::from_secs(
-            config.map_or(DEFAULT_MAX_IDLE_SECS, |c| c.max_idle_secs),
-        );
+        let max_entries = config.map_or(DEFAULT_MAX_ENTRIES, |c| c.max_entries);
+        let max_idle =
+            Duration::from_secs(config.map_or(DEFAULT_MAX_IDLE_SECS, |c| c.max_idle_secs));
         Self {
             entries: Mutex::new(HashMap::default()),
             max_entries,

@@ -65,11 +65,8 @@ impl std::fmt::Debug for StacQueryCacheInner {
 impl Default for StacQueryCache {
     fn default() -> Self {
         let config = get_config_element::<StacCache>().ok();
-        let max_tile_files = config
-            .map_or(DEFAULT_MAX_TILE_FILES, |c| c.max_tile_files);
-        let ttl = Duration::from_secs(
-            config.map_or(DEFAULT_TTL_SECS, |c| c.ttl_secs),
-        );
+        let max_tile_files = config.map_or(DEFAULT_MAX_TILE_FILES, |c| c.max_tile_files);
+        let ttl = Duration::from_secs(config.map_or(DEFAULT_TTL_SECS, |c| c.ttl_secs));
         Self::new(max_tile_files, ttl)
     }
 }
@@ -231,13 +228,13 @@ impl StacQueryCache {
 
         let now = Instant::now();
         let inserted_entry = CacheEntry {
-                spatial_bounds,
-                time_interval,
-                time_steps,
-                tile_files,
-                inserted_at: now,
-                last_used: now,
-            };
+            spatial_bounds,
+            time_interval,
+            time_steps,
+            tile_files,
+            inserted_at: now,
+            last_used: now,
+        };
         trace!(
             dataset = %dataset.name,
             inserted_spatial_bounds = ?inserted_entry.spatial_bounds,
@@ -516,5 +513,4 @@ mod tests {
             .await;
         assert!(hit.is_none());
     }
-
 }
