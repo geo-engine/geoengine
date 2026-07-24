@@ -1,4 +1,4 @@
-use super::external::{DataProvider, TypedDataProviderDefinition};
+use super::external::{DataProvider, SharedDataProvider, TypedDataProviderDefinition};
 use super::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerCollectionListing,
     LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId, UpdateLayer,
@@ -39,6 +39,7 @@ use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::util::HashMapTextTextDbType;
 use snafu::ResultExt;
 use std::str::FromStr;
+use std::sync::Arc;
 use tokio_postgres::Transaction;
 use tonic::async_trait;
 use uuid::Uuid;
@@ -785,6 +786,30 @@ where
         clamp_prio
     }
 
+    /// Verify that the current session's user has permission to access the
+    /// given provider.  Returns `Err` when the provider does not exist or
+    /// the user is not permitted.
+    async fn check_provider_permission(&self, id: DataProviderId) -> Result<()> {
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "
+                SELECT 1
+                FROM
+                    user_permitted_providers p
+                    JOIN layer_providers l ON (p.provider_id = l.id)
+                WHERE
+                    id = $1 AND p.user_id = $2
+                ",
+            )
+            .await?;
+
+        conn.query_one(&stmt, &[&id, &self.session.user.id]).await?;
+
+        Ok(())
+    }
+
     async fn id_exists(tx: &Transaction<'_>, id: &DataProviderId) -> Result<bool> {
         Ok(tx
             .query_one(
@@ -917,14 +942,29 @@ where
     }
 
     async fn load_layer_provider(&self, id: DataProviderId) -> Result<Box<dyn DataProvider>> {
-        let definition = self.get_layer_provider_definition(id).await?;
+        // Check permission *before* cache lookup so the cache can be keyed by
+        // `provider_id` alone, sharing the same provider (and its STAC query
+        // cache) across all users.
+        self.check_provider_permission(id).await?;
 
-        return Box::new(definition)
-            .initialize(PostgresDb {
-                conn_pool: self.conn_pool.clone(),
-                session: self.session.clone(),
+        let provider = self
+            .provider_registry
+            .get_or_try_insert_with(id, || {
+                let db = Self {
+                    conn_pool: self.conn_pool.clone(),
+                    session: self.session.clone(),
+                    provider_registry: self.provider_registry.clone(),
+                };
+
+                async move {
+                    let definition = db.get_layer_provider_definition(id).await?;
+
+                    Box::new(definition).initialize(db).await.map(Arc::from)
+                }
             })
-            .await;
+            .await?;
+
+        Ok(Box::new(SharedDataProvider(provider)))
     }
 
     async fn get_layer_provider_definition(
@@ -1013,6 +1053,8 @@ where
 
         tx.commit().await?;
 
+        self.provider_registry.invalidate_provider(id).await;
+
         Ok(())
     }
 
@@ -1036,6 +1078,8 @@ where
         tx.execute(&stmt, &[&id]).await?;
 
         tx.commit().await?;
+
+        self.provider_registry.invalidate_provider(id).await;
 
         Ok(())
     }

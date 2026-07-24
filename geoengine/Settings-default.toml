@@ -222,6 +222,18 @@ size_in_mb = 1_000 # 1 GB
 # storage limit for collecting query results before insertion into the cache in 
 landing_zone_ratio = 0.1 # 10% of total cache size
 
+[stac_cache]
+# maximum number of TileFile entries for STAC query cache (per provider)
+max_tile_files = 10_000
+# TTL in seconds for STAC query cache entries
+ttl_secs = 3600
+
+[provider_cache]
+# maximum number of provider instances in the provider registry
+max_entries = 256
+# maximum idle time in seconds before evicting a cached provider
+max_idle_secs = 1800
+
 [wildlive]
 api_endpoint = "https://wildlive.senckenberg.de/api/"
 
