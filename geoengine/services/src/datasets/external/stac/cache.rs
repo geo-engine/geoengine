@@ -6,12 +6,6 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tracing::trace;
 
-/// Maximum total number of `TileFile` entries held in memory across all datasets.
-const DEFAULT_MAX_TILE_FILES: usize = 10_000;
-
-/// Default TTL for cached entries (1 hour).
-const DEFAULT_TTL_SECS: u64 = 60 * 60;
-
 /// In-memory cache for STAC query results, keyed by dataset name and (spatial
 /// bounds, time interval).  The cache is held inside the long-lived
 /// `StacDataProvider` and survives across individual requests.
@@ -64,10 +58,9 @@ impl std::fmt::Debug for StacQueryCacheInner {
 
 impl Default for StacQueryCache {
     fn default() -> Self {
-        let config = get_config_element::<StacCache>().ok();
-        let max_tile_files = config.map_or(DEFAULT_MAX_TILE_FILES, |c| c.max_tile_files);
-        let ttl = Duration::from_secs(config.map_or(DEFAULT_TTL_SECS, |c| c.ttl_secs));
-        Self::new(max_tile_files, ttl)
+        let config = get_config_element::<StacCache>()
+            .expect("StacCache config must be present in Settings-default.toml");
+        Self::new(config.max_tile_files, Duration::from_secs(config.ttl_secs))
     }
 }
 

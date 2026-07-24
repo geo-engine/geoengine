@@ -8,7 +8,6 @@ use super::listing::{
     LayerCollectionProvider, ProviderCapabilities, SearchCapabilities, SearchParameters,
     SearchType, SearchTypes,
 };
-use super::provider_registry::ProviderCacheKey;
 use super::storage::{
     INTERNAL_PROVIDER_ID, LayerDb, LayerProviderDb, LayerProviderListing,
     LayerProviderListingOptions,
@@ -948,11 +947,9 @@ where
         // cache) across all users.
         self.check_provider_permission(id).await?;
 
-        let provider_key = ProviderCacheKey { provider_id: id };
-
         let provider = self
             .provider_registry
-            .get_or_try_insert_with(provider_key, || {
+            .get_or_try_insert_with(id, || {
                 let db = Self {
                     conn_pool: self.conn_pool.clone(),
                     session: self.session.clone(),

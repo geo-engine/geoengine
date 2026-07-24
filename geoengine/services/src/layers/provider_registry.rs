@@ -7,19 +7,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
-const DEFAULT_MAX_ENTRIES: usize = 256;
-const DEFAULT_MAX_IDLE_SECS: u64 = 30 * 60;
-
-/// Cache key using only `provider_id` so that the same provider instance
-/// (including its STAC query cache) is shared across all users.
-///
-/// Permission checks are performed *before* the cache lookup in
-/// `load_layer_provider`, so there is no need to scope the cache per user.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ProviderCacheKey {
-    pub provider_id: DataProviderId,
-}
-
 #[derive(Debug, Clone)]
 struct CachedProviderEntry {
     provider: Arc<dyn DataProvider>,
@@ -28,21 +15,19 @@ struct CachedProviderEntry {
 
 #[derive(Debug)]
 pub struct DataProviderRegistry {
-    entries: Mutex<HashMap<ProviderCacheKey, CachedProviderEntry>>,
+    entries: Mutex<HashMap<DataProviderId, CachedProviderEntry>>,
     max_entries: usize,
     max_idle: Duration,
 }
 
 impl Default for DataProviderRegistry {
     fn default() -> Self {
-        let config = get_config_element::<ProviderCache>().ok();
-        let max_entries = config.map_or(DEFAULT_MAX_ENTRIES, |c| c.max_entries);
-        let max_idle =
-            Duration::from_secs(config.map_or(DEFAULT_MAX_IDLE_SECS, |c| c.max_idle_secs));
+        let config = get_config_element::<ProviderCache>()
+            .expect("ProviderCache config must be present in Settings-default.toml");
         Self {
             entries: Mutex::new(HashMap::default()),
-            max_entries,
-            max_idle,
+            max_entries: config.max_entries,
+            max_idle: Duration::from_secs(config.max_idle_secs),
         }
     }
 }
@@ -66,7 +51,7 @@ impl DataProviderRegistry {
     /// call volume the current design is adequate.
     pub async fn get_or_try_insert_with<F, Fut>(
         &self,
-        key: ProviderCacheKey,
+        key: DataProviderId,
         initialize: F,
     ) -> Result<Arc<dyn DataProvider>>
     where
@@ -110,15 +95,15 @@ impl DataProviderRegistry {
 
     pub async fn invalidate_provider(&self, provider_id: DataProviderId) {
         let mut entries = self.entries.lock().await;
-        entries.retain(|key, _| key.provider_id != provider_id);
+        entries.retain(|key, _| *key != provider_id);
     }
 
-    fn evict(entries: &mut HashMap<ProviderCacheKey, CachedProviderEntry>, max_idle: Duration) {
+    fn evict(entries: &mut HashMap<DataProviderId, CachedProviderEntry>, max_idle: Duration) {
         let now = Instant::now();
         entries.retain(|_, entry| now.duration_since(entry.last_used) <= max_idle);
     }
 
-    fn evict_lru_one(entries: &mut HashMap<ProviderCacheKey, CachedProviderEntry>) {
+    fn evict_lru_one(entries: &mut HashMap<DataProviderId, CachedProviderEntry>) {
         if let Some((lru_key, _)) = entries
             .iter()
             .min_by_key(|(_, entry)| entry.last_used)
