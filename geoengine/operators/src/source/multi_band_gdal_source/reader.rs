@@ -2,8 +2,8 @@ use gdal::raster::GdalType;
 use geoengine_datatypes::{
     primitives::TimeInterval,
     raster::{
-        ChangeGridBounds, EmptyGrid, GridBoundingBox2D, GridOrEmpty, Pixel,
-        RasterProperties, RasterTile2D, TileInformation, grid_blit_valid_only,
+        ChangeGridBounds, EmptyGrid, GridBoundingBox2D, GridOrEmpty, Pixel, RasterProperties,
+        RasterTile2D, TileInformation, grid_blit_valid_only,
     },
 };
 use num::FromPrimitive;
