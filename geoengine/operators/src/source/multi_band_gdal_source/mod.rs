@@ -25,12 +25,13 @@ use geoengine_datatypes::{
         TimeInterval, find_next_best_overview_level,
     },
     raster::{
-        GeoTransform, GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D,
-        SpatialGridDefinition, TilingSpatialGridDefinition, TilingSpecification,
+        GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D, SpatialGridDefinition,
+        TilingSpatialGridDefinition, TilingSpecification,
     },
 };
+
 pub use loading_info::{GdalMultiBand, MultiBandGdalLoadingInfo, TileFile};
-use num::{FromPrimitive, integer::div_ceil, integer::div_floor};
+use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
@@ -316,44 +317,6 @@ impl OperatorName for MultiBandGdalSource {
     const TYPE_NAME: &'static str = "MultiBandGdalSource";
 }
 
-fn overview_level_spatial_grid(
-    source_spatial_grid: SpatialGridDefinition,
-    overview_level: u32,
-) -> Option<SpatialGridDefinition> {
-    if overview_level > 0 {
-        debug!("Using overview level {overview_level}");
-        let geo_transform = GeoTransform::new(
-            source_spatial_grid.geo_transform.origin_coordinate,
-            source_spatial_grid.geo_transform.x_pixel_size() * f64::from(overview_level),
-            source_spatial_grid.geo_transform.y_pixel_size() * f64::from(overview_level),
-        );
-        let grid_bounds = GridBoundingBox2D::new_min_max(
-            div_floor(
-                source_spatial_grid.grid_bounds.y_min(),
-                overview_level as isize,
-            ),
-            div_ceil(
-                source_spatial_grid.grid_bounds.y_max(),
-                overview_level as isize,
-            ),
-            div_floor(
-                source_spatial_grid.grid_bounds.x_min(),
-                overview_level as isize,
-            ),
-            div_ceil(
-                source_spatial_grid.grid_bounds.x_max(),
-                overview_level as isize,
-            ),
-        )
-        .expect("overview level must be a positive integer");
-
-        Some(SpatialGridDefinition::new(geo_transform, grid_bounds))
-    } else {
-        debug!("Using original resolution (ov = 0)");
-        None
-    }
-}
-
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for MultiBandGdalSource {
@@ -450,8 +413,10 @@ impl InitializedGdalSourceOperator {
             .expect("Source data must be a source grid definition...");
 
         let (result_descriptor, original_grid) = if let Some(ovr_spatial_grid) =
-            overview_level_spatial_grid(source_resolution_spatial_grid, overview_level)
-        {
+            crate::source::gdal_worker_process::overview_level_spatial_grid(
+                source_resolution_spatial_grid,
+                overview_level,
+            ) {
             let ovr_res = RasterResultDescriptor {
                 spatial_grid: SpatialGridDescriptor::new_source(ovr_spatial_grid),
                 ..result_descriptor
@@ -648,7 +613,7 @@ mod tests {
         CacheHint, Measurement, SpatialPartition2D, TimeInstance,
     };
     use geoengine_datatypes::raster::{
-        GridBoundingBox2D, GridBounds, GridIdx2D, GridSize, RasterDataType,
+        GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridSize, RasterDataType,
     };
     use geoengine_datatypes::raster::{RasterPropertiesEntryType, RasterPropertiesKey};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};

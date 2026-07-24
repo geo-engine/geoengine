@@ -473,6 +473,9 @@ pub async fn add_file_definition_to_datasets<D: GeoEngineDb>(
             .into();
             MetaDataDefinition::OgrMetaData(meta_data)
         }
+        MetaDataDefinition::GdalMultiBand(meta_data) => {
+            MetaDataDefinition::GdalMultiBand(meta_data)
+        }
         _ => todo!("Implement for other meta data types when used"),
     };
 
@@ -512,7 +515,18 @@ pub async fn add_file_definition_to_datasets_and_return_layer<D: GeoEngineDb>(
                 overview_level: None,
             },
         })),
-        _ => panic!("Only GdalSource is supported in this helper function"),
+        "MultiBandGdalSource" => NewTypedOperator::Raster(NewRasterOperator::MultiBandGdalSource(
+            crate::api::model::processing_graphs::MultiBandGdalSource {
+                r#type: Default::default(),
+                params: crate::api::model::processing_graphs::GdalSourceParameters {
+                    data: dataset.name.to_string(),
+                    overview_level: None,
+                },
+            },
+        )),
+        _ => {
+            panic!("Only GdalSource and MultiBandGdalSource are supported in this helper function")
+        }
     };
 
     db.add_layer_with_id(

@@ -627,7 +627,7 @@ mod tests {
     use crate::{
         api::handlers::ogc::test_util::{
             session_and_3857_layer_id, session_and_4326_layer_id, session_and_4326_rgb_layer_id,
-            session_and_native_3857_layer_id,
+            session_and_native_3857_layer_id, session_and_ndvi_multi_band_layer_id,
         },
         contexts::PostgresContext,
         ge_context,
@@ -998,5 +998,37 @@ mod tests {
         );
 
         assert!(query_time_from_datetime(None).is_err());
+    }
+
+    #[ge_context::test]
+    async fn it_renders_ndvi_via_multi_band_tile_png_with_datetime(
+        app_ctx: PostgresContext<NoTls>,
+    ) {
+        let (session_id, data_connector_id, layer_id) =
+            session_and_ndvi_multi_band_layer_id(&app_ctx).await;
+
+        let req = actix_web::test::TestRequest::get()
+			.uri(&format!(
+				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-04-01T00:00:00Z",
+                TILE_MATRIX_SET_ID = CustomNativeTMS::TILE_MATRIX_SET_ID
+			))
+			.append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+        let status = res.status();
+        let content_type = res
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(ToOwned::to_owned);
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        assert_eq!(status, 200);
+        assert_eq!(content_type.as_deref(), Some("image/png"));
+
+        let file_path = test_data!("ogc/tiles/ndvi_0_0_0.png").to_path_buf();
+        save_test_bytes_if_not_exists(&image_bytes, &file_path);
+
+        assert_image_equals(&file_path, &image_bytes);
     }
 }

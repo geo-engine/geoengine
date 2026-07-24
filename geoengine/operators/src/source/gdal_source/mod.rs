@@ -29,8 +29,8 @@ use geoengine_datatypes::{
         TryIrregularTimeFillIterExt, TryRegularTimeFillIterExt, find_next_best_overview_level,
     },
     raster::{
-        EmptyGrid, GeoTransform, GridBoundingBox2D, Pixel, RasterDataType, RasterProperties,
-        RasterTile2D, SpatialGridDefinition, TileInformation, TilingSpecification, TilingStrategy,
+        EmptyGrid, GridBoundingBox2D, Pixel, RasterDataType, RasterProperties, RasterTile2D,
+        SpatialGridDefinition, TileInformation, TilingSpecification, TilingStrategy,
     },
 };
 use itertools::Itertools;
@@ -39,7 +39,6 @@ pub use loading_info::{
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
 };
 use num::FromPrimitive;
-use num::integer::div_floor;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
@@ -492,44 +491,6 @@ where
         .try_buffered(8) // TODO: make this configurable
 }
 
-fn overview_level_spatial_grid(
-    source_spatial_grid: SpatialGridDefinition,
-    overview_level: u32,
-) -> Option<SpatialGridDefinition> {
-    if overview_level > 0 {
-        tracing::trace!("Using overview level {overview_level}");
-        let geo_transform = GeoTransform::new(
-            source_spatial_grid.geo_transform.origin_coordinate,
-            source_spatial_grid.geo_transform.x_pixel_size() * f64::from(overview_level),
-            source_spatial_grid.geo_transform.y_pixel_size() * f64::from(overview_level),
-        );
-        let grid_bounds = GridBoundingBox2D::new_min_max(
-            div_floor(
-                source_spatial_grid.grid_bounds.y_min(),
-                overview_level as isize,
-            ),
-            div_floor(
-                source_spatial_grid.grid_bounds.y_max(),
-                overview_level as isize,
-            ),
-            div_floor(
-                source_spatial_grid.grid_bounds.x_min(),
-                overview_level as isize,
-            ),
-            div_floor(
-                source_spatial_grid.grid_bounds.x_max(),
-                overview_level as isize,
-            ),
-        )
-        .expect("overview level must be a positive integer");
-
-        Some(SpatialGridDefinition::new(geo_transform, grid_bounds))
-    } else {
-        tracing::trace!("Using original resolution (ov = 0)");
-        None
-    }
-}
-
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for GdalSource {
@@ -633,8 +594,10 @@ impl InitializedGdalSourceOperator {
             .expect("Source data must be a source grid definition...");
 
         let (result_descriptor, original_grid) = if let Some(ovr_spatial_grid) =
-            overview_level_spatial_grid(source_resolution_spatial_grid, overview_level)
-        {
+            crate::source::gdal_worker_process::overview_level_spatial_grid(
+                source_resolution_spatial_grid,
+                overview_level,
+            ) {
             let ovr_res = RasterResultDescriptor {
                 spatial_grid: SpatialGridDescriptor::new_source(ovr_spatial_grid),
                 ..result_descriptor
@@ -826,11 +789,9 @@ mod tests {
     use crate::util::gdal::add_ndvi_dataset;
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::DateTimeParseFormat;
-    use geoengine_datatypes::primitives::{
-        AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, TimeInstance,
-    };
+    use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
     use geoengine_datatypes::raster::{
-        BoundedGrid, EmptyGrid2D, GridBoundingBox, GridBounds, GridIdx2D, GridShape2D, GridSize,
+        BoundedGrid, EmptyGrid2D, GeoTransform, GridBounds, GridIdx2D, GridShape2D, GridSize,
         RasterPropertiesEntryType, RasterPropertiesKey, SpatialGridDefinition, TileInformation,
         TilesEqualIgnoringCacheHint, TilingStrategy,
     };
@@ -1456,46 +1417,5 @@ mod tests {
         );
 
         assert!(tile.unwrap().tiles_equal_ignoring_cache_hint(&expected));
-    }
-
-    #[test]
-    fn it_computes_spatial_grids_for_overviews() {
-        let spatial_grid_definition = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(0., 0.), 0.1, -0.1),
-            GridBoundingBox::new([-900, -1800], [899, 1799]).unwrap(),
-        );
-
-        let spatial_grid_definition_2x =
-            overview_level_spatial_grid(spatial_grid_definition, 2).unwrap();
-        let expected_spatial_grid_definition_2x = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(0., 0.), 0.2, -0.2),
-            GridBoundingBox::new([-450, -900], [449, 899]).unwrap(),
-        );
-        assert_eq!(
-            spatial_grid_definition_2x,
-            expected_spatial_grid_definition_2x
-        );
-
-        let spatial_grid_definition_4x =
-            overview_level_spatial_grid(spatial_grid_definition, 4).unwrap();
-        let expected_spatial_grid_definition_4x = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(0., 0.), 0.4, -0.4),
-            GridBoundingBox::new([-225, -450], [224, 449]).unwrap(),
-        );
-        assert_eq!(
-            spatial_grid_definition_4x,
-            expected_spatial_grid_definition_4x
-        );
-
-        let spatial_grid_definition_8x =
-            overview_level_spatial_grid(spatial_grid_definition, 8).unwrap();
-        let expected_spatial_grid_definition_8x = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(0., 0.), 0.8, -0.8),
-            GridBoundingBox::new([-113, -225], [112, 224]).unwrap(),
-        );
-        assert_eq!(
-            spatial_grid_definition_8x,
-            expected_spatial_grid_definition_8x
-        );
     }
 }
