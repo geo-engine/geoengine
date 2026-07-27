@@ -11,7 +11,7 @@ use crate::models;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(untagged)]
 pub enum MetaDataDefinition {
     #[serde(rename="MockMetaData")]
     MockMetaData(Box<models::MockMetaData>),

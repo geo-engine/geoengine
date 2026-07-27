@@ -38,19 +38,19 @@ import type { SingleVectorSource } from './SingleVectorSource';
  *
  * Users can think of this implicit function signature for, e.g., two inputs:
  *
- * ```rust
+ * ```rust,ignore
  * fn (A: f64, B: f64) -> f64
  * ```
  *
  * As a start, expressions contain algebraic operations and mathematical functions.
  *
- * ```rust
+ * ```rust,ignore
  * (A + B) / 2
  * ```
  *
  * In addition, branches can be used to check for conditions.
  *
- * ```rust
+ * ```rust,ignore
  * if A IS NODATA {
  *     B
  * } else {
@@ -60,7 +60,7 @@ import type { SingleVectorSource } from './SingleVectorSource';
  *
  * To generate more complex expressions, it is possible to have variable assignments.
  *
- * ```rust
+ * ```rust,ignore
  * let mean = (A + B) / 2;
  * let coefficient = 0.357;
  * mean * coefficient
@@ -73,7 +73,7 @@ import type { SingleVectorSource } from './SingleVectorSource';
  *
  * Function calls can be used to access utility functions.
  *
- * ```rust
+ * ```rust,ignore
  * max(A, 0)
  * ```
  *
@@ -101,7 +101,7 @@ import type { SingleVectorSource } from './SingleVectorSource';
  *
  * An example expression to calculate the centroid of a geometry is:
  *
- * ```rust
+ * ```rust,ignore
  * centroid(geom)
  * ```
  *
