@@ -1,0 +1,44 @@
+{
+  "name": "landsat-c2-l1 from STAC",
+  "id": "00000000-0000-0000-0000-000000000000",
+  "description": "Auto-discovered mapping for STAC collection 'landsat-c2-l1' at https://stac.test/v1",
+  "priority": 50,
+  "apiUrl": "https://stac.test/v1",
+  "collectionName": "landsat-c2-l1",
+  "s3Config": null,
+  "timeDimension": {
+    "regular": {
+      "origin": 0,
+      "step": { "granularity": "days", "step": 1 }
+    }
+  },
+  "datasets": [
+    {
+      "name": "landsat-c2-l1 EPSG:32632 U16 30m",
+      "description": "Auto-discovered from STAC collection 'landsat-c2-l1'",
+      "data_type": "U16",
+      "resolution": { "x": 30.0, "y": 30.0 },
+      "projection": "EPSG:32632",
+      "spatial_grid": {
+        "spatialGrid": {
+          "geoTransform": {
+            "originCoordinate": { "x": 399960.0, "y": 5800020.0 },
+            "xPixelSize": 30.0,
+            "yPixelSize": -30.0
+          },
+          "gridBounds": {
+            "min": [0, 0],
+            "max": [7999, 7999]
+          }
+        },
+        "state": "source"
+      },
+      "bands": [
+        { "asset_title": "Blue (band 2) - 30m", "band_name": null },
+        { "asset_title": "Green (band 3) - 30m", "band_name": null },
+        { "asset_title": "NIR (band 5) - 30m", "band_name": null },
+        { "asset_title": "Red (band 4) - 30m", "band_name": null }
+      ]
+    }
+  ]
+}
