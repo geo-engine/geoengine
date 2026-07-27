@@ -31,6 +31,7 @@ def file_modifications() -> Generator[tuple[Path, FileModifier], None, None]:
         Path("src/models/meta_data_definition.rs"),
         Path("src/models/raster_operator.rs"),
         Path("src/models/spatial_bounds_derive.rs"),
+        Path("src/models/typed_result_descriptor.rs"),
         Path("src/models/vector_operator.rs"),
     ]:
         yield file_path, make_untagged
