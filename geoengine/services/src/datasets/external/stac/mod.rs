@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 mod cache;
+pub(crate) mod common;
 mod listing;
 mod loading_info;
 

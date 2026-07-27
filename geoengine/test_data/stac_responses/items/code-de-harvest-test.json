@@ -1,0 +1,200 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/eo/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/projection/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/raster/v2.0.0/schema.json"
+      ],
+      "id": "S2B_MSIL2A_20260724T153629_N0512_R068_T19QBG_20260724T190638",
+      "collection": "sentinel-2-l2a",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [8.7, 50.8],
+            [8.8, 50.8],
+            [8.8, 50.9],
+            [8.7, 50.9],
+            [8.7, 50.8]
+          ]
+        ]
+      },
+      "bbox": [8.7, 50.8, 8.8, 50.9],
+      "properties": {
+        "datetime": "2026-07-24T15:36:29.024000Z",
+        "updated": "2026-07-24T19:29:11.371218Z"
+      },
+      "assets": {
+        "B02_10m": {
+          "type": "image/jp2",
+          "title": "Blue (band 2) - 10m",
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/07/24/S2B_MSIL2A_20260724T153629_N0512_R068_T19QBG_20260724T190638.SAFE/GRANULE/L2A_T19QBG_A049000_20260724T153625/IMG_DATA/R10m/T19QBG_20260724T153629_B02_10m.jp2",
+          "bands": [{ "name": "B02", "eo:common_name": "blue" }],
+          "data_type": "uint16",
+          "gsd": 10,
+          "proj:shape": [10980, 10980],
+          "proj:code": "EPSG:32632",
+          "proj:transform": [10.0, 0.0, 399960.0, 0.0, -10.0, 5700000.0]
+        },
+        "B03_10m": {
+          "type": "image/jp2",
+          "title": "Green (band 3) - 10m",
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/07/24/S2B_MSIL2A_20260724T153629_N0512_R068_T19QBG_20260724T190638.SAFE/GRANULE/L2A_T19QBG_A049000_20260724T153625/IMG_DATA/R10m/T19QBG_20260724T153629_B03_10m.jp2",
+          "bands": [{ "name": "B03", "eo:common_name": "green" }],
+          "data_type": "uint16",
+          "gsd": 10,
+          "proj:shape": [10980, 10980],
+          "proj:code": "EPSG:32632",
+          "proj:transform": [10.0, 0.0, 399960.0, 0.0, -10.0, 5700000.0]
+        },
+        "B04_10m": {
+          "type": "image/jp2",
+          "title": "Red (band 4) - 10m",
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/07/24/S2B_MSIL2A_20260724T153629_N0512_R068_T19QBG_20260724T190638.SAFE/GRANULE/L2A_T19QBG_A049000_20260724T153625/IMG_DATA/R10m/T19QBG_20260724T153629_B04_10m.jp2",
+          "bands": [{ "name": "B04", "eo:common_name": "red" }],
+          "data_type": "uint16",
+          "gsd": 10,
+          "proj:shape": [10980, 10980],
+          "proj:code": "EPSG:32632",
+          "proj:transform": [10.0, 0.0, 399960.0, 0.0, -10.0, 5700000.0]
+        },
+        "B08_10m": {
+          "type": "image/jp2",
+          "title": "NIR 1 (band 8) - 10m",
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/07/24/S2B_MSIL2A_20260724T153629_N0512_R068_T19QBG_20260724T190638.SAFE/GRANULE/L2A_T19QBG_A049000_20260724T153625/IMG_DATA/R10m/T19QBG_20260724T153629_B08_10m.jp2",
+          "bands": [{ "name": "B08", "eo:common_name": "nir" }],
+          "data_type": "uint16",
+          "gsd": 10,
+          "proj:shape": [10980, 10980],
+          "proj:code": "EPSG:32632",
+          "proj:transform": [10.0, 0.0, 399960.0, 0.0, -10.0, 5700000.0]
+        },
+        "B11_20m": {
+          "type": "image/jp2",
+          "title": "SWIR 1 (band 11) - 20m",
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/07/24/S2B_MSIL2A_20260724T153629_N0512_R068_T19QBG_20260724T190638.SAFE/GRANULE/L2A_T19QBG_A049000_20260724T153625/IMG_DATA/R20m/T19QBG_20260724T153629_B11_20m.jp2",
+          "bands": [{ "name": "B11", "eo:common_name": "swir16" }],
+          "data_type": "uint16",
+          "gsd": 20,
+          "proj:shape": [5490, 5490],
+          "proj:code": "EPSG:32632",
+          "proj:transform": [20.0, 0.0, 399960.0, 0.0, -20.0, 5700000.0]
+        },
+        "B12_20m": {
+          "type": "image/jp2",
+          "title": "SWIR 2 (band 12) - 20m",
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/07/24/S2B_MSIL2A_20260724T153629_N0512_R068_T19QBG_20260724T190638.SAFE/GRANULE/L2A_T19QBG_A049000_20260724T153625/IMG_DATA/R20m/T19QBG_20260724T153629_B12_20m.jp2",
+          "bands": [{ "name": "B12", "eo:common_name": "swir22" }],
+          "data_type": "uint16",
+          "gsd": 20,
+          "proj:shape": [5490, 5490],
+          "proj:code": "EPSG:32632",
+          "proj:transform": [20.0, 0.0, 399960.0, 0.0, -20.0, 5700000.0]
+        }
+      }
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/eo/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/projection/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/raster/v2.0.0/schema.json"
+      ],
+      "id": "S2B_MSIL2A_20260724T153629_N0512_R068_T19QBF_20260724T190638",
+      "collection": "sentinel-2-l2a",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [8.8, 50.8],
+            [8.9, 50.8],
+            [8.9, 50.9],
+            [8.8, 50.9],
+            [8.8, 50.8]
+          ]
+        ]
+      },
+      "bbox": [8.8, 50.8, 8.9, 50.9],
+      "properties": {
+        "datetime": "2026-07-24T15:36:29.024000Z",
+        "updated": "2026-07-24T19:33:06.935907Z"
+      },
+      "assets": {
+        "B02_10m": {
+          "type": "image/jp2",
+          "title": "Blue (band 2) - 10m",
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/07/24/S2B_MSIL2A_20260724T153629_N0512_R068_T19QBF_20260724T190638.SAFE/GRANULE/L2A_T19QBF_A049000_20260724T153625/IMG_DATA/R10m/T19QBF_20260724T153629_B02_10m.jp2",
+          "bands": [{ "name": "B02", "eo:common_name": "blue" }],
+          "data_type": "uint16",
+          "gsd": 10,
+          "proj:shape": [10980, 10980],
+          "proj:code": "EPSG:32632",
+          "proj:transform": [10.0, 0.0, 399960.0, 0.0, -10.0, 5700000.0]
+        },
+        "B03_10m": {
+          "type": "image/jp2",
+          "title": "Green (band 3) - 10m",
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/07/24/S2B_MSIL2A_20260724T153629_N0512_R068_T19QBF_20260724T190638.SAFE/GRANULE/L2A_T19QBF_A049000_20260724T153625/IMG_DATA/R10m/T19QBF_20260724T153629_B03_10m.jp2",
+          "bands": [{ "name": "B03", "eo:common_name": "green" }],
+          "data_type": "uint16",
+          "gsd": 10,
+          "proj:shape": [10980, 10980],
+          "proj:code": "EPSG:32632",
+          "proj:transform": [10.0, 0.0, 399960.0, 0.0, -10.0, 5700000.0]
+        },
+        "B04_10m": {
+          "type": "image/jp2",
+          "title": "Red (band 4) - 10m",
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/07/24/S2B_MSIL2A_20260724T153629_N0512_R068_T19QBF_20260724T190638.SAFE/GRANULE/L2A_T19QBF_A049000_20260724T153625/IMG_DATA/R10m/T19QBF_20260724T153629_B04_10m.jp2",
+          "bands": [{ "name": "B04", "eo:common_name": "red" }],
+          "data_type": "uint16",
+          "gsd": 10,
+          "proj:shape": [10980, 10980],
+          "proj:code": "EPSG:32632",
+          "proj:transform": [10.0, 0.0, 399960.0, 0.0, -10.0, 5700000.0]
+        },
+        "B08_10m": {
+          "type": "image/jp2",
+          "title": "NIR 1 (band 8) - 10m",
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/07/24/S2B_MSIL2A_20260724T153629_N0512_R068_T19QBF_20260724T190638.SAFE/GRANULE/L2A_T19QBF_A049000_20260724T153625/IMG_DATA/R10m/T19QBF_20260724T153629_B08_10m.jp2",
+          "bands": [{ "name": "B08", "eo:common_name": "nir" }],
+          "data_type": "uint16",
+          "gsd": 10,
+          "proj:shape": [10980, 10980],
+          "proj:code": "EPSG:32632",
+          "proj:transform": [10.0, 0.0, 399960.0, 0.0, -10.0, 5700000.0]
+        },
+        "B11_20m": {
+          "type": "image/jp2",
+          "title": "SWIR 1 (band 11) - 20m",
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/07/24/S2B_MSIL2A_20260724T153629_N0512_R068_T19QBF_20260724T190638.SAFE/GRANULE/L2A_T19QBF_A049000_20260724T153625/IMG_DATA/R20m/T19QBF_20260724T153629_B11_20m.jp2",
+          "bands": [{ "name": "B11", "eo:common_name": "swir16" }],
+          "data_type": "uint16",
+          "gsd": 20,
+          "proj:shape": [5490, 5490],
+          "proj:code": "EPSG:32632",
+          "proj:transform": [20.0, 0.0, 399960.0, 0.0, -20.0, 5700000.0]
+        },
+        "B12_20m": {
+          "type": "image/jp2",
+          "title": "SWIR 2 (band 12) - 20m",
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/07/24/S2B_MSIL2A_20260724T153629_N0512_R068_T19QBF_20260724T190638.SAFE/GRANULE/L2A_T19QBF_A049000_20260724T153625/IMG_DATA/R20m/T19QBF_20260724T153629_B12_20m.jp2",
+          "bands": [{ "name": "B12", "eo:common_name": "swir22" }],
+          "data_type": "uint16",
+          "gsd": 20,
+          "proj:shape": [5490, 5490],
+          "proj:code": "EPSG:32632",
+          "proj:transform": [20.0, 0.0, 399960.0, 0.0, -20.0, 5700000.0]
+        }
+      }
+    }
+  ],
+  "links": [],
+  "numberReturned": 2,
+  "numberMatched": 2
+}

@@ -1,0 +1,82 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/eo/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/projection/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/raster/v2.0.0/schema.json"
+      ],
+      "id": "LC08_L1TP_192026_20260724_20260724_02_RT",
+      "collection": "landsat-c2-l1",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [8.5, 50.5],
+            [9.0, 50.5],
+            [9.0, 51.0],
+            [8.5, 51.0],
+            [8.5, 50.5]
+          ]
+        ]
+      },
+      "bbox": [8.5, 50.5, 9.0, 51.0],
+      "properties": {
+        "datetime": "2026-07-24T10:32:18.024000Z",
+        "updated": "2026-07-24T18:15:42.137000Z"
+      },
+      "assets": {
+        "B4_30m": {
+          "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+          "title": "Red (band 4) - 30m",
+          "href": "s3://usgs-landsat/collection02/level-1/2026/192/026/LC08_L1TP_192026_20260724_20260724_02_RT/B4.TIF",
+          "bands": [{ "name": "B4", "eo:common_name": "red" }],
+          "data_type": "uint16",
+          "gsd": 30,
+          "proj:shape": [8000, 8000],
+          "proj:code": "EPSG:32632",
+          "proj:transform": [30.0, 0.0, 399960.0, 0.0, -30.0, 5800020.0]
+        },
+        "B5_30m": {
+          "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+          "title": "NIR (band 5) - 30m",
+          "href": "s3://usgs-landsat/collection02/level-1/2026/192/026/LC08_L1TP_192026_20260724_20260724_02_RT/B5.TIF",
+          "bands": [{ "name": "B5", "eo:common_name": "nir" }],
+          "data_type": "uint16",
+          "gsd": 30,
+          "proj:shape": [8000, 8000],
+          "proj:code": "EPSG:32632",
+          "proj:transform": [30.0, 0.0, 399960.0, 0.0, -30.0, 5800020.0]
+        },
+        "B2_30m": {
+          "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+          "title": "Blue (band 2) - 30m",
+          "href": "s3://usgs-landsat/collection02/level-1/2026/192/026/LC08_L1TP_192026_20260724_20260724_02_RT/B2.TIF",
+          "bands": [{ "name": "B2", "eo:common_name": "blue" }],
+          "data_type": "uint16",
+          "gsd": 30,
+          "proj:shape": [8000, 8000],
+          "proj:code": "EPSG:32632",
+          "proj:transform": [30.0, 0.0, 399960.0, 0.0, -30.0, 5800020.0]
+        },
+        "B3_30m": {
+          "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+          "title": "Green (band 3) - 30m",
+          "href": "s3://usgs-landsat/collection02/level-1/2026/192/026/LC08_L1TP_192026_20260724_20260724_02_RT/B3.TIF",
+          "bands": [{ "name": "B3", "eo:common_name": "green" }],
+          "data_type": "uint16",
+          "gsd": 30,
+          "proj:shape": [8000, 8000],
+          "proj:code": "EPSG:32632",
+          "proj:transform": [30.0, 0.0, 399960.0, 0.0, -30.0, 5800020.0]
+        }
+      }
+    }
+  ],
+  "links": [],
+  "numberReturned": 1,
+  "numberMatched": 1
+}

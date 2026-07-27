@@ -1,3 +1,4 @@
+use super::common;
 use super::{StacDataProvider, StacProviderDataset, StacProviderS3Config, cache::StacQueryCache};
 use crate::error::Result;
 use crate::util::join_base_url_and_path;
@@ -11,7 +12,7 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, CacheHint, RasterQueryRectangle, TimeDimension, TimeInstance,
     TimeInterval, TryRegularTimeFillIterExt, VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, GridIdx2D, RasterDataType};
+use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterBandDescriptors, RasterResultDescriptor, TimeDescriptor,
@@ -23,9 +24,7 @@ use geoengine_operators::source::{
     GdalRetryOptions, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
     OgrSourceDataset, TileFile,
 };
-use serde_json::Value;
 use stac::Item;
-use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 use tracing::debug;
@@ -454,15 +453,16 @@ impl StacMultiBandMetaData {
         z_index: i64,
         files: &mut Vec<TileFile>,
     ) -> Result<()> {
-        if data_type_from_asset_v1_1_0(asset) != Some(self.dataset.data_type) {
+        if common::data_type_from_asset_v1_1_0(asset) != Some(self.dataset.data_type) {
             return Ok(());
         }
 
-        if !proj_code_matches_dataset(&asset.additional_fields, self.dataset.projection) {
+        if !common::proj_code_matches_dataset(&asset.additional_fields, self.dataset.projection) {
             return Ok(());
         }
 
-        let Some(geo_transform) = geo_transform_from_fields(&asset.additional_fields) else {
+        let Some(geo_transform) = common::geo_transform_from_fields(&asset.additional_fields)
+        else {
             tracing::warn!(
                 "Skipping asset with href {} due to missing geo transform",
                 asset.href
@@ -470,7 +470,7 @@ impl StacMultiBandMetaData {
             return Ok(());
         };
 
-        let Some((height, width)) = proj_shape_from_fields(&asset.additional_fields) else {
+        let Some((height, width)) = common::proj_shape_from_fields(&asset.additional_fields) else {
             tracing::warn!(
                 "Skipping asset with href {} due to missing projection shape",
                 asset.href
@@ -499,19 +499,21 @@ impl StacMultiBandMetaData {
         .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
         let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
 
-        let file_path = gdal_file_path(&asset.href)
+        let file_path = common::gdal_file_path(&asset.href)
             .ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?;
 
-        let gdal_config_options = self.gdal_config_options_for_file_path(&file_path);
+        let gdal_config_options =
+            common::gdal_config_options_for_file_path(&file_path, self.s3_config.as_ref());
 
         for (dataset_band_idx, dataset_band) in self.dataset.bands.iter().enumerate() {
             if dataset_band.asset_title != asset_title {
                 continue;
             }
 
-            let Some(rasterband_channel) =
-                Self::rasterband_channel_for_dataset_band(asset, dataset_band.band_name.as_deref())
-            else {
+            let Some(rasterband_channel) = common::rasterband_channel_for_dataset_band(
+                asset,
+                dataset_band.band_name.as_deref(),
+            ) else {
                 continue;
             };
 
@@ -1141,5 +1143,71 @@ mod tests {
         // can be created and initialized with the STAC provider data
         let _result_descriptor = initialized.result_descriptor();
         // If we get here, the operator initialized successfully
+    }
+
+    /// Test that a discover-generated mapping JSON can be used directly as a
+    /// `StacDataProvider`, validating the mapping format works for both the
+    /// harvester and the runtime provider.
+    #[crate::ge_context::test]
+    async fn mapping_from_discover_works_as_stacdataprovider(app_ctx: PostgresContext<NoTls>) {
+        // Load the discover-generated mapping JSON
+        let mut provider_def: crate::datasets::external::stac::StacDataProviderDefinition =
+            serde_json::from_str(include_str!(
+                "../../../../../test_data/stac_responses/expected-mapping-code-de.json"
+            ))
+            .expect("valid discover mapping fixture");
+
+        // Use a placeholder URL (no actual HTTP calls needed for meta_data registration)
+        provider_def.api_url = "https://stac.test/v1".to_owned();
+        provider_def.id = DataProviderId::new();
+
+        let admin_session = admin_login(&app_ctx).await;
+        let admin_ctx = app_ctx.session_context(admin_session);
+
+        admin_ctx
+            .db()
+            .add_layer_provider(provider_def.clone().into())
+            .await
+            .unwrap();
+
+        let provider = admin_ctx
+            .db()
+            .load_layer_provider(provider_def.id)
+            .await
+            .unwrap();
+
+        // Verify each dataset from the discover-generated mapping can be
+        // resolved via meta_data (no HTTP calls needed at this stage)
+        for dataset in &provider_def.datasets {
+            let epsg_code = dataset.projection.code();
+            let data_type_str = format!("{:?}", dataset.data_type).to_lowercase();
+            let resolution = dataset.resolution.x as u32;
+            let stable_id = format!("epsg{epsg_code}_{data_type_str}_{resolution}");
+
+            let layer_id = geoengine_datatypes::dataset::LayerId(format!("dataset/{stable_id}"));
+            let data_id: DataId = ExternalDataId {
+                provider_id: provider_def.id,
+                layer_id,
+            }
+            .into();
+
+            let meta_result: Result<
+                Box<
+                    dyn MetaData<
+                            MultiBandGdalLoadingInfo,
+                            RasterResultDescriptor,
+                            MultiBandGdalLoadingInfoQueryRectangle,
+                        >,
+                >,
+                geoengine_operators::error::Error,
+            > = MetaDataProvider::meta_data(provider.as_ref(), &data_id).await;
+
+            assert!(
+                meta_result.is_ok(),
+                "meta_data should succeed for dataset '{}' (stable_id: {})",
+                dataset.name,
+                stable_id
+            );
+        }
     }
 }
