@@ -242,22 +242,8 @@ where
     }
 }
 
-/// Like `grid_blit_from`, but only copies pixels from `source` that are marked as valid.
-///
-/// Pixels where the source has no-data (validity mask is `false`) are left untouched
-/// in the destination. If the source is entirely empty (`EmptyGrid`), nothing is copied.
-///
-/// Uses row-based contiguous-run detection with `copy_from_slice` (memcpy) for runs
-/// of 2+ pixels, and direct assignment for single-pixel runs. Includes a fast path:
-/// if all pixels in the intersection are valid, it delegates to [`GridBlit::grid_blit_from`]
-/// for simple row-wise memcpy.
-pub fn grid_blit_valid_only<D1, D2, T>(dest: &mut GridOrEmpty<D2, T>, source: &GridOrEmpty<D1, T>)
+impl<D2, T> GridOrEmpty<D2, T>
 where
-    D1: GridSize<ShapeArray = [usize; 2]>
-        + GridBounds<IndexArray = [isize; 2]>
-        + GridSpaceToLinearSpace<IndexArray = [isize; 2]>
-        + PartialEq
-        + Clone,
     D2: GridSize<ShapeArray = [usize; 2]>
         + GridBounds<IndexArray = [isize; 2]>
         + GridSpaceToLinearSpace<IndexArray = [isize; 2]>
@@ -265,86 +251,90 @@ where
         + Clone,
     T: Copy + Default,
 {
-    if dest.is_empty() && source.is_empty() {
-        return;
-    }
-    dest.materialize();
-    let GridOrEmpty::Grid(dest_grid) = dest else {
-        unreachable!()
-    };
+    /// Like [`grid_blit_from`](GridBlit::grid_blit_from), but only copies pixels from `source`
+    /// that are marked as valid.
+    ///
+    /// Pixels where the source has no-data (validity mask is `false`) are left untouched
+    /// in the destination. If the source is entirely empty (`EmptyGrid`), nothing is copied.
+    ///
+    /// Uses row-based contiguous-run detection with `copy_from_slice` (memcpy) for runs
+    /// of 2+ pixels, and direct assignment for single-pixel runs. Includes a fast path:
+    /// if all pixels in the intersection are valid, it delegates to [`GridBlit::grid_blit_from`]
+    /// for simple row-wise memcpy.
+    #[allow(clippy::missing_panics_doc)]
+    pub fn grid_blit_valid_only<D1>(&mut self, source: &GridOrEmpty<D1, T>)
+    where
+        D1: GridSize<ShapeArray = [usize; 2]>
+            + GridBounds<IndexArray = [isize; 2]>
+            + GridSpaceToLinearSpace<IndexArray = [isize; 2]>
+            + PartialEq
+            + Clone,
+    {
+        if self.is_empty() && source.is_empty() {
+            return;
+        }
+        self.materialize();
+        let dest_bbox = self.bounding_box();
+        let dest_grid = self.as_masked_grid_mut().expect("should be a grid");
 
-    match source {
-        GridOrEmpty::Grid(source_grid) => {
-            let src_bbox = source_grid.inner_grid.bounding_box();
-            let dest_bbox = dest_grid.inner_grid.bounding_box();
+        match source {
+            GridOrEmpty::Grid(source_grid) => {
+                let src_bbox = source_grid.inner_grid.bounding_box();
 
-            if let Some(intersection) = dest_bbox.intersection(&src_bbox) {
-                let GridIdx([y_start, x_start]) = intersection.min_index();
-                let [y_size, x_size] = intersection.axis_size();
+                if let Some(intersection) = dest_bbox.intersection(&src_bbox) {
+                    let GridIdx([y_start, x_start]) = intersection.min_index();
+                    let [y_size, x_size] = intersection.axis_size();
 
-                // Fast path: all pixels in the intersection are valid → regular blit
-                let all_valid = {
-                    let mut all_valid = true;
-                    'all_valid_check: for y in y_start..y_start + y_size as isize {
-                        let row_start = src_bbox.linear_space_index_unchecked([y, x_start]);
-                        for &v in &source_grid.validity_mask.data[row_start..row_start + x_size] {
-                            if !v {
-                                all_valid = false;
-                                break 'all_valid_check;
-                            }
-                        }
+                    // Fast path: all pixels in the intersection are valid → regular blit
+                    if source_grid.all_valid_in_bbox(&intersection) {
+                        self.grid_blit_from(source);
+                        return;
                     }
-                    all_valid
-                };
 
-                if all_valid {
-                    dest.grid_blit_from(source);
-                    return;
-                }
+                    for y in y_start..y_start + y_size as isize {
+                        let src_row_base = src_bbox.linear_space_index_unchecked([y, x_start]);
+                        let dest_row_base = dest_bbox.linear_space_index_unchecked([y, x_start]);
 
-                for y in y_start..y_start + y_size as isize {
-                    let src_row_base = src_bbox.linear_space_index_unchecked([y, x_start]);
-                    let dest_row_base = dest_bbox.linear_space_index_unchecked([y, x_start]);
-
-                    // Scan row for contiguous runs of valid pixels
-                    let mut x: isize = 0;
-                    while x < x_size as isize {
-                        let src_idx = src_row_base + x as usize;
-                        if source_grid.validity_mask.data[src_idx] {
-                            let run_start = x;
-                            x += 1;
-                            // Extend run while consecutive pixels are valid
-                            while x < x_size as isize
-                                && source_grid.validity_mask.data[src_row_base + x as usize]
-                            {
+                        // Scan row for contiguous runs of valid pixels
+                        let mut x: isize = 0;
+                        while x < x_size as isize {
+                            let src_idx = src_row_base + x as usize;
+                            if source_grid.validity_mask.data[src_idx] {
+                                let run_start = x;
                                 x += 1;
-                            }
-                            let run_len = (x - run_start) as usize;
-                            let src_start = src_row_base + run_start as usize;
-                            let dest_start = dest_row_base + run_start as usize;
+                                // Extend run while consecutive pixels are valid
+                                while x < x_size as isize
+                                    && source_grid.validity_mask.data[src_row_base + x as usize]
+                                {
+                                    x += 1;
+                                }
+                                let run_len = (x - run_start) as usize;
+                                let src_start = src_row_base + run_start as usize;
+                                let dest_start = dest_row_base + run_start as usize;
 
-                            if run_len == 1 {
-                                // Single pixel: direct copy avoids slice+call overhead
-                                dest_grid.inner_grid.data[dest_start] =
-                                    source_grid.inner_grid.data[src_start];
-                                dest_grid.validity_mask.data[dest_start] = true;
+                                if run_len == 1 {
+                                    // Single pixel: direct copy avoids slice+call overhead
+                                    dest_grid.inner_grid.data[dest_start] =
+                                        source_grid.inner_grid.data[src_start];
+                                    dest_grid.validity_mask.data[dest_start] = true;
+                                } else {
+                                    dest_grid.inner_grid.data[dest_start..dest_start + run_len]
+                                        .copy_from_slice(
+                                            &source_grid.inner_grid.data
+                                                [src_start..src_start + run_len],
+                                        );
+                                    dest_grid.validity_mask.data[dest_start..dest_start + run_len]
+                                        .fill(true);
+                                }
                             } else {
-                                dest_grid.inner_grid.data[dest_start..dest_start + run_len]
-                                    .copy_from_slice(
-                                        &source_grid.inner_grid.data
-                                            [src_start..src_start + run_len],
-                                    );
-                                dest_grid.validity_mask.data[dest_start..dest_start + run_len]
-                                    .fill(true);
+                                x += 1; // skip no-data pixel
                             }
-                        } else {
-                            x += 1; // skip no-data pixel
                         }
                     }
                 }
             }
+            GridOrEmpty::Empty(_) => {}
         }
-        GridOrEmpty::Empty(_) => {}
     }
 }
 
@@ -352,7 +342,7 @@ where
 mod tests {
     use crate::raster::{
         EmptyGrid2D, EmptyGrid3D, Grid, Grid2D, Grid3D, GridBlit, GridBoundingBox, GridIdx,
-        GridOrEmpty, MaskedGrid, grid_blit_valid_only,
+        GridOrEmpty, MaskedGrid,
         masked_grid::{MaskedGrid2D, MaskedGrid3D},
     };
 
@@ -532,7 +522,7 @@ mod tests {
         let src_masked = MaskedGrid::new(src_data, src_mask).unwrap();
         let src = GridOrEmpty::new_grid(src_masked);
 
-        grid_blit_valid_only(&mut dest, &src);
+        dest.grid_blit_valid_only(&src);
 
         let dest_masked = dest.as_masked_grid().expect("should be a grid");
 
@@ -558,7 +548,7 @@ mod tests {
         let bbox = GridBoundingBox::new(GridIdx([0, 0]), GridIdx([3, 3])).unwrap();
         let src = GridOrEmpty::new_empty_shape(bbox);
 
-        grid_blit_valid_only(&mut dest, &src);
+        dest.grid_blit_valid_only(&src);
 
         let dest_masked = dest.as_masked_grid().expect("should be a grid");
 
@@ -583,7 +573,7 @@ mod tests {
         let src_masked = MaskedGrid::new(src_data, src_mask).unwrap();
         let src = GridOrEmpty::new_grid(src_masked);
 
-        grid_blit_valid_only(&mut dest, &src);
+        dest.grid_blit_valid_only(&src);
 
         let dest_masked = dest.as_masked_grid().expect("should be a grid");
 
@@ -608,7 +598,7 @@ mod tests {
         let src_masked = MaskedGrid::new(src_data, src_mask).unwrap();
         let src = GridOrEmpty::new_grid(src_masked);
 
-        grid_blit_valid_only(&mut dest, &src);
+        dest.grid_blit_valid_only(&src);
 
         let dest_masked = dest.as_masked_grid().expect("should be a grid");
 
@@ -633,7 +623,7 @@ mod tests {
         let src_masked = MaskedGrid::new(src_data, src_mask).unwrap();
         let src = GridOrEmpty::new_grid(src_masked);
 
-        grid_blit_valid_only(&mut dest, &src);
+        dest.grid_blit_valid_only(&src);
 
         let dest_masked = dest.as_masked_grid().expect("should be a grid");
 
@@ -672,7 +662,7 @@ mod tests {
         let src_masked = MaskedGrid::new(src_data, src_mask).unwrap();
         let src = GridOrEmpty::new_grid(src_masked);
 
-        grid_blit_valid_only(&mut dest, &src);
+        dest.grid_blit_valid_only(&src);
 
         let dest_masked = dest.as_masked_grid().expect("should be a grid");
 
@@ -710,7 +700,7 @@ mod tests {
         let src_masked = MaskedGrid::new(src_data, src_mask).unwrap();
         let src = GridOrEmpty::new_grid(src_masked);
 
-        grid_blit_valid_only(&mut dest, &src);
+        dest.grid_blit_valid_only(&src);
 
         let dest_masked = dest.as_masked_grid().expect("should be a grid");
 
@@ -735,7 +725,7 @@ mod tests {
             GridOrEmpty::new_empty_shape(bbox);
         let src: GridOrEmpty<GridBoundingBox<[isize; 2]>, i32> = GridOrEmpty::new_empty_shape(bbox);
 
-        grid_blit_valid_only(&mut dest, &src);
+        dest.grid_blit_valid_only(&src);
 
         // Should still be empty
         assert!(dest.is_empty());
@@ -755,7 +745,7 @@ mod tests {
         let src_masked = MaskedGrid::new(src_data, src_mask).unwrap();
         let src = GridOrEmpty::new_grid(src_masked);
 
-        grid_blit_valid_only(&mut dest, &src);
+        dest.grid_blit_valid_only(&src);
 
         let dest_masked = dest.as_masked_grid().expect("should be a grid");
 
