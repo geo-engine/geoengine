@@ -11,7 +11,7 @@ use futures::StreamExt;
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{DateTime, TimeInstance, TimeInterval},
-    raster::{GeoTransform, GridBoundingBox2D, GridIdx2D, RasterDataType},
+    raster::{GeoTransform, GridBoundingBox2D, GridIdx2D},
     spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption},
 };
 use tracing::{debug, error, info, warn};
@@ -933,16 +933,6 @@ async fn login_geo_engine(
     Ok((client, session_id))
 }
 
-fn data_type_from_asset_v1_1_0_fallback(asset: &stac::Asset) -> Option<RasterDataType> {
-    common::data_type_from_asset_v1_1_0(asset).or_else(|| {
-        asset
-            .additional_fields
-            .get("data_type")
-            .and_then(|v| v.as_str())
-            .and_then(common::raster_data_type_from_stac_data_type_str)
-    })
-}
-
 // ---------------------------------------------------------------------------
 // Harvest Helper Functions
 // ---------------------------------------------------------------------------
@@ -1167,7 +1157,7 @@ fn try_create_tile_for_band(
         .find(|(_, a)| a.title.as_deref() == Some(&band_def.asset_title))?;
 
     // Check data type matches
-    if let Some(asset_dt) = data_type_from_asset_v1_1_0_fallback(asset)
+    if let Some(asset_dt) = common::data_type_from_asset_v1_1_0_fallback(asset)
         && asset_dt != dataset.data_type
     {
         return None;
@@ -1267,6 +1257,7 @@ fn format_duration(secs: u64) -> String {
 mod tests {
     use super::*;
     use geoengine_datatypes::primitives::SpatialResolution;
+    use geoengine_datatypes::raster::RasterDataType;
 
     #[test]
     fn test_dataset_name_for_harvest() {
