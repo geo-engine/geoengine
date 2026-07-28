@@ -223,7 +223,7 @@ fn scan_collection_bands(
         }
 
         if let Ok(Some(bands)) =
-            scan_item_asset_common(&collection.version, asset, collection.summaries.as_ref())
+            scan_collection_item_asset(&collection.version, asset, collection.summaries.as_ref())
         {
             merge_dataset_bands(&mut dataset_bands, bands);
         }
@@ -293,7 +293,7 @@ fn process_sample_assets(
             };
 
             let data_type = common::data_type_from_asset_v1_1_0(asset)
-                .or_else(|| data_type_from_asset_v1_0_0_fallback(asset));
+                .or_else(|| common::data_type_from_asset_v1_0_0_fallback(asset));
             let Some(data_type) = data_type else {
                 continue;
             };
@@ -436,8 +436,7 @@ fn build_dataset_spatial_grid(
                 dataset_key.resolution.into_inner(),
                 -dataset_key.resolution.into_inner(),
             ),
-            GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0]))
-                .expect("zero-size grid bounds should be valid"),
+            zero_size_grid(),
         )
     };
 
@@ -450,17 +449,8 @@ fn build_dataset_spatial_grid(
             default_grid()
         }
     } else if let (Some(gt), Some((height, width))) = (info.geo_transform, info.proj_shape) {
-        GeoOpSpatialGridDescriptor::source_from_parts(
-            gt,
-            GridBoundingBox2D::new(
-                GridIdx2D::new([0, 0]),
-                GridIdx2D::new([(width as isize) - 1, (height as isize) - 1]),
-            )
-            .unwrap_or_else(|_| {
-                GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0]))
-                    .expect("zero-size grid bounds should be valid")
-            }),
-        )
+        let grid_bounds = asset_shape_bounds(height, width).unwrap_or_else(|()| zero_size_grid());
+        GeoOpSpatialGridDescriptor::source_from_parts(gt, grid_bounds)
     } else {
         default_grid()
     }
@@ -469,15 +459,29 @@ fn build_dataset_spatial_grid(
 /// Fallback grid bounds: use the first asset's shape, or a single-pixel grid.
 fn fallback_grid_bounds(info: &DiscoveredDatasetInfo) -> GridBoundingBox2D {
     if let Some((height, width)) = info.proj_shape {
-        GridBoundingBox2D::new(
-            GridIdx2D::new([0, 0]),
-            GridIdx2D::new([(width as isize) - 1, (height as isize) - 1]),
-        )
-        .expect("fallback grid bounds should be valid")
+        asset_shape_bounds(height, width).unwrap_or_else(|()| zero_size_grid())
     } else {
-        GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0]))
-            .expect("zero-size grid bounds should be valid")
+        zero_size_grid()
     }
+}
+
+/// Build grid bounds from an asset's `(height, width)` shape.
+/// Returns `Err` if dimensions are zero (causing negative indices).
+fn asset_shape_bounds(height: usize, width: usize) -> Result<GridBoundingBox2D, ()> {
+    GridBoundingBox2D::new(
+        GridIdx2D::new([0, 0]),
+        GridIdx2D::new([
+            width.saturating_sub(1) as isize,
+            height.saturating_sub(1) as isize,
+        ]),
+    )
+    .map_err(|_| ())
+}
+
+/// A single-pixel grid at the origin, used as a safe fallback when no shape info is available.
+fn zero_size_grid() -> GridBoundingBox2D {
+    GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0]))
+        .expect("zero-size grid bounds should always be valid")
 }
 
 /// Compute grid bounds that cover the full projected CRS extent for the given
@@ -548,19 +552,24 @@ struct PartialDatasetKey {
 // Collection scanning helpers
 // ---------------------------------------------------------------------------
 
-fn scan_item_asset_common(
+fn scan_collection_item_asset(
     collection_version: &stac::Version,
     asset: &stac::ItemAsset,
     collection_summaries: Option<&serde_json::Map<String, serde_json::Value>>,
 ) -> Result<Option<HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>>, String> {
     match collection_version {
-        stac::Version::v1_0_0 => scan_item_asset_v1_0_0_common(asset),
-        stac::Version::v1_1_0 => scan_item_asset_v1_1_0_common(asset, collection_summaries),
-        _ => Err(format!("Unsupported STAC version: {collection_version}")),
+        stac::Version::v1_0_0 => scan_collection_item_asset_v1_0_0(asset),
+        stac::Version::v1_1_0 => scan_collection_item_asset_v1_1_0(asset, collection_summaries),
+        _ => {
+            // For unknown STAC versions, try v1.1.0 first (more common), fall back to v1.0.0
+            scan_collection_item_asset_v1_1_0(asset, collection_summaries)
+                .or_else(|_| scan_collection_item_asset_v1_0_0(asset))
+                .or(Ok(None))
+        }
     }
 }
 
-fn scan_item_asset_v1_0_0_common(
+fn scan_collection_item_asset_v1_0_0(
     asset: &stac::ItemAsset,
 ) -> Result<Option<HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>>, String> {
     let mut dataset_bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> = HashMap::new();
@@ -625,7 +634,7 @@ fn scan_item_asset_v1_0_0_common(
     Ok(Some(dataset_bands))
 }
 
-fn scan_item_asset_v1_1_0_common(
+fn scan_collection_item_asset_v1_1_0(
     asset: &stac::ItemAsset,
     collection_summaries: Option<&serde_json::Map<String, serde_json::Value>>,
 ) -> Result<Option<HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>>, String> {
@@ -676,17 +685,6 @@ fn scan_item_asset_v1_1_0_common(
     }
 
     Ok(Some(dataset_bands))
-}
-
-fn data_type_from_asset_v1_0_0_fallback(asset: &stac::Asset) -> Option<RasterDataType> {
-    asset
-        .additional_fields
-        .get("raster:bands")
-        .and_then(|v| v.as_array())
-        .and_then(|bands| bands.first())
-        .and_then(|band| band.get("data_type"))
-        .and_then(|v| v.as_str())
-        .and_then(common::raster_data_type_from_stac_data_type_str)
 }
 
 fn matches_selected_file_types_static(

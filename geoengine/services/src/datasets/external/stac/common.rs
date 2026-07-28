@@ -219,6 +219,36 @@ pub fn data_type_from_asset_v1_1_0(asset: &stac::Asset) -> Option<RasterDataType
         .and_then(raster_data_type_from_stac_data_type)
 }
 
+/// Extract data type from a STAC 1.1.0 asset with fallback to `additional_fields["data_type"]`.
+///
+/// Some STAC APIs write `data_type` as a raw string in additional fields instead of
+/// populating the typed `stac::Asset::data_type` field. This function tries the typed
+/// field first, then falls back to reading from `additional_fields`.
+pub fn data_type_from_asset_v1_1_0_fallback(asset: &stac::Asset) -> Option<RasterDataType> {
+    data_type_from_asset_v1_1_0(asset).or_else(|| {
+        asset
+            .additional_fields
+            .get("data_type")
+            .and_then(|v| v.as_str())
+            .and_then(raster_data_type_from_stac_data_type_str)
+    })
+}
+
+/// Extract data type from a STAC 1.0.0 asset, reading from `additional_fields["raster:bands"][0]["data_type"]`.
+///
+/// STAC 1.0.0 stores data types inside `raster:bands[]` arrays rather than directly on the asset.
+/// This function reads the first band's `data_type` as a raw string.
+pub fn data_type_from_asset_v1_0_0_fallback(asset: &stac::Asset) -> Option<RasterDataType> {
+    asset
+        .additional_fields
+        .get("raster:bands")
+        .and_then(|v| v.as_array())
+        .and_then(|bands| bands.first())
+        .and_then(|band| band.get("data_type"))
+        .and_then(|v| v.as_str())
+        .and_then(raster_data_type_from_stac_data_type_str)
+}
+
 // ---------------------------------------------------------------------------
 // File path helpers
 // ---------------------------------------------------------------------------
