@@ -1,7 +1,7 @@
 use super::{
     GridBoundingBox, GridBounds, GridContains, GridIdx, GridIndexAccess, GridIndexAccessMut,
     GridSize, GridSpaceToLinearSpace,
-    grid_traits::{ChangeGridBounds, GridShapeAccess},
+    grid_traits::{BoundedGrid, ChangeGridBounds, GridShapeAccess},
 };
 use crate::util::Result;
 use crate::{error, util::ByteSize};
@@ -558,6 +558,28 @@ where
 {
     fn heap_byte_size(&self) -> usize {
         self.data.heap_byte_size()
+    }
+}
+
+impl<D> Grid<D, bool>
+where
+    D: GridSize<ShapeArray = [usize; 2]>
+        + GridBounds<IndexArray = [isize; 2]>
+        + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
+{
+    /// Returns `true` if all values in the given bounding box region are `true`.
+    pub fn all_true_in_bbox(&self, query_bbox: &GridBoundingBox<[isize; 2]>) -> bool {
+        let grid_bbox = self.bounding_box();
+        let GridIdx([y_start, x_start]) = query_bbox.min_index();
+        let [y_size, x_size] = query_bbox.axis_size();
+
+        for y in y_start..y_start + y_size as isize {
+            let row_start = grid_bbox.linear_space_index_unchecked([y, x_start]);
+            if !self.data[row_start..row_start + x_size].iter().all(|&v| v) {
+                return false;
+            }
+        }
+        true
     }
 }
 
