@@ -246,7 +246,6 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
     );
 
     let mut tiles_by_dataset: HashMap<String, Vec<AddDatasetTile>> = HashMap::new();
-    let mut dynamic_datasets: HashMap<String, StacProviderDataset> = HashMap::new();
     let mut items_processed: u64 = 0;
     let mut items_per_sec: f64;
 
@@ -255,18 +254,12 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
         let item_collection = result?;
 
         for item in &item_collection.items {
-            process_harvest_item_dynamic(
-                item,
-                provider_def,
-                &mut tiles_by_dataset,
-                &mut dynamic_datasets,
-                &params,
-            )
-            .unwrap_or_else(|e| {
-                if params.verbose {
-                    warn!("Skipping item {}: {}", item.id, e);
-                }
-            });
+            process_harvest_item(item, provider_def, &mut tiles_by_dataset, &params)
+                .unwrap_or_else(|e| {
+                    if params.verbose {
+                        warn!("Skipping item {}: {}", item.id, e);
+                    }
+                });
 
             items_processed += 1;
         }
@@ -307,35 +300,6 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
     }
 
     info!("Processed {} items total", items_processed);
-
-    // Create any dynamic (per-EPSG) datasets that were discovered during item processing
-    for (dyn_dataset_name, dyn_dataset) in &dynamic_datasets {
-        if !dataset_exists_api(
-            &client,
-            &params.geo_engine_url,
-            &session_id,
-            dyn_dataset_name,
-        )
-        .await?
-        {
-            if params.verbose {
-                info!("Creating dynamic dataset '{}'", dyn_dataset_name);
-            }
-            create_dataset_api(
-                &client,
-                &params.geo_engine_url,
-                &session_id,
-                dyn_dataset_name,
-                dyn_dataset,
-                &params.volume_name,
-            )
-            .await?;
-        }
-        // Also ensure tiles_by_dataset has an entry for this dataset
-        tiles_by_dataset
-            .entry(dyn_dataset_name.clone())
-            .or_default();
-    }
 
     for (dataset_name, tiles) in &tiles_by_dataset {
         if tiles.is_empty() {
@@ -395,16 +359,16 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
 // Item Processing (Harvest)
 // ---------------------------------------------------------------------------
 
-/// Like `process_harvest_item`, but handles items whose EPSG code differs from
-/// the mapping's projection by dynamically creating per-EPSG dataset variants.
-/// Items that pass the `--epsgs` filter but have a different EPSG than the
-/// mapping will be grouped into separate datasets named with their actual EPSG.
+/// Process a STAC item and add tiles to the appropriate dataset from the mapping.
+///
+/// Only assets whose EPSG code matches the dataset's projection are included.
+/// Items with a different EPSG are silently skipped — all datasets must be
+/// predefined in the mapping.
 #[allow(clippy::too_many_lines)]
-fn process_harvest_item_dynamic(
+fn process_harvest_item(
     item: &stac::Item,
     provider_def: &StacDataProviderDefinition,
     tiles_by_dataset: &mut HashMap<String, Vec<AddDatasetTile>>,
-    dynamic_datasets: &mut HashMap<String, StacProviderDataset>,
     params: &StacHarvest,
 ) -> Result<(), anyhow::Error> {
     let Some(datetime) = item.properties.datetime else {
@@ -465,43 +429,15 @@ fn process_harvest_item_dynamic(
                 continue;
             };
 
-            // Determine the actual projection and dataset name for this item
-            let (_actual_projection, actual_dataset_name) = if dataset.projection
-                == SpatialReference::new(SpatialReferenceAuthority::Epsg, item_epsg)
+            // Only process assets whose EPSG matches the dataset's projection
+            if dataset.projection
+                != SpatialReference::new(SpatialReferenceAuthority::Epsg, item_epsg)
             {
-                // EPSG matches the mapping — use the dataset as-is
-                (
-                    dataset.projection,
-                    dataset_name_for_harvest(&provider_def.collection_name, dataset),
-                )
-            } else {
-                // EPSG differs — create a per-EPSG variant
-                let per_epsg_projection =
-                    SpatialReference::new(SpatialReferenceAuthority::Epsg, item_epsg);
+                continue;
+            }
 
-                // Build a modified dataset with the item's EPSG
-                let per_epsg_dataset = StacProviderDataset {
-                    projection: per_epsg_projection,
-                    ..dataset.clone()
-                };
-
-                let dyn_name =
-                    dataset_name_for_harvest(&provider_def.collection_name, &per_epsg_dataset);
-
-                // Register this dynamic dataset so it gets created
-                dynamic_datasets
-                    .entry(dyn_name.clone())
-                    .or_insert_with(|| StacProviderDataset {
-                        projection: SpatialReference::new(
-                            SpatialReferenceAuthority::Epsg,
-                            item_epsg,
-                        ),
-                        spatial_grid: dataset.spatial_grid,
-                        ..dataset.clone()
-                    });
-
-                (per_epsg_projection, dyn_name)
-            };
+            let actual_dataset_name =
+                dataset_name_for_harvest(&provider_def.collection_name, dataset);
 
             let Some(geo_transform) = common::geo_transform_from_fields(&asset.additional_fields)
             else {
@@ -1326,19 +1262,12 @@ mod tests {
         };
 
         let mut tiles_by_dataset: HashMap<String, Vec<AddDatasetTile>> = HashMap::new();
-        let mut dynamic_datasets: HashMap<String, StacProviderDataset> = HashMap::new();
 
         // Process the first item from the fixture
         let item = &items.items[0];
 
-        process_harvest_item_dynamic(
-            item,
-            &mapping,
-            &mut tiles_by_dataset,
-            &mut dynamic_datasets,
-            &params,
-        )
-        .expect("item processing should succeed");
+        process_harvest_item(item, &mapping, &mut tiles_by_dataset, &params)
+            .expect("item processing should succeed");
 
         // The mapping has 2 datasets (10m and 20m), the item has assets for both
         assert_eq!(
@@ -1369,12 +1298,6 @@ mod tests {
                 );
             }
         }
-
-        // Verify no dynamic (per-EPSG) datasets since all items match the mapping EPSG
-        assert!(
-            dynamic_datasets.is_empty(),
-            "no dynamic datasets should be needed when EPSGs match"
-        );
 
         // 10m dataset should have 4 tiles (B02, B03, B04, B08)
         let total_tiles_10m: usize = tiles_by_dataset
@@ -1430,18 +1353,11 @@ mod tests {
         };
 
         let mut tiles_by_dataset: HashMap<String, Vec<AddDatasetTile>> = HashMap::new();
-        let mut dynamic_datasets: HashMap<String, StacProviderDataset> = HashMap::new();
 
         let item = &items.items[0];
 
-        process_harvest_item_dynamic(
-            item,
-            &mapping,
-            &mut tiles_by_dataset,
-            &mut dynamic_datasets,
-            &params,
-        )
-        .expect("Landsat item processing should succeed");
+        process_harvest_item(item, &mapping, &mut tiles_by_dataset, &params)
+            .expect("Landsat item processing should succeed");
 
         // Mapping has 1 dataset (30m), the item has assets for it
         assert_eq!(
@@ -1471,11 +1387,6 @@ mod tests {
                 );
             }
         }
-
-        assert!(
-            dynamic_datasets.is_empty(),
-            "no dynamic datasets should be needed when EPSGs match"
-        );
 
         // 30m dataset should have 4 tiles (Blue, Green, Red, NIR)
         let total_tiles_30m: usize = tiles_by_dataset
