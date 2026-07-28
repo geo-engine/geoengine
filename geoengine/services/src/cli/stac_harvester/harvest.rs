@@ -16,7 +16,9 @@ use geoengine_datatypes::{
 };
 use tracing::{debug, error, info, warn};
 
-use crate::datasets::external::stac::{StacDataProviderDefinition, StacProviderDataset, common};
+use crate::datasets::external::stac::{
+    StacDataProviderDefinition, StacProviderDataset, StacProviderDatasetBand, common,
+};
 use crate::{
     api::{
         handlers::{
@@ -144,7 +146,6 @@ fn parse_mapping_file(s: &str) -> Result<StacDataProviderDefinition, String> {
 // Harvest Implementation
 // ---------------------------------------------------------------------------
 
-#[allow(clippy::too_many_lines)]
 pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Error> {
     let start_time = Instant::now();
 
@@ -164,28 +165,7 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
     )
     .await?;
 
-    let mut created_datasets: Vec<(usize, StacProviderDataset)> = Vec::new();
-
-    for (idx, dataset) in provider_def.datasets.iter().enumerate() {
-        let dataset_name = dataset_name_for_harvest(&provider_def.collection_name, dataset);
-
-        if params.verbose {
-            info!("Checking dataset '{}'", dataset_name);
-        }
-
-        if !dataset_exists_api(&client, &params.geo_engine_url, &session_id, &dataset_name).await? {
-            create_dataset_api(
-                &client,
-                &params.geo_engine_url,
-                &session_id,
-                &dataset_name,
-                dataset,
-                &params.volume_name,
-            )
-            .await?;
-            created_datasets.push((idx, dataset.clone()));
-        }
-    }
+    let created_datasets = setup_datasets(&client, &params, provider_def, &session_id).await?;
 
     info!(
         "Created {} new dataset(s) out of {}",
@@ -199,145 +179,21 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
         stac_api_url, provider_def.collection_name
     );
 
-    let mut query_params: Vec<(String, String)> = Vec::new();
+    let query_params = build_stac_query_params(&params);
 
-    if let Some(bbox) = &params.bbox
-        && bbox.len() == 4
-    {
-        query_params.push((
-            "bbox".to_string(),
-            format!("{},{},{},{}", bbox[0], bbox[1], bbox[2], bbox[3]),
-        ));
-    }
-
-    if params.time_start.is_some() || params.time_end.is_some() {
-        query_params.push((
-            "datetime".to_string(),
-            format!(
-                "{}/{}",
-                params.time_start.as_deref().unwrap_or(""),
-                params.time_end.as_deref().unwrap_or("")
-            ),
-        ));
-    }
-
-    if let Some(limit) = params.limit {
-        query_params.push(("limit".to_string(), limit.to_string()));
-    }
-
-    if params.filter_item_fields {
-        query_params.push((
-            "fields".to_string(),
-            "stac_version,properties.datetime,properties.updated,assets.*.title,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.proj:code,assets.*.proj:shape,assets.*.proj:transform"
-                .to_string(),
-        ));
-    }
-
-    let initial_query_state = QueryState::FirstPage {
-        query_url: items_url.clone(),
-        query_params,
-    };
-
-    let page_stream = create_page_stream(
-        initial_query_state,
-        client.clone(),
-        params.verbose,
-        params.prefetch_pages,
-    );
-
-    let mut tiles_by_dataset: HashMap<String, Vec<AddDatasetTile>> = HashMap::new();
-    let mut items_processed: u64 = 0;
-    let mut items_per_sec: f64;
-
-    futures::pin_mut!(page_stream);
-    while let Some(result) = page_stream.next().await {
-        let item_collection = result?;
-
-        for item in &item_collection.items {
-            process_harvest_item(item, provider_def, &mut tiles_by_dataset, &params)
-                .unwrap_or_else(|e| {
-                    if params.verbose {
-                        warn!("Skipping item {}: {}", item.id, e);
-                    }
-                });
-
-            items_processed += 1;
-        }
-
-        if params.verbose {
-            let elapsed = start_time.elapsed().as_secs_f64();
-            items_per_sec = if elapsed > 0.0 {
-                items_processed as f64 / elapsed
-            } else {
-                0.0
-            };
-
-            if let Some(number_matched) = item_collection
-                .additional_fields
-                .get("numberMatched")
-                .and_then(serde_json::Value::as_u64)
-            {
-                let progress =
-                    (items_processed as f64 / number_matched as f64 * 100.0).clamp(0.0, 100.0);
-                let remaining = number_matched.saturating_sub(items_processed);
-                let eta_secs = if items_per_sec > 0.0 {
-                    remaining as f64 / items_per_sec
-                } else {
-                    f64::INFINITY
-                };
-                let eta_str = if eta_secs.is_finite() {
-                    format_duration(eta_secs as u64)
-                } else {
-                    "unknown".to_string()
-                };
-                println!(
-                    "[{progress:.1}%] Processed {items_processed}/{number_matched} items ({items_per_sec:.1} items/s, ETA: {eta_str})"
-                );
-            } else {
-                println!("Processed {items_processed} items ({items_per_sec:.1} items/s)");
-            }
-        }
-    }
+    let (tiles_by_dataset, items_processed) = process_item_stream(
+        &client,
+        &items_url,
+        &query_params,
+        provider_def,
+        &params,
+        &start_time,
+    )
+    .await?;
 
     info!("Processed {} items total", items_processed);
 
-    for (dataset_name, tiles) in &tiles_by_dataset {
-        if tiles.is_empty() {
-            continue;
-        }
-
-        if params.verbose {
-            info!("Adding {} tiles to dataset '{}'", tiles.len(), dataset_name);
-        }
-
-        let batch_size = 100;
-        for chunk in tiles.chunks(batch_size) {
-            let response = retry_http(
-                || async {
-                    client
-                        .post(format!(
-                            "{}/dataset/{}/tiles",
-                            params.geo_engine_url, dataset_name
-                        ))
-                        .header("Content-Type", "application/json")
-                        .header("Authorization", format!("Bearer {session_id}"))
-                        .json(chunk)
-                        .send()
-                        .await
-                },
-                &format!("Add tiles to dataset '{dataset_name}'"),
-            )
-            .await
-            .with_context(|| format!("Failed to add tiles to dataset '{dataset_name}'"))?;
-
-            if !response.status().is_success() {
-                let status = response.status();
-                let body = response.text().await.unwrap_or_default();
-                warn!("Failed to add tiles to dataset '{dataset_name}' (HTTP {status}): {body}");
-                // Continue with remaining tiles; some conflicts (e.g. z-index) are expected
-            }
-        }
-    }
+    upload_tiles_to_datasets(&client, &params, &session_id, &tiles_by_dataset).await?;
 
     create_harvest_layer_collections(
         &client,
@@ -364,7 +220,6 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
 /// Only assets whose EPSG code matches the dataset's projection are included.
 /// Items with a different EPSG are silently skipped — all datasets must be
 /// predefined in the mapping.
-#[allow(clippy::too_many_lines)]
 fn process_harvest_item(
     item: &stac::Item,
     provider_def: &StacDataProviderDefinition,
@@ -396,119 +251,17 @@ fn process_harvest_item(
 
     for dataset in &provider_def.datasets {
         for (band_idx, band_def) in dataset.bands.iter().enumerate() {
-            let Some((_asset_key, asset)) = item
-                .assets
-                .iter()
-                .find(|(_, a)| a.title.as_deref() == Some(&band_def.asset_title))
-            else {
-                continue;
-            };
-
-            // Check data type matches
-            if let Some(asset_dt) = data_type_from_asset_v1_1_0_fallback(asset)
-                && asset_dt != dataset.data_type
-            {
-                continue;
+            if let Some((dataset_name, tile)) = try_create_tile_for_band(
+                item,
+                dataset,
+                band_idx,
+                band_def,
+                (time, z_index),
+                provider_def,
+                params,
+            ) {
+                tiles_by_dataset.entry(dataset_name).or_default().push(tile);
             }
-
-            // Extract the item's actual EPSG code from the asset
-            let item_epsg = common::epsg_code_from_fields(
-                common::StacExtensionMajorVersion::V2,
-                &asset.additional_fields,
-            )
-            .or_else(|| {
-                // Also try to extract from serialized properties as fallback
-                let props_val = serde_json::to_value(&item.properties)
-                    .ok()
-                    .and_then(|v| v.as_object().cloned())
-                    .unwrap_or_default();
-                common::epsg_code_from_fields(common::StacExtensionMajorVersion::V2, &props_val)
-            });
-
-            let Some(item_epsg) = item_epsg else {
-                continue;
-            };
-
-            // Only process assets whose EPSG matches the dataset's projection
-            if dataset.projection
-                != SpatialReference::new(SpatialReferenceAuthority::Epsg, item_epsg)
-            {
-                continue;
-            }
-
-            let actual_dataset_name =
-                dataset_name_for_harvest(&provider_def.collection_name, dataset);
-
-            let Some(geo_transform) = common::geo_transform_from_fields(&asset.additional_fields)
-            else {
-                continue;
-            };
-
-            if (geo_transform.x_pixel_size().abs() - dataset.resolution.x).abs() > 1e-9
-                || (geo_transform.y_pixel_size().abs() - dataset.resolution.y).abs() > 1e-9
-            {
-                continue;
-            }
-
-            let Some((height, width)) = common::proj_shape_from_fields(&asset.additional_fields)
-            else {
-                continue;
-            };
-
-            let Some(rasterband_channel) =
-                common::rasterband_channel_for_dataset_band(asset, band_def.band_name.as_deref())
-            else {
-                continue;
-            };
-
-            let grid_bounds = GridBoundingBox2D::new(
-                GridIdx2D::new([0, 0]),
-                GridIdx2D::new([(width as isize) - 1, (height as isize) - 1]),
-            )
-            .context("Failed to create grid bounds")?;
-
-            let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
-
-            let Some(file_path) = common::gdal_file_path(&asset.href) else {
-                continue;
-            };
-
-            let gdal_config_options = common::gdal_config_options_for_file_path(
-                &file_path,
-                provider_def.s3_config.as_ref(),
-            );
-
-            let tile = AddDatasetTile {
-                time: TimeInterval::new(time, time + i64::from(24 * 60 * 60 * 1000))
-                    .context("Failed to create time interval")?
-                    .into(),
-                spatial_partition: spatial_partition.into(),
-                band: band_idx as u32,
-                z_index,
-                params: GdalDatasetParameters {
-                    file_path,
-                    rasterband_channel,
-                    geo_transform: geo_transform.into(),
-                    width,
-                    height,
-                    file_not_found_handling:
-                        crate::api::model::operators::FileNotFoundHandling::Error,
-                    no_data_value: params.no_data_value,
-                    properties_mapping: None,
-                    gdal_open_options: None,
-                    gdal_config_options: gdal_config_options.map(|opts| {
-                        opts.into_iter()
-                            .map(|(k, v)| GdalConfigOption::from((k, v)))
-                            .collect()
-                    }),
-                    allow_alphaband_as_mask: false,
-                },
-            };
-
-            tiles_by_dataset
-                .entry(actual_dataset_name)
-                .or_default()
-                .push(tile);
         }
     }
 
@@ -1188,6 +941,312 @@ fn data_type_from_asset_v1_1_0_fallback(asset: &stac::Asset) -> Option<RasterDat
             .and_then(|v| v.as_str())
             .and_then(common::raster_data_type_from_stac_data_type_str)
     })
+}
+
+// ---------------------------------------------------------------------------
+// Harvest Helper Functions
+// ---------------------------------------------------------------------------
+
+/// Create datasets that don't already exist on the Geo Engine server.
+async fn setup_datasets(
+    client: &reqwest::Client,
+    params: &StacHarvest,
+    provider_def: &StacDataProviderDefinition,
+    session_id: &str,
+) -> Result<Vec<(usize, StacProviderDataset)>, anyhow::Error> {
+    let mut created_datasets: Vec<(usize, StacProviderDataset)> = Vec::new();
+
+    for (idx, dataset) in provider_def.datasets.iter().enumerate() {
+        let dataset_name = dataset_name_for_harvest(&provider_def.collection_name, dataset);
+
+        if params.verbose {
+            info!("Checking dataset '{}'", dataset_name);
+        }
+
+        if !dataset_exists_api(client, &params.geo_engine_url, session_id, &dataset_name).await? {
+            create_dataset_api(
+                client,
+                &params.geo_engine_url,
+                session_id,
+                &dataset_name,
+                dataset,
+                &params.volume_name,
+            )
+            .await?;
+            created_datasets.push((idx, dataset.clone()));
+        }
+    }
+
+    Ok(created_datasets)
+}
+
+/// Build the query parameters for the STAC items API request.
+fn build_stac_query_params(params: &StacHarvest) -> Vec<(String, String)> {
+    let mut query_params: Vec<(String, String)> = Vec::new();
+
+    if let Some(bbox) = &params.bbox
+        && bbox.len() == 4
+    {
+        query_params.push((
+            "bbox".to_string(),
+            format!("{},{},{},{}", bbox[0], bbox[1], bbox[2], bbox[3]),
+        ));
+    }
+
+    if params.time_start.is_some() || params.time_end.is_some() {
+        query_params.push((
+            "datetime".to_string(),
+            format!(
+                "{}/{}",
+                params.time_start.as_deref().unwrap_or(""),
+                params.time_end.as_deref().unwrap_or("")
+            ),
+        ));
+    }
+
+    if let Some(limit) = params.limit {
+        query_params.push(("limit".to_string(), limit.to_string()));
+    }
+
+    if params.filter_item_fields {
+        query_params.push((
+            "fields".to_string(),
+            "stac_version,properties.datetime,properties.updated,assets.*.title,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.proj:code,assets.*.proj:shape,assets.*.proj:transform"
+                .to_string(),
+        ));
+    }
+
+    query_params
+}
+
+/// Fetch pages of STAC items, process them, and collect tiles grouped by dataset.
+async fn process_item_stream(
+    client: &reqwest::Client,
+    items_url: &str,
+    query_params: &[(String, String)],
+    provider_def: &StacDataProviderDefinition,
+    params: &StacHarvest,
+    start_time: &Instant,
+) -> Result<(HashMap<String, Vec<AddDatasetTile>>, u64), anyhow::Error> {
+    let initial_query_state = QueryState::FirstPage {
+        query_url: items_url.to_string(),
+        query_params: query_params.to_vec(),
+    };
+
+    let page_stream = create_page_stream(
+        initial_query_state,
+        client.clone(),
+        params.verbose,
+        params.prefetch_pages,
+    );
+
+    let mut tiles_by_dataset: HashMap<String, Vec<AddDatasetTile>> = HashMap::new();
+    let mut items_processed: u64 = 0;
+    let mut items_per_sec: f64;
+
+    futures::pin_mut!(page_stream);
+    while let Some(result) = page_stream.next().await {
+        let item_collection = result?;
+
+        for item in &item_collection.items {
+            process_harvest_item(item, provider_def, &mut tiles_by_dataset, params).unwrap_or_else(
+                |e| {
+                    if params.verbose {
+                        warn!("Skipping item {}: {}", item.id, e);
+                    }
+                },
+            );
+
+            items_processed += 1;
+        }
+
+        if params.verbose {
+            let elapsed = start_time.elapsed().as_secs_f64();
+            items_per_sec = if elapsed > 0.0 {
+                items_processed as f64 / elapsed
+            } else {
+                0.0
+            };
+
+            if let Some(number_matched) = item_collection
+                .additional_fields
+                .get("numberMatched")
+                .and_then(serde_json::Value::as_u64)
+            {
+                let progress =
+                    (items_processed as f64 / number_matched as f64 * 100.0).clamp(0.0, 100.0);
+                let remaining = number_matched.saturating_sub(items_processed);
+                let eta_secs = if items_per_sec > 0.0 {
+                    remaining as f64 / items_per_sec
+                } else {
+                    f64::INFINITY
+                };
+                let eta_str = if eta_secs.is_finite() {
+                    format_duration(eta_secs as u64)
+                } else {
+                    "unknown".to_string()
+                };
+                println!(
+                    "[{progress:.1}%] Processed {items_processed}/{number_matched} items ({items_per_sec:.1} items/s, ETA: {eta_str})"
+                );
+            } else {
+                println!("Processed {items_processed} items ({items_per_sec:.1} items/s)");
+            }
+        }
+    }
+
+    Ok((tiles_by_dataset, items_processed))
+}
+
+/// Upload collected tiles to the Geo Engine server in batches.
+async fn upload_tiles_to_datasets(
+    client: &reqwest::Client,
+    params: &StacHarvest,
+    session_id: &str,
+    tiles_by_dataset: &HashMap<String, Vec<AddDatasetTile>>,
+) -> Result<(), anyhow::Error> {
+    for (dataset_name, tiles) in tiles_by_dataset {
+        if tiles.is_empty() {
+            continue;
+        }
+
+        if params.verbose {
+            info!("Adding {} tiles to dataset '{}'", tiles.len(), dataset_name);
+        }
+
+        let batch_size = 100;
+        for chunk in tiles.chunks(batch_size) {
+            let response = retry_http(
+                || async {
+                    client
+                        .post(format!(
+                            "{}/dataset/{}/tiles",
+                            params.geo_engine_url, dataset_name
+                        ))
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", format!("Bearer {session_id}"))
+                        .json(chunk)
+                        .send()
+                        .await
+                },
+                &format!("Add tiles to dataset '{dataset_name}'"),
+            )
+            .await
+            .with_context(|| format!("Failed to add tiles to dataset '{dataset_name}'"))?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                warn!("Failed to add tiles to dataset '{dataset_name}' (HTTP {status}): {body}");
+                // Continue with remaining tiles; some conflicts (e.g. z-index) are expected
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Try to create a tile for a single band of a single dataset from a STAC item asset.
+///
+/// Returns `None` if no matching asset exists, the data types don't match, the EPSG code
+/// doesn't match the dataset's projection, the resolution doesn't match, or any required
+/// metadata is missing.
+fn try_create_tile_for_band(
+    item: &stac::Item,
+    dataset: &StacProviderDataset,
+    band_idx: usize,
+    band_def: &StacProviderDatasetBand,
+    item_time: (TimeInstance, i64), // (time, z_index)
+    provider_def: &StacDataProviderDefinition,
+    params: &StacHarvest,
+) -> Option<(String, AddDatasetTile)> {
+    let (time, z_index) = item_time;
+    let (_asset_key, asset) = item
+        .assets
+        .iter()
+        .find(|(_, a)| a.title.as_deref() == Some(&band_def.asset_title))?;
+
+    // Check data type matches
+    if let Some(asset_dt) = data_type_from_asset_v1_1_0_fallback(asset)
+        && asset_dt != dataset.data_type
+    {
+        return None;
+    }
+
+    // Extract the item's actual EPSG code from the asset
+    let item_epsg = common::epsg_code_from_fields(
+        common::StacExtensionMajorVersion::V2,
+        &asset.additional_fields,
+    )
+    .or_else(|| {
+        // Also try to extract from serialized properties as fallback
+        let props_val = serde_json::to_value(&item.properties)
+            .ok()
+            .and_then(|v| v.as_object().cloned())
+            .unwrap_or_default();
+        common::epsg_code_from_fields(common::StacExtensionMajorVersion::V2, &props_val)
+    })?;
+
+    // Only process assets whose EPSG matches the dataset's projection
+    if dataset.projection != SpatialReference::new(SpatialReferenceAuthority::Epsg, item_epsg) {
+        return None;
+    }
+
+    let actual_dataset_name = dataset_name_for_harvest(&provider_def.collection_name, dataset);
+
+    let geo_transform = common::geo_transform_from_fields(&asset.additional_fields)?;
+
+    if (geo_transform.x_pixel_size().abs() - dataset.resolution.x).abs() > 1e-9
+        || (geo_transform.y_pixel_size().abs() - dataset.resolution.y).abs() > 1e-9
+    {
+        return None;
+    }
+
+    let (height, width) = common::proj_shape_from_fields(&asset.additional_fields)?;
+
+    let rasterband_channel =
+        common::rasterband_channel_for_dataset_band(asset, band_def.band_name.as_deref())?;
+
+    let grid_bounds = GridBoundingBox2D::new(
+        GridIdx2D::new([0, 0]),
+        GridIdx2D::new([(width as isize) - 1, (height as isize) - 1]),
+    )
+    .ok()?;
+
+    let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
+
+    let file_path = common::gdal_file_path(&asset.href)?;
+
+    let gdal_config_options =
+        common::gdal_config_options_for_file_path(&file_path, provider_def.s3_config.as_ref());
+
+    let tile = AddDatasetTile {
+        time: TimeInterval::new(time, time + i64::from(24 * 60 * 60 * 1000))
+            .ok()?
+            .into(),
+        spatial_partition: spatial_partition.into(),
+        band: band_idx as u32,
+        z_index,
+        params: GdalDatasetParameters {
+            file_path,
+            rasterband_channel,
+            geo_transform: geo_transform.into(),
+            width,
+            height,
+            file_not_found_handling: crate::api::model::operators::FileNotFoundHandling::Error,
+            no_data_value: params.no_data_value,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: gdal_config_options.map(|opts| {
+                opts.into_iter()
+                    .map(|(k, v)| GdalConfigOption::from((k, v)))
+                    .collect()
+            }),
+            allow_alphaband_as_mask: false,
+        },
+    };
+
+    Some((actual_dataset_name, tile))
 }
 
 fn format_duration(secs: u64) -> String {

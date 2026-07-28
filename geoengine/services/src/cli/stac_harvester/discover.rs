@@ -103,7 +103,6 @@ pub enum ImportFileType {
 // Discover Mapping Implementation
 // ---------------------------------------------------------------------------
 
-#[allow(clippy::too_many_lines)]
 pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), anyhow::Error> {
     let client = reqwest::Client::new();
 
@@ -122,11 +121,104 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         .await
         .context("Failed to fetch STAC collection")?;
 
-    // Scan collection-level item_assets for bands (partial information)
+    let dataset_bands = scan_collection_bands(&collection, &params.file_types);
+
+    if params.verbose {
+        info!(
+            "Found {} data type/resolution combinations from collection metadata",
+            dataset_bands.len()
+        );
+    }
+
+    let items_response = fetch_sample_items(&client, &params).await?;
+
+    if items_response.items.is_empty() {
+        anyhow::bail!("No items found in the collection. Cannot discover mapping.");
+    }
+
+    info!(
+        "Probing {} sample item(s) to discover EPSG codes and additional bands",
+        items_response.items.len()
+    );
+
+    let (discovered_datasets, sample_band_info) =
+        process_sample_assets(&items_response, &params.file_types, &params.epsgs);
+
+    if discovered_datasets.is_empty() {
+        anyhow::bail!(
+            "No matching assets found in sample items. Check your --file-types and --epsgs filters."
+        );
+    }
+
+    let time_dimension = parse_time_dimension(&params.time_granularity, params.time_step)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    let s3_config = params
+        .s3_endpoint
+        .as_ref()
+        .map(|endpoint| StacProviderS3Config {
+            endpoint: endpoint.clone(),
+            access_key: params.s3_access_key.clone(),
+            secret_key: params.s3_secret_key.clone(),
+        });
+
+    let datasets = build_datasets(
+        &discovered_datasets,
+        &dataset_bands,
+        &sample_band_info,
+        params.full_projection_grid,
+        &params.stac_collection,
+    );
+
+    let provider_def = StacDataProviderDefinition {
+        name: format!("{} from STAC", params.stac_collection),
+        id: DataProviderId::new(),
+        description: format!(
+            "Auto-discovered mapping for STAC collection '{}' at {}",
+            params.stac_collection, params.stac_url
+        ),
+        priority: Some(50),
+        api_url: params.stac_url.clone(),
+        collection_name: params.stac_collection.clone(),
+        s3_config,
+        time_dimension,
+        datasets,
+    };
+
+    let json = serde_json::to_string_pretty(&provider_def)
+        .context("Failed to serialize mapping to JSON")?;
+
+    if let Some(output_path) = &params.output {
+        std::fs::write(output_path, &json)
+            .with_context(|| format!("Failed to write mapping to {}", output_path.display()))?;
+        println!("Mapping written to {}", output_path.display());
+    } else {
+        println!("{json}");
+    }
+
+    Ok(())
+}
+
+struct DiscoveredDatasetInfo {
+    geo_transform: Option<GeoTransform>,
+    proj_shape: Option<(usize, usize)>,
+    srs: SpatialReference,
+    asset_count: u32,
+}
+
+// ---------------------------------------------------------------------------
+// Discover Helper Functions
+// ---------------------------------------------------------------------------
+
+/// Scan the collection-level `item_assets` for band metadata (data type, resolution, band names).
+fn scan_collection_bands(
+    collection: &stac::Collection,
+    file_types: &[ImportFileType],
+) -> HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> {
     let mut dataset_bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> = HashMap::new();
 
     for (_asset_key, asset) in &collection.item_assets {
-        if !matches_selected_file_types_static(asset.r#type.as_deref(), &params.file_types) {
+        if !matches_selected_file_types_static(asset.r#type.as_deref(), file_types) {
             continue;
         }
 
@@ -137,14 +229,14 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         }
     }
 
-    if params.verbose {
-        info!(
-            "Found {} data type/resolution combinations from collection metadata",
-            dataset_bands.len()
-        );
-    }
+    dataset_bands
+}
 
-    // Sample items to discover EPSG codes and additional band/resolution info
+/// Build query parameters and fetch sample items from the STAC items API.
+async fn fetch_sample_items(
+    client: &reqwest::Client,
+    params: &StacDiscoverMapping,
+) -> Result<stac::ItemCollection, anyhow::Error> {
     let items_url = format!(
         "{}/collections/{}/items",
         params.stac_url.trim_end_matches('/'),
@@ -169,20 +261,21 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
 
     query_params.push(("limit".to_string(), format!("{}", params.sample_items)));
 
-    let items_response: stac::ItemCollection =
-        stac_api_request_with_params(&client, &items_url, &query_params)
-            .await
-            .context("Failed to fetch sample items")?;
+    stac_api_request_with_params(client, &items_url, &query_params)
+        .await
+        .context("Failed to fetch sample items")
+}
 
-    if items_response.items.is_empty() {
-        anyhow::bail!("No items found in the collection. Cannot discover mapping.");
-    }
+/// Process sample items to discover unique datasets (by EPSG, data type, resolution)
+/// and their associated bands.
+type DiscoveredDatasets = HashMap<DatasetKey, DiscoveredDatasetInfo>;
+type SampleBandInfo = HashMap<PartialDatasetKey, Vec<(String, String)>>;
 
-    info!(
-        "Probing {} sample item(s) to discover EPSG codes and additional bands",
-        items_response.items.len()
-    );
-
+fn process_sample_assets(
+    items_response: &stac::ItemCollection,
+    file_types: &[ImportFileType],
+    epsgs: &[u32],
+) -> (DiscoveredDatasets, SampleBandInfo) {
     let mut discovered_datasets: HashMap<DatasetKey, DiscoveredDatasetInfo> = HashMap::new();
     let mut sample_band_info: HashMap<PartialDatasetKey, Vec<(String, String)>> = HashMap::new();
 
@@ -190,7 +283,7 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         let item_epsg = common::epsg_code_from_item(item, common::StacExtensionMajorVersion::V2);
 
         for (asset_key, asset) in &item.assets {
-            if !matches_selected_file_types_static(asset.r#type.as_deref(), &params.file_types) {
+            if !matches_selected_file_types_static(asset.r#type.as_deref(), file_types) {
                 continue;
             }
 
@@ -214,7 +307,7 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
                 continue;
             };
 
-            if !params.epsgs.is_empty() && !params.epsgs.contains(&epsg) {
+            if !epsgs.is_empty() && !epsgs.contains(&epsg) {
                 continue;
             }
 
@@ -254,28 +347,21 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         }
     }
 
-    if discovered_datasets.is_empty() {
-        anyhow::bail!(
-            "No matching assets found in sample items. Check your --file-types and --epsgs filters."
-        );
-    }
+    (discovered_datasets, sample_band_info)
+}
 
-    // Build the StacDataProviderDefinition
-    let time_dimension = parse_time_dimension(&params.time_granularity, params.time_step)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-
-    let s3_config = params
-        .s3_endpoint
-        .as_ref()
-        .map(|endpoint| StacProviderS3Config {
-            endpoint: endpoint.clone(),
-            access_key: params.s3_access_key.clone(),
-            secret_key: params.s3_secret_key.clone(),
-        });
-
+/// Build the `StacProviderDataset` list from discovered datasets, collection bands,
+/// and sample band information.
+fn build_datasets(
+    discovered_datasets: &HashMap<DatasetKey, DiscoveredDatasetInfo>,
+    dataset_bands: &HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>,
+    sample_band_info: &HashMap<PartialDatasetKey, Vec<(String, String)>>,
+    full_projection_grid: bool,
+    stac_collection: &str,
+) -> Vec<StacProviderDataset> {
     let mut datasets: Vec<StacProviderDataset> = Vec::new();
 
-    for (dataset_key, info) in &discovered_datasets {
+    for (dataset_key, info) in discovered_datasets {
         let partial_key = PartialDatasetKey {
             data_type: dataset_key.data_type,
             resolution: dataset_key.resolution,
@@ -312,70 +398,16 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
 
         bands.sort_by(|a, b| a.asset_title.cmp(&b.asset_title));
 
-        let spatial_grid = if params.full_projection_grid {
-            // Compute grid bounds covering the full projected CRS extent
-            if let Some(gt) = info.geo_transform {
-                let grid_bounds = projection_grid_bounds(gt, dataset_key.epsg)
-                    .unwrap_or_else(|| {
-                        // Fallback: use first asset's shape
-                        if let Some((height, width)) = info.proj_shape {
-                            GridBoundingBox2D::new(
-                                GridIdx2D::new([0, 0]),
-                                GridIdx2D::new([(width as isize) - 1, (height as isize) - 1]),
-                            )
-                            .expect("fallback grid bounds should be valid")
-                        } else {
-                            GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0]))
-                                .expect("zero-size grid bounds should be valid")
-                        }
-                    });
-                GeoOpSpatialGridDescriptor::source_from_parts(gt, grid_bounds)
-            } else {
-                GeoOpSpatialGridDescriptor::source_from_parts(
-                    GeoTransform::new(
-                        (0.0, 0.0).into(),
-                        dataset_key.resolution.into_inner(),
-                        -dataset_key.resolution.into_inner(),
-                    ),
-                    GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0]))
-                        .expect("zero-size grid bounds should be valid"),
-                )
-            }
-        } else if let (Some(gt), Some((height, width))) = (info.geo_transform, info.proj_shape) {
-            GeoOpSpatialGridDescriptor::source_from_parts(
-                gt,
-                GridBoundingBox2D::new(
-                    GridIdx2D::new([0, 0]),
-                    GridIdx2D::new([(width as isize) - 1, (height as isize) - 1]),
-                )
-                .unwrap_or_else(|_| {
-                    GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0]))
-                        .expect("zero-size grid bounds should be valid")
-                }),
-            )
-        } else {
-            GeoOpSpatialGridDescriptor::source_from_parts(
-                GeoTransform::new(
-                    (0.0, 0.0).into(),
-                    dataset_key.resolution.into_inner(),
-                    -dataset_key.resolution.into_inner(),
-                ),
-                GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0]))
-                    .expect("zero-size grid bounds should be valid"),
-            )
-        };
+        let spatial_grid = build_dataset_spatial_grid(info, dataset_key, full_projection_grid);
 
         let dataset_name = format!(
             "{} EPSG:{} {:?} {}m",
-            params.stac_collection, dataset_key.epsg, dataset_key.data_type, dataset_key.resolution
+            stac_collection, dataset_key.epsg, dataset_key.data_type, dataset_key.resolution
         );
 
         datasets.push(StacProviderDataset {
             name: dataset_name,
-            description: format!(
-                "Auto-discovered from STAC collection '{}'",
-                params.stac_collection
-            ),
+            description: format!("Auto-discovered from STAC collection '{stac_collection}'"),
             data_type: dataset_key.data_type,
             resolution: SpatialResolution::new_unchecked(
                 dataset_key.resolution.into_inner(),
@@ -387,40 +419,65 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         });
     }
 
-    let provider_def = StacDataProviderDefinition {
-        name: format!("{} from STAC", params.stac_collection),
-        id: DataProviderId::new(),
-        description: format!(
-            "Auto-discovered mapping for STAC collection '{}' at {}",
-            params.stac_collection, params.stac_url
-        ),
-        priority: Some(50),
-        api_url: params.stac_url.clone(),
-        collection_name: params.stac_collection.clone(),
-        s3_config,
-        time_dimension,
-        datasets,
-    };
-
-    let json = serde_json::to_string_pretty(&provider_def)
-        .context("Failed to serialize mapping to JSON")?;
-
-    if let Some(output_path) = &params.output {
-        std::fs::write(output_path, &json)
-            .with_context(|| format!("Failed to write mapping to {}", output_path.display()))?;
-        println!("Mapping written to {}", output_path.display());
-    } else {
-        println!("{json}");
-    }
-
-    Ok(())
+    datasets
 }
 
-struct DiscoveredDatasetInfo {
-    geo_transform: Option<GeoTransform>,
-    proj_shape: Option<(usize, usize)>,
-    srs: SpatialReference,
-    asset_count: u32,
+/// Build the spatial grid descriptor for a discovered dataset, optionally using the
+/// full projected CRS extent instead of the first asset's shape.
+fn build_dataset_spatial_grid(
+    info: &DiscoveredDatasetInfo,
+    dataset_key: &DatasetKey,
+    full_projection_grid: bool,
+) -> GeoOpSpatialGridDescriptor {
+    let default_grid = || {
+        GeoOpSpatialGridDescriptor::source_from_parts(
+            GeoTransform::new(
+                (0.0, 0.0).into(),
+                dataset_key.resolution.into_inner(),
+                -dataset_key.resolution.into_inner(),
+            ),
+            GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0]))
+                .expect("zero-size grid bounds should be valid"),
+        )
+    };
+
+    if full_projection_grid {
+        if let Some(gt) = info.geo_transform {
+            let grid_bounds = projection_grid_bounds(gt, dataset_key.epsg)
+                .unwrap_or_else(|| fallback_grid_bounds(info));
+            GeoOpSpatialGridDescriptor::source_from_parts(gt, grid_bounds)
+        } else {
+            default_grid()
+        }
+    } else if let (Some(gt), Some((height, width))) = (info.geo_transform, info.proj_shape) {
+        GeoOpSpatialGridDescriptor::source_from_parts(
+            gt,
+            GridBoundingBox2D::new(
+                GridIdx2D::new([0, 0]),
+                GridIdx2D::new([(width as isize) - 1, (height as isize) - 1]),
+            )
+            .unwrap_or_else(|_| {
+                GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0]))
+                    .expect("zero-size grid bounds should be valid")
+            }),
+        )
+    } else {
+        default_grid()
+    }
+}
+
+/// Fallback grid bounds: use the first asset's shape, or a single-pixel grid.
+fn fallback_grid_bounds(info: &DiscoveredDatasetInfo) -> GridBoundingBox2D {
+    if let Some((height, width)) = info.proj_shape {
+        GridBoundingBox2D::new(
+            GridIdx2D::new([0, 0]),
+            GridIdx2D::new([(width as isize) - 1, (height as isize) - 1]),
+        )
+        .expect("fallback grid bounds should be valid")
+    } else {
+        GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0]))
+            .expect("zero-size grid bounds should be valid")
+    }
 }
 
 /// Compute grid bounds that cover the full projected CRS extent for the given
@@ -451,7 +508,11 @@ fn projection_grid_bounds(gt: GeoTransform, epsg: u32) -> Option<GridBoundingBox
         (top, bottom)
     };
 
-    GridBoundingBox2D::new(GridIdx2D::new([min_x_idx, min_y_idx]), GridIdx2D::new([max_x_idx, max_y_idx])).ok()
+    GridBoundingBox2D::new(
+        GridIdx2D::new([min_x_idx, min_y_idx]),
+        GridIdx2D::new([max_x_idx, max_y_idx]),
+    )
+    .ok()
 }
 
 /// Return the projected extent `(min_x, max_x, min_y, max_y)` for a given EPSG code.
@@ -875,9 +936,12 @@ mod tests {
         );
 
         stac_server.expect(
-            Expectation::matching(all_of![request::method("GET"), request::path(LANDSAT_ITEMS_PATH)])
-                .times(1)
-                .respond_with(responders::json_encoded(landsat_items_json())),
+            Expectation::matching(all_of![
+                request::method("GET"),
+                request::path(LANDSAT_ITEMS_PATH)
+            ])
+            .times(1)
+            .respond_with(responders::json_encoded(landsat_items_json())),
         );
 
         let output_path = std::env::temp_dir().join("test_discover_landsat_mapping_output.json");
