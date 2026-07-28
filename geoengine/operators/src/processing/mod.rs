@@ -11,6 +11,7 @@ mod map_query;
 mod meteosat;
 mod neighborhood_aggregate;
 mod point_in_polygon;
+mod polygonal_raster_extraction;
 mod raster_scaling;
 mod raster_stacker;
 mod raster_type_conversion;
@@ -53,6 +54,7 @@ pub use point_in_polygon::{
     PointInPolygonFilter, PointInPolygonFilterParams, PointInPolygonFilterSource,
     PointInPolygonTester,
 };
+pub use polygonal_raster_extraction::{PolygonalRasterExtraction, PolygonalRasterExtractionParams};
 pub use raster_stacker::{RasterStacker, RasterStackerParams};
 pub use raster_type_conversion::{
     RasterTypeConversion, RasterTypeConversionParams, RasterTypeConversionQueryProcessor,
