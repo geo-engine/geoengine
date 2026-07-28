@@ -12,6 +12,7 @@ use crate::datasets::external::netcdfcf::{
     OverviewGeneration, error,
 };
 use crate::error::Result;
+use crate::layers::external::DataProviderDefinition;
 use crate::layers::storage::LayerProviderDb;
 use crate::tasks::{Task, TaskContext, TaskId, TaskManager, TaskStatus, TaskStatusInfo};
 use crate::util::apidoc::OpenApiServerInfo;
@@ -132,6 +133,7 @@ async fn retrieve_netcdf_cf_provider<C: SessionContext>(
 ) -> Result<Box<NetCdfCfDataProvider<C::GeoEngineDB>>, NetCdfCf4DProviderError> {
     let db = ctx.db();
 
+    // Try the EBV provider first (it wraps a NetCdf-CF provider)
     if let Ok(data_provider) = db.load_layer_provider(EBV_PROVIDER_ID).await {
         let data_provider = data_provider.into_box_any();
         let ebv_provider: Box<EbvPortalDataProvider<_>> = data_provider
@@ -140,15 +142,28 @@ async fn retrieve_netcdf_cf_provider<C: SessionContext>(
         return Ok(Box::new(ebv_provider.netcdf_cf_provider));
     }
 
-    if let Ok(data_provider) = db.load_layer_provider(NETCDF_CF_PROVIDER_ID).await {
-        let data_provider = data_provider.into_box_any();
-        let netcdf_cf_provider: Box<NetCdfCfDataProvider<_>> = data_provider
-            .downcast::<NetCdfCfDataProvider<_>>()
-            .map_err(|_| NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)?;
-        return Ok(netcdf_cf_provider);
-    }
+    // `load_layer_provider` now returns `Box<SharedDataProvider>`, which wraps
+    // the actual provider in an `Arc`.  We cannot use `into_box_any().downcast()`
+    // because `SharedDataProvider` is not the concrete type we need.
+    //
+    // Instead, directly obtain the provider definition from the database and
+    // initialise it, preserving the concrete type for downcasting.
+    let definition = db
+        .get_layer_provider_definition(NETCDF_CF_PROVIDER_ID)
+        .await
+        .map_err(|_| NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)?;
 
-    Err(NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)
+    let data_provider = Box::new(definition)
+        .initialize(db)
+        .await
+        .map_err(|_| NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)?;
+
+    let data_provider = data_provider.into_box_any();
+    let netcdf_cf_provider: Box<NetCdfCfDataProvider<_>> = data_provider
+        .downcast::<NetCdfCfDataProvider<_>>()
+        .map_err(|_| NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)?;
+
+    Ok(netcdf_cf_provider)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
