@@ -19,6 +19,7 @@
       "step": 1
     }
   },
+  "queryTimeoutSecs": 60,
   "datasets": [
     {
       "name": "Sentinel-2 L2A EPSG:32632 U16 10m",

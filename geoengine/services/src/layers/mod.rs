@@ -4,6 +4,7 @@ pub mod external;
 pub mod layer;
 pub mod listing;
 mod postgres_layer_db;
+pub mod provider_registry;
 pub mod storage;
 
 pub use error::LayerDbError;

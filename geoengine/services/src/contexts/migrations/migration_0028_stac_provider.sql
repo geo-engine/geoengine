@@ -28,7 +28,8 @@ CREATE TYPE "StacDataProviderDefinition" AS (
     collection_name text,
     s3_config "StacProviderS3Config",
     time_dimension "TimeDimension",
-    datasets "StacProviderDataset" []
+    datasets "StacProviderDataset" [],
+    query_timeout_secs bigint
 );
 
 ALTER TYPE "DataProviderDefinition" ADD ATTRIBUTE
