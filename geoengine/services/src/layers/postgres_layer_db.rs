@@ -1,4 +1,4 @@
-use super::external::{DataProvider, SharedDataProvider, TypedDataProviderDefinition};
+use super::external::{DataProvider, SharedDataConnector, TypedDataProviderDefinition};
 use super::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerCollectionListing,
     LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId, UpdateLayer,
@@ -964,7 +964,7 @@ where
             })
             .await?;
 
-        Ok(Box::new(SharedDataProvider(provider)))
+        Ok(Box::new(SharedDataConnector(provider)))
     }
 
     async fn get_layer_provider_definition(

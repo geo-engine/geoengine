@@ -84,10 +84,10 @@ pub trait DataProvider: LayerCollectionProvider
 }
 
 #[derive(Debug, Clone)]
-pub struct SharedDataProvider(pub Arc<dyn DataProvider>);
+pub struct SharedDataConnector(pub Arc<dyn DataProvider>);
 
 #[async_trait]
-impl LayerCollectionProvider for SharedDataProvider {
+impl LayerCollectionProvider for SharedDataConnector {
     fn capabilities(&self) -> crate::layers::listing::ProviderCapabilities {
         self.0.capabilities()
     }
@@ -141,7 +141,7 @@ impl LayerCollectionProvider for SharedDataProvider {
 #[async_trait]
 impl
     MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for SharedDataProvider
+    for SharedDataConnector
 {
     async fn meta_data(
         &self,
@@ -161,7 +161,7 @@ impl
 
 #[async_trait]
 impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for SharedDataProvider
+    for SharedDataConnector
 {
     async fn meta_data(
         &self,
@@ -181,7 +181,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 
 #[async_trait]
 impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for SharedDataProvider
+    for SharedDataConnector
 {
     async fn meta_data(
         &self,
@@ -205,7 +205,7 @@ impl
         MultiBandGdalLoadingInfo,
         RasterResultDescriptor,
         MultiBandGdalLoadingInfoQueryRectangle,
-    > for SharedDataProvider
+    > for SharedDataConnector
 {
     async fn meta_data(
         &self,
@@ -224,7 +224,7 @@ impl
 }
 
 #[async_trait]
-impl DataProvider for SharedDataProvider {
+impl DataProvider for SharedDataConnector {
     async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
         self.0.provenance(id).await
     }

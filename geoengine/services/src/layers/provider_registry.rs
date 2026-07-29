@@ -8,19 +8,19 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
 #[derive(Debug, Clone)]
-struct CachedProviderEntry {
+struct CachedDataConnectorEntry {
     provider: Arc<dyn DataProvider>,
     last_used: Instant,
 }
 
 #[derive(Debug)]
-pub struct DataProviderRegistry {
-    entries: Mutex<HashMap<DataProviderId, CachedProviderEntry>>,
+pub struct DataConnectorRegistry {
+    entries: Mutex<HashMap<DataProviderId, CachedDataConnectorEntry>>,
     max_entries: usize,
     max_idle: Duration,
 }
 
-impl Default for DataProviderRegistry {
+impl Default for DataConnectorRegistry {
     fn default() -> Self {
         let config = get_config_element::<ProviderCache>()
             .expect("ProviderCache config must be present in Settings-default.toml");
@@ -32,16 +32,16 @@ impl Default for DataProviderRegistry {
     }
 }
 
-impl DataProviderRegistry {
-    /// Get a cached provider, or initialise one and cache it.
+impl DataConnectorRegistry {
+    /// Get a cached data connector, or initialise one and cache it.
     ///
     /// # TOCTOU race (known, acceptable)
     ///
     /// The lock is released between the first cache check and the call to
     /// `initialize()`.  If two concurrent requests arrive for the same key,
     /// both will miss the cache, both will call `initialize()` (expensive:
-    /// DB query + provider construction), and the second one to re-acquire
-    /// the lock will discard its freshly-built provider in favour of the
+    /// DB query + connector construction), and the second one to re-acquire
+    /// the lock will discard its freshly-built connector in favour of the
     /// one the first request already stored.  This wastes work under high
     /// concurrency but does **not** corrupt state because the double-check
     /// inside the lock guarantees only one result is stored.
@@ -84,7 +84,7 @@ impl DataProviderRegistry {
 
         entries.insert(
             key,
-            CachedProviderEntry {
+            CachedDataConnectorEntry {
                 provider: provider.clone(),
                 last_used: Instant::now(),
             },
@@ -98,12 +98,12 @@ impl DataProviderRegistry {
         entries.retain(|key, _| *key != provider_id);
     }
 
-    fn evict(entries: &mut HashMap<DataProviderId, CachedProviderEntry>, max_idle: Duration) {
+    fn evict(entries: &mut HashMap<DataProviderId, CachedDataConnectorEntry>, max_idle: Duration) {
         let now = Instant::now();
         entries.retain(|_, entry| now.duration_since(entry.last_used) <= max_idle);
     }
 
-    fn evict_lru_one(entries: &mut HashMap<DataProviderId, CachedProviderEntry>) {
+    fn evict_lru_one(entries: &mut HashMap<DataProviderId, CachedDataConnectorEntry>) {
         if let Some((lru_key, _)) = entries
             .iter()
             .min_by_key(|(_, entry)| entry.last_used)
@@ -286,8 +286,8 @@ mod tests {
 
     /// Returns a registry with a tiny capacity so eviction tests don't need
     /// many entries.
-    fn small_registry() -> DataProviderRegistry {
-        DataProviderRegistry {
+    fn small_registry() -> DataConnectorRegistry {
+        DataConnectorRegistry {
             entries: Mutex::new(HashMap::default()),
             max_entries: 2,
             max_idle: Duration::from_secs(60),
@@ -511,7 +511,7 @@ mod tests {
 
     #[tokio::test]
     async fn idle_entry_is_evicted_after_tti() {
-        let registry = DataProviderRegistry {
+        let registry = DataConnectorRegistry {
             entries: Mutex::new(HashMap::default()),
             max_entries: 10,
             max_idle: Duration::from_millis(10),
@@ -545,7 +545,7 @@ mod tests {
 
     #[tokio::test]
     async fn access_refreshes_idle_timer() {
-        let registry = DataProviderRegistry {
+        let registry = DataConnectorRegistry {
             entries: Mutex::new(HashMap::default()),
             max_entries: 10,
             max_idle: Duration::from_millis(30),

@@ -14,7 +14,7 @@ use crate::layers::add_from_directory::{
     add_datasets_from_directory, add_layer_collections_from_directory, add_layers_from_directory,
     add_providers_from_directory,
 };
-use crate::layers::provider_registry::DataProviderRegistry;
+use crate::layers::provider_registry::DataConnectorRegistry;
 use crate::machine_learning::error::MachineLearningError;
 use crate::quota::{QuotaTrackingFactory, initialize_quota_tracking};
 use crate::tasks::SimpleTaskManagerContext;
@@ -64,7 +64,7 @@ where
     pub(crate) pool: Pool<PostgresConnectionManager<Tls>>,
     volumes: Volumes,
     tile_cache: Arc<SharedCache>,
-    provider_registry: Arc<DataProviderRegistry>,
+    provider_registry: Arc<DataConnectorRegistry>,
     gdal_process_pool: Arc<GdalProcessPool>,
 }
 
@@ -90,7 +90,7 @@ where
 
         Self::create_pro_database(pool.get().await?).await?;
 
-        let provider_registry = Arc::new(DataProviderRegistry::default());
+        let provider_registry = Arc::new(DataConnectorRegistry::default());
         let db = PostgresDb::new(
             pool.clone(),
             UserSession::admin_session(),
@@ -140,7 +140,7 @@ where
 
         Self::create_pro_database(pool.get().await?).await?;
 
-        let provider_registry = Arc::new(DataProviderRegistry::default());
+        let provider_registry = Arc::new(DataConnectorRegistry::default());
         let db = PostgresDb::new(
             pool.clone(),
             UserSession::admin_session(),
@@ -200,7 +200,7 @@ where
 
         let created_schema = Self::create_pro_database(pool.get().await?).await?;
 
-        let provider_registry = Arc::new(DataProviderRegistry::default());
+        let provider_registry = Arc::new(DataConnectorRegistry::default());
         let db = PostgresDb::new(
             pool.clone(),
             UserSession::admin_session(),
@@ -473,7 +473,7 @@ where
 {
     pub(crate) conn_pool: Pool<PostgresConnectionManager<Tls>>,
     pub(crate) session: UserSession,
-    pub(crate) provider_registry: Arc<DataProviderRegistry>,
+    pub(crate) provider_registry: Arc<DataConnectorRegistry>,
 }
 
 impl<Tls> PostgresDb<Tls>
@@ -486,7 +486,7 @@ where
     pub fn new(
         conn_pool: Pool<PostgresConnectionManager<Tls>>,
         session: UserSession,
-        provider_registry: Arc<DataProviderRegistry>,
+        provider_registry: Arc<DataConnectorRegistry>,
     ) -> Self {
         Self {
             conn_pool,
