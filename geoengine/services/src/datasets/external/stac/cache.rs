@@ -2,8 +2,8 @@ use super::StacProviderDataset;
 use crate::config::{StacCache, get_config_element};
 use geoengine_datatypes::primitives::{SpatialPartition2D, TimeInterval};
 use geoengine_operators::source::{TileFile, gdal_worker_process::GdalMetadataMapping};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use tokio::sync::Mutex;
 use tracing::trace;
 
 /// In-memory cache for STAC query results, keyed by dataset name and (spatial
@@ -94,7 +94,10 @@ impl StacQueryCache {
         spatial_bounds: &SpatialPartition2D,
         time_interval: TimeInterval,
     ) -> Option<(Vec<TimeInterval>, Vec<TileFile>)> {
-        let mut inner = self.inner.lock().await;
+        let mut inner = self
+            .inner
+            .lock()
+            .expect("StacQueryCache mutex is not poisoned");
         Self::evict_expired(&mut inner, self.ttl);
 
         let entries = inner
@@ -226,7 +229,10 @@ impl StacQueryCache {
         };
         let new_bytes = Self::entry_bytes(&new_entry);
 
-        let mut inner = self.inner.lock().await;
+        let mut inner = self
+            .inner
+            .lock()
+            .expect("StacQueryCache mutex is not poisoned");
 
         Self::evict_expired(&mut inner, self.ttl);
 
