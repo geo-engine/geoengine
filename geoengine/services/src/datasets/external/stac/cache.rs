@@ -83,6 +83,11 @@ impl StacQueryCache {
     ///
     /// Returns `Some((time_steps, tile_files))` with only those elements that
     /// fall within the queried bounds, or `None` on a cache miss.
+    #[tracing::instrument(skip(self, dataset), fields(
+        dataset = %dataset.name,
+        spatial_bounds = ?spatial_bounds,
+        time_interval = ?time_interval,
+    ))]
     pub async fn lookup(
         &self,
         dataset: &StacProviderDataset,
@@ -91,13 +96,6 @@ impl StacQueryCache {
     ) -> Option<(Vec<TimeInterval>, Vec<TileFile>)> {
         let mut inner = self.inner.lock().await;
         Self::evict_expired(&mut inner, self.ttl);
-
-        trace!(
-            dataset = %dataset.name,
-            spatial_bounds = ?spatial_bounds,
-            time_interval = ?time_interval,
-            "STAC cache lookup"
-        );
 
         let entries = inner
             .by_dataset
@@ -141,17 +139,6 @@ impl StacQueryCache {
 
                 return Some((time_steps, tile_files));
             }
-
-            trace!(
-                dataset = %dataset.name,
-                entry_spatial_bounds = ?entry.spatial_bounds,
-                entry_time_interval = ?entry.time_interval,
-                spatial_match,
-                time_match,
-                entry_time_steps = entry.time_steps.len(),
-                entry_tile_files = entry.tile_files.len(),
-                "STAC cache candidate did not match"
-            );
         }
 
         trace!(dataset = %dataset.name, "STAC cache miss");
@@ -214,6 +201,13 @@ impl StacQueryCache {
     ///    the new result is evicted (the new, larger result supersedes it).
     /// 3. LRU entries are evicted until the total byte size stays within
     ///    `max_bytes`.
+    #[tracing::instrument(skip(self, dataset, time_steps, tile_files), fields(
+        dataset = %dataset.name,
+        spatial_bounds = ?spatial_bounds,
+        time_interval = ?time_interval,
+        time_steps = time_steps.len(),
+        tile_files = tile_files.len(),
+    ))]
     pub async fn insert(
         &self,
         dataset: &StacProviderDataset,
@@ -235,16 +229,6 @@ impl StacQueryCache {
         let mut inner = self.inner.lock().await;
 
         Self::evict_expired(&mut inner, self.ttl);
-
-        trace!(
-            dataset = %dataset.name,
-            spatial_bounds = ?new_entry.spatial_bounds,
-            time_interval = ?new_entry.time_interval,
-            time_steps = new_entry.time_steps.len(),
-            tile_files = new_entry.tile_files.len(),
-            new_bytes,
-            "STAC cache insert"
-        );
 
         let dataset_entries = Self::dataset_entries_mut(&mut inner, dataset);
 
