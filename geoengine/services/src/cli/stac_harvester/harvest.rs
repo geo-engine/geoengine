@@ -40,7 +40,7 @@ use crate::{
                 RasterBandDescriptors, RasterResultDescriptor, RegularTimeDimension,
                 SpatialGridDescriptor, SpatialGridDescriptorState, TimeDescriptor, TimeDimension,
             },
-            responses::{ErrorResponse, IdResponse},
+            responses::IdResponse,
             services::{
                 AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
             },
@@ -59,6 +59,7 @@ use geoengine_operators::{
     engine::{RasterOperator, TypedOperator},
     source::{MultiBandGdalSource, MultiBandGdalSourceParameters},
 };
+use geoengine_api_client::apis::configuration::Configuration as ApiConfig;
 
 // ---------------------------------------------------------------------------
 // Harvest
@@ -82,10 +83,6 @@ pub struct StacHarvest {
     /// Bounding box to import: minx miny maxx maxy (optional)
     #[clap(short, long, value_parser, num_args = 1.., value_delimiter = ' ')]
     pub bbox: Option<Vec<f64>>,
-
-    /// Import limit (page size)
-    #[arg(long)]
-    pub limit: Option<usize>,
 
     /// Geo Engine API URL
     #[arg(long, default_value = "http://localhost:3030/api")]
@@ -139,7 +136,9 @@ fn parse_mapping_file(s: &str) -> Result<StacDataProviderDefinition, String> {
     } else {
         std::fs::read_to_string(s).map_err(|e| format!("Failed to read mapping from '{s}': {e}"))?
     };
-    serde_json::from_str(&json).map_err(|e| format!("Invalid mapping JSON: {e}"))
+    let api_def: crate::api::model::services::StacDataProviderDefinition =
+        serde_json::from_str(&json).map_err(|e| format!("Invalid mapping JSON: {e}"))?;
+    Ok(api_def.into())
 }
 
 // ---------------------------------------------------------------------------
@@ -158,14 +157,17 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
         provider_def.datasets.len()
     );
 
-    let (client, session_id) = login_geo_engine(
+    let api_config = create_api_config(
         &params.geo_engine_url,
         &params.geo_engine_email,
         &params.geo_engine_password,
     )
     .await?;
 
-    let created_datasets = setup_datasets(&client, &params, provider_def, &session_id).await?;
+    // Separate reqwest client for STAC API calls (not Geo Engine)
+    let stac_client = reqwest::Client::new();
+
+    let created_datasets = setup_datasets(&api_config, &params, provider_def).await?;
 
     info!(
         "Created {} new dataset(s) out of {}",
@@ -179,10 +181,10 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
         stac_api_url, provider_def.collection_name
     );
 
-    let query_params = build_stac_query_params(&params);
+    let query_params = build_stac_query_params(&params, provider_def.page_limit as usize);
 
     let (tiles_by_dataset, items_processed) = process_item_stream(
-        &client,
+        &stac_client,
         &items_url,
         &query_params,
         provider_def,
@@ -193,12 +195,10 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
 
     info!("Processed {} items total", items_processed);
 
-    upload_tiles_to_datasets(&client, &params, &session_id, &tiles_by_dataset).await?;
+    upload_tiles_to_datasets(&api_config, &params, &tiles_by_dataset).await?;
 
     create_harvest_layer_collections(
-        &client,
-        &params.geo_engine_url,
-        &session_id,
+        &api_config,
         provider_def,
         &created_datasets,
         &params,
@@ -306,47 +306,36 @@ fn dataset_name_for_harvest(collection_name: &str, dataset: &StacProviderDataset
 }
 
 async fn dataset_exists_api(
-    client: &reqwest::Client,
-    geo_engine_url: &str,
-    session_id: &str,
+    api_config: &ApiConfig,
     dataset_name: &str,
 ) -> Result<bool, anyhow::Error> {
-    let response = retry_http(
-        || async {
-            client
-                .get(format!("{geo_engine_url}/dataset/{dataset_name}"))
-                .header("Authorization", format!("Bearer {session_id}"))
-                .send()
-                .await
-        },
+    let result = retry_http(
+        || geoengine_api_client::apis::datasets_api::get_dataset_handler(api_config, dataset_name),
         &format!("Check dataset existence for '{dataset_name}'"),
     )
-    .await?;
+    .await;
 
-    if response.status().is_success() {
-        return Ok(true);
+    match result {
+        Ok(_) => Ok(true),
+        Err(geoengine_api_client::apis::Error::ResponseError(resp))
+            if resp.status == reqwest::StatusCode::BAD_REQUEST =>
+        {
+            Ok(false)
+        }
+        Err(e) => Err(anyhow::anyhow!("Failed to check dataset '{dataset_name}': {e}")),
     }
-
-    let status = response.status();
-    let body = response.text().await.unwrap_or_default();
-    if status == reqwest::StatusCode::BAD_REQUEST
-        && let Ok(error_response) = serde_json::from_str::<ErrorResponse>(&body)
-        && error_response.error == "CannotLoadDataset"
-    {
-        return Ok(false);
-    }
-
-    anyhow::bail!("Failed to check dataset '{dataset_name}': HTTP {status}: {body}");
 }
 
 async fn create_dataset_api(
-    client: &reqwest::Client,
-    geo_engine_url: &str,
-    session_id: &str,
+    api_config: &ApiConfig,
     dataset_name: &str,
     dataset: &StacProviderDataset,
     volume_name: &str,
 ) -> Result<(), anyhow::Error> {
+    let geo_engine_url = &api_config.base_path;
+    let session_id = api_config.bearer_access_token.as_deref().unwrap_or("");
+    let client = &api_config.client;
+
     let bands: Vec<RasterBandDescriptor> = dataset
         .bands
         .iter()
@@ -358,7 +347,6 @@ async fn create_dataset_api(
         })
         .collect();
 
-    // Get GeoTransform from the spatial grid descriptor for the API
     let dt_gt: GeoTransform = dataset.spatial_grid.geo_transform();
     let api_gt: crate::api::model::datatypes::GeoTransform = dt_gt.into();
 
@@ -438,17 +426,17 @@ async fn create_dataset_api(
         dataset_name.to_string()
     };
 
-    share_dataset_api(client, geo_engine_url, session_id, &created_name).await?;
+    share_dataset_api(api_config, &created_name).await?;
 
     Ok(())
 }
 
 async fn share_dataset_api(
-    client: &reqwest::Client,
-    geo_engine_url: &str,
-    session_id: &str,
+    api_config: &ApiConfig,
     dataset_name: &str,
 ) -> Result<(), anyhow::Error> {
+    let session_id = api_config.bearer_access_token.as_deref().unwrap_or("");
+
     let permissions = vec![
         PermissionRequest {
             resource: Resource::Dataset(DatasetResource {
@@ -471,8 +459,9 @@ async fn share_dataset_api(
     for permission in &permissions {
         retry_http(
             || async {
-                client
-                    .put(format!("{geo_engine_url}/permissions"))
+                api_config
+                    .client
+                    .put(format!("{}/permissions", api_config.base_path))
                     .header("Content-Type", "application/json")
                     .header("Authorization", format!("Bearer {session_id}"))
                     .json(permission)
@@ -488,17 +477,17 @@ async fn share_dataset_api(
 }
 
 async fn create_harvest_layer_collections(
-    client: &reqwest::Client,
-    geo_engine_url: &str,
-    session_id: &str,
+    api_config: &ApiConfig,
     provider_def: &StacDataProviderDefinition,
     created_datasets: &[(usize, StacProviderDataset)],
     params: &StacHarvest,
 ) -> Result<(), anyhow::Error> {
+    let geo_engine_url = &api_config.base_path;
+    let session_id = api_config.bearer_access_token.as_deref().unwrap_or("");
+    let client = &api_config.client;
+
     let root_collection_id = create_layer_collection_api(
-        client,
-        geo_engine_url,
-        session_id,
+        api_config,
         &LayerCollectionId(INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string()),
         &provider_def.collection_name,
         &format!(
@@ -510,9 +499,7 @@ async fn create_harvest_layer_collections(
     .await?;
 
     let temp_collection_id = create_layer_collection_api(
-        client,
-        geo_engine_url,
-        session_id,
+        api_config,
         &root_collection_id,
         "_layers",
         "All dataset layers (internal)",
@@ -567,23 +554,25 @@ async fn create_harvest_layer_collections(
         )
         .await?;
 
-        share_layer_api(client, geo_engine_url, session_id, &response.id).await?;
+        share_layer_api(api_config, &response.id).await?;
     }
 
     Ok(())
 }
 
 async fn create_layer_collection_api(
-    client: &reqwest::Client,
-    geo_engine_url: &str,
-    session_id: &str,
+    api_config: &ApiConfig,
     parent_id: &LayerCollectionId,
     name: &str,
     description: &str,
     params: &StacHarvest,
 ) -> Result<LayerCollectionId, anyhow::Error> {
+    let geo_engine_url = &api_config.base_path;
+    let session_id = api_config.bearer_access_token.as_deref().unwrap_or("");
+    let client = &api_config.client;
+
     if let Some(existing_id) =
-        find_child_collection_by_name(client, geo_engine_url, session_id, parent_id, name).await?
+        find_child_collection_by_name(api_config, parent_id, name).await?
     {
         if params.verbose {
             info!("Found existing layer collection '{name}'");
@@ -615,18 +604,20 @@ async fn create_layer_collection_api(
     )
     .await?;
 
-    share_layer_collection_api(client, geo_engine_url, session_id, &response.id).await?;
+    share_layer_collection_api(api_config, &response.id).await?;
 
     Ok(response.id)
 }
 
 async fn find_child_collection_by_name(
-    client: &reqwest::Client,
-    geo_engine_url: &str,
-    session_id: &str,
+    api_config: &ApiConfig,
     parent_id: &LayerCollectionId,
     child_name: &str,
 ) -> Result<Option<LayerCollectionId>, anyhow::Error> {
+    let geo_engine_url = &api_config.base_path;
+    let session_id = api_config.bearer_access_token.as_deref().unwrap_or("");
+    let client = &api_config.client;
+
     let mut offset: u32 = 0;
     let limit: u32 = 20;
 
@@ -665,11 +656,13 @@ async fn find_child_collection_by_name(
 }
 
 async fn share_layer_collection_api(
-    client: &reqwest::Client,
-    geo_engine_url: &str,
-    session_id: &str,
+    api_config: &ApiConfig,
     collection_id: &LayerCollectionId,
 ) -> Result<(), anyhow::Error> {
+    let geo_engine_url = &api_config.base_path;
+    let session_id = api_config.bearer_access_token.as_deref().unwrap_or("");
+    let client = &api_config.client;
+
     let permissions = vec![
         PermissionRequest {
             resource: Resource::LayerCollection(LayerCollectionResource {
@@ -709,11 +702,13 @@ async fn share_layer_collection_api(
 }
 
 async fn share_layer_api(
-    client: &reqwest::Client,
-    geo_engine_url: &str,
-    session_id: &str,
+    api_config: &ApiConfig,
     layer_id: &LayerId,
 ) -> Result<(), anyhow::Error> {
+    let geo_engine_url = &api_config.base_path;
+    let session_id = api_config.bearer_access_token.as_deref().unwrap_or("");
+    let client = &api_config.client;
+
     let permissions = vec![
         PermissionRequest {
             resource: Resource::Layer(LayerResource {
@@ -896,41 +891,34 @@ where
 // Authentication helper
 // ---------------------------------------------------------------------------
 
-async fn login_geo_engine(
+async fn create_api_config(
     geo_engine_url: &str,
     geo_engine_email: &str,
     geo_engine_password: &str,
-) -> Result<(reqwest::Client, String), anyhow::Error> {
-    let client = reqwest::Client::new();
+) -> Result<ApiConfig, anyhow::Error> {
+    use geoengine_api_client::models;
 
-    let response = retry_http(
-        || async {
-            client
-                .post(format!("{geo_engine_url}/login"))
-                .header("Content-Type", "application/json")
-                .json(&serde_json::json!({
-                    "email": geo_engine_email,
-                    "password": geo_engine_password,
-                }))
-                .send()
-                .await
-        },
+    let config = ApiConfig {
+        base_path: geo_engine_url.to_string(),
+        ..ApiConfig::default()
+    };
+
+    let credentials = models::UserCredentials::new(
+        geo_engine_email.to_string(),
+        geo_engine_password.to_string(),
+    );
+
+    let session = retry_http(
+        || geoengine_api_client::apis::session_api::login_handler(&config, credentials.clone()),
         "Login to Geo Engine",
     )
     .await
     .context("Failed to authenticate")?;
 
-    let json = response
-        .json::<serde_json::Value>()
-        .await
-        .context("Failed to parse auth response")?;
-
-    let session_id = json["id"]
-        .as_str()
-        .context("No session id in response")?
-        .to_string();
-
-    Ok((client, session_id))
+    Ok(ApiConfig {
+        bearer_access_token: Some(session.id.to_string()),
+        ..config
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -939,10 +927,9 @@ async fn login_geo_engine(
 
 /// Create datasets that don't already exist on the Geo Engine server.
 async fn setup_datasets(
-    client: &reqwest::Client,
+    api_config: &ApiConfig,
     params: &StacHarvest,
     provider_def: &StacDataProviderDefinition,
-    session_id: &str,
 ) -> Result<Vec<(usize, StacProviderDataset)>, anyhow::Error> {
     let mut created_datasets: Vec<(usize, StacProviderDataset)> = Vec::new();
 
@@ -953,11 +940,9 @@ async fn setup_datasets(
             info!("Checking dataset '{}'", dataset_name);
         }
 
-        if !dataset_exists_api(client, &params.geo_engine_url, session_id, &dataset_name).await? {
+        if !dataset_exists_api(api_config, &dataset_name).await? {
             create_dataset_api(
-                client,
-                &params.geo_engine_url,
-                session_id,
+                api_config,
                 &dataset_name,
                 dataset,
                 &params.volume_name,
@@ -971,7 +956,7 @@ async fn setup_datasets(
 }
 
 /// Build the query parameters for the STAC items API request.
-fn build_stac_query_params(params: &StacHarvest) -> Vec<(String, String)> {
+fn build_stac_query_params(params: &StacHarvest, page_limit: usize) -> Vec<(String, String)> {
     let mut query_params: Vec<(String, String)> = Vec::new();
 
     if let Some(bbox) = &params.bbox
@@ -994,9 +979,7 @@ fn build_stac_query_params(params: &StacHarvest) -> Vec<(String, String)> {
         ));
     }
 
-    if let Some(limit) = params.limit {
-        query_params.push(("limit".to_string(), limit.to_string()));
-    }
+    query_params.push(("limit".to_string(), page_limit.to_string()));
 
     if params.filter_item_fields {
         query_params.push((
@@ -1090,11 +1073,14 @@ async fn process_item_stream(
 
 /// Upload collected tiles to the Geo Engine server in batches.
 async fn upload_tiles_to_datasets(
-    client: &reqwest::Client,
+    api_config: &ApiConfig,
     params: &StacHarvest,
-    session_id: &str,
     tiles_by_dataset: &HashMap<String, Vec<AddDatasetTile>>,
 ) -> Result<(), anyhow::Error> {
+    let geo_engine_url = &api_config.base_path;
+    let session_id = api_config.bearer_access_token.as_deref().unwrap_or("");
+    let client = &api_config.client;
+
     for (dataset_name, tiles) in tiles_by_dataset {
         if tiles.is_empty() {
             continue;
@@ -1110,8 +1096,7 @@ async fn upload_tiles_to_datasets(
                 || async {
                     client
                         .post(format!(
-                            "{}/dataset/{}/tiles",
-                            params.geo_engine_url, dataset_name
+                            "{geo_engine_url}/dataset/{dataset_name}/tiles",
                         ))
                         .header("Content-Type", "application/json")
                         .header("Authorization", format!("Bearer {session_id}"))
@@ -1283,10 +1268,12 @@ mod tests {
 
     #[test]
     fn test_process_harvest_item_produces_correct_tiles() {
-        let mapping: StacDataProviderDefinition = serde_json::from_str(include_str!(
-            "../../../../test_data/stac_responses/expected-mapping-code-de.json"
-        ))
-        .expect("valid mapping fixture");
+        let api_mapping: crate::api::model::services::StacDataProviderDefinition =
+            serde_json::from_str(include_str!(
+                "../../../../test_data/stac_responses/expected-mapping-code-de.json"
+            ))
+            .expect("valid mapping fixture");
+        let mapping: StacDataProviderDefinition = api_mapping.into();
 
         let items: stac::ItemCollection = serde_json::from_str(include_str!(
             "../../../../test_data/stac_responses/items/code-de-harvest-test.json"
@@ -1298,7 +1285,6 @@ mod tests {
             time_start: None,
             time_end: None,
             bbox: None,
-            limit: None,
             geo_engine_url: String::new(),
             geo_engine_email: String::new(),
             geo_engine_password: String::new(),
@@ -1374,10 +1360,12 @@ mod tests {
 
     #[test]
     fn test_process_harvest_landsat_item_produces_correct_tiles() {
-        let mapping: StacDataProviderDefinition = serde_json::from_str(include_str!(
-            "../../../../test_data/stac_responses/expected-mapping-landsat-c2-l1.json"
-        ))
-        .expect("valid Landsat mapping fixture");
+        let api_mapping: crate::api::model::services::StacDataProviderDefinition =
+            serde_json::from_str(include_str!(
+                "../../../../test_data/stac_responses/expected-mapping-landsat-c2-l1.json"
+            ))
+            .expect("valid Landsat mapping fixture");
+        let mapping: StacDataProviderDefinition = api_mapping.into();
 
         let items: stac::ItemCollection = serde_json::from_str(include_str!(
             "../../../../test_data/stac_responses/items/landsat-c2-l1-harvest-test.json"
@@ -1389,7 +1377,6 @@ mod tests {
             time_start: None,
             time_end: None,
             bbox: None,
-            limit: None,
             geo_engine_url: String::new(),
             geo_engine_email: String::new(),
             geo_engine_password: String::new(),

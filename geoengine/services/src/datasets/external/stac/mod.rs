@@ -33,7 +33,7 @@ pub struct StacDataProviderDefinition {
     pub s3_config: Option<StacProviderS3Config>,
     pub time_dimension: TimeDimension, // TODO: should this be on dataset level?
     pub datasets: Vec<StacProviderDataset>,
-    // TODO: page limit(?)
+    pub page_limit: i64,
     /// Timeout in seconds for outgoing STAC API HTTP requests.
     #[serde(default = "default_query_timeout")]
     pub query_timeout_secs: i64,
@@ -94,6 +94,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
             self.s3_config,
             self.time_dimension,
             self.datasets,
+            self.page_limit,
             self.query_timeout_secs,
         )))
     }
@@ -150,6 +151,7 @@ pub struct StacDataProvider {
     s3_config: Option<StacProviderS3Config>,
     time_dimension: TimeDimension,
     datasets: Vec<StacProviderDataset>,
+    page_limit: i64,
     /// Shared HTTP client, reused across all requests for this provider.
     client: reqwest::Client,
     /// In-memory cache for STAC query results (tile files), keyed by dataset
@@ -168,6 +170,7 @@ impl StacDataProvider {
         s3_config: Option<StacProviderS3Config>,
         time_dimension: TimeDimension,
         datasets: Vec<StacProviderDataset>,
+        page_limit: i64,
         query_timeout_secs: i64,
     ) -> Self {
         let client = reqwest::Client::builder()
@@ -183,6 +186,7 @@ impl StacDataProvider {
             s3_config,
             time_dimension,
             datasets,
+            page_limit,
             client,
             query_cache: Arc::new(StacQueryCache::default()),
         }

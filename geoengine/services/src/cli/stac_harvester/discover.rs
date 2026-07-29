@@ -54,6 +54,10 @@ pub struct StacDiscoverMapping {
     #[arg(long, default_value_t = 5)]
     pub sample_items: usize,
 
+    /// Page size for querying items from the STAC server (default: 100)
+    #[arg(long, default_value_t = 100)]
+    pub page_limit: usize,
+
     /// Output file for the mapping JSON (default: stdout)
     #[arg(long)]
     pub output: Option<PathBuf>,
@@ -183,10 +187,13 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         s3_config,
         time_dimension,
         datasets,
+        page_limit: params.page_limit as i64,
     };
 
-    let json = serde_json::to_string_pretty(&provider_def)
-        .context("Failed to serialize mapping to JSON")?;
+    let json = serde_json::to_string_pretty(
+        &crate::api::model::services::StacDataProviderDefinition::from(provider_def),
+    )
+    .context("Failed to serialize mapping to JSON")?;
 
     if let Some(output_path) = &params.output {
         std::fs::write(output_path, &json)
@@ -218,7 +225,7 @@ fn scan_collection_bands(
     let mut dataset_bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> = HashMap::new();
 
     for (_asset_key, asset) in &collection.item_assets {
-        if !matches_selected_file_types_static(asset.r#type.as_deref(), file_types) {
+        if !matches_selected_file_types(asset.r#type.as_deref(), file_types) {
             continue;
         }
 
@@ -233,11 +240,13 @@ fn scan_collection_bands(
 }
 
 /// Build query parameters and fetch sample items from the STAC items API.
+/// Follows pagination links until `sample_items` items are collected or no
+/// more pages are available.
 async fn fetch_sample_items(
     client: &reqwest::Client,
     params: &StacDiscoverMapping,
 ) -> Result<stac::ItemCollection, anyhow::Error> {
-    let items_url = format!(
+    let base_url = format!(
         "{}/collections/{}/items",
         params.stac_url.trim_end_matches('/'),
         params.stac_collection
@@ -259,11 +268,42 @@ async fn fetch_sample_items(
         ));
     }
 
-    query_params.push(("limit".to_string(), format!("{}", params.sample_items)));
+    query_params.push(("limit".to_string(), params.page_limit.to_string()));
 
-    stac_api_request_with_params(client, &items_url, &query_params)
-        .await
-        .context("Failed to fetch sample items")
+    let mut all_items = Vec::new();
+    let mut next_url: Option<String> = None;
+
+    loop {
+        let page = if let Some(ref url) = next_url {
+            stac_api_request_parse::<stac::ItemCollection>(client, url)
+                .await
+                .context("Failed to fetch sample items page")?
+        } else {
+            stac_api_request_with_params(client, &base_url, &query_params)
+                .await
+                .context("Failed to fetch sample items")?
+        };
+
+        all_items.extend(page.items);
+
+        if all_items.len() >= params.sample_items {
+            all_items.truncate(params.sample_items);
+            break;
+        }
+
+        // Follow the `next` link if available
+        next_url = page
+            .links
+            .iter()
+            .find(|link| link.rel == "next")
+            .map(|link| link.href.clone());
+
+        if next_url.is_none() {
+            break;
+        }
+    }
+
+    Ok(all_items.into())
 }
 
 /// Process sample items to discover unique datasets (by EPSG, data type, resolution)
@@ -283,7 +323,7 @@ fn process_sample_assets(
         let item_epsg = common::epsg_code_from_item(item, common::StacExtensionMajorVersion::V2);
 
         for (asset_key, asset) in &item.assets {
-            if !matches_selected_file_types_static(asset.r#type.as_deref(), file_types) {
+            if !matches_selected_file_types(asset.r#type.as_deref(), file_types) {
                 continue;
             }
 
@@ -519,18 +559,26 @@ fn projection_grid_bounds(gt: GeoTransform, epsg: u32) -> Option<GridBoundingBox
     .ok()
 }
 
-/// Return the projected extent `(min_x, max_x, min_y, max_y)` for a given EPSG code.
-/// Known extents for UTM zones; other CRS types return `None`.
+/// Return the projected extent `(min_x, max_x, min_y, max_y)` for a given EPSG code
+/// by querying the CRS's area of use via PROJ and projecting it into the CRS's
+/// own coordinate system.
 fn projection_extent(epsg: u32) -> Option<(f64, f64, f64, f64)> {
-    // UTM northern hemisphere zones EPSG:32601 – 32660
-    if (32601..=32660).contains(&epsg) {
-        return Some((0.0, 1_000_000.0, 0.0, 10_000_000.0));
-    }
-    // UTM southern hemisphere zones EPSG:32701 – 32760
-    if (32701..=32760).contains(&epsg) {
-        return Some((0.0, 1_000_000.0, 0.0, 10_000_000.0));
-    }
-    None
+    use proj::Proj;
+
+    let proj_crs = Proj::new(&format!("EPSG:{epsg}")).ok()?;
+
+    // Get area of use in degrees (WGS84)
+    let (area, _name) = proj_crs.area_of_use().ok()?;
+    let area = area?;
+
+    // Project the WGS84 bounding box into the target CRS
+    let pipeline = Proj::new_known_crs("EPSG:4326", &format!("EPSG:{epsg}"), None).ok()?;
+    let bounds = pipeline
+        .transform_bounds(area.west, area.south, area.east, area.north, 21)
+        .ok()?;
+
+    // transform_bounds returns [west, south, east, north] in the target CRS
+    Some((bounds[0], bounds[2], bounds[1], bounds[3]))
 }
 
 /// A key that uniquely identifies a Geo Engine dataset derived from STAC assets.
@@ -687,7 +735,7 @@ fn scan_collection_item_asset_v1_1_0(
     Ok(Some(dataset_bands))
 }
 
-fn matches_selected_file_types_static(
+fn matches_selected_file_types(
     media_type: Option<&str>,
     file_types: &[ImportFileType],
 ) -> bool {
@@ -850,6 +898,7 @@ mod tests {
             verbose: false,
             time_granularity: "days".to_string(),
             time_step: 1,
+            page_limit: 100,
         };
 
         discover_mapping(params)
@@ -863,7 +912,7 @@ mod tests {
         let mut output_json: serde_json::Value =
             serde_json::from_str(&output_content).expect("output should be valid JSON");
 
-        // Normalize dynamic fields before comparison
+        // Normalize variable fields before comparison
         let output_obj = output_json.as_object_mut().unwrap();
         output_obj.remove("id");
         output_obj.insert(
@@ -960,6 +1009,7 @@ mod tests {
             verbose: false,
             time_granularity: "days".to_string(),
             time_step: 1,
+            page_limit: 100,
         };
 
         discover_mapping(params)

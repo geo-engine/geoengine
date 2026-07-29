@@ -37,6 +37,7 @@ struct StacMultiBandMetaData {
     s3_config: Option<StacProviderS3Config>,
     time_dimension: TimeDimension,
     dataset: StacProviderDataset,
+    page_limit: i64,
     client: reqwest::Client,
     /// Shared query-result cache from the provider.
     query_cache: Arc<StacQueryCache>,
@@ -371,7 +372,7 @@ impl StacMultiBandMetaData {
 						.to_datetime_string_with_millis(),
 				),
 			),
-			("limit".to_owned(), "100".to_owned()),
+			("limit".to_owned(), self.page_limit.to_string()),
 			(
 				"fields".to_owned(),
 				"stac_version,properties.datetime,properties.updated,assets.*.title,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.proj:code,assets.*.proj:shape,assets.*.proj:transform".to_owned(),
@@ -796,6 +797,7 @@ impl
             s3_config: self.s3_config.clone(),
             time_dimension: self.time_dimension,
             dataset: dataset.clone(),
+            page_limit: self.page_limit,
             client: self.client.clone(),
             query_cache: self.query_cache.clone(),
         }))
@@ -868,6 +870,7 @@ mod tests {
                     },
                 ],
             }],
+            page_limit: 100,
             query_timeout_secs: 60,
         }
     }
@@ -1104,6 +1107,7 @@ mod tests {
                     ],
                 },
             ],
+            page_limit: 100,
             query_timeout_secs: 60,
         };
 
@@ -1150,12 +1154,15 @@ mod tests {
     /// harvester and the runtime provider.
     #[crate::ge_context::test]
     async fn mapping_from_discover_works_as_stacdataprovider(app_ctx: PostgresContext<NoTls>) {
-        // Load the discover-generated mapping JSON
-        let mut provider_def: crate::datasets::external::stac::StacDataProviderDefinition =
+        // Load the discover-generated mapping JSON via the API layer (camelCase)
+        let api_def: crate::api::model::services::StacDataProviderDefinition =
             serde_json::from_str(include_str!(
                 "../../../../../test_data/stac_responses/expected-mapping-code-de.json"
             ))
             .expect("valid discover mapping fixture");
+
+        let mut provider_def: crate::datasets::external::stac::StacDataProviderDefinition =
+            api_def.into();
 
         // Use a placeholder URL (no actual HTTP calls needed for meta_data registration)
         provider_def.api_url = "https://stac.test/v1".to_owned();

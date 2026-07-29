@@ -1122,6 +1122,7 @@ pub struct StacDataProviderDefinition {
     pub s3_config: Option<StacProviderS3Config>,
     pub time_dimension: TimeDimension,
     pub datasets: Vec<StacProviderDataset>,
+    pub page_limit: i64,
     /// Timeout in seconds for outgoing STAC API HTTP requests.
     #[serde(default = "default_query_timeout")]
     pub query_timeout_secs: i64,
@@ -1145,6 +1146,7 @@ impl From<StacDataProviderDefinition>
             s3_config: value.s3_config.map(Into::into),
             time_dimension: api_time_dimension_to_datatypes(value.time_dimension),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
+            page_limit: value.page_limit,
             query_timeout_secs: value.query_timeout_secs,
         }
     }
@@ -1165,6 +1167,7 @@ impl From<crate::datasets::external::stac::StacDataProviderDefinition>
             s3_config: value.s3_config.map(Into::into),
             time_dimension: datatypes_time_dimension_to_api(value.time_dimension),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
+            page_limit: value.page_limit,
             query_timeout_secs: value.query_timeout_secs,
         }
     }
