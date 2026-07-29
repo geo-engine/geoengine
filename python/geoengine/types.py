@@ -1750,9 +1750,11 @@ class GeoTransform:
         """Initialize a new `GeoTransform`"""
 
         # Note: We use the GeoTransform in API to adress two types in the backend.
-        # The first type is the backend GeoTransform. In this case, the x_pixel_size is always positive and the y_pixel_size is always negative.
-        # The second type is the GdalGeoTransform. In this case, the x_pixel_size is always positive and the y_pixel_size is in most cases negative.
-        #  BUT there are cases where y_pixel_size is positive. Therefore, we only check that x_pixel_size is positive and y_pixel_size is not zero.
+        # The first type is the backend GeoTransform. In this case, the x_pixel_size is always positive \
+        # and the y_pixel_size is always negative.
+        # The second type is the GdalGeoTransform. In this case, the x_pixel_size is always positive \
+        # and the y_pixel_size is in most cases negative.
+        #  BUT there are cases where y_pixel_size is positive. Therefore, we only check that y_pixel_size is not zero.
         assert x_pixel_size > 0, "In Geo Engine, x_pixel_size is always positive."
         assert y_pixel_size != 0, "y_pixel_size must not be zero."
 
