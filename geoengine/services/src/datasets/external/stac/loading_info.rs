@@ -172,7 +172,6 @@ impl
         let time_interval =
             stac_query_time_interval(query.query_rectangle.time_interval(), self.time_dimension)?;
 
-        // --- Cache lookup -------------------------------------------------
         if let Some((cached_time_steps, cached_files)) = self
             .query_cache
             .lookup(&self.dataset, &spatial_bounds, time_interval)
@@ -190,7 +189,6 @@ impl
                 CacheHint::default(),
             ));
         }
-        // ------------------------------------------------------------------
 
         let query_params = self.create_stac_query_params(&query, time_interval)?;
 
@@ -240,7 +238,6 @@ impl
                 .then(a.z_index.cmp(&b.z_index))
         });
 
-        // --- Cache store --------------------------------------------------
         self.query_cache
             .insert(
                 &self.dataset,
@@ -250,7 +247,6 @@ impl
                 files.clone(),
             )
             .await;
-        // ------------------------------------------------------------------
 
         Ok(MultiBandGdalLoadingInfo::new(
             time_steps,
