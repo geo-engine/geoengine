@@ -1,4 +1,5 @@
 {
+  "type": "StacProviderDefinition",
   "name": "sentinel-2-l2a from STAC",
   "id": "00000000-0000-0000-0000-000000000000",
   "description": "Auto-discovered mapping for STAC collection 'sentinel-2-l2a' at https://stac.test/v1",
@@ -7,19 +8,18 @@
   "collectionName": "sentinel-2-l2a",
   "s3Config": null,
   "timeDimension": {
-    "regular": {
-      "origin": 0,
-      "step": { "granularity": "days", "step": 1 }
-    }
+    "type": "regular",
+    "origin": 0,
+    "step": { "granularity": "days", "step": 1 }
   },
   "datasets": [
     {
       "name": "sentinel-2-l2a EPSG:32632 U16 10m",
       "description": "Auto-discovered from STAC collection 'sentinel-2-l2a'",
-      "data_type": "U16",
+      "dataType": "U16",
       "resolution": { "x": 10.0, "y": 10.0 },
       "projection": "EPSG:32632",
-      "spatial_grid": {
+      "spatialGrid": {
         "spatialGrid": {
           "geoTransform": {
             "originCoordinate": { "x": 399960.0, "y": 5700000.0 },
@@ -27,26 +27,26 @@
             "yPixelSize": -10.0
           },
           "gridBounds": {
-            "min": [0, 0],
-            "max": [10979, 10979]
+            "topLeftIdx": { "yIdx": 0, "xIdx": 0 },
+            "bottomRightIdx": { "yIdx": 10979, "xIdx": 10979 }
           }
         },
-        "state": "source"
+        "descriptor": "source"
       },
       "bands": [
-        { "asset_title": "Blue (band 2) - 10m", "band_name": null },
-        { "asset_title": "Green (band 3) - 10m", "band_name": null },
-        { "asset_title": "NIR 1 (band 8) - 10m", "band_name": null },
-        { "asset_title": "Red (band 4) - 10m", "band_name": null }
+        { "assetTitle": "Blue (band 2) - 10m", "bandName": null },
+        { "assetTitle": "Green (band 3) - 10m", "bandName": null },
+        { "assetTitle": "NIR 1 (band 8) - 10m", "bandName": null },
+        { "assetTitle": "Red (band 4) - 10m", "bandName": null }
       ]
     },
     {
       "name": "sentinel-2-l2a EPSG:32632 U16 20m",
       "description": "Auto-discovered from STAC collection 'sentinel-2-l2a'",
-      "data_type": "U16",
+      "dataType": "U16",
       "resolution": { "x": 20.0, "y": 20.0 },
       "projection": "EPSG:32632",
-      "spatial_grid": {
+      "spatialGrid": {
         "spatialGrid": {
           "geoTransform": {
             "originCoordinate": { "x": 399960.0, "y": 5700000.0 },
@@ -54,16 +54,17 @@
             "yPixelSize": -20.0
           },
           "gridBounds": {
-            "min": [0, 0],
-            "max": [5489, 5489]
+            "topLeftIdx": { "yIdx": 0, "xIdx": 0 },
+            "bottomRightIdx": { "yIdx": 5489, "xIdx": 5489 }
           }
         },
-        "state": "source"
+        "descriptor": "source"
       },
       "bands": [
-        { "asset_title": "SWIR 1 (band 11) - 20m", "band_name": null },
-        { "asset_title": "SWIR 2 (band 12) - 20m", "band_name": null }
+        { "assetTitle": "SWIR 1 (band 11) - 20m", "bandName": null },
+        { "assetTitle": "SWIR 2 (band 12) - 20m", "bandName": null }
       ]
     }
-  ]
+  ],
+  "pageLimit": 100
 }
