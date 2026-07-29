@@ -83,7 +83,7 @@ impl StacQueryCache {
     ///
     /// Returns `Some((time_steps, tile_files))` with only those elements that
     /// fall within the queried bounds, or `None` on a cache miss.
-    #[tracing::instrument(skip(self, dataset), fields(
+    #[tracing::instrument(level = "trace", skip(self, dataset), fields(
         dataset = %dataset.name,
         spatial_bounds = ?spatial_bounds,
         time_interval = ?time_interval,
@@ -204,7 +204,7 @@ impl StacQueryCache {
     ///    the new result is evicted (the new, larger result supersedes it).
     /// 3. LRU entries are evicted until the total byte size stays within
     ///    `max_bytes`.
-    #[tracing::instrument(skip(self, dataset, time_steps, tile_files), fields(
+    #[tracing::instrument(level = "trace", skip(self, dataset, time_steps, tile_files), fields(
         dataset = %dataset.name,
         spatial_bounds = ?spatial_bounds,
         time_interval = ?time_interval,
