@@ -1,7 +1,7 @@
 use super::StacProviderDataset;
 use crate::config::{StacCache, get_config_element};
 use geoengine_datatypes::primitives::{SpatialPartition2D, TimeInterval};
-use geoengine_operators::source::TileFile;
+use geoengine_operators::source::{TileFile, gdal_worker_process::GdalMetadataMapping};
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tracing::trace;
@@ -22,15 +22,15 @@ use tracing::trace;
 #[derive(Debug)]
 pub struct StacQueryCache {
     inner: Mutex<StacQueryCacheInner>,
-    max_tile_files: usize,
+    max_bytes: usize,
     ttl: Duration,
 }
 
 struct StacQueryCacheInner {
     /// Per-dataset list of cache entries.
     by_dataset: Vec<DatasetCacheEntries>,
-    /// Total number of `TileFile` instances currently held in the cache.
-    total_tile_files: usize,
+    /// Total estimated byte size of all `CacheEntry` instances currently held in the cache.
+    total_bytes: usize,
 }
 
 struct DatasetCacheEntries {
@@ -51,7 +51,7 @@ impl std::fmt::Debug for StacQueryCacheInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("StacQueryCacheInner")
             .field("datasets", &self.by_dataset.len())
-            .field("total_tile_files", &self.total_tile_files)
+            .field("total_bytes", &self.total_bytes)
             .finish()
     }
 }
@@ -60,18 +60,21 @@ impl Default for StacQueryCache {
     fn default() -> Self {
         let config = get_config_element::<StacCache>()
             .expect("StacCache config must be present in Settings-default.toml");
-        Self::new(config.max_tile_files, Duration::from_secs(config.ttl_secs))
+        Self::new(
+            config.size_in_mb * 1024 * 1024,
+            Duration::from_secs(config.ttl_secs),
+        )
     }
 }
 
 impl StacQueryCache {
-    pub fn new(max_tile_files: usize, ttl: Duration) -> Self {
+    pub fn new(max_bytes: usize, ttl: Duration) -> Self {
         Self {
             inner: Mutex::new(StacQueryCacheInner {
                 by_dataset: Vec::new(),
-                total_tile_files: 0,
+                total_bytes: 0,
             }),
-            max_tile_files,
+            max_bytes,
             ttl,
         }
     }
@@ -155,14 +158,62 @@ impl StacQueryCache {
         None
     }
 
+    /// Estimated byte size of a single `CacheEntry`, including its heap allocations.
+    fn entry_bytes(entry: &CacheEntry) -> usize {
+        let mut total = std::mem::size_of::<CacheEntry>();
+
+        // time_steps vec heap
+        total += entry.time_steps.len() * std::mem::size_of::<TimeInterval>();
+
+        // tile_files vec heap
+        for tf in &entry.tile_files {
+            total += std::mem::size_of::<TileFile>();
+
+            let params = &tf.params;
+            // PathBuf heap
+            total += params.file_path.as_os_str().len();
+
+            // properties_mapping heap
+            if let Some(ref mappings) = params.properties_mapping {
+                for m in mappings {
+                    total += std::mem::size_of::<GdalMetadataMapping>();
+                    if let Some(ref domain) = m.source_key.domain {
+                        total += domain.len();
+                    }
+                    total += m.source_key.key.len();
+                    if let Some(ref domain) = m.target_key.domain {
+                        total += domain.len();
+                    }
+                    total += m.target_key.key.len();
+                }
+            }
+
+            // gdal_open_options heap
+            if let Some(ref opts) = params.gdal_open_options {
+                for opt in opts {
+                    total += opt.len();
+                }
+            }
+
+            // gdal_config_options heap
+            if let Some(ref opts) = params.gdal_config_options {
+                for (k, v) in opts {
+                    total += k.len() + v.len();
+                }
+            }
+        }
+
+        total
+    }
+
     /// Store a new query result in the cache.
     ///
     /// Before inserting:
     /// 1. Expired entries are removed.
     /// 2. Any cached entry for the same dataset that is *fully contained* by
     ///    the new result is evicted (the new, larger result supersedes it).
-    /// 3. LRU entries are evicted until the total tile-file count stays within
-    ///    `max_tile_files`.
+    /// 3. LRU entries are evicted until the total byte size stays within
+    ///    `max_bytes`.
     pub async fn insert(
         &self,
         dataset: &StacProviderDataset,
@@ -171,18 +222,27 @@ impl StacQueryCache {
         time_steps: Vec<TimeInterval>,
         tile_files: Vec<TileFile>,
     ) {
-        // Count empty entries as 1 so they are not exempt from LRU eviction.
-        let new_count = std::cmp::max(1, tile_files.len());
+        let new_entry = CacheEntry {
+            spatial_bounds,
+            time_interval,
+            time_steps,
+            tile_files,
+            inserted_at: Instant::now(),
+            last_used: Instant::now(),
+        };
+        let new_bytes = Self::entry_bytes(&new_entry);
+
         let mut inner = self.inner.lock().await;
 
         Self::evict_expired(&mut inner, self.ttl);
 
         trace!(
             dataset = %dataset.name,
-            spatial_bounds = ?spatial_bounds,
-            time_interval = ?time_interval,
-            time_steps = time_steps.len(),
-            tile_files = new_count,
+            spatial_bounds = ?new_entry.spatial_bounds,
+            time_interval = ?new_entry.time_interval,
+            time_steps = new_entry.time_steps.len(),
+            tile_files = new_entry.tile_files.len(),
+            new_bytes,
             "STAC cache insert"
         );
 
@@ -191,55 +251,57 @@ impl StacQueryCache {
         // Evict all cached entries that are fully contained by the new result.
         let mut freed = 0usize;
         dataset_entries.retain(|entry| {
-            let evict = spatial_bounds.contains(&entry.spatial_bounds)
-                && time_interval.contains(&entry.time_interval);
+            let evict = new_entry.spatial_bounds.contains(&entry.spatial_bounds)
+                && new_entry.time_interval.contains(&entry.time_interval);
 
             if evict {
+                let entry_bytes = Self::entry_bytes(entry);
                 trace!(
                     dataset = %dataset.name,
                     entry_spatial_bounds = ?entry.spatial_bounds,
                     entry_time_interval = ?entry.time_interval,
                     entry_time_steps = entry.time_steps.len(),
                     entry_tile_files = entry.tile_files.len(),
+                    entry_bytes,
                     "STAC cache evict superseded entry"
                 );
-                freed += entry.tile_files.len();
+                freed += entry_bytes;
                 false
             } else {
                 true
             }
         });
-        inner.total_tile_files -= freed;
+        inner.total_bytes -= freed;
 
         // Enforce the memory cap by evicting LRU entries across all datasets.
-        // (`new_count` is at least 1 even for empty entries, see above.)
-        while inner.total_tile_files + new_count > self.max_tile_files {
+        while inner.total_bytes + new_bytes > self.max_bytes {
             if !Self::evict_lru_one(&mut inner) {
                 break;
             }
         }
 
-        let now = Instant::now();
-        let inserted_entry = CacheEntry {
-            spatial_bounds,
-            time_interval,
-            time_steps,
-            tile_files,
-            inserted_at: now,
-            last_used: now,
-        };
+        if inner.total_bytes + new_bytes > self.max_bytes {
+            trace!(
+                dataset = %dataset.name,
+                new_bytes,
+                max_bytes = self.max_bytes,
+                "STAC cache insert skipped: entry exceeds cache limit"
+            );
+            return;
+        }
+
         trace!(
             dataset = %dataset.name,
-            inserted_spatial_bounds = ?inserted_entry.spatial_bounds,
-            inserted_time_interval = ?inserted_entry.time_interval,
-            inserted_time_steps = inserted_entry.time_steps.len(),
-            inserted_tile_files = inserted_entry.tile_files.len(),
-            total_tile_files = inner.total_tile_files + inserted_entry.tile_files.len(),
+            inserted_spatial_bounds = ?new_entry.spatial_bounds,
+            inserted_time_interval = ?new_entry.time_interval,
+            inserted_time_steps = new_entry.time_steps.len(),
+            inserted_tile_files = new_entry.tile_files.len(),
+            new_bytes,
+            total_bytes = inner.total_bytes + new_bytes,
             "STAC cache stored entry"
         );
-        let actual_new_tile_files = inserted_entry.tile_files.len();
-        Self::dataset_entries_mut(&mut inner, dataset).push(inserted_entry);
-        inner.total_tile_files += actual_new_tile_files;
+        Self::dataset_entries_mut(&mut inner, dataset).push(new_entry);
+        inner.total_bytes += new_bytes;
     }
 
     fn dataset_entries_mut<'a>(
@@ -267,27 +329,29 @@ impl StacQueryCache {
             .as_mut()
     }
 
-    /// Remove all entries older than `ttl`, updating the tile-file count.
+    /// Remove all entries older than `ttl`, updating the byte count.
     fn evict_expired(inner: &mut StacQueryCacheInner, ttl: Duration) {
         let mut freed = 0usize;
         for dataset_entries in &mut inner.by_dataset {
             dataset_entries.entries.retain(|e| {
                 if e.inserted_at.elapsed() > ttl {
+                    let entry_bytes = Self::entry_bytes(e);
                     trace!(
                         dataset = %dataset_entries.dataset.name,
                         expired_spatial_bounds = ?e.spatial_bounds,
                         expired_time_interval = ?e.time_interval,
                         expired_tile_files = e.tile_files.len(),
+                        entry_bytes,
                         "STAC cache evict expired entry"
                     );
-                    freed += e.tile_files.len();
+                    freed += entry_bytes;
                     false
                 } else {
                     true
                 }
             });
         }
-        inner.total_tile_files -= freed;
+        inner.total_bytes -= freed;
     }
 
     /// Remove the single least-recently-used entry across all datasets.
@@ -311,14 +375,16 @@ impl StacQueryCache {
             && let Some(dataset_entries) = inner.by_dataset.get_mut(dataset_idx)
         {
             let removed = dataset_entries.entries.swap_remove(entry_idx);
+            let removed_bytes = Self::entry_bytes(&removed);
             trace!(
                 dataset = %dataset_entries.dataset.name,
                 evicted_spatial_bounds = ?removed.spatial_bounds,
                 evicted_time_interval = ?removed.time_interval,
                 evicted_tile_files = removed.tile_files.len(),
+                removed_bytes,
                 "STAC cache evict LRU entry"
             );
-            inner.total_tile_files -= removed.tile_files.len();
+            inner.total_bytes -= removed_bytes;
             return true;
         }
         false
@@ -391,7 +457,7 @@ mod tests {
 
     #[tokio::test]
     async fn lookup_uses_dataset_key_and_containment() {
-        let cache = StacQueryCache::new(100, Duration::from_secs(60));
+        let cache = StacQueryCache::new(100 * 1024 * 1024, Duration::from_secs(60));
         let a = dataset("A");
         let b = dataset("B");
 
@@ -418,7 +484,7 @@ mod tests {
 
     #[tokio::test]
     async fn larger_insert_evicts_contained_entry() {
-        let cache = StacQueryCache::new(100, Duration::from_secs(60));
+        let cache = StacQueryCache::new(100 * 1024 * 1024, Duration::from_secs(60));
         let a = dataset("A");
 
         cache
@@ -449,9 +515,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn enforces_lru_tile_file_limit() {
-        let cache = StacQueryCache::new(1, Duration::from_secs(60));
+    async fn enforces_lru_byte_limit() {
         let a = dataset("A");
+
+        // Compute the byte size of a single entry so we can set a limit between 1 and 2 entries.
+        let sample = CacheEntry {
+            spatial_bounds: bounds(0.0, 0.0, 10.0, 10.0),
+            time_interval: time(0, 10),
+            time_steps: vec![time(0, 10)],
+            tile_files: vec![tile_file(time(0, 10), bounds(0.0, 0.0, 10.0, 10.0))],
+            inserted_at: Instant::now(),
+            last_used: Instant::now(),
+        };
+        let per_entry = StacQueryCache::entry_bytes(&sample);
+
+        // Create a cache that fits exactly one entry (but not two).
+        let cache = StacQueryCache::new(per_entry, Duration::from_secs(60));
 
         cache
             .insert(
@@ -463,6 +542,7 @@ mod tests {
             )
             .await;
 
+        // The second insert exceeds the limit and evicts the first.
         cache
             .insert(
                 &a,
@@ -486,7 +566,7 @@ mod tests {
 
     #[tokio::test]
     async fn expires_entries_after_ttl() {
-        let cache = StacQueryCache::new(10, Duration::from_millis(1));
+        let cache = StacQueryCache::new(10 * 1024 * 1024, Duration::from_millis(1));
         let a = dataset("A");
 
         cache

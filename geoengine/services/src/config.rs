@@ -581,11 +581,19 @@ impl ConfigElement for Cache {
 
 #[derive(Debug, Deserialize, Clone, Copy)]
 pub struct StacCache {
-    /// Maximum total number of `TileFile` entries held in the STAC query cache
-    /// across all datasets.
-    pub max_tile_files: usize,
+    /// Maximum size of the STAC query cache in MB across all datasets.
+    pub size_in_mb: usize,
     /// TTL in seconds for STAC query cache entries.
     pub ttl_secs: u64,
+}
+
+impl TestDefault for StacCache {
+    fn test_default() -> Self {
+        Self {
+            size_in_mb: 1_000, // 1 GB
+            ttl_secs: 3_600,
+        }
+    }
 }
 
 impl ConfigElement for StacCache {
