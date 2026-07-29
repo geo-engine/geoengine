@@ -13,6 +13,9 @@ struct CachedDataConnectorEntry {
     last_used: Instant,
 }
 
+/// A registry that caches data connectors (DataProvider instances) for reuse.
+/// This avoids expensive database queries and connector construction on every request.
+/// It also allows data connectors to keep state (e.g. cached metadata) across requests, improving performance.
 #[derive(Debug)]
 pub struct DataConnectorRegistry {
     entries: Mutex<HashMap<DataProviderId, CachedDataConnectorEntry>>,

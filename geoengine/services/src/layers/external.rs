@@ -83,6 +83,7 @@ pub trait DataProvider: LayerCollectionProvider
     async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput>;
 }
 
+/// A wrapper around a `DataProvider` that allows it to be shared across threads and tasks.
 #[derive(Debug, Clone)]
 pub struct SharedDataConnector(pub Arc<dyn DataProvider>);
 
