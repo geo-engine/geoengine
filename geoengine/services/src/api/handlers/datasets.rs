@@ -1726,6 +1726,7 @@ mod tests {
             test::raster_tile_from_file,
         },
     };
+    use httptest::{Expectation, Server, all_of, matchers::request, responders::status_code};
     use serde_json::{Value, json};
     use tokio_postgres::NoTls;
     use uuid::Uuid;
@@ -3748,25 +3749,65 @@ mod tests {
         Ok(())
     }
 
-    /// Creates NDVI tiles with absolute file paths, suitable for use with `DataPath::External`
-    /// (where paths are not resolved against any base path).
-    fn create_ndvi_tiles_absolute() -> Vec<AddDatasetTile> {
+    /// Registers tile files on a mock HTTP server and creates tiles with `/vsicurl/` paths.
+    /// The mock server serves the actual test data files so GDAL can read them via `/vsicurl/`.
+    fn create_ndvi_tiles_vsicurl(server: &Server) -> Vec<AddDatasetTile> {
         let mut tiles = create_ndvi_tiles();
-        let test_data_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .canonicalize()
-            .expect("should resolve during testing")
-            .parent()
-            .expect("should have parent")
-            .join("test_data/");
+
         for tile in &mut tiles {
-            tile.params.file_path = test_data_root.join(&tile.params.file_path);
+            let file_path_str = tile.params.file_path.to_string_lossy().to_string();
+
+            // Read the actual tile file from the test data directory
+            let local_path: PathBuf = test_data!(&file_path_str).into();
+            let data = std::fs::read(&local_path).unwrap();
+            let content_length = data.len();
+
+            let server_path = format!("/{file_path_str}");
+
+            // HEAD request (GDAL uses this to discover file size)
+            server.expect(
+                Expectation::matching(all_of![
+                    request::method("HEAD"),
+                    request::path(server_path.clone())
+                ])
+                .times(0..)
+                .respond_with(
+                    status_code(200)
+                        .append_header("Content-Length", content_length.to_string())
+                        .append_header("Accept-Ranges", "bytes"),
+                ),
+            );
+
+            // GET request (GDAL fetches tile data via /vsicurl/)
+            server.expect(
+                Expectation::matching(all_of![request::method("GET"), request::path(server_path)])
+                    .times(0..)
+                    .respond_with(
+                        status_code(200)
+                            .append_header("Content-Type", "image/tiff")
+                            .append_header("Content-Length", content_length.to_string())
+                            .body(data),
+                    ),
+            );
+
+            // Convert to a /vsicurl/ URL that passes validate_file_path
+            let url = server.url_str(&format!("/{file_path_str}"));
+            tile.params.file_path = format!("/vsicurl{url}").into();
         }
+
         tiles
     }
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn it_adds_tiles_to_external_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        // Start a mock HTTP server that serves the tile files (GDAL reads them via /vsicurl/)
+        let mock_server = httptest::Server::run();
+
+        // Create tiles with /vsicurl/ paths backed by the mock server.
+        // The mock server is kept alive for the full test duration (including the WMS query).
+        let tiles = create_ndvi_tiles_vsicurl(&mock_server);
+
         // add data
         let create = CreateDataset {
             data_path: DataPath::External,
@@ -3809,11 +3850,18 @@ mod tests {
 
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
-        // add tiles with absolute file paths directly via the database,
-        // bypassing the API handler's validate_tile check (which rejects local paths for External).
-        // The external data loading path is still exercised when tiles are queried.
-        let tiles = create_ndvi_tiles_absolute();
-        db.add_dataset_tiles(dataset_id, tiles).await?;
+        // Add tiles through the API handler — validate_tile now checks that the paths
+        // are valid /vsicurl/ URLs (which they are), so this succeeds.
+        let req = actix_web::test::TestRequest::post()
+            .uri(&format!("/dataset/{dataset_name}/tiles"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&tiles)?);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "response: {res:?}");
 
         // create workflow
         let workflow = Workflow::Legacy {
