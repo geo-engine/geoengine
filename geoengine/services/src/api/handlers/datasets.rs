@@ -278,7 +278,10 @@ fn validate_tile(
     // External data uses GDAL virtual filesystem paths (e.g., /vsicurl/, /vsis3/)
     // and must not refer to local filesystem paths
     if matches!(data_path, DataPath::External) {
-        if data_path.validate_file_path(&tile.params.file_path).is_err() {
+        if data_path
+            .validate_file_path(&tile.params.file_path)
+            .is_err()
+        {
             return Err(AddDatasetTilesError::TileFileMustBeExternalPath {
                 file_path: tile.params.file_path.to_string_lossy().to_string(),
             });
