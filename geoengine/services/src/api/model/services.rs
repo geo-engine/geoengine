@@ -208,6 +208,31 @@ impl DataPath {
             None => Ok(file_path.to_path_buf()),
         }
     }
+
+    /// Validates that a file path is appropriate for this data path variant.
+    ///
+    /// For `External`, the file path must be a GDAL virtual filesystem path
+    /// (e.g., `/vsicurl/` or `/vsis3/`), not a local filesystem path.
+    /// For `Volume` and `Upload`, the file path must be a relative path
+    /// with no root, parent, or current-directory components.
+    pub fn validate_file_path(&self, file_path: &Path) -> Result<()> {
+        match self {
+            DataPath::External => {
+                let path_str = file_path.to_string_lossy();
+                if !path_str.starts_with("/vsicurl/") && !path_str.starts_with("/vsis3/") {
+                    return Err(Error::InvalidPath);
+                }
+                Ok(())
+            }
+            DataPath::Volume(_) | DataPath::Upload(_) => {
+                let _file_name = file_path.file_name().ok_or(Error::PathIsNotAFile)?;
+
+                crate::util::validate_relative_path(Path::new(""), file_path)?;
+
+                Ok(())
+            }
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema, Validate)]

@@ -145,18 +145,7 @@ impl AdjustFilePath for Upload {
         let file_name = file_path.file_name().ok_or(error::Error::PathIsNotAFile)?;
 
         // Reject absolute / remote paths — upload paths must be relative filenames
-        for component in file_path.components() {
-            if let std::path::Component::RootDir
-            | std::path::Component::Prefix(_)
-            | std::path::Component::CurDir
-            | std::path::Component::ParentDir = component
-            {
-                return Err(error::Error::PathMustNotContainParentReferences {
-                    base: self.id.root_path()?,
-                    sub_path: file_path.into(),
-                });
-            }
-        }
+        crate::util::validate_relative_path(&self.id.root_path()?, file_path)?;
 
         Ok(self.id.root_path()?.join(file_name))
     }
