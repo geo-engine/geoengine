@@ -12272,6 +12272,11 @@
             "items": {
               "$ref": "#/components/schemas/StacProviderDataset"
             }
+          },
+          "queryTimeoutSecs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Timeout in seconds for outgoing STAC API HTTP requests."
           }
         }
       },

@@ -25,12 +25,13 @@ use geoengine_datatypes::{
         TimeInterval, find_next_best_overview_level,
     },
     raster::{
-        GeoTransform, GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D,
-        SpatialGridDefinition, TilingSpatialGridDefinition, TilingSpecification,
+        GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D, SpatialGridDefinition,
+        TilingSpatialGridDefinition, TilingSpecification,
     },
 };
+
 pub use loading_info::{GdalMultiBand, MultiBandGdalLoadingInfo, TileFile};
-use num::{FromPrimitive, integer::div_ceil, integer::div_floor};
+use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
@@ -316,44 +317,6 @@ impl OperatorName for MultiBandGdalSource {
     const TYPE_NAME: &'static str = "MultiBandGdalSource";
 }
 
-fn overview_level_spatial_grid(
-    source_spatial_grid: SpatialGridDefinition,
-    overview_level: u32,
-) -> Option<SpatialGridDefinition> {
-    if overview_level > 0 {
-        debug!("Using overview level {overview_level}");
-        let geo_transform = GeoTransform::new(
-            source_spatial_grid.geo_transform.origin_coordinate,
-            source_spatial_grid.geo_transform.x_pixel_size() * f64::from(overview_level),
-            source_spatial_grid.geo_transform.y_pixel_size() * f64::from(overview_level),
-        );
-        let grid_bounds = GridBoundingBox2D::new_min_max(
-            div_floor(
-                source_spatial_grid.grid_bounds.y_min(),
-                overview_level as isize,
-            ),
-            div_ceil(
-                source_spatial_grid.grid_bounds.y_max(),
-                overview_level as isize,
-            ),
-            div_floor(
-                source_spatial_grid.grid_bounds.x_min(),
-                overview_level as isize,
-            ),
-            div_ceil(
-                source_spatial_grid.grid_bounds.x_max(),
-                overview_level as isize,
-            ),
-        )
-        .expect("overview level must be a positive integer");
-
-        Some(SpatialGridDefinition::new(geo_transform, grid_bounds))
-    } else {
-        debug!("Using original resolution (ov = 0)");
-        None
-    }
-}
-
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for MultiBandGdalSource {
@@ -450,8 +413,10 @@ impl InitializedGdalSourceOperator {
             .expect("Source data must be a source grid definition...");
 
         let (result_descriptor, original_grid) = if let Some(ovr_spatial_grid) =
-            overview_level_spatial_grid(source_resolution_spatial_grid, overview_level)
-        {
+            crate::source::gdal_worker_process::overview_level_spatial_grid(
+                source_resolution_spatial_grid,
+                overview_level,
+            ) {
             let ovr_res = RasterResultDescriptor {
                 spatial_grid: SpatialGridDescriptor::new_source(ovr_spatial_grid),
                 ..result_descriptor
@@ -648,7 +613,7 @@ mod tests {
         CacheHint, Measurement, SpatialPartition2D, TimeInstance,
     };
     use geoengine_datatypes::raster::{
-        GridBoundingBox2D, GridBounds, GridIdx2D, GridSize, RasterDataType,
+        GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridSize, RasterDataType,
     };
     use geoengine_datatypes::raster::{RasterPropertiesEntryType, RasterPropertiesKey};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
@@ -1937,6 +1902,142 @@ mod tests {
             .collect();
 
         assert_eq_two_list_of_tiles(&tiles, &expected_tiles, false);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_combines_partially_overlapping_tiles_with_grid_blit_valid_only() -> Result<()> {
+        // Uses persisted test data from test_data/raster/grid_blit_valid_only/
+        // File A (left.tif):  valid data (100) in cols 0,1, no-data (0) in cols 2,3
+        // File B (right.tif): no-data (0) in cols 0,1, valid data (200) in cols 2,3
+        // Expected (expected.tif): all valid, cols 0,1=100, cols 2,3=200
+        // See test_data/raster/grid_blit_valid_only/generate_test_data.py
+
+        use crate::source::gdal_worker_process::{
+            GdalProcessPool, GdalProcessPoolAccess, GdalReaderMode, ReaderState, WorkerConfig,
+        };
+        use geoengine_datatypes::raster::{
+            GeoTransform, GridShape2D, SpatialGridDefinition, TileInformation,
+            TilingSpatialGridDefinition, TilingSpecification,
+        };
+
+        let width = 4usize;
+        let height = 4usize;
+
+        let geo_transform = GdalDatasetGeoTransform {
+            origin_coordinate: (0.0, 4.0).into(),
+            x_pixel_size: 1.0,
+            y_pixel_size: -1.0,
+        };
+
+        let dataset_params = GdalDatasetParameters {
+            file_path: test_data!("raster/grid_blit_valid_only/left.tif").to_path_buf(),
+            rasterband_channel: 1,
+            geo_transform,
+            width,
+            height,
+            file_not_found_handling: FileNotFoundHandling::Error,
+            no_data_value: Some(0.0),
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: true,
+            retry: None,
+        };
+
+        let mut params_b = dataset_params.clone();
+        params_b.file_path = test_data!("raster/grid_blit_valid_only/right.tif").to_path_buf();
+
+        // Partially overlapping spatial partitions so neither is filtered out:
+        //   A covers x in [0,3)  (left 3 cols)  → (0,4)-(3,0)
+        //   B covers x in [1,4)  (right 3 cols) → (1,4)-(4,0)
+        // Neither contains the other → both are kept by tile_files()
+        let partition_a = SpatialPartition2D::new_unchecked((0.0, 4.0).into(), (3.0, 0.0).into());
+        let partition_b = SpatialPartition2D::new_unchecked((1.0, 4.0).into(), (4.0, 0.0).into());
+
+        let time_interval = TimeInterval::new_unchecked(
+            TimeInstance::from_str("2025-01-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2025-02-01T00:00:00Z").unwrap(),
+        );
+
+        let tile_a = TileFile {
+            time: time_interval,
+            spatial_partition: partition_a,
+            band: 0,
+            z_index: 0,
+            params: dataset_params,
+        };
+
+        let tile_b = TileFile {
+            time: time_interval,
+            spatial_partition: partition_b,
+            band: 0,
+            z_index: 1,
+            params: params_b,
+        };
+
+        let loading_info = MultiBandGdalLoadingInfo::new(
+            vec![time_interval],
+            vec![tile_a, tile_b],
+            CacheHint::default(),
+        );
+
+        // Both files and tile share the same spatial grid
+        let data_grid = SpatialGridDefinition::new(
+            GeoTransform::new((0.0, 4.0).into(), 1.0, -1.0),
+            GridBoundingBox2D::new([0, 0], [height as isize - 1, width as isize - 1]).unwrap(),
+        );
+
+        let reader_mode = GdalReaderMode::OriginalResolution(ReaderState {
+            dataset_spatial_grid: data_grid,
+        });
+
+        let tile_info = TileInformation::new(
+            [0, 0].into(),
+            GridShape2D::new([height, width]),
+            GeoTransform::new((0.0, 4.0).into(), 1.0, -1.0),
+        );
+
+        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gw = gpp.get_gdal_worker();
+
+        let tile = GdalPoolReader::load_tile_from_files_async::<u16>(
+            loading_info,
+            reader_mode,
+            tile_info,
+            time_interval,
+            0, // band
+            gw,
+        )
+        .await?;
+
+        let grid = tile.grid_array.as_masked_grid().expect("should be a grid");
+
+        let tiling_spec = TilingSpecification::new(GridShape2D::new([height, width]));
+        let tiling_grid = TilingSpatialGridDefinition::new(data_grid, tiling_spec);
+
+        let expected_tile = raster_tile_from_file::<u16>(
+            test_data!("raster/grid_blit_valid_only/expected.tif"),
+            tiling_grid,
+            time_interval,
+            0,
+        )
+        .unwrap();
+
+        let expected_grid = expected_tile
+            .grid_array
+            .as_masked_grid()
+            .expect("should be a grid");
+
+        assert_eq!(
+            grid.inner_grid.data, expected_grid.inner_grid.data,
+            "pixel data mismatch"
+        );
+        assert_eq!(
+            grid.validity_mask.data, expected_grid.validity_mask.data,
+            "validity mask mismatch"
+        );
 
         Ok(())
     }

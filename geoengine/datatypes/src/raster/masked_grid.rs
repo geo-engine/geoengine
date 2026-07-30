@@ -121,6 +121,19 @@ where
     }
 }
 
+impl<D, T> MaskedGrid<D, T>
+where
+    D: GridSize<ShapeArray = [usize; 2]>
+        + GridBounds<IndexArray = [isize; 2]>
+        + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
+{
+    /// Returns `true` if all pixels in the given bounding box region are valid
+    /// (i.e., the validity mask is `true` for every pixel in the region).
+    pub fn all_valid_in_bbox(&self, query_bbox: &GridBoundingBox<[isize; 2]>) -> bool {
+        self.validity_mask.all_true_in_bbox(query_bbox)
+    }
+}
+
 impl<D, T> From<Grid<D, T>> for MaskedGrid<D, T>
 where
     D: GridSize + PartialEq + Clone,
