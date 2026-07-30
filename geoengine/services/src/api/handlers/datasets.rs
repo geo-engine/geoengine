@@ -3792,7 +3792,7 @@ mod tests {
 
             // Convert to a /vsicurl/ URL that passes validate_file_path
             let url = server.url_str(&format!("/{file_path_str}"));
-            tile.params.file_path = format!("/vsicurl{url}").into();
+            tile.params.file_path = format!("/vsicurl/{url}").into();
         }
 
         tiles
