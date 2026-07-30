@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use crate::api::handlers::datasets::AddDatasetTile;
 use crate::api::model::datatypes::SpatialPartition2D;
 use crate::api::model::services::{DataPath, UpdateDataset};
@@ -8,7 +6,7 @@ use crate::datasets::listing::Provenance;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::datasets::listing::{OrderBy, ProvenanceOutput};
 use crate::datasets::storage::{Dataset, DatasetDb, DatasetStore, MetaDataDefinition};
-use crate::datasets::upload::{FileId, UploadRootPath, Volumes};
+use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::datasets::{AddDataset, DatasetIdAndName, DatasetName};
 use crate::error::{self, Error, Result};
@@ -691,31 +689,6 @@ where
 
         let data_path: DataPath = row.get(1);
 
-        let data_path =
-            match data_path {
-                DataPath::Volume(volume_name) =>
-                // TODO: after Volume management is implemented, this needs to be adapted
-                {
-                    Volumes::default()
-                        .volumes
-                        .iter()
-                        .find(|v| v.name == volume_name)
-                        .ok_or(Error::UnknownVolumeName {
-                            volume_name: volume_name.0.clone(),
-                        })
-                        .map_err(|e| geoengine_operators::error::Error::MetaData {
-                            source: Box::new(e),
-                        })?
-                        .path
-                        .clone()
-                }
-                DataPath::Upload(upload_id) => upload_id.root_path().map_err(|e| {
-                    geoengine_operators::error::Error::MetaData {
-                        source: Box::new(e),
-                    }
-                })?,
-            };
-
         Ok(Box::new(MultiBandGdalLoadingInfoProvider {
             dataset_id: id,
             result_descriptor,
@@ -735,7 +708,7 @@ where
 {
     dataset_id: DatasetId,
     result_descriptor: RasterResultDescriptor,
-    data_path: PathBuf,
+    data_path: DataPath,
     db: PostgresDb<Tls>,
 }
 
@@ -988,19 +961,27 @@ where
                     source: Box::new(e),
                 })?;
 
+            // Resolve the base path once before the tile loop to avoid repeated volume lookups
+            let base_path = self.data_path.resolve_base_path().map_err(|e| {
+                geoengine_operators::error::Error::MetaData {
+                    source: Box::new(e),
+                }
+            })?;
+
             let files: Vec<TileFile> = rows
                 .into_iter()
-                .map(|row| TileFile {
-                    spatial_partition: row.get(0),
-                    time: row.get(1),
-                    band: row.get(2),
-                    z_index: row.get(3),
-                    params: {
-                        let mut params: GdalDatasetParameters = row.get(4);
-                        // at some point we need to turn the relative file paths of tiles into absolute paths
-                        params.file_path = self.data_path.join(&params.file_path);
-                        params
-                    },
+                .map(|row| {
+                    let mut params: GdalDatasetParameters = row.get(4);
+                    if let Some(ref base_path) = base_path {
+                        params.file_path = base_path.join(&params.file_path);
+                    }
+                    TileFile {
+                        spatial_partition: row.get(0),
+                        time: row.get(1),
+                        band: row.get(2),
+                        z_index: row.get(3),
+                        params,
+                    }
                 })
                 .collect();
 

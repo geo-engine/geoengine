@@ -6930,6 +6930,13 @@
                 "$ref": "#/components/schemas/UploadId"
               }
             }
+          },
+          {
+            "type": "string",
+            "title": "DataPathExternal",
+            "enum": [
+              "external"
+            ]
           }
         ]
       },

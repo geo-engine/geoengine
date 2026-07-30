@@ -1421,6 +1421,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
 pub struct DataPathDbType {
     pub volume_name: Option<String>,
     pub upload_id: Option<uuid::Uuid>,
+    pub external: Option<bool>,
 }
 
 impl From<&DataPath> for DataPathDbType {
@@ -1429,10 +1430,17 @@ impl From<&DataPath> for DataPathDbType {
             DataPath::Volume(volume_name) => Self {
                 volume_name: Some(volume_name.0.clone()),
                 upload_id: None,
+                external: Some(false),
             },
             DataPath::Upload(upload_id) => Self {
                 volume_name: None,
                 upload_id: Some(upload_id.0),
+                external: Some(false),
+            },
+            DataPath::External => Self {
+                volume_name: None,
+                upload_id: None,
+                external: Some(true),
             },
         }
     }
@@ -1441,9 +1449,10 @@ impl From<&DataPath> for DataPathDbType {
 impl TryFrom<DataPathDbType> for DataPath {
     type Error = Error;
     fn try_from(other: DataPathDbType) -> Result<Self, Error> {
-        match (other.volume_name, other.upload_id) {
-            (Some(v), None) => Ok(DataPath::Volume(VolumeName(v))),
-            (None, Some(u)) => Ok(DataPath::Upload(UploadId(u))),
+        match (other.volume_name, other.upload_id, other.external) {
+            (Some(v), None, _) => Ok(DataPath::Volume(VolumeName(v))),
+            (None, Some(u), _) => Ok(DataPath::Upload(UploadId(u))),
+            (None, None, Some(true)) => Ok(DataPath::External),
             _ => Err(Error::UnexpectedInvalidDbTypeConversion),
         }
     }

@@ -128,6 +128,9 @@ pub enum AddDatasetTilesError {
     TileFilePathNotRelative {
         file_path: String,
     },
+    TileFileMustBeExternalPath {
+        file_path: String,
+    },
     CannotOpenTileFile {
         source: geoengine_operators::error::Error,
         file_path: String,

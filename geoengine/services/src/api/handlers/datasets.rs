@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::{
     api::model::{
         datatypes::SpatialPartition2D,
@@ -249,16 +251,15 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
 
     let tiles = tiles.into_inner();
 
-    let data_path_file_path = file_path_from_data_path(
-        &dataset
-            .data_path
-            .ok_or(AddDatasetTilesError::DatasetIsMissingDataPath)?,
-        &session_context,
-    )
-    .context(CannotAddTilesToDataset)?;
+    let data_path = dataset
+        .data_path
+        .ok_or(AddDatasetTilesError::DatasetIsMissingDataPath)?;
+
+    let data_path_file_path =
+        file_path_from_data_path(&data_path, &session_context).context(CannotAddTilesToDataset)?;
 
     for tile in &tiles {
-        validate_tile(tile, &data_path_file_path, &dataset_descriptor)?;
+        validate_tile(tile, &data_path, &data_path_file_path, &dataset_descriptor)?;
     }
 
     db.add_dataset_tiles(dataset_id, tiles)
@@ -270,27 +271,22 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
 
 fn validate_tile(
     tile: &AddDatasetTile,
+    data_path: &DataPath,
     data_path_file_path: &Path,
     dataset_descriptor: &RasterResultDescriptor,
 ) -> Result<(), AddDatasetTilesError> {
-    if tile
-        .params
-        .file_path
-        .to_string_lossy()
-        .starts_with("/vsicurl")
-        || tile
-            .params
-            .file_path
-            .to_string_lossy()
-            .starts_with("/vsis3")
-    {
-        // do not validate remote files
-        // TODO: add flag to do this?
-        // TODO: detect remote files based on volume not file path?
-        // TODO: validate based on metadata, without opening the file
+    // External data uses GDAL virtual filesystem paths (e.g., /vsicurl/, /vsis3/)
+    // and must not refer to local filesystem paths
+    if matches!(data_path, DataPath::External) {
+        if data_path.validate_file_path(&tile.params.file_path).is_err() {
+            return Err(AddDatasetTilesError::TileFileMustBeExternalPath {
+                file_path: tile.params.file_path.to_string_lossy().to_string(),
+            });
+        }
         return Ok(());
     }
 
+    // Volume and upload paths must be relative; they are resolved against the data path
     ensure!(
         tile.params.file_path.is_relative(),
         TileFilePathNotRelative {
@@ -389,6 +385,7 @@ fn file_path_from_data_path<T: SessionContext>(
             })?
             .into(),
         DataPath::Upload(upload_id) => upload_id.root_path()?,
+        DataPath::External => PathBuf::new(),
     })
 }
 
@@ -954,7 +951,7 @@ pub async fn suggest_meta_data_handler<C: ApplicationContext>(
 
             let root_path = upload.id.root_path()?;
 
-            (root_path, main_file)
+            (Some(root_path), main_file)
         }
         DataPath::Volume(volume) => {
             let main_file = suggest
@@ -969,13 +966,31 @@ pub async fn suggest_meta_data_handler<C: ApplicationContext>(
                 },
             )?;
 
-            (root_path.path.clone(), main_file)
+            (Some(root_path.path.clone()), main_file)
+        }
+        DataPath::External => {
+            let main_file = suggest
+                .main_file
+                .ok_or(error::Error::NoMainFileCandidateFound)?;
+
+            // Validate that the file path is a valid external path (GDAL VSI path)
+            DataPath::External
+                .validate_file_path(Path::new(&main_file))
+                .map_err(|_| error::Error::InvalidPath)?;
+
+            // For external data, the file path is already absolute; no root path to resolve against
+            (None, main_file)
         }
     };
 
     let layer_name = suggest.layer_name;
 
-    let main_file_path = path_with_base_path(&root_path, Path::new(&main_file))?;
+    let main_file_path = if let Some(ref root_path) = root_path {
+        path_with_base_path(root_path, Path::new(&main_file))?
+    } else {
+        // For external data, the file path is already absolute
+        Path::new(&main_file).to_path_buf()
+    };
 
     let dataset = gdal_open_dataset(&main_file_path)?;
 
@@ -994,8 +1009,10 @@ pub async fn suggest_meta_data_handler<C: ApplicationContext>(
     } else {
         let mut gdal_params =
             gdal_parameters_from_dataset(&dataset, 1, &main_file_path, None, None)?;
-        if let Ok(relative_path) = gdal_params.file_path.strip_prefix(root_path) {
-            gdal_params.file_path = relative_path.to_path_buf();
+        if let Some(ref root_path) = root_path {
+            if let Ok(relative_path) = gdal_params.file_path.strip_prefix(root_path) {
+                gdal_params.file_path = relative_path.to_path_buf();
+            }
         }
         let result_descriptor = raster_descriptor_from_dataset(&dataset, 1)?;
 
@@ -1554,6 +1571,10 @@ async fn create_dataset_handler<C: ApplicationContext>(
             data_path: DataPath::Upload(volume),
             definition,
         } => create_upload_dataset(session, app_ctx, volume, definition).await,
+        CreateDataset {
+            data_path: DataPath::External,
+            definition,
+        } => create_external_dataset(session, app_ctx, definition).await,
     }
 }
 
@@ -1579,6 +1600,39 @@ async fn create_system_dataset<C: ApplicationContext>(
             definition.properties.into(),
             definition.meta_data.into(),
             Some(DataPath::Volume(volume_name)),
+        )
+        .await
+        .context(CannotCreateDataset)?;
+
+    db.add_permission(
+        Role::registered_user_role_id(),
+        dataset.id,
+        Permission::Read,
+    )
+    .await
+    .boxed_context(crate::error::PermissionDb)
+    .context(DatabaseAccess)?;
+
+    db.add_permission(Role::anonymous_role_id(), dataset.id, Permission::Read)
+        .await
+        .boxed_context(crate::error::PermissionDb)
+        .context(DatabaseAccess)?;
+
+    Ok(web::Json(dataset.name.into()))
+}
+
+async fn create_external_dataset<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    definition: DatasetDefinition,
+) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError> {
+    let db = app_ctx.session_context(session).db();
+
+    let dataset = db
+        .add_dataset(
+            definition.properties.into(),
+            definition.meta_data.into(),
+            Some(DataPath::External),
         )
         .await
         .context(CannotCreateDataset)?;
@@ -2078,6 +2132,60 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(serde_json::to_string(&create)?);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200);
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_creates_external_gdal_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let mut meta_data = create_ndvi_meta_data();
+
+        // For external data, the file path is already absolute; no resolution against a volume
+        meta_data.params.file_path =
+            test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF").to_path_buf();
+
+        let create = CreateDataset {
+            data_path: DataPath::External,
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "ndvi external".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "GdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+                },
+                meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
+            },
+        };
+
+        // create via admin session
+        let admin_session = admin_login(&app_ctx).await;
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id().to_string()),
+            ))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_json(create);
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200);
+
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+
+        // assert dataset is accessible via regular session
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/{dataset_name}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
 
         let res = send_test_request(req, app_ctx.clone()).await;
         assert_eq!(res.status(), 200);
@@ -3631,6 +3739,141 @@ mod tests {
         let image_bytes = actix_web::test::read_body(res).await;
 
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "wms.png");
+
+        assert_image_equals(test_data!("raster/multi_tile/wms.png"), &image_bytes);
+
+        Ok(())
+    }
+
+    /// Creates NDVI tiles with absolute file paths, suitable for use with `DataPath::External`
+    /// (where paths are not resolved against any base path).
+    fn create_ndvi_tiles_absolute() -> Vec<AddDatasetTile> {
+        let mut tiles = create_ndvi_tiles();
+        let test_data_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .canonicalize()
+            .expect("should resolve during testing")
+            .parent()
+            .expect("should have parent")
+            .join("test_data/");
+        for tile in &mut tiles {
+            tile.params.file_path = test_data_root.join(&tile.params.file_path);
+        }
+        tiles
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_adds_tiles_to_external_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        // add data
+        let create = CreateDataset {
+            data_path: DataPath::External,
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "ndvi external (tiled)".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "MultiBandGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+                },
+                meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
+                    r#type: Default::default(),
+                    result_descriptor: create_ndvi_result_descriptor(true).into(),
+                }),
+            },
+        };
+
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let db = ctx.db();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
+
+        // add tiles with absolute file paths directly via the database,
+        // bypassing the API handler's validate_tile check (which rejects local paths for External).
+        // The external data loading path is still exercised when tiles are queried.
+        let tiles = create_ndvi_tiles_absolute();
+        db.add_dataset_tiles(dataset_id, tiles).await?;
+
+        // create workflow
+        let workflow = Workflow::Legacy {
+            operator: geoengine_operators::engine::TypedOperator::Raster(
+                MultiBandGdalSource {
+                    params: MultiBandGdalSourceParameters::new(dataset_name.into()),
+                }
+                .boxed(),
+            ),
+        };
+
+        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
+
+        let colorizer = geoengine_datatypes::operations::image::Colorizer::linear_gradient(
+            vec![
+                (0.0, RgbaColor::white()).try_into().unwrap(),
+                (255.0, RgbaColor::black()).try_into().unwrap(),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::white(),
+            RgbaColor::black(),
+        )
+        .unwrap();
+
+        let raster_colorizer =
+            crate::api::model::datatypes::RasterColorizer::SingleBand(SingleBandRasterColorizer {
+                r#type: Default::default(),
+                band: 0,
+                band_colorizer: colorizer.into(),
+            });
+
+        let params = &[
+            ("request", "GetMap"),
+            ("service", "WMS"),
+            ("version", "1.3.0"),
+            ("layers", &id.to_string()),
+            ("bbox", "-90,-180,90,180"),
+            ("width", "3600"),
+            ("height", "1800"),
+            ("crs", "EPSG:4326"),
+            (
+                "styles",
+                &format!(
+                    "custom:{}",
+                    serde_json::to_string(&raster_colorizer).unwrap()
+                ),
+            ),
+            ("format", "image/png"),
+            ("time", "2014-01-01T00:00:00.0Z"),
+        ];
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/wms/{}?{}",
+                id,
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_test_request(req, app_ctx).await;
+
+        assert_eq!(res.status(), 200);
+
+        let image_bytes = actix_web::test::read_body(res).await;
 
         assert_image_equals(test_data!("raster/multi_tile/wms.png"), &image_bytes);
 

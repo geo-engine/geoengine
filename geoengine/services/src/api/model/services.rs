@@ -12,7 +12,8 @@ use crate::api::model::operators::{
 use crate::datasets::DatasetName;
 use crate::datasets::external::{GdalRetries, WildliveDataConnectorAuth};
 use crate::datasets::storage::validate_tags;
-use crate::datasets::upload::{UploadId, VolumeName};
+use crate::datasets::upload::{UploadId, UploadRootPath, VolumeName, Volumes};
+use crate::error::{Error, Result};
 use crate::projects::Symbology;
 use crate::util::Secret;
 use crate::util::oidc::RefreshToken;
@@ -21,7 +22,7 @@ use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use url::Url;
 use utoipa::ToSchema;
 use validator::{Validate, ValidationErrors};
@@ -167,11 +168,45 @@ pub enum DataPath {
     Volume(VolumeName),
     #[schema(title = "DataPathUpload")]
     Upload(UploadId),
+    #[schema(title = "DataPathExternal")]
+    External,
 }
 
 impl TestDefault for DataPath {
     fn test_default() -> Self {
         DataPath::Volume(VolumeName("test_data".to_string()))
+    }
+}
+
+impl DataPath {
+    /// Resolves the data path to its base directory path.
+    /// Returns `Ok(None)` for external data (no base path needed).
+    /// Returns `Ok(Some(path))` for volume and upload data.
+    pub fn resolve_base_path(&self) -> Result<Option<PathBuf>> {
+        match self {
+            DataPath::Volume(volume_name) => {
+                let volumes = Volumes::default();
+                let volume = volumes
+                    .volumes
+                    .iter()
+                    .find(|v| v.name == *volume_name)
+                    .ok_or_else(|| Error::UnknownVolumeName {
+                        volume_name: volume_name.0.clone(),
+                    })?;
+                Ok(Some(volume.path.clone()))
+            }
+            DataPath::Upload(upload_id) => Ok(Some(upload_id.root_path()?)),
+            DataPath::External => Ok(None),
+        }
+    }
+
+    /// Resolves a file path relative to the data path into an absolute file path.
+    /// For external data, the file path is treated as already absolute.
+    pub fn resolve_file_path(&self, file_path: &Path) -> Result<PathBuf> {
+        match self.resolve_base_path()? {
+            Some(base_path) => Ok(base_path.join(file_path)),
+            None => Ok(file_path.to_path_buf()),
+        }
     }
 }
 
