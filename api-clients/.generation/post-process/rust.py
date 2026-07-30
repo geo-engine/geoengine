@@ -27,6 +27,7 @@ def file_modifications() -> Generator[tuple[Path, FileModifier], None, None]:
     )
 
     for file_path in [
+        Path("src/models/data_id.rs"),
         Path("src/models/measurement.rs"),
         Path("src/models/meta_data_definition.rs"),
         Path("src/models/raster_operator.rs"),
