@@ -59,6 +59,7 @@ export function StacDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminato
         's3Config': json['s3Config'] == null ? undefined : StacProviderS3ConfigFromJSON(json['s3Config']),
         'timeDimension': TimeDimensionFromJSON(json['timeDimension']),
         'datasets': (json['datasets'].map(StacProviderDatasetFromJSON)),
+        'queryTimeoutSecs': json['queryTimeoutSecs'] == null ? undefined : json['queryTimeoutSecs'],
     };
 }
 export function StacDataProviderDefinitionToJSON(json) {
@@ -79,5 +80,6 @@ export function StacDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator
         's3Config': StacProviderS3ConfigToJSON(value['s3Config']),
         'timeDimension': TimeDimensionToJSON(value['timeDimension']),
         'datasets': (value['datasets'].map(StacProviderDatasetToJSON)),
+        'queryTimeoutSecs': value['queryTimeoutSecs'],
     };
 }

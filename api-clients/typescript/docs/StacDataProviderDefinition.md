@@ -16,6 +16,7 @@ Name | Type
 `s3Config` | [StacProviderS3Config](StacProviderS3Config.md)
 `timeDimension` | [TimeDimension](TimeDimension.md)
 `datasets` | [Array&lt;StacProviderDataset&gt;](StacProviderDataset.md)
+`queryTimeoutSecs` | number
 
 ## Example
 
@@ -34,6 +35,7 @@ const example = {
   "s3Config": null,
   "timeDimension": null,
   "datasets": null,
+  "queryTimeoutSecs": null,
 } satisfies StacDataProviderDefinition
 
 console.log(example)

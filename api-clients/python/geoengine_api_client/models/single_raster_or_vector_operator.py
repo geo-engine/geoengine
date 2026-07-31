@@ -113,6 +113,11 @@ class SingleRasterOrVectorOperator(BaseModel):
             instance.actual_instance = Reprojection.from_json(json_str)
             return instance
 
+        # check if data type is `VectorExpression`
+        if _data_type == "VectorExpression":
+            instance.actual_instance = VectorExpression.from_json(json_str)
+            return instance
+
         # check if data type is `RasterOperator`
         if _data_type == "RasterOperator":
             instance.actual_instance = RasterOperator.from_json(json_str)

@@ -23,7 +23,7 @@ from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-VECTOROPERATOR_ONE_OF_SCHEMAS = ["MockPointSource", "OgrSource", "RasterVectorJoin", "Reprojection"]
+VECTOROPERATOR_ONE_OF_SCHEMAS = ["MockPointSource", "OgrSource", "RasterVectorJoin", "Reprojection", "VectorExpression"]
 
 class VectorOperator(BaseModel):
     """
@@ -37,8 +37,10 @@ class VectorOperator(BaseModel):
     oneof_schema_3_validator: Optional[RasterVectorJoin] = None
     # data type: Reprojection
     oneof_schema_4_validator: Optional[Reprojection] = None
-    actual_instance: Optional[Union[MockPointSource, OgrSource, RasterVectorJoin, Reprojection]] = None
-    one_of_schemas: Set[str] = { "MockPointSource", "OgrSource", "RasterVectorJoin", "Reprojection" }
+    # data type: VectorExpression
+    oneof_schema_5_validator: Optional[VectorExpression] = None
+    actual_instance: Optional[Union[MockPointSource, OgrSource, RasterVectorJoin, Reprojection, VectorExpression]] = None
+    one_of_schemas: Set[str] = { "MockPointSource", "OgrSource", "RasterVectorJoin", "Reprojection", "VectorExpression" }
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -84,12 +86,17 @@ class VectorOperator(BaseModel):
             error_messages.append(f"Error! Input type `{type(v)}` is not `Reprojection`")
         else:
             match += 1
+        # validate data type: VectorExpression
+        if not isinstance(v, VectorExpression):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `VectorExpression`")
+        else:
+            match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in VectorOperator with oneOf schemas: MockPointSource, OgrSource, RasterVectorJoin, Reprojection. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in VectorOperator with oneOf schemas: MockPointSource, OgrSource, RasterVectorJoin, Reprojection, VectorExpression. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in VectorOperator with oneOf schemas: MockPointSource, OgrSource, RasterVectorJoin, Reprojection. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in VectorOperator with oneOf schemas: MockPointSource, OgrSource, RasterVectorJoin, Reprojection, VectorExpression. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -129,6 +136,11 @@ class VectorOperator(BaseModel):
             instance.actual_instance = Reprojection.from_json(json_str)
             return instance
 
+        # check if data type is `VectorExpression`
+        if _data_type == "VectorExpression":
+            instance.actual_instance = VectorExpression.from_json(json_str)
+            return instance
+
         # deserialize data into MockPointSource
         try:
             instance.actual_instance = MockPointSource.from_json(json_str)
@@ -153,13 +165,19 @@ class VectorOperator(BaseModel):
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
+        # deserialize data into VectorExpression
+        try:
+            instance.actual_instance = VectorExpression.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into VectorOperator with oneOf schemas: MockPointSource, OgrSource, RasterVectorJoin, Reprojection. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into VectorOperator with oneOf schemas: MockPointSource, OgrSource, RasterVectorJoin, Reprojection, VectorExpression. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into VectorOperator with oneOf schemas: MockPointSource, OgrSource, RasterVectorJoin, Reprojection. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into VectorOperator with oneOf schemas: MockPointSource, OgrSource, RasterVectorJoin, Reprojection, VectorExpression. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -173,7 +191,7 @@ class VectorOperator(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], MockPointSource, OgrSource, RasterVectorJoin, Reprojection]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], MockPointSource, OgrSource, RasterVectorJoin, Reprojection, VectorExpression]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None
@@ -190,6 +208,7 @@ class VectorOperator(BaseModel):
 
 from geoengine_api_client.models.raster_vector_join import RasterVectorJoin
 from geoengine_api_client.models.reprojection import Reprojection
+from geoengine_api_client.models.vector_expression import VectorExpression
 # TODO: Rewrite to not use raise_errors
 VectorOperator.model_rebuild(raise_errors=False)
 

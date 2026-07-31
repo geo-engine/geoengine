@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 /// DataId : The identifier for loadable data. It is used in the source operators to get the loading info (aka parametrization) for accessing the data. Internal data is loaded from datasets, external from `DataProvider`s.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(untagged)]
 pub enum DataId {
     #[serde(rename="internal")]
     Internal(Box<models::InternalDataId>),

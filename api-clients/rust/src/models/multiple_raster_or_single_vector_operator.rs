@@ -27,13 +27,13 @@ impl Default for MultipleRasterOrSingleVectorOperator {
 /// 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum Type {
-    #[serde(rename = "Reprojection")]
-    Reprojection,
+    #[serde(rename = "VectorExpression")]
+    VectorExpression,
 }
 
 impl Default for Type {
     fn default() -> Type {
-        Self::Reprojection
+        Self::VectorExpression
     }
 }
 

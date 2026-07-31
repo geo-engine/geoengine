@@ -29,8 +29,8 @@ impl Default for SingleRasterOrVectorOperator {
 pub enum Type {
     #[serde(rename = "TemporalRasterAggregation")]
     TemporalRasterAggregation,
-    #[serde(rename = "Reprojection")]
-    Reprojection,
+    #[serde(rename = "VectorExpression")]
+    VectorExpression,
 }
 
 impl Default for Type {

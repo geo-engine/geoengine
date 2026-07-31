@@ -18,6 +18,7 @@ use geoengine_operators::{
         RasterTypeConversion as OperatorsRasterTypeConversion,
         RasterVectorJoin as OperatorsRasterVectorJoin, Reprojection as OperatorsReprojection,
         TemporalRasterAggregation as OperatorsTemporalRasterAggregation,
+        VectorExpression as OperatorsVectorExpression,
     },
     source::{
         GdalSource as OperatorsGdalSource, MultiBandGdalSource as OperatorsMultiBandGdalSource,
@@ -47,6 +48,7 @@ pub(crate) use crate::api::model::processing_graphs::{
         RasterStackerParameters, RasterTypeConversion, RasterTypeConversionParameters,
         RasterVectorJoin, RasterVectorJoinParameters, RenameBands, Reprojection,
         ReprojectionParameters, TemporalRasterAggregation, TemporalRasterAggregationParameters,
+        VectorExpression, VectorExpressionParameters,
     },
     source::{
         GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
@@ -98,6 +100,7 @@ pub enum VectorOperator {
     OgrSource(OgrSource),
     RasterVectorJoin(RasterVectorJoin),
     Reprojection(Reprojection),
+    VectorExpression(VectorExpression),
 }
 
 /// An operator that produces plot data.
@@ -172,7 +175,6 @@ impl TryFrom<VectorOperator> for Box<dyn OperatorsVectorOperator> {
         // [ ] PointInPolygonFilter
         // [ ] TimeProjection
         // [ ] TimeShift
-        // [ ] VectorExpression
         // [ ] VectorJoin
         // [ ] VisualPointClustering
         match operator {
@@ -188,6 +190,10 @@ impl TryFrom<VectorOperator> for Box<dyn OperatorsVectorOperator> {
             }
             VectorOperator::Reprojection(reprojection) => {
                 OperatorsReprojection::try_from(reprojection).map(OperatorsVectorOperator::boxed)
+            }
+            VectorOperator::VectorExpression(vector_expression) => {
+                OperatorsVectorExpression::try_from(vector_expression)
+                    .map(OperatorsVectorOperator::boxed)
             }
         }
     }
@@ -267,6 +273,8 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     ReprojectionParameters,
     TemporalRasterAggregation,
     TemporalRasterAggregationParameters,
+    VectorExpression,
+    VectorExpressionParameters,
     // Plots
     Histogram,
     HistogramParameters,

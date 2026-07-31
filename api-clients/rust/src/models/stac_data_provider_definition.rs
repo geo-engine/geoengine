@@ -32,6 +32,9 @@ pub struct StacDataProviderDefinition {
     pub time_dimension: Box<models::TimeDimension>,
     #[serde(rename = "datasets")]
     pub datasets: Vec<models::StacProviderDataset>,
+    /// Timeout in seconds for outgoing STAC API HTTP requests.
+    #[serde(rename = "queryTimeoutSecs", skip_serializing_if = "Option::is_none")]
+    pub query_timeout_secs: Option<i64>,
 }
 
 impl StacDataProviderDefinition {
@@ -47,6 +50,7 @@ impl StacDataProviderDefinition {
             s3_config: None,
             time_dimension: Box::new(time_dimension),
             datasets,
+            query_timeout_secs: None,
         }
     }
 }

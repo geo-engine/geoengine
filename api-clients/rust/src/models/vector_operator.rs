@@ -22,6 +22,8 @@ pub enum VectorOperator {
     RasterVectorJoin(Box<models::RasterVectorJoin>),
     #[serde(rename="Reprojection")]
     Reprojection(Box<models::Reprojection>),
+    #[serde(rename="VectorExpression")]
+    VectorExpression(Box<models::VectorExpression>),
 }
 
 impl Default for VectorOperator {

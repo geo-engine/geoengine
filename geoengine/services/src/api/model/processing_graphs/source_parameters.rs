@@ -20,6 +20,24 @@ impl TryFrom<SingleRasterSource> for geoengine_operators::engine::SingleRasterSo
     }
 }
 
+/// A single vector operator as a source for this operator.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[schema(no_recursion)]
+#[serde(rename_all = "camelCase")]
+pub struct SingleVectorSource {
+    pub vector: VectorOperator,
+}
+
+impl TryFrom<SingleVectorSource> for geoengine_operators::engine::SingleVectorSource {
+    type Error = anyhow::Error;
+
+    fn try_from(value: SingleVectorSource) -> Result<Self, Self::Error> {
+        Ok(Self {
+            vector: value.vector.try_into()?,
+        })
+    }
+}
+
 /// One or more raster operators as sources for this operator.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[schema(no_recursion)]

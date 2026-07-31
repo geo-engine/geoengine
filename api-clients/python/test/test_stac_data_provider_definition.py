@@ -77,7 +77,8 @@ class TestStacDataProviderDefinition(unittest.TestCase):
                                 asset_title = '', 
                                 band_name = '', )
                             ], )
-                    ]
+                    ],
+                query_timeout_secs = 56
             )
         else:
             return StacDataProviderDefinition(

@@ -39,13 +39,20 @@ import {
     ReprojectionFromJSONTyped,
     ReprojectionToJSON,
 } from './Reprojection';
+import type { VectorExpression } from './VectorExpression';
+import {
+    instanceOfVectorExpression,
+    VectorExpressionFromJSON,
+    VectorExpressionFromJSONTyped,
+    VectorExpressionToJSON,
+} from './VectorExpression';
 
 /**
  * @type VectorOperator
  * An operator that produces vector data.
  * @export
  */
-export type VectorOperator = { type: 'MockPointSource' } & MockPointSource | { type: 'OgrSource' } & OgrSource | { type: 'RasterVectorJoin' } & RasterVectorJoin | { type: 'Reprojection' } & Reprojection;
+export type VectorOperator = { type: 'MockPointSource' } & MockPointSource | { type: 'OgrSource' } & OgrSource | { type: 'RasterVectorJoin' } & RasterVectorJoin | { type: 'Reprojection' } & Reprojection | { type: 'VectorExpression' } & VectorExpression;
 
 export function VectorOperatorFromJSON(json: any): VectorOperator {
     return VectorOperatorFromJSONTyped(json, false);
@@ -64,6 +71,8 @@ export function VectorOperatorFromJSONTyped(json: any, ignoreDiscriminator: bool
             return Object.assign({}, RasterVectorJoinFromJSONTyped(json, true), { type: 'RasterVectorJoin' } as const);
         case 'Reprojection':
             return Object.assign({}, ReprojectionFromJSONTyped(json, true), { type: 'Reprojection' } as const);
+        case 'VectorExpression':
+            return Object.assign({}, VectorExpressionFromJSONTyped(json, true), { type: 'VectorExpression' } as const);
         default:
             return json;
     }
@@ -86,6 +95,8 @@ export function VectorOperatorToJSONTyped(value?: VectorOperator | null, ignoreD
             return Object.assign({}, RasterVectorJoinToJSON(value), { type: 'RasterVectorJoin' } as const);
         case 'Reprojection':
             return Object.assign({}, ReprojectionToJSON(value), { type: 'Reprojection' } as const);
+        case 'VectorExpression':
+            return Object.assign({}, VectorExpressionToJSON(value), { type: 'VectorExpression' } as const);
         default:
             return value;
     }

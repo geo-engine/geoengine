@@ -11,7 +11,7 @@ use crate::models;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(untagged)]
 pub enum TypedResultDescriptor {
     #[serde(rename="plot")]
     Plot(Box<models::TypedPlotResultDescriptor>),

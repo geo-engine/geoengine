@@ -8,8 +8,8 @@ An operator that produces vector data.
 Name | Type
 ------------ | -------------
 `type` | string
-`params` | [ReprojectionParameters](ReprojectionParameters.md)
-`sources` | [SingleRasterOrVectorSource](SingleRasterOrVectorSource.md)
+`params` | [VectorExpressionParameters](VectorExpressionParameters.md)
+`sources` | [SingleVectorSource](SingleVectorSource.md)
 
 ## Example
 

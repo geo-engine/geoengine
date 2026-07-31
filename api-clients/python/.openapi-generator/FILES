@@ -94,6 +94,7 @@ docs/GeneralApi.md
 docs/GeoJson.md
 docs/GeoTransform.md
 docs/GeometryDimension.md
+docs/GeometryOutputColumn.md
 docs/GeospatialData.md
 docs/GeospatialDataDataType.md
 docs/GeospatialDataDataTypeOneOf.md
@@ -164,6 +165,7 @@ docs/MultipleRasterOrSingleVectorSource.md
 docs/MultipleRasterSources.md
 docs/Names.md
 docs/NetCdfCfDataProviderDefinition.md
+docs/NewOutputColumn.md
 docs/NumberParam.md
 docs/OGCAPIApi.md
 docs/OGCWCSApi.md
@@ -190,6 +192,7 @@ docs/OgrSourceTimeFormatCustom.md
 docs/OgrSourceTimeFormatUnixTimeStamp.md
 docs/OperatorQuota.md
 docs/OrderBy.md
+docs/OutputColumn.md
 docs/PaletteColorizer.md
 docs/PangaeaDataProviderDefinition.md
 docs/PercentileEstimateAggregation.md
@@ -258,6 +261,7 @@ docs/SingleRasterOrVectorSource.md
 docs/SingleRasterSource.md
 docs/SingleVectorMultipleRasterSources.md
 docs/SingleVectorOrRasterSource.md
+docs/SingleVectorSource.md
 docs/SpatialBoundsDerive.md
 docs/SpatialBoundsDeriveBounds.md
 docs/SpatialBoundsDeriveDerive.md
@@ -355,6 +359,8 @@ docs/VariableMatrixWidth.md
 docs/VecUpdate.md
 docs/VectorColumnInfo.md
 docs/VectorDataType.md
+docs/VectorExpression.md
+docs/VectorExpressionParameters.md
 docs/VectorOperator.md
 docs/VectorResultDescriptor.md
 docs/Volume.md
@@ -486,6 +492,7 @@ geoengine_api_client/models/gdal_source_time_placeholder.py
 geoengine_api_client/models/geo_json.py
 geoengine_api_client/models/geo_transform.py
 geoengine_api_client/models/geometry_dimension.py
+geoengine_api_client/models/geometry_output_column.py
 geoengine_api_client/models/geospatial_data.py
 geoengine_api_client/models/geospatial_data_data_type.py
 geoengine_api_client/models/geospatial_data_data_type_one_of.py
@@ -554,6 +561,7 @@ geoengine_api_client/models/multiple_raster_or_single_vector_source.py
 geoengine_api_client/models/multiple_raster_sources.py
 geoengine_api_client/models/names.py
 geoengine_api_client/models/net_cdf_cf_data_provider_definition.py
+geoengine_api_client/models/new_output_column.py
 geoengine_api_client/models/number_param.py
 geoengine_api_client/models/ogr_meta_data.py
 geoengine_api_client/models/ogr_source.py
@@ -576,6 +584,7 @@ geoengine_api_client/models/ogr_source_time_format_custom.py
 geoengine_api_client/models/ogr_source_time_format_unix_time_stamp.py
 geoengine_api_client/models/operator_quota.py
 geoengine_api_client/models/order_by.py
+geoengine_api_client/models/output_column.py
 geoengine_api_client/models/palette_colorizer.py
 geoengine_api_client/models/pangaea_data_provider_definition.py
 geoengine_api_client/models/percentile_estimate_aggregation.py
@@ -639,6 +648,7 @@ geoengine_api_client/models/single_raster_or_vector_source.py
 geoengine_api_client/models/single_raster_source.py
 geoengine_api_client/models/single_vector_multiple_raster_sources.py
 geoengine_api_client/models/single_vector_or_raster_source.py
+geoengine_api_client/models/single_vector_source.py
 geoengine_api_client/models/spatial_bounds_derive.py
 geoengine_api_client/models/spatial_bounds_derive_bounds.py
 geoengine_api_client/models/spatial_bounds_derive_derive.py
@@ -733,6 +743,8 @@ geoengine_api_client/models/variable_matrix_width.py
 geoengine_api_client/models/vec_update.py
 geoengine_api_client/models/vector_column_info.py
 geoengine_api_client/models/vector_data_type.py
+geoengine_api_client/models/vector_expression.py
+geoengine_api_client/models/vector_expression_parameters.py
 geoengine_api_client/models/vector_operator.py
 geoengine_api_client/models/vector_result_descriptor.py
 geoengine_api_client/models/volume.py
@@ -850,6 +862,7 @@ test/test_general_api.py
 test/test_geo_json.py
 test/test_geo_transform.py
 test/test_geometry_dimension.py
+test/test_geometry_output_column.py
 test/test_geospatial_data.py
 test/test_geospatial_data_data_type.py
 test/test_geospatial_data_data_type_one_of.py
@@ -920,6 +933,7 @@ test/test_multiple_raster_or_single_vector_source.py
 test/test_multiple_raster_sources.py
 test/test_names.py
 test/test_net_cdf_cf_data_provider_definition.py
+test/test_new_output_column.py
 test/test_number_param.py
 test/test_ogcapi_api.py
 test/test_ogcwcs_api.py
@@ -946,6 +960,7 @@ test/test_ogr_source_time_format_custom.py
 test/test_ogr_source_time_format_unix_time_stamp.py
 test/test_operator_quota.py
 test/test_order_by.py
+test/test_output_column.py
 test/test_palette_colorizer.py
 test/test_pangaea_data_provider_definition.py
 test/test_percentile_estimate_aggregation.py
@@ -1013,6 +1028,7 @@ test/test_single_raster_or_vector_source.py
 test/test_single_raster_source.py
 test/test_single_vector_multiple_raster_sources.py
 test/test_single_vector_or_raster_source.py
+test/test_single_vector_source.py
 test/test_spatial_bounds_derive.py
 test/test_spatial_bounds_derive_bounds.py
 test/test_spatial_bounds_derive_derive.py
@@ -1111,6 +1127,8 @@ test/test_variable_matrix_width.py
 test/test_vec_update.py
 test/test_vector_column_info.py
 test/test_vector_data_type.py
+test/test_vector_expression.py
+test/test_vector_expression_parameters.py
 test/test_vector_operator.py
 test/test_vector_result_descriptor.py
 test/test_volume.py

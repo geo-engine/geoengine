@@ -1,4 +1,4 @@
-use crate::api::model::datatypes::Coordinate2D;
+use crate::api::model::datatypes::{Coordinate2D, VectorDataType};
 use anyhow::Context;
 use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize, Serializer};
@@ -57,11 +57,24 @@ impl From<RasterDataType> for geoengine_datatypes::raster::RasterDataType {
 /// Measurement information for a raster band.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase", untagged)]
-#[schema(discriminator = "type")]
+#[schema(
+    discriminator = "type",
+    examples(
+        json!({"type": "unitless"}),
+        json!({"type": "continuous", "measurement": "length", "unit": "m"}),
+        json!({"type": "classification", "measurement": "severity", "classes": ["low", "medium", "high"]}),
+    ),
+)]
 pub enum Measurement {
     Unitless(UnitlessMeasurement),
     Continuous(ContinuousMeasurement),
     Classification(ClassificationMeasurement),
+}
+
+impl Measurement {
+    pub fn unitless() -> Self {
+        Self::Unitless(Default::default())
+    }
 }
 
 impl From<geoengine_datatypes::primitives::Measurement> for Measurement {
@@ -415,6 +428,22 @@ impl TryFrom<BoundingBox2D> for geoengine_datatypes::primitives::BoundingBox2D {
         )
         .context("invalid bounding box")
     }
+}
+
+/// Specify the output of a vector expression.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(tag = "type", content = "value", rename_all = "camelCase")]
+#[schema(examples(
+    json!({"type": "column", "value": "adjusted_temperature"}),
+    json!({"type": "geometry", "value": "MultiPolygon"}),
+))]
+pub enum OutputColumn {
+    /// The expression will override the current geometry
+    #[schema(title = "GeometryOutputColumn")]
+    Geometry(VectorDataType),
+    /// The expression will append a new `Float` column
+    #[schema(title = "NewOutputColumn")]
+    Column(String),
 }
 
 #[cfg(test)]
