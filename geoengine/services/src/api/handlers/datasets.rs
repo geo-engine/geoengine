@@ -275,8 +275,9 @@ fn validate_tile(
     data_path_file_path: &Path,
     dataset_descriptor: &RasterResultDescriptor,
 ) -> Result<(), AddDatasetTilesError> {
-    // External data uses GDAL virtual filesystem paths (e.g., /vsicurl/, /vsis3/)
-    // and must not refer to local filesystem paths
+    // External data uses remote URLs (http://, https://, s3://) and must not
+    // refer to local filesystem paths. The GDAL virtual file system prefix is
+    // added only when the dataset is opened.
     if matches!(data_path, DataPath::External) {
         if data_path
             .validate_file_path(&tile.params.file_path)
@@ -3749,7 +3750,8 @@ mod tests {
         Ok(())
     }
 
-    /// Registers tile files on a mock HTTP server and creates tiles with `/vsicurl/` paths.
+    /// Registers tile files on a mock HTTP server and creates tiles with plain `http://` URLs.
+    /// The `/vsicurl/` prefix is only added when GDAL opens the dataset.
     /// The mock server serves the actual test data files so GDAL can read them via `/vsicurl/`.
     fn create_ndvi_tiles_vsicurl(server: &Server) -> Vec<AddDatasetTile> {
         let mut tiles = create_ndvi_tiles();
@@ -3790,9 +3792,8 @@ mod tests {
                     ),
             );
 
-            // Convert to a /vsicurl/ URL that passes validate_file_path
-            let url = server.url_str(&format!("/{file_path_str}"));
-            tile.params.file_path = format!("/vsicurl/{url}").into();
+            // Store the plain http URL — the /vsicurl/ prefix is added when opening the dataset
+            tile.params.file_path = server.url_str(&format!("/{file_path_str}")).into();
         }
 
         tiles
@@ -3804,7 +3805,7 @@ mod tests {
         // Start a mock HTTP server that serves the tile files (GDAL reads them via /vsicurl/)
         let mock_server = httptest::Server::run();
 
-        // Create tiles with /vsicurl/ paths backed by the mock server.
+        // Create tiles with plain http URLs backed by the mock server.
         // The mock server is kept alive for the full test duration (including the WMS query).
         let tiles = create_ndvi_tiles_vsicurl(&mock_server);
 
@@ -3851,7 +3852,7 @@ mod tests {
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         // Add tiles through the API handler — validate_tile now checks that the paths
-        // are valid /vsicurl/ URLs (which they are), so this succeeds.
+        // are valid http URLs (which they are), so this succeeds.
         let req = actix_web::test::TestRequest::post()
             .uri(&format!("/dataset/{dataset_name}/tiles"))
             .append_header((header::CONTENT_LENGTH, 0))

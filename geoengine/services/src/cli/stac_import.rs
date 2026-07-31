@@ -3,7 +3,7 @@
 use ordered_float::OrderedFloat;
 use std::{
     collections::{HashMap, HashSet},
-    path::PathBuf,
+    path::{Path, PathBuf},
     str::FromStr,
     time::{Duration, Instant},
 };
@@ -1622,7 +1622,7 @@ impl AssetBandProcessor<'_> {
             band: band_index as u32,
             z_index: self.z_index,
             params: GdalDatasetParameters {
-                file_path: file_path.into(),
+                file_path,
                 rasterband_channel: band_idx + 1, // gdal channels are 1-based
                 geo_transform: self.geo_transform.into(),
                 width,
@@ -1641,9 +1641,9 @@ impl AssetBandProcessor<'_> {
 
     fn gdal_options_for_file_path(
         &self,
-        file_path: &GdalFilePath,
+        file_path: &Path,
     ) -> Result<Option<Vec<GdalConfigOption>>, anyhow::Error> {
-        let gdal_open_options = if let GdalFilePath::S3(_) = *file_path {
+        let gdal_open_options = if file_path.to_string_lossy().starts_with("s3://") {
             // TODO: allow skipping s3 assets on missing credentials?
             let s3_endpoint = self.params.s3_endpoint.as_ref().ok_or(anyhow::anyhow!(
                 "S3 endpoint must be provided for S3 assets"
@@ -1733,7 +1733,7 @@ impl AssetBandProcessor<'_> {
             band: band_index as u32,
             z_index: self.z_index,
             params: GdalDatasetParameters {
-                file_path: file_path.into(),
+                file_path,
                 rasterband_channel: band_idx + 1, // gdal channels are 1-based
                 geo_transform: self.geo_transform.into(),
                 width,
@@ -1751,26 +1751,14 @@ impl AssetBandProcessor<'_> {
     }
 }
 
-fn gdal_file_path(asset: &Asset) -> anyhow::Result<GdalFilePath> {
-    if asset.href.starts_with("http") {
-        Ok(GdalFilePath::Http(format!("/vsicurl/{}", asset.href)))
-    } else if let Some(s3_url) = asset.href.strip_prefix("s3://") {
-        Ok(GdalFilePath::S3(format!("/vsis3/{s3_url}")))
+fn gdal_file_path(asset: &Asset) -> anyhow::Result<PathBuf> {
+    if asset.href.starts_with("http://")
+        || asset.href.starts_with("https://")
+        || asset.href.starts_with("s3://")
+    {
+        Ok(PathBuf::from(asset.href.clone()))
     } else {
         anyhow::bail!("Unsupported asset href format for GDAL: {}", asset.href);
-    }
-}
-
-enum GdalFilePath {
-    Http(String),
-    S3(String),
-}
-
-impl GdalFilePath {
-    fn into(self) -> PathBuf {
-        match self {
-            GdalFilePath::Http(path) | GdalFilePath::S3(path) => PathBuf::from(path),
-        }
     }
 }
 
@@ -2781,7 +2769,7 @@ mod tests {
         assert_eq!(
             tile.params.file_path,
             PathBuf::from(
-                "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/U/MB/2026/1/S2B_32UMB_20260128_0_L2A/B02.tif"
+                "https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/U/MB/2026/1/S2B_32UMB_20260128_0_L2A/B02.tif"
             )
         );
 
@@ -2930,7 +2918,7 @@ mod tests {
         assert_eq!(tile.params.height, 10_980);
         assert_eq!(
             tile.params.file_path,
-            PathBuf::from("/vsis3/eodata/Sentinel-2/MSI/L2A/2026/01/28/example/B02_10m.jp2")
+            PathBuf::from("s3://eodata/Sentinel-2/MSI/L2A/2026/01/28/example/B02_10m.jp2")
         );
 
         let expected_z_index = chrono::DateTime::parse_from_rfc3339("2026-01-29T14:19:30Z")

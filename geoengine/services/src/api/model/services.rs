@@ -211,15 +211,19 @@ impl DataPath {
 
     /// Validates that a file path is appropriate for this data path variant.
     ///
-    /// For `External`, the file path must be a GDAL virtual filesystem path
-    /// (e.g., `/vsicurl/` or `/vsis3/`), not a local filesystem path.
+    /// For `External`, the file path must be a remote URL with an `http://`, `https://`,
+    /// or `s3://` scheme. The GDAL virtual file system prefix (e.g. `/vsicurl/` or
+    /// `/vsis3/`) is only added when the dataset is actually opened.
     /// For `Volume` and `Upload`, the file path must be a relative path
     /// with no root, parent, or current-directory components.
     pub fn validate_file_path(&self, file_path: &Path) -> Result<()> {
         match self {
             DataPath::External => {
                 let path_str = file_path.to_string_lossy();
-                if !path_str.starts_with("/vsicurl/") && !path_str.starts_with("/vsis3/") {
+                let is_url = path_str.starts_with("http://")
+                    || path_str.starts_with("https://")
+                    || path_str.starts_with("s3://");
+                if !is_url {
                     return Err(Error::InvalidPath);
                 }
                 Ok(())

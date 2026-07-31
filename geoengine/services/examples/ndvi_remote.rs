@@ -8,9 +8,15 @@ use geoengine_datatypes::raster::{
 use geoengine_datatypes::util::gdal::gdal_open_dataset;
 use std::time::{Duration, Instant};
 
-const B04_URL: &str = "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/U/MB/2020/8/S2B_32UMB_20200807_1_L2A/B04.tif";
-const B08_URL: &str = "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/U/MB/2020/8/S2B_32UMB_20200807_1_L2A/B08.tif";
-const SCL_URL: &str = "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/U/MB/2020/8/S2B_32UMB_20200807_1_L2A/SCL.tif";
+const B04_URL: &str = "https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/U/MB/2020/8/S2B_32UMB_20200807_1_L2A/B04.tif";
+const B08_URL: &str = "https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/U/MB/2020/8/S2B_32UMB_20200807_1_L2A/B08.tif";
+const SCL_URL: &str = "https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/U/MB/2020/8/S2B_32UMB_20200807_1_L2A/SCL.tif";
+
+/// Wraps an http(s) URL in GDAL's `/vsicurl/` virtual file system handler.
+/// The prefix is only added when the dataset is actually opened.
+fn vsicurl(url: &str) -> String {
+    format!("/vsicurl/{url}")
+}
 
 struct BandData {
     b04: Vec<u16>,
@@ -154,9 +160,9 @@ fn read_bands(
         ReadStrategy::TiledReusedDataset { tile_size }
         | ReadStrategy::TiledReopenDataset { tile_size } => {
             let reopen_per_tile = matches!(strategy, ReadStrategy::TiledReopenDataset { .. });
-            let scl_dataset = gdal_open_dataset(std::path::Path::new(SCL_URL))?;
-            let b08_dataset = gdal_open_dataset(std::path::Path::new(B08_URL))?;
-            let b04_dataset = gdal_open_dataset(std::path::Path::new(B04_URL))?;
+            let scl_dataset = gdal_open_dataset(std::path::Path::new(&vsicurl(SCL_URL)))?;
+            let b08_dataset = gdal_open_dataset(std::path::Path::new(&vsicurl(B08_URL)))?;
+            let b04_dataset = gdal_open_dataset(std::path::Path::new(&vsicurl(B04_URL)))?;
             read_bands_tiled_internal(
                 &b04_dataset,
                 &b08_dataset,
@@ -183,9 +189,9 @@ fn read_bands_full_raster(
 ) -> Result<(BandData, Duration), Box<dyn std::error::Error>> {
     let start = Instant::now();
 
-    let scl_dataset = gdal_open_dataset(std::path::Path::new(SCL_URL))?;
-    let b08_dataset = gdal_open_dataset(std::path::Path::new(B08_URL))?;
-    let b04_dataset = gdal_open_dataset(std::path::Path::new(B04_URL))?;
+    let scl_dataset = gdal_open_dataset(std::path::Path::new(&vsicurl(SCL_URL)))?;
+    let b08_dataset = gdal_open_dataset(std::path::Path::new(&vsicurl(B08_URL)))?;
+    let b04_dataset = gdal_open_dataset(std::path::Path::new(&vsicurl(B04_URL)))?;
 
     // Read B04 (10m resolution)
     let b04_band = b04_dataset.rasterband(1)?;
@@ -254,9 +260,9 @@ fn read_bands_tiled_internal(
             // Get datasets for this tile (reopen if needed)
             let (b04_ds, b08_ds, scl_ds);
             let (b04_band, b08_band, scl_band) = if reopen_per_tile {
-                b04_ds = gdal_open_dataset(std::path::Path::new(B04_URL))?;
-                b08_ds = gdal_open_dataset(std::path::Path::new(B08_URL))?;
-                scl_ds = gdal_open_dataset(std::path::Path::new(SCL_URL))?;
+                b04_ds = gdal_open_dataset(std::path::Path::new(&vsicurl(B04_URL)))?;
+                b08_ds = gdal_open_dataset(std::path::Path::new(&vsicurl(B08_URL)))?;
+                scl_ds = gdal_open_dataset(std::path::Path::new(&vsicurl(SCL_URL)))?;
                 (
                     b04_ds.rasterband(1)?,
                     b08_ds.rasterband(1)?,
