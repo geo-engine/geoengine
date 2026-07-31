@@ -586,8 +586,9 @@ impl StacMultiBandMetaData {
 
     fn gdal_config_options_for_file_path(&self, file_path: &Path) -> Option<Vec<(String, String)>> {
         let file_path_str = file_path.to_string_lossy();
-        let is_vsi_s3 = file_path_str.starts_with("/vsis3/");
-        let is_vsi_curl = file_path_str.starts_with("/vsicurl/");
+        let is_vsi_s3 = file_path_str.starts_with("s3://");
+        let is_vsi_curl =
+            file_path_str.starts_with("http://") || file_path_str.starts_with("https://");
 
         if !is_vsi_s3 && !is_vsi_curl {
             return None;
@@ -668,12 +669,11 @@ fn stac_query_time_interval(
 }
 
 fn gdal_file_path(href: &str) -> Option<PathBuf> {
-    if href.starts_with("http") {
-        return Some(PathBuf::from(format!("/vsicurl/{href}")));
+    if href.starts_with("http://") || href.starts_with("https://") || href.starts_with("s3://") {
+        return Some(PathBuf::from(href));
     }
 
-    href.strip_prefix("s3://")
-        .map(|s3_path| PathBuf::from(format!("/vsis3/{s3_path}")))
+    None
 }
 
 fn proj_shape_from_fields(fields: &serde_json::Map<String, Value>) -> Option<(usize, usize)> {
@@ -987,15 +987,15 @@ mod tests {
 
             for param in &b08_params {
                 assert!(
-                    param.file_path.to_string_lossy().contains("/vsis3/"),
-                    "B08 file should use S3 path: {:?}",
+                    param.file_path.to_string_lossy().starts_with("s3://"),
+                    "B08 file should use S3 URL: {:?}",
                     param.file_path
                 );
             }
             for param in &b04_params {
                 assert!(
-                    param.file_path.to_string_lossy().contains("/vsis3/"),
-                    "B04 file should use S3 path: {:?}",
+                    param.file_path.to_string_lossy().starts_with("s3://"),
+                    "B04 file should use S3 URL: {:?}",
                     param.file_path
                 );
             }

@@ -81,6 +81,25 @@ where
     }
 }
 
+/// Validates that a path is relative — no root, prefix, current-dir, or parent-dir components.
+pub fn validate_relative_path(base: &Path, sub_path: &Path) -> Result<()> {
+    for component in sub_path.components() {
+        if matches!(
+            component,
+            std::path::Component::CurDir
+                | std::path::Component::ParentDir
+                | std::path::Component::RootDir
+                | std::path::Component::Prefix(_)
+        ) {
+            return Err(Error::PathMustNotContainParentReferences {
+                base: base.into(),
+                sub_path: sub_path.into(),
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Join `base` and `sub_path` and ensure the `sub_path` doesn't escape the `base`
 /// returns an error if the `sub_path` escapes the `base`
 ///
@@ -95,18 +114,7 @@ pub fn path_with_base_path(base: &Path, sub_path: &Path) -> Result<PathBuf> {
             });
         }
     }
-    for component in sub_path.components() {
-        if let std::path::Component::CurDir
-        | std::path::Component::ParentDir
-        | std::path::Component::RootDir
-        | std::path::Component::Prefix(_) = component
-        {
-            return Err(Error::PathMustNotContainParentReferences {
-                base: base.into(),
-                sub_path: sub_path.into(),
-            });
-        }
-    }
+    validate_relative_path(base, sub_path)?;
 
     let path = base.join(sub_path);
 

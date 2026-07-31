@@ -12,7 +12,8 @@ use crate::api::model::operators::{
 use crate::datasets::DatasetName;
 use crate::datasets::external::{GdalRetries, WildliveDataConnectorAuth};
 use crate::datasets::storage::validate_tags;
-use crate::datasets::upload::{UploadId, VolumeName};
+use crate::datasets::upload::{UploadId, UploadRootPath, VolumeName, Volumes};
+use crate::error::{Error, Result};
 use crate::projects::Symbology;
 use crate::util::Secret;
 use crate::util::oidc::RefreshToken;
@@ -21,7 +22,7 @@ use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use url::Url;
 use utoipa::ToSchema;
 use validator::{Validate, ValidationErrors};
@@ -160,6 +161,10 @@ pub struct CreateDataset {
     pub definition: DatasetDefinition,
 }
 
+/// A data path is a reference to a location where data is stored.
+/// It can be a volume, an upload, or an external source.
+/// This information is used when turning a relative file path of a `Dataset` file
+/// into an absolute file path on the server.
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum DataPath {
@@ -167,11 +172,74 @@ pub enum DataPath {
     Volume(VolumeName),
     #[schema(title = "DataPathUpload")]
     Upload(UploadId),
+    #[schema(title = "DataPathExternal")]
+    External,
 }
 
 impl TestDefault for DataPath {
     fn test_default() -> Self {
         DataPath::Volume(VolumeName("test_data".to_string()))
+    }
+}
+
+impl DataPath {
+    /// Resolves the data path to its base directory path.
+    /// Returns `Ok(None)` for external data (no base path needed).
+    /// Returns `Ok(Some(path))` for volume and upload data.
+    pub fn resolve_base_path(&self) -> Result<Option<PathBuf>> {
+        match self {
+            DataPath::Volume(volume_name) => {
+                let volumes = Volumes::default();
+                let volume = volumes
+                    .volumes
+                    .iter()
+                    .find(|v| v.name == *volume_name)
+                    .ok_or_else(|| Error::UnknownVolumeName {
+                        volume_name: volume_name.0.clone(),
+                    })?;
+                Ok(Some(volume.path.clone()))
+            }
+            DataPath::Upload(upload_id) => Ok(Some(upload_id.root_path()?)),
+            DataPath::External => Ok(None),
+        }
+    }
+
+    /// Resolves a file path relative to the data path into an absolute file path.
+    /// For external data, the file path is treated as already absolute.
+    pub fn resolve_file_path(&self, file_path: &Path) -> Result<PathBuf> {
+        match self.resolve_base_path()? {
+            Some(base_path) => Ok(base_path.join(file_path)),
+            None => Ok(file_path.to_path_buf()),
+        }
+    }
+
+    /// Validates that a file path is appropriate for this data path variant.
+    ///
+    /// For `External`, the file path must be a remote URL with an `http://`, `https://`,
+    /// or `s3://` scheme. The GDAL virtual file system prefix (e.g. `/vsicurl/` or
+    /// `/vsis3/`) is only added when the dataset is actually opened.
+    /// For `Volume` and `Upload`, the file path must be a relative path
+    /// with no root, parent, or current-directory components.
+    pub fn validate_file_path(&self, file_path: &Path) -> Result<()> {
+        match self {
+            DataPath::External => {
+                let path_str = file_path.to_string_lossy();
+                let is_url = path_str.starts_with("http://")
+                    || path_str.starts_with("https://")
+                    || path_str.starts_with("s3://");
+                if !is_url {
+                    return Err(Error::InvalidPath);
+                }
+                Ok(())
+            }
+            DataPath::Volume(_) | DataPath::Upload(_) => {
+                let _file_name = file_path.file_name().ok_or(Error::PathIsNotAFile)?;
+
+                crate::util::validate_relative_path(Path::new(""), file_path)?;
+
+                Ok(())
+            }
+        }
     }
 }
 

@@ -9,9 +9,15 @@ use geoengine_datatypes::util::gdal::gdal_open_dataset;
 use std::time::{Duration, Instant};
 
 const CODE_DE_S3_ENDPOINT: &str = "eodata.nsiscloud.polsa.gov.pl";
-const B04_URL: &str = "/vsis3/eodata/Sentinel-2/MSI/L2A/2026/01/03/S2C_MSIL2A_20260103T103441_N0511_R108_T32UNB_20260103T142711.SAFE/GRANULE/L2A_T32UNB_A006942_20260103T103622/IMG_DATA/R10m/T32UNB_20260103T103441_B04_10m.jp2";
-const B08_URL: &str = "/vsis3/eodata/Sentinel-2/MSI/L2A/2026/01/03/S2C_MSIL2A_20260103T103441_N0511_R108_T32UNC_20260103T142711.SAFE/GRANULE/L2A_T32UNC_A006942_20260103T103622/IMG_DATA/R10m/T32UNC_20260103T103441_B08_10m.jp2";
-const SCL_URL: &str = "/vsis3/eodata/Sentinel-2/MSI/L2A/2026/01/03/S2C_MSIL2A_20260103T103441_N0511_R108_T32UNA_20260103T142711.SAFE/GRANULE/L2A_T32UNA_A006942_20260103T103622/IMG_DATA/R20m/T32UNA_20260103T103441_SCL_20m.jp2";
+const B04_URL: &str = "s3://eodata/Sentinel-2/MSI/L2A/2026/01/03/S2C_MSIL2A_20260103T103441_N0511_R108_T32UNB_20260103T142711.SAFE/GRANULE/L2A_T32UNB_A006942_20260103T103622/IMG_DATA/R10m/T32UNB_20260103T103441_B04_10m.jp2";
+const B08_URL: &str = "s3://eodata/Sentinel-2/MSI/L2A/2026/01/03/S2C_MSIL2A_20260103T103441_N0511_R108_T32UNC_20260103T142711.SAFE/GRANULE/L2A_T32UNC_A006942_20260103T103622/IMG_DATA/R10m/T32UNC_20260103T103441_B08_10m.jp2";
+const SCL_URL: &str = "s3://eodata/Sentinel-2/MSI/L2A/2026/01/03/S2C_MSIL2A_20260103T103441_N0511_R108_T32UNA_20260103T142711.SAFE/GRANULE/L2A_T32UNA_A006942_20260103T103622/IMG_DATA/R20m/T32UNA_20260103T103441_SCL_20m.jp2";
+
+/// Wraps an `s3://` URL in GDAL's `/vsis3/` virtual file system handler.
+/// The prefix is only added when the dataset is actually opened.
+fn vsis3(url: &str) -> String {
+    format!("/vsis3/{}", url.strip_prefix("s3://").unwrap_or(url))
+}
 
 struct BandData {
     b04: Vec<u16>,
@@ -165,9 +171,9 @@ fn read_bands(
         ReadStrategy::TiledReusedDataset { tile_size }
         | ReadStrategy::TiledReopenDataset { tile_size } => {
             let reopen_per_tile = matches!(strategy, ReadStrategy::TiledReopenDataset { .. });
-            let scl_dataset = gdal_open_dataset(std::path::Path::new(SCL_URL))?;
-            let b08_dataset = gdal_open_dataset(std::path::Path::new(B08_URL))?;
-            let b04_dataset = gdal_open_dataset(std::path::Path::new(B04_URL))?;
+            let scl_dataset = gdal_open_dataset(std::path::Path::new(&vsis3(SCL_URL)))?;
+            let b08_dataset = gdal_open_dataset(std::path::Path::new(&vsis3(B08_URL)))?;
+            let b04_dataset = gdal_open_dataset(std::path::Path::new(&vsis3(B04_URL)))?;
             read_bands_tiled_internal(
                 &b04_dataset,
                 &b08_dataset,
@@ -194,9 +200,9 @@ fn read_bands_full_raster(
 ) -> Result<(BandData, Duration), Box<dyn std::error::Error>> {
     let start = Instant::now();
 
-    let scl_dataset = gdal_open_dataset(std::path::Path::new(SCL_URL))?;
-    let b08_dataset = gdal_open_dataset(std::path::Path::new(B08_URL))?;
-    let b04_dataset = gdal_open_dataset(std::path::Path::new(B04_URL))?;
+    let scl_dataset = gdal_open_dataset(std::path::Path::new(&vsis3(SCL_URL)))?;
+    let b08_dataset = gdal_open_dataset(std::path::Path::new(&vsis3(B08_URL)))?;
+    let b04_dataset = gdal_open_dataset(std::path::Path::new(&vsis3(B04_URL)))?;
 
     // Read B04 (10m resolution)
     let b04_band = b04_dataset.rasterband(1)?;
@@ -265,9 +271,9 @@ fn read_bands_tiled_internal(
             // Get datasets for this tile (reopen if needed)
             let (b04_ds, b08_ds, scl_ds);
             let (b04_band, b08_band, scl_band) = if reopen_per_tile {
-                b04_ds = gdal_open_dataset(std::path::Path::new(B04_URL))?;
-                b08_ds = gdal_open_dataset(std::path::Path::new(B08_URL))?;
-                scl_ds = gdal_open_dataset(std::path::Path::new(SCL_URL))?;
+                b04_ds = gdal_open_dataset(std::path::Path::new(&vsis3(B04_URL)))?;
+                b08_ds = gdal_open_dataset(std::path::Path::new(&vsis3(B08_URL)))?;
+                scl_ds = gdal_open_dataset(std::path::Path::new(&vsis3(SCL_URL)))?;
                 (
                     b04_ds.rasterband(1)?,
                     b08_ds.rasterband(1)?,

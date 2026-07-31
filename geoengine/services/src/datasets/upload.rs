@@ -144,6 +144,9 @@ impl AdjustFilePath for Upload {
     fn adjust_file_path(&self, file_path: &Path) -> Result<PathBuf> {
         let file_name = file_path.file_name().ok_or(error::Error::PathIsNotAFile)?;
 
+        // Reject absolute / remote paths — upload paths must be relative filenames
+        crate::util::validate_relative_path(&self.id.root_path()?, file_path)?;
+
         Ok(self.id.root_path()?.join(file_name))
     }
 }
@@ -166,4 +169,101 @@ pub trait UploadDb {
     async fn load_upload(&self, upload: UploadId) -> Result<Upload>;
 
     async fn create_upload(&self, upload: Upload) -> Result<()>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use geoengine_datatypes::util::Identifier;
+    use std::path::Path;
+
+    fn make_upload() -> Upload {
+        Upload {
+            id: UploadId::new(),
+            files: vec![],
+        }
+    }
+
+    #[test]
+    fn it_adjusts_upload_file_path() {
+        let upload = make_upload();
+        let result = upload.adjust_file_path(Path::new("test_file.tif"));
+        assert!(result.is_ok());
+
+        let path = result.unwrap();
+        assert_eq!(
+            path.file_name(),
+            Some(std::ffi::OsStr::new("test_file.tif"))
+        );
+        assert!(path.to_string_lossy().contains("test_upload"));
+    }
+
+    #[test]
+    fn it_adjusts_upload_file_path_with_subdirectory() {
+        let upload = make_upload();
+        let result = upload.adjust_file_path(Path::new("subdir/test_file.tif"));
+        assert!(result.is_ok());
+
+        // The file name is extracted from the path, subdirectory is ignored
+        let path = result.unwrap();
+        assert_eq!(
+            path.file_name(),
+            Some(std::ffi::OsStr::new("test_file.tif"))
+        );
+        // The path must be relative to the upload dir, not include the subdirectory
+        assert!(!path.to_string_lossy().contains("subdir"));
+    }
+
+    #[test]
+    fn it_rejects_upload_file_path_with_root_dir() {
+        let upload = make_upload();
+        let result = upload.adjust_file_path(Path::new("/etc/passwd"));
+        assert!(result.is_err());
+        assert!(
+            matches!(
+                result.unwrap_err(),
+                error::Error::PathMustNotContainParentReferences { .. }
+            ),
+            "expected PathMustNotContainParentReferences"
+        );
+    }
+
+    #[test]
+    fn it_rejects_upload_file_path_with_cur_dir() {
+        let upload = make_upload();
+        let result = upload.adjust_file_path(Path::new("./file.txt"));
+        assert!(result.is_err());
+        assert!(
+            matches!(
+                result.unwrap_err(),
+                error::Error::PathMustNotContainParentReferences { .. }
+            ),
+            "expected PathMustNotContainParentReferences"
+        );
+    }
+
+    #[test]
+    fn it_rejects_upload_file_path_with_parent_dir() {
+        let upload = make_upload();
+        let result = upload.adjust_file_path(Path::new("../file.txt"));
+        assert!(result.is_err());
+        assert!(
+            matches!(
+                result.unwrap_err(),
+                error::Error::PathMustNotContainParentReferences { .. }
+            ),
+            "expected PathMustNotContainParentReferences"
+        );
+    }
+
+    #[test]
+    fn it_rejects_upload_file_path_without_file_name() {
+        let upload = make_upload();
+        let result = upload.adjust_file_path(Path::new(""));
+        assert!(result.is_err());
+        assert!(
+            matches!(result.unwrap_err(), error::Error::PathIsNotAFile { .. }),
+            "expected PathIsNotAFile"
+        );
+    }
 }

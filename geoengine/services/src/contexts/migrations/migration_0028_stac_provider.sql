@@ -34,3 +34,6 @@ CREATE TYPE "StacDataProviderDefinition" AS (
 
 ALTER TYPE "DataProviderDefinition" ADD ATTRIBUTE
 stac_data_provider_definition "StacDataProviderDefinition";
+
+-- Add explicit boolean for the External variant
+ALTER TYPE "DataPath" ADD ATTRIBUTE external boolean;

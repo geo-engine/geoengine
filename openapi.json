@@ -6930,8 +6930,16 @@
                 "$ref": "#/components/schemas/UploadId"
               }
             }
+          },
+          {
+            "type": "string",
+            "title": "DataPathExternal",
+            "enum": [
+              "external"
+            ]
           }
-        ]
+        ],
+        "description": "A data path is a reference to a location where data is stored.\nIt can be a volume, an upload, or an external source.\nThis information is used when turning a relative file path of a `Dataset` file\ninto an absolute file path on the server."
       },
       "DataProviderId": {
         "type": "string",

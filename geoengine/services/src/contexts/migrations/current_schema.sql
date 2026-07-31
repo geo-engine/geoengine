@@ -642,9 +642,9 @@ CREATE TABLE workflows (
 -- TODO: add length constraints
 
 CREATE TYPE "DataPath" AS (
-    -- oneOf
     volume_name text,
-    upload_id uuid
+    upload_id uuid,
+    external boolean
 );
 
 CREATE TABLE datasets (

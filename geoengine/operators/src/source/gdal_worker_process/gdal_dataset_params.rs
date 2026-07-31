@@ -77,8 +77,32 @@ impl GdalDatasetParameters {
         SpatialGridDefinition::new(gdal_geo_transform, self.dataset_bounds())
     }
 
-    pub fn is_vis_curl(&self) -> bool {
-        self.file_path.starts_with("/vsicurl/") || self.file_path.starts_with("/vsis3/")
+    /// Returns the file path that should be passed to GDAL when opening the dataset.
+    ///
+    /// Remote HTTP(S) and S3 URLs are wrapped in the corresponding GDAL virtual file
+    /// system handler (`/vsicurl/` for `http://`/`https://`, `/vsis3/` for `s3://`).
+    /// Local file paths and already-prefixed paths (e.g. `/vsicurl_streaming/`) are
+    /// returned unchanged.
+    pub fn file_path_for_open(&self) -> PathBuf {
+        let file_path_str = self.file_path.to_string_lossy();
+
+        if let Some(s3_path) = file_path_str.strip_prefix("s3://") {
+            PathBuf::from(format!("/vsis3/{s3_path}"))
+        } else if file_path_str.starts_with("http://") || file_path_str.starts_with("https://") {
+            PathBuf::from(format!("/vsicurl/{file_path_str}"))
+        } else {
+            self.file_path.clone()
+        }
+    }
+
+    /// Returns whether the file path refers to a remote resource that is accessed via
+    /// a GDAL virtual file system handler (HTTP(S) or S3). Used to decide whether the
+    /// VSI cache needs to be cleared on retry.
+    pub fn is_remote(&self) -> bool {
+        let file_path_str = self.file_path.to_string_lossy();
+        file_path_str.starts_with("http://")
+            || file_path_str.starts_with("https://")
+            || file_path_str.starts_with("s3://")
     }
 
     /// Returns the request-level GDAL config options supplied by the user.

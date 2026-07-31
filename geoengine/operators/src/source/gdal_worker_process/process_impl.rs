@@ -254,7 +254,7 @@ impl GdalDatasetHolder {
             .expect("GdalConfigOptions must not fail");
 
         let ds = gdal_open_ex_gdal_error(
-            &dataset_params.file_path,
+            &dataset_params.file_path_for_open(),
             DatasetOptions {
                 open_flags: GdalOpenFlags::GDAL_OF_RASTER,
                 open_options: options.as_deref(),
@@ -368,7 +368,7 @@ impl GdalHandling {
         dataset_params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
     ) -> Result<super::process_common::GdalIpcPayload<T>, IpcProcessError> {
-        let is_vsi_curl = dataset_params.is_vis_curl();
+        let is_remote = dataset_params.is_remote();
         let max_retries = dataset_params.max_retries().unwrap_or(0);
         let dp = &dataset_params;
 
@@ -383,16 +383,16 @@ impl GdalHandling {
                 let ds = match cache.get_or_open(dp) {
                     Ok(dataset) => dataset,
                     Err(gdal_error) => {
-                        if is_vsi_curl {
-                            Self::clear_gdal_vsi_cache_for_path(dp.file_path.as_path());
+                        if is_remote {
+                            Self::clear_gdal_vsi_cache_for_path(&dp.file_path_for_open());
                         }
                         return Err(IpcProcessError::from(gdal_error));
                     }
                 };
 
                 Self::load_tile_data(ds, dataset_params, read_advise).inspect_err(|_e| {
-                    if is_vsi_curl {
-                        Self::clear_gdal_vsi_cache_for_path(dp.file_path.as_path());
+                    if is_remote {
+                        Self::clear_gdal_vsi_cache_for_path(&dp.file_path_for_open());
                     }
                 })
             },
@@ -1195,7 +1195,7 @@ mod tests {
         );
 
         let ds = GdalDatasetParameters {
-            file_path: format!("/vsicurl/{}", server.url_str("/non_existing.tif")).into(),
+            file_path: server.url_str("/non_existing.tif").into(),
             rasterband_channel: 1,
             geo_transform: TestDefault::test_default(),
             width: 100,
@@ -1241,7 +1241,7 @@ mod tests {
         }
 
         let ds = GdalDatasetParameters {
-            file_path: format!("/vsicurl/{}", server.url_str("/internal_error.tif")).into(),
+            file_path: server.url_str("/internal_error.tif").into(),
             rasterband_channel: 1,
             geo_transform: TestDefault::test_default(),
             width: 100,
@@ -1293,22 +1293,37 @@ mod tests {
                 ]),
         );
 
-        let file_path: PathBuf = format!("/vsicurl/{}", server.url_str("/foo.tif")).into();
+        let params = GdalDatasetParameters {
+            file_path: server.url_str("/foo.tif").into(),
+            rasterband_channel: 1,
+            geo_transform: TestDefault::test_default(),
+            width: 100,
+            height: 100,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: None,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: Some(vec![
+                (
+                    "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
+                    ".tif".to_owned(),
+                ),
+                (
+                    "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
+                    "EMPTY_DIR".to_owned(),
+                ),
+                ("GDAL_HTTP_NETRC".to_owned(), "NO".to_owned()),
+                ("GDAL_HTTP_MAX_RETRY".to_owned(), "0".to_string()),
+            ]),
+            allow_alphaband_as_mask: true,
+            retry: None,
+        };
 
-        let options = Some(vec![
-            (
-                "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
-                ".tif".to_owned(),
-            ),
-            (
-                "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
-                "EMPTY_DIR".to_owned(),
-            ),
-            ("GDAL_HTTP_NETRC".to_owned(), "NO".to_owned()),
-            ("GDAL_HTTP_MAX_RETRY".to_owned(), "0".to_string()),
-        ]);
+        // The `/vsicurl/` prefix is added when the dataset is opened
+        let file_path = params.file_path_for_open();
 
-        let _thread_local_configs = options
+        let _thread_local_configs = params
+            .gdal_config_options
             .as_ref()
             .map(|config_options| GdalConfigOptions::new(config_options));
 

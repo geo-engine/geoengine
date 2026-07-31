@@ -611,7 +611,7 @@ impl SentinelS2L2aCogsMetaData {
         Ok(GdalLoadingInfoTemporalSlice {
             time: time_interval,
             params: Some(GdalDatasetParameters {
-                file_path: PathBuf::from(format!("/vsicurl/{}", asset.href)),
+                file_path: PathBuf::from(asset.href.clone()),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform::from(
                     asset
@@ -1011,7 +1011,7 @@ mod tests {
         let expected = vec![GdalLoadingInfoTemporalSlice {
             time: TimeInterval::new_unchecked(1_609_581_746_000, 1_609_581_758_000),
             params: Some(GdalDatasetParameters {
-                file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
+                file_path: "https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (600_000.0, 3_400_020.0).into(),
@@ -1411,7 +1411,7 @@ mod tests {
             vec![GdalLoadingInfoTemporalSlice {
                 time: TimeInterval::new_unchecked(1_632_384_644_000,1_632_384_704_000),
                 params: Some(GdalDatasetParameters {
-                    file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif".into(),
+                    file_path: "https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif".into(),
                     rasterband_channel: 1,
                     geo_transform: GdalDatasetGeoTransform {
                         origin_coordinate: (499_980.0,9_800_020.00).into(),
