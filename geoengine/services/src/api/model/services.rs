@@ -161,6 +161,10 @@ pub struct CreateDataset {
     pub definition: DatasetDefinition,
 }
 
+/// A data path is a reference to a location where data is stored.
+/// It can be a volume, an upload, or an external source.
+/// This information is used when turning a relative file path of a `Dataset` file
+/// into an absolute file path on the server.
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum DataPath {
