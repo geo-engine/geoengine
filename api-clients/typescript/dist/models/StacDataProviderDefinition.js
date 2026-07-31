@@ -67,6 +67,7 @@ function StacDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminator) {
         's3Config': json['s3Config'] == null ? undefined : (0, StacProviderS3Config_1.StacProviderS3ConfigFromJSON)(json['s3Config']),
         'timeDimension': (0, TimeDimension_1.TimeDimensionFromJSON)(json['timeDimension']),
         'datasets': (json['datasets'].map(StacProviderDataset_1.StacProviderDatasetFromJSON)),
+        'queryTimeoutSecs': json['queryTimeoutSecs'] == null ? undefined : json['queryTimeoutSecs'],
     };
 }
 function StacDataProviderDefinitionToJSON(json) {
@@ -87,5 +88,6 @@ function StacDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator = fals
         's3Config': (0, StacProviderS3Config_1.StacProviderS3ConfigToJSON)(value['s3Config']),
         'timeDimension': (0, TimeDimension_1.TimeDimensionToJSON)(value['timeDimension']),
         'datasets': (value['datasets'].map(StacProviderDataset_1.StacProviderDatasetToJSON)),
+        'queryTimeoutSecs': value['queryTimeoutSecs'],
     };
 }

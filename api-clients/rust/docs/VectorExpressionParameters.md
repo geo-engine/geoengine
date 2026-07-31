@@ -8,7 +8,7 @@ Name | Type | Description | Notes
 **expression** | **String** | The expression to evaluate. | 
 **output_column** | [**models::OutputColumn**](OutputColumn.md) | The type and name of the new column. | 
 **geometry_column_name** | Option<**String**> | The variable name of the geometry column. The default is `geom`. | [optional]
-**output_measurement** | [**models::Measurement**](Measurement.md) | The measurement of the new column. The default is unitless. | 
+**output_measurement** | Option<[**models::Measurement**](Measurement.md)> | The measurement of the new column. The default is unitless. | [optional]
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

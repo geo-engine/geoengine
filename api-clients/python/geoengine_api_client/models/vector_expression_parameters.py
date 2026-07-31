@@ -32,7 +32,7 @@ class VectorExpressionParameters(BaseModel):
     expression: StrictStr = Field(description="The expression to evaluate.")
     output_column: OutputColumn = Field(description="The type and name of the new column.", alias="outputColumn")
     geometry_column_name: Optional[StrictStr] = Field(default=None, description="The variable name of the geometry column. The default is `geom`.", alias="geometryColumnName")
-    output_measurement: Measurement = Field(description="The measurement of the new column. The default is unitless.", alias="outputMeasurement")
+    output_measurement: Optional[Measurement] = Field(default=None, description="The measurement of the new column. The default is unitless.", alias="outputMeasurement")
     __properties: ClassVar[List[str]] = ["inputColumns", "expression", "outputColumn", "geometryColumnName", "outputMeasurement"]
 
     model_config = ConfigDict(

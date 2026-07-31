@@ -77,6 +77,12 @@ export interface StacDataProviderDefinition {
      * @memberof StacDataProviderDefinition
      */
     datasets: Array<StacProviderDataset>;
+    /**
+     * Timeout in seconds for outgoing STAC API HTTP requests.
+     * @type {number}
+     * @memberof StacDataProviderDefinition
+     */
+    queryTimeoutSecs?: number;
 }
 /**
  * @export

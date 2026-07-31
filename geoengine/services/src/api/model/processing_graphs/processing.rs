@@ -1151,7 +1151,7 @@ pub struct VectorExpressionParameters {
     /// The type and name of the new column.
     #[schema(examples(
         json!({"type": "column", "value": "adjusted_temperature"}),
-        json!({"type": "geometry", "value": "multiPolygon"}),
+        json!({"type": "geometry", "value": "MultiPolygon"}),
     ))]
     pub output_column: OutputColumn,
 
@@ -1168,6 +1168,7 @@ pub struct VectorExpressionParameters {
         json!({"type": "continuous", "measurement": "length", "unit": "m"}),
         json!({"type": "classification", "measurement": "severity", "classes": ["low", "medium", "high"]}),
     ))]
+    #[serde(default = "Measurement::unitless")]
     pub output_measurement: Measurement,
 }
 

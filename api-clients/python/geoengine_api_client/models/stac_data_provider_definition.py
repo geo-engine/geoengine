@@ -40,7 +40,8 @@ class StacDataProviderDefinition(BaseModel):
     s3_config: Optional[StacProviderS3Config] = Field(default=None, alias="s3Config")
     time_dimension: TimeDimension = Field(alias="timeDimension")
     datasets: List[StacProviderDataset]
-    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "collectionName", "s3Config", "timeDimension", "datasets"]
+    query_timeout_secs: Optional[StrictInt] = Field(default=None, description="Timeout in seconds for outgoing STAC API HTTP requests.", alias="queryTimeoutSecs")
+    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "collectionName", "s3Config", "timeDimension", "datasets", "queryTimeoutSecs"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -132,7 +133,8 @@ class StacDataProviderDefinition(BaseModel):
             "collectionName": obj.get("collectionName"),
             "s3Config": StacProviderS3Config.from_dict(obj["s3Config"]) if obj.get("s3Config") is not None else None,
             "timeDimension": TimeDimension.from_dict(obj["timeDimension"]) if obj.get("timeDimension") is not None else None,
-            "datasets": [StacProviderDataset.from_dict(_item) for _item in obj["datasets"]] if obj.get("datasets") is not None else None
+            "datasets": [StacProviderDataset.from_dict(_item) for _item in obj["datasets"]] if obj.get("datasets") is not None else None,
+            "queryTimeoutSecs": obj.get("queryTimeoutSecs")
         })
         return _obj
 

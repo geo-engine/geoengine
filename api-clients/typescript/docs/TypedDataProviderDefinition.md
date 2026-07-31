@@ -42,6 +42,7 @@ Name | Type
 `s3Config` | [StacProviderS3Config](StacProviderS3Config.md)
 `timeDimension` | [TimeDimension](TimeDimension.md)
 `datasets` | [Array&lt;StacProviderDataset&gt;](StacProviderDataset.md)
+`queryTimeoutSecs` | number
 `user` | string
 `refreshToken` | string
 `expiryDate` | Date
@@ -89,6 +90,7 @@ const example = {
   "s3Config": null,
   "timeDimension": null,
   "datasets": null,
+  "queryTimeoutSecs": null,
   "user": null,
   "refreshToken": null,
   "expiryDate": null,

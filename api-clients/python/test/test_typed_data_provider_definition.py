@@ -144,6 +144,7 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                                 band_name = '', )
                             ], )
                     ],
+                query_timeout_secs = 56,
                 user = '',
                 refresh_token = '',
                 expiry_date = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f')

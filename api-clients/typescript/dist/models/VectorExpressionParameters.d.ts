@@ -52,7 +52,7 @@ export interface VectorExpressionParameters {
      * @type {Measurement}
      * @memberof VectorExpressionParameters
      */
-    outputMeasurement: Measurement;
+    outputMeasurement?: Measurement;
 }
 /**
  * Check if a given object implements the VectorExpressionParameters interface.

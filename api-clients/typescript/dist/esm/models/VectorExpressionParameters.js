@@ -22,8 +22,6 @@ export function instanceOfVectorExpressionParameters(value) {
         return false;
     if (!('outputColumn' in value) || value['outputColumn'] === undefined)
         return false;
-    if (!('outputMeasurement' in value) || value['outputMeasurement'] === undefined)
-        return false;
     return true;
 }
 export function VectorExpressionParametersFromJSON(json) {
@@ -38,7 +36,7 @@ export function VectorExpressionParametersFromJSONTyped(json, ignoreDiscriminato
         'expression': json['expression'],
         'outputColumn': OutputColumnFromJSON(json['outputColumn']),
         'geometryColumnName': json['geometryColumnName'] == null ? undefined : json['geometryColumnName'],
-        'outputMeasurement': MeasurementFromJSON(json['outputMeasurement']),
+        'outputMeasurement': json['outputMeasurement'] == null ? undefined : MeasurementFromJSON(json['outputMeasurement']),
     };
 }
 export function VectorExpressionParametersToJSON(json) {

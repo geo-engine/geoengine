@@ -26,19 +26,19 @@ pub struct VectorExpressionParameters {
     #[serde(rename = "geometryColumnName", skip_serializing_if = "Option::is_none")]
     pub geometry_column_name: Option<String>,
     /// The measurement of the new column. The default is unitless.
-    #[serde(rename = "outputMeasurement")]
-    pub output_measurement: Box<models::Measurement>,
+    #[serde(rename = "outputMeasurement", skip_serializing_if = "Option::is_none")]
+    pub output_measurement: Option<Box<models::Measurement>>,
 }
 
 impl VectorExpressionParameters {
     /// Parameters for the `VectorExpression` operator.
-    pub fn new(input_columns: Vec<String>, expression: String, output_column: models::OutputColumn, output_measurement: models::Measurement) -> VectorExpressionParameters {
+    pub fn new(input_columns: Vec<String>, expression: String, output_column: models::OutputColumn) -> VectorExpressionParameters {
         VectorExpressionParameters {
             input_columns,
             expression,
             output_column: Box::new(output_column),
             geometry_column_name: None,
-            output_measurement: Box::new(output_measurement),
+            output_measurement: None,
         }
     }
 }

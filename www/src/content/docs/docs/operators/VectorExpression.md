@@ -110,13 +110,20 @@ The parsing of the expression can fail if there are, e.g., syntax errors.
 
 ## Parameters
 
-| Name               | Type         | Description                                                                                                                                                                                                                                                                                                       | Examples                               |
-| ------------------ | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| inputColumns       | array        | The columns to use as variables in the expression.<br><br>For usage in the expression, all special characters are replaced by underscores.<br>E.g., `precipitation.cm` becomes `precipitation_cm`.<br>If the column name starts with a number, an underscore is prepended.<br>E.g., `1column` becomes `_1column`. |                                        |
-| expression         | string       | The expression to evaluate.                                                                                                                                                                                                                                                                                       | `"temperature * (1 + humidity / 100)"` |
-| outputColumn       | OutputColumn | The type and name of the new column.                                                                                                                                                                                                                                                                              |                                        |
-| geometryColumnName | string       | The variable name of the geometry column.<br>The default is `geom`.                                                                                                                                                                                                                                               | `"geom"`                               |
-| outputMeasurement  | Measurement  | The measurement of the new column.<br>The default is unitless.                                                                                                                                                                                                                                                    |                                        |
+| Name         | Type         | Description                                                                                                                                                                                                                                                                                                       | Examples                               |
+| ------------ | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| inputColumns | array        | The columns to use as variables in the expression.<br><br>For usage in the expression, all special characters are replaced by underscores.<br>E.g., `precipitation.cm` becomes `precipitation_cm`.<br>If the column name starts with a number, an underscore is prepended.<br>E.g., `1column` becomes `_1column`. |                                        |
+| expression   | string       | The expression to evaluate.                                                                                                                                                                                                                                                                                       | `"temperature * (1 + humidity / 100)"` |
+| outputColumn | OutputColumn | The type and name of the new column.                                                                                                                                                                                                                                                                              | `{                                     |
+
+"type": "column",
+"value": "adjusted_temperature"
+}`<br>`{
+"type": "geometry",
+"value": "MultiPolygon"
+}`|
+| geometryColumnName | string | The variable name of the geometry column.<br>The default is`geom`. | `"geom"` |
+| outputMeasurement | Measurement | The measurement of the new column.<br>The default is unitless. | |
 
 ## Sources
 

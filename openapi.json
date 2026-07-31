@@ -10508,7 +10508,17 @@
             }
           }
         ],
-        "description": "Specify the output of a vector expression."
+        "description": "Specify the output of a vector expression.",
+        "examples": [
+          {
+            "type": "column",
+            "value": "adjusted_temperature"
+          },
+          {
+            "type": "geometry",
+            "value": "MultiPolygon"
+          }
+        ]
       },
       "Palette": {
         "type": "object",
@@ -14431,8 +14441,7 @@
         "required": [
           "inputColumns",
           "expression",
-          "outputColumn",
-          "outputMeasurement"
+          "outputColumn"
         ],
         "properties": {
           "inputColumns": {

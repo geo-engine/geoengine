@@ -50,7 +50,6 @@ class TestVectorExpressionParameters(unittest.TestCase):
                     ],
                 expression = '',
                 output_column = None,
-                output_measurement = None,
         )
         """
 

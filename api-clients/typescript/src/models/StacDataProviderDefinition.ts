@@ -100,6 +100,12 @@ export interface StacDataProviderDefinition {
      * @memberof StacDataProviderDefinition
      */
     datasets: Array<StacProviderDataset>;
+    /**
+     * Timeout in seconds for outgoing STAC API HTTP requests.
+     * @type {number}
+     * @memberof StacDataProviderDefinition
+     */
+    queryTimeoutSecs?: number;
 }
 
 
@@ -147,6 +153,7 @@ export function StacDataProviderDefinitionFromJSONTyped(json: any, ignoreDiscrim
         's3Config': json['s3Config'] == null ? undefined : StacProviderS3ConfigFromJSON(json['s3Config']),
         'timeDimension': TimeDimensionFromJSON(json['timeDimension']),
         'datasets': ((json['datasets'] as Array<any>).map(StacProviderDatasetFromJSON)),
+        'queryTimeoutSecs': json['queryTimeoutSecs'] == null ? undefined : json['queryTimeoutSecs'],
     };
 }
 
@@ -171,6 +178,7 @@ export function StacDataProviderDefinitionToJSONTyped(value?: StacDataProviderDe
         's3Config': StacProviderS3ConfigToJSON(value['s3Config']),
         'timeDimension': TimeDimensionToJSON(value['timeDimension']),
         'datasets': ((value['datasets'] as Array<any>).map(StacProviderDatasetToJSON)),
+        'queryTimeoutSecs': value['queryTimeoutSecs'],
     };
 }
 
