@@ -34,6 +34,9 @@ function DataPathFromJSONTyped(json, ignoreDiscriminator) {
     if ((0, DataPathVolume_1.instanceOfDataPathVolume)(json)) {
         return (0, DataPathVolume_1.DataPathVolumeFromJSONTyped)(json, true);
     }
+    if (typeof json === 'string' && (json === 'external')) {
+        return json;
+    }
     return {};
 }
 function DataPathToJSON(json) {
@@ -51,6 +54,9 @@ function DataPathToJSONTyped(value, ignoreDiscriminator = false) {
     }
     if ((0, DataPathVolume_1.instanceOfDataPathVolume)(value)) {
         return (0, DataPathVolume_1.DataPathVolumeToJSON)(value);
+    }
+    if (typeof value === 'string' && (value === 'external')) {
+        return value;
     }
     return {};
 }

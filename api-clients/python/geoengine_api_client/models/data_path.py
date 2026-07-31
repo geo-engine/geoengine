@@ -23,18 +23,20 @@ from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-DATAPATH_ONE_OF_SCHEMAS = ["DataPathUpload", "DataPathVolume"]
+DATAPATH_ONE_OF_SCHEMAS = ["DataPathUpload", "DataPathVolume", "str"]
 
 class DataPath(BaseModel):
     """
-    DataPath
+    A data path is a reference to a location where data is stored. It can be a volume, an upload, or an external source. This information is used when turning a relative file path of a `Dataset` file into an absolute file path on the server.
     """
     # data type: DataPathVolume
     oneof_schema_1_validator: Optional[DataPathVolume] = None
     # data type: DataPathUpload
     oneof_schema_2_validator: Optional[DataPathUpload] = None
-    actual_instance: Optional[Union[DataPathUpload, DataPathVolume]] = None
-    one_of_schemas: Set[str] = { "DataPathUpload", "DataPathVolume" }
+    # data type: str
+    oneof_schema_3_validator: Optional[StrictStr] = None
+    actual_instance: Optional[Union[DataPathUpload, DataPathVolume, str]] = None
+    one_of_schemas: Set[str] = { "DataPathUpload", "DataPathVolume", "str" }
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -67,12 +69,18 @@ class DataPath(BaseModel):
             error_messages.append(f"Error! Input type `{type(v)}` is not `DataPathUpload`")
         else:
             match += 1
+        # validate data type: str
+        try:
+            instance.oneof_schema_3_validator = v
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in DataPath with oneOf schemas: DataPathUpload, DataPathVolume. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in DataPath with oneOf schemas: DataPathUpload, DataPathVolume, str. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in DataPath with oneOf schemas: DataPathUpload, DataPathVolume. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in DataPath with oneOf schemas: DataPathUpload, DataPathVolume, str. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -99,13 +107,22 @@ class DataPath(BaseModel):
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
+        # deserialize data into str
+        try:
+            # validation
+            instance.oneof_schema_3_validator = json.loads(json_str)
+            # assign value to actual_instance
+            instance.actual_instance = instance.oneof_schema_3_validator
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into DataPath with oneOf schemas: DataPathUpload, DataPathVolume. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into DataPath with oneOf schemas: DataPathUpload, DataPathVolume, str. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into DataPath with oneOf schemas: DataPathUpload, DataPathVolume. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into DataPath with oneOf schemas: DataPathUpload, DataPathVolume, str. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -119,7 +136,7 @@ class DataPath(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], DataPathUpload, DataPathVolume]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], DataPathUpload, DataPathVolume, str]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None

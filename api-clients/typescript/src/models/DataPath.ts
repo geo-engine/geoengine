@@ -28,10 +28,13 @@ import {
 
 /**
  * @type DataPath
- * 
+ * A data path is a reference to a location where data is stored.
+ * It can be a volume, an upload, or an external source.
+ * This information is used when turning a relative file path of a `Dataset` file
+ * into an absolute file path on the server.
  * @export
  */
-export type DataPath = DataPathUpload | DataPathVolume;
+export type DataPath = DataPathUpload | DataPathVolume | string;
 
 export function DataPathFromJSON(json: any): DataPath {
     return DataPathFromJSONTyped(json, false);
@@ -49,6 +52,9 @@ export function DataPathFromJSONTyped(json: any, ignoreDiscriminator: boolean): 
     }
     if (instanceOfDataPathVolume(json)) {
         return DataPathVolumeFromJSONTyped(json, true);
+    }
+    if (typeof json === 'string' && (json === 'external')) {
+        return json;
     }
     return {} as any;
 }
@@ -69,6 +75,9 @@ export function DataPathToJSONTyped(value?: DataPath | null, ignoreDiscriminator
     }
     if (instanceOfDataPathVolume(value)) {
         return DataPathVolumeToJSON(value as DataPathVolume);
+    }
+    if (typeof value === 'string' && (value === 'external')) {
+        return value;
     }
     return {};
 }

@@ -12,10 +12,13 @@ import type { DataPathUpload } from './DataPathUpload';
 import type { DataPathVolume } from './DataPathVolume';
 /**
  * @type DataPath
- *
+ * A data path is a reference to a location where data is stored.
+ * It can be a volume, an upload, or an external source.
+ * This information is used when turning a relative file path of a `Dataset` file
+ * into an absolute file path on the server.
  * @export
  */
-export type DataPath = DataPathUpload | DataPathVolume;
+export type DataPath = DataPathUpload | DataPathVolume | string;
 export declare function DataPathFromJSON(json: any): DataPath;
 export declare function DataPathFromJSONTyped(json: any, ignoreDiscriminator: boolean): DataPath;
 export declare function DataPathToJSON(json: any): any;
