@@ -1,60 +1,67 @@
-use self::database::NetCdfDatabaseListingConfig;
-use self::loading::{
-    LayerCollectionIdFn, LayerCollectionParts, create_layer, create_layer_collection_from_parts,
+use self::{
+    database::NetCdfDatabaseListingConfig,
+    loading::{
+        LayerCollectionIdFn, LayerCollectionParts, create_layer, create_layer_collection_from_parts,
+    },
+    metadata::{Creator, DataRange, NetCdfGroupMetadata, NetCdfOverviewMetadata},
+    overviews::{OverviewCreationOptions, create_overviews, remove_overviews},
 };
-use self::metadata::{Creator, DataRange, NetCdfGroupMetadata, NetCdfOverviewMetadata};
-use self::overviews::create_overviews;
-use self::overviews::{OverviewCreationOptions, remove_overviews};
-use crate::contexts::GeoEngineDb;
-use crate::datasets::external::netcdfcf::loading::{ParamModification, create_loading_info};
-use crate::datasets::listing::ProvenanceOutput;
-use crate::error::Error;
-use crate::layers::external::DataProvider;
-use crate::layers::external::DataProviderDefinition;
-use crate::layers::layer::LayerCollectionListOptions;
-use crate::layers::layer::LayerCollectionListing;
-use crate::layers::layer::ProviderLayerCollectionId;
-use crate::layers::layer::{CollectionItem, LayerCollection};
-use crate::layers::layer::{Layer, ProviderLayerId};
-use crate::layers::listing::LayerCollectionProvider;
-use crate::layers::listing::{LayerCollectionId, ProviderCapabilities, SearchCapabilities};
-use crate::tasks::TaskContext;
+use crate::{
+    contexts::GeoEngineDb,
+    datasets::{
+        external::netcdfcf::loading::{ParamModification, create_loading_info},
+        listing::ProvenanceOutput,
+    },
+    error::Error,
+    layers::{
+        external::{DataProvider, DataProviderDefinition},
+        layer::{
+            CollectionItem, Layer, LayerCollection, LayerCollectionListOptions,
+            LayerCollectionListing, ProviderLayerCollectionId, ProviderLayerId,
+        },
+        listing::{
+            LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+        },
+    },
+    tasks::TaskContext,
+};
 use async_trait::async_trait;
-use gdal::raster::{Dimension, GdalDataType, Group};
-use gdal::{DatasetOptions, GdalOpenFlags};
-use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId, NamedData};
-use geoengine_datatypes::error::BoxedResultExt;
-use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
-use geoengine_datatypes::primitives::{
-    CacheTtlSeconds, DateTime, Measurement, RasterQueryRectangle, TimeInstance,
-    VectorQueryRectangle,
+use gdal::{
+    DatasetOptions, GdalOpenFlags,
+    raster::{Dimension, GdalDataType, Group},
 };
-use geoengine_datatypes::raster::{
-    BoundedGrid, GdalGeoTransform, GeoTransform, GridShape2D, RasterDataType,
+use geoengine_datatypes::{
+    dataset::{DataId, DataProviderId, LayerId, NamedData},
+    error::BoxedResultExt,
+    operations::image::{Colorizer, RgbaColor},
+    primitives::{
+        CacheTtlSeconds, DateTime, Measurement, RasterQueryRectangle, TimeInstance,
+        VectorQueryRectangle,
+    },
+    raster::{BoundedGrid, GdalGeoTransform, GeoTransform, GridShape2D, RasterDataType},
+    spatial_reference::SpatialReference,
+    util::{canonicalize_subpath, gdal::ResamplingMethod},
 };
-use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_datatypes::util::canonicalize_subpath;
-use geoengine_datatypes::util::gdal::ResamplingMethod;
-use geoengine_operators::engine::{RasterBandDescriptor, SpatialGridDescriptor};
-use geoengine_operators::engine::{RasterBandDescriptors, TimeDescriptor};
-use geoengine_operators::source::{
-    FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
-};
-use geoengine_operators::util::gdal::gdal_open_dataset_ex;
 use geoengine_operators::{
-    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
+    engine::{
+        MetaData, MetaDataProvider, RasterBandDescriptor, RasterBandDescriptors,
+        RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor, VectorResultDescriptor,
+    },
     mock::MockDatasetDataSourceLoadingInfo,
     source::{
-        GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-        OgrSourceDataset,
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
+        MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
     },
+    util::gdal::gdal_open_dataset_ex,
 };
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+};
 use tracing::debug;
 use walkdir::{DirEntry, WalkDir};
 
@@ -1613,8 +1620,10 @@ mod tests {
     use crate::ge_context;
     use crate::layers::layer::LayerListing;
     use crate::layers::storage::LayerProviderDb;
+    use crate::quota::ComputationId;
     use crate::tasks::util::NopTaskContext;
     use crate::util::tests::add_land_cover_to_datasets;
+    use crate::workflows::workflow::WorkflowId;
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};
     use geoengine_datatypes::primitives::{
@@ -1623,6 +1632,7 @@ mod tests {
     };
     use geoengine_datatypes::raster::RenameBands;
     use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D};
+    use geoengine_datatypes::util::Identifier;
     use geoengine_datatypes::{
         primitives::TimeInterval, spatial_reference::SpatialReferenceAuthority, test_data,
         util::gdal::hide_gdal_errors,
@@ -2384,7 +2394,7 @@ mod tests {
         };
 
         let query_context = ctx
-            .query_context(Default::default(), Default::default())
+            .query_context(WorkflowId::new(), ComputationId::new())
             .unwrap();
 
         let result = processor

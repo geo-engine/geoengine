@@ -1335,6 +1335,7 @@ mod tests {
         },
         ge_context,
         layers::{layer::Layer, storage::INTERNAL_PROVIDER_ID},
+        quota::ComputationId,
         tasks::{TaskManager, TaskStatus, util::test::wait_for_task_to_finish},
         users::{UserAuth, UserSession},
         util::tests::{TestDataUploads, admin_login, read_body_string, send_test_request},
@@ -1356,7 +1357,7 @@ mod tests {
             TilingSpecification,
         },
         spatial_reference::SpatialReference,
-        util::test::TestDefault,
+        util::{Identifier, test::TestDefault},
     };
     use geoengine_operators::{
         engine::{
@@ -1369,7 +1370,6 @@ mod tests {
         source::{GdalSource, GdalSourceParameters},
         util::test::assert_eq_two_raster_operator_res_u8,
     };
-    use uuid::Uuid;
 
     use std::sync::Arc;
     use tokio_postgres::NoTls;
@@ -2776,7 +2776,8 @@ mod tests {
 
         assert_eq_two_raster_operator_res_u8(
             &ctx.execution_context().unwrap(),
-            &ctx.query_context(Uuid::new_v4(), Uuid::new_v4()).unwrap(),
+            &ctx.query_context(WorkflowId::new(), ComputationId::new())
+                .unwrap(),
             workflow_operator,
             dataset_operator,
             mock_source.query_rectangle,

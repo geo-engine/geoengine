@@ -124,7 +124,11 @@ pub fn calculate_number_of_tiles(
     GridShape2D::new(tile_bounds.axis_size())
 }
 
-/// Returns a session id, data connector id and layer id for an NDVI dataset loaded via MultiBandGdalSource.
+/// Returns a session id, data connector id and layer id for an NDVI dataset loaded via [`MultiBandGdalSource`].
+#[allow(
+    clippy::too_many_lines,
+    reason = "Test utility function, not production code"
+)]
 pub async fn session_and_ndvi_multi_band_layer_id(
     app_ctx: &PostgresContext<NoTls>,
 ) -> (SessionId, DataProviderId, LayerId) {
@@ -135,15 +139,16 @@ pub async fn session_and_ndvi_multi_band_layer_id(
     let db = ctx.db();
 
     // Create GdalMultiBand metadata for NDVI data
-    use geoengine_datatypes::primitives::TimeInterval as DtTimeInterval;
-
     let result_descriptor = geoengine_operators::engine::RasterResultDescriptor {
         data_type: geoengine_datatypes::raster::RasterDataType::U8,
         spatial_reference: geoengine_datatypes::spatial_reference::SpatialReferenceOption::from(
             geoengine_datatypes::spatial_reference::SpatialReference::epsg_4326(),
         ),
         time: geoengine_operators::engine::TimeDescriptor::new_irregular(Some(
-            DtTimeInterval::new_unchecked(1_396_310_400_000, 1_398_902_400_000),
+            geoengine_datatypes::primitives::TimeInterval::new_unchecked(
+                1_396_310_400_000,
+                1_398_902_400_000,
+            ),
         )),
         spatial_grid: geoengine_operators::engine::SpatialGridDescriptor::new_source(
             geoengine_datatypes::raster::SpatialGridDefinition::new(
@@ -191,7 +196,6 @@ pub async fn session_and_ndvi_multi_band_layer_id(
     }
 
     // Create a single tile for the NDVI data
-    use crate::api::model::datatypes::{Coordinate2D, GeoTransform};
     let tile = AddDatasetTile {
         time: crate::api::model::datatypes::TimeInterval {
             start: geoengine_datatypes::primitives::TimeInstance::from_millis_unchecked(
@@ -204,16 +208,16 @@ pub async fn session_and_ndvi_multi_band_layer_id(
             .into(),
         },
         spatial_partition: crate::api::model::datatypes::SpatialPartition2D {
-            upper_left_coordinate: Coordinate2D { x: -180., y: 90. },
-            lower_right_coordinate: Coordinate2D { x: 180., y: -90. },
+            upper_left_coordinate: crate::api::model::datatypes::Coordinate2D { x: -180., y: 90. },
+            lower_right_coordinate: crate::api::model::datatypes::Coordinate2D { x: 180., y: -90. },
         },
         band: 0,
         z_index: 0,
         params: crate::api::model::operators::GdalDatasetParameters {
             file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-04-01.TIFF").into(),
             rasterband_channel: 1,
-            geo_transform: GeoTransform {
-                origin_coordinate: Coordinate2D { x: -180., y: 90. },
+            geo_transform: crate::api::model::datatypes::GeoTransform {
+                origin_coordinate: crate::api::model::datatypes::Coordinate2D { x: -180., y: 90. },
                 x_pixel_size: 0.1,
                 y_pixel_size: -0.1,
             },

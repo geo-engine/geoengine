@@ -24,14 +24,17 @@ use geoengine_services::{
     contexts::{ApplicationContext, PostgresContext, SessionContext},
     datasets::{DatasetName, storage::DatasetStore},
     permissions::{Permission, PermissionDb, Role},
+    quota::ComputationId,
     test_data,
     users::{UserAuth, UserSession},
-    util::tests::{add_ndvi_to_datasets2, with_temp_context},
+    util::{
+        Identifier,
+        tests::{add_ndvi_to_datasets2, with_temp_context},
+    },
+    workflows::workflow::WorkflowId,
 };
-use std::env;
-use std::str::FromStr;
+use std::{env, str::FromStr};
 use tokio_postgres::NoTls;
-use uuid::Uuid;
 
 const RUNS: usize = 10;
 
@@ -47,7 +50,9 @@ async fn bench_gdal_source() {
         let ctx = app_ctx.session_context(session.clone());
 
         let exe_ctx = ctx.execution_context().unwrap();
-        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4()).unwrap();
+        let query_ctx = ctx
+            .query_context(WorkflowId::new(), ComputationId::new())
+            .unwrap();
 
         let (_, dataset) = add_ndvi_to_datasets2(&app_ctx, true, true).await;
 
@@ -109,7 +114,9 @@ async fn bench_multi_band_gdal_source() {
         let ctx = app_ctx.session_context(session.clone());
 
         let exe_ctx = ctx.execution_context().unwrap();
-        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4()).unwrap();
+        let query_ctx = ctx
+            .query_context(WorkflowId::new(), ComputationId::new())
+            .unwrap();
 
         let dataset = add_ndvi_multi_tile_dataset(&app_ctx).await;
 

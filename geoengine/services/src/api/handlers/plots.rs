@@ -1,24 +1,28 @@
-use crate::api::model::datatypes::TimeInterval;
-use crate::api::ogc::util::{parse_bbox, parse_time};
-use crate::config;
-use crate::contexts::{ApplicationContext, SessionContext};
-use crate::error;
-use crate::error::Result;
-use crate::util::parsing::parse_spatial_resolution;
-use crate::util::server::connection_closed;
-use crate::workflows::registry::WorkflowRegistry;
-use crate::workflows::workflow::WorkflowId;
-use actix_web::{FromRequest, HttpRequest, Responder, web};
-use base64::Engine;
-use geoengine_datatypes::operations::reproject::reproject_spatial_query;
-use geoengine_datatypes::plots::PlotOutputFormat;
-use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
-use geoengine_datatypes::primitives::{PlotQueryRectangle, PlotSeriesSelection};
-use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_operators::engine::{
-    QueryContext, ResultDescriptor, TypedPlotQueryProcessor, WorkflowOperatorPath,
+use crate::{
+    api::{
+        model::datatypes::TimeInterval,
+        ogc::util::{parse_bbox, parse_time},
+    },
+    config,
+    contexts::{ApplicationContext, SessionContext},
+    error::{self, Result},
+    quota::ComputationId,
+    util::{parsing::parse_spatial_resolution, server::connection_closed},
+    workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
 };
-use geoengine_operators::util::abortable_query_execution;
+use actix_web::{FromRequest, HttpRequest, HttpResponse, Responder, web};
+use base64::Engine;
+use geoengine_datatypes::{
+    operations::reproject::reproject_spatial_query,
+    plots::PlotOutputFormat,
+    primitives::{BoundingBox2D, PlotQueryRectangle, PlotSeriesSelection, SpatialResolution},
+    spatial_reference::SpatialReference,
+    util::Identifier,
+};
+use geoengine_operators::{
+    engine::{QueryContext, ResultDescriptor, TypedPlotQueryProcessor, WorkflowOperatorPath},
+    util::abortable_query_execution,
+};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::time::Duration;
@@ -156,7 +160,9 @@ async fn get_plot_handler<C: ApplicationContext>(
 
     let processor = initialized.query_processor()?;
 
-    let mut query_ctx = ctx.query_context(workflow_id.0, Uuid::new_v4())?;
+    let computation_id = ComputationId::new();
+
+    let mut query_ctx = ctx.query_context(workflow_id, computation_id)?;
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
@@ -196,7 +202,9 @@ async fn get_plot_handler<C: ApplicationContext>(
         data,
     };
 
-    Ok(web::Json(output))
+    Ok(HttpResponse::Ok()
+        .append_header(computation_id)
+        .json(output))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]

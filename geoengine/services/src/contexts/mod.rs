@@ -1,49 +1,58 @@
-use crate::api::model::services::Volume;
-use crate::config::{Cache, QuotaTrackingMode, get_config_element};
-use crate::datasets::external::WildliveDbCache;
-use crate::datasets::external::netcdfcf::NetCdfCfProviderDb;
-use crate::datasets::storage::DatasetDb;
-use crate::error::Result;
-use crate::layers::listing::LayerCollectionProvider;
-use crate::layers::storage::{LayerDb, LayerProviderDb};
-use crate::machine_learning::MlModelDb;
-use crate::permissions::PermissionDb;
-use crate::tasks::{TaskContext, TaskManager};
-use crate::users::{OidcManager, RoleDb, UserAuth, UserDb};
-use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
-use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
-use geoengine_datatypes::machine_learning::MlModelName;
-use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
-use geoengine_datatypes::raster::TilingSpecification;
-use geoengine_operators::cache::cache_operator::InitializedCacheOperator;
-use geoengine_operators::cache::shared_cache::SharedCache;
-use geoengine_operators::engine::{
-    ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
-    InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
-    QueryAbortTrigger, QueryContext, RasterResultDescriptor, VectorResultDescriptor,
+use crate::{
+    api::model::services::Volume,
+    config::{Cache, QuotaTrackingMode, get_config_element},
+    datasets::{
+        external::{WildliveDbCache, netcdfcf::NetCdfCfProviderDb},
+        storage::DatasetDb,
+    },
+    error::Result,
+    layers::{
+        listing::LayerCollectionProvider,
+        storage::{LayerDb, LayerProviderDb},
+    },
+    machine_learning::MlModelDb,
+    permissions::PermissionDb,
+    projects::ProjectDb,
+    quota::ComputationId,
+    tasks::{TaskContext, TaskManager},
+    users::{OidcManager, RoleDb, UserAuth, UserDb},
+    workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
 };
-use geoengine_operators::machine_learning::MlModelLoadingInfo;
-use geoengine_operators::meta::quota::{QuotaCheck, QuotaChecker, QuotaTracking};
-use geoengine_operators::meta::wrapper::InitializedOperatorWrapper;
-use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
-use geoengine_operators::source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess};
-use geoengine_operators::source::{
-    GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-    OgrSourceDataset,
+use async_trait::async_trait;
+use geoengine_datatypes::{
+    dataset::{DataId, DataProviderId, ExternalDataId, LayerId},
+    machine_learning::MlModelName,
+    primitives::{RasterQueryRectangle, VectorQueryRectangle},
+    raster::TilingSpecification,
+};
+use geoengine_operators::{
+    cache::{cache_operator::InitializedCacheOperator, shared_cache::SharedCache},
+    engine::{
+        ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
+        InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
+        QueryAbortTrigger, QueryContext, RasterResultDescriptor, VectorResultDescriptor,
+    },
+    machine_learning::MlModelLoadingInfo,
+    meta::{
+        quota::{QuotaCheck, QuotaChecker, QuotaTracking},
+        wrapper::InitializedOperatorWrapper,
+    },
+    mock::MockDatasetDataSourceLoadingInfo,
+    source::{
+        GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
+        OgrSourceDataset,
+        gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
+    },
 };
 use rayon::ThreadPool;
-use std::str::FromStr;
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 use tokio::sync::RwLock;
-use uuid::Uuid;
 
 pub use migrations::{
     CurrentSchemaMigration, DatabaseVersion, Migration, MigrationResult, initialize_database,
     migrate_database,
 };
-pub use postgres::PostgresDb;
-pub use postgres::{PostgresContext, PostgresSessionContext};
+pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{Session, SessionId};
 
 mod db_types;
@@ -87,7 +96,11 @@ pub trait SessionContext: 'static + Send + Sync + Clone {
 
     /// Create a new query context for executing queries on processors
     // TODO: assign computation id inside SessionContext or let it be provided from outside?
-    fn query_context(&self, workflow: Uuid, computation: Uuid) -> Result<Self::QueryContext>;
+    fn query_context(
+        &self,
+        workflow: WorkflowId,
+        computation: ComputationId,
+    ) -> Result<Self::QueryContext>;
 
     /// Create a new execution context initializing operators
     fn execution_context(&self) -> Result<Self::ExecutionContext>;

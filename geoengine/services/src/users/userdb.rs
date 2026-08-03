@@ -1,18 +1,21 @@
-use crate::api::handlers::users::UsageSummaryGranularity;
-use crate::contexts::SessionId;
-use crate::error::Result;
-use crate::permissions::{RoleDescription, RoleId};
-use crate::projects::{ProjectId, STRectangle};
-use crate::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
-use crate::users::oidc::{OidcTokens, UserClaims};
-use crate::users::{UserCredentials, UserId, UserRegistration, UserSession};
+use crate::{
+    api::handlers::users::UsageSummaryGranularity,
+    contexts::SessionId,
+    error::Result,
+    permissions::{RoleDescription, RoleId},
+    projects::{ProjectId, STRectangle},
+    quota::{ComputationId, ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota},
+    users::{
+        UserCredentials, UserId, UserRegistration, UserSession,
+        oidc::{OidcTokens, UserClaims},
+    },
+};
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_operators::meta::quota::ComputationUnit;
 use oauth2::AccessToken;
 use snafu::Snafu;
 use tokio_postgres::Transaction;
-use uuid::Uuid;
 
 #[async_trait]
 pub trait UserAuth {
@@ -142,7 +145,10 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call
-    async fn quota_used_by_computation(&self, computation_id: Uuid) -> Result<Vec<OperatorQuota>>;
+    async fn quota_used_by_computation(
+        &self,
+        computation_id: ComputationId,
+    ) -> Result<Vec<OperatorQuota>>;
 
     /// Retrieve the quota log for data
     ///
