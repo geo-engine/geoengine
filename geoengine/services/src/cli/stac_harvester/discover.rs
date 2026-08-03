@@ -12,12 +12,11 @@ use geoengine_datatypes::{
 use ordered_float::OrderedFloat;
 use tracing::{info, warn};
 
-use crate::api::model::datatypes::{Measurement, UnitlessMeasurement, UnitlessMeasurementTypeTag};
-use crate::api::model::operators::RasterBandDescriptor;
 use crate::datasets::external::stac::{
-    StacDataProviderDefinition, StacProviderDataset, StacProviderDatasetBand, StacProviderS3Config,
-    common,
+    StacAssetBand, StacDataProviderDefinition, StacProviderDataset, StacProviderDatasetBand,
+    StacProviderS3Config, common,
 };
+use crate::util::retry::{RetryPolicy, retry_http};
 use geoengine_datatypes::primitives::{
     RegularTimeDimension as DtRegularTimeDimension, TimeDimension as DtTimeDimension,
 };
@@ -88,6 +87,14 @@ pub struct StacDiscoverMapping {
     #[arg(long, default_value_t = false)]
     pub full_projection_grid: bool,
 
+    /// Provider id to write into the output definition.
+    ///
+    /// Discovery normally assigns a fresh random id. Pass the `id` of the
+    /// existing mapping file when regenerating it so that provider-scoped
+    /// references (e.g. `_:<id>:...` in layer bodies) stay valid.
+    #[arg(long)]
+    pub id: Option<DataProviderId>,
+
     /// Time dimension granularity (default: days)
     #[arg(long, default_value = "days")]
     pub time_granularity: String,
@@ -121,9 +128,10 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         params.stac_collection
     );
 
-    let collection: stac::Collection = stac_api_request_parse(&client, &collection_url)
-        .await
-        .context("Failed to fetch STAC collection")?;
+    let collection: stac::Collection =
+        stac_api_request_parse(&client, &collection_url, &stac_request_policy())
+            .await
+            .context("Failed to fetch STAC collection")?;
 
     let dataset_bands = scan_collection_bands(&collection, &params.file_types);
 
@@ -176,7 +184,7 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
 
     let provider_def = StacDataProviderDefinition {
         name: format!("{} from STAC", params.stac_collection),
-        id: DataProviderId::new(),
+        id: params.id.unwrap_or_else(DataProviderId::new),
         description: format!(
             "Auto-discovered mapping for STAC collection '{}' at {}",
             params.stac_collection, params.stac_url
@@ -188,12 +196,32 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         time_dimension,
         datasets,
         page_limit: params.page_limit as i64,
+        query_timeout_secs: 60,
     };
 
-    let json = serde_json::to_string_pretty(
-        &crate::api::model::services::StacDataProviderDefinition::from(provider_def),
+    let s3_config = provider_def.s3_config.clone();
+
+    let mut json_value = serde_json::to_value(
+        crate::api::model::services::StacDataProviderDefinition::from(provider_def),
     )
     .context("Failed to serialize mapping to JSON")?;
+
+    // The API model wraps S3 credentials in `Secret`, which serializes as
+    // `*****`. Keep the plain values (e.g. `__AWS_ACCESS_KEY_ID__` markers) in
+    // the output file instead, so they can be substituted at runtime.
+    if let (Some(obj), Some(s3)) = (json_value.as_object_mut(), &s3_config)
+        && let Some(s3_obj) = obj.get_mut("s3Config").and_then(|v| v.as_object_mut())
+    {
+        if let Some(key) = &s3.access_key {
+            s3_obj.insert("accessKey".to_string(), serde_json::json!(key));
+        }
+        if let Some(key) = &s3.secret_key {
+            s3_obj.insert("secretKey".to_string(), serde_json::json!(key));
+        }
+    }
+
+    let json =
+        serde_json::to_string_pretty(&json_value).context("Failed to serialize mapping to JSON")?;
 
     if let Some(output_path) = &params.output {
         std::fs::write(output_path, &json)
@@ -221,8 +249,9 @@ struct DiscoveredDatasetInfo {
 fn scan_collection_bands(
     collection: &stac::Collection,
     file_types: &[ImportFileType],
-) -> HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> {
-    let mut dataset_bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> = HashMap::new();
+) -> HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>> {
+    let mut dataset_bands: HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>> =
+        HashMap::new();
 
     for (_asset_key, asset) in &collection.item_assets {
         if !matches_selected_file_types(asset.r#type.as_deref(), file_types) {
@@ -275,11 +304,11 @@ async fn fetch_sample_items(
 
     loop {
         let page = if let Some(ref url) = next_url {
-            stac_api_request_parse::<stac::ItemCollection>(client, url)
+            stac_api_request_parse::<stac::ItemCollection>(client, url, &stac_request_policy())
                 .await
                 .context("Failed to fetch sample items page")?
         } else {
-            stac_api_request_with_params(client, &base_url, &query_params)
+            stac_api_request_with_params(client, &base_url, &query_params, &stac_request_policy())
                 .await
                 .context("Failed to fetch sample items")?
         };
@@ -364,13 +393,17 @@ fn process_sample_assets(
             };
 
             let asset_title = asset.title.as_deref().unwrap_or(asset_key).to_string();
-            let band_names = common::band_names_from_asset_v1_1_0(asset)
-                .unwrap_or_else(|_| vec![asset_title.clone()]);
+            let asset_info = common::band_names_from_asset_v1_1_0(asset).unwrap_or_else(|_| {
+                common::AssetBandInfo {
+                    asset_title: asset_title.clone(),
+                    band_names: vec![asset_title.clone()],
+                }
+            });
 
             let entry = sample_band_info.entry(partial_key.clone()).or_default();
-            for bn in &band_names {
-                if !entry.iter().any(|(t, _)| t == &asset_title) {
-                    entry.push((asset_title.clone(), bn.clone()));
+            for bn in &asset_info.band_names {
+                if !entry.iter().any(|(t, _)| t == &asset_info.asset_title) {
+                    entry.push((asset_info.asset_title.clone(), bn.clone()));
                 }
             }
 
@@ -394,7 +427,7 @@ fn process_sample_assets(
 /// and sample band information.
 fn build_datasets(
     discovered_datasets: &HashMap<DatasetKey, DiscoveredDatasetInfo>,
-    dataset_bands: &HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>,
+    dataset_bands: &HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>>,
     sample_band_info: &HashMap<PartialDatasetKey, Vec<(String, String)>>,
     full_projection_grid: bool,
     stac_collection: &str,
@@ -408,25 +441,35 @@ fn build_datasets(
         };
 
         let mut bands: Vec<StacProviderDatasetBand> = Vec::new();
+        // Track the *resolved* band name (what the harvest uses:
+        // `band_name`, falling back to the asset title). Raster band names must
+        // be unique, so skip any band whose resolved name is already present.
+        let mut seen_names: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         // Use bands from collection-level scan
         if let Some(descriptors) = dataset_bands.get(&partial_key) {
-            for desc in descriptors {
-                bands.push(StacProviderDatasetBand {
-                    asset_title: desc.name.clone(),
-                    band_name: None,
-                });
+            for band in descriptors {
+                let resolved = band
+                    .asset_band
+                    .band_name
+                    .clone()
+                    .unwrap_or_else(|| band.asset_band.asset_title.clone());
+                if seen_names.insert(resolved) {
+                    bands.push(band.clone());
+                }
             }
         }
 
         // Enrich with sample item band info
         if let Some(sample_bands) = sample_band_info.get(&partial_key) {
             for (asset_title, band_name) in sample_bands {
-                if !bands.iter().any(|b| b.asset_title == *asset_title) {
-                    bands.push(StacProviderDatasetBand {
+                // Sample bands always carry an explicit band name; skip any
+                // whose resolved name is already present.
+                if seen_names.insert(band_name.clone()) {
+                    bands.push(StacProviderDatasetBand::new_unitless(StacAssetBand {
                         asset_title: asset_title.clone(),
                         band_name: Some(band_name.clone()),
-                    });
+                    }));
                 }
             }
         }
@@ -436,7 +479,7 @@ fn build_datasets(
             continue;
         }
 
-        bands.sort_by(|a, b| a.asset_title.cmp(&b.asset_title));
+        bands.sort_by(|a, b| a.asset_band.asset_title.cmp(&b.asset_band.asset_title));
 
         let spatial_grid = build_dataset_spatial_grid(info, dataset_key, full_projection_grid);
 
@@ -604,7 +647,7 @@ fn scan_collection_item_asset(
     collection_version: &stac::Version,
     asset: &stac::ItemAsset,
     collection_summaries: Option<&serde_json::Map<String, serde_json::Value>>,
-) -> Result<Option<HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>>, String> {
+) -> Result<Option<HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>>>, String> {
     match collection_version {
         stac::Version::v1_0_0 => scan_collection_item_asset_v1_0_0(asset),
         stac::Version::v1_1_0 => scan_collection_item_asset_v1_1_0(asset, collection_summaries),
@@ -619,8 +662,9 @@ fn scan_collection_item_asset(
 
 fn scan_collection_item_asset_v1_0_0(
     asset: &stac::ItemAsset,
-) -> Result<Option<HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>>, String> {
-    let mut dataset_bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> = HashMap::new();
+) -> Result<Option<HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>>>, String> {
+    let mut dataset_bands: HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>> =
+        HashMap::new();
 
     let Some(raster_bands) = asset.additional_fields.get("raster:bands") else {
         return Ok(None);
@@ -643,6 +687,8 @@ fn scan_collection_item_asset_v1_0_0(
     } else if band_count != 1 {
         return Ok(None);
     }
+
+    let asset_title = asset.title.clone().unwrap_or_default();
 
     for (index, raster_band) in raster_bands.into_iter().enumerate() {
         let data_type = raster_band
@@ -671,12 +717,10 @@ fn scan_collection_item_asset_v1_0_0(
                 resolution,
             })
             .or_default()
-            .push(RasterBandDescriptor {
-                name: band_name,
-                measurement: Measurement::Unitless(UnitlessMeasurement {
-                    r#type: UnitlessMeasurementTypeTag::UnitlessMeasurementTypeTag,
-                }),
-            });
+            .push(StacProviderDatasetBand::new_unitless(StacAssetBand {
+                asset_title: asset_title.clone(),
+                band_name: Some(band_name),
+            }));
     }
 
     Ok(Some(dataset_bands))
@@ -685,8 +729,9 @@ fn scan_collection_item_asset_v1_0_0(
 fn scan_collection_item_asset_v1_1_0(
     asset: &stac::ItemAsset,
     collection_summaries: Option<&serde_json::Map<String, serde_json::Value>>,
-) -> Result<Option<HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>>, String> {
-    let mut dataset_bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> = HashMap::new();
+) -> Result<Option<HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>>>, String> {
+    let mut dataset_bands: HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>> =
+        HashMap::new();
 
     let data_type = asset
         .additional_fields
@@ -698,7 +743,7 @@ fn scan_collection_item_asset_v1_1_0(
     let raster_data_type = common::raster_data_type_from_stac_data_type_str(data_type)
         .ok_or_else(|| format!("Unsupported data_type: {data_type}"))?;
 
-    let band_names = common::band_names_from_item_asset_v1_1_0(asset)?;
+    let asset_info = common::band_names_from_item_asset_v1_1_0(asset)?;
 
     let resolution = asset
         .additional_fields
@@ -717,28 +762,23 @@ fn scan_collection_item_asset_v1_1_0(
         })
         .ok_or_else(|| "Missing attribute `gsd` or `proj:transform`".to_string())?;
 
-    for band_name in band_names {
-        dataset_bands
-            .entry(PartialDatasetKey {
-                data_type: raster_data_type,
-                resolution: resolution.into(),
-            })
-            .or_default()
-            .push(RasterBandDescriptor {
-                name: band_name.clone(),
-                measurement: Measurement::Unitless(UnitlessMeasurement {
-                    r#type: UnitlessMeasurementTypeTag::UnitlessMeasurementTypeTag,
-                }),
-            });
+    let entry = dataset_bands
+        .entry(PartialDatasetKey {
+            data_type: raster_data_type,
+            resolution: resolution.into(),
+        })
+        .or_default();
+    for band_name in asset_info.band_names {
+        entry.push(StacProviderDatasetBand::new_unitless(StacAssetBand {
+            asset_title: asset_info.asset_title.clone(),
+            band_name: Some(band_name),
+        }));
     }
 
     Ok(Some(dataset_bands))
 }
 
-fn matches_selected_file_types(
-    media_type: Option<&str>,
-    file_types: &[ImportFileType],
-) -> bool {
+fn matches_selected_file_types(media_type: Option<&str>, file_types: &[ImportFileType]) -> bool {
     file_types.iter().any(|file_type| match file_type {
         ImportFileType::Cog => common::is_cog_media_type(media_type),
         ImportFileType::Jp2 => common::is_jp2_media_type(media_type),
@@ -746,14 +786,26 @@ fn matches_selected_file_types(
 }
 
 fn merge_dataset_bands(
-    dataset_bands: &mut HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>,
-    additions: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>,
+    dataset_bands: &mut HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>>,
+    additions: HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>>,
 ) {
-    for (partial_key, band_descriptors) in additions {
+    for (partial_key, bands) in additions {
         let existing_bands = dataset_bands.entry(partial_key).or_default();
-        for descriptor in band_descriptors {
-            if existing_bands.iter().all(|b| b.name != descriptor.name) {
-                existing_bands.push(descriptor);
+        for band in bands {
+            let resolved = band
+                .asset_band
+                .band_name
+                .clone()
+                .unwrap_or_else(|| band.asset_band.asset_title.clone());
+            let already_present = existing_bands.iter().any(|b| {
+                b.asset_band
+                    .band_name
+                    .clone()
+                    .unwrap_or_else(|| b.asset_band.asset_title.clone())
+                    == resolved
+            });
+            if !already_present {
+                existing_bands.push(band);
             }
         }
     }
@@ -784,21 +836,25 @@ fn parse_time_dimension(granularity: &str, step: u64) -> Result<DtTimeDimension,
 // STAC API helpers
 // ---------------------------------------------------------------------------
 
+/// Retry policy for STAC API requests: retry transient failures but fail fast
+/// on definitive 4xx responses (e.g. collection/items not found).
+fn stac_request_policy() -> RetryPolicy {
+    RetryPolicy::new().stop_on_status(&[400, 404])
+}
+
 async fn stac_api_request_parse<T: serde::de::DeserializeOwned>(
     client: &reqwest::Client,
     url: &str,
+    policy: &RetryPolicy,
 ) -> Result<T, anyhow::Error> {
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .with_context(|| format!("Failed to fetch {url}"))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        anyhow::bail!("STAC API returned HTTP {status}: {body}");
-    }
+    let response = retry_http(
+        || async { client.get(url).send().await?.error_for_status() },
+        &format!("Fetch {url}"),
+        policy,
+        |e| e.status().map(|s| s.as_u16()),
+    )
+    .await
+    .with_context(|| format!("Failed to fetch {url}"))?;
 
     response
         .json()
@@ -810,19 +866,23 @@ async fn stac_api_request_with_params(
     client: &reqwest::Client,
     url: &str,
     params: &[(String, String)],
+    policy: &RetryPolicy,
 ) -> Result<stac::ItemCollection, anyhow::Error> {
-    let response = client
-        .get(url)
-        .query(params)
-        .send()
-        .await
-        .with_context(|| format!("Failed to fetch {url}"))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        anyhow::bail!("STAC API returned HTTP {status}: {body}");
-    }
+    let response = retry_http(
+        || async {
+            client
+                .get(url)
+                .query(params)
+                .send()
+                .await?
+                .error_for_status()
+        },
+        &format!("Fetch {url}"),
+        policy,
+        |e| e.status().map(|s| s.as_u16()),
+    )
+    .await
+    .with_context(|| format!("Failed to fetch {url}"))?;
 
     response
         .json()
@@ -899,6 +959,7 @@ mod tests {
             time_granularity: "days".to_string(),
             time_step: 1,
             page_limit: 100,
+            id: None,
         };
 
         discover_mapping(params)
@@ -1010,6 +1071,7 @@ mod tests {
             time_granularity: "days".to_string(),
             time_step: 1,
             page_limit: 100,
+            id: None,
         };
 
         discover_mapping(params)
@@ -1048,5 +1110,97 @@ mod tests {
         pretty_assertions::assert_eq!(expected, output_json);
 
         let _ = std::fs::remove_file(&output_path);
+    }
+
+    // -----------------------------------------------------------------------
+    // build_datasets band dedup
+    // -----------------------------------------------------------------------
+
+    fn unitless_band_descriptor(asset_title: &str, band_name: &str) -> StacProviderDatasetBand {
+        StacProviderDatasetBand::new_unitless(StacAssetBand {
+            asset_title: asset_title.to_string(),
+            band_name: Some(band_name.to_string()),
+        })
+    }
+
+    #[test]
+    fn test_build_datasets_dedupes_duplicate_resolved_band_names() {
+        let partial_key = PartialDatasetKey {
+            data_type: RasterDataType::U8,
+            resolution: OrderedFloat(10.0),
+        };
+        let dataset_key = DatasetKey {
+            epsg: 32_632,
+            data_type: RasterDataType::U8,
+            resolution: OrderedFloat(10.0),
+        };
+
+        // Collection-level scan reports the true-color asset as one dataset
+        // band per STAC band, keeping the real asset title separate from the
+        // band name (no `True color image [B02]`-style synthetic titles).
+        let mut dataset_bands = HashMap::new();
+        dataset_bands.insert(
+            partial_key.clone(),
+            vec![
+                unitless_band_descriptor("True color image", "B02"),
+                unitless_band_descriptor("True color image", "B03"),
+                unitless_band_descriptor("True color image", "B04"),
+            ],
+        );
+
+        // Sample items report the same true-color asset with an explicit band
+        // name that would collide with the collection scan's `B04` band.
+        let mut sample_band_info = HashMap::new();
+        sample_band_info.insert(
+            partial_key.clone(),
+            vec![("True color image".to_string(), "B04".to_string())],
+        );
+
+        let mut discovered_datasets = HashMap::new();
+        discovered_datasets.insert(
+            dataset_key,
+            DiscoveredDatasetInfo {
+                geo_transform: Some(GeoTransform::new((0.0, 0.0).into(), 10.0, -10.0)),
+                proj_shape: Some((100, 100)),
+                srs: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32_632),
+                asset_count: 1,
+            },
+        );
+
+        let datasets = build_datasets(
+            &discovered_datasets,
+            &dataset_bands,
+            &sample_band_info,
+            false,
+            "sentinel-2-l2a",
+        );
+
+        assert_eq!(datasets.len(), 1);
+
+        let names: Vec<String> = datasets[0]
+            .bands
+            .iter()
+            .map(|b| {
+                b.asset_band
+                    .band_name
+                    .clone()
+                    .unwrap_or_else(|| b.asset_band.asset_title.clone())
+            })
+            .collect();
+
+        // The duplicate `B04` from the sample item must be dropped so that all
+        // resolved band names are unique.
+        assert_eq!(names, vec!["B02", "B03", "B04"]);
+
+        // All bands keep the real asset title.
+        assert!(
+            datasets[0]
+                .bands
+                .iter()
+                .all(|b| b.asset_band.asset_title == "True color image")
+        );
+
+        let unique: std::collections::HashSet<_> = names.iter().collect();
+        assert_eq!(unique.len(), names.len());
     }
 }

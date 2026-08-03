@@ -55,28 +55,76 @@
       },
       "bands": [
         {
-          "assetTitle": "Aerosol optical thickness (AOT) - 10m",
-          "bandName": "AOT"
+          "assetBand": {
+            "assetTitle": "Aerosol optical thickness (AOT) - 10m",
+            "bandName": "AOT"
+          },
+          "bandDescriptor": {
+            "name": "AOT",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Blue (band 2) - 10m",
-          "bandName": "B02"
+          "assetBand": {
+            "assetTitle": "Blue (band 2) - 10m",
+            "bandName": "B02"
+          },
+          "bandDescriptor": {
+            "name": "B02",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Green (band 3) - 10m",
-          "bandName": "B03"
+          "assetBand": {
+            "assetTitle": "Green (band 3) - 10m",
+            "bandName": "B03"
+          },
+          "bandDescriptor": {
+            "name": "B03",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "NIR 1 (band 8) - 10m",
-          "bandName": "B08"
+          "assetBand": {
+            "assetTitle": "NIR 1 (band 8) - 10m",
+            "bandName": "B08"
+          },
+          "bandDescriptor": {
+            "name": "B08",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Red (band 4) - 10m",
-          "bandName": "B04"
+          "assetBand": {
+            "assetTitle": "Red (band 4) - 10m",
+            "bandName": "B04"
+          },
+          "bandDescriptor": {
+            "name": "B04",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Water vapour (WVP) - 10m",
-          "bandName": "WVP"
+          "assetBand": {
+            "assetTitle": "Water vapour (WVP) - 10m",
+            "bandName": "WVP"
+          },
+          "bandDescriptor": {
+            "name": "WVP",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         }
       ]
     },
@@ -114,52 +162,148 @@
       },
       "bands": [
         {
-          "assetTitle": "Aerosol optical thickness (AOT) - 20m",
-          "bandName": "AOT"
+          "assetBand": {
+            "assetTitle": "Aerosol optical thickness (AOT) - 20m",
+            "bandName": "AOT"
+          },
+          "bandDescriptor": {
+            "name": "AOT",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Blue (band 2) - 20m",
-          "bandName": "B02"
+          "assetBand": {
+            "assetTitle": "Blue (band 2) - 20m",
+            "bandName": "B02"
+          },
+          "bandDescriptor": {
+            "name": "B02",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Coastal aerosol (band 1) - 20m",
-          "bandName": "B01"
+          "assetBand": {
+            "assetTitle": "Coastal aerosol (band 1) - 20m",
+            "bandName": "B01"
+          },
+          "bandDescriptor": {
+            "name": "B01",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Green (band 3) - 20m",
-          "bandName": "B03"
+          "assetBand": {
+            "assetTitle": "Green (band 3) - 20m",
+            "bandName": "B03"
+          },
+          "bandDescriptor": {
+            "name": "B03",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "NIR 2 (band 8A) - 20m",
-          "bandName": "B8A"
+          "assetBand": {
+            "assetTitle": "NIR 2 (band 8A) - 20m",
+            "bandName": "B8A"
+          },
+          "bandDescriptor": {
+            "name": "B8A",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Red (band 4) - 20m",
-          "bandName": "B04"
+          "assetBand": {
+            "assetTitle": "Red (band 4) - 20m",
+            "bandName": "B04"
+          },
+          "bandDescriptor": {
+            "name": "B04",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Red edge 1 (band 5) - 20m",
-          "bandName": "B05"
+          "assetBand": {
+            "assetTitle": "Red edge 1 (band 5) - 20m",
+            "bandName": "B05"
+          },
+          "bandDescriptor": {
+            "name": "B05",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Red edge 2 (band 6) - 20m",
-          "bandName": "B06"
+          "assetBand": {
+            "assetTitle": "Red edge 2 (band 6) - 20m",
+            "bandName": "B06"
+          },
+          "bandDescriptor": {
+            "name": "B06",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Red edge 3 (band 7) - 20m",
-          "bandName": "B07"
+          "assetBand": {
+            "assetTitle": "Red edge 3 (band 7) - 20m",
+            "bandName": "B07"
+          },
+          "bandDescriptor": {
+            "name": "B07",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "SWIR 1 (band 11) - 20m",
-          "bandName": "B11"
+          "assetBand": {
+            "assetTitle": "SWIR 1 (band 11) - 20m",
+            "bandName": "B11"
+          },
+          "bandDescriptor": {
+            "name": "B11",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "SWIR 2 (band 12) - 20m",
-          "bandName": "B12"
+          "assetBand": {
+            "assetTitle": "SWIR 2 (band 12) - 20m",
+            "bandName": "B12"
+          },
+          "bandDescriptor": {
+            "name": "B12",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Water vapour (WVP) - 20m",
-          "bandName": "WVP"
+          "assetBand": {
+            "assetTitle": "Water vapour (WVP) - 20m",
+            "bandName": "WVP"
+          },
+          "bandDescriptor": {
+            "name": "WVP",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         }
       ]
     },
@@ -197,56 +341,160 @@
       },
       "bands": [
         {
-          "assetTitle": "Aerosol optical thickness (AOT) - 60m",
-          "bandName": "AOT"
+          "assetBand": {
+            "assetTitle": "Aerosol optical thickness (AOT) - 60m",
+            "bandName": "AOT"
+          },
+          "bandDescriptor": {
+            "name": "AOT",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Blue (band 2) - 60m",
-          "bandName": "B02"
+          "assetBand": {
+            "assetTitle": "Blue (band 2) - 60m",
+            "bandName": "B02"
+          },
+          "bandDescriptor": {
+            "name": "B02",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Coastal aerosol (band 1) - 60m",
-          "bandName": "B01"
+          "assetBand": {
+            "assetTitle": "Coastal aerosol (band 1) - 60m",
+            "bandName": "B01"
+          },
+          "bandDescriptor": {
+            "name": "B01",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Green (band 3) - 60m",
-          "bandName": "B03"
+          "assetBand": {
+            "assetTitle": "Green (band 3) - 60m",
+            "bandName": "B03"
+          },
+          "bandDescriptor": {
+            "name": "B03",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "NIR 2 (band 8A) - 60m",
-          "bandName": "B8A"
+          "assetBand": {
+            "assetTitle": "NIR 2 (band 8A) - 60m",
+            "bandName": "B8A"
+          },
+          "bandDescriptor": {
+            "name": "B8A",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "NIR 3 (band 9) - 60m",
-          "bandName": "B09"
+          "assetBand": {
+            "assetTitle": "NIR 3 (band 9) - 60m",
+            "bandName": "B09"
+          },
+          "bandDescriptor": {
+            "name": "B09",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Red (band 4) - 60m",
-          "bandName": "B04"
+          "assetBand": {
+            "assetTitle": "Red (band 4) - 60m",
+            "bandName": "B04"
+          },
+          "bandDescriptor": {
+            "name": "B04",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Red edge 1 (band 5) - 60m",
-          "bandName": "B05"
+          "assetBand": {
+            "assetTitle": "Red edge 1 (band 5) - 60m",
+            "bandName": "B05"
+          },
+          "bandDescriptor": {
+            "name": "B05",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Red edge 2 (band 6) - 60m",
-          "bandName": "B06"
+          "assetBand": {
+            "assetTitle": "Red edge 2 (band 6) - 60m",
+            "bandName": "B06"
+          },
+          "bandDescriptor": {
+            "name": "B06",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Red edge 3 (band 7) - 60m",
-          "bandName": "B07"
+          "assetBand": {
+            "assetTitle": "Red edge 3 (band 7) - 60m",
+            "bandName": "B07"
+          },
+          "bandDescriptor": {
+            "name": "B07",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "SWIR 1 (band 11) - 60m",
-          "bandName": "B11"
+          "assetBand": {
+            "assetTitle": "SWIR 1 (band 11) - 60m",
+            "bandName": "B11"
+          },
+          "bandDescriptor": {
+            "name": "B11",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "SWIR 2 (band 12) - 60m",
-          "bandName": "B12"
+          "assetBand": {
+            "assetTitle": "SWIR 2 (band 12) - 60m",
+            "bandName": "B12"
+          },
+          "bandDescriptor": {
+            "name": "B12",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Water vapour (WVP) - 60m",
-          "bandName": "WVP"
+          "assetBand": {
+            "assetTitle": "Water vapour (WVP) - 60m",
+            "bandName": "WVP"
+          },
+          "bandDescriptor": {
+            "name": "WVP",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         }
       ]
     },
@@ -284,16 +532,40 @@
       },
       "bands": [
         {
-          "assetTitle": "True color image",
-          "bandName": "B02"
+          "assetBand": {
+            "assetTitle": "True color image",
+            "bandName": "B02"
+          },
+          "bandDescriptor": {
+            "name": "B02",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "True color image",
-          "bandName": "B03"
+          "assetBand": {
+            "assetTitle": "True color image",
+            "bandName": "B03"
+          },
+          "bandDescriptor": {
+            "name": "B03",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "True color image",
-          "bandName": "B04"
+          "assetBand": {
+            "assetTitle": "True color image",
+            "bandName": "B04"
+          },
+          "bandDescriptor": {
+            "name": "B04",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         }
       ]
     },
@@ -331,27 +603,75 @@
       },
       "bands": [
         {
-          "assetTitle": "Cloud probability (CLD) - 20m",
-          "bandName": "CLD"
+          "assetBand": {
+            "assetTitle": "Cloud probability (CLD) - 20m",
+            "bandName": "CLD"
+          },
+          "bandDescriptor": {
+            "name": "CLD",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Scene classification map (SCL) - 20m"
+          "assetBand": {
+            "assetTitle": "Scene classification map (SCL) - 20m"
+          },
+          "bandDescriptor": {
+            "name": "Scene classification map (SCL) - 20m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Snow probability (SNW) - 20m",
-          "bandName": "SNW"
+          "assetBand": {
+            "assetTitle": "Snow probability (SNW) - 20m",
+            "bandName": "SNW"
+          },
+          "bandDescriptor": {
+            "name": "SNW",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "True color image",
-          "bandName": "B02"
+          "assetBand": {
+            "assetTitle": "True color image",
+            "bandName": "B02"
+          },
+          "bandDescriptor": {
+            "name": "B02",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "True color image",
-          "bandName": "B03"
+          "assetBand": {
+            "assetTitle": "True color image",
+            "bandName": "B03"
+          },
+          "bandDescriptor": {
+            "name": "B03",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "True color image",
-          "bandName": "B04"
+          "assetBand": {
+            "assetTitle": "True color image",
+            "bandName": "B04"
+          },
+          "bandDescriptor": {
+            "name": "B04",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         }
       ]
     },
@@ -389,27 +709,75 @@
       },
       "bands": [
         {
-          "assetTitle": "Cloud probability (CLD) - 60m",
-          "bandName": "CLD"
+          "assetBand": {
+            "assetTitle": "Cloud probability (CLD) - 60m",
+            "bandName": "CLD"
+          },
+          "bandDescriptor": {
+            "name": "CLD",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Scene classification map (SCL) - 60m"
+          "assetBand": {
+            "assetTitle": "Scene classification map (SCL) - 60m"
+          },
+          "bandDescriptor": {
+            "name": "Scene classification map (SCL) - 60m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "Snow probability (SNW) - 60m",
-          "bandName": "SNW"
+          "assetBand": {
+            "assetTitle": "Snow probability (SNW) - 60m",
+            "bandName": "SNW"
+          },
+          "bandDescriptor": {
+            "name": "SNW",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "True color image",
-          "bandName": "B02"
+          "assetBand": {
+            "assetTitle": "True color image",
+            "bandName": "B02"
+          },
+          "bandDescriptor": {
+            "name": "B02",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "True color image",
-          "bandName": "B03"
+          "assetBand": {
+            "assetTitle": "True color image",
+            "bandName": "B03"
+          },
+          "bandDescriptor": {
+            "name": "B03",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         },
         {
-          "assetTitle": "True color image",
-          "bandName": "B04"
+          "assetBand": {
+            "assetTitle": "True color image",
+            "bandName": "B04"
+          },
+          "bandDescriptor": {
+            "name": "B04",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
         }
       ]
     }

@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    io::Read,
-    str::FromStr,
-    time::{Duration, Instant},
-};
+use std::{collections::HashMap, io::Read, str::FromStr, time::Instant};
 
 use anyhow::Context;
 use chrono::Timelike;
@@ -19,6 +14,7 @@ use tracing::{debug, error, info, warn};
 use crate::datasets::external::stac::{
     StacDataProviderDefinition, StacProviderDataset, StacProviderDatasetBand, common,
 };
+use crate::util::retry::{RetryPolicy, retry_http};
 use crate::{
     api::{
         handlers::{
@@ -32,8 +28,8 @@ use crate::{
         model::{
             datatypes::{
                 GdalConfigOption, GridBoundingBox2D as ApiGridBoundingBox2D,
-                GridIdx2D as ApiGridIdx2D, LayerId, Measurement, SpatialGridDefinition,
-                TimeGranularity, TimeStep, UnitlessMeasurement, UnitlessMeasurementTypeTag,
+                GridIdx2D as ApiGridIdx2D, LayerId, SpatialGridDefinition, TimeGranularity,
+                TimeStep,
             },
             operators::{
                 GdalDatasetParameters, GdalMultiBand, GdalMultiBandTypeTag, RasterBandDescriptor,
@@ -55,11 +51,11 @@ use crate::{
     permissions::{Permission, Role},
     workflows::workflow::Workflow,
 };
+use geoengine_api_client::apis::configuration::Configuration as ApiConfig;
 use geoengine_operators::{
     engine::{RasterOperator, TypedOperator},
     source::{MultiBandGdalSource, MultiBandGdalSourceParameters},
 };
-use geoengine_api_client::apis::configuration::Configuration as ApiConfig;
 
 // ---------------------------------------------------------------------------
 // Harvest
@@ -197,13 +193,7 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
 
     upload_tiles_to_datasets(&api_config, &params, &tiles_by_dataset).await?;
 
-    create_harvest_layer_collections(
-        &api_config,
-        provider_def,
-        &created_datasets,
-        &params,
-    )
-    .await?;
+    create_harvest_layer_collections(&api_config, provider_def, &created_datasets, &params).await?;
 
     let elapsed = start_time.elapsed();
     info!("Harvest completed in {:.2?}", elapsed);
@@ -309,20 +299,39 @@ async fn dataset_exists_api(
     api_config: &ApiConfig,
     dataset_name: &str,
 ) -> Result<bool, anyhow::Error> {
+    // A missing dataset is signalled with HTTP 400 (`CannotLoadDataset`) and
+    // conventionally 404 — a definitive "doesn't exist" answer. Configure the
+    // retry policy to stop on those codes so they are not retried.
+    let policy = RetryPolicy::new().stop_on_status(&[400, 404]);
+
     let result = retry_http(
         || geoengine_api_client::apis::datasets_api::get_dataset_handler(api_config, dataset_name),
         &format!("Check dataset existence for '{dataset_name}'"),
+        &policy,
+        apis_error_status,
     )
     .await;
 
     match result {
         Ok(_) => Ok(true),
         Err(geoengine_api_client::apis::Error::ResponseError(resp))
-            if resp.status == reqwest::StatusCode::BAD_REQUEST =>
+            if resp.status == reqwest::StatusCode::BAD_REQUEST
+                || resp.status == reqwest::StatusCode::NOT_FOUND =>
         {
             Ok(false)
         }
-        Err(e) => Err(anyhow::anyhow!("Failed to check dataset '{dataset_name}': {e}")),
+        Err(e) => Err(anyhow::anyhow!(
+            "Failed to check dataset '{dataset_name}': {e}"
+        )),
+    }
+}
+
+/// Extract an HTTP status code from a `geoengine_api_client` API error, so a
+/// [`RetryPolicy`] can match on it.
+fn apis_error_status<T>(e: &geoengine_api_client::apis::Error<T>) -> Option<u16> {
+    match e {
+        geoengine_api_client::apis::Error::ResponseError(resp) => Some(resp.status.as_u16()),
+        _ => None,
     }
 }
 
@@ -339,12 +348,7 @@ async fn create_dataset_api(
     let bands: Vec<RasterBandDescriptor> = dataset
         .bands
         .iter()
-        .map(|b| RasterBandDescriptor {
-            name: b.band_name.clone().unwrap_or_else(|| b.asset_title.clone()),
-            measurement: Measurement::Unitless(UnitlessMeasurement {
-                r#type: UnitlessMeasurementTypeTag::UnitlessMeasurementTypeTag,
-            }),
-        })
+        .map(|b| b.band_descriptor.clone().into())
         .collect();
 
     let dt_gt: GeoTransform = dataset.spatial_grid.geo_transform();
@@ -408,6 +412,8 @@ async fn create_dataset_api(
                 .await
         },
         &format!("Create dataset '{dataset_name}'"),
+        &RetryPolicy::new(),
+        |e| e.status().map(|s| s.as_u16()),
     )
     .await?;
 
@@ -469,6 +475,8 @@ async fn share_dataset_api(
                     .await
             },
             &format!("Add permission for dataset '{dataset_name}'"),
+            &RetryPolicy::new(),
+            |e| e.status().map(|s| s.as_u16()),
         )
         .await?;
     }
@@ -551,6 +559,8 @@ async fn create_harvest_layer_collections(
                     .await
             },
             &format!("Create layer '{layer_name}'"),
+            &RetryPolicy::new(),
+            |e| e.status().map(|s| s.as_u16()),
         )
         .await?;
 
@@ -571,9 +581,7 @@ async fn create_layer_collection_api(
     let session_id = api_config.bearer_access_token.as_deref().unwrap_or("");
     let client = &api_config.client;
 
-    if let Some(existing_id) =
-        find_child_collection_by_name(api_config, parent_id, name).await?
-    {
+    if let Some(existing_id) = find_child_collection_by_name(api_config, parent_id, name).await? {
         if params.verbose {
             info!("Found existing layer collection '{name}'");
         }
@@ -601,6 +609,8 @@ async fn create_layer_collection_api(
                 .await
         },
         &format!("Create layer collection '{name}'"),
+        &RetryPolicy::new(),
+        |e| e.status().map(|s| s.as_u16()),
     )
     .await?;
 
@@ -636,6 +646,8 @@ async fn find_child_collection_by_name(
                     .await
             },
             &format!("List child collections of {parent_id}"),
+            &RetryPolicy::new(),
+            |e| e.status().map(|s| s.as_u16()),
         )
         .await?;
 
@@ -694,6 +706,8 @@ async fn share_layer_collection_api(
                     .await
             },
             &format!("Share collection with role {}", permission.role_id),
+            &RetryPolicy::new(),
+            |e| e.status().map(|s| s.as_u16()),
         )
         .await?;
     }
@@ -701,10 +715,7 @@ async fn share_layer_collection_api(
     Ok(())
 }
 
-async fn share_layer_api(
-    api_config: &ApiConfig,
-    layer_id: &LayerId,
-) -> Result<(), anyhow::Error> {
+async fn share_layer_api(api_config: &ApiConfig, layer_id: &LayerId) -> Result<(), anyhow::Error> {
     let geo_engine_url = &api_config.base_path;
     let session_id = api_config.bearer_access_token.as_deref().unwrap_or("");
     let client = &api_config.client;
@@ -740,6 +751,8 @@ async fn share_layer_api(
                     .await
             },
             &format!("Share layer with role {}", permission.role_id),
+            &RetryPolicy::new(),
+            |e| e.status().map(|s| s.as_u16()),
         )
         .await?;
     }
@@ -750,9 +763,6 @@ async fn share_layer_api(
 // ---------------------------------------------------------------------------
 // Pagination
 // ---------------------------------------------------------------------------
-
-const MAX_RETRIES: u32 = 10;
-const INITIAL_RETRY_DELAY_MS: u64 = 1000;
 
 #[derive(Debug, Clone)]
 enum QueryState {
@@ -823,6 +833,8 @@ async fn query_item_collection_internal(
                         .await
                 },
                 "Query STAC first page",
+                &RetryPolicy::new(),
+                |e| e.status().map(|s| s.as_u16()),
             )
             .await?;
 
@@ -840,6 +852,8 @@ async fn query_item_collection_internal(
             let item_collection: stac::ItemCollection = retry_http(
                 || async { client.get(next_url).send().await?.json().await },
                 "Query STAC next page",
+                &RetryPolicy::new(),
+                |e| e.status().map(|s| s.as_u16()),
             )
             .await?;
 
@@ -854,36 +868,6 @@ async fn query_item_collection_internal(
             Ok((item_collection, new_state))
         }
         QueryState::Finished => anyhow::bail!("No more pages to query"),
-    }
-}
-
-// ---------------------------------------------------------------------------
-// HTTP retry helper
-// ---------------------------------------------------------------------------
-
-async fn retry_http<F, Fut, T, E>(mut operation: F, operation_name: &str) -> Result<T, E>
-where
-    F: FnMut() -> Fut,
-    Fut: std::future::Future<Output = Result<T, E>>,
-    E: std::fmt::Display,
-{
-    let mut attempt = 0;
-    loop {
-        match operation().await {
-            Ok(result) => return Ok(result),
-            Err(err) => {
-                attempt += 1;
-                if attempt >= MAX_RETRIES {
-                    error!("{operation_name} failed after {MAX_RETRIES} attempts: {err}");
-                    return Err(err);
-                }
-                let delay = Duration::from_millis(INITIAL_RETRY_DELAY_MS * 2_u64.pow(attempt - 1));
-                warn!(
-                    "{operation_name} failed (attempt {attempt}/{MAX_RETRIES}): {err}. Retrying in {delay:?}..."
-                );
-                tokio::time::sleep(delay).await;
-            }
-        }
     }
 }
 
@@ -911,6 +895,8 @@ async fn create_api_config(
     let session = retry_http(
         || geoengine_api_client::apis::session_api::login_handler(&config, credentials.clone()),
         "Login to Geo Engine",
+        &RetryPolicy::new(),
+        apis_error_status,
     )
     .await
     .context("Failed to authenticate")?;
@@ -941,13 +927,7 @@ async fn setup_datasets(
         }
 
         if !dataset_exists_api(api_config, &dataset_name).await? {
-            create_dataset_api(
-                api_config,
-                &dataset_name,
-                dataset,
-                &params.volume_name,
-            )
-            .await?;
+            create_dataset_api(api_config, &dataset_name, dataset, &params.volume_name).await?;
             created_datasets.push((idx, dataset.clone()));
         }
     }
@@ -1095,9 +1075,7 @@ async fn upload_tiles_to_datasets(
             let response = retry_http(
                 || async {
                     client
-                        .post(format!(
-                            "{geo_engine_url}/dataset/{dataset_name}/tiles",
-                        ))
+                        .post(format!("{geo_engine_url}/dataset/{dataset_name}/tiles"))
                         .header("Content-Type", "application/json")
                         .header("Authorization", format!("Bearer {session_id}"))
                         .json(chunk)
@@ -1105,6 +1083,8 @@ async fn upload_tiles_to_datasets(
                         .await
                 },
                 &format!("Add tiles to dataset '{dataset_name}'"),
+                &RetryPolicy::new(),
+                |e| e.status().map(|s| s.as_u16()),
             )
             .await
             .with_context(|| format!("Failed to add tiles to dataset '{dataset_name}'"))?;
@@ -1139,7 +1119,7 @@ fn try_create_tile_for_band(
     let (_asset_key, asset) = item
         .assets
         .iter()
-        .find(|(_, a)| a.title.as_deref() == Some(&band_def.asset_title))?;
+        .find(|(_, a)| a.title.as_deref() == Some(&band_def.asset_band.asset_title))?;
 
     // Check data type matches
     if let Some(asset_dt) = common::data_type_from_asset_v1_1_0_fallback(asset)
@@ -1179,8 +1159,10 @@ fn try_create_tile_for_band(
 
     let (height, width) = common::proj_shape_from_fields(&asset.additional_fields)?;
 
-    let rasterband_channel =
-        common::rasterband_channel_for_dataset_band(asset, band_def.band_name.as_deref())?;
+    let rasterband_channel = common::rasterband_channel_for_dataset_band(
+        asset,
+        band_def.asset_band.band_name.as_deref(),
+    )?;
 
     let grid_bounds = GridBoundingBox2D::new(
         GridIdx2D::new([0, 0]),
