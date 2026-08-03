@@ -4,6 +4,7 @@ Cargo.toml
 README.md
 docs/AccessConstraints.md
 docs/AddDataset.md
+docs/AddDatasetTile.md
 docs/AddLayer.md
 docs/AddLayerCollection.md
 docs/AddRole.md
@@ -401,6 +402,7 @@ src/apis/workflows_api.rs
 src/lib.rs
 src/models/access_constraints.rs
 src/models/add_dataset.rs
+src/models/add_dataset_tile.rs
 src/models/add_layer.rs
 src/models/add_layer_collection.rs
 src/models/add_role.rs

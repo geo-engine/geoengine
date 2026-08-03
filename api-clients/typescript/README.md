@@ -31,8 +31,8 @@ async function example() {
   const body = {
     // string | Dataset Name
     dataset: dataset_example,
-    // AutoCreateDataset
-    autoCreateDataset: ...,
+    // Array<AddDatasetTile>
+    addDatasetTile: ...,
   } satisfies AddDatasetTilesHandlerRequest;
 
   try {
@@ -163,6 +163,7 @@ All URIs are relative to *https://geoengine.io/api*
 
 - [AccessConstraints](docs/AccessConstraints.md)
 - [AddDataset](docs/AddDataset.md)
+- [AddDatasetTile](docs/AddDatasetTile.md)
 - [AddLayer](docs/AddLayer.md)
 - [AddLayerCollection](docs/AddLayerCollection.md)
 - [AddRole](docs/AddRole.md)

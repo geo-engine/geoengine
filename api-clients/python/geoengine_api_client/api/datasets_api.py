@@ -18,6 +18,7 @@ from typing_extensions import Annotated
 from pydantic import Field, StrictStr
 from typing import List, Optional
 from typing_extensions import Annotated
+from geoengine_api_client.models.add_dataset_tile import AddDatasetTile
 from geoengine_api_client.models.auto_create_dataset import AutoCreateDataset
 from geoengine_api_client.models.create_dataset import CreateDataset
 from geoengine_api_client.models.dataset import Dataset
@@ -55,7 +56,7 @@ class DatasetsApi:
     def add_dataset_tiles_handler(
         self,
         dataset: Annotated[StrictStr, Field(description="Dataset Name")],
-        auto_create_dataset: AutoCreateDataset,
+        add_dataset_tile: List[AddDatasetTile],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -74,8 +75,8 @@ class DatasetsApi:
 
         :param dataset: Dataset Name (required)
         :type dataset: str
-        :param auto_create_dataset: (required)
-        :type auto_create_dataset: AutoCreateDataset
+        :param add_dataset_tile: (required)
+        :type add_dataset_tile: List[AddDatasetTile]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -100,7 +101,7 @@ class DatasetsApi:
 
         _param = self._add_dataset_tiles_handler_serialize(
             dataset=dataset,
-            auto_create_dataset=auto_create_dataset,
+            add_dataset_tile=add_dataset_tile,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -125,7 +126,7 @@ class DatasetsApi:
     def add_dataset_tiles_handler_with_http_info(
         self,
         dataset: Annotated[StrictStr, Field(description="Dataset Name")],
-        auto_create_dataset: AutoCreateDataset,
+        add_dataset_tile: List[AddDatasetTile],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -144,8 +145,8 @@ class DatasetsApi:
 
         :param dataset: Dataset Name (required)
         :type dataset: str
-        :param auto_create_dataset: (required)
-        :type auto_create_dataset: AutoCreateDataset
+        :param add_dataset_tile: (required)
+        :type add_dataset_tile: List[AddDatasetTile]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -170,7 +171,7 @@ class DatasetsApi:
 
         _param = self._add_dataset_tiles_handler_serialize(
             dataset=dataset,
-            auto_create_dataset=auto_create_dataset,
+            add_dataset_tile=add_dataset_tile,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -195,7 +196,7 @@ class DatasetsApi:
     def add_dataset_tiles_handler_without_preload_content(
         self,
         dataset: Annotated[StrictStr, Field(description="Dataset Name")],
-        auto_create_dataset: AutoCreateDataset,
+        add_dataset_tile: List[AddDatasetTile],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -214,8 +215,8 @@ class DatasetsApi:
 
         :param dataset: Dataset Name (required)
         :type dataset: str
-        :param auto_create_dataset: (required)
-        :type auto_create_dataset: AutoCreateDataset
+        :param add_dataset_tile: (required)
+        :type add_dataset_tile: List[AddDatasetTile]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -240,7 +241,7 @@ class DatasetsApi:
 
         _param = self._add_dataset_tiles_handler_serialize(
             dataset=dataset,
-            auto_create_dataset=auto_create_dataset,
+            add_dataset_tile=add_dataset_tile,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -260,7 +261,7 @@ class DatasetsApi:
     def _add_dataset_tiles_handler_serialize(
         self,
         dataset,
-        auto_create_dataset,
+        add_dataset_tile,
         _request_auth,
         _content_type,
         _headers,
@@ -270,6 +271,7 @@ class DatasetsApi:
         _host = None
 
         _collection_formats: Dict[str, str] = {
+            'AddDatasetTile': '',
         }
 
         _path_params: Dict[str, str] = {}
@@ -288,8 +290,8 @@ class DatasetsApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if auto_create_dataset is not None:
-            _body_params = auto_create_dataset
+        if add_dataset_tile is not None:
+            _body_params = add_dataset_tile
 
 
 

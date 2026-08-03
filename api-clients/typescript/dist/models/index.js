@@ -18,6 +18,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 /* eslint-disable */
 __exportStar(require("./AccessConstraints"), exports);
 __exportStar(require("./AddDataset"), exports);
+__exportStar(require("./AddDatasetTile"), exports);
 __exportStar(require("./AddLayer"), exports);
 __exportStar(require("./AddLayerCollection"), exports);
 __exportStar(require("./AddRole"), exports);
