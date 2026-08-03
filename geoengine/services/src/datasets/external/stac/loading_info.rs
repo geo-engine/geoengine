@@ -25,6 +25,7 @@ use geoengine_operators::source::{
     OgrSourceDataset, TileFile,
 };
 use stac::Item;
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use tracing::debug;
@@ -356,36 +357,33 @@ impl StacMultiBandMetaData {
         let time_end = time_interval.end();
 
         let query_params = vec![
-			(
-				"bbox".to_owned(),
-				format!(
-					"{},{},{},{}",
-					bbox.lower_left().x,
-					bbox.lower_left().y,
-					bbox.upper_right().x,
-					bbox.upper_right().y
-				),
-			),
-			(
-				"datetime".to_owned(),
-				format!(
-					"{}/{}",
-					time_start
-						.as_date_time()
-						.ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?
-						.to_datetime_string_with_millis(),
-					time_end
-						.as_date_time()
-						.ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?
-						.to_datetime_string_with_millis(),
-				),
-			),
-			("limit".to_owned(), self.page_limit.to_string()),
-			(
-				"fields".to_owned(),
-				"stac_version,properties.datetime,properties.updated,assets.*.title,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.proj:code,assets.*.proj:shape,assets.*.proj:transform".to_owned(),
-			),
-		];
+            (
+                "bbox".to_owned(),
+                format!(
+                    "{},{},{},{}",
+                    bbox.lower_left().x,
+                    bbox.lower_left().y,
+                    bbox.upper_right().x,
+                    bbox.upper_right().y
+                ),
+            ),
+            (
+                "datetime".to_owned(),
+                format!(
+                    "{}/{}",
+                    time_start
+                        .as_date_time()
+                        .ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?
+                        .to_datetime_string_with_millis(),
+                    time_end
+                        .as_date_time()
+                        .ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?
+                        .to_datetime_string_with_millis(),
+                ),
+            ),
+            ("limit".to_owned(), self.page_limit.to_string()),
+            ("fields".to_owned(), common::STAC_ITEM_FIELDS.to_owned()),
+        ];
 
         Ok(query_params)
     }
@@ -508,8 +506,14 @@ impl StacMultiBandMetaData {
         .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
         let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
 
-        let file_path = common::gdal_file_path(&asset.href)
-            .ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+        let file_path = if asset.href.starts_with("http://")
+            || asset.href.starts_with("https://")
+            || asset.href.starts_with("s3://")
+        {
+            PathBuf::from(&asset.href)
+        } else {
+            return Err(geoengine_operators::error::Error::InvalidDataProviderConfig.into());
+        };
 
         let gdal_config_options =
             common::gdal_config_options_for_file_path(&file_path, self.s3_config.as_ref());
@@ -554,87 +558,6 @@ impl StacMultiBandMetaData {
 
         Ok(())
     }
-
-    fn rasterband_channel_for_dataset_band(
-        asset: &stac::Asset,
-        required_band_name: Option<&str>,
-    ) -> Option<usize> {
-        if asset.bands.is_empty() {
-            if required_band_name.is_some() {
-                tracing::warn!(
-                    "STAC asset with href {} does not include bands, but dataset configuration requires a band name. Skipping asset.",
-                    asset.href
-                );
-                return None;
-            }
-
-            return Some(1);
-        }
-
-        let Some(required_band_name) = required_band_name else {
-            tracing::warn!(
-                "STAC asset with href {} includes bands, but dataset configuration does not specify a band name. Skipping asset.",
-                asset.href
-            );
-            return None;
-        };
-
-        let Some(asset_band_idx) = asset
-            .bands
-            .iter()
-            .position(|asset_band| asset_band.name.as_deref() == Some(required_band_name))
-        else {
-            tracing::debug!(
-                "Skipping asset with href {} due to missing required band {}",
-                asset.href,
-                required_band_name
-            );
-            return None;
-        };
-
-        Some(asset_band_idx + 1)
-    }
-
-    fn gdal_config_options_for_file_path(&self, file_path: &Path) -> Option<Vec<(String, String)>> {
-        let file_path_str = file_path.to_string_lossy();
-        let is_vsi_s3 = file_path_str.starts_with("s3://");
-        let is_vsi_curl =
-            file_path_str.starts_with("http://") || file_path_str.starts_with("https://");
-
-        if !is_vsi_s3 && !is_vsi_curl {
-            return None;
-        }
-
-        let mut options = vec![
-            (
-                "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
-                "EMPTY_DIR".to_owned(),
-            ),
-            (
-                "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
-                ".tif,.tiff,.jp2".to_owned(),
-            ),
-        ];
-
-        if !is_vsi_s3 {
-            return Some(options);
-        }
-
-        if let Some(config) = self.s3_config.as_ref() {
-            options.push(("AWS_S3_ENDPOINT".to_owned(), config.endpoint.clone()));
-            options.push(("AWS_VIRTUAL_HOSTING".to_owned(), "FALSE".to_owned())); // TODO: make configurable?
-
-            if let Some(access_key) = &config.access_key {
-                options.push(("AWS_ACCESS_KEY_ID".to_owned(), access_key.clone()));
-            }
-
-            if let Some(secret_key) = &config.secret_key {
-                options.push(("AWS_SECRET_ACCESS_KEY".to_owned(), secret_key.clone()));
-            }
-        }
-
-        Some(options)
-    }
 }
 
 fn stac_query_bbox(
@@ -677,104 +600,6 @@ fn stac_query_time_interval(
         }
         TimeDimension::Irregular => Ok(query_time_interval),
     }
-}
-
-fn gdal_file_path(href: &str) -> Option<PathBuf> {
-    if href.starts_with("http://") || href.starts_with("https://") || href.starts_with("s3://") {
-        return Some(PathBuf::from(href));
-    }
-
-    None
-}
-
-fn proj_shape_from_fields(fields: &serde_json::Map<String, Value>) -> Option<(usize, usize)> {
-    let proj_shape = fields.get("proj:shape")?.as_array()?;
-    if proj_shape.len() != 2 {
-        return None;
-    }
-
-    let height = proj_shape.first()?.as_u64()? as usize;
-    let width = proj_shape.get(1)?.as_u64()? as usize;
-
-    Some((height, width))
-}
-
-fn geo_transform_from_fields(fields: &serde_json::Map<String, Value>) -> Option<GeoTransform> {
-    let proj_transform = fields.get("proj:transform")?;
-    let proj_transform_array = proj_transform.as_array()?;
-    if proj_transform_array.len() != 6 {
-        return None;
-    }
-
-    let proj_transform_values = proj_transform_array
-        .iter()
-        .map(Value::as_f64)
-        .collect::<Option<Vec<_>>>()?;
-
-    let gdal_geotransform = [
-        proj_transform_values[2],
-        proj_transform_values[0],
-        proj_transform_values[1],
-        proj_transform_values[5],
-        proj_transform_values[3],
-        proj_transform_values[4],
-    ];
-
-    Some(gdal_geotransform.into())
-}
-
-fn data_type_from_asset_v1_1_0(asset: &stac::Asset) -> Option<RasterDataType> {
-    asset
-        .data_type
-        .as_ref()
-        .and_then(raster_data_type_from_stac_data_type)
-}
-
-fn raster_data_type_from_stac_data_type(
-    data_type: &stac_extensions::raster::DataType,
-) -> Option<RasterDataType> {
-    match data_type {
-        stac_extensions::raster::DataType::UInt8 => Some(RasterDataType::U8),
-        stac_extensions::raster::DataType::UInt16 => Some(RasterDataType::U16),
-        stac_extensions::raster::DataType::UInt32 => Some(RasterDataType::U32),
-        stac_extensions::raster::DataType::Int16 => Some(RasterDataType::I16),
-        stac_extensions::raster::DataType::Int32 => Some(RasterDataType::I32),
-        stac_extensions::raster::DataType::Float32 => Some(RasterDataType::F32),
-        stac_extensions::raster::DataType::Float64 => Some(RasterDataType::F64),
-        _ => None,
-    }
-}
-
-fn proj_code_matches_dataset(
-    fields: &serde_json::Map<String, Value>,
-    dataset_projection: SpatialReference,
-) -> bool {
-    let Some(code) = fields.get("proj:code") else {
-        return false;
-    };
-
-    let Some(proj_code) = proj_code_as_srs_string(code) else {
-        return false;
-    };
-
-    proj_code == dataset_projection.to_string()
-}
-
-fn proj_code_as_srs_string(value: &Value) -> Option<String> {
-    if let Some(code_number) = value.as_u64() {
-        return Some(format!("EPSG:{code_number}"));
-    }
-
-    let code_str = value.as_str()?.trim();
-    if code_str.contains(':') {
-        return Some(code_str.to_ascii_uppercase());
-    }
-
-    if let Ok(code_number) = code_str.parse::<u32>() {
-        return Some(format!("EPSG:{code_number}"));
-    }
-
-    None
 }
 
 #[async_trait]

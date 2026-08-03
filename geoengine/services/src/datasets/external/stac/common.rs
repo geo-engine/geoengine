@@ -13,9 +13,12 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 use serde::Deserialize;
-use std::path::PathBuf;
 
 use super::StacProviderS3Config;
+
+/// STAC `fields` query parameter used to keep item responses small while including all
+/// metadata needed by the provider (loading info) and the harvester (discovery/mapping).
+pub const STAC_ITEM_FIELDS: &str = "stac_version,properties.datetime,properties.updated,assets.*.title,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.proj:code,assets.*.proj:shape,assets.*.proj:transform";
 
 // ---------------------------------------------------------------------------
 // STAC extension version types
@@ -253,23 +256,6 @@ pub fn data_type_from_asset_v1_0_0_fallback(asset: &stac::Asset) -> Option<Raste
         .and_then(|band| band.get("data_type"))
         .and_then(|v| v.as_str())
         .and_then(raster_data_type_from_stac_data_type_str)
-}
-
-// ---------------------------------------------------------------------------
-// File path helpers
-// ---------------------------------------------------------------------------
-
-/// Convert a STAC asset href (HTTP or S3 URL) to a GDAL VSI path.
-///
-/// - `http://...` → `/vsicurl/http://...`
-/// - `s3://bucket/key` → `/vsis3/bucket/key`
-pub fn gdal_file_path(href: &str) -> Option<PathBuf> {
-    if href.starts_with("http") {
-        return Some(PathBuf::from(format!("/vsicurl/{href}")));
-    }
-
-    href.strip_prefix("s3://")
-        .map(|s3_path| PathBuf::from(format!("/vsis3/{s3_path}")))
 }
 
 // ---------------------------------------------------------------------------
@@ -558,7 +544,7 @@ pub fn is_jp2_media_type(media_type: Option<&str>) -> bool {
 // GDAL config options
 // ---------------------------------------------------------------------------
 
-/// Build GDAL configuration options for `/vsis3/` paths.
+/// Build GDAL configuration options for S3-backed file paths.
 ///
 /// Returns the common options plus S3-specific credentials when an S3 config is provided.
 pub fn gdal_config_options_for_s3(
@@ -583,16 +569,16 @@ pub fn gdal_config_options_for_s3(
     options
 }
 
-/// Build GDAL configuration options for a VSI file path, including common CURL/S3 options.
+/// Build GDAL configuration options for a remote (HTTP or S3) file path, including common CURL/S3 options.
 pub fn gdal_config_options_for_file_path(
     file_path: &std::path::Path,
     s3_config: Option<&StacProviderS3Config>,
 ) -> Option<Vec<(String, String)>> {
     let file_path_str = file_path.to_string_lossy();
-    let is_vsi_s3 = file_path_str.starts_with("/vsis3/");
-    let is_vsi_curl = file_path_str.starts_with("/vsicurl/");
+    let is_s3 = file_path_str.starts_with("s3://");
+    let is_http = file_path_str.starts_with("http://") || file_path_str.starts_with("https://");
 
-    if !is_vsi_s3 && !is_vsi_curl {
+    if !is_s3 && !is_http {
         return None;
     }
 
@@ -607,7 +593,7 @@ pub fn gdal_config_options_for_file_path(
         ),
     ];
 
-    if is_vsi_s3 {
+    if is_s3 {
         options.extend(gdal_config_options_for_s3(s3_config));
     }
 
@@ -751,27 +737,6 @@ mod tests {
             Some(RasterDataType::U16)
         );
         assert_eq!(raster_data_type_from_stac_data_type_str("unknown"), None);
-    }
-
-    // -----------------------------------------------------------------------
-    // gdal_file_path
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn test_gdal_file_path_http() {
-        let path = gdal_file_path("https://example.com/file.tif").expect("should parse");
-        assert_eq!(path, PathBuf::from("/vsicurl/https://example.com/file.tif"));
-    }
-
-    #[test]
-    fn test_gdal_file_path_s3() {
-        let path = gdal_file_path("s3://bucket/key/file.tif").expect("should parse");
-        assert_eq!(path, PathBuf::from("/vsis3/bucket/key/file.tif"));
-    }
-
-    #[test]
-    fn test_gdal_file_path_unsupported() {
-        assert!(gdal_file_path("/local/path.tif").is_none());
     }
 
     // -----------------------------------------------------------------------
