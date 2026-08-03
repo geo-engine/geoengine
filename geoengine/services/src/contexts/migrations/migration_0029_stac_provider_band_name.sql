@@ -23,7 +23,8 @@ CREATE TYPE "StacAssetBand" AS (
 );
 
 ALTER TYPE "StacProviderDatasetBand" ADD ATTRIBUTE asset_band "StacAssetBand";
-ALTER TYPE "StacProviderDatasetBand" ADD ATTRIBUTE band_descriptor "RasterBandDescriptor";
+ALTER TYPE "StacProviderDatasetBand"
+ADD ATTRIBUTE band_descriptor "RasterBandDescriptor";
 
 -- `page_limit` was moved here from migration 0028, which is already released.
 -- It must be added before the data migration below, since
@@ -95,10 +96,13 @@ END;
 $$ LANGUAGE plpgsql;
 
 UPDATE layer_providers
-SET definition = ROW(
-    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-    pg_temp.stac_migrate_provider_def((definition).stac_data_provider_definition)
-)::"DataProviderDefinition"
+SET
+    definition = ROW(
+        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+        pg_temp.stac_migrate_provider_def(
+            (definition).stac_data_provider_definition
+        )
+    )::"DataProviderDefinition"
 WHERE (definition).stac_data_provider_definition IS NOT NULL;
 
 -- Drop the now-redundant flat addressing attributes.
