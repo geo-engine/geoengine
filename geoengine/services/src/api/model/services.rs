@@ -989,13 +989,23 @@ impl From<crate::datasets::external::stac::StacProviderS3Config> for StacProvide
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct StacProviderDatasetBand {
+pub struct StacAssetBand {
     pub asset_title: String,
     pub band_name: Option<String>,
 }
 
-impl From<StacProviderDatasetBand> for crate::datasets::external::stac::StacProviderDatasetBand {
-    fn from(value: StacProviderDatasetBand) -> Self {
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StacProviderDatasetBand {
+    /// The band inside the STAC asset that this dataset band reads from
+    /// (addressing: which asset file + which raster channel within it).
+    pub asset_band: StacAssetBand,
+    /// The band descriptor of the resulting geo engine dataset layer.
+    pub band_descriptor: crate::api::model::operators::RasterBandDescriptor,
+}
+
+impl From<StacAssetBand> for crate::datasets::external::stac::StacAssetBand {
+    fn from(value: StacAssetBand) -> Self {
         Self {
             asset_title: value.asset_title,
             band_name: value.band_name,
@@ -1003,11 +1013,29 @@ impl From<StacProviderDatasetBand> for crate::datasets::external::stac::StacProv
     }
 }
 
-impl From<crate::datasets::external::stac::StacProviderDatasetBand> for StacProviderDatasetBand {
-    fn from(value: crate::datasets::external::stac::StacProviderDatasetBand) -> Self {
+impl From<crate::datasets::external::stac::StacAssetBand> for StacAssetBand {
+    fn from(value: crate::datasets::external::stac::StacAssetBand) -> Self {
         Self {
             asset_title: value.asset_title,
             band_name: value.band_name,
+        }
+    }
+}
+
+impl From<StacProviderDatasetBand> for crate::datasets::external::stac::StacProviderDatasetBand {
+    fn from(value: StacProviderDatasetBand) -> Self {
+        Self {
+            asset_band: value.asset_band.into(),
+            band_descriptor: value.band_descriptor.into(),
+        }
+    }
+}
+
+impl From<crate::datasets::external::stac::StacProviderDatasetBand> for StacProviderDatasetBand {
+    fn from(value: crate::datasets::external::stac::StacProviderDatasetBand) -> Self {
+        Self {
+            asset_band: value.asset_band.into(),
+            band_descriptor: value.band_descriptor.into(),
         }
     }
 }

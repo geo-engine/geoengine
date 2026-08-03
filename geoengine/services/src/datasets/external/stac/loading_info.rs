@@ -256,6 +256,14 @@ impl
     }
 
     async fn result_descriptor(&self) -> geoengine_operators::util::Result<RasterResultDescriptor> {
+        let bands = RasterBandDescriptors::new(
+            self.dataset
+                .bands
+                .iter()
+                .map(|b| b.band_descriptor.clone())
+                .collect(),
+        )?;
+
         Ok(RasterResultDescriptor {
             data_type: self.dataset.data_type,
             spatial_reference: self.dataset.projection.into(),
@@ -264,7 +272,7 @@ impl
                 dimension: self.time_dimension,
             },
             spatial_grid: self.dataset.spatial_grid,
-            bands: RasterBandDescriptors::new_multiple_bands(self.dataset.bands.len() as u32),
+            bands,
         })
     }
 
@@ -507,13 +515,13 @@ impl StacMultiBandMetaData {
             common::gdal_config_options_for_file_path(&file_path, self.s3_config.as_ref());
 
         for (dataset_band_idx, dataset_band) in self.dataset.bands.iter().enumerate() {
-            if dataset_band.asset_title != asset_title {
+            if dataset_band.asset_band.asset_title != asset_title {
                 continue;
             }
 
             let Some(rasterband_channel) = common::rasterband_channel_for_dataset_band(
                 asset,
-                dataset_band.band_name.as_deref(),
+                dataset_band.asset_band.band_name.as_deref(),
             ) else {
                 continue;
             };
@@ -822,7 +830,8 @@ mod tests {
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::SpatialGridDescriptor;
     use geoengine_operators::engine::{
-        MetaData, MetaDataProvider, RasterResultDescriptor, WorkflowOperatorPath,
+        MetaData, MetaDataProvider, RasterBandDescriptor, RasterResultDescriptor,
+        WorkflowOperatorPath,
     };
     use geoengine_operators::source::{
         MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
@@ -861,12 +870,18 @@ mod tests {
                 ),
                 bands: vec![
                     crate::datasets::external::stac::StacProviderDatasetBand {
-                        asset_title: "NIR 1 (band 8) - 10m".to_owned(),
-                        band_name: Some("B08".to_owned()),
+                        asset_band: crate::datasets::external::stac::StacAssetBand {
+                            asset_title: "NIR 1 (band 8) - 10m".to_owned(),
+                            band_name: Some("B08".to_owned()),
+                        },
+                        band_descriptor: RasterBandDescriptor::new_unitless("B08".to_owned()),
                     },
                     crate::datasets::external::stac::StacProviderDatasetBand {
-                        asset_title: "Red (band 4) - 10m".to_owned(),
-                        band_name: Some("B04".to_owned()),
+                        asset_band: crate::datasets::external::stac::StacAssetBand {
+                            asset_title: "Red (band 4) - 10m".to_owned(),
+                            band_name: Some("B04".to_owned()),
+                        },
+                        band_descriptor: RasterBandDescriptor::new_unitless("B04".to_owned()),
                     },
                 ],
             }],
@@ -1060,24 +1075,39 @@ mod tests {
                     ),
                     bands: vec![
                         crate::datasets::external::stac::StacProviderDatasetBand {
-                            asset_title: "Blue (band 2) - 10m".to_owned(),
-                            band_name: Some("B02".to_owned()),
+                            asset_band: crate::datasets::external::stac::StacAssetBand {
+                                asset_title: "Blue (band 2) - 10m".to_owned(),
+                                band_name: Some("B02".to_owned()),
+                            },
+                            band_descriptor: RasterBandDescriptor::new_unitless("B02".to_owned()),
                         },
                         crate::datasets::external::stac::StacProviderDatasetBand {
-                            asset_title: "Green (band 3) - 10m".to_owned(),
-                            band_name: Some("B03".to_owned()),
+                            asset_band: crate::datasets::external::stac::StacAssetBand {
+                                asset_title: "Green (band 3) - 10m".to_owned(),
+                                band_name: Some("B03".to_owned()),
+                            },
+                            band_descriptor: RasterBandDescriptor::new_unitless("B03".to_owned()),
                         },
                         crate::datasets::external::stac::StacProviderDatasetBand {
-                            asset_title: "Water vapour (WVP) - 10m".to_owned(),
-                            band_name: Some("WVP".to_owned()),
+                            asset_band: crate::datasets::external::stac::StacAssetBand {
+                                asset_title: "Water vapour (WVP) - 10m".to_owned(),
+                                band_name: Some("WVP".to_owned()),
+                            },
+                            band_descriptor: RasterBandDescriptor::new_unitless("WVP".to_owned()),
                         },
                         crate::datasets::external::stac::StacProviderDatasetBand {
-                            asset_title: "NIR 1 (band 8) - 10m".to_owned(),
-                            band_name: Some("B08".to_owned()),
+                            asset_band: crate::datasets::external::stac::StacAssetBand {
+                                asset_title: "NIR 1 (band 8) - 10m".to_owned(),
+                                band_name: Some("B08".to_owned()),
+                            },
+                            band_descriptor: RasterBandDescriptor::new_unitless("B08".to_owned()),
                         },
                         crate::datasets::external::stac::StacProviderDatasetBand {
-                            asset_title: "Red (band 4) - 10m".to_owned(),
-                            band_name: Some("B04".to_owned()),
+                            asset_band: crate::datasets::external::stac::StacAssetBand {
+                                asset_title: "Red (band 4) - 10m".to_owned(),
+                                band_name: Some("B04".to_owned()),
+                            },
+                            band_descriptor: RasterBandDescriptor::new_unitless("B04".to_owned()),
                         },
                     ],
                 },
@@ -1097,12 +1127,18 @@ mod tests {
                     ),
                     bands: vec![
                         crate::datasets::external::stac::StacProviderDatasetBand {
-                            asset_title: "Aerosol optical thickness (AOT) - 20m".to_owned(),
-                            band_name: Some("AOT".to_owned()),
+                            asset_band: crate::datasets::external::stac::StacAssetBand {
+                                asset_title: "Aerosol optical thickness (AOT) - 20m".to_owned(),
+                                band_name: Some("AOT".to_owned()),
+                            },
+                            band_descriptor: RasterBandDescriptor::new_unitless("AOT".to_owned()),
                         },
                         crate::datasets::external::stac::StacProviderDatasetBand {
-                            asset_title: "Scene classification map (SCL) - 20m".to_owned(),
-                            band_name: Some("SCL".to_owned()),
+                            asset_band: crate::datasets::external::stac::StacAssetBand {
+                                asset_title: "Scene classification map (SCL) - 20m".to_owned(),
+                                band_name: Some("SCL".to_owned()),
+                            },
+                            band_descriptor: RasterBandDescriptor::new_unitless("SCL".to_owned()),
                         },
                     ],
                 },

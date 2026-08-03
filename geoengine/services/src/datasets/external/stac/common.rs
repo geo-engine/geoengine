@@ -48,6 +48,12 @@ pub fn geo_transform_from_fields(
         return None;
     }
 
+    // A `GeoTransform` requires non-zero pixel sizes. Some STAC catalogs encode
+    // angular/QA assets with a zero pixel height, so skip those instead of panicking.
+    if values[0] == 0.0 || values[4] == 0.0 {
+        return None;
+    }
+
     // GDAL geo-transform: [origin_x, pixel_width, rotation, origin_y, rotation, pixel_height]
     let gdal_geotransform: GdalGeoTransform = [
         values[2], // origin_x
@@ -280,23 +286,36 @@ pub struct EoBand {
 /// Map a GDAL raster band channel index for a dataset band within an asset.
 ///
 /// If the asset has no `bands` metadata, returns channel 1 (single-band asset).
-/// If the asset has bands, matches by `band_name` against asset band names.
-/// If the asset has exactly one band and no `band_name` is required, returns
-/// channel 1 (single-band asset treated the same as no band metadata).
+/// If the asset has exactly one band, returns channel 1: a single-band asset has
+/// only one GDAL raster band, and STAC servers commonly label it with a short
+/// code (e.g. `B10`) while the configured band name may be the human-readable
+/// asset title (e.g. `Thermal Infrared 10.9 (band 10) - 100m`), so a strict name
+/// match would wrongly skip the asset.
+/// If the asset has multiple bands, matches by `band_name` against asset band
+/// names to select the channel.
 /// Returns `None` if the required band is not found.
 pub fn rasterband_channel_for_dataset_band(
     asset: &stac::Asset,
     required_band_name: Option<&str>,
 ) -> Option<usize> {
-    if asset.bands.is_empty() || (asset.bands.len() == 1 && required_band_name.is_none()) {
-        if required_band_name.is_some() && asset.bands.is_empty() {
-            tracing::warn!(
-                "STAC asset with href {} does not include bands, but dataset configuration requires a band name. Skipping asset.",
-                asset.href
+    if asset.bands.is_empty() {
+        // No `bands` metadata: assume a single-band raster and map to channel 1.
+        // STAC servers commonly omit `bands` for single-band products (e.g.
+        // Sentinel-2 SCL/CLD/SNW, Landsat QA bands), even when the mapping
+        // configures an explicit band name. Skipping here would silently lose
+        // the band, so proceed with channel 1 (the single-band path below does
+        // the same regardless of the requested name).
+        if required_band_name.is_some() {
+            tracing::debug!(
+                "STAC asset with href {} does not include bands, but dataset configuration requires band name {:?}. Assuming single-band raster (channel 1).",
+                asset.href,
+                required_band_name
             );
-            return None;
         }
+        return Some(1);
+    }
 
+    if asset.bands.len() == 1 {
         return Some(1);
     }
 
@@ -325,21 +344,38 @@ pub fn rasterband_channel_for_dataset_band(
     Some(asset_band_idx + 1)
 }
 
+/// Parsed band information from a STAC 1.1.0 asset.
+///
+/// Keeps the asset's display title separate from the individual band names so
+/// callers can match an asset by its real STAC title and select the raster
+/// channel by band name, without encoding the band name into the title (e.g.
+/// `True color image [B02]`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct AssetBandInfo {
+    pub asset_title: String,
+    pub band_names: Vec<String>,
+}
+
 /// Derive band names from a STAC 1.1.0 `Asset`, using the `bands` field.
-pub fn band_names_from_asset_v1_1_0(asset: &stac::Asset) -> Result<Vec<String>, String> {
+///
+/// For assets without `bands` metadata or with exactly one band, the single
+/// band is named after the asset title. For multi-band assets the individual
+/// STAC band names (e.g. `B04`) are returned, so the mapping can reference the
+/// exact raster channel while keeping the real asset title.
+pub fn band_names_from_asset_v1_1_0(asset: &stac::Asset) -> Result<AssetBandInfo, String> {
     let asset_title = asset
         .title
         .as_deref()
-        .ok_or_else(|| "Missing title in asset metadata".to_string())?;
+        .ok_or_else(|| "Missing title in asset metadata".to_string())?
+        .to_string();
 
     let bands = &asset.bands;
 
-    if bands.is_empty() {
-        return Ok(vec![asset_title.to_string()]);
-    }
-
-    if bands.len() == 1 {
-        return Ok(vec![asset_title.to_string()]);
+    if bands.is_empty() || bands.len() == 1 {
+        return Ok(AssetBandInfo {
+            asset_title: asset_title.clone(),
+            band_names: vec![asset_title],
+        });
     }
 
     let mut names = Vec::new();
@@ -347,18 +383,24 @@ pub fn band_names_from_asset_v1_1_0(asset: &stac::Asset) -> Result<Vec<String>, 
         let Some(band_name) = &band.name else {
             return Err("Band is missing name for multi-band asset".to_string());
         };
-        names.push(format!("{asset_title} [{band_name}]"));
+        names.push(band_name.clone());
     }
 
-    Ok(names)
+    Ok(AssetBandInfo {
+        asset_title,
+        band_names: names,
+    })
 }
 
 /// Derive band names from a STAC 1.1.0 `ItemAsset`, using the `bands` additional field.
-pub fn band_names_from_item_asset_v1_1_0(asset: &stac::ItemAsset) -> Result<Vec<String>, String> {
+///
+/// See [`band_names_from_asset_v1_1_0`] for the naming semantics.
+pub fn band_names_from_item_asset_v1_1_0(asset: &stac::ItemAsset) -> Result<AssetBandInfo, String> {
     let asset_title = asset
         .title
         .as_deref()
-        .ok_or_else(|| "Missing title in asset metadata".to_string())?;
+        .ok_or_else(|| "Missing title in asset metadata".to_string())?
+        .to_string();
 
     let band_names = asset
         .additional_fields
@@ -366,15 +408,17 @@ pub fn band_names_from_item_asset_v1_1_0(asset: &stac::ItemAsset) -> Result<Vec<
         .and_then(serde_json::Value::as_array);
 
     let Some(bands) = band_names else {
-        return Ok(vec![asset_title.to_string()]);
+        return Ok(AssetBandInfo {
+            asset_title: asset_title.clone(),
+            band_names: vec![asset_title],
+        });
     };
 
-    if bands.is_empty() {
-        return Ok(vec![asset_title.to_string()]);
-    }
-
-    if bands.len() == 1 {
-        return Ok(vec![asset_title.to_string()]);
+    if bands.is_empty() || bands.len() == 1 {
+        return Ok(AssetBandInfo {
+            asset_title: asset_title.clone(),
+            band_names: vec![asset_title],
+        });
     }
 
     let mut names = Vec::new();
@@ -383,10 +427,13 @@ pub fn band_names_from_item_asset_v1_1_0(asset: &stac::ItemAsset) -> Result<Vec<
             .get("name")
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| "Band is missing name for multi-band asset".to_string())?;
-        names.push(format!("{asset_title} [{band_name}]"));
+        names.push(band_name.to_string());
     }
 
-    Ok(names)
+    Ok(AssetBandInfo {
+        asset_title,
+        band_names: names,
+    })
 }
 
 /// Normalize a label string: trim, lowercase, join whitespace-separated words with underscores.
@@ -603,6 +650,18 @@ mod tests {
         fields.insert(
             "proj:transform".to_string(),
             serde_json::json!([1.0, 2.0, 3.0]),
+        );
+        assert!(geo_transform_from_fields(&fields).is_none());
+    }
+
+    #[test]
+    fn test_geo_transform_from_fields_zero_pixel_size() {
+        // Some STAC catalogs encode angular/QA assets with a zero pixel height;
+        // these must be skipped rather than causing a panic.
+        let mut fields = serde_json::Map::new();
+        fields.insert(
+            "proj:transform".to_string(),
+            serde_json::json!([539_085.0, 30.0, 0.0, 5_846_715.0, 0.0, -30.0]),
         );
         assert!(geo_transform_from_fields(&fields).is_none());
     }
@@ -873,8 +932,9 @@ mod tests {
             "title": "My Band"
         });
         let asset: stac::Asset = serde_json::from_value(json).unwrap();
-        let names = band_names_from_asset_v1_1_0(&asset).expect("should succeed");
-        assert_eq!(names, vec!["My Band"]);
+        let info = band_names_from_asset_v1_1_0(&asset).expect("should succeed");
+        assert_eq!(info.asset_title, "My Band");
+        assert_eq!(info.band_names, vec!["My Band"]);
     }
 
     #[test]
@@ -885,23 +945,24 @@ mod tests {
             "bands": [{"name": "B01"}]
         });
         let asset: stac::Asset = serde_json::from_value(json).unwrap();
-        let names = band_names_from_asset_v1_1_0(&asset).expect("should succeed");
-        assert_eq!(names, vec!["My Asset"]);
+        let info = band_names_from_asset_v1_1_0(&asset).expect("should succeed");
+        assert_eq!(info.asset_title, "My Asset");
+        assert_eq!(info.band_names, vec!["My Asset"]);
     }
 
     #[test]
     fn test_band_names_from_asset_v1_1_0_multi_band() {
         let json = serde_json::json!({
             "href": "http://example.com/file.tif",
-            "title": "Sentinel-2",
+            "title": "True color image",
             "bands": [{"name": "B04"}, {"name": "B03"}, {"name": "B02"}]
         });
         let asset: stac::Asset = serde_json::from_value(json).unwrap();
-        let names = band_names_from_asset_v1_1_0(&asset).expect("should succeed");
-        assert_eq!(
-            names,
-            vec!["Sentinel-2 [B04]", "Sentinel-2 [B03]", "Sentinel-2 [B02]",]
-        );
+        let info = band_names_from_asset_v1_1_0(&asset).expect("should succeed");
+        // The real asset title is preserved separately from the band names; the
+        // band name is NOT encoded into the title (no `True color image [B02]`).
+        assert_eq!(info.asset_title, "True color image");
+        assert_eq!(info.band_names, vec!["B04", "B03", "B02"]);
     }
 
     // -----------------------------------------------------------------------
@@ -919,13 +980,39 @@ mod tests {
 
     #[test]
     fn test_rasterband_channel_no_bands_with_required() {
+        // An asset without `bands` metadata (e.g. Sentinel-2 SCL) still maps to
+        // channel 1 even when the mapping configures an explicit band name —
+        // skipping would silently lose the band.
         let json = serde_json::json!({
             "href": "http://example.com/file.tif"
         });
         let asset: stac::Asset = serde_json::from_value(json).unwrap();
         assert_eq!(
-            rasterband_channel_for_dataset_band(&asset, Some("B04")),
-            None
+            rasterband_channel_for_dataset_band(
+                &asset,
+                Some("Scene classification map (SCL) - 20m")
+            ),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn test_rasterband_channel_single_band_with_required_name() {
+        // A single-band asset (e.g. a Landsat thermal TIFF with
+        // `bands: [{name: "B10"}]`) must still resolve to channel 1 even when
+        // the configured band name is the human-readable asset title instead of
+        // the STAC short code.
+        let json = serde_json::json!({
+            "href": "http://example.com/file.tif",
+            "bands": [{"name": "B10"}]
+        });
+        let asset: stac::Asset = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            rasterband_channel_for_dataset_band(
+                &asset,
+                Some("Thermal Infrared 10.9 (band 10) - 100m")
+            ),
+            Some(1)
         );
     }
 

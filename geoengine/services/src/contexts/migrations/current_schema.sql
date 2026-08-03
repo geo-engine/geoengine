@@ -882,9 +882,14 @@ CREATE TYPE "StacProviderS3Config" AS (
     secret_key text
 );
 
-CREATE TYPE "StacProviderDatasetBand" AS (
+CREATE TYPE "StacAssetBand" AS (
     asset_title text,
     band_name text
+);
+
+CREATE TYPE "StacProviderDatasetBand" AS (
+    asset_band "StacAssetBand",
+    band_descriptor "RasterBandDescriptor"
 );
 
 CREATE TYPE "StacProviderDataset" AS (

@@ -10,61 +10,155 @@
   "timeDimension": {
     "type": "regular",
     "origin": 0,
-    "step": { "granularity": "days", "step": 1 }
+    "step": {
+      "granularity": "days",
+      "step": 1
+    }
   },
   "datasets": [
     {
       "name": "sentinel-2-l2a EPSG:32632 U16 10m",
       "description": "Auto-discovered from STAC collection 'sentinel-2-l2a'",
       "dataType": "U16",
-      "resolution": { "x": 10.0, "y": 10.0 },
+      "resolution": {
+        "x": 10.0,
+        "y": 10.0
+      },
       "projection": "EPSG:32632",
       "spatialGrid": {
         "spatialGrid": {
           "geoTransform": {
-            "originCoordinate": { "x": 399960.0, "y": 5700000.0 },
+            "originCoordinate": {
+              "x": 399960.0,
+              "y": 5700000.0
+            },
             "xPixelSize": 10.0,
             "yPixelSize": -10.0
           },
           "gridBounds": {
-            "topLeftIdx": { "yIdx": 0, "xIdx": 0 },
-            "bottomRightIdx": { "yIdx": 10979, "xIdx": 10979 }
+            "topLeftIdx": {
+              "yIdx": 0,
+              "xIdx": 0
+            },
+            "bottomRightIdx": {
+              "yIdx": 10979,
+              "xIdx": 10979
+            }
           }
         },
         "descriptor": "source"
       },
       "bands": [
-        { "assetTitle": "Blue (band 2) - 10m", "bandName": null },
-        { "assetTitle": "Green (band 3) - 10m", "bandName": null },
-        { "assetTitle": "NIR 1 (band 8) - 10m", "bandName": null },
-        { "assetTitle": "Red (band 4) - 10m", "bandName": null }
+        {
+          "assetBand": {
+            "assetTitle": "Blue (band 2) - 10m",
+            "bandName": "Blue (band 2) - 10m"
+          },
+          "bandDescriptor": {
+            "name": "Blue (band 2) - 10m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        },
+        {
+          "assetBand": {
+            "assetTitle": "Green (band 3) - 10m",
+            "bandName": "Green (band 3) - 10m"
+          },
+          "bandDescriptor": {
+            "name": "Green (band 3) - 10m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        },
+        {
+          "assetBand": {
+            "assetTitle": "NIR 1 (band 8) - 10m",
+            "bandName": "NIR 1 (band 8) - 10m"
+          },
+          "bandDescriptor": {
+            "name": "NIR 1 (band 8) - 10m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        },
+        {
+          "assetBand": {
+            "assetTitle": "Red (band 4) - 10m",
+            "bandName": "Red (band 4) - 10m"
+          },
+          "bandDescriptor": {
+            "name": "Red (band 4) - 10m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        }
       ]
     },
     {
       "name": "sentinel-2-l2a EPSG:32632 U16 20m",
       "description": "Auto-discovered from STAC collection 'sentinel-2-l2a'",
       "dataType": "U16",
-      "resolution": { "x": 20.0, "y": 20.0 },
+      "resolution": {
+        "x": 20.0,
+        "y": 20.0
+      },
       "projection": "EPSG:32632",
       "spatialGrid": {
         "spatialGrid": {
           "geoTransform": {
-            "originCoordinate": { "x": 399960.0, "y": 5700000.0 },
+            "originCoordinate": {
+              "x": 399960.0,
+              "y": 5700000.0
+            },
             "xPixelSize": 20.0,
             "yPixelSize": -20.0
           },
           "gridBounds": {
-            "topLeftIdx": { "yIdx": 0, "xIdx": 0 },
-            "bottomRightIdx": { "yIdx": 5489, "xIdx": 5489 }
+            "topLeftIdx": {
+              "yIdx": 0,
+              "xIdx": 0
+            },
+            "bottomRightIdx": {
+              "yIdx": 5489,
+              "xIdx": 5489
+            }
           }
         },
         "descriptor": "source"
       },
       "bands": [
-        { "assetTitle": "SWIR 1 (band 11) - 20m", "bandName": null },
-        { "assetTitle": "SWIR 2 (band 12) - 20m", "bandName": null }
+        {
+          "assetBand": {
+            "assetTitle": "SWIR 1 (band 11) - 20m",
+            "bandName": "SWIR 1 (band 11) - 20m"
+          },
+          "bandDescriptor": {
+            "name": "SWIR 1 (band 11) - 20m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        },
+        {
+          "assetBand": {
+            "assetTitle": "SWIR 2 (band 12) - 20m",
+            "bandName": "SWIR 2 (band 12) - 20m"
+          },
+          "bandDescriptor": {
+            "name": "SWIR 2 (band 12) - 20m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        }
       ]
     }
   ],
-  "pageLimit": 100
+  "pageLimit": 100,
+  "queryTimeoutSecs": 60
 }
