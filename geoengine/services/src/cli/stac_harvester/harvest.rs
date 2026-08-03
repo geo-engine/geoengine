@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Read, str::FromStr, time::Instant};
+use std::{collections::HashMap, io::Read, path::PathBuf, str::FromStr, time::Instant};
 
 use anyhow::Context;
 use chrono::Timelike;
@@ -962,11 +962,7 @@ fn build_stac_query_params(params: &StacHarvest, page_limit: usize) -> Vec<(Stri
     query_params.push(("limit".to_string(), page_limit.to_string()));
 
     if params.filter_item_fields {
-        query_params.push((
-            "fields".to_string(),
-            "stac_version,properties.datetime,properties.updated,assets.*.title,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.proj:code,assets.*.proj:shape,assets.*.proj:transform"
-                .to_string(),
-        ));
+        query_params.push(("fields".to_string(), common::STAC_ITEM_FIELDS.to_string()));
     }
 
     query_params
@@ -1172,7 +1168,14 @@ fn try_create_tile_for_band(
 
     let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
 
-    let file_path = common::gdal_file_path(&asset.href)?;
+    let file_path = if asset.href.starts_with("http://")
+        || asset.href.starts_with("https://")
+        || asset.href.starts_with("s3://")
+    {
+        PathBuf::from(&asset.href)
+    } else {
+        return None;
+    };
 
     let gdal_config_options =
         common::gdal_config_options_for_file_path(&file_path, provider_def.s3_config.as_ref());
@@ -1307,11 +1310,8 @@ mod tests {
                     "tile dimensions should be positive"
                 );
                 assert!(
-                    tile.params
-                        .file_path
-                        .to_string_lossy()
-                        .starts_with("/vsis3/"),
-                    "file path should be a VSI path: {}",
+                    tile.params.file_path.to_string_lossy().starts_with("s3://"),
+                    "file path should be an S3 URL: {}",
                     tile.params.file_path.display()
                 );
             }
@@ -1397,11 +1397,8 @@ mod tests {
                     "tile dimensions should be positive"
                 );
                 assert!(
-                    tile.params
-                        .file_path
-                        .to_string_lossy()
-                        .starts_with("/vsis3/"),
-                    "file path should be a VSI path: {}",
+                    tile.params.file_path.to_string_lossy().starts_with("s3://"),
+                    "file path should be an S3 URL: {}",
                     tile.params.file_path.display()
                 );
             }
