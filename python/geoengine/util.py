@@ -2,6 +2,8 @@
 Module for utility functions
 """
 
+import sys
+
 import numpy as np
 
 
@@ -21,3 +23,8 @@ def clamp_datetime_ms_ns(value: np.datetime64) -> np.datetime64:
         return max_date
 
     return value.astype("datetime64[ns]")
+
+
+def eprint(*args, **kwargs):
+    """Print to stderr."""
+    print(*args, file=sys.stderr, **kwargs)
