@@ -12309,14 +12309,14 @@
               "$ref": "#/components/schemas/StacProviderDataset"
             }
           },
-          "pageLimit": {
-            "type": "integer",
-            "format": "int64"
-          },
           "queryTimeoutSecs": {
             "type": "integer",
             "format": "int64",
             "description": "Timeout in seconds for outgoing STAC API HTTP requests."
+          },
+          "pageLimit": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

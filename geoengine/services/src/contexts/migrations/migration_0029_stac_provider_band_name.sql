@@ -12,6 +12,10 @@
 -- `RasterBandDescriptor` of the geo engine dataset layer band, populated with
 -- the naming fallback ("use band_name, then asset_title") and a unitless
 -- measurement.
+--
+-- Additionally, this migration takes over the `page_limit` attribute of
+-- `StacDataProviderDefinition` that previously lived in the released migration
+-- `0028_stac_provider`, so that migration stays untouched.
 
 CREATE TYPE "StacAssetBand" AS (
     asset_title text,
@@ -20,6 +24,11 @@ CREATE TYPE "StacAssetBand" AS (
 
 ALTER TYPE "StacProviderDatasetBand" ADD ATTRIBUTE asset_band "StacAssetBand";
 ALTER TYPE "StacProviderDatasetBand" ADD ATTRIBUTE band_descriptor "RasterBandDescriptor";
+
+-- `page_limit` was moved here from migration 0028, which is already released.
+-- It must be added before the data migration below, since
+-- `pg_temp.stac_migrate_provider_def` reads `(def).page_limit`.
+ALTER TYPE "StacDataProviderDefinition" ADD ATTRIBUTE page_limit bigint;
 
 -- Migrate existing stored STAC provider definitions: bundle the flat
 -- `asset_title`/`band_name` attributes into the new `asset_band` attribute.
@@ -79,8 +88,8 @@ BEGIN
         (def).s3_config,
         (def).time_dimension,
         new_datasets,
-        (def).page_limit,
-        (def).query_timeout_secs
+        (def).query_timeout_secs,
+        (def).page_limit
     )::"StacDataProviderDefinition";
 END;
 $$ LANGUAGE plpgsql;

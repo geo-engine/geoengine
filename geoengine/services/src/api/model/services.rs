@@ -1001,6 +1001,11 @@ pub struct StacProviderDatasetBand {
     /// (addressing: which asset file + which raster channel within it).
     pub asset_band: StacAssetBand,
     /// The band descriptor of the resulting geo engine dataset layer.
+    ///
+    /// Independent of `assetBand`, which *addresses* the band inside the asset
+    /// files. Populated by discovery with the naming fallback
+    /// (`assetBand.bandName`, then `assetBand.assetTitle`) and a unitless
+    /// measurement.
     pub band_descriptor: crate::api::model::operators::RasterBandDescriptor,
 }
 
@@ -1150,10 +1155,10 @@ pub struct StacDataProviderDefinition {
     pub s3_config: Option<StacProviderS3Config>,
     pub time_dimension: TimeDimension,
     pub datasets: Vec<StacProviderDataset>,
-    pub page_limit: i64,
     /// Timeout in seconds for outgoing STAC API HTTP requests.
     #[serde(default = "default_query_timeout")]
     pub query_timeout_secs: i64,
+    pub page_limit: i64,
 }
 
 fn default_query_timeout() -> i64 {
