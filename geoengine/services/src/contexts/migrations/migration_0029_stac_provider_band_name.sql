@@ -95,10 +95,13 @@ END;
 $$ LANGUAGE plpgsql;
 
 UPDATE layer_providers
-SET definition = ROW(
-    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-    pg_temp.stac_migrate_provider_def((definition).stac_data_provider_definition)
-)::"DataProviderDefinition"
+SET
+    definition = ROW(
+        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+        pg_temp.stac_migrate_provider_def(
+            (definition).stac_data_provider_definition
+        )
+    )::"DataProviderDefinition"
 WHERE (definition).stac_data_provider_definition IS NOT NULL;
 
 -- Drop the now-redundant flat addressing attributes.
