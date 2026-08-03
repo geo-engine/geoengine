@@ -53,13 +53,13 @@
     "dependencies": {
         "@angular/animations": "^21.2.0",
         "@angular/cdk": "^21.2.0",
-        "@angular/common": "^21.2.0",
+        "@angular/common": "^22.1.0",
         "@angular/compiler": "^21.2.0",
         "@angular/core": "^21.2.0",
-        "@angular/forms": "^21.2.0",
+        "@angular/forms": "^22.1.0",
         "@angular/material": "^21.2.0",
-        "@angular/platform-browser": "^21.2.0",
-        "@angular/router": "^21.2.0",
+        "@angular/platform-browser": "^22.1.0",
+        "@angular/router": "^22.1.0",
         "@codemirror/lang-json": "~6.0.2",
         "@codemirror/lang-rust": "~6.0.2",
         "@codemirror/language": "~6.12.2",
@@ -93,7 +93,7 @@
         "xss": "1.0.15"
     },
     "devDependencies": {
-        "@angular/build": "^21.2.0",
+        "@angular/build": "^22.1.2",
         "@angular/cli": "^21.2.0",
         "@angular/compiler-cli": "^21.2.0",
         "@angular/language-service": "^21.2.0",
