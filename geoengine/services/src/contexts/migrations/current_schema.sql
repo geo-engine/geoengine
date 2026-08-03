@@ -912,8 +912,8 @@ CREATE TYPE "StacDataProviderDefinition" AS (
     s3_config "StacProviderS3Config",
     time_dimension "TimeDimension",
     datasets "StacProviderDataset" [],
-    page_limit bigint,
-    query_timeout_secs bigint
+    query_timeout_secs bigint,
+    page_limit bigint
 );
 
 CREATE TYPE "DataProviderDefinition" AS (
