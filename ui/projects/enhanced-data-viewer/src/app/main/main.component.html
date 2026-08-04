@@ -115,7 +115,9 @@
                     <h4>Vizualization Presets</h4>
                     <mat-nav-list class="visualization-presets">
                         @for (group of presetGroups(); track group.category) {
-                            <span class="preset-group-label">{{ group.label }}</span>
+                            @if (debug()) {
+                                <span class="preset-group-label">{{ group.label }}</span>
+                            }
                             @for (preset of group.presets; track $index) {
                                 <mat-list-item
                                     [activated]="currentPresets().indexOf(preset) === selectedPresetIndex()"

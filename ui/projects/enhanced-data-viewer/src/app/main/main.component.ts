@@ -4,8 +4,10 @@ import {
     ElementRef,
     ResourceRef,
     afterNextRender,
+    booleanAttribute,
     computed,
     inject,
+    input,
     resource,
     signal,
     viewChild,
@@ -320,6 +322,13 @@ export class MainComponent {
     private readonly layerService = inject(LayersService);
     private readonly mapService = inject(MapService);
 
+    /**
+     * Bound from the `debug` query parameter via `bindToComponentInputs`.
+     * When `true`, all preset categories (static, harvested, ad-hoc) are shown;
+     * otherwise only the harvested presets are displayed.
+     */
+    readonly debug = input(false, {transform: booleanAttribute});
+
     readonly topToolbar = viewChild.required<MatToolbar, ElementRef<HTMLElement>>('topToolbar', {read: ElementRef});
     readonly mapComponent = viewChild.required(MapContainerComponent);
 
@@ -355,7 +364,12 @@ export class MainComponent {
     readonly currentPresets = computed(() => {
         const key = this.selectedDataSource();
         const ds = DATA_SOURCES.find((d) => d.key === key);
-        return ds?.presets ?? [];
+        const presets = ds?.presets ?? [];
+
+        // The static and ad-hoc presets are not production-ready yet; they are hidden
+        // unless the app is opened with the `debug` query parameter.
+        if (this.debug()) return presets;
+        return presets.filter((preset) => preset.category === 'harvested');
     });
 
     readonly presetGroups = computed(() => {
