@@ -127,6 +127,7 @@ from .workflow import (
     Workflow,
     WorkflowId,
     data_usage,
+    data_usage_for_computation,
     data_usage_summary,
     get_quota,
     register_workflow,
