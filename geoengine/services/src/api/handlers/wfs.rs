@@ -1287,4 +1287,12 @@ x;y
             "no-cache"
         );
     }
+
+    #[ge_context::test]
+    async fn it_sets_computation_id_header(app_ctx: PostgresContext<NoTls>) {
+        let res = get_feature_json_test_helper(app_ctx, Method::GET).await;
+
+        assert_eq!(res.status(), 200);
+        assert!(res.headers().get("x-computation-id").is_some());
+    }
 }

@@ -1470,7 +1470,7 @@ impl TryIntoHeaderPair for ComputationId {
 
     fn try_into_pair(self) -> std::prelude::v1::Result<(HeaderName, HeaderValue), Self::Error> {
         Ok((
-            HeaderName::from_static("X-Computation-Id"),
+            HeaderName::from_static("x-computation-id"), // NOTE: any uppercase letter leads to panics
             HeaderValue::from_str(&self.to_string())?,
         ))
     }

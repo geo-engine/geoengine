@@ -3850,8 +3850,7 @@
             "description": "Computation id",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "$ref": "#/components/schemas/ComputationId"
             }
           }
         ],
@@ -6657,6 +6656,10 @@
           }
         ]
       },
+      "ComputationId": {
+        "type": "string",
+        "format": "uuid"
+      },
       "ComputationQuota": {
         "type": "object",
         "required": [
@@ -6671,12 +6674,10 @@
             "format": "date-time"
           },
           "computationId": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "#/components/schemas/ComputationId"
           },
           "workflowId": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "#/components/schemas/WorkflowId"
           },
           "count": {
             "type": "integer",
@@ -6978,12 +6979,10 @@
             "format": "date-time"
           },
           "userId": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "#/components/schemas/UserId"
           },
           "computationId": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "#/components/schemas/ComputationId"
           },
           "data": {
             "type": "string"
