@@ -214,9 +214,11 @@ fn process_harvest_item(
     tiles_by_dataset: &mut HashMap<String, Vec<AddDatasetTile>>,
     params: &StacHarvest,
 ) -> Result<(), anyhow::Error> {
-    // Skip items whose STAC version the provider would also reject, so harvested
-    // datasets and provider-loaded datasets stay consistent.
-    if item.version != stac::Version::v1_1_0 {
+    // Harvest both STAC 1.0.0 and 1.1.0 items. Discovery supports both versions, so
+    // rejecting 1.0.0 here would silently harvest zero items from 1.0.0 collections.
+    // The version-aware parsing in `try_create_tile_for_band` handles the different
+    // metadata layouts. Skip only unknown versions.
+    if !matches!(item.version, stac::Version::v1_0_0 | stac::Version::v1_1_0) {
         warn!(
             "Skipping STAC item with unsupported version: {:?}",
             item.version
@@ -1130,26 +1132,37 @@ fn try_create_tile_for_band(
         .iter()
         .find(|(_, a)| a.title.as_deref() == Some(&band_def.asset_band.asset_title))?;
 
-    // Check data type matches
-    if let Some(asset_dt) = common::data_type_from_asset_v1_1_0_fallback(asset)
+    // STAC 1.0.0 and 1.1.0 store data type and projection extension metadata
+    // differently, so pick the version-appropriate parsing below.
+    let proj_extension_version = match item.version {
+        stac::Version::v1_0_0 => common::StacExtensionMajorVersion::V1,
+        stac::Version::v1_1_0 => common::StacExtensionMajorVersion::V2,
+        _ => return None,
+    };
+
+    // Check data type matches. STAC 1.0.0 keeps it in `raster:bands[]`, STAC 1.1.0
+    // in the asset's `data_type` field.
+    let asset_dt = match item.version {
+        stac::Version::v1_0_0 => common::data_type_from_asset_v1_0_0_fallback(asset),
+        stac::Version::v1_1_0 => common::data_type_from_asset_v1_1_0_fallback(asset),
+        _ => return None,
+    };
+    if let Some(asset_dt) = asset_dt
         && asset_dt != dataset.data_type
     {
         return None;
     }
 
     // Extract the item's actual EPSG code from the asset
-    let item_epsg = common::epsg_code_from_fields(
-        common::StacExtensionMajorVersion::V2,
-        &asset.additional_fields,
-    )
-    .or_else(|| {
-        // Also try to extract from serialized properties as fallback
-        let props_val = serde_json::to_value(&item.properties)
-            .ok()
-            .and_then(|v| v.as_object().cloned())
-            .unwrap_or_default();
-        common::epsg_code_from_fields(common::StacExtensionMajorVersion::V2, &props_val)
-    })?;
+    let item_epsg = common::epsg_code_from_fields(proj_extension_version, &asset.additional_fields)
+        .or_else(|| {
+            // Also try to extract from serialized properties as fallback
+            let props_val = serde_json::to_value(&item.properties)
+                .ok()
+                .and_then(|v| v.as_object().cloned())
+                .unwrap_or_default();
+            common::epsg_code_from_fields(proj_extension_version, &props_val)
+        })?;
 
     // Only process assets whose EPSG matches the dataset's projection
     if dataset.projection != SpatialReference::new(SpatialReferenceAuthority::Epsg, item_epsg) {
@@ -1244,6 +1257,7 @@ fn format_duration(secs: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::datasets::external::stac::StacAssetBand;
     use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::raster::RasterDataType;
 
@@ -1430,6 +1444,120 @@ mod tests {
             total_tiles_30m, 4,
             "first item should produce 4 tiles for 30m bands"
         );
+    }
+
+    /// Verifies that STAC 1.0.0 items (e.g. from element84's STAC API) are harvested
+    /// rather than skipped. Their data type lives in `raster:bands[]` and the EPSG
+    /// code on the item properties (`proj:epsg`), so this exercises the version-aware
+    /// parsing in `try_create_tile_for_band`. The item fixture is a recorded response
+    /// from the element84 STAC API and contains no external dependencies.
+    #[test]
+    fn test_process_harvest_item_recovers_v1_0_0_item() {
+        use geoengine_datatypes::dataset::DataProviderId;
+        use geoengine_datatypes::util::Identifier;
+
+        let mapping = StacDataProviderDefinition {
+            name: "element84-test".to_string(),
+            id: DataProviderId::new(),
+            description: String::new(),
+            priority: None,
+            api_url: "https://earth-search.aws.element84.com/v0".to_string(),
+            collection_name: "sentinel-2-l2a".to_string(),
+            s3_config: None,
+            time_dimension: geoengine_datatypes::primitives::TimeDimension::Regular(
+                geoengine_datatypes::primitives::RegularTimeDimension::new_with_epoch_origin(
+                    geoengine_datatypes::primitives::TimeStep {
+                        granularity: geoengine_datatypes::primitives::TimeGranularity::Days,
+                        step: 1,
+                    },
+                ),
+            ),
+            datasets: vec![StacProviderDataset {
+                name: "test".to_string(),
+                description: String::new(),
+                data_type: RasterDataType::U16,
+                resolution: SpatialResolution::new_unchecked(10.0, 10.0),
+                projection: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632),
+                spatial_grid: geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new((0.0, 0.0).into(), 10.0, -10.0),
+                    GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0])).unwrap(),
+                ),
+                bands: vec![StacProviderDatasetBand::new_unitless(StacAssetBand {
+                    asset_title: "Blue - 10m".to_string(),
+                    band_name: Some("blue".to_string()),
+                })],
+            }],
+            query_timeout_secs: 60,
+            page_limit: 10,
+        };
+
+        let items: stac::ItemCollection = serde_json::from_str(include_str!(
+            "../../../../test_data/stac_responses/items/element84-marburg-minimal.json"
+        ))
+        .expect("valid element84 items fixture");
+
+        let params = StacHarvest {
+            mapping: mapping.clone(),
+            time_start: None,
+            time_end: None,
+            bbox: None,
+            geo_engine_url: String::new(),
+            geo_engine_email: String::new(),
+            geo_engine_password: String::new(),
+            verbose: false,
+            prefetch_pages: 1,
+            z_index_property_name: Some("updated".to_string()),
+            no_data_value: None,
+            gdal_retries: None,
+            filter_item_fields: true,
+        };
+
+        let mut tiles_by_dataset: HashMap<String, Vec<AddDatasetTile>> = HashMap::new();
+
+        let item = &items.items[0];
+
+        // Sanity check: this fixture is a STAC 1.0.0 response.
+        assert_eq!(item.version, stac::Version::v1_0_0);
+
+        process_harvest_item(item, &mapping, &mut tiles_by_dataset, &params)
+            .expect("1.0.0 item processing should succeed");
+
+        // The 1.0.0 item must be recovered (not skipped) and produce a tile.
+        assert_eq!(
+            tiles_by_dataset.len(),
+            1,
+            "one dataset should receive tiles from the 1.0.0 item"
+        );
+
+        let (_dataset_name, tiles) = tiles_by_dataset.iter().next().expect("one dataset");
+        assert_eq!(tiles.len(), 1, "blue band should produce exactly one tile");
+        let tile = &tiles[0];
+
+        // Data type (uint16 from `raster:bands[]`) and EPSG (`proj:epsg` on the item)
+        // must have been recovered from the 1.0.0 metadata layout.
+        assert_eq!(tile.band, 0, "band index should be 0");
+        assert_eq!(tile.params.rasterband_channel, 1);
+        assert_eq!(tile.params.width, 10_980);
+        assert_eq!(tile.params.height, 10_980);
+
+        // The first matching asset is the COG GeoTIFF (https) asset.
+        assert!(
+            tile.params
+                .file_path
+                .to_string_lossy()
+                .starts_with("https://"),
+            "file path should be the COG URL: {}",
+            tile.params.file_path.display()
+        );
+
+        assert_eq!(tile.params.geo_transform.x_pixel_size, 10.0);
+        assert_eq!(tile.params.geo_transform.origin_coordinate.x, 399_960.0);
+        assert_eq!(tile.params.geo_transform.origin_coordinate.y, 5_700_000.0);
+
+        // The item timestamp (2026-01-28T10:36:43Z) is snapped to the daily time
+        // dimension: [2026-01-28T00:00:00Z, 2026-01-29T00:00:00Z).
+        assert_eq!(tile.time.start.inner(), 1_769_558_400_000);
+        assert_eq!(tile.time.end.inner(), 1_769_644_800_000);
     }
 
     /// Verifies the tile-import contract: datasets are created with an `External`
