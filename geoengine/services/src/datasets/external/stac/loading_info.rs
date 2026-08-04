@@ -434,21 +434,9 @@ impl StacMultiBandMetaData {
         let item_time = TimeInstance::from_millis(item_datetime.timestamp_millis())
             .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
 
-        let time = match self.time_dimension {
-            TimeDimension::Regular(regular) => {
-                let time_start = regular
-                    .snap_prev(item_time)
-                    .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
-                let time_end = (time_start + regular.step)
-                    .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
-
-                TimeInterval::new(time_start, time_end)
-                    .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?
-            }
-            TimeDimension::Irregular => {
-                unreachable!("irregular time dimension rejected at provider initialization")
-            }
-        };
+        // Shared with the STAC harvester so both produce identical intervals.
+        let time = common::snap_time_interval(item_time, &self.time_dimension)
+            .ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?;
 
         Ok(Some((time, z_index)))
     }
@@ -460,7 +448,7 @@ impl StacMultiBandMetaData {
         z_index: i64,
         files: &mut Vec<TileFile>,
     ) -> Result<()> {
-        if common::data_type_from_asset_v1_1_0(asset) != Some(self.dataset.data_type) {
+        if common::data_type_from_asset_v1_1_0_fallback(asset) != Some(self.dataset.data_type) {
             return Ok(());
         }
 
@@ -516,7 +504,7 @@ impl StacMultiBandMetaData {
         };
 
         let gdal_config_options =
-            common::gdal_config_options_for_file_path(&file_path, self.s3_config.as_ref());
+            common::gdal_config_options_for_file_path(&file_path, self.s3_config.as_ref(), None);
 
         for (dataset_band_idx, dataset_band) in self.dataset.bands.iter().enumerate() {
             if dataset_band.asset_band.asset_title != asset_title {

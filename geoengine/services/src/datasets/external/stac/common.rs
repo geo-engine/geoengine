@@ -9,6 +9,7 @@
 #![allow(dead_code)]
 
 use geoengine_datatypes::{
+    primitives::{TimeDimension, TimeInstance, TimeInterval},
     raster::{GdalGeoTransform, GeoTransform, RasterDataType},
     spatial_reference::SpatialReference,
 };
@@ -541,6 +542,30 @@ pub fn is_jp2_media_type(media_type: Option<&str>) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Time helpers
+// ---------------------------------------------------------------------------
+
+/// Snap a timestamp to the previous step boundary of a regular time dimension and return
+/// the interval `[start, start + step)`.
+///
+/// Returns `None` for irregular dimensions or if the arithmetic fails. Both the STAC
+/// provider and the STAC harvester use this so that harvested tiles and provider-loaded
+/// tiles produce identical time intervals for the same item.
+pub fn snap_time_interval(
+    time: TimeInstance,
+    time_dimension: &TimeDimension,
+) -> Option<TimeInterval> {
+    match time_dimension {
+        TimeDimension::Regular(regular) => {
+            let start = regular.snap_prev(time).ok()?;
+            let end = (start + regular.step).ok()?;
+            TimeInterval::new(start, end).ok()
+        }
+        TimeDimension::Irregular => None,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // GDAL config options
 // ---------------------------------------------------------------------------
 
@@ -570,9 +595,13 @@ pub fn gdal_config_options_for_s3(
 }
 
 /// Build GDAL configuration options for a remote (HTTP or S3) file path, including common CURL/S3 options.
+///
+/// When `retries` is set, adds GDAL HTTP retry options so transient failures reading
+/// remote tiles are retried.
 pub fn gdal_config_options_for_file_path(
     file_path: &std::path::Path,
     s3_config: Option<&StacProviderS3Config>,
+    retries: Option<usize>,
 ) -> Option<Vec<(String, String)>> {
     let file_path_str = file_path.to_string_lossy();
     let is_s3 = file_path_str.starts_with("s3://");
@@ -592,6 +621,11 @@ pub fn gdal_config_options_for_file_path(
             ".tif,.tiff,.jp2".to_owned(),
         ),
     ];
+
+    if let Some(retries) = retries {
+        options.push(("GDAL_HTTP_MAX_RETRY".to_owned(), retries.to_string()));
+        options.push(("GDAL_HTTP_RETRY_DELAY".to_owned(), "5".to_owned()));
+    }
 
     if is_s3 {
         options.extend(gdal_config_options_for_s3(s3_config));
@@ -1036,6 +1070,41 @@ mod tests {
         assert!(options.contains(&("AWS_ACCESS_KEY_ID".to_string(), "key".to_string())));
         assert!(options.contains(&("AWS_SECRET_ACCESS_KEY".to_string(), "secret".to_string())));
         assert!(options.contains(&("AWS_VIRTUAL_HOSTING".to_string(), "FALSE".to_string())));
+    }
+
+    #[test]
+    fn test_gdal_config_options_for_file_path_http_no_retries() {
+        let options = gdal_config_options_for_file_path(
+            std::path::Path::new("https://example.com/file.tif"),
+            None,
+            None,
+        )
+        .expect("http path should produce options");
+        assert!(!options.iter().any(|(k, _)| k == "GDAL_HTTP_MAX_RETRY"));
+        assert!(options.contains(&(
+            "GDAL_DISABLE_READDIR_ON_OPEN".to_string(),
+            "EMPTY_DIR".to_string()
+        )));
+    }
+
+    #[test]
+    fn test_gdal_config_options_for_file_path_with_retries() {
+        let options = gdal_config_options_for_file_path(
+            std::path::Path::new("https://example.com/file.tif"),
+            None,
+            Some(3),
+        )
+        .expect("http path should produce options");
+        assert!(options.contains(&("GDAL_HTTP_MAX_RETRY".to_string(), "3".to_string())));
+        assert!(options.contains(&("GDAL_HTTP_RETRY_DELAY".to_string(), "5".to_string())));
+    }
+
+    #[test]
+    fn test_gdal_config_options_for_file_path_local_path_returns_none() {
+        assert_eq!(
+            gdal_config_options_for_file_path(std::path::Path::new("/data/file.tif"), None, None),
+            None
+        );
     }
 
     // -----------------------------------------------------------------------
