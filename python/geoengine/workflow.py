@@ -267,20 +267,17 @@ class Workflow:
 
         with geoc.ApiClient(session.configuration) as api_client:
             wfs_api = geoc.OGCWFSApi(api_client)
-            try:
-                response = wfs_api.wfs_handler_with_http_info(
-                    workflow=self.__workflow_id.to_dict(),
-                    service=geoc.WfsService(geoc.WfsService.WFS),
-                    request=geoc.WfsRequest(geoc.WfsRequest.GETFEATURE),
-                    type_names=str(self.__workflow_id),
-                    bbox=bbox.bbox_str,
-                    version=geoc.WfsVersion(geoc.WfsVersion.ENUM_2_DOT_0_DOT_0),
-                    time=bbox.time_str,
-                    srs_name=bbox.srs,
-                    _request_timeout=timeout,
-                )
-            except geoc.ApiException as e:
-                raise GeoEngineException(e) from e
+            response = wfs_api.wfs_handler_with_http_info(
+                workflow=self.__workflow_id.to_dict(),
+                service=geoc.WfsService(geoc.WfsService.WFS),
+                request=geoc.WfsRequest(geoc.WfsRequest.GETFEATURE),
+                type_names=str(self.__workflow_id),
+                bbox=bbox.bbox_str,
+                version=geoc.WfsVersion(geoc.WfsVersion.ENUM_2_DOT_0_DOT_0),
+                time=bbox.time_str,
+                srs_name=bbox.srs,
+                _request_timeout=timeout,
+            )
 
         # Extract computation ID from response headers
         computation_id = None
