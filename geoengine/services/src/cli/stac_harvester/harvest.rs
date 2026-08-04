@@ -1,11 +1,10 @@
 use std::{collections::HashMap, io::Read, path::PathBuf, str::FromStr, time::Instant};
 
 use anyhow::Context;
-use chrono::Timelike;
 use futures::StreamExt;
 use geoengine_datatypes::{
     dataset::NamedData,
-    primitives::{DateTime, TimeInstance, TimeInterval},
+    primitives::TimeInstance,
     raster::{GeoTransform, GridBoundingBox2D, GridIdx2D},
     spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption},
 };
@@ -28,13 +27,12 @@ use crate::{
         model::{
             datatypes::{
                 GdalConfigOption, GridBoundingBox2D as ApiGridBoundingBox2D,
-                GridIdx2D as ApiGridIdx2D, LayerId, SpatialGridDefinition, TimeGranularity,
-                TimeStep,
+                GridIdx2D as ApiGridIdx2D, LayerId, SpatialGridDefinition,
             },
             operators::{
                 GdalDatasetParameters, GdalMultiBand, GdalMultiBandTypeTag, RasterBandDescriptor,
-                RasterBandDescriptors, RasterResultDescriptor, RegularTimeDimension,
-                SpatialGridDescriptor, SpatialGridDescriptorState, TimeDescriptor, TimeDimension,
+                RasterBandDescriptors, RasterResultDescriptor, SpatialGridDescriptor,
+                SpatialGridDescriptorState, TimeDescriptor, TimeDimension,
             },
             responses::IdResponse,
             services::{
@@ -42,7 +40,7 @@ use crate::{
             },
         },
     },
-    datasets::{DatasetName, upload::VolumeName},
+    datasets::DatasetName,
     layers::{
         layer::{AddLayer, AddLayerCollection, CollectionItem, LayerCollection},
         listing::LayerCollectionId,
@@ -91,10 +89,6 @@ pub struct StacHarvest {
     /// Geo Engine API password
     #[arg(long, default_value = "adminadmin")]
     pub geo_engine_password: String,
-
-    /// Volume on the server
-    #[arg(long, default_value = "geodata")]
-    pub volume_name: String,
 
     /// Verbose output
     #[arg(long, default_value_t = false)]
@@ -145,6 +139,10 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
     let start_time = Instant::now();
 
     let provider_def = &params.mapping;
+
+    if provider_def.time_dimension == geoengine_datatypes::primitives::TimeDimension::Irregular {
+        anyhow::bail!("Harvesting does not support irregular time dimensions");
+    }
 
     info!(
         "Harvesting STAC collection '{}' at {} with {} dataset(s)",
@@ -216,18 +214,22 @@ fn process_harvest_item(
     tiles_by_dataset: &mut HashMap<String, Vec<AddDatasetTile>>,
     params: &StacHarvest,
 ) -> Result<(), anyhow::Error> {
+    // Skip items whose STAC version the provider would also reject, so harvested
+    // datasets and provider-loaded datasets stay consistent.
+    if item.version != stac::Version::v1_1_0 {
+        warn!(
+            "Skipping STAC item with unsupported version: {:?}",
+            item.version
+        );
+        return Ok(());
+    }
+
     let Some(datetime) = item.properties.datetime else {
         return Ok(());
     };
 
-    let date_without_time = datetime
-        .with_hour(0)
-        .and_then(|d| d.with_minute(0))
-        .and_then(|d| d.with_second(0))
-        .and_then(|d| d.with_nanosecond(0))
-        .context("Failed to set time to zero")?;
-    let date_without_time: DateTime = date_without_time.into();
-    let time: TimeInstance = date_without_time.into();
+    let time: TimeInstance = TimeInstance::from_millis(datetime.timestamp_millis())
+        .map_err(|e| anyhow::anyhow!("Invalid item datetime: {e}"))?;
 
     let z_index = match params.z_index_property_name.as_deref() {
         Some("updated") => item
@@ -339,7 +341,7 @@ async fn create_dataset_api(
     api_config: &ApiConfig,
     dataset_name: &str,
     dataset: &StacProviderDataset,
-    volume_name: &str,
+    time_dimension: &geoengine_datatypes::primitives::TimeDimension,
 ) -> Result<(), anyhow::Error> {
     let geo_engine_url = &api_config.base_path;
     let session_id = api_config.bearer_access_token.as_deref().unwrap_or("");
@@ -355,7 +357,9 @@ async fn create_dataset_api(
     let api_gt: crate::api::model::datatypes::GeoTransform = dt_gt.into();
 
     let create_dataset_req = CreateDataset {
-        data_path: DataPath::Volume(VolumeName(volume_name.to_string())),
+        // Tiles reference remote http(s)/s3 URLs, so datasets must be registered as
+        // external data. Volume/upload data paths only allow relative local paths.
+        data_path: DataPath::External,
         definition: DatasetDefinition {
             properties: AddDataset {
                 name: Some(
@@ -377,13 +381,16 @@ async fn create_dataset_api(
                         .into(),
                     time: TimeDescriptor {
                         bounds: None,
-                        dimension: TimeDimension::Regular(RegularTimeDimension {
-                            origin: TimeInstance::from_millis_unchecked(0).into(),
-                            step: TimeStep {
-                                granularity: TimeGranularity::Days,
-                                step: 1,
-                            },
-                        }),
+                        // Use the mapping's time dimension (granularity/step) so
+                        // harvested datasets match the STAC provider's time handling.
+                        dimension: match time_dimension {
+                            geoengine_datatypes::primitives::TimeDimension::Regular(regular) => {
+                                TimeDimension::Regular((*regular).into())
+                            }
+                            geoengine_datatypes::primitives::TimeDimension::Irregular => {
+                                TimeDimension::Irregular
+                            }
+                        },
                     },
                     spatial_grid: SpatialGridDescriptor {
                         spatial_grid: SpatialGridDefinition {
@@ -519,7 +526,7 @@ async fn create_harvest_layer_collections(
         let dataset_name = dataset_name_for_harvest(&provider_def.collection_name, dataset);
         let layer_name = format!(
             "EPSG:{} {:?} {}m",
-            dataset.projection.authority(),
+            dataset.projection.code(),
             dataset.data_type,
             dataset.resolution.x
         );
@@ -927,7 +934,13 @@ async fn setup_datasets(
         }
 
         if !dataset_exists_api(api_config, &dataset_name).await? {
-            create_dataset_api(api_config, &dataset_name, dataset, &params.volume_name).await?;
+            create_dataset_api(
+                api_config,
+                &dataset_name,
+                dataset,
+                &provider_def.time_dimension,
+            )
+            .await?;
             created_datasets.push((idx, dataset.clone()));
         }
     }
@@ -1177,13 +1190,18 @@ fn try_create_tile_for_band(
         return None;
     };
 
-    let gdal_config_options =
-        common::gdal_config_options_for_file_path(&file_path, provider_def.s3_config.as_ref());
+    let gdal_config_options = common::gdal_config_options_for_file_path(
+        &file_path,
+        provider_def.s3_config.as_ref(),
+        params.gdal_retries,
+    );
+
+    // Snap the item timestamp to the mapping's time dimension so harvested tile
+    // intervals match the provider's (e.g. yearly for BioIS imperviousness data).
+    let time_interval = common::snap_time_interval(time, &provider_def.time_dimension)?;
 
     let tile = AddDatasetTile {
-        time: TimeInterval::new(time, time + i64::from(24 * 60 * 60 * 1000))
-            .ok()?
-            .into(),
+        time: time_interval.into(),
         spatial_partition: spatial_partition.into(),
         band: band_idx as u32,
         z_index,
@@ -1273,7 +1291,6 @@ mod tests {
             geo_engine_url: String::new(),
             geo_engine_email: String::new(),
             geo_engine_password: String::new(),
-            volume_name: String::new(),
             verbose: false,
             prefetch_pages: 1,
             z_index_property_name: Some("updated".to_string()),
@@ -1362,7 +1379,6 @@ mod tests {
             geo_engine_url: String::new(),
             geo_engine_email: String::new(),
             geo_engine_password: String::new(),
-            volume_name: String::new(),
             verbose: false,
             prefetch_pages: 1,
             z_index_property_name: Some("updated".to_string()),
@@ -1414,5 +1430,77 @@ mod tests {
             total_tiles_30m, 4,
             "first item should produce 4 tiles for 30m bands"
         );
+    }
+
+    /// Verifies the tile-import contract: datasets are created with an `External`
+    /// data path (so remote http/s3 tile URLs pass `validate_tile`) and with the
+    /// mapping's time dimension instead of a hardcoded daily one.
+    #[tokio::test]
+    async fn test_create_dataset_api_uses_external_data_path_and_time_dimension() {
+        use httptest::{
+            Expectation, Server, all_of,
+            matchers::{json_decoded, request},
+            responders,
+        };
+
+        let mut server = Server::run();
+
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("POST", "/dataset"),
+                request::body(json_decoded(|value: &serde_json::Value| {
+                    value["dataPath"] == serde_json::json!("external")
+                        && value["definition"]["metaData"]["resultDescriptor"]["time"]["dimension"]
+                            ["type"]
+                            == serde_json::json!("regular")
+                        && value["definition"]["metaData"]["resultDescriptor"]["time"]["dimension"]
+                            ["step"]["granularity"]
+                            == serde_json::json!("years")
+                })),
+            ])
+            .times(1)
+            .respond_with(responders::status_code(200).body(r#"{"datasetName": "test_dataset"}"#)),
+        );
+
+        // create_dataset_api shares the new dataset with registered + anonymous users.
+        server.expect(
+            Expectation::matching(request::method_path("PUT", "/permissions"))
+                .times(2)
+                .respond_with(responders::status_code(200)),
+        );
+
+        let api_config = geoengine_api_client::apis::configuration::Configuration {
+            base_path: server.url_str("/").trim_end_matches('/').to_string(),
+            ..Default::default()
+        };
+
+        let dataset = StacProviderDataset {
+            name: "test".to_string(),
+            description: String::new(),
+            data_type: RasterDataType::U16,
+            resolution: SpatialResolution::new_unchecked(10.0, 10.0),
+            projection: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632),
+            spatial_grid: geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new((0.0, 0.0).into(), 10.0, -10.0),
+                GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0])).unwrap(),
+            ),
+            bands: vec![],
+        };
+
+        // A yearly time dimension, as used for BioIS imperviousness data.
+        let time_dimension = geoengine_datatypes::primitives::TimeDimension::Regular(
+            geoengine_datatypes::primitives::RegularTimeDimension::new_with_epoch_origin(
+                geoengine_datatypes::primitives::TimeStep {
+                    granularity: geoengine_datatypes::primitives::TimeGranularity::Years,
+                    step: 1,
+                },
+            ),
+        );
+
+        create_dataset_api(&api_config, "test_dataset", &dataset, &time_dimension)
+            .await
+            .expect("create_dataset_api should succeed");
+
+        server.verify_and_clear();
     }
 }
