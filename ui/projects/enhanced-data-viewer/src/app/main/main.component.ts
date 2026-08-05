@@ -13,7 +13,7 @@ import {
     viewChild,
 } from '@angular/core';
 import {MatSidenavModule} from '@angular/material/sidenav';
-import {ProjectService, MapService, MapContainerComponent, CoreModule} from '@geoengine/core';
+import {ProjectService, MapService, MapContainerComponent, CoreModule, SpatialReferenceService, WGS_84} from '@geoengine/core';
 import {AppConfig} from '../app-config.service';
 import {Layer, LayersService, Time, TimeStepDuration, UserService} from '@geoengine/common';
 import {MatToolbar, MatToolbarModule} from '@angular/material/toolbar';
@@ -321,6 +321,7 @@ export class MainComponent {
     readonly userService = inject(UserService);
     private readonly layerService = inject(LayersService);
     private readonly mapService = inject(MapService);
+    private readonly spatialReferenceService = inject(SpatialReferenceService);
 
     /**
      * Bound from the `debug` query parameter via `bindToComponentInputs`.
@@ -441,12 +442,30 @@ export class MainComponent {
             read: () => {
                 this.mapService.registerMapComponent(this.mapComponent());
 
+                this.zoomToGermany();
+
                 this.setInitialTime();
 
                 this.onToolbarResize();
                 const topToolbarObserver = new ResizeObserver(() => this.onToolbarResize());
                 topToolbarObserver.observe(this.topToolbar().nativeElement);
             },
+        });
+    }
+
+    /**
+     * Zoom the map to the configured focus extent (Germany) once the project's
+     * spatial reference is known. The extent is defined in WGS 84 and is
+     * reprojected into the map's projection before fitting the view.
+     */
+    private zoomToGermany(): void {
+        this.projectService.getSpatialReferenceOnce().subscribe((projection) => {
+            const extent = this.spatialReferenceService.reprojectExtent(
+                this.config.DEFAULTS.FOCUS_EXTENT,
+                WGS_84.spatialReference,
+                projection,
+            );
+            this.mapService.zoomTo(extent);
         });
     }
 
