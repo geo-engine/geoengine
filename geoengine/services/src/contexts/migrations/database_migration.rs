@@ -107,7 +107,7 @@ where
 
     tx.commit().await?;
 
-    info!("Created schema. Version is: {}", create_schema.version());
+    info!("Version" = %create_schema.version(), "Created schema.");
 
     Ok(())
 }

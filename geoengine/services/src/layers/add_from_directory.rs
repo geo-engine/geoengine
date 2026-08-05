@@ -1,23 +1,18 @@
-use super::storage::LayerProviderDb;
-use crate::contexts::GeoEngineDb;
-use crate::datasets::storage::{DatasetDb, DatasetDefinition};
-use crate::layers::external::DataProviderDefinition;
-use crate::layers::storage::LayerDb;
 use crate::{
+    contexts::GeoEngineDb,
+    datasets::storage::{DatasetDb, DatasetDefinition},
     error::Result,
     layers::{
-        external::TypedDataProviderDefinition,
+        external::{DataProviderDefinition, TypedDataProviderDefinition},
         layer::{AddLayer, AddLayerCollection, LayerCollectionDefinition, LayerDefinition},
         listing::{LayerCollectionId, LayerCollectionProvider},
+        storage::{LayerDb, LayerProviderDb},
     },
     permissions::{Permission, PermissionDb, Role},
 };
-use geoengine_datatypes::dataset::DatasetId;
-use geoengine_datatypes::error::BoxedResultExt;
-use geoengine_datatypes::util::helpers::ge_report;
+use geoengine_datatypes::{dataset::DatasetId, error::BoxedResultExt, util::helpers::ge_report};
 use std::{
     collections::HashMap,
-    ffi::OsStr,
     fs::{self, DirEntry, File},
     io::BufReader,
     path::PathBuf,
@@ -70,19 +65,24 @@ pub async fn add_layers_from_directory<L: LayerDb + PermissionDb>(db: &mut L, fi
     };
 
     for entry in dir {
-        match entry {
-            Ok(entry) if entry.path().extension() == Some(OsStr::new("json")) => {
-                match add_layer_from_dir_entry(db, &entry).await {
-                    Ok(()) => info!("Added layer from directory entry: {entry:?}"),
-                    Err(e) => {
-                        warn!("Skipped adding layer from directory entry: {entry:?} error: {e}");
-                    }
-                }
-            }
+        let entry = match entry {
+            Ok(entry) if is_json_file(&entry) => entry,
             _ => {
-                warn!("Skipped adding layer from directory entry: {entry:?}");
+                warn!(
+                    "Entry" = path_display_option(&entry),
+                    "Error" = error_display_option(&entry),
+                    "Skipped adding layer from directory entry"
+                );
+                continue;
             }
+        };
+
+        if let Err(e) = add_layer_from_dir_entry(db, &entry).await {
+            warn!("Entry" = path_display(&entry), "Error" = %e, "Skipped adding layer from directory entry");
+            continue;
         }
+
+        info!("Entry" = %entry.path().display(), "Added layer from directory entry");
     }
 }
 
@@ -147,19 +147,26 @@ pub async fn add_layer_collections_from_directory<
     let mut collection_defs = vec![];
 
     for entry in dir {
-        match entry {
-            Ok(entry) if entry.path().extension() == Some(OsStr::new("json")) => {
-                match get_layer_collection_from_dir_entry(&entry) {
-                    Ok(def) => collection_defs.push(def),
-                    Err(e) => {
-                        warn!(
-                            "Skipped adding layer collection from directory entry: {entry:?} error: {e}"
-                        );
-                    }
-                }
-            }
+        let entry = match entry {
+            Ok(entry) if is_json_file(&entry) => entry,
             _ => {
-                warn!("Skipped adding layer collection from directory entry: {entry:?}");
+                warn!(
+                    "Entry" = path_display_option(&entry),
+                    "Error" = error_display_option(&entry),
+                    "Skipped adding layer collection from directory entry"
+                );
+                continue;
+            }
+        };
+
+        match get_layer_collection_from_dir_entry(&entry) {
+            Ok(def) => collection_defs.push(def),
+            Err(e) => {
+                warn!(
+                    "Entry" = path_display(&entry),
+                    "Error" = %e,
+                    "Skipped adding layer collection from directory entry"
+                );
             }
         }
     }
@@ -236,30 +243,44 @@ pub async fn add_providers_from_directory<D: LayerProviderDb + PermissionDb + Ge
     };
 
     for entry in dir {
-        match entry {
-            Ok(entry)
-                if entry.path().is_file()
-                    && entry.path().extension().is_some_and(|ext| ext == "json") =>
-            {
-                match add_provider_definition_from_dir_entry(db, &entry).await {
-                    Ok(()) => info!("Added provider from file `{}`", entry.path().display()),
-                    Err(e) => {
-                        warn!(
-                            "Skipped adding provider from file `{}` error: `{:?}`",
-                            entry.path().display(),
-                            e
-                        );
-                    }
-                }
-            }
-            Err(e) => {
-                warn!("Skipped adding provider from directory entry `{e:?}`");
-            }
+        let entry = match entry {
+            Ok(entry) if is_json_file(&entry) => entry,
             _ => {
-                // ignore directories, etc.
+                warn!(
+                    "Entry" = entry.as_ref().ok().map(|e| e.path().display().to_string()),
+                    "Error" = entry.as_ref().err().map(ToString::to_string),
+                    "Skipped adding provider from directory entry"
+                );
+                continue;
             }
+        };
+
+        if let Err(e) = add_provider_definition_from_dir_entry(db, &entry).await {
+            warn!(
+                "File" = %entry.path().display(),
+                "Error" = %e,
+                "Skipped adding provider from file",
+            );
         }
+
+        info!("File" = %entry.path().display(), "Added provider from file");
     }
+}
+
+fn is_json_file(entry: &DirEntry) -> bool {
+    entry.path().is_file() && entry.path().extension().is_some_and(|ext| ext == "json")
+}
+
+fn path_display_option(entry: &Result<DirEntry, std::io::Error>) -> Option<String> {
+    entry.as_ref().ok().map(path_display)
+}
+
+fn path_display(entry: &DirEntry) -> String {
+    entry.path().display().to_string()
+}
+
+fn error_display_option(entry: &Result<DirEntry, std::io::Error>) -> Option<String> {
+    entry.as_ref().err().map(ToString::to_string)
 }
 
 pub async fn add_datasets_from_directory<D: DatasetDb + PermissionDb>(

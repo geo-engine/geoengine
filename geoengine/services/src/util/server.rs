@@ -1,24 +1,24 @@
-use crate::api::model::responses::ErrorResponse;
-use crate::config::get_config_element;
-use crate::error::Result;
-use actix_http::body::{BoxBody, EitherBody, MessageBody};
-use actix_http::header::{HeaderName, HeaderValue};
-use actix_http::uri::PathAndQuery;
-use actix_http::{Extensions, HttpMessage, StatusCode};
-use actix_web::dev::{ServiceFactory, ServiceRequest, ServiceResponse};
-use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
-use actix_web::{HttpRequest, HttpResponse, http, middleware, web};
+use crate::{api::model::responses::ErrorResponse, config::get_config_element, error::Result};
+use actix_http::{
+    Extensions, HttpMessage, StatusCode,
+    body::{BoxBody, EitherBody, MessageBody},
+    header::{HeaderName, HeaderValue},
+    uri::PathAndQuery,
+};
+use actix_web::{
+    HttpRequest, HttpResponse,
+    dev::{ServiceFactory, ServiceRequest, ServiceResponse},
+    error::{InternalError, JsonPayloadError, QueryPayloadError},
+    http, middleware, web,
+};
 use futures::future::BoxFuture;
 use geoengine_datatypes::primitives::CacheHint;
-use std::any::Any;
-use std::num::NonZeroUsize;
-use std::time::Duration;
-use tracing::Span;
-use tracing::debug;
-use tracing::info;
+use std::{any::Any, fmt::Write, num::NonZeroUsize, time::Duration};
+use tracing::{Span, debug, info};
 use tracing_actix_web::{RequestId, RootSpanBuilder};
 use url::Url;
 use utoipa::{ToSchema, openapi::OpenApi};
+
 /// Custom root span for web requests that paste a request id to all logs.
 pub struct CustomRootSpanBuilder;
 
@@ -274,48 +274,51 @@ pub fn serve_openapi_json<
 }
 
 pub(crate) fn log_server_info() -> Result<()> {
+    fn enabled_disabled(enabled: bool) -> &'static str {
+        if enabled { "enabled" } else { "disabled" }
+    }
+
+    let cache_config: crate::config::Cache = get_config_element()?;
+    let oidc_config: crate::config::Oidc = get_config_element()?;
+    let open_telemetry: crate::config::OpenTelemetry = get_config_element()?;
+    let postgres_config: crate::config::Postgres = get_config_element()?;
+    let quota_config: crate::config::Quota = get_config_element()?;
+    let session_config: crate::config::Session = get_config_element()?;
+    let user_config: crate::config::User = get_config_element()?;
     let web_config: crate::config::Web = get_config_element()?;
 
     let external_address = web_config.api_url()?;
-
-    info!("Starting server…");
-
+    let local_address = Url::parse(&format!(
+        "http://{}{}",
+        web_config.bind_address, web_config.api_prefix
+    ))?;
+    let swagger_url = external_address.join("swagger-ui/")?;
     let version = server_info();
-    info!(
-        "Version: {} (commit: {}, build date: {})",
-        version.version, version.commit_hash, version.build_date
-    );
-    info!("Features: {}", version.features);
 
-    info!(
-        "Local Address: {} ",
-        Url::parse(&format!(
-            "http://{}{}",
-            web_config.bind_address, web_config.api_prefix
-        ))?,
-    );
-
-    info!("External Address: {external_address} ");
-
-    info!(
-        "API Documentation: {}",
-        external_address.join("swagger-ui/")?
-    );
-
-    let postgres_config: crate::config::Postgres = get_config_element()?;
-    if postgres_config.clear_database_on_start {
-        info!("Clear Database on Start: enabled");
-    } else {
-        info!("Clear Database on Start: disabled");
+    let mut cache_enabled = enabled_disabled(cache_config.enabled).to_string();
+    if cache_config.enabled {
+        let _ = write!(cache_enabled, " ({} MB)", cache_config.size_in_mb);
     }
 
-    let session_config: crate::config::Session = get_config_element()?;
-
-    if session_config.anonymous_access {
-        info!("Anonymous Access: enabled");
-    } else {
-        info!("Anonymous Access: disabled");
-    }
+    info!(
+        "Version" = %version.version,
+        "Commit" = %version.commit_hash,
+        "Build Date" = %version.build_date,
+        "Build Features" = Some(version.features).filter(|s| !s.trim().is_empty()),
+        "Local Address" = %local_address,
+        "External Address" = %external_address,
+        "Swagger URL" = %swagger_url,
+        "Clear DB on Start" = postgres_config.clear_database_on_start,
+        "Anonymous Access" = enabled_disabled(session_config.anonymous_access),
+        "User Registration" = enabled_disabled(user_config.registration),
+        "OIDC" = enabled_disabled(oidc_config.enabled),
+        "OpenTelemetry Tracing" = enabled_disabled(open_telemetry.enabled),
+        "OpenTelemetry Tracing Endpoint" = open_telemetry.enabled.then_some(open_telemetry.endpoint.as_str()),
+        "Cache" = enabled_disabled(cache_config.enabled),
+        "Cache Size" = cache_config.enabled.then(|| format!("{} MB", cache_config.size_in_mb)),
+        "Quota Tracking" = ?quota_config.mode,
+        "Server starting with configuration",
+    );
 
     Ok(())
 }
