@@ -87,6 +87,18 @@ run-examples test-code-path="../geoengine" build-type="debug" coverage="": commo
     {{ if coverage == "" { "" } else { 'COVERAGE_COMMAND="' + coverage + '"' } }} \
     {{ PYTHON }} test_all_notebooks.py
 
+# Run all examples in the examples directory.
+[arg("build-type", long="build-type", pattern="debug|release")]
+[arg("coverage", long="coverage", value="--cov=geoengine --cov-report=lcov")]
+[arg("test-code-path", long="test-code-path")]
+[group("test")]
+run-example example-notebook test-code-path="../geoengine" build-type="debug" coverage="": common::_clear _venv-is-installed
+    . {{ VENV_BIN }}activate && \
+    GEOENGINE_TEST_CODE_PATH={{ test-code-path }} \
+    GEOENGINE_TEST_BUILD_TYPE={{ build-type }} \
+    {{ if coverage == "" { "" } else { 'COVERAGE_COMMAND="' + coverage + '"' } }} \
+    {{ PYTHON }} test_notebook.py examples/{{ example-notebook }}
+
 format-code: common::_clear _venv-is-installed
     {{ PYTHON }} -m ruff format
     {{ PYTHON }} -m ruff check --fix
