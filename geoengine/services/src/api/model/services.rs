@@ -989,13 +989,28 @@ impl From<crate::datasets::external::stac::StacProviderS3Config> for StacProvide
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct StacProviderDatasetBand {
+pub struct StacAssetBand {
     pub asset_title: String,
     pub band_name: Option<String>,
 }
 
-impl From<StacProviderDatasetBand> for crate::datasets::external::stac::StacProviderDatasetBand {
-    fn from(value: StacProviderDatasetBand) -> Self {
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StacProviderDatasetBand {
+    /// The band inside the STAC asset that this dataset band reads from
+    /// (addressing: which asset file + which raster channel within it).
+    pub asset_band: StacAssetBand,
+    /// The band descriptor of the resulting geo engine dataset layer.
+    ///
+    /// Independent of `assetBand`, which *addresses* the band inside the asset
+    /// files. Populated by discovery with the naming fallback
+    /// (`assetBand.bandName`, then `assetBand.assetTitle`) and a unitless
+    /// measurement.
+    pub band_descriptor: crate::api::model::operators::RasterBandDescriptor,
+}
+
+impl From<StacAssetBand> for crate::datasets::external::stac::StacAssetBand {
+    fn from(value: StacAssetBand) -> Self {
         Self {
             asset_title: value.asset_title,
             band_name: value.band_name,
@@ -1003,11 +1018,29 @@ impl From<StacProviderDatasetBand> for crate::datasets::external::stac::StacProv
     }
 }
 
-impl From<crate::datasets::external::stac::StacProviderDatasetBand> for StacProviderDatasetBand {
-    fn from(value: crate::datasets::external::stac::StacProviderDatasetBand) -> Self {
+impl From<crate::datasets::external::stac::StacAssetBand> for StacAssetBand {
+    fn from(value: crate::datasets::external::stac::StacAssetBand) -> Self {
         Self {
             asset_title: value.asset_title,
             band_name: value.band_name,
+        }
+    }
+}
+
+impl From<StacProviderDatasetBand> for crate::datasets::external::stac::StacProviderDatasetBand {
+    fn from(value: StacProviderDatasetBand) -> Self {
+        Self {
+            asset_band: value.asset_band.into(),
+            band_descriptor: value.band_descriptor.into(),
+        }
+    }
+}
+
+impl From<crate::datasets::external::stac::StacProviderDatasetBand> for StacProviderDatasetBand {
+    fn from(value: crate::datasets::external::stac::StacProviderDatasetBand) -> Self {
+        Self {
+            asset_band: value.asset_band.into(),
+            band_descriptor: value.band_descriptor.into(),
         }
     }
 }
@@ -1125,6 +1158,7 @@ pub struct StacDataProviderDefinition {
     /// Timeout in seconds for outgoing STAC API HTTP requests.
     #[serde(default = "default_query_timeout")]
     pub query_timeout_secs: i64,
+    pub page_limit: i64,
 }
 
 fn default_query_timeout() -> i64 {
@@ -1145,6 +1179,7 @@ impl From<StacDataProviderDefinition>
             s3_config: value.s3_config.map(Into::into),
             time_dimension: api_time_dimension_to_datatypes(value.time_dimension),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
+            page_limit: value.page_limit,
             query_timeout_secs: value.query_timeout_secs,
         }
     }
@@ -1165,6 +1200,7 @@ impl From<crate::datasets::external::stac::StacDataProviderDefinition>
             s3_config: value.s3_config.map(Into::into),
             time_dimension: datatypes_time_dimension_to_api(value.time_dimension),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
+            page_limit: value.page_limit,
             query_timeout_secs: value.query_timeout_secs,
         }
     }

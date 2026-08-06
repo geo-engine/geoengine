@@ -144,7 +144,6 @@ mod tests {
                     CacheHint::default(),
                 )
             })
-            .map_err(Into::into)
     }
 
     fn tile_information_with_partition_and_shape(

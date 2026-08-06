@@ -1,0 +1,105 @@
+{
+  "type": "StacProviderDefinition",
+  "name": "landsat-c2-l1 from STAC",
+  "id": "00000000-0000-0000-0000-000000000000",
+  "description": "Auto-discovered mapping for STAC collection 'landsat-c2-l1' at https://stac.test/v1",
+  "priority": 50,
+  "apiUrl": "https://stac.test/v1",
+  "collectionName": "landsat-c2-l1",
+  "s3Config": null,
+  "timeDimension": {
+    "type": "regular",
+    "origin": 0,
+    "step": {
+      "granularity": "days",
+      "step": 1
+    }
+  },
+  "datasets": [
+    {
+      "name": "landsat-c2-l1 EPSG:32632 U16 30m",
+      "description": "Auto-discovered from STAC collection 'landsat-c2-l1'",
+      "dataType": "U16",
+      "resolution": {
+        "x": 30.0,
+        "y": 30.0
+      },
+      "projection": "EPSG:32632",
+      "spatialGrid": {
+        "spatialGrid": {
+          "geoTransform": {
+            "originCoordinate": {
+              "x": 399960.0,
+              "y": 5800020.0
+            },
+            "xPixelSize": 30.0,
+            "yPixelSize": -30.0
+          },
+          "gridBounds": {
+            "topLeftIdx": {
+              "yIdx": 0,
+              "xIdx": 0
+            },
+            "bottomRightIdx": {
+              "yIdx": 7999,
+              "xIdx": 7999
+            }
+          }
+        },
+        "descriptor": "source"
+      },
+      "bands": [
+        {
+          "assetBand": {
+            "assetTitle": "Blue (band 2) - 30m",
+            "bandName": "Blue (band 2) - 30m"
+          },
+          "bandDescriptor": {
+            "name": "Blue (band 2) - 30m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        },
+        {
+          "assetBand": {
+            "assetTitle": "Green (band 3) - 30m",
+            "bandName": "Green (band 3) - 30m"
+          },
+          "bandDescriptor": {
+            "name": "Green (band 3) - 30m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        },
+        {
+          "assetBand": {
+            "assetTitle": "NIR (band 5) - 30m",
+            "bandName": "NIR (band 5) - 30m"
+          },
+          "bandDescriptor": {
+            "name": "NIR (band 5) - 30m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        },
+        {
+          "assetBand": {
+            "assetTitle": "Red (band 4) - 30m",
+            "bandName": "Red (band 4) - 30m"
+          },
+          "bandDescriptor": {
+            "name": "Red (band 4) - 30m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "pageLimit": 100,
+  "queryTimeoutSecs": 60
+}
