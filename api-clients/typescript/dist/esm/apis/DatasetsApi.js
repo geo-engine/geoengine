@@ -20,7 +20,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { AutoCreateDatasetToJSON, CreateDatasetToJSON, DatasetFromJSON, DatasetListingFromJSON, DatasetNameResponseFromJSON, MetaDataDefinitionFromJSON, MetaDataDefinitionToJSON, MetaDataSuggestionFromJSON, ProvenancesToJSON, SuggestMetaDataToJSON, SymbologyToJSON, UpdateDatasetToJSON, VolumeFromJSON, VolumeFileLayersResponseFromJSON, } from '../models/index';
+import { AddDatasetTileToJSON, AutoCreateDatasetToJSON, CreateDatasetToJSON, DatasetFromJSON, DatasetListingFromJSON, DatasetNameResponseFromJSON, MetaDataDefinitionFromJSON, MetaDataDefinitionToJSON, MetaDataSuggestionFromJSON, ProvenancesToJSON, SuggestMetaDataToJSON, SymbologyToJSON, UpdateDatasetToJSON, VolumeFromJSON, VolumeFileLayersResponseFromJSON, } from '../models/index';
 /**
  *
  */
@@ -33,8 +33,8 @@ export class DatasetsApi extends runtime.BaseAPI {
             if (requestParameters['dataset'] == null) {
                 throw new runtime.RequiredError('dataset', 'Required parameter "dataset" was null or undefined when calling addDatasetTilesHandler().');
             }
-            if (requestParameters['autoCreateDataset'] == null) {
-                throw new runtime.RequiredError('autoCreateDataset', 'Required parameter "autoCreateDataset" was null or undefined when calling addDatasetTilesHandler().');
+            if (requestParameters['addDatasetTile'] == null) {
+                throw new runtime.RequiredError('addDatasetTile', 'Required parameter "addDatasetTile" was null or undefined when calling addDatasetTilesHandler().');
             }
             const queryParameters = {};
             const headerParameters = {};
@@ -53,7 +53,7 @@ export class DatasetsApi extends runtime.BaseAPI {
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: AutoCreateDatasetToJSON(requestParameters['autoCreateDataset']),
+                body: requestParameters['addDatasetTile'].map(AddDatasetTileToJSON),
             };
         });
     }

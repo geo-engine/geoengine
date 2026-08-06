@@ -77,11 +77,11 @@ with geoengine_api_client.ApiClient(configuration) as api_client:
     # Create an instance of the API class
     api_instance = geoengine_api_client.DatasetsApi(api_client)
     dataset = 'dataset_example' # str | Dataset Name
-    auto_create_dataset = geoengine_api_client.AutoCreateDataset() # AutoCreateDataset | 
+    add_dataset_tile = [geoengine_api_client.AddDatasetTile()] # List[AddDatasetTile] | 
 
     try:
         # Add a tile to a gdal dataset.
-        api_instance.add_dataset_tiles_handler(dataset, auto_create_dataset)
+        api_instance.add_dataset_tiles_handler(dataset, add_dataset_tile)
     except ApiException as e:
         print("Exception when calling DatasetsApi->add_dataset_tiles_handler: %s\n" % e)
 
@@ -200,6 +200,7 @@ Class | Method | HTTP request | Description
 
  - [AccessConstraints](docs/AccessConstraints.md)
  - [AddDataset](docs/AddDataset.md)
+ - [AddDatasetTile](docs/AddDatasetTile.md)
  - [AddLayer](docs/AddLayer.md)
  - [AddLayerCollection](docs/AddLayerCollection.md)
  - [AddRole](docs/AddRole.md)

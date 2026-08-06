@@ -202,7 +202,7 @@ pub async fn list_datasets_handler<C: ApplicationContext>(
     tag = "Datasets",
     post,
     path = "/dataset/{dataset}/tiles",
-    request_body = AutoCreateDataset,
+    request_body = Vec<AddDatasetTile>,
     responses(
         (status = 200),
     ),

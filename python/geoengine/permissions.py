@@ -105,7 +105,7 @@ class UserId:
     @classmethod
     def from_response(cls, response: dict[str, str]) -> UserId:
         """Parse a http response to an `UserId`"""
-        print(response)
+
         if "id" not in response:
             raise GeoEngineException(response)
 

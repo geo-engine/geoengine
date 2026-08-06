@@ -1,5 +1,6 @@
 export * from './AccessConstraints';
 export * from './AddDataset';
+export * from './AddDatasetTile';
 export * from './AddLayer';
 export * from './AddLayerCollection';
 export * from './AddRole';

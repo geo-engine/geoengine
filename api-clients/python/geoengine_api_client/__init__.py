@@ -46,6 +46,7 @@ __all__ = [
     "ApiException",
     "AccessConstraints",
     "AddDataset",
+    "AddDatasetTile",
     "AddLayer",
     "AddLayerCollection",
     "AddRole",
@@ -438,6 +439,7 @@ from geoengine_api_client.exceptions import ApiException as ApiException
 # import models into sdk package
 from geoengine_api_client.models.access_constraints import AccessConstraints as AccessConstraints
 from geoengine_api_client.models.add_dataset import AddDataset as AddDataset
+from geoengine_api_client.models.add_dataset_tile import AddDatasetTile as AddDatasetTile
 from geoengine_api_client.models.add_layer import AddLayer as AddLayer
 from geoengine_api_client.models.add_layer_collection import AddLayerCollection as AddLayerCollection
 from geoengine_api_client.models.add_role import AddRole as AddRole

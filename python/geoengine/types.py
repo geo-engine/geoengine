@@ -233,8 +233,6 @@ class TimeInterval:
         # The openapi Timeinterval does not accept end: None. So we set it to start IF self is an instant.
         end = end if end is not None else start
 
-        print(self, start, end)
-
         return geoengine_api_client.TimeInterval(start=int(start), end=int(end))
 
     @staticmethod

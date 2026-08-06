@@ -56,6 +56,7 @@ from geoengine.types import (
     SpatialResolution,
     VectorResultDescriptor,
 )
+from geoengine.util import eprint
 from geoengine.workflow_builder.operators import Operator as WorkflowBuilderOperator
 
 # TODO: Define as recursive type when supported in mypy: https://github.com/python/mypy/issues/731
@@ -616,7 +617,7 @@ class Workflow:
         session = get_session()
 
         if not isinstance(query_rectangle, QueryRectangle):
-            print("save_as_dataset ignores params other then spatial and tmporal bounds.")
+            eprint("save_as_dataset ignores params other then spatial and tmporal bounds.")
 
         qrect = geoc.models.raster_to_dataset_query_rectangle.RasterToDatasetQueryRectangle(
             spatial_bounds=SpatialPartition2D.from_bounding_box(query_rectangle.spatial_bounds).to_api_dict(),
