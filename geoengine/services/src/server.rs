@@ -1,25 +1,24 @@
-use crate::api::apidoc::ApiDoc;
-use crate::api::handlers;
-use crate::config::{self, get_config_element};
-use crate::contexts::ApplicationContext;
-use crate::contexts::PostgresContext;
-use crate::error::{Error, Result};
-use crate::users::UserSession;
-use crate::util::middleware::OutputRequestId;
-use crate::util::postgres::DatabaseConnectionConfig;
-use crate::util::server::{
-    CustomRootSpanBuilder, calculate_max_blocking_threads_per_worker, configure_extractors,
-    connection_init, log_server_info, render_404, render_405, serve_openapi_json,
+use crate::{
+    api::{apidoc::ApiDoc, handlers},
+    config::{self, get_config_element},
+    contexts::{ApplicationContext, PostgresContext},
+    error::{Error, Result},
+    users::UserSession,
+    util::{
+        middleware::OutputRequestId,
+        postgres::DatabaseConnectionConfig,
+        server::{
+            CustomRootSpanBuilder, calculate_max_blocking_threads_per_worker, configure_extractors,
+            connection_init, log_server_info, render_404, render_405, serve_openapi_json,
+        },
+    },
 };
 use actix_files::Files;
 use actix_web::{App, FromRequest, HttpServer, http, middleware, web};
 use bb8_postgres::tokio_postgres::NoTls;
 use geoengine_datatypes::raster::TilingSpecification;
-use geoengine_operators::engine::ChunkByteSize;
-use geoengine_operators::util::gdal::register_gdal_drivers_from_list;
-use std::net::SocketAddr;
-use std::path::PathBuf;
-use tracing::info;
+use geoengine_operators::{engine::ChunkByteSize, util::gdal::register_gdal_drivers_from_list};
+use std::{net::SocketAddr, path::PathBuf};
 use tracing_actix_web::TracingLogger;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -125,43 +124,11 @@ where
 pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     log_server_info()?;
 
-    let user_config: crate::config::User = get_config_element()?;
     let oidc_config: crate::config::Oidc = get_config_element()?;
     let web_config: crate::config::Web = get_config_element()?;
-    let open_telemetry: crate::config::OpenTelemetry = get_config_element()?;
     let cache_config: crate::config::Cache = get_config_element()?;
     let quota_config: crate::config::Quota = get_config_element()?;
     let gdal_process_pool_config: crate::config::GdalProcessPool = get_config_element()?;
-
-    if user_config.registration {
-        info!("User Registration: enabled");
-    } else {
-        info!("User Registration: disabled");
-    }
-
-    if oidc_config.enabled {
-        info!("OIDC: enabled");
-    } else {
-        info!("OIDC: disabled");
-    }
-
-    if open_telemetry.enabled {
-        info!("OpenTelemetry Tracing: enabled");
-        info!(
-            "OpenTelemetry Tracing Endpoint: {}",
-            open_telemetry.endpoint
-        );
-    } else {
-        info!("OpenTelemetry Tracing: disabled");
-    }
-
-    if cache_config.enabled {
-        info!("Cache: enabled ({} MB)", cache_config.size_in_mb);
-    } else {
-        info!("Cache: disabled");
-    }
-
-    info!("QuotaTracking: {:?}", quota_config.mode);
 
     let data_path_config: config::DataProvider = get_config_element()?;
 
