@@ -827,7 +827,10 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AutoCreateDataset"
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AddDatasetTile"
+                }
               }
             }
           },
@@ -5858,6 +5861,36 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "AddDatasetTile": {
+        "type": "object",
+        "required": [
+          "time",
+          "spatial_partition",
+          "band",
+          "z_index",
+          "params"
+        ],
+        "properties": {
+          "time": {
+            "$ref": "#/components/schemas/TimeInterval"
+          },
+          "spatial_partition": {
+            "$ref": "#/components/schemas/SpatialPartition2D"
+          },
+          "band": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "z_index": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "params": {
+            "$ref": "#/components/schemas/GdalDatasetParameters"
           }
         }
       },

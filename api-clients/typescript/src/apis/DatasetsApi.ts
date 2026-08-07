@@ -14,6 +14,7 @@
 
 import * as runtime from '../runtime';
 import type {
+  AddDatasetTile,
   AutoCreateDataset,
   CreateDataset,
   Dataset,
@@ -31,6 +32,8 @@ import type {
   VolumeFileLayersResponse,
 } from '../models/index';
 import {
+    AddDatasetTileFromJSON,
+    AddDatasetTileToJSON,
     AutoCreateDatasetFromJSON,
     AutoCreateDatasetToJSON,
     CreateDatasetFromJSON,
@@ -65,7 +68,7 @@ import {
 
 export interface AddDatasetTilesHandlerRequest {
     dataset: string;
-    autoCreateDataset: AutoCreateDataset;
+    addDatasetTile: Array<AddDatasetTile>;
 }
 
 export interface AutoCreateDatasetHandlerRequest {
@@ -141,10 +144,10 @@ export class DatasetsApi extends runtime.BaseAPI {
             );
         }
 
-        if (requestParameters['autoCreateDataset'] == null) {
+        if (requestParameters['addDatasetTile'] == null) {
             throw new runtime.RequiredError(
-                'autoCreateDataset',
-                'Required parameter "autoCreateDataset" was null or undefined when calling addDatasetTilesHandler().'
+                'addDatasetTile',
+                'Required parameter "addDatasetTile" was null or undefined when calling addDatasetTilesHandler().'
             );
         }
 
@@ -171,7 +174,7 @@ export class DatasetsApi extends runtime.BaseAPI {
             method: 'POST',
             headers: headerParameters,
             query: queryParameters,
-            body: AutoCreateDatasetToJSON(requestParameters['autoCreateDataset']),
+            body: requestParameters['addDatasetTile']!.map(AddDatasetTileToJSON),
         };
     }
 

@@ -15,6 +15,7 @@
 # import models into model package
 from geoengine_api_client.models.access_constraints import AccessConstraints
 from geoengine_api_client.models.add_dataset import AddDataset
+from geoengine_api_client.models.add_dataset_tile import AddDatasetTile
 from geoengine_api_client.models.add_layer import AddLayer
 from geoengine_api_client.models.add_layer_collection import AddLayerCollection
 from geoengine_api_client.models.add_role import AddRole

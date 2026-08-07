@@ -36,8 +36,8 @@ class DatasetsApi extends runtime.BaseAPI {
             if (requestParameters['dataset'] == null) {
                 throw new runtime.RequiredError('dataset', 'Required parameter "dataset" was null or undefined when calling addDatasetTilesHandler().');
             }
-            if (requestParameters['autoCreateDataset'] == null) {
-                throw new runtime.RequiredError('autoCreateDataset', 'Required parameter "autoCreateDataset" was null or undefined when calling addDatasetTilesHandler().');
+            if (requestParameters['addDatasetTile'] == null) {
+                throw new runtime.RequiredError('addDatasetTile', 'Required parameter "addDatasetTile" was null or undefined when calling addDatasetTilesHandler().');
             }
             const queryParameters = {};
             const headerParameters = {};
@@ -56,7 +56,7 @@ class DatasetsApi extends runtime.BaseAPI {
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.AutoCreateDatasetToJSON)(requestParameters['autoCreateDataset']),
+                body: requestParameters['addDatasetTile'].map(index_1.AddDatasetTileToJSON),
             };
         });
     }

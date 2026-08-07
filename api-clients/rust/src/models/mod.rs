@@ -2,6 +2,8 @@ pub mod access_constraints;
 pub use self::access_constraints::AccessConstraints;
 pub mod add_dataset;
 pub use self::add_dataset::AddDataset;
+pub mod add_dataset_tile;
+pub use self::add_dataset_tile::AddDatasetTile;
 pub mod add_layer;
 pub use self::add_layer::AddLayer;
 pub mod add_layer_collection;

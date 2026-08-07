@@ -42,7 +42,7 @@ use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::{path::PathBuf, sync::Arc};
 use tokio_postgres::error::SqlState;
-use tracing::info;
+use tracing::{info, instrument};
 
 // TODO: do not report postgres error details to user
 
@@ -179,6 +179,7 @@ where
     }
 
     // TODO: check if the datasets exist already and don't output warnings when skipping them
+    #[instrument(skip_all)]
     #[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
     pub async fn new_with_data(
         config: Config,
