@@ -16,6 +16,7 @@ use crate::{
     },
     contexts::{ApplicationContext, SessionContext},
     layers::layer::Layer,
+    quota::ComputationId,
     workflows::registry::WorkflowRegistry,
 };
 use actix_web::{HttpResponse, web};
@@ -24,6 +25,7 @@ use futures::{Stream, StreamExt, TryFutureExt, TryStreamExt, stream::BoxStream};
 use geoengine_datatypes::{
     error::BoxedResultExt,
     primitives::{TimeInstance, TimeInterval},
+    util::Identifier,
 };
 use geoengine_operators::{
     call_on_generic_raster_processor,
@@ -39,7 +41,6 @@ use ogcapi_types::common::{
 use std::collections::HashSet;
 use tracing::warn;
 use utoipa::{IntoParams, ToSchema};
-use uuid::Uuid;
 
 // TODO: add to [`ogcapi_types::common::link_rel`] and use from there
 const MAP_TILESETS_REL: &str = "http://www.opengis.net/def/rel/ogc/1.0/tilesets-map";
@@ -361,7 +362,7 @@ pub async fn collection<C: ApplicationContext>(
 
     let processing_graph_id = ctx.db().register_workflow(layer.workflow.clone()).await?;
 
-    let query_context = ctx.query_context(processing_graph_id.0, Uuid::new_v4())?;
+    let query_context = ctx.query_context(processing_graph_id, ComputationId::new())?;
 
     let descriptor = raster_workflow_metadata::<C::SessionContext>(
         layer.workflow.clone(),

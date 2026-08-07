@@ -447,7 +447,7 @@ mod tests {
 
     #[tokio::test]
     async fn lookup_uses_dataset_key_and_containment() {
-        let cache = StacQueryCache::new(100 * 1024 * 1024, Duration::from_secs(60));
+        let cache = StacQueryCache::new(100 * 1024 * 1024, Duration::from_mins(1));
         let a = dataset("A");
         let b = dataset("B");
 
@@ -474,7 +474,7 @@ mod tests {
 
     #[tokio::test]
     async fn larger_insert_evicts_contained_entry() {
-        let cache = StacQueryCache::new(100 * 1024 * 1024, Duration::from_secs(60));
+        let cache = StacQueryCache::new(100 * 1024 * 1024, Duration::from_mins(1));
         let a = dataset("A");
 
         cache
@@ -520,7 +520,7 @@ mod tests {
         let per_entry = StacQueryCache::entry_bytes(&sample);
 
         // Create a cache that fits exactly one entry (but not two).
-        let cache = StacQueryCache::new(per_entry, Duration::from_secs(60));
+        let cache = StacQueryCache::new(per_entry, Duration::from_mins(1));
 
         cache
             .insert(

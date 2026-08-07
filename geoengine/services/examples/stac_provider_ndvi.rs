@@ -14,15 +14,15 @@ use geoengine_services::{
     contexts::{ApplicationContext, PostgresContext, SessionContext},
     datasets::external::stac::StacDataProviderDefinition,
     layers::storage::LayerProviderDb,
+    quota::ComputationId,
     users::UserSession,
     util::tests::with_temp_context,
-    workflows::workflow::Workflow,
+    workflows::workflow::{Workflow, WorkflowId},
 };
 use std::{collections::BTreeMap, fs, path::Path};
 use tokio_postgres::NoTls;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
-use uuid::Uuid;
 
 const PROVIDER_TEMPLATE_ID: &str = "b274275c-373d-4a3f-8b45-9b48e9614329";
 
@@ -167,7 +167,7 @@ async fn run_profile_query(
         RasterQueryRectangle::new(query_grid.grid_bounds(), query_time, BandSelection::first());
 
     let query_ctx = admin_ctx
-        .query_context(Uuid::new_v4(), Uuid::new_v4())
+        .query_context(WorkflowId::new(), ComputationId::new())
         .context("creating query context")?;
 
     let mut stream = processor

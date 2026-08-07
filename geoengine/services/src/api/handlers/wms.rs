@@ -1,39 +1,47 @@
-use crate::api::model::datatypes::{
-    RasterColorizer, SpatialReference, SpatialReferenceOption, TimeInterval,
+use crate::{
+    api::{
+        model::{
+            datatypes::{RasterColorizer, SpatialReference, SpatialReferenceOption, TimeInterval},
+            responses::ErrorResponse,
+        },
+        ogc::{
+            util::{OgcProtocol, OgcQueryExtractor, ogc_endpoint_url},
+            wms::request::{
+                GetCapabilities, GetFeatureInfo, GetLegendGraphic, GetMap, GetMapExceptionFormat,
+                GetStyles,
+            },
+        },
+    },
+    config::{self, get_config_element},
+    contexts::{ApplicationContext, SessionContext},
+    error::{self, Error, Result},
+    quota::ComputationId,
+    util::server::{CacheControlHeader, connection_closed, not_implemented_handler},
+    workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
 };
-use crate::api::model::responses::ErrorResponse;
-use crate::api::ogc::util::{OgcProtocol, OgcQueryExtractor, ogc_endpoint_url};
-use crate::api::ogc::wms::request::{
-    GetCapabilities, GetFeatureInfo, GetLegendGraphic, GetMap, GetMapExceptionFormat, GetStyles,
-};
-use crate::config;
-use crate::config::get_config_element;
-use crate::contexts::{ApplicationContext, SessionContext};
-use crate::error::{self, Error, Result};
-use crate::util::server::{CacheControlHeader, connection_closed, not_implemented_handler};
-use crate::workflows::registry::WorkflowRegistry;
-use crate::workflows::workflow::WorkflowId;
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
-use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BandSelection, CacheHint, SpatialResolution,
+use geoengine_datatypes::{
+    primitives::{
+        AxisAlignedRectangle, BandSelection, CacheHint, RasterQueryRectangle, SpatialPartition2D,
+        SpatialResolution,
+    },
+    raster::GridIntersection,
+    util::Identifier,
 };
-use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D};
-use geoengine_datatypes::raster::GridIntersection;
-use geoengine_operators::util::raster_stream_to_png::default_colorizer_gradient;
 use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{ExecutionContext, WorkflowOperatorPath},
-    util::raster_stream_to_png::raster_stream_to_png_bytes,
+    util::raster_stream_to_png::{default_colorizer_gradient, raster_stream_to_png_bytes},
 };
 use reqwest::Url;
 use serde::Deserialize;
 use snafu::ensure;
-use std::str::FromStr;
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
 use tracing::debug;
-use utoipa::IntoParams;
-use utoipa::openapi::{Ref, Required};
-use uuid::Uuid;
+use utoipa::{
+    IntoParams,
+    openapi::{Ref, Required},
+};
 
 pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -305,7 +313,7 @@ async fn wms_get_map<C: ApplicationContext>(
         request: &GetMap,
         app_ctx: web::Data<C>,
         session: C::Session,
-    ) -> Result<(Vec<u8>, CacheHint)> {
+    ) -> Result<(Vec<u8>, CacheHint, ComputationId)> {
         let endpoint = workflow;
         let layer = WorkflowId::from_str(&request.layers)?;
 
@@ -347,6 +355,8 @@ async fn wms_get_map<C: ApplicationContext>(
         let operator = workflow.operator()?.get_raster()?;
 
         let execution_context = ctx.execution_context()?;
+
+        let computation_id = ComputationId::new();
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
@@ -443,7 +453,7 @@ async fn wms_get_map<C: ApplicationContext>(
                     raster_colorizer.no_data_color(),
                 )?;
 
-            return Ok((empty_image, CacheHint::max_duration()));
+            return Ok((empty_image, CacheHint::max_duration(), computation_id));
         }
 
         debug!("WMS re-scale-project: {:?}", query_tiling_pixel_grid);
@@ -456,21 +466,24 @@ async fn wms_get_map<C: ApplicationContext>(
 
         debug!("WMS query rect: {:?}", query_rect);
 
-        let query_ctx = ctx.query_context(workflow_id.0, Uuid::new_v4())?;
+        let query_ctx = ctx.query_context(workflow_id, computation_id)?;
 
         // The raster to png code already resamples when the tiles are filled. We should add resample for lower resolutions
-        call_on_generic_raster_processor!(
+        let result = call_on_generic_raster_processor!(
             processor,
             p =>
                 raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time.map(Into::into), Some(raster_colorizer), conn_closed).await // TODO: pass raster colorizer here
         )
-        .map_err(error::Error::from)
+        .map_err(error::Error::from);
+
+        result.map(|(image_bytes, cache_hint)| (image_bytes, cache_hint, computation_id))
     }
 
     match compute_result(req, workflow, &request, app_ctx, session).await {
-        Ok((image_bytes, cache_hint)) => Ok(HttpResponse::Ok()
+        Ok((image_bytes, cache_hint, computation_id)) => Ok(HttpResponse::Ok()
             .content_type(mime::IMAGE_PNG)
             .append_header(cache_hint.cache_control_header())
+            .append_header(computation_id)
             .body(image_bytes)),
         Err(error) => Ok(handle_wms_error(request.exceptions, &error)),
     }
@@ -711,7 +724,8 @@ mod tests {
                 .unwrap(),
                 BandSelection::first(),
             ),
-            ctx.query_context(Uuid::new_v4(), Uuid::new_v4()).unwrap(),
+            ctx.query_context(WorkflowId::new(), ComputationId::new())
+                .unwrap(),
             360,
             180,
             None,
