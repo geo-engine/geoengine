@@ -38,7 +38,8 @@ pub async fn start_server() -> Result<()> {
         EnvFilter::try_new(&logging_config.log_spec).expect("to have a valid log spec");
 
     // create a log layer for output to the console and add it to the registry
-    let registry = registry.with(console_layer_with_filter(console_filter));
+    let (console_layer, _console_guard) = console_layer_with_filter(console_filter);
+    let registry = registry.with(console_layer);
 
     // create a filter for the log message level in file output. Since the console_filter is not copy or clone, we have to create a new one. TODO: allow a different log level for file output.
     let file_filter =
@@ -111,18 +112,23 @@ where
     Ok(opentelemetry)
 }
 
-fn console_layer_with_filter<S, F: Filter<S> + 'static>(filter: F) -> impl Layer<S>
+fn console_layer_with_filter<S, F: Filter<S> + 'static>(
+    filter: F,
+) -> (impl Layer<S> + use<S, F>, WorkerGuard)
 where
     S: Subscriber,
     for<'a> S: LookupSpan<'a>,
 {
-    tracing_subscriber::fmt::layer()
+    // blocking the event thread when the PTY can't keep up; lines are dropped when full
+    let (non_blocking_writer, guard) = tracing_appender::non_blocking(std::io::stderr());
+    let layer = tracing_subscriber::fmt::layer()
         .pretty()
         .with_file(false)
         .with_target(true)
         .with_ansi(true)
-        .with_writer(std::io::stderr)
-        .with_filter(filter)
+        .with_writer(non_blocking_writer)
+        .with_filter(filter);
+    (layer, guard)
 }
 
 // we use a custom formatter because there are still format flags within spans even when `with_ansi` is false due to bug: https://github.com/tokio-rs/tracing/issues/1817
