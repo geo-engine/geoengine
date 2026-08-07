@@ -82,6 +82,7 @@ const fn default_as_cog() -> bool {
 pub struct RasterDatasetFromWorkflowResult {
     pub dataset: DatasetName,
     pub upload: UploadId,
+    pub computation_id: ComputationId,
 }
 
 impl TaskStatusInfo for RasterDatasetFromWorkflowResult {}
@@ -160,9 +161,8 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
             )
         };
 
-        let query_ctx = self
-            .ctx
-            .query_context(self.workflow_id, ComputationId::new())?;
+        let computation_id = ComputationId::new();
+        let query_ctx = self.ctx.query_context(self.workflow_id, computation_id)?;
         let request_spatial_ref =
             Option::<SpatialReference>::from(result_descriptor.spatial_reference)
                 .ok_or(crate::error::Error::MissingSpatialReference)?;
@@ -205,6 +205,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
         Ok(RasterDatasetFromWorkflowResult {
             dataset: dataset.name,
             upload: self.upload,
+            computation_id,
         })
     }
 }
