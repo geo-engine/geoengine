@@ -1,38 +1,31 @@
-use crate::api::handlers::users::UsageSummaryGranularity;
-use crate::contexts::PostgresDb;
-use crate::contexts::{ApplicationContext, SessionId};
-use crate::error::{Error, Result};
-use crate::permissions::TxPermissionDb;
-use crate::permissions::{Role, RoleDescription, RoleId};
-use crate::projects::{ProjectId, STRectangle};
-use crate::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
-use crate::users::oidc::{FlatMaybeEncryptedOidcTokens, OidcTokens, UserClaims};
-use crate::users::userdb::{
-    CannotRevokeRoleThatIsNotAssignedRoleDbError, RoleIdDoesNotExistRoleDbError,
+use crate::{
+    api::handlers::users::UsageSummaryGranularity,
+    contexts::{ApplicationContext, PostgresContext, PostgresDb, SessionId},
+    error::{self, Error, Result},
+    permissions::{Role, RoleDescription, RoleId, TxPermissionDb},
+    projects::{ProjectId, STRectangle},
+    quota::{ComputationId, ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota},
+    users::{
+        SessionTokenStore, StoredOidcTokens, User, UserCredentials, UserDb, UserId, UserInfo,
+        UserRegistration, UserSession,
+        oidc::{FlatMaybeEncryptedOidcTokens, OidcTokens, UserClaims},
+        userdb::{
+            Bb8RoleDbError, CannotRevokeRoleThatIsNotAssignedRoleDbError, PermissionDbRoleDbError,
+            PostgresRoleDbError, RoleDb, RoleDbError, RoleIdDoesNotExistRoleDbError, UserAuth,
+        },
+    },
+    util::{Identifier, encryption::MaybeEncryptedBytes, postgres::PostgresErrorExt},
 };
-use crate::users::{
-    SessionTokenStore, StoredOidcTokens, User, UserCredentials, UserDb, UserId, UserInfo,
-    UserRegistration, UserSession,
-};
-use crate::util::Identifier;
-use crate::util::postgres::PostgresErrorExt;
-use crate::{contexts::PostgresContext, error};
 use async_trait::async_trait;
-use geoengine_operators::meta::quota::ComputationUnit;
-
-use crate::util::encryption::MaybeEncryptedBytes;
 use bb8_postgres::{
     tokio_postgres::Socket, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
 };
+use geoengine_operators::meta::quota::ComputationUnit;
 use oauth2::AccessToken;
 use pwhash::bcrypt;
 use snafu::{ResultExt, ensure};
 use tokio_postgres::Transaction;
 use uuid::Uuid;
-
-use super::userdb::{
-    Bb8RoleDbError, PermissionDbRoleDbError, PostgresRoleDbError, RoleDb, RoleDbError, UserAuth,
-};
 
 #[async_trait]
 impl<Tls> UserAuth for PostgresContext<Tls>
@@ -881,7 +874,10 @@ where
             .collect())
     }
 
-    async fn quota_used_by_computation(&self, computation_id: Uuid) -> Result<Vec<OperatorQuota>> {
+    async fn quota_used_by_computation(
+        &self,
+        computation_id: ComputationId,
+    ) -> Result<Vec<OperatorQuota>> {
         let conn = self.conn_pool.get().await?;
 
         let rows = conn

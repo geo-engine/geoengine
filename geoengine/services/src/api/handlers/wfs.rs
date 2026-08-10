@@ -1,44 +1,49 @@
-use crate::api::model::datatypes::TimeInterval;
-use crate::api::ogc::util::{OgcProtocol, OgcQueryExtractor, ogc_endpoint_url};
-use crate::api::ogc::wfs::request::{GetCapabilities, GetFeature};
-use crate::config;
-use crate::config::get_config_element;
-use crate::contexts::{ApplicationContext, SessionContext};
-use crate::error;
-use crate::error::Result;
-use crate::util::server::{CacheControlHeader, connection_closed};
-use crate::workflows::registry::WorkflowRegistry;
-use crate::workflows::workflow::{Workflow, WorkflowId};
+use crate::{
+    api::{
+        model::datatypes::TimeInterval,
+        ogc::{
+            util::{OgcProtocol, OgcQueryExtractor, ogc_endpoint_url},
+            wfs::request::{GetCapabilities, GetFeature},
+        },
+    },
+    config::{self, get_config_element},
+    contexts::{ApplicationContext, SessionContext},
+    error::{self, Result},
+    quota::ComputationId,
+    util::server::{CacheControlHeader, connection_closed},
+    workflows::{
+        registry::WorkflowRegistry,
+        workflow::{Workflow, WorkflowId},
+    },
+};
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
 use futures::future::BoxFuture;
 use futures_util::TryStreamExt;
-use geoengine_datatypes::collections::ToGeoJson;
-use geoengine_datatypes::collections::{FeatureCollection, MultiPointCollection};
-use geoengine_datatypes::primitives::VectorQueryRectangle;
-use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use geoengine_datatypes::{
-    primitives::{FeatureData, Geometry, MultiPoint},
+    collections::{FeatureCollection, MultiPointCollection, ToGeoJson},
+    primitives::{
+        CacheHint, ColumnSelection, FeatureData, Geometry, MultiPoint, VectorQueryRectangle,
+    },
     spatial_reference::SpatialReference,
+    util::Identifier,
 };
-use geoengine_operators::engine::{
-    QueryContext, ResultDescriptor, SingleRasterOrVectorSource, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor,
+use geoengine_operators::{
+    engine::{
+        QueryContext, QueryProcessor, ResultDescriptor, SingleRasterOrVectorSource,
+        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, WorkflowOperatorPath,
+    },
+    processing::{DeriveOutRasterSpecsSource, Reprojection, ReprojectionParams},
+    util::{abortable_query_execution, input::RasterOrVectorOperator},
 };
-use geoengine_operators::engine::{QueryProcessor, WorkflowOperatorPath};
-use geoengine_operators::processing::{
-    DeriveOutRasterSpecsSource, Reprojection, ReprojectionParams,
-};
-use geoengine_operators::util::abortable_query_execution;
-use geoengine_operators::util::input::RasterOrVectorOperator;
 use reqwest::Url;
 use serde::Deserialize;
 use serde_json::json;
 use snafu::ensure;
-use std::str::FromStr;
-use std::time::Duration;
-use utoipa::openapi::{Ref, Required};
-use utoipa::{IntoParams, ToSchema};
-use uuid::Uuid;
+use std::{str::FromStr, time::Duration};
+use utoipa::{
+    IntoParams, ToSchema,
+    openapi::{Ref, Required},
+};
 
 pub(crate) fn init_wfs_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -561,7 +566,8 @@ async fn wfs_get_feature<C: ApplicationContext>(
         request.time.unwrap_or_else(default_time_from_config).into(),
         ColumnSelection::all(),
     );
-    let query_ctx = ctx.query_context(type_names.0, Uuid::new_v4())?;
+    let computation_id = ComputationId::new();
+    let query_ctx = ctx.query_context(type_names, computation_id)?;
 
     let (json, cache_hint) = match processor {
         TypedVectorQueryProcessor::Data(p) => {
@@ -580,6 +586,7 @@ async fn wfs_get_feature<C: ApplicationContext>(
 
     Ok(HttpResponse::Ok()
         .append_header(cache_hint.cache_control_header())
+        .append_header(computation_id)
         .json(json))
 }
 
@@ -1279,5 +1286,13 @@ x;y
             res.headers().get(header::CACHE_CONTROL).unwrap(),
             "no-cache"
         );
+    }
+
+    #[ge_context::test]
+    async fn it_sets_computation_id_header(app_ctx: PostgresContext<NoTls>) {
+        let res = get_feature_json_test_helper(app_ctx, Method::GET).await;
+
+        assert_eq!(res.status(), 200);
+        assert!(res.headers().get("x-computation-id").is_some());
     }
 }

@@ -262,7 +262,7 @@ mod tests {
         let result = upload.adjust_file_path(Path::new(""));
         assert!(result.is_err());
         assert!(
-            matches!(result.unwrap_err(), error::Error::PathIsNotAFile { .. }),
+            matches!(result.unwrap_err(), error::Error::PathIsNotAFile),
             "expected PathIsNotAFile"
         );
     }

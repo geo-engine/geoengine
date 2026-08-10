@@ -1,37 +1,55 @@
-use crate::api::handlers::tasks::TaskResponse;
-use crate::api::model::datatypes::{BandSelection, DataId, TimeInterval};
-use crate::api::model::responses::IdResponse;
-use crate::api::ogc::util::{parse_bbox, parse_time};
-use crate::config::get_config_element;
-use crate::contexts::{ApplicationContext, SessionContext};
-use crate::datasets::listing::{DatasetProvider, Provenance, ProvenanceOutput};
-use crate::datasets::{
-    RasterDatasetFromWorkflow, RasterDatasetFromWorkflowParams,
-    schedule_raster_dataset_from_workflow_task,
+use crate::{
+    api::{
+        handlers::tasks::TaskResponse,
+        model::{
+            datatypes::{BandSelection, DataId, TimeInterval},
+            responses::IdResponse,
+        },
+        ogc::util::{parse_bbox, parse_time},
+    },
+    config::get_config_element,
+    contexts::{ApplicationContext, SessionContext},
+    datasets::{
+        RasterDatasetFromWorkflow, RasterDatasetFromWorkflowParams,
+        listing::{DatasetProvider, Provenance, ProvenanceOutput},
+        schedule_raster_dataset_from_workflow_task,
+    },
+    error::Result,
+    layers::storage::LayerProviderDb,
+    quota::ComputationId,
+    util::{
+        parsing::{parse_band_selection, parse_spatial_partition},
+        workflows::validate_workflow,
+    },
+    workflows::{
+        WebsocketStreamTask, handle_websocket_message,
+        registry::WorkflowRegistry,
+        send_websocket_message,
+        workflow::{Workflow, WorkflowId},
+    },
 };
-use crate::error::Result;
-use crate::layers::storage::LayerProviderDb;
-use crate::util::parsing::{parse_band_selection, parse_spatial_partition};
-use crate::util::workflows::validate_workflow;
-use crate::workflows::registry::WorkflowRegistry;
-use crate::workflows::workflow::{Workflow, WorkflowId};
-use crate::workflows::{WebsocketStreamTask, handle_websocket_message, send_websocket_message};
 use actix_web::{FromRequest, HttpRequest, HttpResponse, Responder, web};
-use futures::StreamExt;
-use futures::future::join_all;
-use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
-use geoengine_datatypes::primitives::{
-    BoundingBox2D, ColumnSelection, RasterQueryRectangle, SpatialPartition2D, VectorQueryRectangle,
+use futures::{StreamExt, future::join_all};
+use geoengine_datatypes::{
+    error::{BoxedResultExt, ErrorSource},
+    primitives::{
+        BoundingBox2D, ColumnSelection, RasterQueryRectangle, SpatialPartition2D,
+        VectorQueryRectangle,
+    },
+    util::Identifier,
 };
-use geoengine_operators::call_on_typed_operator;
-use geoengine_operators::engine::{ExecutionContext, OperatorData, WorkflowOperatorPath};
+use geoengine_operators::{
+    call_on_typed_operator,
+    engine::{ExecutionContext, OperatorData, WorkflowOperatorPath},
+};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::collections::HashMap;
-use std::io::{Cursor, Write};
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    io::{Cursor, Write},
+    sync::Arc,
+};
 use utoipa::{IntoParams, ToSchema};
-use uuid::Uuid;
 use zip::{ZipWriter, write::SimpleFileOptions};
 
 pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)
@@ -559,7 +577,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         RasterStreamWebsocketResultType::Arrow
     ));
 
-    let query_ctx = ctx.query_context(workflow_id.0, Uuid::new_v4())?;
+    let query_ctx = ctx.query_context(workflow_id, ComputationId::new())?;
 
     let mut stream_task = WebsocketStreamTask::new_raster_initialized::<_>(
         initialized_operator,
@@ -674,7 +692,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         operator,
         query_rectangle,
         ctx.execution_context()?,
-        ctx.query_context(workflow_id.0, Uuid::new_v4())?,
+        ctx.query_context(workflow_id, ComputationId::new())?,
     )
     .await?;
 
@@ -702,6 +720,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
             if indicator.is_none() {
                 // the stream ended or session was closed, stop processing
                 break;
+                // TODO: send `ComputationId`
             }
         }
 
@@ -1563,7 +1582,8 @@ mod tests {
 
         assert_eq_two_raster_operator_res_u8(
             &ctx.execution_context().unwrap(),
-            &ctx.query_context(Uuid::new_v4(), Uuid::new_v4()).unwrap(),
+            &ctx.query_context(workflow_id, ComputationId::new())
+                .unwrap(),
             operator_a,
             operator_b,
             query_rectangle,

@@ -785,7 +785,7 @@ mod tests {
 
         let (sender, receiver) = ipc_channel::ipc::channel().unwrap();
 
-        sender.send(msg.clone()).unwrap();
+        sender.send(msg).unwrap();
         let recv = receiver.recv().unwrap();
         assert_eq!(msg, recv);
     }
@@ -797,7 +797,7 @@ mod tests {
 
         let (sender, receiver) = ipc_channel::ipc::channel().unwrap();
 
-        sender.send(msg.clone()).unwrap();
+        sender.send(msg).unwrap();
         let recv = receiver.recv().unwrap();
         assert_eq!(msg, recv);
     }
@@ -941,12 +941,12 @@ mod tests {
         sender.send(msg).unwrap();
         let rx_result = receiver
             .recv()
-            .inspect_err(|e| panic!("IPC receive: {:?}", e))
+            .inspect_err(|e| panic!("IPC receive: {e:?}"))
             .unwrap();
 
         let payload = match rx_result {
             Ok(r) => r,
-            Err(e) => panic!("Error receiving from IPC process: {:?}", e),
+            Err(e) => panic!("Error receiving from IPC process: {e:?}"),
         };
 
         let result_2: GdalIpcPayload<u8> = (&payload).try_into().unwrap();
@@ -1003,8 +1003,7 @@ mod tests {
         let dataset = gdc.get_or_open(&dataset_params).unwrap();
 
         let reader_payload =
-            GdalHandling::load_tile_data::<u8>(dataset, &dataset_params, gdal_read_advice)
-                .map_err(IpcProcessError::from)?;
+            GdalHandling::load_tile_data::<u8>(dataset, &dataset_params, gdal_read_advice)?;
 
         let grid_and_props: GridAndProperties<u8, GridBoundingBox2D> = reader_payload.into();
         Ok(grid_and_props.into())
@@ -1144,8 +1143,10 @@ mod tests {
 
         // file not found => specific error
         match result {
-            Err(IpcProcessError::GdalError { kind, .. })
-                if kind == IpcProcessGdalErrorKind::FileNotFound => {}
+            Err(IpcProcessError::GdalError {
+                kind: IpcProcessGdalErrorKind::FileNotFound,
+                ..
+            }) => {}
             _ => panic!("expected FileNotFound error"),
         }
 
@@ -1235,8 +1236,10 @@ mod tests {
 
         // file not found => specific error
         match result {
-            Err(IpcProcessError::GdalError { kind, .. })
-                if kind == IpcProcessGdalErrorKind::FileNotFound => {}
+            Err(IpcProcessError::GdalError {
+                kind: IpcProcessGdalErrorKind::FileNotFound,
+                ..
+            }) => {}
             _ => panic!("expected FileNotFound error"),
         }
 

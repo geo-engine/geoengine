@@ -1,33 +1,22 @@
-use crate::api::model::responses::IdResponse;
-use crate::config;
-use crate::contexts::ApplicationContext;
-use crate::contexts::SessionContext;
-use crate::error;
-use crate::error::Result;
-use crate::permissions::{RoleDescription, RoleId};
-use crate::projects::ProjectId;
-use crate::projects::STRectangle;
-use crate::quota::ComputationQuota;
-use crate::quota::DataUsage;
-use crate::quota::DataUsageSummary;
-use crate::quota::OperatorQuota;
-use crate::users::UserAuth;
-use crate::users::UserDb;
-use crate::users::UserId;
-use crate::users::UserRegistration;
-use crate::users::UserSession;
-use crate::users::{AuthCodeRequestURL, AuthCodeResponse, RoleDb, UserCredentials};
-use crate::util::extractors::ValidatedJson;
-use actix_web::FromRequest;
-use actix_web::{HttpResponse, Responder, web};
+use crate::{
+    api::model::responses::IdResponse,
+    config,
+    contexts::{ApplicationContext, SessionContext},
+    error::{self, Result},
+    permissions::{RoleDescription, RoleId},
+    projects::{ProjectId, STRectangle},
+    quota::{ComputationId, ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota},
+    users::{
+        AuthCodeRequestURL, AuthCodeResponse, RoleDb, UserAuth, UserCredentials, UserDb, UserId,
+        UserRegistration, UserSession,
+    },
+    util::extractors::ValidatedJson,
+};
+use actix_web::{FromRequest, HttpResponse, Responder, web};
 use geoengine_datatypes::error::BoxedResultExt;
-use serde::Deserialize;
-use serde::Serialize;
-use snafu::ResultExt;
-use snafu::ensure;
-use utoipa::IntoParams;
-use utoipa::ToSchema;
-use uuid::Uuid;
+use serde::{Deserialize, Serialize};
+use snafu::{ResultExt, ensure};
+use utoipa::{IntoParams, ToSchema};
 
 pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -378,12 +367,12 @@ pub(crate) async fn computations_quota_handler<C: ApplicationContext>(
         ("session_token" = [])
     ),
     params(
-        ("computation" = Uuid, description = "Computation id")
+        ("computation" = ComputationId, description = "Computation id")
     )
 )]
 pub(crate) async fn computation_quota_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
-    computation: web::Path<Uuid>,
+    computation: web::Path<ComputationId>,
     session: C::Session,
 ) -> Result<web::Json<Vec<OperatorQuota>>> {
     let computation = computation.into_inner();

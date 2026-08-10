@@ -1033,7 +1033,7 @@ mod tests {
     #[test]
     fn score_exact_match_fresh() {
         let w = window([100, 100], [200, 200]);
-        let aff = make_affinity(42, 1, w.clone());
+        let aff = make_affinity(42, 1, w);
         let score = aff.calculate_score(42, 1, &w, aff.timestamp);
 
         assert_approx_eq!(
@@ -1058,7 +1058,7 @@ mod tests {
     #[test]
     fn score_different_band_same_dataset() {
         let w = window([0, 0], [7, 7]);
-        let aff = make_affinity(42, 1, w.clone());
+        let aff = make_affinity(42, 1, w);
         let score = aff.calculate_score(42, 2, &w, aff.timestamp);
 
         assert_approx_eq!(f64, score, SCORE_DATASET_MATCH);
@@ -1067,7 +1067,7 @@ mod tests {
     #[test]
     fn score_different_dataset() {
         let w = window([0, 0], [7, 7]);
-        let aff = make_affinity(42, 1, w.clone());
+        let aff = make_affinity(42, 1, w);
         let score = aff.calculate_score(99, 1, &w, aff.timestamp);
 
         assert_approx_eq!(f64, score, 0.0);
@@ -1076,8 +1076,10 @@ mod tests {
     #[test]
     fn score_expired_cache() {
         let w = window([0, 0], [7, 7]);
-        let mut aff = make_affinity(42, 1, w.clone());
-        aff.timestamp = Instant::now() - Duration::from_secs_f64(CACHE_TTL_SECS + 1.0);
+        let mut aff = make_affinity(42, 1, w);
+        aff.timestamp = Instant::now()
+            .checked_sub(Duration::from_secs_f64(CACHE_TTL_SECS + 1.0))
+            .unwrap();
         let score = aff.calculate_score(42, 1, &w, Instant::now());
 
         assert_approx_eq!(f64, score, 0.0);
@@ -1145,8 +1147,8 @@ mod tests {
                     GridIdx2D::new([0, 0]),
                     GridShape2D::new([256, 256]),
                 ),
-                read_window_bounds: w.clone(),
-                bounds_of_target: w.clone(),
+                read_window_bounds: w,
+                bounds_of_target: w,
                 flip_y: false,
             },
             data_type: RasterDataType::U8,
@@ -1287,7 +1289,7 @@ mod tests {
         let dispatcher = GdalPoolDispatcher::new(pool);
 
         let w = window([0, 0], [255, 255]);
-        let (msg_a, _) = make_request(42, 1, w.clone());
+        let (msg_a, _) = make_request(42, 1, w);
         let (msg_b, _) = make_request(42, 1, w);
 
         let d1 = dispatcher.clone();

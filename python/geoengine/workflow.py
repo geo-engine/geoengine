@@ -256,6 +256,9 @@ class Workflow:
     ) -> gpd.GeoDataFrame:
         """
         Query a workflow and return the WFS result as a GeoPandas `GeoDataFrame`
+
+        The computation ID from the server response is attached as an attribute.
+        Access via: `df.attrs.get('computation_id')`
         """
 
         if not self.__result_descriptor.is_vector_result():
@@ -265,7 +268,7 @@ class Workflow:
 
         with geoc.ApiClient(session.configuration) as api_client:
             wfs_api = geoc.OGCWFSApi(api_client)
-            response = wfs_api.wfs_handler(
+            response = wfs_api.wfs_handler_with_http_info(
                 workflow=self.__workflow_id.to_dict(),
                 service=geoc.WfsService(geoc.WfsService.WFS),
                 request=geoc.WfsRequest(geoc.WfsRequest.GETFEATURE),
@@ -276,6 +279,11 @@ class Workflow:
                 srs_name=bbox.srs,
                 _request_timeout=timeout,
             )
+
+        # Extract computation ID from response headers
+        computation_id = None
+        if response.headers:
+            computation_id = response.headers.get("x-computation-id")
 
         def geo_json_with_time_to_geopandas(geo_json):
             """
@@ -307,10 +315,13 @@ class Workflow:
 
             return data
 
-        result = geo_json_with_time_to_geopandas(response.to_dict())
+        result = geo_json_with_time_to_geopandas(response.data.to_dict())
 
         if resolve_classifications:
             result = transform_classifications(result)
+
+        # Attach computation ID to the result
+        result.attrs["computation_id"] = computation_id
 
         return result
 
@@ -1074,7 +1085,10 @@ def data_usage(offset: int = 0, limit: int = 10) -> list[geoc.DataUsage]:
 
 
 def data_usage_summary(
-    granularity: geoc.UsageSummaryGranularity, dataset: str | None = None, offset: int = 0, limit: int = 10
+    granularity: geoc.UsageSummaryGranularity,
+    dataset: str | None = None,
+    offset: int = 0,
+    limit: int = 10,
 ) -> pd.DataFrame:
     """
     Get data usage summary
@@ -1095,3 +1109,22 @@ def data_usage_summary(
             df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
 
     return df
+
+
+def data_usage_for_computation(computation_id: UUID) -> int:
+    """
+    Get data usage for a specific computation
+    """
+
+    session = get_session()
+
+    with geoc.ApiClient(session.configuration) as api_client:
+        user_api = geoc.UserApi(api_client)
+        response = user_api.computation_quota_handler(computation_id)
+
+    computation_credits = 0
+
+    for operator_quota in response:
+        computation_credits += operator_quota.count
+
+    return computation_credits

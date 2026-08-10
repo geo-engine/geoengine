@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use crate::{
     api::{
         handlers::ogc::{
@@ -21,6 +19,7 @@ use crate::{
     contexts::{ApplicationContext, SessionContext},
     layers::layer::Layer,
     projects::Symbology,
+    quota::ComputationId,
     util::server::{CacheControlHeader, connection_closed},
     workflows::registry::WorkflowRegistry,
 };
@@ -53,8 +52,8 @@ use ogcapi_types::{
         TileSets, TilesCrs,
     },
 };
+use std::time::Duration;
 use utoipa::IntoParams;
-use uuid::Uuid;
 
 /// OGC API Collection Tilesets List
 ///
@@ -479,7 +478,7 @@ pub async fn tile<C: ApplicationContext>(
         band_selection(&layer),
     );
 
-    let (processor, query_ctx) =
+    let (processor, query_ctx, computation_id) =
         create_query_processor_and_query_context(&layer, &initialized_operator, &ctx).await?;
 
     let connection_closed_handler = connection_closed(
@@ -509,6 +508,7 @@ pub async fn tile<C: ApplicationContext>(
     Ok(HttpResponse::Ok()
         .content_type(mime::IMAGE_PNG)
         .append_header(cache_hint.cache_control_header())
+        .append_header(computation_id)
         .body(image_bytes))
 }
 
@@ -610,15 +610,16 @@ async fn create_query_processor_and_query_context<C: SessionContext>(
     layer: &Layer,
     initialized_operator: &dyn InitializedRasterOperator,
     ctx: &C,
-) -> OgcApiResult<(TypedRasterQueryProcessor, C::QueryContext)> {
+) -> OgcApiResult<(TypedRasterQueryProcessor, C::QueryContext, ComputationId)> {
     let processing_graph_id = ctx.db().register_workflow(layer.workflow.clone()).await?; // TODO: can we get this without re-registering it?
-    let query_ctx = ctx.query_context(*processing_graph_id.uuid(), Uuid::new_v4())?;
+    let computation_id = ComputationId::new();
+    let query_ctx = ctx.query_context(processing_graph_id, computation_id)?;
 
     let query_processor = initialized_operator
         .query_processor()
         .boxed_context(error::InitializingProcessingGraph)?;
 
-    Ok((query_processor, query_ctx))
+    Ok((query_processor, query_ctx, computation_id))
 }
 
 #[cfg(test)]

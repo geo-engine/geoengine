@@ -13,7 +13,7 @@ struct CachedDataConnectorEntry {
     last_used: Instant,
 }
 
-/// A registry that caches data connectors (DataProvider instances) for reuse.
+/// A registry that caches data connectors ([`DataProvider`] instances) for reuse.
 /// This avoids expensive database queries and connector construction on every request.
 /// It also allows data connectors to keep state (e.g. cached metadata) across requests, improving performance.
 #[derive(Debug)]
@@ -110,7 +110,7 @@ impl DataConnectorRegistry {
         if let Some((lru_key, _)) = entries
             .iter()
             .min_by_key(|(_, entry)| entry.last_used)
-            .map(|(key, entry)| (key.clone(), entry.last_used))
+            .map(|(key, entry)| (*key, entry.last_used))
         {
             entries.remove(&lru_key);
         }
@@ -167,10 +167,11 @@ mod tests {
             &self.name
         }
 
-        fn description(&self) -> &str {
+        fn description(&self) -> &'static str {
             ""
         }
 
+        #[allow(clippy::unimplemented, reason = "ok in tests")]
         async fn load_layer_collection(
             &self,
             _collection: &LayerCollectionId,
@@ -179,10 +180,12 @@ mod tests {
             unimplemented!()
         }
 
+        #[allow(clippy::unimplemented, reason = "ok in tests")]
         async fn get_root_layer_collection_id(&self) -> crate::error::Result<LayerCollectionId> {
             unimplemented!()
         }
 
+        #[allow(clippy::unimplemented, reason = "ok in tests")]
         async fn load_layer(
             &self,
             _id: &LayerId,
@@ -194,6 +197,7 @@ mod tests {
     // ── MetaDataProvider impls (4×) ────────────────────────────────────────
 
     #[async_trait]
+    #[allow(clippy::unimplemented, reason = "ok in tests")]
     impl
         MetaDataProvider<
             MockDatasetDataSourceLoadingInfo,
@@ -218,6 +222,7 @@ mod tests {
     }
 
     #[async_trait]
+    #[allow(clippy::unimplemented, reason = "ok in tests")]
     impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
         for MockProvider
     {
@@ -232,6 +237,7 @@ mod tests {
     }
 
     #[async_trait]
+    #[allow(clippy::unimplemented, reason = "ok in tests")]
     impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         for MockProvider
     {
@@ -246,6 +252,7 @@ mod tests {
     }
 
     #[async_trait]
+    #[allow(clippy::unimplemented, reason = "ok in tests")]
     impl
         MetaDataProvider<
             MultiBandGdalLoadingInfo,
@@ -272,6 +279,7 @@ mod tests {
     // ── DataProvider ───────────────────────────────────────────────────────
 
     #[async_trait]
+    #[allow(clippy::unimplemented, reason = "ok in tests")]
     impl super::super::external::DataProvider for MockProvider {
         async fn provenance(
             &self,
@@ -284,7 +292,7 @@ mod tests {
     // ── Helpers ────────────────────────────────────────────────────────────
 
     fn make_id(n: u8) -> DataProviderId {
-        DataProviderId::from_u128(n as u128)
+        DataProviderId::from_u128(u128::from(n))
     }
 
     /// Returns a registry with a tiny capacity so eviction tests don't need
@@ -293,7 +301,7 @@ mod tests {
         DataConnectorRegistry {
             entries: Mutex::new(HashMap::default()),
             max_entries: 2,
-            max_idle: Duration::from_secs(60),
+            max_idle: Duration::from_mins(1),
         }
     }
 

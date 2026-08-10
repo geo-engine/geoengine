@@ -15,9 +15,11 @@ use crate::datasets::storage::validate_tags;
 use crate::datasets::upload::{UploadId, UploadRootPath, VolumeName, Volumes};
 use crate::error::{Error, Result};
 use crate::projects::Symbology;
+use crate::quota::ComputationId;
 use crate::util::Secret;
 use crate::util::oidc::RefreshToken;
 use crate::util::parsing::deserialize_base_url;
+use actix_http::header::{HeaderName, HeaderValue, InvalidHeaderValue, TryIntoHeaderPair};
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_macros::type_tag;
@@ -1460,6 +1462,17 @@ impl From<crate::machine_learning::MlModel> for MlModel {
             metadata: value.metadata.into(),
             file_name: value.file_name,
         }
+    }
+}
+
+impl TryIntoHeaderPair for ComputationId {
+    type Error = InvalidHeaderValue;
+
+    fn try_into_pair(self) -> std::prelude::v1::Result<(HeaderName, HeaderValue), Self::Error> {
+        Ok((
+            HeaderName::from_static("x-computation-id"), // NOTE: any uppercase letter leads to panics
+            HeaderValue::from_str(&self.to_string())?,
+        ))
     }
 }
 
