@@ -461,6 +461,7 @@ impl GdalProcessPool {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn broker_loop(
         mut rx: mpsc::Receiver<BrokerCommand>,
         workers: Vec<WorkerProcess>,
@@ -534,9 +535,7 @@ impl GdalProcessPool {
                                         })
                                     {
                                         tracing::error!(
-                                            "Failed to send WorkerReplaced for GDAL Worker {}: {:?}",
-                                            worker_id,
-                                            e
+                                            "Failed to send WorkerReplaced for GDAL Worker {worker_id}: {e:?}",
                                         );
                                     }
                                 }

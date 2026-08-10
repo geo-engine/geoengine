@@ -74,7 +74,7 @@ pub async fn start_server() -> Result<()> {
     registry.init();
 
     match geoengine_services::server::start_server(None).await {
-        Ok(_) => tracing::info!("Server stopped successfully"),
+        Ok(()) => tracing::info!("Server stopped successfully"),
         Err(err) => tracing::error!("Server stopped with error: {err}"),
     }
     drop(writer_drop_guard);
