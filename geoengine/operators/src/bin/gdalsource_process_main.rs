@@ -109,8 +109,7 @@ fn init_subscriber(
     open_telemetry_config: &OpenTelemetryConfig,
     token: &str,
 ) -> (Option<SdkTracerProvider>, WorkerGuard, Option<WorkerGuard>) {
-    // ponytail: reuse the same non-blocking writer pattern as the file layer to avoid
-    // blocking the event thread when the PTY can't keep up; lines are dropped when full
+    // we use the non-blocking wrapper around stderr so that we don't block the worker on logging. The guard is dropped at the end of main to flush any remaining logs.
     let (non_blocking_writer, stderr_guard) = tracing_appender::non_blocking(std::io::stderr());
     let stderr_layer = tracing_subscriber::fmt::layer()
         .pretty()
@@ -230,7 +229,7 @@ fn main() {
         .expect("Failed to create tokio runtime for telemetry");
 
     let runtime_guard = runtime.enter();
-    let (provider, _stderr_guard, _file_guard) = init_subscriber(
+    let (provider, stderr_guard, file_guard) = init_subscriber(
         &worker_config.logging,
         &worker_config.open_telemetry,
         &token,
@@ -251,6 +250,8 @@ fn main() {
     {
         tracing::error!("Failed to flush OpenTelemetry provider: {err}");
     }
+    drop(stderr_guard);
+    drop(file_guard);
 }
 
 fn raster_type_dispatch(
