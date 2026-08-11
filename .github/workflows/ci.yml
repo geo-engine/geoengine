@@ -89,7 +89,7 @@ jobs:
       - name: Rustfmt
         run: just backend lint-rustfmt
       - name: Clippy
-        run: just backend lint-clippy
+        run: just backend lint-clippy --deny-warnings
       - name: SQLFluff
         run: just backend lint-sql
 
