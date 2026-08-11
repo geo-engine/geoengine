@@ -108,13 +108,15 @@ fn init_subscriber(
     logging_config: &WorkerLoggingConfig,
     open_telemetry_config: &OpenTelemetryConfig,
     token: &str,
-) -> (Option<SdkTracerProvider>, Option<WorkerGuard>) {
+) -> (Option<SdkTracerProvider>, WorkerGuard, Option<WorkerGuard>) {
+    // we use the non-blocking wrapper around stderr so that we don't block the worker on logging. The guard is dropped at the end of main to flush any remaining logs.
+    let (non_blocking_writer, stderr_guard) = tracing_appender::non_blocking(std::io::stderr());
     let stderr_layer = tracing_subscriber::fmt::layer()
         .pretty()
         .with_file(false)
         .with_target(true)
         .with_ansi(true)
-        .with_writer(std::io::stderr)
+        .with_writer(non_blocking_writer)
         .with_filter(EnvFilter::new(&logging_config.log_spec));
 
     let (file_layer, file_guard) = if logging_config.log_to_file {
@@ -162,14 +164,14 @@ fn init_subscriber(
             .with(opentelemetry)
             .init();
 
-        return (Some(provider), file_guard);
+        return (Some(provider), stderr_guard, file_guard);
     }
 
     tracing_subscriber::registry()
         .with(stderr_layer)
         .with(file_layer)
         .init();
-    (None, file_guard)
+    (None, stderr_guard, file_guard)
 }
 
 // We use a custom formatter because there are still format flags within spans even when
@@ -227,7 +229,7 @@ fn main() {
         .expect("Failed to create tokio runtime for telemetry");
 
     let runtime_guard = runtime.enter();
-    let (provider, _file_guard) = init_subscriber(
+    let (provider, stderr_guard, file_guard) = init_subscriber(
         &worker_config.logging,
         &worker_config.open_telemetry,
         &token,
@@ -248,6 +250,8 @@ fn main() {
     {
         tracing::error!("Failed to flush OpenTelemetry provider: {err}");
     }
+    drop(stderr_guard);
+    drop(file_guard);
 }
 
 fn raster_type_dispatch(
