@@ -461,6 +461,7 @@ impl GdalProcessPool {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn broker_loop(
         mut rx: mpsc::Receiver<BrokerCommand>,
         workers: Vec<WorkerProcess>,
@@ -526,11 +527,17 @@ impl GdalProcessPool {
                                         "Successfully respawned GDAL Worker {}",
                                         worker_id
                                     );
-                                    let _ = b_tx.blocking_send(BrokerCommand::WorkerReplaced {
-                                        worker_id,
-                                        child_guard,
-                                        job_tx,
-                                    });
+                                    if let Err(e) =
+                                        b_tx.blocking_send(BrokerCommand::WorkerReplaced {
+                                            worker_id,
+                                            child_guard,
+                                            job_tx,
+                                        })
+                                    {
+                                        tracing::error!(
+                                            "Failed to send WorkerReplaced for GDAL Worker {worker_id}: {e:?}",
+                                        );
+                                    }
                                 }
                                 Err(e) => {
                                     // Prevent silent failures if the respawn itself crashes
@@ -571,6 +578,7 @@ impl GdalProcessPool {
                 );
             }
         }
+        tracing::error!("GDAL broker loop: channel closed, exiting");
     }
 }
 
