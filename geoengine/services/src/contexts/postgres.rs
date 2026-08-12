@@ -454,6 +454,8 @@ where
         computation: ComputationId,
     ) -> Result<Self::QueryContext> {
         // TODO: load config only once
+        let tile_parallelism =
+            crate::config::get_config_element::<crate::config::QueryContext>()?.tile_parallelism;
 
         Ok(QueryContextImpl::new_with_extensions(
             self.context.query_ctx_chunk_size,
@@ -461,6 +463,7 @@ where
             self.context.thread_pool.clone(),
             self.context.gdal_process_pool.clone(),
             self.context.default_cache_ttl,
+            tile_parallelism,
             Some(self.context.tile_cache.clone()),
             self.context.new_raster_cache.clone(),
             Some(

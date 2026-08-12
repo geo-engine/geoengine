@@ -34,7 +34,8 @@ use geoengine_operators::{
     engine::{
         ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
         InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
-        QueryAbortTrigger, QueryContext, RasterResultDescriptor, VectorResultDescriptor,
+        QueryAbortTrigger, QueryContext, RasterResultDescriptor, TileScheduler,
+        VectorResultDescriptor,
     },
     machine_learning::MlModelLoadingInfo,
     meta::{
@@ -139,6 +140,7 @@ pub struct QueryContextImpl {
     tiling_specification: TilingSpecification,
     thread_pool: Arc<ThreadPool>,
     default_cache_ttl: CacheTtlSeconds,
+    tile_scheduler: TileScheduler,
     cache: Option<Arc<SharedCache>>,
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     quota_tracking: Option<QuotaTracking>,
@@ -162,6 +164,7 @@ impl QueryContextImpl {
             tiling_specification,
             thread_pool,
             default_cache_ttl,
+            tile_scheduler: TileScheduler::default(),
             cache: None,
             new_raster_cache: None,
             quota_tracking: None,
@@ -179,6 +182,7 @@ impl QueryContextImpl {
         thread_pool: Arc<ThreadPool>,
         gdal_process_pool: Arc<GdalProcessPool>,
         default_cache_ttl: CacheTtlSeconds,
+        tile_parallelism: usize,
         cache: Option<Arc<SharedCache>>,
         new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
         quota_tracking: Option<QuotaTracking>,
@@ -190,6 +194,7 @@ impl QueryContextImpl {
             tiling_specification,
             thread_pool,
             default_cache_ttl,
+            tile_scheduler: TileScheduler::fixed(tile_parallelism),
             cache,
             new_raster_cache,
             quota_checker,
@@ -213,6 +218,10 @@ impl QueryContext for QueryContextImpl {
 
     fn default_cache_ttl(&self) -> CacheTtlSeconds {
         self.default_cache_ttl
+    }
+
+    fn tile_scheduler(&self) -> &TileScheduler {
+        &self.tile_scheduler
     }
 
     fn abort_registration(&self) -> &QueryAbortRegistration {
