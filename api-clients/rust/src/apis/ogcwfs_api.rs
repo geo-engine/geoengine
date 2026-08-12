@@ -22,7 +22,7 @@ pub enum WfsHandlerError {
 }
 
 
-pub async fn wfs_handler(configuration: &configuration::Configuration, workflow: &str, request: models::WfsRequest, bbox: Option<&str>, count: Option<i64>, filter: Option<&str>, namespaces: Option<&str>, property_name: Option<&str>, result_type: Option<&str>, service: Option<models::WfsService>, sort_by: Option<&str>, srs_name: Option<&str>, time: Option<&str>, type_names: Option<&str>, version: Option<&str>) -> Result<models::GeoJson, Error<WfsHandlerError>> {
+pub async fn wfs_handler(configuration: &configuration::Configuration, workflow: &str, request: models::WfsRequest, bbox: Option<&str>, count: Option<i64>, filter: Option<&str>, namespaces: Option<&str>, property_name: Option<&str>, result_type: Option<&str>, service: Option<models::WfsService>, sort_by: Option<&str>, srs_name: Option<&str>, time: Option<&str>, type_names: Option<&str>, version: Option<&str>, computation_id: Option<&mut String>) -> Result<models::GeoJson, Error<WfsHandlerError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_workflow = workflow;
     let p_query_request = request;
@@ -97,6 +97,8 @@ pub async fn wfs_handler(configuration: &configuration::Configuration, workflow:
         .unwrap_or("application/octet-stream");
     let content_type = super::ContentType::from(content_type);
 
+    set_computation_id_from_response(&resp, computation_id);
+
     if !status.is_client_error() && !status.is_server_error() {
         let content = resp.text().await?;
         match content_type {
@@ -111,3 +113,18 @@ pub async fn wfs_handler(configuration: &configuration::Configuration, workflow:
     }
 }
 
+fn set_computation_id_from_response(resp: &reqwest::Response, computation_id: Option<&mut String>) {
+    let Some(computation_id) = computation_id else {
+        return;
+    };
+
+    let Some(computation_id_header) = resp.headers().get("x-computation-id") else {
+        return;
+    };
+
+    let Ok(computation_id_str) = computation_id_header.to_str() else {
+        return;
+    };
+
+    *computation_id = computation_id_str.to_string();
+}
