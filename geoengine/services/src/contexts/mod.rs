@@ -30,7 +30,8 @@ use geoengine_operators::{
     engine::{
         ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
         InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
-        QueryAbortTrigger, QueryContext, RasterResultDescriptor, VectorResultDescriptor,
+        QueryAbortTrigger, QueryContext, RasterResultDescriptor, TileScheduler,
+        VectorResultDescriptor,
     },
     machine_learning::MlModelLoadingInfo,
     meta::{
@@ -134,6 +135,7 @@ pub struct QueryContextImpl {
     chunk_byte_size: ChunkByteSize,
     tiling_specification: TilingSpecification,
     thread_pool: Arc<ThreadPool>,
+    tile_scheduler: TileScheduler,
     cache: Option<Arc<SharedCache>>,
     quota_tracking: Option<QuotaTracking>,
     quota_checker: Option<QuotaChecker>,
@@ -154,6 +156,7 @@ impl QueryContextImpl {
             chunk_byte_size,
             tiling_specification,
             thread_pool,
+            tile_scheduler: TileScheduler::default(),
             cache: None,
             quota_tracking: None,
             quota_checker: None,
@@ -168,6 +171,7 @@ impl QueryContextImpl {
         tiling_specification: TilingSpecification,
         thread_pool: Arc<ThreadPool>,
         gdal_process_pool: Arc<GdalProcessPool>,
+        tile_parallelism: usize,
 
         cache: Option<Arc<SharedCache>>,
         quota_tracking: Option<QuotaTracking>,
@@ -178,6 +182,7 @@ impl QueryContextImpl {
             chunk_byte_size,
             tiling_specification,
             thread_pool,
+            tile_scheduler: TileScheduler::fixed(tile_parallelism),
             cache,
             quota_checker,
             quota_tracking,
@@ -196,6 +201,10 @@ impl QueryContext for QueryContextImpl {
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
+    }
+
+    fn tile_scheduler(&self) -> &TileScheduler {
+        &self.tile_scheduler
     }
 
     fn abort_registration(&self) -> &QueryAbortRegistration {
