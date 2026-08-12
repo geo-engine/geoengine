@@ -68,7 +68,7 @@ export class Configuration {
 }
 export const DefaultConfig = new Configuration({
     headers: {
-        'User-Agent': 'geoengine/api-client/typescript/0.9.3'
+        'User-Agent': 'geoengine/api-client/typescript/0.9.4'
     }
 });
 /**
