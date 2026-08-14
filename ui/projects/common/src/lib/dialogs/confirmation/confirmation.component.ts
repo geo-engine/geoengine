@@ -1,4 +1,4 @@
-import {Component, inject} from '@angular/core';
+import {Component, inject, ChangeDetectionStrategy} from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogRef, MatDialogTitle, MatDialogContent, MatDialogActions, MatDialogClose} from '@angular/material/dialog';
 import {CdkScrollable} from '@angular/cdk/scrolling';
 import {MatButton} from '@angular/material/button';
@@ -7,6 +7,7 @@ import {MatButton} from '@angular/material/button';
     selector: 'geoengine-confirmation-dialog',
     templateUrl: './confirmation.component.html',
     styleUrl: './confirmation.component.css',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [MatDialogTitle, CdkScrollable, MatDialogContent, MatDialogActions, MatButton, MatDialogClose],
 })
 export class ConfirmationComponent {

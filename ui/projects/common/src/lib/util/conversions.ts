@@ -12,7 +12,7 @@ import {Time} from '../time/time.model';
  * Throws an error if something went wrong.
  */
 export const olExtentToTuple = (extent: OlExtent): [number, number, number, number] => {
-    if (extent.length !== 4) {
+    if (!extent || extent.length !== 4) {
         throw Error('OlExtent must be of size 4');
     }
     return [extent[0], extent[1], extent[2], extent[3]];

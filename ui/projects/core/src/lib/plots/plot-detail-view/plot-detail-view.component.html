@@ -2,18 +2,22 @@
 <mat-dialog-content>
     @switch (plotData?.outputFormat) {
         @case ('ImagePng') {
-            <img [src]="plotData?.data" [alt]="plot.name" />
+            <img [src]="$safeNavigationMigration(plotData?.data)" [alt]="plot.name" />
             @if (plotLoading$ | async) {
                 <mat-progress-bar mode="indeterminate"></mat-progress-bar>
             }
         }
         @case ('JsonPlain') {
-            <pre>{{ plotData?.data | json }}</pre>
+            <pre>{{ $safeNavigationMigration(plotData?.data) | json }}</pre>
         }
         @case ('JsonVega') {
             @if (maxWidth$ | async; as maxWidth) {
                 @if (maxHeight$ | async; as maxHeight) {
-                    <geoengine-vega-viewer [chartData]="plotData?.data" [width]="maxWidth" [height]="maxHeight"></geoengine-vega-viewer>
+                    <geoengine-vega-viewer
+                        [chartData]="$safeNavigationMigration(plotData?.data)"
+                        [width]="maxWidth"
+                        [height]="maxHeight"
+                    ></geoengine-vega-viewer>
                 }
             }
         }

@@ -18,7 +18,7 @@
                 </ng-container>
             </mat-nav-list>
 
-            @if (source?.loading$ | async) {
+            @if ($safeNavigationMigration(source?.loading$) | async) {
                 <mat-spinner [diameter]="loadingSpinnerDiameterPx" />
             }
         </cdk-virtual-scroll-viewport>

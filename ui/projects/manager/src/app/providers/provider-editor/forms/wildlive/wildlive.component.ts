@@ -1,4 +1,4 @@
-import {Component, inject, input, effect, forwardRef} from '@angular/core';
+import {Component, inject, input, effect, forwardRef, ChangeDetectionStrategy} from '@angular/core';
 import {
     ControlValueAccessor,
     FormBuilder,
@@ -58,6 +58,7 @@ type WildLiveFormRaw = ReturnType<WildLiveComponent['form']['getRawValue']>;
         ReactiveFormsModule,
         CommonModule,
     ],
+    changeDetection: ChangeDetectionStrategy.OnPush,
     providers: [
         {
             provide: NG_VALUE_ACCESSOR,

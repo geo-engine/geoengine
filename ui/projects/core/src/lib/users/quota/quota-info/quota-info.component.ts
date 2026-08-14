@@ -1,4 +1,4 @@
-import {ChangeDetectorRef, Component, OnDestroy, OnInit, inject} from '@angular/core';
+import {ChangeDetectorRef, Component, OnDestroy, OnInit, inject, ChangeDetectionStrategy} from '@angular/core';
 import {Quota, UserService} from '@geoengine/common';
 import {Subscription, timer} from 'rxjs';
 import {MatIconButton} from '@angular/material/button';
@@ -8,6 +8,7 @@ import {MatIcon} from '@angular/material/icon';
     selector: 'geoengine-quota-info',
     templateUrl: './quota-info.component.html',
     styleUrls: ['./quota-info.component.scss'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [MatIconButton, MatIcon],
 })
 export class QuotaInfoComponent implements OnDestroy, OnInit {

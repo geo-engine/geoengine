@@ -15,7 +15,7 @@
                             <mat-tab label="Raster">
                                 <geoengine-accordion-entry
                                     [collection]="collection.raster.id"
-                                    [otherCollection]="collection.otherRaster?.id"
+                                    [otherCollection]="$safeNavigationMigration(collection.otherRaster?.id)"
                                     [icon]="icon(collection.name)"
                                 ></geoengine-accordion-entry>
                             </mat-tab>

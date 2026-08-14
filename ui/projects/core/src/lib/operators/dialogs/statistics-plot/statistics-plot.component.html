@@ -16,8 +16,8 @@
                         title="Additional Rasters"
                         subtitle=""
                         formControlName="additionalRasterLayers"
-                        [min]="0"
-                        [max]="4"
+                        [minLength]="0"
+                        [maxLength]="4"
                     ></geoengine-multi-layer-selection>
                 </div>
             }
@@ -66,7 +66,7 @@
         <ng-container layerSpecification>
             <geoengine-operator-output-name
                 formControlName="name"
-                [suggestion]="'Statistics of ' + (form.controls.layer.valueChanges | async)?.name"
+                [suggestion]="'Statistics of ' + $safeNavigationMigration((form.controls.layer.valueChanges | async)?.name)"
             >
                 @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
                     <mat-hint align="end" class="error"> The name must be non-empty. </mat-hint>

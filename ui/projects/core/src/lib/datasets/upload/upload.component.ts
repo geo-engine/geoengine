@@ -229,7 +229,7 @@ export class UploadComponent implements OnDestroy {
             } else if (err && typeof err === 'object' && 'message' in err) {
                 errorMessage = (err as {message: string}).message;
             } else {
-                throw new Error('Unknown error occurred while creating dataset');
+                throw new Error('Unknown error occurred while creating dataset', {cause: err});
             }
 
             this.notificationService.error('Create dataset failed: ' + errorMessage);

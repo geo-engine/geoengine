@@ -1,4 +1,4 @@
-import {ChangeDetectorRef, Component, inject} from '@angular/core';
+import {ChangeDetectorRef, Component, inject, ChangeDetectionStrategy} from '@angular/core';
 import {Router} from '@angular/router';
 import {first, skipWhile, Subscription} from 'rxjs';
 import {BackendInfoDict} from '../../../backend/backend.model';
@@ -15,6 +15,7 @@ import {MatButton} from '@angular/material/button';
     selector: 'geoengine-backend-status-page',
     templateUrl: './backend-status-page.component.html',
     styleUrls: ['./backend-status-page.component.scss'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         FxLayoutDirective,
         FxLayoutAlignDirective,

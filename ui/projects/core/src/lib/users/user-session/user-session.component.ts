@@ -1,4 +1,4 @@
-import {Component, OnDestroy, inject} from '@angular/core';
+import {Component, OnDestroy, inject, ChangeDetectionStrategy} from '@angular/core';
 import {Subscription} from 'rxjs';
 import {Session} from '../session.model';
 import {Clipboard} from '@angular/cdk/clipboard';
@@ -10,6 +10,7 @@ import {MatIcon} from '@angular/material/icon';
     selector: 'geoengine-user-session',
     templateUrl: './user-session.component.html',
     styleUrls: ['./user-session.component.scss'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [MatIconButton, MatIcon],
 })
 export class UserSessionComponent implements OnDestroy {

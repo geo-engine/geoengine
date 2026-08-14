@@ -1,8 +1,9 @@
-import {Component} from '@angular/core';
+import {Component, ChangeDetectionStrategy} from '@angular/core';
 
 @Component({
     selector: 'geoengine-vat-logo',
     template: ` <h1><span class="blue">V</span><span class="light-blue">A</span><span class="green">T</span></h1> `,
+    changeDetection: ChangeDetectionStrategy.OnPush,
     styles: [
         `
             h1 {

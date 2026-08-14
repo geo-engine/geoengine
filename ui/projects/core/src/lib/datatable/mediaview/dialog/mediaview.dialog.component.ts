@@ -1,4 +1,4 @@
-import {Component, OnInit, inject} from '@angular/core';
+import {Component, OnInit, inject, ChangeDetectionStrategy} from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogContent} from '@angular/material/dialog';
 import {DialogHeaderComponent} from '../../../dialogs/dialog-header/dialog-header.component';
 import {CdkScrollable} from '@angular/cdk/scrolling';
@@ -11,6 +11,7 @@ import {MediaviewPlaylistComponent} from '../playlist/mediaview.playlist.compone
     selector: 'geoengine-mediaview-dialog',
     templateUrl: './mediaview.dialog.component.html',
     styleUrls: ['./mediaview.dialog.component.scss'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [DialogHeaderComponent, CdkScrollable, MatDialogContent, MatTooltip, MatMiniFabButton, MatIcon, MediaviewPlaylistComponent],
 })
 

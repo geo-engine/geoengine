@@ -123,7 +123,7 @@
         <ng-container layerSpecification>
             <geoengine-operator-output-name
                 formControlName="layerName"
-                [suggestion]="'Expression on ' + (form.controls.source.valueChanges | async)?.name"
+                [suggestion]="'Expression on ' + $safeNavigationMigration((form.controls.source.valueChanges | async)?.name)"
             >
                 @if (layerName.errors?.required || layerName.errors?.onlyWhitespace) {
                     <mat-hint align="end" class="error">The name must be non-empty.</mat-hint>

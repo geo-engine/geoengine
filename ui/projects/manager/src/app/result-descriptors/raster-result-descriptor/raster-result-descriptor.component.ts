@@ -1,4 +1,4 @@
-import {Component, input} from '@angular/core';
+import {Component, input, ChangeDetectionStrategy} from '@angular/core';
 import {BoundingBox2D, GeoTransform, GridBoundingBox2D} from '@geoengine/common';
 import {RasterBandDescriptor, TypedRasterResultDescriptor, RegularTimeDimension} from '@geoengine/api-client';
 import {FormsModule} from '@angular/forms';
@@ -20,6 +20,7 @@ import {
     selector: 'geoengine-manager-raster-result-descriptor',
     templateUrl: './raster-result-descriptor.component.html',
     styleUrl: './raster-result-descriptor.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         FormsModule,
         MatFormField,

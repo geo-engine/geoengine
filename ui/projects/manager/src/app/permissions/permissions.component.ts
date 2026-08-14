@@ -1,5 +1,5 @@
 import {DataSource} from '@angular/cdk/collections';
-import {AfterViewInit, Component, OnChanges, SimpleChanges, inject, input, viewChild} from '@angular/core';
+import {AfterViewInit, Component, OnChanges, SimpleChanges, inject, input, viewChild, ChangeDetectionStrategy} from '@angular/core';
 import {Permission, PermissionListing} from '@geoengine/api-client';
 import {BehaviorSubject, firstValueFrom, Observable, Subject, tap} from 'rxjs';
 import {MatPaginator} from '@angular/material/paginator';
@@ -37,6 +37,7 @@ export interface PermissionForm {
     selector: 'geoengine-manager-permissions',
     templateUrl: './permissions.component.html',
     styleUrl: './permissions.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         MatTable,
         MatColumnDef,
@@ -128,7 +129,7 @@ export class PermissionsComponent implements AfterViewInit, OnChanges {
         const permission = this.form.controls.permission.value;
 
         const roleName = this.form.controls.role.value;
-        let roleId = '';
+        let roleId;
         try {
             roleId = await this.userService.getRoleByName(roleName);
         } catch (error) {

@@ -5,5 +5,13 @@
         "types": ["@types/hammerjs"]
     },
     "files": ["src/main.ts"],
-    "include": []
+    "include": [],
+    "angularCompilerOptions": {
+        "extendedDiagnostics": {
+            "checks": {
+                "nullishCoalescingNotNullable": "suppress",
+                "optionalChainNotNullable": "suppress"
+            }
+        }
+    }
 }

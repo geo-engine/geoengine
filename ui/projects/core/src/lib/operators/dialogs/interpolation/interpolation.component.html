@@ -56,7 +56,7 @@
         <ng-container layerSpecification>
             <geoengine-operator-output-name
                 formControlName="name"
-                [suggestion]="(form.controls.layer.valueChanges | async)?.name + ' interpolated'"
+                [suggestion]="$safeNavigationMigration((form.controls.layer.valueChanges | async)?.name) + ' interpolated'"
             >
                 @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
                     <mat-hint align="end" class="error"> The name must be non-empty. </mat-hint>

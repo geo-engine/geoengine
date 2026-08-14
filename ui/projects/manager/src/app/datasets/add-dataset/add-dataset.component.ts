@@ -1,4 +1,4 @@
-import {Component, inject, viewChild} from '@angular/core';
+import {Component, inject, viewChild, ChangeDetectionStrategy} from '@angular/core';
 import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {ConfirmationComponent, DatasetsService, errorToText, OgrDatasetComponent} from '@geoengine/common';
 import {DataPath, MetaDataDefinition, Volume as VolumeDict} from '@geoengine/api-client';
@@ -38,6 +38,7 @@ export interface AddDatasetForm {
     selector: 'geoengine-manager-add-dataset',
     templateUrl: './add-dataset.component.html',
     styleUrl: './add-dataset.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         MatDialogTitle,
         FormsModule,
@@ -181,8 +182,8 @@ export class AddDatasetComponent {
             return;
         }
 
-        let sourceOperator = undefined;
-        let metaData: MetaDataDefinition | undefined = undefined;
+        let sourceOperator;
+        let metaData: MetaDataDefinition | undefined;
 
         if (this.form.controls.dataType.value === DataTypes.Raster) {
             const gdalMetaDataList = this.gdalMetaDataList();

@@ -1,4 +1,4 @@
-import {Component, input} from '@angular/core';
+import {Component, input, ChangeDetectionStrategy} from '@angular/core';
 import {Measurement, TypedVectorResultDescriptor} from '@geoengine/api-client';
 import {FormsModule} from '@angular/forms';
 import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
@@ -25,6 +25,7 @@ interface Column {
     selector: 'geoengine-manager-vector-result-descriptor',
     templateUrl: './vector-result-descriptor.component.html',
     styleUrl: './vector-result-descriptor.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         FormsModule,
         MatFormField,

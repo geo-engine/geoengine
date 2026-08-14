@@ -1,4 +1,4 @@
-import {AfterViewInit, Component, effect, forwardRef, signal} from '@angular/core';
+import {AfterViewInit, Component, effect, forwardRef, signal, ChangeDetectionStrategy} from '@angular/core';
 import {v4 as uuidv4} from 'uuid';
 import {ControlValueAccessor, FormControl, NG_VALUE_ACCESSOR, ReactiveFormsModule} from '@angular/forms';
 import {MatFormField} from '@angular/material/form-field';
@@ -18,6 +18,7 @@ import {toSignal} from '@angular/core/rxjs-interop';
             multi: true,
         },
     ],
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [ReactiveFormsModule, MatFormField, MatInput, MatButton, MatLabel],
 })
 export class IdInputComponent implements ControlValueAccessor, AfterViewInit {

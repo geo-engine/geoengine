@@ -1,4 +1,4 @@
-import {AfterViewInit, Component, computed, effect, inject, isDevMode, signal} from '@angular/core';
+import {AfterViewInit, Component, computed, effect, inject, isDevMode, signal, ChangeDetectionStrategy} from '@angular/core';
 import {AppConfig} from '../app-config.service';
 import {KeyValuePipe, Location} from '@angular/common';
 import {ActivatedRoute, Router} from '@angular/router';
@@ -11,6 +11,7 @@ export interface OidcPopupMessage {
     selector: 'geoengine-oidc-popup',
     templateUrl: './oidc-popup.component.html',
     styleUrls: ['./oidc-popup.component.scss'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [KeyValuePipe],
 })
 export class OidcPopupComponent implements AfterViewInit {

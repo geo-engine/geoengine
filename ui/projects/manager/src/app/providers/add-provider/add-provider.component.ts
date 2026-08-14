@@ -1,10 +1,9 @@
-import {Component, inject} from '@angular/core';
-import {LayersService} from '@geoengine/common';
+import {Component, inject, ChangeDetectionStrategy} from '@angular/core';
+import {errorToText, LayersService} from '@geoengine/common';
 import {ProviderType} from '../provider-editor/provider-editor.component';
 import {TypedDataProviderDefinition} from '@geoengine/api-client';
 import {MatDialogRef, MatDialogTitle} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
-import {errorToText} from 'projects/common/src/lib/util/conversions';
 import {FormsModule} from '@angular/forms';
 import {ProviderInputComponent} from '../provider-input/provider-input.component';
 import {MatCard, MatCardContent} from '@angular/material/card';
@@ -17,6 +16,7 @@ import {MatButton} from '@angular/material/button';
     selector: 'geoengine-manager-add-provider',
     templateUrl: './add-provider.component.html',
     styleUrl: './add-provider.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [FormsModule, ProviderInputComponent, MatDialogTitle, MatCard, MatCardContent, MatLabel, MatSelect, MatOption, MatButton],
 })
 export class AddProviderComponent {

@@ -1,4 +1,4 @@
-import {Component, OnChanges, signal, SimpleChanges, WritableSignal, inject, input, output} from '@angular/core';
+import {Component, OnChanges, signal, SimpleChanges, WritableSignal, inject, input, output, ChangeDetectionStrategy} from '@angular/core';
 import {FormArray, FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
@@ -23,6 +23,7 @@ export interface CollectionForm {
     selector: 'geoengine-manager-layer-collection-editor',
     templateUrl: './layer-collection-editor.component.html',
     styleUrl: './layer-collection-editor.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         FormsModule,
         ReactiveFormsModule,

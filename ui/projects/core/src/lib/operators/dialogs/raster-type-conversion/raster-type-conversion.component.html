@@ -31,7 +31,9 @@
             <geoengine-operator-output-name
                 formControlName="name"
                 [suggestion]="
-                    (form.controls.layer.valueChanges | async)?.name + ' as ' + (form.controls.dataType.valueChanges | async)?.toString()
+                    $safeNavigationMigration((form.controls.layer.valueChanges | async)?.name) +
+                    ' as ' +
+                    $safeNavigationMigration((form.controls.dataType.valueChanges | async)?.toString())
                 "
             >
                 @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {

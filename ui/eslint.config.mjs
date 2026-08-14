@@ -1,5 +1,5 @@
 import {defineConfig} from 'eslint/config';
-import preferArrow from 'eslint-plugin-prefer-arrow';
+import preferArrow from 'eslint-plugin-prefer-arrow-functions';
 import angular from 'angular-eslint';
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';

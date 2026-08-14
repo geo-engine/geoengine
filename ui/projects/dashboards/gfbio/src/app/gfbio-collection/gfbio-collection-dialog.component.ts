@@ -1,4 +1,4 @@
-import {Component, inject} from '@angular/core';
+import {Component, inject, ChangeDetectionStrategy} from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogRef, MatDialogContent} from '@angular/material/dialog';
 import {LayerCollectionItemDict, LayerCollectionLayerDict, ProjectService, CoreModule} from '@geoengine/core';
 import {map, mergeMap} from 'rxjs/operators';
@@ -34,6 +34,7 @@ enum LayerStatus {
     selector: 'geoengine-gfbio-basket-dialog',
     templateUrl: './gfbio-collection-dialog.component.html',
     styleUrls: ['./gfbio-collection-dialog.component.scss'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         CoreModule,
         CdkScrollable,
