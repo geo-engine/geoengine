@@ -5,8 +5,8 @@ import {provideAnimations} from '@angular/platform-browser/animations';
 import {routes} from './app.routes';
 import {CommonConfig, NotificationService, RandomColorService, UserService} from '@geoengine/common';
 import {BackendService, CoreConfig, LayoutService, MapService, ProjectService, SidenavRef, SpatialReferenceService} from '@geoengine/core';
-import {DataSelectionService} from 'projects/dashboards/data-atlas/src/app/data-selection.service';
 import {provideHttpClient} from '@angular/common/http';
+import {DataSelectionService} from './data-selection.service';
 
 export const appConfig: ApplicationConfig = {
     providers: [
