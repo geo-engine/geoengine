@@ -70,7 +70,7 @@
                 [colorizer]="gradientColorizer"
                 [queryParams]="queryParams()"
                 [workflowId]="symbologyWorkflow().workflowId"
-                [band]="$safeNavigationMigration(selectedBand()?.name) | valueDefault: 'band'"
+                [band]="selectedBand()?.name | valueDefault: 'band'"
                 (colorizerChange)="updateColorizer($event)"
             ></geoengine-raster-gradient-symbology-editor>
         }
@@ -87,15 +87,15 @@
                 [queryParams]="queryParams()"
                 [workflowId]="symbologyWorkflow().workflowId"
                 [band1]="{
-                    name: $safeNavigationMigration(getSelectedBand(0)()?.name) | valueDefault: '',
+                    name: getSelectedBand(0)()?.name | valueDefault: '',
                     index: getSelectedBandIndex(0),
                 }"
                 [band2]="{
-                    name: $safeNavigationMigration(getSelectedBand(1)()?.name) | valueDefault: '',
+                    name: getSelectedBand(1)()?.name | valueDefault: '',
                     index: getSelectedBandIndex(1),
                 }"
                 [band3]="{
-                    name: $safeNavigationMigration(getSelectedBand(2)()?.name) | valueDefault: '',
+                    name: getSelectedBand(2)()?.name | valueDefault: '',
                     index: getSelectedBandIndex(2),
                 }"
             ></geoengine-raster-multiband-symbology-editor>

@@ -5,13 +5,13 @@
             type="text"
             [readonly]="readonlyAttribute()"
             [placeholder]="attributePlaceholder()"
-            [ngModel]="$safeNavigationMigration(colorAttributeInput?.key)"
+            [ngModel]="colorAttributeInput?.key"
             (ngModelChange)="updateKey($event)"
             (blur)="propagateChange()"
             (keydown.enter)="propagateChange()"
         />
         @if (hasColorHint()) {
-            <mat-hint align="start">{{ colorHint($safeNavigationMigration(colorAttributeInput?.key)) }}</mat-hint>
+            <mat-hint align="start">{{ colorHint(colorAttributeInput?.key) }}</mat-hint>
         }
     </mat-form-field>
 

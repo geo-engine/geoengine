@@ -16,11 +16,7 @@
         @if (selectedOperator$ | async) {
             <mat-list fxLayout="row">
                 <mat-list-item fxFlex="grow">
-                    <img
-                        mat-list-avatar
-                        [src]="selectedOperatorIcon$ | async"
-                        [alt]="$safeNavigationMigration((selectedOperator$ | async)?.type)"
-                    />
+                    <img mat-list-avatar [src]="selectedOperatorIcon$ | async" [alt]="(selectedOperator$ | async)?.type" />
                     <h4 mat-line>{{ (selectedOperator$ | async)?.type }}</h4>
                     <p mat-line>{{ layer.layerType }}</p>
                 </mat-list-item>

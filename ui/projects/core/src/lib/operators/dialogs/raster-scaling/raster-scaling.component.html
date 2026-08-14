@@ -114,9 +114,9 @@
             <geoengine-operator-output-name
                 formControlName="name"
                 [suggestion]="
-                    $safeNavigationMigration((form.controls.layer.valueChanges | async)?.name) +
+                    (form.controls.layer.valueChanges | async)?.name +
                     ' scaled [' +
-                    $safeNavigationMigration((form.controls.scaleType.valueChanges | async)?.type) +
+                    (form.controls.scaleType.valueChanges | async)?.type +
                     ']'
                 "
             >

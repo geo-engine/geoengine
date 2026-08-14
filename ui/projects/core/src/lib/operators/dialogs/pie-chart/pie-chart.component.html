@@ -35,7 +35,7 @@
         <ng-container layerSpecification>
             <geoengine-operator-output-name
                 formControlName="name"
-                [suggestion]="'Pie Chart of ' + $safeNavigationMigration((form.controls.layer.valueChanges | async)?.name)"
+                [suggestion]="'Pie Chart of ' + (form.controls.layer.valueChanges | async)?.name"
             >
                 @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
                     <mat-hint align="end" class="error"> The name must be non-empty. </mat-hint>

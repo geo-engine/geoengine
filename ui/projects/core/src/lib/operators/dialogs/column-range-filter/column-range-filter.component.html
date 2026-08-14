@@ -130,7 +130,7 @@
         <ng-container layerSpecification>
             <geoengine-operator-output-name
                 formControlName="name"
-                [suggestion]="'Filtered ' + $safeNavigationMigration((form.controls.layer.valueChanges | async)?.name)"
+                [suggestion]="'Filtered ' + (form.controls.layer.valueChanges | async)?.name"
             ></geoengine-operator-output-name>
         </ng-container>
 

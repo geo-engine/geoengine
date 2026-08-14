@@ -1,7 +1,7 @@
 <mat-card appearance="outlined">
     <mat-card-header>
         @if (plotIcon(); as plotIcon) {
-            <img mat-card-avatar [src]="plotIcon" [alt]="$safeNavigationMigration(plotData()?.outputFormat)" />
+            <img mat-card-avatar [src]="plotIcon" [alt]="plotData()?.outputFormat" />
         }
         <mat-card-title>{{ plot().name }}</mat-card-title>
         <mat-card-subtitle>{{ plotData()?.plotType }}</mat-card-subtitle>
@@ -15,16 +15,13 @@
         <mat-card-content>
             @switch (plotData()?.outputFormat) {
                 @case ('ImagePng') {
-                    <img [src]="$safeNavigationMigration(plotData()?.data)" [alt]="plot().name" />
+                    <img [src]="plotData()?.data" [alt]="plot().name" />
                 }
                 @case ('JsonPlain') {
-                    <pre>{{ $safeNavigationMigration(plotData()?.data) | json }}</pre>
+                    <pre>{{ plotData()?.data | json }}</pre>
                 }
                 @case ('JsonVega') {
-                    <geoengine-vega-viewer
-                        [chartData]="$safeNavigationMigration(plotData()?.data)"
-                        [width]="width()"
-                    ></geoengine-vega-viewer>
+                    <geoengine-vega-viewer [chartData]="plotData()?.data" [width]="width()"></geoengine-vega-viewer>
                 }
                 @default {
                     <pre>{{ plotData()?.data }}</pre>

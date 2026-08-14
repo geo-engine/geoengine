@@ -1,18 +1,6 @@
 import {of, zip, forkJoin, firstValueFrom} from 'rxjs';
 import {map, mergeMap} from 'rxjs/operators';
-import {
-    Component,
-    ChangeDetectionStrategy,
-    inject,
-    input,
-    computed,
-    model,
-    signal,
-    output,
-    forwardRef,
-    effect,
-    linkedSignal,
-} from '@angular/core';
+import {Component, ChangeDetectionStrategy, inject, input, computed, model, signal, forwardRef, effect, linkedSignal} from '@angular/core';
 import {ProjectService} from '../../../../project/project.service';
 import {
     Layer,
