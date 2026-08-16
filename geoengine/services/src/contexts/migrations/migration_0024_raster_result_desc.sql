@@ -39,7 +39,7 @@ SET
             (
                 (cte).meta.params.geo_transform.origin_coordinate,
                 (cte).meta.params.geo_transform.x_pixel_size,
-                (cte).meta.params.geo_transform.x_pixel_size
+                (cte).meta.params.geo_transform.y_pixel_size
             )::"GeoTransform",
             (
                 0,
@@ -68,7 +68,7 @@ SET
             (
                 (cte).meta.params.geo_transform.origin_coordinate,
                 (cte).meta.params.geo_transform.x_pixel_size,
-                (cte).meta.params.geo_transform.x_pixel_size
+                (cte).meta.params.geo_transform.y_pixel_size
             )::"GeoTransform",
             (
                 0,
@@ -97,7 +97,7 @@ SET
             (
                 (cte).meta.params.geo_transform.origin_coordinate,
                 (cte).meta.params.geo_transform.x_pixel_size,
-                (cte).meta.params.geo_transform.x_pixel_size
+                (cte).meta.params.geo_transform.y_pixel_size
             )::"GeoTransform",
             (
                 0,
