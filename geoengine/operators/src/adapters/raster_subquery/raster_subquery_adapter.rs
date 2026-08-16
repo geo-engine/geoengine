@@ -26,6 +26,10 @@ pub trait FoldTileAccuMut: FoldTileAccu {
     fn set_cache_hint(&mut self, new_cache_hint: CacheHint);
 }
 
+/// Phantom type pinning the generic params of [`RasterSubQueryAdapter`] unused in fields.
+/// `fn() ->` keeps the marker covariant and unconditionally `Send` + `Sync`.
+type AdapterMarker<R, S, T> = fn() -> (R, S, T);
+
 /// Generates tiles by running bounded, ordered sub-query futures.
 pub struct RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery, TimeStream>
 where
@@ -35,7 +39,7 @@ where
     TimeStream: Stream<Item = Result<TimeInterval>>,
 {
     stream: BoxStream<'a, Result<RasterTile2D<PixelType>>>,
-    _marker: std::marker::PhantomData<fn() -> (RasterProcessorType, SubQuery, TimeStream)>,
+    _marker: std::marker::PhantomData<AdapterMarker<RasterProcessorType, SubQuery, TimeStream>>,
 }
 
 impl<'a, PixelType, RasterProcessor, SubQuery, TimeStream>
@@ -46,6 +50,12 @@ where
     SubQuery: SubQueryTileAggregator<'a, PixelType> + Sync + 'a,
     TimeStream: Stream<Item = Result<TimeInterval>> + Send + 'a,
 {
+    /// Creates a new adapter.
+    ///
+    /// # Panics
+    ///
+    /// The returned stream unwraps a time interval it sets itself in the
+    /// generation loop, so it only panics if that internal invariant is broken.
     pub fn new(
         source_processor: &'a RasterProcessor,
         query_rect_to_answer: RasterQueryRectangle,
@@ -70,14 +80,13 @@ where
                 let descriptor_bands = descriptor_bands.clone();
                 async move {
                     loop {
-                        if let Some(iter) = band_tile_iter.as_mut() {
-                            if let Some((tile, band)) = iter.next() {
+                        if let Some(iter) = band_tile_iter.as_mut()
+                            && let Some((tile, band)) = iter.next() {
                                 return Ok(Some((
-                                    (time.expect("time is set"), tile, band),
+                                    (time.expect("time is always set before `band_tile_iter` is produced in the same loop iteration"), tile, band),
                                     (time_stream, band_tile_iter, time),
                                 )));
                             }
-                        }
 
                         let next_time = time_stream.next().await.transpose()?;
                         let Some(next_time) = next_time else {

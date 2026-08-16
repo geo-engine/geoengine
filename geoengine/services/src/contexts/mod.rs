@@ -166,6 +166,7 @@ impl QueryContextImpl {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new_with_extensions(
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
