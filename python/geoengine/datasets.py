@@ -608,7 +608,7 @@ def add_or_replace_dataset_with_permissions(
     else:
         dataset_name = DatasetName(properties.name)
         dataset_info = dataset_info_by_name(dataset_name)
-        
+
         if dataset_info is None:  # dataset is not existing or can't read
             dataset_name = add_dataset_and_permissions()
         else:
