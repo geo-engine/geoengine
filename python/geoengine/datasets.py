@@ -607,14 +607,8 @@ def add_or_replace_dataset_with_permissions(
 
     else:
         dataset_name = DatasetName(properties.name)
-        try:
-            dataset_info = dataset_info_by_name(dataset_name)
-        except Exception as e:
-            print(f"Error while checking for existing dataset {dataset_name}: {e}")
-            if replace_existing:  # dataset exists and we overwrite it
-                delete_dataset(dataset_name)
-            dataset_info = None
-
+        dataset_info = dataset_info_by_name(dataset_name)
+        
         if dataset_info is None:  # dataset is not existing or can't read
             dataset_name = add_dataset_and_permissions()
         else:
