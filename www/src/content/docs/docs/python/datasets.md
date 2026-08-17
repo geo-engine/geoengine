@@ -111,7 +111,7 @@ def start(cls, start_field: str, start_format: OgrSourceTimeFormat,
 
 Specify a start column and a fixed duration
 
-#### start_end
+#### start\_end
 
 ```python
 @classmethod
@@ -123,7 +123,7 @@ def start_end(
 
 The dataset contains start and end column
 
-#### start_duration
+#### start\_duration
 
 ```python
 @classmethod
@@ -204,7 +204,7 @@ def __init__(display_name: str,
 
 Creates a new `AddDatasetProperties` object
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.AddDataset
@@ -228,7 +228,7 @@ def __eq__(other) -> bool
 
 Checks if two volume ids are equal
 
-#### pandas_dtype_to_column_type
+#### pandas\_dtype\_to\_column\_type
 
 ```python
 def pandas_dtype_to_column_type(dtype: np.dtype) -> FeatureDataType
@@ -236,7 +236,7 @@ def pandas_dtype_to_column_type(dtype: np.dtype) -> FeatureDataType
 
 Convert a pandas `dtype` to a column type
 
-#### upload_dataframe
+#### upload\_dataframe
 
 ```python
 def upload_dataframe(df: gpd.GeoDataFrame,
@@ -249,7 +249,8 @@ def upload_dataframe(df: gpd.GeoDataFrame,
 
 Uploads a given dataframe to Geo Engine.
 
-## Parameters
+Parameters
+----------
 
 df
 The dataframe to upload.
@@ -264,12 +265,14 @@ The error handling strategy. Defaults to `OgrOnError.ABORT`.
 timeout
 The upload timeout in seconds. Defaults to 3600.
 
-## Returns
+Returns
+-------
 
 DatasetName
 The name of the uploaded dataset
 
-## Raises
+Raises
+------
 
 GeoEngineException
 If the dataset could not be uploaded or the name is already taken.
@@ -282,7 +285,7 @@ class StoredDataset(NamedTuple)
 
 The result of a store dataset request is a combination of `upload_id` and `dataset_name`
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -300,7 +303,7 @@ class Volume()
 
 A volume
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -317,7 +320,7 @@ def volumes(timeout: int = 60) -> list[Volume]
 
 Returns a list of all volumes
 
-#### volume_by_name
+#### volume\_by\_name
 
 ```python
 def volume_by_name(volume_name: str, timeout: int = 60) -> Volume | None
@@ -325,7 +328,7 @@ def volume_by_name(volume_name: str, timeout: int = 60) -> Volume | None
 
 Returns a volume with the specified name or None if none exists
 
-#### add_dataset
+#### add\_dataset
 
 ```python
 def add_dataset(data_store: Volume | UploadId,
@@ -336,7 +339,7 @@ def add_dataset(data_store: Volume | UploadId,
 
 Adds a dataset to the Geo Engine
 
-#### add_or_replace_dataset_with_permissions
+#### add\_or\_replace\_dataset\_with\_permissions
 
 ```python
 def add_or_replace_dataset_with_permissions(
@@ -351,7 +354,7 @@ def add_or_replace_dataset_with_permissions(
 Add a dataset to the Geo Engine and set permissions.
 Replaces existing datasets if forced!
 
-#### delete_dataset
+#### delete\_dataset
 
 ```python
 def delete_dataset(dataset_name: DatasetName, timeout: int = 60) -> None
@@ -359,7 +362,7 @@ def delete_dataset(dataset_name: DatasetName, timeout: int = 60) -> None
 
 Delete a dataset. The dataset must be owned by the caller.
 
-#### list_datasets_page
+#### list\_datasets\_page
 
 ```python
 def list_datasets_page(
@@ -372,7 +375,7 @@ def list_datasets_page(
 
 List datasets
 
-#### list_datasets
+#### list\_datasets
 
 ```python
 def list_datasets(
@@ -385,7 +388,7 @@ def list_datasets(
 
 List datasets
 
-#### dataset_info_by_name
+#### dataset\_info\_by\_name
 
 ```python
 def dataset_info_by_name(
@@ -395,7 +398,7 @@ def dataset_info_by_name(
 
 Get dataset information.
 
-#### dataset_metadata_by_name
+#### dataset\_metadata\_by\_name
 
 ```python
 def dataset_metadata_by_name(

@@ -93,7 +93,7 @@ class MissingFieldInResponseException(Exception)
 
 Exception for when a field is missing in a response
 
-#### check_response_for_error
+#### check\_response\_for\_error
 
 ```python
 def check_response_for_error(response: Response) -> None

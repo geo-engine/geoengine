@@ -14,7 +14,7 @@ class MlModelConfig()
 
 Configuration for an ml model
 
-#### register_ml_model
+#### register\_ml\_model
 
 ```python
 def register_ml_model(onnx_model: ModelProto,
@@ -25,7 +25,7 @@ def register_ml_model(onnx_model: ModelProto,
 
 Uploads an onnx file and registers it as an ml model
 
-#### model_dim_to_tensorshape
+#### model\_dim\_to\_tensorshape
 
 ```python
 def model_dim_to_tensorshape(model_dims)
@@ -33,7 +33,7 @@ def model_dim_to_tensorshape(model_dims)
 
 Transform an ONNX dimension into a MlTensorShape3D
 
-#### check_backend_constraints
+#### check\_backend\_constraints
 
 ```python
 def check_backend_constraints(input_shape: MlTensorShape3D,
@@ -43,7 +43,7 @@ def check_backend_constraints(input_shape: MlTensorShape3D,
 
 Checks that the shapes match the constraintsof the backend
 
-#### validate_model_config
+#### validate\_model\_config
 
 ```python
 def validate_model_config(onnx_model: ModelProto, *,
