@@ -337,11 +337,6 @@ pub fn rasterband_channel_for_dataset_band(
 }
 
 /// Parsed band information from a STAC 1.1.0 asset.
-///
-/// Keeps the asset's display title separate from the individual band names so
-/// callers can match an asset by its real STAC title and select the raster
-/// channel by band name, without encoding the band name into the title (e.g.
-/// `True color image [B02]`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct AssetBandInfo {
     pub asset_title: String,
@@ -354,7 +349,10 @@ pub struct AssetBandInfo {
 /// band is named after the asset title. For multi-band assets the individual
 /// STAC band names (e.g. `B04`) are returned, so the mapping can reference the
 /// exact raster channel while keeping the real asset title.
-pub fn band_names_from_asset_v1_1_0(asset: &stac::Asset) -> Result<AssetBandInfo, String> {
+pub fn band_names_from_asset_v1_1_0(
+    asset: &stac::Asset,
+    asset_key: Option<&str>,
+) -> Result<AssetBandInfo, String> {
     let asset_title = asset
         .title
         .as_deref()
@@ -364,9 +362,11 @@ pub fn band_names_from_asset_v1_1_0(asset: &stac::Asset) -> Result<AssetBandInfo
     let bands = &asset.bands;
 
     if bands.is_empty() || bands.len() == 1 {
+        // Use asset_key if provided (e.g., "B01", "B02"), otherwise fall back to asset_title
+        let band_name = asset_key.unwrap_or(&asset_title).to_string();
         return Ok(AssetBandInfo {
             asset_title: asset_title.clone(),
-            band_names: vec![asset_title],
+            band_names: vec![band_name],
         });
     }
 
@@ -386,8 +386,12 @@ pub fn band_names_from_asset_v1_1_0(asset: &stac::Asset) -> Result<AssetBandInfo
 
 /// Derive band names from a STAC 1.1.0 `ItemAsset`, using the `bands` additional field.
 ///
-/// See [`band_names_from_asset_v1_1_0`] for the naming semantics.
-pub fn band_names_from_item_asset_v1_1_0(asset: &stac::ItemAsset) -> Result<AssetBandInfo, String> {
+/// Prefers the asset_key when provided (e.g., "B01", "B02" from STAC collection item_assets keys).
+/// Falls back to band names from the `bands` field, or the asset title.
+pub fn band_names_from_item_asset_v1_1_0(
+    asset: &stac::ItemAsset,
+    asset_key: Option<&str>,
+) -> Result<AssetBandInfo, String> {
     let asset_title = asset
         .title
         .as_deref()
@@ -400,19 +404,24 @@ pub fn band_names_from_item_asset_v1_1_0(asset: &stac::ItemAsset) -> Result<Asse
         .and_then(serde_json::Value::as_array);
 
     let Some(bands) = band_names else {
+        // Use asset_key if provided, otherwise fall back to asset_title
+        let band_name = asset_key.unwrap_or(&asset_title).to_string();
         return Ok(AssetBandInfo {
             asset_title: asset_title.clone(),
-            band_names: vec![asset_title],
+            band_names: vec![band_name],
         });
     };
 
     if bands.is_empty() || bands.len() == 1 {
+        // Use asset_key if provided, otherwise fall back to asset_title
+        let band_name = asset_key.unwrap_or(&asset_title).to_string();
         return Ok(AssetBandInfo {
             asset_title: asset_title.clone(),
-            band_names: vec![asset_title],
+            band_names: vec![band_name],
         });
     }
 
+    // For multi-band assets, try to extract band names from the bands field
     let mut names = Vec::new();
     for band in bands {
         let band_name = band
@@ -936,7 +945,7 @@ mod tests {
             "title": "My Band"
         });
         let asset: stac::Asset = serde_json::from_value(json).unwrap();
-        let info = band_names_from_asset_v1_1_0(&asset).expect("should succeed");
+        let info = band_names_from_asset_v1_1_0(&asset, None).expect("should succeed");
         assert_eq!(info.asset_title, "My Band");
         assert_eq!(info.band_names, vec!["My Band"]);
     }
@@ -949,7 +958,7 @@ mod tests {
             "bands": [{"name": "B01"}]
         });
         let asset: stac::Asset = serde_json::from_value(json).unwrap();
-        let info = band_names_from_asset_v1_1_0(&asset).expect("should succeed");
+        let info = band_names_from_asset_v1_1_0(&asset, None).expect("should succeed");
         assert_eq!(info.asset_title, "My Asset");
         assert_eq!(info.band_names, vec!["My Asset"]);
     }
@@ -962,7 +971,7 @@ mod tests {
             "bands": [{"name": "B04"}, {"name": "B03"}, {"name": "B02"}]
         });
         let asset: stac::Asset = serde_json::from_value(json).unwrap();
-        let info = band_names_from_asset_v1_1_0(&asset).expect("should succeed");
+        let info = band_names_from_asset_v1_1_0(&asset, None).expect("should succeed");
         // The real asset title is preserved separately from the band names; the
         // band name is NOT encoded into the title (no `True color image [B02]`).
         assert_eq!(info.asset_title, "True color image");

@@ -253,13 +253,13 @@ fn scan_collection_bands(
     let mut dataset_bands: HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>> =
         HashMap::new();
 
-    for (_asset_key, asset) in &collection.item_assets {
+    for (asset_key, asset) in &collection.item_assets {
         if !matches_selected_file_types(asset.r#type.as_deref(), file_types) {
             continue;
         }
 
         if let Ok(Some(bands)) =
-            scan_collection_item_asset(&collection.version, asset, collection.summaries.as_ref())
+            scan_collection_item_asset(&collection.version, asset, collection.summaries.as_ref(), Some(asset_key.as_str()))
         {
             merge_dataset_bands(&mut dataset_bands, bands);
         }
@@ -393,7 +393,7 @@ fn process_sample_assets(
             };
 
             let asset_title = asset.title.as_deref().unwrap_or(asset_key).to_string();
-            let asset_info = common::band_names_from_asset_v1_1_0(asset).unwrap_or_else(|_| {
+            let asset_info = common::band_names_from_asset_v1_1_0(asset, Some(asset_key.as_str())).unwrap_or_else(|_| {
                 common::AssetBandInfo {
                     asset_title: asset_title.clone(),
                     band_names: vec![asset_title.clone()],
@@ -479,13 +479,26 @@ fn build_datasets(
             continue;
         }
 
-        bands.sort_by(|a, b| a.asset_band.asset_title.cmp(&b.asset_band.asset_title));
+        bands.sort_by(|a, b| {
+            let a_name = a
+                .asset_band
+                .band_name
+                .as_deref()
+                .unwrap_or(&a.asset_band.asset_title);
+            let b_name = b
+                .asset_band
+                .band_name
+                .as_deref()
+                .unwrap_or(&b.asset_band.asset_title);
+            a_name.cmp(b_name)
+        });
 
         let spatial_grid = build_dataset_spatial_grid(info, dataset_key, full_projection_grid);
 
+        let unit_suffix = get_unit_suffix(dataset_key.epsg);
         let dataset_name = format!(
-            "{} EPSG:{} {:?} {}m",
-            stac_collection, dataset_key.epsg, dataset_key.data_type, dataset_key.resolution
+            "{} EPSG:{} {:?} {}{}",
+            stac_collection, dataset_key.epsg, dataset_key.data_type, dataset_key.resolution, unit_suffix
         );
 
         datasets.push(StacProviderDataset {
@@ -647,14 +660,15 @@ fn scan_collection_item_asset(
     collection_version: &stac::Version,
     asset: &stac::ItemAsset,
     collection_summaries: Option<&serde_json::Map<String, serde_json::Value>>,
+    asset_key: Option<&str>,
 ) -> Result<Option<HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>>>, String> {
     match collection_version {
-        stac::Version::v1_0_0 => scan_collection_item_asset_v1_0_0(asset),
-        stac::Version::v1_1_0 => scan_collection_item_asset_v1_1_0(asset, collection_summaries),
+        stac::Version::v1_0_0 => scan_collection_item_asset_v1_0_0(asset, asset_key),
+        stac::Version::v1_1_0 => scan_collection_item_asset_v1_1_0(asset, collection_summaries, asset_key),
         _ => {
             // For unknown STAC versions, try v1.1.0 first (more common), fall back to v1.0.0
-            scan_collection_item_asset_v1_1_0(asset, collection_summaries)
-                .or_else(|_| scan_collection_item_asset_v1_0_0(asset))
+            scan_collection_item_asset_v1_1_0(asset, collection_summaries, asset_key)
+                .or_else(|_| scan_collection_item_asset_v1_0_0(asset, asset_key))
                 .or(Ok(None))
         }
     }
@@ -662,6 +676,7 @@ fn scan_collection_item_asset(
 
 fn scan_collection_item_asset_v1_0_0(
     asset: &stac::ItemAsset,
+    asset_key: Option<&str>,
 ) -> Result<Option<HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>>>, String> {
     let mut dataset_bands: HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>> =
         HashMap::new();
@@ -703,12 +718,12 @@ fn scan_collection_item_asset_v1_0_0(
 
         let band_name = if let Some(ref eo_bands_vec) = eo_bands {
             common::v1_0_0_band_name(
-                asset.title.as_deref(),
+                asset_key.or_else(|| asset.title.as_deref()),
                 Some(&eo_bands_vec[index]),
                 band_count,
             )
         } else {
-            common::v1_0_0_band_name(asset.title.as_deref(), None, 1)
+            common::v1_0_0_band_name(asset_key.or_else(|| asset.title.as_deref()), None, 1)
         };
 
         dataset_bands
@@ -729,6 +744,7 @@ fn scan_collection_item_asset_v1_0_0(
 fn scan_collection_item_asset_v1_1_0(
     asset: &stac::ItemAsset,
     collection_summaries: Option<&serde_json::Map<String, serde_json::Value>>,
+    asset_key: Option<&str>,
 ) -> Result<Option<HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>>>, String> {
     let mut dataset_bands: HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>> =
         HashMap::new();
@@ -743,7 +759,7 @@ fn scan_collection_item_asset_v1_1_0(
     let raster_data_type = common::raster_data_type_from_stac_data_type_str(data_type)
         .ok_or_else(|| format!("Unsupported data_type: {data_type}"))?;
 
-    let asset_info = common::band_names_from_item_asset_v1_1_0(asset)?;
+    let asset_info = common::band_names_from_item_asset_v1_1_0(asset, asset_key)?;
 
     let resolution = asset
         .additional_fields
@@ -808,6 +824,26 @@ fn merge_dataset_bands(
                 existing_bands.push(band);
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Helper Functions
+// ---------------------------------------------------------------------------
+
+/// Determine the unit suffix for a dataset based on its EPSG code.
+/// Geographic CRS (like EPSG:4326) use degrees, projected CRS (like UTM) use meters.
+fn get_unit_suffix(epsg: u32) -> &'static str {
+    match epsg {
+        // Geographic CRS codes (WGS84, ETRS89, and other lat/lon coordinates)
+        4258 | 4267 | 4269 | 4276 | 4277 | 4278 | 4279 | 4289 | 4291 | 4308 | 4309
+        | 4311 | 4312 | 4313 | 4314 | 4315 | 4316 | 4317 | 4318 | 4319 | 4322 | 4326 | 4357
+        | 4359 | 4360 | 4361 | 4362 | 4363 | 4364 | 4365 | 4366 | 4367 | 4368 | 4369 | 4370
+        | 4371 | 4372 | 4373 | 4374 | 4375 | 4376 | 4377 | 4378 | 4379 | 4380 | 4381 | 4382
+        | 4383 | 4384 | 4385 | 4386 | 4387 | 4388 | 4389 | 4390 | 4391 | 4392 | 4393 | 4394
+        | 4395 | 4396 | 4397 | 4398 | 4399 => "deg",
+        // Projected CRS (UTM and others) use meters
+        _ => "m",
     }
 }
 

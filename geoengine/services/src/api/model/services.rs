@@ -1001,11 +1001,6 @@ pub struct StacProviderDatasetBand {
     /// (addressing: which asset file + which raster channel within it).
     pub asset_band: StacAssetBand,
     /// The band descriptor of the resulting geo engine dataset layer.
-    ///
-    /// Independent of `assetBand`, which *addresses* the band inside the asset
-    /// files. Populated by discovery with the naming fallback
-    /// (`assetBand.bandName`, then `assetBand.assetTitle`) and a unitless
-    /// measurement.
     pub band_descriptor: crate::api::model::operators::RasterBandDescriptor,
 }
 

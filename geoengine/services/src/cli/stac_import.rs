@@ -2121,7 +2121,7 @@ async fn scan_collection(
                     raster: StacExtensionMajorVersion::V2,
                     eo: StacExtensionMajorVersion::V2,
                 },
-            ) => scan_item_asset_v1_1_0(asset),
+            ) => scan_item_asset_v1_1_0(asset, Some(asset_key)),
             _ => Err(anyhow::anyhow!(
                 "Unsupported STAC version or extension versions: {:?}, {stac_extension_versions:?}",
                 collection.version
@@ -2230,6 +2230,7 @@ fn scan_item_asset_v1_0_0(
 
 fn scan_item_asset_v1_1_0(
     asset: &stac::ItemAsset,
+    asset_key: Option<&str>,
 ) -> anyhow::Result<Option<HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>>> {
     let mut dataset_bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> = HashMap::new();
 
@@ -2247,7 +2248,7 @@ fn scan_item_asset_v1_1_0(
         .context(format!("Unsupported data_type: {data_type}"))?;
 
     // in STAC 1.1.0 `raster:bands` and `eo:bands` are merged into common metadata `bands`
-    let band_names = band_names_from_item_asset_v1_1_0(asset)?;
+    let band_names = band_names_from_item_asset_v1_1_0(asset, asset_key)?;
 
     let resolution = asset
         .additional_fields
@@ -2301,7 +2302,7 @@ fn band_names_from_asset_v1_1_0(asset: &stac::Asset) -> anyhow::Result<Vec<Strin
     Ok(names)
 }
 
-fn band_names_from_item_asset_v1_1_0(asset: &stac::ItemAsset) -> anyhow::Result<Vec<String>> {
+fn band_names_from_item_asset_v1_1_0(asset: &stac::ItemAsset, asset_key: Option<&str>) -> anyhow::Result<Vec<String>> {
     let asset_title = asset
         .title
         .as_deref()
@@ -2313,15 +2314,21 @@ fn band_names_from_item_asset_v1_1_0(asset: &stac::ItemAsset) -> anyhow::Result<
         .and_then(serde_json::Value::as_array);
 
     let Some(bands) = band_names else {
-        return Ok(vec![asset_title.to_string()]);
+        // Use asset_key if provided, otherwise fall back to asset_title
+        let name = asset_key.unwrap_or(asset_title).to_string();
+        return Ok(vec![name]);
     };
 
     if bands.is_empty() {
-        return Ok(vec![asset_title.to_string()]);
+        // Use asset_key if provided, otherwise fall back to asset_title
+        let name = asset_key.unwrap_or(asset_title).to_string();
+        return Ok(vec![name]);
     }
 
     if bands.len() == 1 {
-        return Ok(vec![asset_title.to_string()]);
+        // Use asset_key if provided, otherwise fall back to asset_title
+        let name = asset_key.unwrap_or(asset_title).to_string();
+        return Ok(vec![name]);
     }
 
     let mut names = Vec::new();
