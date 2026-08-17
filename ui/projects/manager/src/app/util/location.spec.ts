@@ -26,4 +26,12 @@ describe('oidcRedirectPath', () => {
         const redirectUri = oidcRedirectPath(location, route, '/manager', '/gis/');
         await expect(redirectUri).toBe('https://example.com/gis/manager/oidc-popup');
     });
+
+    it('should honor a deployment base href without a trailing slash', async () => {
+        const location = urlToLocation(new URL('https://example.com'));
+
+        const route = '/oidc-popup';
+        const redirectUri = oidcRedirectPath(location, route, '/manager', '/gis');
+        await expect(redirectUri).toBe('https://example.com/gis/manager/oidc-popup');
+    });
 });

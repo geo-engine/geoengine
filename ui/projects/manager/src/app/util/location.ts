@@ -18,7 +18,7 @@
  * `https://example.com/gis/manager/oidc-popup`.
  */
 export function oidcRedirectPath(location: Location, route: string, managerBasePath = '', baseHref = '/'): string {
-    // ponytail: use explicit route metadata; the current pathname also contains the active manager route.
+    // ponytail: use the active route prefix; the current pathname also contains the active manager route.
     let managerPath = managerBasePath;
     // Remove the leading slash before resolving the path relative to baseHref.
     if (managerPath.startsWith('/')) {
@@ -36,5 +36,10 @@ export function oidcRedirectPath(location: Location, route: string, managerBaseP
     }
 
     const path = `${managerPath}/${routePath}`;
-    return new URL(path, new URL(baseHref, location.origin)).toString();
+    let normalizedBaseHref = baseHref;
+    if (!normalizedBaseHref.endsWith('/')) {
+        normalizedBaseHref += '/';
+    }
+
+    return new URL(path, new URL(normalizedBaseHref, location.origin)).toString();
 }
