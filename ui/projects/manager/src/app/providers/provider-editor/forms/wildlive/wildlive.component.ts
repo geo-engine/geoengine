@@ -1,5 +1,4 @@
 import {Component, inject, input, effect, forwardRef} from '@angular/core';
-import {ActivatedRoute} from '@angular/router';
 import {
     ControlValueAccessor,
     FormBuilder,
@@ -69,8 +68,6 @@ type WildLiveFormRaw = ReturnType<WildLiveComponent['form']['getRawValue']>;
 })
 export class WildLiveComponent implements ControlValueAccessor {
     protected readonly formBuilder = inject(FormBuilder).nonNullable;
-    private readonly route = inject(ActivatedRoute);
-
     readonly isNew = input<boolean>(false);
 
     readonly form: FormGroup<WildLiveForm>;
@@ -192,10 +189,19 @@ export class WildLiveComponent implements ControlValueAccessor {
      * `/gis/manager/navigation` becomes `/gis/manager/oidc-popup`.
      */
     private getWildliveOidcRedirectUri(): string | undefined {
-        const routeSegments = this.route.snapshot.pathFromRoot.flatMap(({url}) => url.map(({path}) => path));
-        const currentRoute = routeSegments.at(-1);
+        // This component is rendered only below the manager's `navigation` route.
+        const redirectUri = oidcRedirectPath(window.location, '/oidc-popup', 'navigation');
+        // Temporary deployment diagnostics; remove after the redirect path is verified.
+        // eslint-disable-next-line no-console
+        console.debug('[WildLIVE OIDC] component redirect URI', {
+            origin: window.location.origin,
+            pathname: window.location.pathname,
+            hash: window.location.hash,
+            currentRoute: 'navigation',
+            redirectUri,
+        });
 
-        return currentRoute ? oidcRedirectPath(window.location, '/oidc-popup', currentRoute) : undefined;
+        return redirectUri;
     }
 
     async connectToWildlivePortal(): Promise<void> {
