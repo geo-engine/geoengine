@@ -3,7 +3,6 @@ import {MatIconRegistry} from '@angular/material/icon';
 import {DomSanitizer, Title} from '@angular/platform-browser';
 import {Router, RouterOutlet} from '@angular/router';
 import {AppConfig} from './app-config.service';
-import {Location} from '@angular/common';
 import {UserService} from '@geoengine/common';
 
 @Component({
@@ -21,7 +20,6 @@ export class AppComponent implements OnInit {
     readonly config = inject<AppConfig>(AppConfig);
     private readonly titleService = inject(Title);
     private readonly vcRef = inject(ViewContainerRef);
-    private readonly location = inject(Location);
 
     constructor() {
         this.registerIcons();
@@ -32,20 +30,6 @@ export class AppComponent implements OnInit {
     }
 
     ngOnInit(): void {
-        if (window.location.search.length > 0) {
-            // remove the query parameters before the hash from the url because they are not part of the app and cannot be removed later on
-            // services can get the original query parameters from the `URLSearchParams` in their constructor which is called before the routing is initialized.
-            const search = window.location.search;
-
-            let path = '/';
-            if (window.location.hash.length > 0) {
-                path = window.location.hash.substring(1); // remove the leading #
-            }
-
-            window.history.replaceState(null, '', window.location.pathname);
-            this.location.go(path, search);
-        }
-
         this.router.initialNavigation();
     }
 

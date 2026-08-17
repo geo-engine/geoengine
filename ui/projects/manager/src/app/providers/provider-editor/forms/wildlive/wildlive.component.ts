@@ -188,13 +188,47 @@ export class WildLiveComponent implements ControlValueAccessor {
         }
     }
 
+    /**
+     * Builds the callback URL for both standalone manager and GIS-mounted manager.
+     * Angular route segments identify the manager mount, while the browser pathname
+     * identifies the deployment prefix such as `/gis`.
+     */
+    private getWildliveOidcRedirectUri(): string {
+        // `/navigation` is the manager route; `/manager/navigation` is the GIS-mounted route.
+        const activeRoute = this.route.snapshot.pathFromRoot.flatMap(({url}) => url.map(({path}) => path));
+        const managerPath = activeRoute.slice(0, -1).join('/');
+        const currentPath = `/${activeRoute.join('/')}`;
+        const deploymentBase = this.getDeploymentBaseHref(currentPath);
+
+        return oidcRedirectPath(window.location, '/oidc-popup', managerPath, deploymentBase);
+    }
+
+    /**
+     * Finds the deployment prefix before the active Angular route.
+     * For `/gis/manager/navigation`, this returns `/gis/`.
+     */
+    private getDeploymentBaseHref(currentPath: string): string {
+        const configuredBaseHref = document.querySelector('base')?.href ?? '/';
+
+        // The base tag is enough when it contains the deployment prefix.
+        if (currentPath === '/') {
+            return configuredBaseHref;
+        }
+
+        // The browser path also works when the base tag is simply `/`.
+        const pathname = window.location.pathname;
+        if (pathname.endsWith(currentPath)) {
+            return pathname.slice(0, -currentPath.length);
+        }
+
+        return configuredBaseHref;
+    }
+
     async connectToWildlivePortal(): Promise<void> {
         const orientation = window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
         const [popupWidth, popupHeight] = orientation === 'landscape' ? [700, 500] : [360, 660];
 
-        const managerBasePath = (this.route.snapshot.data['managerBasePath'] as string | undefined) ?? '';
-        const baseHref = document.querySelector('base')?.href ?? '/';
-        const redirectUri = oidcRedirectPath(window.location, '/oidc-popup', managerBasePath, baseHref);
+        const redirectUri = this.getWildliveOidcRedirectUri();
 
         const clientId = 'geoengine';
         const keycloakBaseUrl = 'https://auth.geoengine.io/realms/AI4WildLIVE/protocol/openid-connect/auth';
