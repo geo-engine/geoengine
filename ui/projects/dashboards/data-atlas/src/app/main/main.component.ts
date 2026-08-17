@@ -1,4 +1,4 @@
-import {Observable, BehaviorSubject, first, filter, map, forkJoin} from 'rxjs';
+import {Observable, BehaviorSubject, first, filter, map, forkJoin, firstValueFrom} from 'rxjs';
 import {AfterViewInit, ChangeDetectionStrategy, Component, HostListener, OnInit, ViewContainerRef, inject, viewChild} from '@angular/core';
 import {MatIconRegistry, MatIcon} from '@angular/material/icon';
 import {
@@ -189,12 +189,12 @@ export class MainComponent implements OnInit, AfterViewInit {
                 openClosePromise = this.leftSidenav().close();
             }
 
-            openClosePromise.then(() => this.mapComponent().resize());
+            void openClosePromise.then(() => this.mapComponent().resize());
         });
     }
 
     ngAfterViewInit(): void {
-        this.reset();
+        void this.reset();
         this.mapComponent().resize();
     }
 
@@ -235,10 +235,10 @@ export class MainComponent implements OnInit, AfterViewInit {
             });
     }
 
-    private reset(): void {
-        this.projectService.clearLayers();
-        this.projectService.clearPlots();
-        this.projectService.setTime(new Time(moment.utc()));
+    private async reset(): Promise<void> {
+        await firstValueFrom(this.projectService.clearLayers());
+        await firstValueFrom(this.projectService.clearPlots());
+        await this.projectService.setTime(new Time(moment.utc()));
     }
 
     private registerIcons(): void {

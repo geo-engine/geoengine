@@ -62,11 +62,11 @@ export class SymbologyEditorComponent implements OnChanges {
 
     applyChanges(): void {
         if (this.rasterSymbology) {
-            this.updateRasterSymbology();
+            void this.updateRasterSymbology();
         }
 
         if (this.vectorSymbology) {
-            this.updateVectorSymbology();
+            void this.updateVectorSymbology();
         }
     }
 

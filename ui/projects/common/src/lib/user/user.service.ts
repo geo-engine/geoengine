@@ -130,7 +130,7 @@ export class UserService {
         if (oidcParams && oidcRestoreRoute) {
             const sess = await this.oidcLogin(oidcParams);
             this.session$.next(sess);
-            this.router.navigateByUrl(oidcRestoreRoute);
+            await this.router.navigateByUrl(oidcRestoreRoute);
         } else {
             try {
                 // restore old session if possible

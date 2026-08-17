@@ -95,14 +95,14 @@ export class TimeConfigComponent implements OnInit, OnDestroy, AfterViewInit {
         this.projectTimeSubscription?.unsubscribe();
     }
 
-    applyTime(): void {
+    async applyTime(): Promise<void> {
         if (!this.form.valid) {
             return;
         }
 
         const time = this.formToTime();
 
-        this.updateTime(time);
+        await this.updateTime(time);
     }
 
     reset(): void {
@@ -137,10 +137,10 @@ export class TimeConfigComponent implements OnInit, OnDestroy, AfterViewInit {
         return new Time(start, end);
     }
 
-    protected updateTime(time: Time): void {
+    protected async updateTime(time: Time): Promise<void> {
         if (!time.isValid) {
             return;
         }
-        this.projectService.setTime(time);
+        await this.projectService.setTime(time);
     }
 }

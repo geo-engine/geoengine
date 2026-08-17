@@ -182,7 +182,7 @@ export class AppComponent implements OnInit, AfterViewInit {
                 openClosePromise = this.rightSidenav().close();
             }
 
-            openClosePromise.then(() => this.mapComponent().resize());
+            void openClosePromise.then(() => this.mapComponent().resize());
         });
         this.projectService
             .getNewPlotStream()

@@ -94,7 +94,7 @@ export class RegisterComponent implements AfterViewInit {
             });
 
             this.notificationService.info('Registration successful!');
-            this.redirectToMainView();
+            await this.redirectToMainView();
         } catch (error) {
             if (error instanceof GeoEngineError) {
                 this.registrationError$.next(error.message);
@@ -104,7 +104,7 @@ export class RegisterComponent implements AfterViewInit {
         }
     }
 
-    redirectToMainView(): void {
-        this.router.navigate([this.loginRedirect()]);
+    async redirectToMainView(): Promise<void> {
+        await this.router.navigate([this.loginRedirect()]);
     }
 }

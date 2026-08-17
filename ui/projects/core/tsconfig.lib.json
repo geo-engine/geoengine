@@ -5,10 +5,7 @@
         "declarationMap": true,
         "declaration": true,
         "inlineSources": true,
-        "types": ["@types/hammerjs"],
-        "paths": {
-            "@geoengine/common": ["dist/common"]
-        }
+        "types": ["@types/hammerjs"]
     },
     "angularCompilerOptions": {
         "skipTemplateCodegen": true,

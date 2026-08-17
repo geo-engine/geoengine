@@ -37,7 +37,7 @@ export class AppComponent {
 
     private setupLogoutCallback(): void {
         this.userService.setLogoutCallback(() => {
-            this.router.navigate(['signin']);
+            void this.router.navigate(['signin']);
         });
     }
 }

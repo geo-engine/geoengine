@@ -127,7 +127,7 @@ export class DashboardComponent implements AfterViewInit, AfterContentInit {
 
     // eslint-disable-next-line @typescript-eslint/no-misused-promises, @typescript-eslint/require-await
     async ngAfterContentInit(): Promise<void> {
-        this.loadData();
+        await this.loadData();
 
         // eslint-disable-next-line @typescript-eslint/no-misused-promises
         this.projectService.getSelectedFeatureStream().subscribe(async (featureSelection) => {
@@ -162,7 +162,7 @@ export class DashboardComponent implements AfterViewInit, AfterContentInit {
         // wait for project to be loaded before redirecting
         await firstValueFrom(this.projectService.getProjectOnce());
 
-        this.loadClassification();
+        await this.loadClassification();
         await this.loadProperties();
     }
 

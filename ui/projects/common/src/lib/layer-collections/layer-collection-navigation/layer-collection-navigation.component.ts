@@ -144,14 +144,14 @@ export class LayerCollectionNavigationComponent implements OnInit, OnChanges, On
         }
 
         if (!this.search.isSearching && eventData.key === 'f' && eventData.ctrlKey) {
-            this.search.toggleSearch();
+            void this.search.toggleSearch();
             eventData.preventDefault();
         } else if (this.search.isSearching && eventData.key === 'Escape') {
             // Note: for some reason, this event is rarely catched.
             this.search.exitSearch();
             eventData.preventDefault();
         } else if (this.search.isSearching && eventData.key === 'Enter') {
-            this.search.toggleSearch();
+            void this.search.toggleSearch();
             eventData.preventDefault();
         }
     }
@@ -201,7 +201,7 @@ export class LayerCollectionNavigationComponent implements OnInit, OnChanges, On
     protected updateListView(id?: LayerCollectionItemOrSearch): void {
         this.selectedCollection = id ?? {type: 'collection', id: this.collectionId()};
 
-        this.search.updateSearchCapabilities(this.selectedCollection.id).then(() => {
+        void this.search.updateSearchCapabilities(this.selectedCollection.id).then(() => {
             this.changeDetectorRef.markForCheck();
         });
     }
@@ -285,9 +285,9 @@ class Search {
         return false;
     }
 
-    toggleSearch(): void {
+    async toggleSearch(): Promise<void> {
         if (this.isSearching && this.searchString.value) {
-            this.search(this.searchString.value);
+            await this.search(this.searchString.value);
         }
 
         this.isSearching = !this.isSearching;

@@ -96,7 +96,7 @@ export class OgrDatasetComponent implements OnChanges {
     }
     ngOnChanges(changes: SimpleChanges): void {
         if (changes.uploadId?.currentValue) {
-            this.setUpMetadataSpecification(changes.uploadId.currentValue);
+            void this.setUpMetadataSpecification(changes.uploadId.currentValue);
             return;
         }
 
@@ -295,8 +295,8 @@ export class OgrDatasetComponent implements OnChanges {
         }
     }
 
-    reloadSuggestion(): void {
-        this.suggest(this.formMetaData.controls.mainFile.value, this.formMetaData.controls.layerName.value);
+    async reloadSuggestion(): Promise<void> {
+        await this.suggest(this.formMetaData.controls.mainFile.value, this.formMetaData.controls.layerName.value);
     }
 
     fillMetaDataForm(suggest: MetaDataSuggestion): void {

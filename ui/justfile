@@ -35,8 +35,12 @@ run project="gis" nightly="false": common::_clear
     npm run serve:{{ project }}:{{ if nightly == "true" { "nightly" } else { "local" } }}
 
 [arg("ci", long="ci", value="true", help="Whether to run tests in CI mode.")]
-test ci="false": common::_clear
-    npm run test{{ if ci == "true" { ":browser:ci" } else { "" } }}
+[arg("include", long="include", help="Whether to include only specific test files, e.g. `--include=`.")]
+test ci="false" include="" filter="": common::_clear
+    npm run test{{ if ci == "true" { ":browser:ci" } else { "" } }} \
+        -- \
+        {{ if include == "" { "" } else { "--include=" + include } }} \
+        {{ if filter == "" { "" } else { '--filter="' + filter + '"' } }}
 
 [group("update")]
 update-step1-angular: common::_clear && (lint "--quiet" "--fix" "gis")

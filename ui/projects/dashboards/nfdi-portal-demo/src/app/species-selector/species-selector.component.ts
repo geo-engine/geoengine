@@ -490,7 +490,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
         // initialize start values
         // must ensure that project is loaded before
         this.projectService.clearLayers().subscribe(() => {
-            this.dataSelectionService.setTimeSteps(
+            void this.dataSelectionService.setTimeSteps(
                 [...generateYearlyTimeSteps(START_YEAR, END_YEAR, this.currentMonth)],
                 undefined,
                 new Time('2010-01-01T00:00:00.000Z', '2010-02-01T00:00:00.000Z'),
@@ -1206,14 +1206,14 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
         }
     }
 
-    setMonth(value: number | null): void {
+    async setMonth(value: number | null): Promise<void> {
         if (!value) {
             return;
         }
 
         this.currentMonth = value;
 
-        this.dataSelectionService.setTimeSteps(
+        await this.dataSelectionService.setTimeSteps(
             [...generateYearlyTimeSteps(START_YEAR, END_YEAR, this.currentMonth)],
             (currentTime: Time, timeStep: Time): boolean => currentTime.start.year() === timeStep.start.year(),
         );

@@ -73,12 +73,12 @@ export class BackendStatusPageComponent {
         });
     }
 
-    refresh(): void {
+    async refresh(): Promise<void> {
         this.goToMapSubscription?.unsubscribe();
-        this.userService.triggerBackendStatusUpdate();
+        await this.userService.triggerBackendStatusUpdate();
     }
 
-    goBack(): void {
+    async goBack(): Promise<void> {
         this.goToMapSubscription?.unsubscribe();
         this.goToMapSubscription = this.userService
             .getBackendStatus()
@@ -91,6 +91,6 @@ export class BackendStatusPageComponent {
                 setTimeout(() => this.router.navigate(['/map']));
             });
 
-        this.userService.triggerBackendStatusUpdate();
+        await this.userService.triggerBackendStatusUpdate();
     }
 }

@@ -150,7 +150,7 @@ export class LayerCollectionEditorComponent implements OnChanges {
 
         try {
             const collectionListing = this.collectionListing();
-            this.layersService.updateLayerCollection(collectionListing.id.collectionId, {
+            await this.layersService.updateLayerCollection(collectionListing.id.collectionId, {
                 name,
                 description,
                 properties,

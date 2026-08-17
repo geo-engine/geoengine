@@ -127,7 +127,7 @@ export class AddDatasetComponent {
             },
         );
 
-        this.datasetsService.getVolumes().then((volumes) => {
+        void this.datasetsService.getVolumes().then((volumes) => {
             this.volumes$.next(volumes);
         });
     }

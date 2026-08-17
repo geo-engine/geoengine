@@ -28,8 +28,8 @@ describe('MultiLayerSelectionComponent', () => {
     let component: MultiLayerSelectionComponent;
     let fixture: ComponentFixture<MultiLayerSelectionComponent>;
     let layersInput: WritableSignal<Array<Layer>>;
-    let minInput: WritableSignal<number>;
-    let maxInput: WritableSignal<number>;
+    let minLengthInput: WritableSignal<number>;
+    let maxLengthInput: WritableSignal<number>;
     let typesInput: WritableSignal<Array<ResultType>>;
 
     /** Mock Layers **/
@@ -144,20 +144,21 @@ describe('MultiLayerSelectionComponent', () => {
         }).compileComponents();
 
         layersInput = signal([]);
-        minInput = signal(1);
-        maxInput = signal(1);
+        minLengthInput = signal(1);
+        maxLengthInput = signal(1);
         typesInput = signal(ResultTypes.ALL_TYPES);
 
         fixture = TestBed.createComponent(MultiLayerSelectionComponent, {
             bindings: [
                 inputBinding('layers', layersInput),
-                inputBinding('min', minInput),
-                inputBinding('max', maxInput),
+                inputBinding('minLength', minLengthInput),
+                inputBinding('maxLength', maxLengthInput),
                 inputBinding('types', typesInput),
             ],
         });
         component = fixture.componentInstance;
         fixture.detectChanges();
+        await fixture.whenStable();
     });
 
     /** create app **/
@@ -178,8 +179,8 @@ describe('MultiLayerSelectionComponent', () => {
      * checking the default layer displayed **/
     it('should display the first of selectedLayers per default, min = max = 1', async () => {
         layersInput.set(mockLayers);
-        minInput.set(1);
-        maxInput.set(1);
+        minLengthInput.set(1);
+        maxLengthInput.set(1);
 
         await fixture.whenStable();
 
@@ -193,8 +194,8 @@ describe('MultiLayerSelectionComponent', () => {
     /** checking the layer displayed after changing the selected layer **/
     it('should update the layer displayed to equal selected layer, min = max = 1', async () => {
         layersInput.set(mockLayers);
-        minInput.set(1);
-        maxInput.set(1);
+        minLengthInput.set(1);
+        maxLengthInput.set(1);
 
         await fixture.whenStable();
 
@@ -216,8 +217,8 @@ describe('MultiLayerSelectionComponent', () => {
      * checking the default layers displayed and the number of possible layers to select **/
     it('should display the selectedLayers per default, max = 3', async () => {
         layersInput.set(mockLayers);
-        minInput.set(1);
-        maxInput.set(3);
+        minLengthInput.set(1);
+        maxLengthInput.set(3);
 
         await fixture.whenStable();
 
@@ -251,8 +252,8 @@ describe('MultiLayerSelectionComponent', () => {
         }
 
         layersInput.set(mockLayers);
-        minInput.set(1);
-        maxInput.set(3);
+        minLengthInput.set(1);
+        maxLengthInput.set(3);
 
         await fixture.whenStable();
 

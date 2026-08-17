@@ -143,7 +143,11 @@ export class MultiLayerSelectionComponent implements FormValueControl<Array<Laye
             allLayers: this.allLayers(),
         }),
         stream: ({params}) => {
-            return of(params.layers ?? params.allLayers).pipe(
+            const inputLayers = params.layers ?? params.allLayers;
+            if (inputLayers.length === 0) {
+                return of([]);
+            }
+            return of(inputLayers).pipe(
                 mergeMap((layers) => {
                     const layersAndMetadata = layers.map((l) => zip(of(l), this.projectService.getLayerMetadata(l)));
                     return forkJoin(layersAndMetadata);

@@ -145,7 +145,7 @@ export class SpatialReferenceService {
                 this.getAndRegisterSpec(sref.SRS_STRING),
             ),
         ).subscribe((specs) => {
-            specs.forEach((spec) => {
+            void specs.forEach((spec) => {
                 this.specs.set(spec.spatialReference.srsString, spec);
             });
         });
