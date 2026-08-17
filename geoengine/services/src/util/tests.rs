@@ -32,6 +32,7 @@ use crate::{
         CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology,
         STRectangle, Symbology, UpdateProject,
     },
+    quota::ComputationId,
     users::{
         OidcManager, UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession,
     },
@@ -46,12 +47,13 @@ use crate::{
         workflow::{Workflow, WorkflowId},
     },
 };
-use actix_web::dev::ServiceResponse;
 use actix_web::{
-    App, HttpResponse, Responder, http, http::Method, http::header, middleware, test, web,
+    App, HttpResponse, Responder,
+    dev::ServiceResponse,
+    http::{self, Method, header},
+    middleware, test, web,
 };
-use bb8_postgres::PostgresConnectionManager;
-use bb8_postgres::bb8::ManageConnection;
+use bb8_postgres::{PostgresConnectionManager, bb8::ManageConnection};
 use flexi_logger::Logger;
 use futures_util::Future;
 use geoengine_datatypes::{
@@ -80,13 +82,12 @@ use geoengine_operators::{
     },
 };
 use rand::Rng;
-use std::fs::File;
-use std::io::BufReader;
-use std::io::Write;
-use std::path::Path;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::OnceLock;
+use std::{
+    fs::File,
+    io::{BufReader, Write},
+    path::{Path, PathBuf},
+    sync::{Arc, OnceLock},
+};
 use tokio::runtime::Handle;
 use tokio::sync::OwnedSemaphorePermit;
 use tokio::sync::RwLock;
@@ -94,7 +95,6 @@ use tokio::sync::Semaphore;
 use tokio_postgres::NoTls;
 use tracing::debug;
 use tracing_actix_web::TracingLogger;
-use uuid::Uuid;
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_project_helper(
@@ -878,7 +878,7 @@ where
 {
     type Q = C::QueryContext;
     fn mock_query_context(&self) -> Result<C::QueryContext, crate::error::Error> {
-        self.query_context(Uuid::new_v4(), Uuid::new_v4())
+        self.query_context(WorkflowId::new(), ComputationId::new())
     }
 }
 

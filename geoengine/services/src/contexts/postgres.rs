@@ -1,26 +1,26 @@
-use self::migrations::all_migrations;
-use crate::api::model::services::Volume;
-use crate::config::{Cache, Oidc, Quota, get_config_element};
-use crate::contexts::{
-    ApplicationContext, CurrentSchemaMigration, MigrationResult, QueryContextImpl, SessionId,
-    initialize_database, migrations,
+use crate::{
+    api::model::services::Volume,
+    config::{Cache, Oidc, Quota, get_config_element},
+    contexts::{
+        ApplicationContext, CurrentSchemaMigration, ExecutionContextImpl, GeoEngineDb,
+        MigrationResult, QueryContextImpl, QuotaCheckerImpl, SessionContext, SessionId,
+        initialize_database, migrations,
+    },
+    datasets::{DatasetName, upload::Volumes},
+    error::{self, Error, Result},
+    layers::{
+        add_from_directory::{
+            add_datasets_from_directory, add_layer_collections_from_directory,
+            add_layers_from_directory, add_providers_from_directory,
+        },
+        provider_registry::DataConnectorRegistry,
+    },
+    machine_learning::error::MachineLearningError,
+    quota::{ComputationId, QuotaTrackingFactory, initialize_quota_tracking},
+    tasks::{SimpleTaskManagerContext, TypedTaskManagerBackend, UserTaskManager},
+    users::{OidcManager, UserAuth, UserSession},
+    workflows::workflow::WorkflowId,
 };
-use crate::contexts::{ExecutionContextImpl, QuotaCheckerImpl};
-use crate::contexts::{GeoEngineDb, SessionContext};
-use crate::datasets::DatasetName;
-use crate::datasets::upload::Volumes;
-use crate::error::{self, Error, Result};
-use crate::layers::add_from_directory::{
-    add_datasets_from_directory, add_layer_collections_from_directory, add_layers_from_directory,
-    add_providers_from_directory,
-};
-use crate::layers::provider_registry::DataConnectorRegistry;
-use crate::machine_learning::error::MachineLearningError;
-use crate::quota::{QuotaTrackingFactory, initialize_quota_tracking};
-use crate::tasks::SimpleTaskManagerContext;
-use crate::tasks::{TypedTaskManagerBackend, UserTaskManager};
-use crate::users::OidcManager;
-use crate::users::{UserAuth, UserSession};
 use async_trait::async_trait;
 use bb8_postgres::{
     PostgresConnectionManager,
@@ -28,21 +28,21 @@ use bb8_postgres::{
     bb8::PooledConnection,
     tokio_postgres::{Config, Socket, tls::MakeTlsConnect, tls::TlsConnect},
 };
-use geoengine_datatypes::machine_learning::MlModelName;
-use geoengine_datatypes::raster::TilingSpecification;
-use geoengine_datatypes::util::test::TestDefault;
-use geoengine_operators::cache::shared_cache::SharedCache;
-use geoengine_operators::engine::ChunkByteSize;
-use geoengine_operators::meta::quota::QuotaChecker;
-use geoengine_operators::source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess};
-use geoengine_operators::util::create_rayon_thread_pool;
+use geoengine_datatypes::{
+    machine_learning::MlModelName, raster::TilingSpecification, util::test::TestDefault,
+};
+use geoengine_operators::{
+    cache::shared_cache::SharedCache,
+    engine::ChunkByteSize,
+    meta::quota::QuotaChecker,
+    source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
+    util::create_rayon_thread_pool,
+};
 use rayon::ThreadPool;
 use snafu::ResultExt;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use tokio_postgres::error::SqlState;
-use tracing::info;
-use uuid::Uuid;
+use tracing::{info, instrument};
 
 // TODO: do not report postgres error details to user
 
@@ -179,6 +179,7 @@ where
     }
 
     // TODO: check if the datasets exist already and don't output warnings when skipping them
+    #[instrument(skip_all)]
     #[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
     pub async fn new_with_data(
         config: Config,
@@ -263,7 +264,7 @@ where
         let migration = initialize_database(
             &mut conn,
             Box::new(CurrentSchemaMigration),
-            &all_migrations(),
+            &migrations::all_migrations(),
         )
         .await?;
 
@@ -414,7 +415,11 @@ where
         UserTaskManager::new(self.context.task_manager.clone(), self.session.clone())
     }
 
-    fn query_context(&self, workflow: Uuid, computation: Uuid) -> Result<Self::QueryContext> {
+    fn query_context(
+        &self,
+        workflow: WorkflowId,
+        computation: ComputationId,
+    ) -> Result<Self::QueryContext> {
         // TODO: load config only once
 
         Ok(QueryContextImpl::new_with_extensions(
@@ -3496,7 +3501,8 @@ mod tests {
             60,
         );
 
-        let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
+        let tracking =
+            quota.create_quota_tracking(&session, WorkflowId::new(), ComputationId::new());
 
         tracking.mock_work_unit_done();
         tracking.mock_work_unit_done();
@@ -3553,7 +3559,8 @@ mod tests {
             60,
         );
 
-        let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
+        let tracking =
+            quota.create_quota_tracking(&session, WorkflowId::new(), ComputationId::new());
 
         tracking.mock_work_unit_done();
         tracking.mock_work_unit_done();

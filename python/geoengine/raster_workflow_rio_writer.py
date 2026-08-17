@@ -13,6 +13,7 @@ from geoengine.types import (
     RasterResultDescriptor,
     TimeInterval,
 )
+from geoengine.util import eprint
 from geoengine.workflow import Workflow
 
 # pylint: disable=too-many-instance-attributes
@@ -113,7 +114,7 @@ class RasterWorkflowRioWriter:
         assert self.dataset_geo_transform is not None, "Dataset GeoTransform not set"
         affine_transform = rio.Affine.from_gdal(*self.dataset_geo_transform.to_gdal())
         if self.print_info:
-            print(
+            eprint(
                 f"Creating dataset {self.dataset_prefix}{time_formated_start}.tif"
                 f" with width {self.dataset_width}, height {self.dataset_height}, \
                       geo_transform {self.dataset_geo_transform}"

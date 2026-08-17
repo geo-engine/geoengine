@@ -5,6 +5,7 @@ use crate::datasets::listing::DatasetProvider;
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::datasets::{DatasetIdAndName, DatasetName};
+use crate::quota::ComputationId;
 use crate::tasks::TaskContext;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
@@ -35,7 +36,6 @@ use std::sync::Arc;
 use tokio::fs;
 use tonic::async_trait;
 use utoipa::ToSchema;
-use uuid::Uuid;
 
 /// parameter for the dataset from workflow handler (body)
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
@@ -82,6 +82,7 @@ const fn default_as_cog() -> bool {
 pub struct RasterDatasetFromWorkflowResult {
     pub dataset: DatasetName,
     pub upload: UploadId,
+    pub computation_id: ComputationId,
 }
 
 impl TaskStatusInfo for RasterDatasetFromWorkflowResult {}
@@ -160,7 +161,8 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
             )
         };
 
-        let query_ctx = self.ctx.query_context(self.workflow_id.0, Uuid::new_v4())?;
+        let computation_id = ComputationId::new();
+        let query_ctx = self.ctx.query_context(self.workflow_id, computation_id)?;
         let request_spatial_ref =
             Option::<SpatialReference>::from(result_descriptor.spatial_reference)
                 .ok_or(crate::error::Error::MissingSpatialReference)?;
@@ -203,6 +205,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
         Ok(RasterDatasetFromWorkflowResult {
             dataset: dataset.name,
             upload: self.upload,
+            computation_id,
         })
     }
 }

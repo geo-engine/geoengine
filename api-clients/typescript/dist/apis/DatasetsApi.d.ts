@@ -9,10 +9,10 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { AutoCreateDataset, CreateDataset, Dataset, DatasetListing, DatasetNameResponse, MetaDataDefinition, MetaDataSuggestion, OrderBy, Provenances, SuggestMetaData, Symbology, UpdateDataset, Volume, VolumeFileLayersResponse } from '../models/index';
+import type { AddDatasetTile, AutoCreateDataset, CreateDataset, Dataset, DatasetListing, DatasetNameResponse, MetaDataDefinition, MetaDataSuggestion, OrderBy, Provenances, SuggestMetaData, Symbology, UpdateDataset, Volume, VolumeFileLayersResponse } from '../models/index';
 export interface AddDatasetTilesHandlerRequest {
     dataset: string;
-    autoCreateDataset: AutoCreateDataset;
+    addDatasetTile: Array<AddDatasetTile>;
 }
 export interface AutoCreateDatasetHandlerRequest {
     autoCreateDataset: AutoCreateDataset;

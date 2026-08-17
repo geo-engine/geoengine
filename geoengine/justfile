@@ -21,10 +21,11 @@ generate-openapi-spec: common::_clear
 lint: common::_clear lint-rustfmt lint-clippy lint-sql
 
 # Run clippy for all features and all targets.
-[arg('fix', long='fix', value='--fix', help='Automatically apply fixes where possible.')]
+[arg('fix', long='fix', value='--fix --allow-dirty', help='Automatically apply fixes where possible.')]
+[arg('deny-warnings', long='deny-warnings', value='-D warnings', help='Deny warnings.')]
 [group("lint")]
-lint-clippy fix="": common::_clear
-    cargo clippy --all-features --all-targets {{ if fix == "--fix" { "--fix --allow-dirty" } else { "" } }}
+lint-clippy fix="" deny-warnings="": common::_clear
+    cargo clippy --all-features --all-targets {{ fix }} -- {{ deny-warnings }}
 
 # Run rustfmt
 [arg('write', long='write', value='--write', help='Write changes to files instead of checking.')]

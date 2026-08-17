@@ -23,7 +23,7 @@ Method | HTTP request | Description
 
 ## add_dataset_tiles_handler
 
-> add_dataset_tiles_handler(dataset, auto_create_dataset)
+> add_dataset_tiles_handler(dataset, add_dataset_tile)
 Add a tile to a gdal dataset.
 
 ### Parameters
@@ -32,7 +32,7 @@ Add a tile to a gdal dataset.
 Name | Type | Description  | Required | Notes
 ------------- | ------------- | ------------- | ------------- | -------------
 **dataset** | **String** | Dataset Name | [required] |
-**auto_create_dataset** | [**AutoCreateDataset**](AutoCreateDataset.md) |  | [required] |
+**add_dataset_tile** | [**Vec<models::AddDatasetTile>**](AddDatasetTile.md) |  | [required] |
 
 ### Return type
 

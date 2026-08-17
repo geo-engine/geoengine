@@ -11,7 +11,7 @@
       "name": "Apache-2.0",
       "url": "https://github.com/geo-engine/geoengine/blob/main/LICENSE"
     },
-    "version": "0.9.3"
+    "version": "0.9.4"
   },
   "servers": [
     {
@@ -827,7 +827,10 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AutoCreateDataset"
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AddDatasetTile"
+                }
               }
             }
           },
@@ -3850,8 +3853,7 @@
             "description": "Computation id",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "$ref": "#/components/schemas/ComputationId"
             }
           }
         ],
@@ -5862,6 +5864,36 @@
           }
         }
       },
+      "AddDatasetTile": {
+        "type": "object",
+        "required": [
+          "time",
+          "spatial_partition",
+          "band",
+          "z_index",
+          "params"
+        ],
+        "properties": {
+          "time": {
+            "$ref": "#/components/schemas/TimeInterval"
+          },
+          "spatial_partition": {
+            "$ref": "#/components/schemas/SpatialPartition2D"
+          },
+          "band": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "z_index": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "params": {
+            "$ref": "#/components/schemas/GdalDatasetParameters"
+          }
+        }
+      },
       "AddLayer": {
         "type": "object",
         "required": [
@@ -6657,6 +6689,10 @@
           }
         ]
       },
+      "ComputationId": {
+        "type": "string",
+        "format": "uuid"
+      },
       "ComputationQuota": {
         "type": "object",
         "required": [
@@ -6671,12 +6707,10 @@
             "format": "date-time"
           },
           "computationId": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "#/components/schemas/ComputationId"
           },
           "workflowId": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "#/components/schemas/WorkflowId"
           },
           "count": {
             "type": "integer",
@@ -6978,12 +7012,10 @@
             "format": "date-time"
           },
           "userId": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "#/components/schemas/UserId"
           },
           "computationId": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "#/components/schemas/ComputationId"
           },
           "data": {
             "type": "string"

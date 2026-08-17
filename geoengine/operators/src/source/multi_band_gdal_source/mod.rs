@@ -604,7 +604,11 @@ mod tests {
         ExecutionContext, MockExecutionContext, RasterBandDescriptor, StaticMetaData,
         TimeDescriptor,
     };
-    use crate::source::{FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping};
+    use crate::source::gdal_worker_process::WorkerConfig;
+    use crate::source::{
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
+        GdalProcessPoolAccess,
+    };
     use crate::test_data;
     use crate::util::test::raster_tile_from_file;
     use futures::TryStreamExt;
@@ -613,7 +617,8 @@ mod tests {
         CacheHint, Measurement, SpatialPartition2D, TimeInstance,
     };
     use geoengine_datatypes::raster::{
-        GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridSize, RasterDataType,
+        GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridSize,
+        RasterDataType,
     };
     use geoengine_datatypes::raster::{RasterPropertiesEntryType, RasterPropertiesKey};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
@@ -1907,20 +1912,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_combines_partially_overlapping_tiles_with_grid_blit_valid_only() -> Result<()> {
+    async fn it_combines_partially_overlapping_tiles_with_grid_blit_valid_only() {
         // Uses persisted test data from test_data/raster/grid_blit_valid_only/
         // File A (left.tif):  valid data (100) in cols 0,1, no-data (0) in cols 2,3
         // File B (right.tif): no-data (0) in cols 0,1, valid data (200) in cols 2,3
         // Expected (expected.tif): all valid, cols 0,1=100, cols 2,3=200
         // See test_data/raster/grid_blit_valid_only/generate_test_data.py
-
-        use crate::source::gdal_worker_process::{
-            GdalProcessPool, GdalProcessPoolAccess, GdalReaderMode, ReaderState, WorkerConfig,
-        };
-        use geoengine_datatypes::raster::{
-            GeoTransform, GridShape2D, SpatialGridDefinition, TileInformation,
-            TilingSpatialGridDefinition, TilingSpecification,
-        };
 
         let width = 4usize;
         let height = 4usize;
@@ -2010,7 +2007,8 @@ mod tests {
             0, // band
             gw,
         )
-        .await?;
+        .await
+        .unwrap();
 
         let grid = tile.grid_array.as_masked_grid().expect("should be a grid");
 
@@ -2038,7 +2036,5 @@ mod tests {
             grid.validity_mask.data, expected_grid.validity_mask.data,
             "validity mask mismatch"
         );
-
-        Ok(())
     }
 }

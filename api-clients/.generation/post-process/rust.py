@@ -20,11 +20,12 @@ def file_modifications() -> Generator[tuple[Path, FileModifier], None, None]:
     yield Path("src/apis/tasks_api.rs"), tasks_api_rs
     yield Path("src/models/default.rs"), default_rs
     yield Path("src/models/geospatial_data_data_type.rs"), geospatial_data_data_type_rs
-    yield Path("src/models/spatial_partition2_d.rs"), spatial_partition2_d_rs
+    yield Path("src/apis/ogcwfs_api.rs"), ogcwfs_api_rs
     yield (
         Path("src/models/multiple_raster_or_single_vector_operator.rs"),
         multiple_raster_or_single_vector_operator_rs,
     )
+    yield Path("src/models/spatial_partition2_d.rs"), spatial_partition2_d_rs
 
     for file_path in [
         Path("src/models/data_id.rs"),
@@ -221,16 +222,47 @@ def ogcwfs_api_rs(file_contents: list[str]) -> Generator[str, None, None]:
     for line in file_contents:
         dedented_line = dedent(line)
 
-        if dedented_line.startswith(
-            'req_builder = req_builder.query(&[("service", &serde_json::to_string(param_value)?)]);'
-        ):
-            line = indent(
-                'req_builder = req_builder.query(&[("service", &param_value.to_string())]);'
-                "\n",
-                2 * INDENT,
+        if dedented_line.startswith("pub async fn wfs_handler"):
+            position = line.find(") -> Result")
+            line = (
+                line[:position]
+                + ", computation_id: Option<&mut String>"
+                + line[position:]
+            )
+        elif dedented_line.startswith("let content_type = super::"):
+            line += (
+                "\n"
+                + indent(
+                    "set_computation_id_from_response(&resp, computation_id);",
+                    INDENT,
+                )
+                + "\n"
             )
 
         yield line
+
+    yield (
+        dedent(
+            """
+        fn set_computation_id_from_response(resp: &reqwest::Response, computation_id: Option<&mut String>) {
+            let Some(computation_id) = computation_id else {
+                return;
+            };
+
+            let Some(computation_id_header) = resp.headers().get("x-computation-id") else {
+                return;
+            };
+
+            let Ok(computation_id_str) = computation_id_header.to_str() else {
+                return;
+            };
+            
+            *computation_id = computation_id_str.to_string();
+        }
+        """,
+        ).strip()
+        + "\n"
+    )
 
 
 def default_rs(file_contents: list[str]) -> Generator[str, None, None]:

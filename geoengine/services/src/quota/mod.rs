@@ -1,13 +1,19 @@
-use crate::config::QuotaTrackingMode;
-use crate::users::{UserDb, UserId, UserSession};
-use geoengine_datatypes::{primitives::DateTime, util::test::TestDefault};
+use crate::{
+    config::QuotaTrackingMode,
+    identifier,
+    users::{UserDb, UserId, UserSession},
+    workflows::workflow::WorkflowId,
+};
+use geoengine_datatypes::{
+    primitives::DateTime,
+    util::{Identifier, test::TestDefault},
+};
 use geoengine_operators::meta::quota::{ComputationUnit, QuotaMessage, QuotaTracking};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::{collections::HashMap, time::Duration};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use utoipa::ToSchema;
-use uuid::Uuid;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -15,6 +21,8 @@ use uuid::Uuid;
 pub enum QuotaError {
     QuotaExhausted,
 }
+
+identifier!(ComputationId);
 
 #[derive(Debug, Clone)]
 pub struct QuotaTrackingFactory {
@@ -29,14 +37,14 @@ impl QuotaTrackingFactory {
     pub fn create_quota_tracking(
         &self,
         session: &UserSession,
-        workflow: Uuid,
-        computation: Uuid,
+        workflow: WorkflowId,
+        computation: ComputationId,
     ) -> QuotaTracking {
         QuotaTracking::new(
             self.quota_sender.clone(),
             session.user.id.0,
-            workflow,
-            computation,
+            *workflow.uuid(),
+            *computation.uuid(),
         )
     }
 }
@@ -188,8 +196,8 @@ pub struct OperatorQuota {
 #[serde(rename_all = "camelCase")]
 pub struct ComputationQuota {
     pub timestamp: DateTime,
-    pub computation_id: Uuid,
-    pub workflow_id: Uuid,
+    pub computation_id: ComputationId,
+    pub workflow_id: WorkflowId,
     pub count: u64,
 }
 
@@ -197,8 +205,8 @@ pub struct ComputationQuota {
 #[serde(rename_all = "camelCase")]
 pub struct DataUsage {
     pub timestamp: DateTime,
-    pub user_id: Uuid,
-    pub computation_id: Uuid,
+    pub user_id: UserId,
+    pub computation_id: ComputationId,
     pub data: String,
     pub count: u64,
 }
@@ -251,7 +259,8 @@ mod tests {
             60,
         );
 
-        let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
+        let tracking =
+            quota.create_quota_tracking(&session, WorkflowId::new(), ComputationId::new());
 
         tracking.mock_work_unit_done();
         tracking.mock_work_unit_done();
@@ -303,7 +312,8 @@ mod tests {
             60,
         );
 
-        let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
+        let tracking =
+            quota.create_quota_tracking(&session, WorkflowId::new(), ComputationId::new());
 
         tracking.mock_work_unit_done();
         tracking.mock_work_unit_done();
@@ -358,7 +368,8 @@ mod tests {
             2,
         );
 
-        let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
+        let tracking =
+            quota.create_quota_tracking(&session, WorkflowId::new(), ComputationId::new());
 
         tracking.mock_work_unit_done();
         tracking.mock_work_unit_done();

@@ -16,6 +16,7 @@ from geoengine import backports
 from geoengine.auth import get_session
 from geoengine.error import GeoEngineException, TypeException
 from geoengine.types import DEFAULT_ISO_TIME_FORMAT
+from geoengine.util import eprint
 
 
 class TaskId:
@@ -296,7 +297,7 @@ class Task:
             current_status = self.get_status(request_timeout)
 
             if print_status:
-                print(current_status)
+                eprint(current_status)
             if current_status.status == TaskStatus.RUNNING:
                 time.sleep(check_interval_seconds)
 
@@ -328,7 +329,7 @@ class Task:
                 last_status = TaskStatusInfo.from_response(response)
 
                 if print_status:
-                    print(last_status)
+                    eprint(last_status)
 
                 if last_status.status != TaskStatus.RUNNING:
                     return last_status

@@ -5,6 +5,7 @@
 README.md
 docs/AccessConstraints.md
 docs/AddDataset.md
+docs/AddDatasetTile.md
 docs/AddLayer.md
 docs/AddLayerCollection.md
 docs/AddRole.md
@@ -405,6 +406,7 @@ geoengine_api_client/exceptions.py
 geoengine_api_client/models/__init__.py
 geoengine_api_client/models/access_constraints.py
 geoengine_api_client/models/add_dataset.py
+geoengine_api_client/models/add_dataset_tile.py
 geoengine_api_client/models/add_layer.py
 geoengine_api_client/models/add_layer_collection.py
 geoengine_api_client/models/add_role.py
@@ -773,6 +775,7 @@ test-requirements.txt
 test/__init__.py
 test/test_access_constraints.py
 test/test_add_dataset.py
+test/test_add_dataset_tile.py
 test/test_add_layer.py
 test/test_add_layer_collection.py
 test/test_add_role.py

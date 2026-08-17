@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use crate::{
     api::model::{
         datatypes::SpatialPartition2D,
@@ -64,7 +62,7 @@ use snafu::{ResultExt, ensure};
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
-    path::Path,
+    path::{Path, PathBuf},
 };
 use utoipa::{ToResponse, ToSchema};
 
@@ -202,7 +200,7 @@ pub async fn list_datasets_handler<C: ApplicationContext>(
     tag = "Datasets",
     post,
     path = "/dataset/{dataset}/tiles",
-    request_body = AutoCreateDataset,
+    request_body = Vec<AddDatasetTile>,
     responses(
         (status = 200),
     ),
@@ -1013,10 +1011,10 @@ pub async fn suggest_meta_data_handler<C: ApplicationContext>(
     } else {
         let mut gdal_params =
             gdal_parameters_from_dataset(&dataset, 1, &main_file_path, None, None)?;
-        if let Some(ref root_path) = root_path {
-            if let Ok(relative_path) = gdal_params.file_path.strip_prefix(root_path) {
-                gdal_params.file_path = relative_path.to_path_buf();
-            }
+        if let Some(ref root_path) = root_path
+            && let Ok(relative_path) = gdal_params.file_path.strip_prefix(root_path)
+        {
+            gdal_params.file_path = relative_path.to_path_buf();
         }
         let result_descriptor = raster_descriptor_from_dataset(&dataset, 1)?;
 
@@ -1688,13 +1686,17 @@ mod tests {
         error::Result,
         ge_context,
         projects::{PointSymbology, RasterSymbology, Symbology},
+        quota::ComputationId,
         test_data,
         users::{RoleDb, UserAuth},
         util::tests::{
             MockQueryContext, SetMultipartBody, TestDataUploads, add_file_definition_to_datasets,
             admin_login, read_body_json, read_body_string, send_test_request,
         },
-        workflows::{registry::WorkflowRegistry, workflow::Workflow},
+        workflows::{
+            registry::WorkflowRegistry,
+            workflow::{Workflow, WorkflowId},
+        },
     };
     use actix_web;
     use actix_web::http::header;
@@ -1709,7 +1711,7 @@ mod tests {
         },
         raster::{GridShape2D, TilingSpecification},
         spatial_reference::SpatialReferenceOption,
-        util::{assert_image_equals, test::assert_eq_two_list_of_tiles},
+        util::{Identifier, assert_image_equals, test::assert_eq_two_list_of_tiles},
     };
     use geoengine_operators::{
         engine::{
@@ -1730,7 +1732,6 @@ mod tests {
     use httptest::{Expectation, Server, all_of, matchers::request, responders::status_code};
     use serde_json::{Value, json};
     use tokio_postgres::NoTls;
-    use uuid::Uuid;
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
@@ -2055,7 +2056,7 @@ mod tests {
         .await?;
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
-        let query_ctx = session_context.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+        let query_ctx = session_context.query_context(WorkflowId::new(), ComputationId::new())?;
 
         let query = query_processor
             .query(
@@ -4112,7 +4113,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
 
         let tiling_spec = execution_context.tiling_specification();
 
@@ -4206,7 +4207,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
 
         let tiling_spec = execution_context.tiling_specification();
 
@@ -4309,7 +4310,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
 
         let tiling_spec = execution_context.tiling_specification();
 
@@ -4438,7 +4439,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
 
         let tiling_spec = execution_context.tiling_specification();
 
@@ -4665,7 +4666,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
 
         let tiling_spec = execution_context.tiling_specification();
 
@@ -4889,7 +4890,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
 
         let tiling_spec = execution_context.tiling_specification();
 
@@ -4983,7 +4984,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
 
         let tiling_spec = execution_context.tiling_specification();
 
@@ -5597,7 +5598,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
 
         let processor = processor.get_u16().unwrap();
 
@@ -5687,7 +5688,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
 
         let times = processor
             .get_u16()

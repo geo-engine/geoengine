@@ -1,36 +1,43 @@
-use crate::api::handlers::spatial_references::spatial_reference_specification;
-use crate::api::ogc::util::{OgcProtocol, OgcQueryExtractor, ogc_endpoint_url};
-use crate::api::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion};
-use crate::config;
-use crate::config::get_config_element;
-use crate::contexts::{ApplicationContext, SessionContext};
-use crate::error::Result;
-use crate::error::{self, Error};
-use crate::util::server::{CacheControlHeader, connection_closed};
-use crate::workflows::registry::WorkflowRegistry;
-use crate::workflows::workflow::WorkflowId;
+use crate::{
+    api::{
+        handlers::spatial_references::spatial_reference_specification,
+        ogc::{
+            util::{OgcProtocol, OgcQueryExtractor, ogc_endpoint_url},
+            wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion},
+        },
+    },
+    config::{self, get_config_element},
+    contexts::{ApplicationContext, SessionContext},
+    error::{self, Error, Result},
+    quota::ComputationId,
+    util::server::{CacheControlHeader, connection_closed},
+    workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
+};
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
-use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BandSelection, RasterQueryRectangle, SpatialResolution, TimeInterval,
+use geoengine_datatypes::{
+    primitives::{
+        AxisAlignedRectangle, BandSelection, RasterQueryRectangle, SpatialResolution, TimeInterval,
+    },
+    raster::GridShape2D,
+    spatial_reference::SpatialReference,
+    util::Identifier,
 };
-use geoengine_datatypes::raster::GridShape2D;
-use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_operators::call_on_generic_raster_processor_gdal_types;
-use geoengine_operators::engine::{
-    ExecutionContext, InitializedRasterOperator, WorkflowOperatorPath,
-};
-use geoengine_operators::util::raster_stream_to_geotiff::{
-    GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions, raster_stream_to_multiband_geotiff_bytes,
+use geoengine_operators::{
+    call_on_generic_raster_processor_gdal_types,
+    engine::{ExecutionContext, InitializedRasterOperator, WorkflowOperatorPath},
+    util::raster_stream_to_geotiff::{
+        GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions, raster_stream_to_multiband_geotiff_bytes,
+    },
 };
 use serde::Deserialize;
 use snafu::ensure;
-use std::str::FromStr;
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
 use tracing::info;
 use url::Url;
-use utoipa::IntoParams;
-use utoipa::openapi::{Ref, Required};
-use uuid::Uuid;
+use utoipa::{
+    IntoParams,
+    openapi::{Ref, Required},
+};
 
 pub(crate) fn init_wcs_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -428,7 +435,9 @@ async fn wcs_get_coverage<C: ApplicationContext>(
 
     let processor = wrapped.initialized_operator.query_processor()?;
 
-    let query_ctx = ctx.query_context(identifier.0, Uuid::new_v4())?;
+    let computation_id = ComputationId::new();
+
+    let query_ctx = ctx.query_context(identifier, computation_id)?;
 
     let (bytes, cache_hint) = call_on_generic_raster_processor_gdal_types!(processor, p =>
         raster_stream_to_multiband_geotiff_bytes(
@@ -453,6 +462,7 @@ async fn wcs_get_coverage<C: ApplicationContext>(
 
     Ok(HttpResponse::Ok()
         .append_header(cache_hint.cache_control_header())
+        .append_header(computation_id)
         .content_type("image/tiff")
         .body(bytes))
 }

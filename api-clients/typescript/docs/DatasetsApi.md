@@ -23,7 +23,7 @@ All URIs are relative to *https://geoengine.io/api*
 
 ## addDatasetTilesHandler
 
-> addDatasetTilesHandler(dataset, autoCreateDataset)
+> addDatasetTilesHandler(dataset, addDatasetTile)
 
 Add a tile to a gdal dataset.
 
@@ -47,8 +47,8 @@ async function example() {
   const body = {
     // string | Dataset Name
     dataset: dataset_example,
-    // AutoCreateDataset
-    autoCreateDataset: ...,
+    // Array<AddDatasetTile>
+    addDatasetTile: ...,
   } satisfies AddDatasetTilesHandlerRequest;
 
   try {
@@ -69,7 +69,7 @@ example().catch(console.error);
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
 | **dataset** | `string` | Dataset Name | [Defaults to `undefined`] |
-| **autoCreateDataset** | [AutoCreateDataset](AutoCreateDataset.md) |  | |
+| **addDatasetTile** | `Array<AddDatasetTile>` |  | |
 
 ### Return type
 

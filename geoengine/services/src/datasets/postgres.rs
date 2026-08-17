@@ -1069,9 +1069,9 @@ where
         });
 
         tracing::info!(
-            "Adding dataset with name: {:?}, tags: {:?}",
-            name,
-            dataset.tags
+            "Name" = %name,
+            "Tags" = ?dataset.tags,
+            "Adding dataset",
         );
 
         self.check_dataset_namespace(&name)?;

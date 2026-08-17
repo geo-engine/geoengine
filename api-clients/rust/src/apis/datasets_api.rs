@@ -134,10 +134,10 @@ pub enum UpdateLoadingInfoHandlerError {
 }
 
 
-pub async fn add_dataset_tiles_handler(configuration: &configuration::Configuration, dataset: &str, auto_create_dataset: models::AutoCreateDataset) -> Result<(), Error<AddDatasetTilesHandlerError>> {
+pub async fn add_dataset_tiles_handler(configuration: &configuration::Configuration, dataset: &str, add_dataset_tile: Vec<models::AddDatasetTile>) -> Result<(), Error<AddDatasetTilesHandlerError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_dataset = dataset;
-    let p_body_auto_create_dataset = auto_create_dataset;
+    let p_body_add_dataset_tile = add_dataset_tile;
 
     let uri_str = format!("{}/dataset/{dataset}/tiles", configuration.base_path, dataset=crate::apis::urlencode(p_path_dataset));
     let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
@@ -148,7 +148,7 @@ pub async fn add_dataset_tiles_handler(configuration: &configuration::Configurat
     if let Some(ref token) = configuration.bearer_access_token {
         req_builder = req_builder.bearer_auth(token.to_owned());
     };
-    req_builder = req_builder.json(&p_body_auto_create_dataset);
+    req_builder = req_builder.json(&p_body_add_dataset_tile);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req).await?;
