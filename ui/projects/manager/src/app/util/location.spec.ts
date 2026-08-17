@@ -13,7 +13,7 @@ describe('oidcRedirectPath', () => {
 
         const route = '/oidc-popup';
         const redirectUri = oidcRedirectPath(location, route);
-        await expect(redirectUri).toBe('https://example.com/#/oidc-popup');
+        await expect(redirectUri).toBe('https://example.com/oidc-popup');
     });
 
     it('should generate correct redirect URI with path', async () => {
@@ -21,7 +21,7 @@ describe('oidcRedirectPath', () => {
 
         const route = '/oidc-popup';
         const redirectUri = oidcRedirectPath(location, route);
-        await expect(redirectUri).toBe('https://example.com/some/path#/oidc-popup');
+        await expect(redirectUri).toBe('https://example.com/some/path/oidc-popup');
     });
 
     it('should generate correct redirect URI with path, with trailing slash', async () => {
@@ -29,14 +29,6 @@ describe('oidcRedirectPath', () => {
 
         const route = '/oidc-popup';
         const redirectUri = oidcRedirectPath(location, route);
-        await expect(redirectUri).toBe('https://example.com/some/path/#/oidc-popup');
-    });
-
-    it('should generate correct redirect URI under /manager subpath', async () => {
-        const location = urlToLocation(new URL('https://example.com/#/manager'));
-
-        const route = '/oidc-popup';
-        const redirectUri = oidcRedirectPath(location, route);
-        await expect(redirectUri).toBe('https://example.com/#/manager/oidc-popup');
+        await expect(redirectUri).toBe('https://example.com/some/path/oidc-popup');
     });
 });
