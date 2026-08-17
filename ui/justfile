@@ -34,8 +34,8 @@ build project="gis": common::_clear
 run project="gis" nightly="false": common::_clear
     npm run serve:{{ project }}:{{ if nightly == "true" { "nightly" } else { "local" } }}
 
-[arg("ci", long="ci", value="true", help="Whether to run tests in CI mode.")]
 [arg("include", long="include", help="Whether to include only specific test files, e.g. `--include=`.")]
+[arg("ci", long="ci", value="true", help="Whether to run tests in CI mode.")]
 test ci="false" include="" filter="": common::_clear
     npm run test{{ if ci == "true" { ":browser:ci" } else { "" } }} \
         -- \
