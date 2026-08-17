@@ -1,4 +1,5 @@
 import {Component, inject, input, effect, forwardRef} from '@angular/core';
+import {ActivatedRoute} from '@angular/router';
 import {
     ControlValueAccessor,
     FormBuilder,
@@ -68,6 +69,7 @@ type WildLiveFormRaw = ReturnType<WildLiveComponent['form']['getRawValue']>;
 })
 export class WildLiveComponent implements ControlValueAccessor {
     protected readonly formBuilder = inject(FormBuilder).nonNullable;
+    private readonly route = inject(ActivatedRoute);
 
     readonly isNew = input<boolean>(false);
 
@@ -189,7 +191,9 @@ export class WildLiveComponent implements ControlValueAccessor {
         const orientation = window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
         const [popupWidth, popupHeight] = orientation === 'landscape' ? [700, 500] : [360, 660];
 
-        const redirectUri = oidcRedirectPath(window.location, '/oidc-popup');
+        const managerBasePath = (this.route.snapshot.data['managerBasePath'] as string | undefined) ?? '';
+        const baseHref = document.querySelector('base')?.href ?? '/';
+        const redirectUri = oidcRedirectPath(window.location, '/oidc-popup', managerBasePath, baseHref);
 
         const clientId = 'geoengine';
         const keycloakBaseUrl = 'https://auth.geoengine.io/realms/AI4WildLIVE/protocol/openid-connect/auth';
