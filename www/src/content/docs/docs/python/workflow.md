@@ -99,6 +99,9 @@ def get_dataframe(bbox: QueryRectangle,
 
 Query a workflow and return the WFS result as a GeoPandas `GeoDataFrame`
 
+The computation ID from the server response is attached as an attribute.
+Access via: `df.attrs.get('computation_id')`
+
 #### wms_get_map_as_image
 
 ```python
@@ -313,3 +316,11 @@ def data_usage_summary(granularity: geoc.UsageSummaryGranularity,
 ```
 
 Get data usage summary
+
+#### data_usage_for_computation
+
+```python
+def data_usage_for_computation(computation_id: UUID) -> int
+```
+
+Get data usage for a specific computation
