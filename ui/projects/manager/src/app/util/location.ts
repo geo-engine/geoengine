@@ -1,45 +1,51 @@
 /**
  * Generates a redirect URI for OIDC authentication flows.
  * @param route The route to append to the redirect URI.
- * @param managerBasePath The manager route prefix, e.g. `/manager` when embedded in GIS.
- * @param baseHref The application's deployment base href.
- * @returns The full redirect URI including the specified route.
+ * @param currentRoute The current Angular route, e.g. `navigation`.
+ * @returns The full redirect URI, or `undefined` when the current route cannot be resolved.
  * @example
- * Standalone manager at `https://example.com/`:
- * `oidcRedirectPath(location, '/oidc-popup')` returns
+ * Standalone manager at `https://example.com/navigation`:
+ * `oidcRedirectPath(location, '/oidc-popup', 'navigation')` returns
  * `https://example.com/oidc-popup`.
  * @example
- * Manager embedded in GIS at `/manager`:
- * `oidcRedirectPath(location, '/oidc-popup', '/manager')` returns
- * `https://example.com/manager/oidc-popup`.
- * @example
- * GIS deployed below `/gis/`:
- * `oidcRedirectPath(location, '/oidc-popup', '/manager', '/gis/')` returns
+ * Manager embedded in GIS at `https://example.com/gis/manager/navigation`:
+ * `oidcRedirectPath(location, '/oidc-popup', 'navigation')` returns
  * `https://example.com/gis/manager/oidc-popup`.
  */
-export function oidcRedirectPath(location: Location, route: string, managerBasePath = '', baseHref = '/'): string {
-    // ponytail: use the active route prefix; the current pathname also contains the active manager route.
-    let managerPath = managerBasePath;
-    // Remove the leading slash before resolving the path relative to baseHref.
-    if (managerPath.startsWith('/')) {
-        managerPath = managerPath.substring(1);
+export function oidcRedirectPath(location: Location, route: string, currentRoute: string): string | undefined {
+    // A trailing slash is equivalent for browser routes, but would prevent the
+    // suffix check below from recognizing URLs such as `/manager/navigation/`.
+    let pathname = location.pathname;
+    while (pathname.endsWith('/')) {
+        pathname = pathname.slice(0, -1);
     }
-    // Avoid creating a double slash between the manager prefix and the route.
-    if (managerPath.endsWith('/')) {
-        managerPath = managerPath.substring(0, managerPath.length - 1);
-    }
-
-    let routePath = route;
-    // Normalize the route so it can be appended to the manager prefix.
-    if (routePath.startsWith('/')) {
-        routePath = routePath.substring(1);
+    if (!pathname) {
+        pathname = '/';
     }
 
-    const path = `${managerPath}/${routePath}`;
-    let normalizedBaseHref = baseHref;
-    if (!normalizedBaseHref.endsWith('/')) {
-        normalizedBaseHref += '/';
+    const currentPath = currentRoute ? `/${currentRoute}` : '';
+
+    let basePath = '';
+    if (currentPath && pathname.endsWith(currentPath)) {
+        // Remove the current Angular route, leaving the deployment and mount path:
+        // `/gis/manager/navigation` becomes `/gis/manager`.
+        basePath = pathname.slice(0, -currentPath.length);
+    } else if (currentRoute === 'navigation') {
+        // The navigation component can also be rendered at the application's mount
+        // path before Angular has added `/navigation` to the browser URL.
+        basePath = pathname === '/' ? '' : pathname;
+    } else {
+        // Never send an unverified root URI to Keycloak. A wrong but valid-looking
+        // redirect URI is harder to diagnose than stopping the authentication flow.
+        return undefined;
     }
 
-    return new URL(path, new URL(normalizedBaseHref, location.origin)).toString();
+    // Split on `/` instead of relying on regular expressions so leading and
+    // trailing slashes cannot create duplicate separators in the URI.
+    const path = [basePath, route]
+        .flatMap((part) => part.split('/'))
+        .filter(Boolean)
+        .join('/');
+
+    return new URL(`/${path}`, location.origin).toString();
 }
