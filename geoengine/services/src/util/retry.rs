@@ -185,3 +185,120 @@ fn is_terminal<E: std::fmt::Display>(
 
     !(status_allows_retry && message_allows_retry)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{RetryPolicy, retry_http};
+    use std::fmt;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    #[derive(Debug, Clone)]
+    struct TestError {
+        status: Option<u16>,
+        message: String,
+    }
+
+    impl fmt::Display for TestError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            if let Some(status) = self.status {
+                write!(f, "HTTP {status}: {}", self.message)
+            } else {
+                write!(f, "{}", self.message)
+            }
+        }
+    }
+
+    impl std::error::Error for TestError {}
+
+    #[tokio::test]
+    async fn retry_http_retries_until_success() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+
+        let result: Result<String, TestError> = retry_http(
+            {
+                let attempts = attempts.clone();
+                move || {
+                    let current = attempts.fetch_add(1, Ordering::SeqCst) + 1;
+                    async move {
+                        if current < 3 {
+                            Err(TestError {
+                                status: None,
+                                message: "temporary network issue".to_string(),
+                            })
+                        } else {
+                            Ok("ok".to_string())
+                        }
+                    }
+                }
+            },
+            "transient fetch",
+            &RetryPolicy::new().max_retries(5).initial_delay_ms(1),
+            |e| e.status,
+        )
+        .await;
+
+        assert_eq!(result.unwrap(), "ok");
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn retry_http_stops_on_status_code() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+
+        let result: Result<String, TestError> = retry_http(
+            {
+                let attempts = attempts.clone();
+                move || {
+                    attempts.fetch_add(1, Ordering::SeqCst);
+                    async {
+                        Err(TestError {
+                            status: Some(500),
+                            message: "server error".to_string(),
+                        })
+                    }
+                }
+            },
+            "server fetch",
+            &RetryPolicy::new()
+                .max_retries(5)
+                .initial_delay_ms(1)
+                .stop_on_status(&[500]),
+            |e| e.status,
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn retry_http_stops_on_message_contains() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+
+        let result: Result<String, TestError> = retry_http(
+            {
+                let attempts = attempts.clone();
+                move || {
+                    attempts.fetch_add(1, Ordering::SeqCst);
+                    async {
+                        Err(TestError {
+                            status: Some(400),
+                            message: "bad request".to_string(),
+                        })
+                    }
+                }
+            },
+            "message fetch",
+            &RetryPolicy::new()
+                .max_retries(5)
+                .initial_delay_ms(1)
+                .stop_on_message(&["bad request"]),
+            |e| e.status,
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    }
+}
