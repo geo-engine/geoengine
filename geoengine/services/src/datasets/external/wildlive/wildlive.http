@@ -45,6 +45,17 @@ Content-Type: application/json
 
 ###
 
+POST https://wildlive.senckenberg.de/api/search
+Content-Type: application/json
+
+{
+    "query": "type:Annotation AND (/id:\"wildlive/6607f2427e15c57796d7\" OR /id:\"wildlive/dbc69a65af93dbbd1210\" OR /id:\"wildlive/7d448ae071ca86f883c2\" OR /id:\"wildlive/b271db928c4f8fca67e4\" OR /id:\"wildlive/d30e14dd0a416b170cea\" OR /id:\"wildlive/0b08b66fc91c2818e32e\" OR /id:\"wildlive/6608886b51501afd38c2\" OR /id:\"wildlive/37bc8a6d81c568cd2c71\" OR /id:\"wildlive/20efe67ab867fc9dd00c\" OR /id:\"wildlive/5e5ed0f4b30e0a142ffc\" OR /id:\"wildlive/b23d86cbd5dc2b8d2a48\" OR /id:\"wildlive/c2f3cac3423885404825\")",
+    "page_num": 0,
+    "page_size": 10000
+}
+
+###
+
 # @name session
 POST https://webapp.senckenberg.de/auth/realms/wildlive-portal/protocol/openid-connect/token
 Content-Type: application/x-www-form-urlencoded

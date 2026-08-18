@@ -48,8 +48,8 @@ pub struct CaptureFeature {
     pub station_setup_id: String,
     pub capture_time_stamp: DateTime<Utc>,
     pub accepted_name_usage_id: String,
-    pub vernacular_name: String,
-    pub scientific_name: String,
+    // pub vernacular_name: String,
+    // pub scientific_name: String,
     pub content_url: String,
     pub geom: Coordinate2D,
 }
@@ -93,10 +93,10 @@ struct Annotation {
 struct AnnotationBody {
     #[serde(rename = "acceptedNameUsageID")]
     pub accepted_name_usage_id: String,
-    #[serde(rename = "vernacularName")]
-    pub vernacular_name: String,
-    #[serde(rename = "scientificName")]
-    pub scientific_name: String,
+    // #[serde(rename = "vernacularName")]
+    // pub vernacular_name: String,
+    // #[serde(rename = "scientificName")]
+    // pub scientific_name: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -559,15 +559,18 @@ pub(super) async fn captures_dataset(
             .context(error::UnableToLookupStation)?;
 
         // dbg!(&image_object.id, image_annotations.keys());
-        let (accepted_name_usage_id, vernacular_name, scientific_name) =
+        // let (accepted_name_usage_id, vernacular_name, scientific_name) =
+        let accepted_name_usage_id =
             if let Some(annotation) = image_annotations.get(&image_object.id) {
-                (
-                    annotation.body.accepted_name_usage_id.clone(),
-                    annotation.body.vernacular_name.clone(),
-                    annotation.body.scientific_name.clone(),
-                )
+                // (
+                //     annotation.body.accepted_name_usage_id.clone(),
+                //     annotation.body.vernacular_name.clone(),
+                //     annotation.body.scientific_name.clone(),
+                // )
+                annotation.body.accepted_name_usage_id.clone()
             } else {
-                (String::new(), String::new(), String::new())
+                // (String::new(), String::new(), String::new())
+                String::new()
             };
 
         captures.push(CaptureFeature {
@@ -578,8 +581,8 @@ pub(super) async fn captures_dataset(
                 .parse()
                 .boxed_context(error::InvalidCaptureTimeStamp)?,
             accepted_name_usage_id,
-            vernacular_name,
-            scientific_name,
+            // vernacular_name,
+            // scientific_name,
             content_url: image_object.content_url.clone(),
             geom: Coordinate2D::new(station.decimal_longitude, station.decimal_latitude),
         });
@@ -1005,8 +1008,8 @@ mod tests {
                 station_setup_id: "wildlive/ea64f18b8fa1dec31196".into(),
                 capture_time_stamp: "2019-02-26T14:48:27Z".parse().unwrap(),
                 accepted_name_usage_id: "https://www.gbif.org/species/5219426".into(),
-                vernacular_name: "Jaguar".into(),
-                scientific_name: "Panthera onca (Linnaeus, 1758)".into(),
+                // vernacular_name: "Jaguar".into(),
+                // scientific_name: "Panthera onca (Linnaeus, 1758)".into(),
                 content_url: "https://wildlive.senckenberg.de/api/objects/wildlive/75243d4b79e5c91bd3b3?payload=CamTrapImport_2019-03-11_Grid_G-05_105_A_026.JPG".into(),
                 geom: Coordinate2D { x: -62., y: -16.3 },
             },
