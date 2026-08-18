@@ -299,7 +299,7 @@ export class ColumnRangeFilterComponent implements OnDestroy {
                     keepNulls: false,
                 },
                 sources: {
-                    vector: this.createWorkflow(filterValues, ++index, inputWorkflow).operator,
+                    vector: this.createWorkflow(filterValues, index + 1, inputWorkflow).operator,
                 },
             } as ColumnRangeFilterDict,
         };

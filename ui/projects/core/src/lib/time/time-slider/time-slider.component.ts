@@ -93,7 +93,7 @@ export class TimeSliderComponent implements OnInit, OnDestroy {
             if (!this.isRange) {
                 this.endTime = this.startTime;
             }
-            this.changeTime();
+            void this.changeTime();
         });
 
         this.timeline.on('rangechanged', (properties) => {
@@ -150,7 +150,7 @@ export class TimeSliderComponent implements OnInit, OnDestroy {
         await this.projectService.getTimeOnce();
 
         const updatedTime = new Time(moment(this.startTime), moment(this.endTime));
-        this.projectService.setTime(updatedTime);
+        await this.projectService.setTime(updatedTime);
     }
 
     ngOnDestroy(): void {

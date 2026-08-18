@@ -6,7 +6,6 @@ import {
     OnChanges,
     SimpleChanges,
     OnDestroy,
-    ComponentFactoryResolver,
     Injector,
     ChangeDetectorRef,
     inject,
@@ -40,7 +39,6 @@ export class TabsComponent implements OnChanges, OnDestroy {
     readonly tabsService = inject(TabsService);
     protected readonly layoutService = inject(LayoutService);
     protected readonly config = inject(CoreConfig);
-    protected readonly componentFactoryResolver = inject(ComponentFactoryResolver);
     protected readonly injector = inject(Injector);
     protected readonly changeDetectorRef = inject(ChangeDetectorRef);
 

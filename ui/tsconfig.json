@@ -1,7 +1,6 @@
 {
     "compileOnSave": false,
     "compilerOptions": {
-        "baseUrl": "./",
         "outDir": "./dist/out-tsc",
         "sourceMap": true,
         "declaration": false,
@@ -13,9 +12,9 @@
         "target": "ES2022",
         "lib": ["ES2022", "dom", "ESNext.Disposable"],
         "paths": {
-            "@geoengine/core": ["dist/core", "projects/core/src"],
-            "@geoengine/common": ["dist/common", "projects/common/src"],
-            "@geoengine/manager": ["projects/manager/src"],
+            "@geoengine/core": ["./dist/core", "./projects/core/src"],
+            "@geoengine/common": ["./dist/common", "./projects/common/src"],
+            "@geoengine/manager": ["./projects/manager/src"],
             "fast-json-patch/index.mjs": ["./node_modules/fast-json-patch/index.d.ts"]
         },
         "forceConsistentCasingInFileNames": true,

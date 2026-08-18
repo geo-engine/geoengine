@@ -223,13 +223,13 @@ export class RasterizationComponent implements OnDestroy {
 
     private rasterizationParams(): GridRasterizationDict | DensityRasterizationDict | null {
         let params: GridRasterizationDict | DensityRasterizationDict | null = null;
-        let rasterization = this.form.controls.rasterization;
+        let rasterization;
 
         if (this.selected.value === 0) {
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- needed for TS to narrow the union type
             rasterization = this.form.controls.rasterization as FormGroup<GridForm>;
 
-            return (params = {
+            params = {
                 type: 'grid',
                 spatialResolution: {
                     x: rasterization?.value.resolution?.resX ?? 10,
@@ -240,19 +240,18 @@ export class RasterizationComponent implements OnDestroy {
                     x: rasterization?.value.origin?.originX ?? 0,
                     y: rasterization?.value.origin?.originY ?? 0,
                 },
-            });
-        }
-
-        if (this.selected.value === 1) {
+            };
+        } else if (this.selected.value === 1) {
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- needed for TS to narrow the union type
             rasterization = this.form.controls.rasterization as FormGroup<DensityForm>;
 
-            return (params = {
+            params = {
                 type: 'density',
                 cutoff: rasterization?.value.cutoff ?? 10,
                 stddev: rasterization?.value.stddev ?? 10,
-            });
+            };
         }
+
         return params;
     }
 }

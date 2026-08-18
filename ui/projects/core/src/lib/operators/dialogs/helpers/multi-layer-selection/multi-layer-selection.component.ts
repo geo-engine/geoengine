@@ -1,6 +1,6 @@
 import {of, zip, forkJoin, firstValueFrom} from 'rxjs';
 import {map, mergeMap} from 'rxjs/operators';
-import {Component, ChangeDetectionStrategy, inject, input, computed, model, signal, output, forwardRef, effect} from '@angular/core';
+import {Component, ChangeDetectionStrategy, inject, input, computed, model, signal, forwardRef, effect, linkedSignal} from '@angular/core';
 import {ProjectService} from '../../../../project/project.service';
 import {
     Layer,
@@ -89,12 +89,12 @@ export class MultiLayerSelectionComponent implements FormValueControl<Array<Laye
     /**
      * The minimum number of elements to select.
      */
-    readonly min = input<number | undefined>();
+    readonly minLength = input<number | undefined>();
 
     /**
      * The maximum number of elements to select.
      */
-    readonly max = input<number | undefined>();
+    readonly maxLength = input<number | undefined>();
 
     /**
      * The type is used as a filter for the layers to choose from.
@@ -106,7 +106,13 @@ export class MultiLayerSelectionComponent implements FormValueControl<Array<Laye
      */
     readonly inputNaming = input<(index: number) => string>((idx) => 'Input ' + this.toLetters(idx));
 
-    readonly touched = output<boolean>();
+    readonly touched = input<boolean>(false);
+
+    /**
+     * A combination from the `touched` input and the `touched` output.
+     * This is used to mark the control as touched when the user interacts with it.
+     */
+    readonly wasTouched = linkedSignal(() => this.touched());
 
     /**
      * The title of the component (optional).
@@ -137,7 +143,11 @@ export class MultiLayerSelectionComponent implements FormValueControl<Array<Laye
             allLayers: this.allLayers(),
         }),
         stream: ({params}) => {
-            return of(params.layers ?? params.allLayers).pipe(
+            const inputLayers = params.layers ?? params.allLayers;
+            if (inputLayers.length === 0) {
+                return of([]);
+            }
+            return of(inputLayers).pipe(
                 mergeMap((layers) => {
                     const layersAndMetadata = layers.map((l) => zip(of(l), this.projectService.getLayerMetadata(l)));
                     return forkJoin(layersAndMetadata);
@@ -150,11 +160,11 @@ export class MultiLayerSelectionComponent implements FormValueControl<Array<Laye
     });
 
     readonly hasLayers = computed(() => this.filteredLayers.value().length > 0);
-    readonly layersAtMin = computed(() => !this.hasLayers() || this.value().length <= (this.min() ?? 1));
-    readonly layersAtMax = computed(() => !this.hasLayers() || this.value().length >= (this.max() ?? 1));
+    readonly layersAtMin = computed(() => !this.hasLayers() || this.value().length <= (this.minLength() ?? 1));
+    readonly layersAtMax = computed(() => !this.hasLayers() || this.value().length >= (this.maxLength() ?? 1));
     readonly minNotEqualMax = computed(() => {
-        const min = this.min();
-        const max = this.max();
+        const min = this.minLength();
+        const max = this.maxLength();
         return min !== undefined && max !== undefined && min !== max;
     });
 
@@ -164,8 +174,8 @@ export class MultiLayerSelectionComponent implements FormValueControl<Array<Laye
         // check min and max wrt. value
         effect(() => {
             const selectedLayers = this.value();
-            const min = this.min();
-            const max = this.max();
+            const min = this.minLength();
+            const max = this.maxLength();
 
             if (max !== undefined && selectedLayers.length > max) {
                 this.value.set(selectedLayers.slice(0, max - 1));
@@ -190,7 +200,8 @@ export class MultiLayerSelectionComponent implements FormValueControl<Array<Laye
         effect(() => {
             this.onChange(this.value());
         });
-        this.touched.subscribe(() => {
+        effect(() => {
+            this.wasTouched();
             this.onTouched();
         });
     }
@@ -206,7 +217,7 @@ export class MultiLayerSelectionComponent implements FormValueControl<Array<Laye
 
     add(): void {
         const selectedLayers = this.value();
-        const max = this.max();
+        const max = this.maxLength();
         if (max !== undefined && selectedLayers.length >= max) {
             return;
         }
@@ -218,7 +229,7 @@ export class MultiLayerSelectionComponent implements FormValueControl<Array<Laye
 
     remove(): void {
         const selectedLayers = this.value();
-        const min = this.min();
+        const min = this.minLength();
         if (min !== undefined && selectedLayers.length <= min) {
             return;
         }

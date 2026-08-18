@@ -1,4 +1,4 @@
-import {Component, viewChild} from '@angular/core';
+import {Component, viewChild, ChangeDetectionStrategy} from '@angular/core';
 import {ProviderListComponent} from './provider-list/provider-list.component';
 import {LayerProviderListing} from '@geoengine/api-client';
 import {ProviderEditorComponent} from './provider-editor/provider-editor.component';
@@ -7,6 +7,7 @@ import {ProviderEditorComponent} from './provider-editor/provider-editor.compone
     selector: 'geoengine-manager-providers',
     templateUrl: './providers.component.html',
     styleUrl: './providers.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [ProviderEditorComponent, ProviderListComponent],
 })
 export class ProvidersComponent {

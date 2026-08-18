@@ -1,4 +1,4 @@
-import {Component, inject} from '@angular/core';
+import {Component, inject, ChangeDetectionStrategy} from '@angular/core';
 import {RouterOutlet} from '@angular/router';
 import {CoreConfig, CoreModule} from '@geoengine/core';
 import {DataSelectionService} from './data-selection.service';
@@ -8,6 +8,7 @@ import {DataSelectionService} from './data-selection.service';
     imports: [RouterOutlet, CoreModule],
     providers: [DataSelectionService],
     templateUrl: './app.component.html',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     styleUrl: './app.component.scss',
 })
 export class AppComponent {

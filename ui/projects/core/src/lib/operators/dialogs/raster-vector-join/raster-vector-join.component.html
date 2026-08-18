@@ -11,8 +11,8 @@
             <geoengine-multi-layer-selection
                 [types]="allowedRasterTypes"
                 formControlName="rasterLayers"
-                [min]="minNumberOfRasterInputs"
-                [max]="maxNumberOfRasterInputs"
+                [minLength]="minNumberOfRasterInputs"
+                [maxLength]="maxNumberOfRasterInputs"
             ></geoengine-multi-layer-selection>
         </ng-container>
 

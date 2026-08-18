@@ -1,6 +1,6 @@
 import {DataSource} from '@angular/cdk/collections';
 import {CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf} from '@angular/cdk/scrolling';
-import {AfterContentInit, Component, inject, output, viewChild} from '@angular/core';
+import {AfterContentInit, Component, inject, output, viewChild, ChangeDetectionStrategy} from '@angular/core';
 import {MatDialog} from '@angular/material/dialog';
 import {DatasetsService} from '@geoengine/common';
 import {DatasetListing} from '@geoengine/api-client';
@@ -30,6 +30,7 @@ import {AsyncPipe} from '@angular/common';
     selector: 'geoengine-manager-dataset-list',
     templateUrl: './dataset-list.component.html',
     styleUrl: './dataset-list.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         MatButton,
         MatIcon,

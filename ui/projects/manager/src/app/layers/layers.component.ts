@@ -1,4 +1,4 @@
-import {Component, signal, WritableSignal, inject, viewChild} from '@angular/core';
+import {Component, signal, WritableSignal, inject, viewChild, ChangeDetectionStrategy} from '@angular/core';
 import {
     CollectionNavigation,
     LAYER_DB_PROVIDER_ID,
@@ -30,6 +30,7 @@ export type ItemId = {type: ItemType.Layer; layer: UUID} | {type: ItemType.Colle
     selector: 'geoengine-manager-layers',
     templateUrl: './layers.component.html',
     styleUrl: './layers.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         MatButton,
         MatIcon,

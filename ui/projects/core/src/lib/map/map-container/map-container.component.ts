@@ -549,8 +549,9 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
             const oldCenterPoint = new OlGeomPoint(centerCoord);
             newCenterPoint = oldCenterPoint.transform(this.view.getProjection(), olProjection);
 
-            if (!containsCoordinate(olProjection.getExtent(), newCenterPoint.getCoordinates())) {
-                newCenterPoint = new OlGeomPoint(getCenter(olProjection.getExtent()));
+            const olProjectionExtent = olProjection.getExtent();
+            if (olProjectionExtent && !containsCoordinate(olProjectionExtent, newCenterPoint.getCoordinates())) {
+                newCenterPoint = new OlGeomPoint(getCenter(olProjectionExtent));
                 zoomLevel = DEFAULT_ZOOM_LEVEL;
             }
         } else if (this.config.DEFAULTS.FOCUS_EXTENT) {
@@ -614,10 +615,17 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
             return;
         }
 
+        const extent = this.view.calculateExtent(this.maps[0].getSize());
+        const maxExtent = this.view.getProjection().getExtent();
+
+        if (!extent || !maxExtent) {
+            return;
+        }
+
         this.mapService.setViewportSize({
-            extent: olExtentToTuple(this.view.calculateExtent(this.maps[0].getSize())),
+            extent: olExtentToTuple(extent),
             resolution,
-            maxExtent: olExtentToTuple(this.view.getProjection().getExtent()),
+            maxExtent: olExtentToTuple(maxExtent),
         });
     }
 
@@ -687,14 +695,15 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
             });
 
             // eslint-disable-next-line @typescript-eslint/no-misused-promises
-            source.setLoader(async (_extent, _resolution, sourceProjection): Promise<void> => {
+            source.setLoader(async (_extent, _resolution, sourceProjection): Promise<Array<OlFeatureLike>> => {
                 const dataProjection = 'EPSG:4326';
                 const response = await fetch('assets/fallback-base-layer/ne_50m_land.fgb');
 
                 if (response.body === null) {
-                    return;
+                    return [];
                 }
 
+                const features = [];
                 for await (const _feature of flatgeobuf.deserialize(response.body)) {
                     const geometry = _feature.getGeometry()!;
                     geometry.transform(dataProjection, sourceProjection);
@@ -703,8 +712,10 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
                     feature.setProperties(_feature.getProperties());
                     feature.setId(_feature.getId());
 
-                    source.addFeature(feature);
+                    features.push(feature);
                 }
+
+                return features;
             });
 
             return source;

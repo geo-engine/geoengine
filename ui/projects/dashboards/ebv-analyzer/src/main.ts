@@ -3,7 +3,7 @@ import {CoreConfig, LayoutService, MapService, ProjectService, SidenavRef, Spati
 import {CommonConfig, NotificationService, RandomColorService, UserService} from '@geoengine/common';
 import {provideAppInitializer, inject, importProvidersFrom, provideZonelessChangeDetection} from '@angular/core';
 import {DataSelectionService} from './app/data-selection.service';
-import {provideHttpClient, withInterceptorsFromDi} from '@angular/common/http';
+import {provideHttpClient, withInterceptorsFromDi, withXhr} from '@angular/common/http';
 import {provideAnimations} from '@angular/platform-browser/animations';
 import {BrowserModule, bootstrapApplication} from '@angular/platform-browser';
 import {provideRouter} from '@angular/router';
@@ -41,7 +41,7 @@ bootstrapApplication(AppComponent, {
         SpatialReferenceService,
         DataSelectionService,
         UserService,
-        provideHttpClient(withInterceptorsFromDi()),
+        provideHttpClient(withXhr(), withInterceptorsFromDi()),
         provideAnimations(),
         provideRouter([{path: '**', component: AppComponent}]),
     ],

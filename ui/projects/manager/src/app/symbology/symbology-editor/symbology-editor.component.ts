@@ -1,4 +1,4 @@
-import {Component, Input, OnChanges, SimpleChanges, inject, input, viewChild} from '@angular/core';
+import {Component, Input, OnChanges, SimpleChanges, inject, input, viewChild, ChangeDetectionStrategy} from '@angular/core';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {
     DatasetsService,
@@ -18,6 +18,7 @@ import {MatButton} from '@angular/material/button';
     selector: 'geoengine-manager-symbology-editor',
     templateUrl: './symbology-editor.component.html',
     styleUrl: './symbology-editor.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [CommonModule, MatButton],
 })
 export class SymbologyEditorComponent implements OnChanges {
@@ -61,11 +62,11 @@ export class SymbologyEditorComponent implements OnChanges {
 
     applyChanges(): void {
         if (this.rasterSymbology) {
-            this.updateRasterSymbology();
+            void this.updateRasterSymbology();
         }
 
         if (this.vectorSymbology) {
-            this.updateVectorSymbology();
+            void this.updateVectorSymbology();
         }
     }
 

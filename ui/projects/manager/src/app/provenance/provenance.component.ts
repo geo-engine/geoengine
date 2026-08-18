@@ -1,4 +1,4 @@
-import {Component, OnChanges, SimpleChanges, input, output} from '@angular/core';
+import {Component, OnChanges, SimpleChanges, input, output, ChangeDetectionStrategy} from '@angular/core';
 import {FormArray, FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {geoengineValidators} from '@geoengine/common';
 import {Provenance} from '@geoengine/api-client';
@@ -26,6 +26,7 @@ export interface ProvenanceChange {
     selector: 'geoengine-manager-provenance',
     templateUrl: './provenance.component.html',
     styleUrl: './provenance.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [FormsModule, ReactiveFormsModule, MatDivider, MatFormField, MatLabel, MatInput, MatIconButton, MatIcon, MatButton],
 })
 export class ProvenanceComponent implements OnChanges {

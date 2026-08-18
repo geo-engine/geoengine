@@ -259,15 +259,13 @@ export class DataTableComponent implements OnInit, AfterViewInit, OnDestroy {
         const xCoords: string[] = [];
         const yCoords: string[] = [];
 
-        if (
-            !(
-                featureType === 'Polygon' ||
-                featureType === 'MultiPolygon' ||
-                featureType === 'LineString' ||
-                featureType === 'MultiLineString' ||
-                featureType === 'Point'
-            )
-        ) {
+        if (!(
+            featureType === 'Polygon' ||
+            featureType === 'MultiPolygon' ||
+            featureType === 'LineString' ||
+            featureType === 'MultiLineString' ||
+            featureType === 'Point'
+        )) {
             xCoords.push('N/A');
             yCoords.push('N/A');
             return [xCoords, yCoords];

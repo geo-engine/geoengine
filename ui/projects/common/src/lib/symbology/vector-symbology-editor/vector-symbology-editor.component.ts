@@ -81,7 +81,7 @@ export class VectorSymbologyEditorComponent implements OnChanges, OnInit {
                 this.currentSymbology instanceof ClusteredPointSymbology ||
                 this.currentSymbology instanceof PolygonSymbology;
             this.showRadiusEditor = this.currentSymbology instanceof PointSymbology;
-            this.initializeAttributes();
+            void this.initializeAttributes();
         }
     }
 
@@ -92,7 +92,7 @@ export class VectorSymbologyEditorComponent implements OnChanges, OnInit {
             this.currentSymbology instanceof ClusteredPointSymbology ||
             this.currentSymbology instanceof PolygonSymbology;
         this.showRadiusEditor = this.currentSymbology instanceof PointSymbology;
-        this.initializeAttributes();
+        void this.initializeAttributes();
     }
 
     get isPointLayer(): boolean {
@@ -484,8 +484,8 @@ export class VectorSymbologyEditorComponent implements OnChanges, OnInit {
         this.changedSymbology.emit(this.currentSymbology);
     }
 
-    protected initializeAttributes(): void {
-        this.workflowsService.getMetadata(this.symbologyWorkflow().workflowId).then((metadata) => {
+    protected async initializeAttributes(): Promise<void> {
+        await this.workflowsService.getMetadata(this.symbologyWorkflow().workflowId).then((metadata) => {
             if (!(metadata.type === 'vector')) {
                 return;
             }

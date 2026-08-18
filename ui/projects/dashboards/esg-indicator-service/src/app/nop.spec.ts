@@ -1,3 +1,5 @@
+import {describe, it, expect} from 'vitest';
+
 // this file can be removed as soon as there is a real test in the project
 
 describe('NopTest', () => {

@@ -79,13 +79,13 @@ export class TimeStepSelectorComponent implements OnChanges {
     /**
      * On a slider event, calculate the timestamp and set the new time for the app layers
      */
-    setTime(tick: number): void {
+    async setTime(tick: number): Promise<void> {
         const timeSteps = this.timeSteps();
         if (!timeSteps) {
             return;
         }
         const timeStep = timeSteps[tick];
-        this.projectService.setTime(timeStep);
+        await this.projectService.setTime(timeStep);
     }
 
     /**

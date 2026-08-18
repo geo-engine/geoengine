@@ -1,4 +1,4 @@
-import {ChangeDetectorRef, Component, OnChanges, SimpleChanges, inject, input} from '@angular/core';
+import {ChangeDetectorRef, Component, OnChanges, SimpleChanges, inject, input, ChangeDetectionStrategy} from '@angular/core';
 import {FormsModule, ReactiveFormsModule, UntypedFormControl, UntypedFormGroup, Validators} from '@angular/forms';
 import {DatasetsService} from '../datasets.service';
 import {UploadsService} from '../../uploads/uploads.service';
@@ -39,6 +39,7 @@ import {FxLayoutDirective} from '../../util/directives/flexbox-legacy.directive'
         FxLayoutDirective,
     ],
     templateUrl: './ogr-dataset.component.html',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     styleUrl: './ogr-dataset.component.css',
 })
 export class OgrDatasetComponent implements OnChanges {
@@ -95,7 +96,7 @@ export class OgrDatasetComponent implements OnChanges {
     }
     ngOnChanges(changes: SimpleChanges): void {
         if (changes.uploadId?.currentValue) {
-            this.setUpMetadataSpecification(changes.uploadId.currentValue);
+            void this.setUpMetadataSpecification(changes.uploadId.currentValue);
             return;
         }
 
@@ -294,8 +295,8 @@ export class OgrDatasetComponent implements OnChanges {
         }
     }
 
-    reloadSuggestion(): void {
-        this.suggest(this.formMetaData.controls.mainFile.value, this.formMetaData.controls.layerName.value);
+    async reloadSuggestion(): Promise<void> {
+        await this.suggest(this.formMetaData.controls.mainFile.value, this.formMetaData.controls.layerName.value);
     }
 
     fillMetaDataForm(suggest: MetaDataSuggestion): void {
@@ -379,7 +380,7 @@ export class OgrDatasetComponent implements OnChanges {
     }
 
     async suggest(mainFile: string | undefined = undefined, layerName: string | undefined = undefined): Promise<void> {
-        let dataPath = undefined;
+        let dataPath;
 
         const uploadId = this.uploadId();
         const volumeName = this.volumeName();

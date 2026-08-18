@@ -83,7 +83,7 @@ export class RasterIconComponent {
         const isGradient = colorizer.isGradient();
         const scale = isGradient ? numberOfColors / (xCells + yCells - 1) : numberOfColors / numberOfCells;
         const idx = y * xCells + x;
-        let colorIdx = 0;
+        let colorIdx;
         if (numberOfColors === 2) {
             colorIdx = y % 2 === 0 ? x % 2 : (x + 1) % 2;
         } else {
