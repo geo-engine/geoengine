@@ -1583,6 +1583,7 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    #[allow(clippy::float_cmp)]
     fn read_all_valid_with_no_data_override() {
         // This test verifies that when GDAL reports all pixels as valid
         // (is_all_valid returns true), but an explicit no_data_value is set
@@ -1651,10 +1652,7 @@ mod tests {
                 );
             }
             other => {
-                panic!(
-                    "Expected WithNoData or AllValid variant, but got {:?}",
-                    other
-                );
+                panic!("Expected WithNoData or AllValid variant, but got {other:?}");
             }
         }
     }
