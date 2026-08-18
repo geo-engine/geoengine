@@ -172,7 +172,7 @@ mod tests {
         primitives::CacheHint,
         raster::{
             GeoTransform, GeoTransformAccess, Grid2D, GridOrEmpty, MaskedGrid, RasterTile2D,
-            TileInformation,
+            TileIdx, TileInformation, TileSize,
         },
     };
 
@@ -181,8 +181,8 @@ mod tests {
         let input = RasterTile2D::new_with_tile_info(
             Default::default(),
             TileInformation {
-                global_tile_position: [0, 0].into(),
-                tile_size_in_pixels: [3, 3].into(),
+                tile_position: TileIdx::new_y_x(0, 0),
+                tile_size: TileSize([3, 3].into()),
                 global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 1.0, -1.0),
             },
             0,
@@ -196,8 +196,8 @@ mod tests {
         let input_grid = input.into_inner_positioned_grid();
 
         let output_info = TileInformation {
-            global_tile_position: [0, 0].into(),
-            tile_size_in_pixels: [3, 3].into(),
+            tile_position: TileIdx::new_y_x(0, 0),
+            tile_size: TileSize([3, 3].into()),
             global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 0.5, -0.5),
         };
 
@@ -266,8 +266,8 @@ mod tests {
         let input = RasterTile2D::new_with_tile_info(
             Default::default(),
             TileInformation {
-                global_tile_position: [0, 0].into(),
-                tile_size_in_pixels: [3, 3].into(),
+                tile_position: TileIdx::new_y_x(0, 0),
+                tile_size: TileSize([3, 3].into()),
                 global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 1.0, -1.0),
             },
             0,
@@ -281,8 +281,8 @@ mod tests {
         let input_grid = input.into_inner_positioned_grid();
 
         let output_info = TileInformation {
-            global_tile_position: [0, 0].into(),
-            tile_size_in_pixels: [4, 4].into(),
+            tile_position: TileIdx::new_y_x(0, 0),
+            tile_size: TileSize([4, 4].into()),
             global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 0.5, -0.5),
         };
 

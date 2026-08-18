@@ -515,6 +515,8 @@ async fn add_dataset_and_tiles_to_geoengine(
                     gdal_open_options: None,
                     gdal_config_options: None,
                     allow_alphaband_as_mask: false,
+                    tiling_origin: None,
+                    tile_size: None,
                 },
             };
 

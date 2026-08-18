@@ -14,11 +14,11 @@ use crate::{
     workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
+use geoengine_datatypes::raster::{GridShape2D, TilingGrid};
 use geoengine_datatypes::{
     primitives::{
         AxisAlignedRectangle, BandSelection, RasterQueryRectangle, SpatialResolution, TimeInterval,
     },
-    raster::GridShape2D,
     spatial_reference::SpatialReference,
     util::Identifier,
 };
@@ -420,12 +420,15 @@ async fn wcs_get_coverage<C: ApplicationContext>(
         )
         .await?;
 
-    let query_tiling_pixel_grid = wrapped
-        .result_descriptor
-        .spatial_grid_descriptor()
-        .tiling_grid_definition(tiling_spec)
-        .tiling_spatial_grid_definition()
-        .spatial_bounds_to_compatible_spatial_grid(request_partition);
+    let query_tiling_pixel_grid = TilingGrid::from_spatial_grid(
+        wrapped
+            .result_descriptor
+            .spatial_grid_descriptor()
+            .spatial_grid,
+        tiling_spec.tile_size,
+    )
+    .to_spatial_grid()
+    .spatial_bounds_to_compatible_spatial_grid(request_partition);
 
     let query_rect = RasterQueryRectangle::new(
         query_tiling_pixel_grid.grid_bounds(),
@@ -501,15 +504,15 @@ mod tests {
     use actix_web::http::header;
     use actix_web::test;
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::raster::GridShape2D;
-    use geoengine_datatypes::raster::TilingSpecification;
+    use geoengine_datatypes::raster::TileSize;
+    use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::ImageFormat;
     use geoengine_datatypes::util::assert_image_equals_with_format;
     use tokio_postgres::NoTls;
 
     fn tiling_spec() -> TilingSpecification {
-        TilingSpecification::new(GridShape2D::new([600, 600]))
+        TilingSpecification::with_zero_origin(TileSize(GridShape2D::new([600, 600])))
     }
 
     #[ge_context::test]

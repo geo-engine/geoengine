@@ -76,7 +76,7 @@ impl RasterOperator for Onnx {
 
         let model_loading_info = context.ml_model_loading_info(&self.params.model).await?;
 
-        let tiling_shape = context.tiling_specification().tile_size_in_pixels;
+        let tiling_shape = context.tiling_specification().tile_size.0;
 
         // check that we can use the model input / output shape with the operator
         check_model_shape(&model_loading_info.metadata, tiling_shape)?;
@@ -536,7 +536,7 @@ mod tests {
     use geoengine_datatypes::{
         machine_learning::{MlModelName, MlTensorShape3D},
         primitives::{CacheHint, RasterQueryRectangle, TimeInterval},
-        raster::{Grid, GridOrEmpty, GridShape, RasterDataType, RenameBands},
+        raster::{Grid, GridOrEmpty, GridShape, RasterDataType, RenameBands, TileSize},
         spatial_reference::SpatialReference,
         test_data,
         util::test::TestDefault,
@@ -710,6 +710,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -730,6 +731,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -739,6 +741,7 @@ mod tests {
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
+                output_origin: None,
                 rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {
@@ -772,9 +775,9 @@ mod tests {
         };
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
+        exe_ctx.tiling_specification.tile_size = TileSize(GridShape {
             shape_array: [2, 2],
-        };
+        });
         exe_ctx.ml_models.insert(model_name, ml_model_loading_info);
 
         let query_rect = RasterQueryRectangle::new(
@@ -919,6 +922,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -939,6 +943,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -959,6 +964,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -968,6 +974,7 @@ mod tests {
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
+                output_origin: None,
                 rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {
@@ -1001,9 +1008,9 @@ mod tests {
         };
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
+        exe_ctx.tiling_specification.tile_size = TileSize(GridShape {
             shape_array: [2, 2],
-        };
+        });
         exe_ctx.ml_models.insert(model_name, ml_model_loading_info);
 
         let query_rect = RasterQueryRectangle::new(
@@ -1102,10 +1109,13 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::F32,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
-                TestDefault::test_default(),
-                GridBoundingBox2D::new_min_max(-512, -1, 0, 1023).unwrap(),
-            )),
+            spatial_grid: SpatialGridDescriptor::new_source(
+                SpatialGridDefinition::new(
+                    TestDefault::test_default(),
+                    GridBoundingBox2D::new_min_max(-512, -1, 0, 1023).unwrap(),
+                ),
+                TileSize::new(256, 256),
+            ),
             time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5).unwrap()),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1128,6 +1138,7 @@ mod tests {
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
+                output_origin: None,
                 rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {
@@ -1161,9 +1172,9 @@ mod tests {
         };
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
+        exe_ctx.tiling_specification.tile_size = TileSize(GridShape {
             shape_array: [512, 512],
-        };
+        });
         exe_ctx.ml_models.insert(model_name, ml_model_loading_info);
 
         let query_rect = RasterQueryRectangle::new(

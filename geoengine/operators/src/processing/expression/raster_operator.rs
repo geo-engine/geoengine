@@ -256,7 +256,7 @@ mod tests {
     use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval};
     use geoengine_datatypes::raster::{
         Grid2D, GridBoundingBox2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D,
-        RenameBands, TileInformation, TilingSpecification,
+        RenameBands, TileInformation, TileSize, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -311,10 +311,8 @@ mod tests {
 
     #[tokio::test]
     async fn basic_unary() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = [3, 2].into();
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -367,10 +365,8 @@ mod tests {
 
     #[tokio::test]
     async fn unary_map_no_data() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = [3, 2].into();
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -423,10 +419,8 @@ mod tests {
 
     #[tokio::test]
     async fn basic_binary() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = [3, 2].into();
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -443,6 +437,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
+                        output_origin: None,
                         rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
@@ -486,10 +481,8 @@ mod tests {
 
     #[tokio::test]
     async fn basic_coalesce() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = [3, 2].into();
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -513,6 +506,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
+                        output_origin: None,
                         rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
@@ -563,10 +557,8 @@ mod tests {
         let no_data_value = 3;
         let no_data_value_option = Some(no_data_value);
 
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = [3, 2].into();
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -584,6 +576,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
+                        output_origin: None,
                         rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
@@ -639,10 +632,8 @@ mod tests {
         let no_data_value = 0;
         let no_data_value_option = Some(no_data_value);
 
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = [3, 2].into();
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -665,6 +656,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
+                        output_origin: None,
                         rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
@@ -711,10 +703,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_classifies() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = [3, 2].into();
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -740,6 +730,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
+                        output_origin: None,
                         rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
@@ -790,10 +781,8 @@ mod tests {
     #[tokio::test]
     async fn test_functions() {
         let no_data_value = 0;
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = [3, 2].into();
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -809,6 +798,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
+                        output_origin: None,
                         rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
@@ -871,8 +861,8 @@ mod tests {
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
-                global_tile_position: [-1, 0].into(),
-                tile_size_in_pixels: [3, 2].into(),
+                tile_position: [-1, 0].into(),
+                tile_size: [3, 2].into(),
                 global_geo_transform: TestDefault::test_default(),
             },
             0,
@@ -890,6 +880,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -901,10 +892,8 @@ mod tests {
     #[tokio::test]
     async fn it_attaches_cache_hint_1() {
         let no_data_value = 0;
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = [3, 2].into();
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -921,6 +910,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
+                        output_origin: None,
                         rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
@@ -964,10 +954,8 @@ mod tests {
     #[tokio::test]
     async fn it_attaches_cache_hint_2() {
         let no_data_value = 0;
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = [3, 2].into();
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -987,6 +975,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
+                        output_origin: None,
                         rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
@@ -1029,10 +1018,8 @@ mod tests {
     #[tokio::test]
     async fn it_attaches_cache_hint_3() {
         let no_data_value = 0;
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = [3, 2].into();
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -1055,6 +1042,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
+                        output_origin: None,
                         rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {

@@ -50,7 +50,7 @@ mod test_util {
     use geoengine_datatypes::raster::{
         BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, GridOrEmpty2D,
         GridShape2D, MaskedGrid2D, Pixel, RasterDataType, RasterProperties, RasterPropertiesEntry,
-        RasterPropertiesEntryType, RasterTile2D, TileInformation,
+        RasterPropertiesEntryType, RasterTile2D, TileInformation, TileSize,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
     use geoengine_datatypes::util::Identifier;
@@ -175,8 +175,8 @@ mod test_util {
         let raster_tile = RasterTile2D::new_with_tile_info_and_properties(
             TimeInterval::default(),
             TileInformation {
-                global_tile_position: [-1, 0].into(),
-                tile_size_in_pixels: [3, 2].into(),
+                tile_position: [-1, 0].into(),
+                tile_size: [3, 2].into(),
                 global_geo_transform: TestDefault::test_default(),
             },
             0,
@@ -195,6 +195,7 @@ mod test_util {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
                         GridBoundingBox2D::new([-3, 0], [0, 2]).unwrap(),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "band".into(),
@@ -270,6 +271,7 @@ mod test_util {
                 gdal_config_options: None,
                 allow_alphaband_as_mask: true,
                 retry: None,
+                tile_size: None,
             },
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::I16,
@@ -288,6 +290,7 @@ mod test_util {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new(origin_coordinate, x_pixel_size, y_pixel_size),
                     GridShape2D::new_2d(3712, 3712).bounding_box(),
+                    TileSize::new(256, 256),
                 ),
                 bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                     "band".into(),

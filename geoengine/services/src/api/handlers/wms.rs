@@ -20,12 +20,12 @@ use crate::{
     workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
+use geoengine_datatypes::raster::{GridIntersection, TilingGrid};
 use geoengine_datatypes::{
     primitives::{
         AxisAlignedRectangle, BandSelection, CacheHint, RasterQueryRectangle, SpatialPartition2D,
         SpatialResolution,
     },
-    raster::GridIntersection,
     util::Identifier,
 };
 use geoengine_operators::{
@@ -398,12 +398,15 @@ async fn wms_get_map<C: ApplicationContext>(
 
         let processor = initialized.query_processor()?;
 
-        let query_tiling_pixel_grid = wrapped
-            .result_descriptor
-            .spatial_grid_descriptor()
-            .tiling_grid_definition(tiling_spec)
-            .tiling_spatial_grid_definition()
-            .spatial_bounds_to_compatible_spatial_grid(request_bounds);
+        let query_tiling_pixel_grid = TilingGrid::from_spatial_grid(
+            wrapped
+                .result_descriptor
+                .spatial_grid_descriptor()
+                .spatial_grid,
+            tiling_spec.tile_size,
+        )
+        .to_spatial_grid()
+        .spatial_bounds_to_compatible_spatial_grid(request_bounds);
 
         let attributes = raster_colorizer.as_ref().map_or_else(
             // TODO: move this to a method of RasterColorizer
@@ -436,8 +439,8 @@ async fn wms_get_map<C: ApplicationContext>(
         let result_descriptor_intersects_query_space = wrapped
             .result_descriptor
             .spatial_grid
-            .tiling_grid_definition(tiling_spec)
-            .tiling_grid_bounds()
+            .spatial_grid
+            .grid_bounds
             .intersects(&query_tiling_pixel_grid.grid_bounds());
 
         if !result_descriptor_intersects_query_time || !result_descriptor_intersects_query_space {
@@ -571,10 +574,12 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::primitives::CacheTtlSeconds;
-    use geoengine_datatypes::raster::{GridBoundingBox2D, GridShape2D, TilingSpecification};
+    use geoengine_datatypes::raster::{
+        GridBoundingBox2D, GridShape2D, TileSize, TilingSpecification,
+    };
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::assert_image_equals;
-    use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
+    use geoengine_operators::engine::RasterQueryProcessor;
     use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
@@ -703,13 +708,11 @@ mod tests {
     async fn png_from_stream_non_full(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
-        let exe_ctx = ctx.execution_context().unwrap();
-
         let meta_data = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
             meta_data.result_descriptor.clone(),
-            exe_ctx.tiling_specification(),
+            meta_data.result_descriptor.tiling_grid_definition(),
             Box::new(meta_data),
         );
 
@@ -736,15 +739,12 @@ mod tests {
         .unwrap();
 
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "raster_small_22.png");
-
         assert_image_equals(test_data!("wms/raster_small.png"), &image_bytes);
     }
 
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn get_map_test_helper_tiling_spec() -> TilingSpecification {
-        TilingSpecification {
-            tile_size_in_pixels: GridShape2D::new([600, 600]),
-        }
+        TilingSpecification::with_zero_origin(TileSize(GridShape2D::new([600, 600])))
     }
 
     async fn get_map_test_helper(
@@ -813,7 +813,6 @@ mod tests {
         let image_bytes = actix_web::test::read_body(response).await;
 
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_ndvi_2.png");
-
         assert_image_equals(test_data!("wms/get_map_ndvi.png"), &image_bytes);
     }
 

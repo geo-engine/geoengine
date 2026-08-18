@@ -778,6 +778,7 @@ impl Accu for MovingAverageAccu {
 #[cfg(test)]
 mod tests {
     use futures::StreamExt;
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::{
         primitives::{BandSelection, CacheHint, TimeInterval, TimeStep},
         raster::{Grid, GridBoundingBox2D, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
@@ -1227,6 +1228,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_multiple_bands(3),
                 },
@@ -1245,9 +1247,9 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
+        exe_ctx.tiling_specification.tile_size = TileSize(GridShape {
             shape_array: [2, 2],
-        };
+        });
 
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
@@ -1379,6 +1381,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_multiple_bands(3),
                 },
@@ -1397,9 +1400,9 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
+        exe_ctx.tiling_specification.tile_size = TileSize(GridShape {
             shape_array: [2, 2],
-        };
+        });
 
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),

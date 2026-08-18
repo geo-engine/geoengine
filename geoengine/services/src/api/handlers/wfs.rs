@@ -722,7 +722,7 @@ mod tests {
     use actix_web::http::header;
     use actix_web::{http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
+    use geoengine_datatypes::raster::{GridShape2D, TileSize, TilingSpecification};
     use geoengine_datatypes::test_data;
     use geoengine_operators::engine::TypedOperator;
     use geoengine_operators::source::CsvSourceParameters;
@@ -1165,9 +1165,7 @@ x;y
 
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn raster_vector_join_tiling_spec() -> TilingSpecification {
-        TilingSpecification {
-            tile_size_in_pixels: GridShape2D::new([600, 600]),
-        }
+        TilingSpecification::with_zero_origin(TileSize(GridShape2D::new([600, 600])))
     }
 
     #[ge_context::test(tiling_spec = "raster_vector_join_tiling_spec")]

@@ -15,7 +15,7 @@ use crate::{
     },
 };
 use geoengine_datatypes::{
-    raster::{GridBoundingBox2D, GridIdx2D, GridShape2D, GridSize, TilingSpatialGridDefinition},
+    raster::{GridBoundingBox2D, GridIdx2D, GridShape2D, GridSize, TilingGrid},
     test_data,
 };
 use tokio_postgres::NoTls;
@@ -112,16 +112,13 @@ pub fn grid_bbox(min: [isize; 2], max: [isize; 2]) -> GridBoundingBox2D {
     GridBoundingBox2D::new(GridIdx2D::new(min), GridIdx2D::new(max)).unwrap()
 }
 
-/// Calculates the number of tiles in x and y direction for a given tiling spatial grid definition.
-pub fn calculate_number_of_tiles(
-    tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
-) -> GridShape2D {
-    let grid_bounds = tiling_spatial_grid_definition.tiling_grid_bounds();
+/// Calculates the number of tiles in x and y direction for a given tiling grid.
+pub fn calculate_number_of_tiles(tiling_grid: &TilingGrid) -> GridShape2D {
+    let tiling_strategy = tiling_grid.tiling_strategy();
+    let tile_bounds =
+        tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(tiling_grid.pixel_bounds);
 
-    let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
-    let tile_bounds = tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
-
-    GridShape2D::new(tile_bounds.axis_size())
+    GridShape2D::new(tile_bounds.0.axis_size())
 }
 
 /// Returns a session id, data connector id and layer id for an NDVI dataset loaded via [`MultiBandGdalSource`].
@@ -155,6 +152,7 @@ pub async fn session_and_ndvi_multi_band_layer_id(
                 geoengine_datatypes::raster::GeoTransform::new((-180.0, 90.0).into(), 0.1, -0.1),
                 geoengine_datatypes::raster::GridBoundingBox2D::new([0, 0], [1799, 3599]).unwrap(),
             ),
+            geoengine_datatypes::raster::TileSize::new(512, 512),
         ),
         bands: vec![geoengine_operators::engine::RasterBandDescriptor::new(
             "ndvi".to_string(),
@@ -229,6 +227,8 @@ pub async fn session_and_ndvi_multi_band_layer_id(
             gdal_open_options: None,
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
+            tiling_origin: None,
+            tile_size: None,
         },
     };
 

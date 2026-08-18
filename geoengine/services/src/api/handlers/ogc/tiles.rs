@@ -30,7 +30,7 @@ use geoengine_datatypes::{
     primitives::{
         AxisAlignedRectangle, BandSelection, RasterQueryRectangle, TimeInstance, TimeInterval,
     },
-    raster::GridShape2D,
+    raster::{GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, TileSize, TilingGrid},
     util::Identifier,
 };
 use geoengine_operators::{
@@ -387,6 +387,7 @@ impl TileQuery {
 		("session_token" = [])
 	)
 )]
+#[allow(clippy::too_many_lines)]
 pub async fn tile<C: ApplicationContext>(
     req: HttpRequest,
     session: C::Session,
@@ -433,10 +434,6 @@ pub async fn tile<C: ApplicationContext>(
         tiling_specification,
     )?;
 
-    let (expected_number_of_tiles_at_zoom_level, _) =
-        tms_spec.grid_shape_and_origin(query.tile_matrix);
-    query.check_inside_bounds(expected_number_of_tiles_at_zoom_level)?;
-
     #[cfg(debug_assertions)]
     let original_result_descriptor = initialized_operator.result_descriptor().clone();
 
@@ -453,27 +450,49 @@ pub async fn tile<C: ApplicationContext>(
             .boxed_context(error::InitializingProcessingGraph)?;
     }
 
+    let (expected_number_of_tiles_at_zoom_level, _) =
+        tms_spec.grid_shape_and_origin(query.tile_matrix);
+    query.check_inside_bounds(expected_number_of_tiles_at_zoom_level)?;
+
     #[cfg(debug_assertions)]
     assert_multiple_of_original_resolution(
         &original_result_descriptor,
         initialized_operator.result_descriptor(),
     );
 
-    let tile_size_in_pixels = tms_spec.tile_size_in_pixels(query.tile_matrix);
+    let tile_size = tms_spec.tile_size(query.tile_matrix);
     let (tile_width, tile_height) = (
-        u32::try_from(tile_size_in_pixels.x()).unwrap_or(u32::MAX),
-        u32::try_from(tile_size_in_pixels.y()).unwrap_or(u32::MAX),
+        u32::try_from(tile_size.x()).unwrap_or(u32::MAX),
+        u32::try_from(tile_size.y()).unwrap_or(u32::MAX),
     );
 
+    let source_tiling_grid = TilingGrid::from_spatial_grid(
+        initialized_operator
+            .result_descriptor()
+            .spatial_grid_descriptor()
+            .spatial_grid,
+        TileSize(tms_spec.tile_size(query.tile_matrix)),
+    );
+    let tile_spatial_bounds = tms_spec.tile_spatial_bounds(
+        &source_tiling_grid,
+        query.tile_matrix,
+        query.tile_row,
+        query.tile_col,
+    )?;
+    let source_grid = initialized_operator
+        .result_descriptor()
+        .spatial_grid_descriptor()
+        .spatial_grid;
+    let source_tile_min = source_grid
+        .geo_transform()
+        .spatial_to_grid_bounds(&tile_spatial_bounds)
+        .min_index();
+    let source_tile_bounds = GridBoundingBox2D::new_unchecked(
+        source_tile_min,
+        source_tile_min + GridIdx2D::new([tile_height as isize - 1, tile_width as isize - 1]),
+    );
     let query_rect = RasterQueryRectangle::new(
-        tms_spec.tile_grid_bbox(
-            &initialized_operator
-                .result_descriptor()
-                .tiling_grid_definition(tiling_specification),
-            query.tile_matrix,
-            query.tile_row,
-            query.tile_col,
-        )?,
+        source_tile_bounds,
         query.time_interval,
         band_selection(&layer),
     );
@@ -923,7 +942,6 @@ mod tests {
             .and_then(|v| v.to_str().ok())
             .map(ToOwned::to_owned);
         let image_bytes = actix_web::test::read_body(res).await;
-
         assert_eq!(
             status,
             200,

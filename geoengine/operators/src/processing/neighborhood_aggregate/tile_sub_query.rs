@@ -201,7 +201,7 @@ where
             *accu_time,
             *info_out,
             0, // TODO
-            GridOrEmpty::new_empty_shape(info_out.tile_size_in_pixels),
+            GridOrEmpty::new_empty_shape(info_out.tile_size.0),
             accu_cache_hint, // TODO: is this correct? Was CacheHint::max_duration() before
         );
     }
@@ -240,12 +240,12 @@ where
 
     debug_assert_eq!(
         out_data.shape_ref().axis_size(),
-        info_out.tile_size_in_pixels.axis_size()
+        info_out.tile_size.0.axis_size()
     );
 
     RasterTile2D::new(
         *accu_time,
-        info_out.global_tile_position,
+        info_out.tile_position,
         accu_band,
         info_out.global_geo_transform,
         out_data.unbounded(),
@@ -263,8 +263,7 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
 
     let tiling_strategy = tile_info.tiling_strategy();
 
-    let target_tile_start =
-        tiling_strategy.tile_idx_to_global_pixel_idx(tile_info.global_tile_position);
+    let target_tile_start = tiling_strategy.tile_idx_to_global_pixel_idx(tile_info.tile_position);
     let accu_start = target_tile_start
         - GridIdx([
             neighborhood.y_radius() as isize,
@@ -272,10 +271,8 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
         ]);
     let accu_end = accu_start
         + GridIdx2D::new_y_x(
-            tiling_strategy.tile_size_in_pixels.y() as isize + 2 * neighborhood.y_radius() as isize
-                - 1, // -1 because the end is inclusive
-            tiling_strategy.tile_size_in_pixels.x() as isize + 2 * neighborhood.x_radius() as isize
-                - 1,
+            tiling_strategy.tile_size.0.y() as isize + 2 * neighborhood.y_radius() as isize - 1, // -1 because the end is inclusive
+            tiling_strategy.tile_size.0.x() as isize + 2 * neighborhood.x_radius() as isize - 1,
         );
 
     let accu_bounds = GridBoundingBox2D::new(accu_start, accu_end)
@@ -371,7 +368,7 @@ mod tests {
         );
 
         let tiling_strategy = TilingStrategy::new(
-            execution_context.tiling_specification.tile_size_in_pixels,
+            execution_context.tiling_specification.tile_size,
             spatial_grid.geo_transform(),
         );
 
@@ -414,7 +411,7 @@ mod tests {
             aggregator.neighborhood,
         );
 
-        assert_eq!(tile_info.tile_size_in_pixels.axis_size(), [512, 512]);
+        assert_eq!(tile_info.tile_size.0.axis_size(), [512, 512]);
         assert_eq!(
             accu.accu_grid.shape_ref().axis_size(),
             [512 + 2 + 2, 512 + 2 + 2]

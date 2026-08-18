@@ -1353,7 +1353,7 @@ mod tests {
             TimeGranularity, TimeInterval,
         },
         raster::{
-            GeoTransform, Grid, GridBoundingBox2D, GridShape, RasterDataType, RasterTile2D,
+            GeoTransform, Grid, GridBoundingBox2D, RasterDataType, RasterTile2D, TileIdx, TileSize,
             TilingSpecification,
         },
         spatial_reference::SpatialReference,
@@ -2573,7 +2573,7 @@ mod tests {
             let data: Vec<RasterTile2D<u8>> = vec![
                 RasterTile2D {
                     time: TimeInterval::new_unchecked(1_671_868_800_000, 1_671_955_200_000),
-                    tile_position: [-1, 0].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
                     band: 0,
                     global_geo_transform: TestDefault::test_default(),
                     grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
@@ -2582,7 +2582,7 @@ mod tests {
                 },
                 RasterTile2D {
                     time: TimeInterval::new_unchecked(1_671_955_200_000, 1_672_041_600_000),
-                    tile_position: [-1, 0].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
                     band: 0,
                     global_geo_transform: TestDefault::test_default(),
                     grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
@@ -2605,6 +2605,7 @@ mod tests {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::test_default(),
                     GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
+                    TileSize::default_512(),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             };
@@ -2635,9 +2636,7 @@ mod tests {
                 }
             };
 
-            let tiling_specification = TilingSpecification {
-                tile_size_in_pixels: GridShape::new([2, 2]),
-            };
+            let tiling_specification = TilingSpecification::with_zero_origin(TileSize::new(2, 2));
 
             let query_rectangle = RasterQueryRectangle::new(
                 GridBoundingBox2D::new_min_max(-2, -1, 0, 1).unwrap(),

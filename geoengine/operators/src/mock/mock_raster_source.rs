@@ -142,11 +142,12 @@ where
     ) -> Result<futures::stream::BoxStream<crate::util::Result<Self::Output>>> {
         let tiling_strat = self
             .result_descriptor
-            .tiling_grid_definition(ctx.tiling_specification())
-            .generate_data_tiling_strategy();
+            .tiling_grid_definition()
+            .tiling_strategy();
 
-        let tiling_bounds =
-            tiling_strat.global_pixel_grid_bounds_to_tile_grid_bounds(query.spatial_bounds());
+        let tiling_bounds = tiling_strat
+            .global_pixel_grid_bounds_to_tile_grid_bounds(query.spatial_bounds())
+            .0;
 
         let times = self.time_query(query.time_interval(), ctx).await?;
 
@@ -175,7 +176,7 @@ where
                         tile,
                         band,
                         tiling_strat.geo_transform,
-                        GridOrEmpty::new_empty_shape(tiling_strat.tile_size_in_pixels),
+                        GridOrEmpty::new_empty_shape(tiling_strat.tile_size.0),
                         CacheHint::no_cache(),
                     )
                 })
@@ -348,10 +349,13 @@ macro_rules! impl_mock_raster_source {
                     );
                 };
 
+                let mut result_descriptor = self.params.result_descriptor;
+                result_descriptor.spatial_grid.tile_size = tiling_specification.tile_size;
+
                 Ok(InitializedMockRasterSource {
                     name,
                     path,
-                    result_descriptor: self.params.result_descriptor,
+                    result_descriptor,
                     data,
                     tiling_specification,
                 }
@@ -460,6 +464,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BandSelection, CacheHint, TimeInstance, TimeInterval, TimeStep,
     };
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::raster::{
         BoundedGrid, GeoTransform, Grid, Grid2D, GridBoundingBox2D, MaskedGrid, RasterDataType,
         RasterProperties, TileInformation,
@@ -478,8 +483,8 @@ mod tests {
             TimeInterval::default(),
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
-                global_tile_position: [0, 0].into(),
-                tile_size_in_pixels: [3, 2].into(),
+                tile_position: [0, 0].into(),
+                tile_size: [3, 2].into(),
             },
             0,
             raster.into(),
@@ -496,6 +501,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., 0.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 2).bounding_box(),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -566,6 +572,7 @@ mod tests {
                             }
                         },
                         "state": "source",
+                        "tileSize": {"shapeArray": [256, 256]},
                     },
                     "bands": [
                         {
@@ -582,10 +589,8 @@ mod tests {
 
         let deserialized: Box<dyn RasterOperator> = serde_json::from_value(serialized).unwrap();
 
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = [3, 2].into();
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -662,6 +667,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -669,8 +675,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::with_zero_origin([3, 2].into()),
+        );
 
         let query_processor = raster_source
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -790,6 +797,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -797,8 +805,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::with_zero_origin([3, 2].into()),
+        );
 
         let query_processor = raster_source
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)

@@ -594,6 +594,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geoengine_datatypes::raster::TileSize;
 
     use crate::{
         engine::{
@@ -908,7 +909,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_absolute_raster_shift() {
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -922,12 +923,14 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
                 GridShape2D::new_2d(3, 4).bounding_box(),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
 
-        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size_in_pixels));
+        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size));
         let raster_tiles = vec![
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -935,8 +938,8 @@ mod tests {
                     DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: [-1, 0].into(),
+                    tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -949,8 +952,8 @@ mod tests {
                     DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: [-1, 1].into(),
+                    tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -963,8 +966,8 @@ mod tests {
                     DateTime::new_utc(2012, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: [-1, 0].into(),
+                    tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -977,8 +980,8 @@ mod tests {
                     DateTime::new_utc(2012, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: [-1, 1].into(),
+                    tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -991,8 +994,8 @@ mod tests {
                     DateTime::new_utc(2013, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: [-1, 0].into(),
+                    tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1005,8 +1008,8 @@ mod tests {
                     DateTime::new_utc(2013, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: [-1, 1].into(),
+                    tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1090,7 +1093,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_relative_raster_shift() {
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1104,12 +1107,14 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, 0], [0, 4]).unwrap(),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
 
-        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size_in_pixels));
+        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size));
         let raster_tiles = vec![
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -1117,8 +1122,8 @@ mod tests {
                     DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: [-1, 0].into(),
+                    tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1131,8 +1136,8 @@ mod tests {
                     DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: [-1, 1].into(),
+                    tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1145,8 +1150,8 @@ mod tests {
                     DateTime::new_utc(2012, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: [-1, 0].into(),
+                    tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1159,8 +1164,8 @@ mod tests {
                     DateTime::new_utc(2012, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: [-1, 1].into(),
+                    tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1173,8 +1178,8 @@ mod tests {
                     DateTime::new_utc(2013, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: [-1, 0].into(),
+                    tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1187,8 +1192,8 @@ mod tests {
                     DateTime::new_utc(2013, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: [-1, 1].into(),
+                    tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1295,6 +1300,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
+                        output_origin: None,
                         rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {

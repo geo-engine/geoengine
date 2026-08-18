@@ -175,12 +175,11 @@ pub struct TilingSpecification {
 
 impl From<TilingSpecification> for geoengine_datatypes::raster::TilingSpecification {
     fn from(ts: TilingSpecification) -> geoengine_datatypes::raster::TilingSpecification {
-        geoengine_datatypes::raster::TilingSpecification {
-            tile_size_in_pixels: geoengine_datatypes::raster::GridShape2D::from([
-                ts.tile_shape_pixels_y,
-                ts.tile_shape_pixels_x,
-            ]),
-        }
+        geoengine_datatypes::raster::TilingSpecification::with_zero_origin(
+            geoengine_datatypes::raster::TileSize(geoengine_datatypes::raster::GridShape2D::from(
+                [ts.tile_shape_pixels_y, ts.tile_shape_pixels_x],
+            )),
+        )
     }
 }
 

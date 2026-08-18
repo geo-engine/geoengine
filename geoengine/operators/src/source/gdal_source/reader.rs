@@ -82,6 +82,8 @@ mod tests {
     };
 
     use super::*;
+    use geoengine_datatypes::raster::TileIdx;
+    use geoengine_datatypes::raster::TileSize;
 
     // TODO (low): name / test
     async fn load_ndvi_jan_2014_by_process(
@@ -129,6 +131,7 @@ mod tests {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         };
 
         GdalPoolReader::from(gdal_worker)
@@ -157,8 +160,8 @@ mod tests {
         );
 
         TileInformation {
-            tile_size_in_pixels: shape,
-            global_tile_position: [0, 0].into(),
+            tile_size: TileSize(shape),
+            tile_position: TileIdx::new_y_x(0, 0),
             global_geo_transform: real_geotransform,
         }
     }

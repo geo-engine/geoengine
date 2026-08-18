@@ -1633,6 +1633,8 @@ impl AssetBandProcessor<'_> {
                 gdal_open_options: None,
                 gdal_config_options,
                 allow_alphaband_as_mask: false,
+                tiling_origin: None,
+                tile_size: None,
             },
         };
 
@@ -1744,6 +1746,8 @@ impl AssetBandProcessor<'_> {
                 gdal_open_options: None,
                 gdal_config_options,
                 allow_alphaband_as_mask: false,
+                tiling_origin: None,
+                tile_size: None,
             },
         };
 

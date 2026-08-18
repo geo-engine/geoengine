@@ -235,8 +235,8 @@ mod tests {
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::DateTime;
     use geoengine_datatypes::raster::{
-        GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, RasterTile2D, TileInformation,
-        TilingSpecification,
+        GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, RasterTile2D, TileIdx,
+        TileInformation, TileSize, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -259,6 +259,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new_min_max(-3, 0, 0, 2).unwrap(),
+                TileSize::default_512(),
             ),
             time: TimeDescriptor::new_irregular(None),
             bands: RasterBandDescriptors::new_single_band(),
@@ -270,8 +271,8 @@ mod tests {
                     geoengine_datatypes::primitives::TimeInterval::default(),
                     TileInformation {
                         global_geo_transform: TestDefault::test_default(),
-                        global_tile_position: [0, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(0, 0),
+                        tile_size: [3, 2].into(),
                     },
                     0,
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -286,7 +287,7 @@ mod tests {
     }
 
     fn json_tiling_spec() -> TilingSpecification {
-        TilingSpecification::new([3, 2].into())
+        TilingSpecification::with_zero_origin([3, 2].into())
     }
 
     #[ge_context::test(tiling_spec = "json_tiling_spec")]
@@ -352,7 +353,7 @@ mod tests {
     }
 
     fn json_vega_tiling_spec() -> TilingSpecification {
-        TilingSpecification::new([3, 2].into())
+        TilingSpecification::with_zero_origin([3, 2].into())
     }
 
     #[ge_context::test(tiling_spec = "json_vega_tiling_spec")]

@@ -8,7 +8,8 @@ use geoengine_datatypes::raster::{
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, TimeInterval},
     raster::{
-        GeoTransform, Grid2D, GridOrEmpty2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
+        GeoTransform, Grid2D, GridOrEmpty2D, GridSize, Pixel, RasterTile2D, TilingGrid,
+        TilingSpecification,
     },
     util::test::TestDefault,
 };
@@ -29,7 +30,10 @@ fn setup_gdal_source(
 ) -> GdalSourceProcessor<u8> {
     GdalSourceProcessor::<u8> {
         produced_result_descriptor: meta_data.result_descriptor.clone(),
-        tiling_specification,
+        tiling_grid: TilingGrid::from_spatial_grid(
+            meta_data.result_descriptor.spatial_grid.spatial_grid,
+            tiling_specification.tile_size,
+        ),
         overview_level: 0,
         meta_data: Box::new(meta_data),
         original_resolution_spatial_grid: None,
@@ -40,8 +44,8 @@ fn setup_gdal_source(
 #[allow(clippy::too_many_lines)]
 fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProcessor<u8> {
     let grid: GridOrEmpty2D<u8> = Grid2D::new(
-        tiling_spec.tile_size_in_pixels,
-        vec![42; tiling_spec.tile_size_in_pixels.number_of_elements()],
+        tiling_spec.tile_size.into(),
+        vec![42; tiling_spec.tile_size.number_of_elements()],
     )
     .unwrap()
     .into();
@@ -185,12 +189,11 @@ fn bench_raster_processor<
                     "{}, {}, {}, {}, {}, {}, {}, {}",
                     bench_id,
                     qrect_name,
-                    tiling_spec.tile_size_in_pixels.axis_size_y(),
-                    tiling_spec.tile_size_in_pixels.axis_size_x(),
+                    tiling_spec.tile_size.axis_size_y(),
+                    tiling_spec.tile_size.axis_size_x(),
                     query_elapsed.as_nanos(),
                     number_of_tiles,
-                    number_of_tiles as u128
-                        * tiling_spec.tile_size_in_pixels.number_of_elements() as u128,
+                    number_of_tiles as u128 * tiling_spec.tile_size.number_of_elements() as u128,
                     elapsed.as_nanos()
                 );
             });
@@ -242,7 +245,7 @@ fn bench_no_data_tiles() {
         ),
     ];
 
-    let tiling_specs = vec![TilingSpecification::new([600, 600].into())];
+    let tiling_specs = vec![TilingSpecification::with_zero_origin([600, 600].into())];
 
     let run_time = tokio::runtime::Runtime::new().unwrap();
 
@@ -275,17 +278,17 @@ fn bench_tile_size() {
     let run_time = tokio::runtime::Runtime::new().unwrap();
 
     let tiling_specs = vec![
-        TilingSpecification::new([32, 32].into()),
-        TilingSpecification::new([64, 64].into()),
-        TilingSpecification::new([128, 128].into()),
-        TilingSpecification::new([256, 256].into()),
-        TilingSpecification::new([512, 512].into()),
-        TilingSpecification::new([600, 600].into()),
-        TilingSpecification::new([900, 900].into()),
-        TilingSpecification::new([1024, 1024].into()),
-        TilingSpecification::new([2048, 2048].into()),
-        TilingSpecification::new([4096, 4096].into()),
-        TilingSpecification::new([9000, 9000].into()),
+        TilingSpecification::with_zero_origin([32, 32].into()),
+        TilingSpecification::with_zero_origin([64, 64].into()),
+        TilingSpecification::with_zero_origin([128, 128].into()),
+        TilingSpecification::with_zero_origin([256, 256].into()),
+        TilingSpecification::with_zero_origin([512, 512].into()),
+        TilingSpecification::with_zero_origin([600, 600].into()),
+        TilingSpecification::with_zero_origin([900, 900].into()),
+        TilingSpecification::with_zero_origin([1024, 1024].into()),
+        TilingSpecification::with_zero_origin([2048, 2048].into()),
+        TilingSpecification::with_zero_origin([4096, 4096].into()),
+        TilingSpecification::with_zero_origin([9000, 9000].into()),
     ];
 
     bench_raster_processor(

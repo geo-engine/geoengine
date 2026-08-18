@@ -17,7 +17,7 @@ use futures::StreamExt;
 use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, SpatialResolution};
 use geoengine_datatypes::raster::{
-    Grid2D, GridBoundingBox2D, GridShape2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
+    Grid2D, GridBoundingBox2D, GridShape2D, GridSize, Pixel, RasterTile2D,
 };
 use num::Integer;
 use num_traits::AsPrimitive;
@@ -141,11 +141,10 @@ impl RasterOperator for NeighborhoodAggregate {
         // dimensions must not be larger as the neighboring tiles
         let dimensions = self.params.neighborhood.dimensions();
         ensure!(
-            dimensions.axis_size_x() <= tiling_specification.tile_size_in_pixels.axis_size_x()
-                && dimensions.axis_size_y()
-                    <= tiling_specification.tile_size_in_pixels.axis_size_y(),
+            dimensions.axis_size_x() <= tiling_specification.tile_size.axis_size_x()
+                && dimensions.axis_size_y() <= tiling_specification.tile_size.axis_size_y(),
             error::NeighborhoodTooLarge {
-                limit: tiling_specification.tile_size_in_pixels,
+                limit: tiling_specification.tile_size,
                 actual: dimensions
             }
         );
@@ -163,7 +162,6 @@ impl RasterOperator for NeighborhoodAggregate {
             result_descriptor: raster_source.result_descriptor().clone(),
             raster_source,
             neighborhood: self.params.neighborhood.try_into()?,
-            tiling_specification,
         };
 
         Ok(initialized_operator.boxed())
@@ -179,7 +177,6 @@ pub struct InitializedNeighborhoodAggregate {
     result_descriptor: RasterResultDescriptor,
     raster_source: Box<dyn InitializedRasterOperator>,
     neighborhood: Neighborhood,
-    tiling_specification: TilingSpecification,
 }
 
 impl InitializedRasterOperator for InitializedNeighborhoodAggregate {
@@ -190,13 +187,11 @@ impl InitializedRasterOperator for InitializedNeighborhoodAggregate {
             source_processor, p => match &self.params.aggregate_function  {
                 AggregateFunctionParams::Sum => NeighborhoodAggregateProcessor::<_,_, Sum>::new(
                         p,
-                        self.tiling_specification,
                         self.neighborhood.clone(),
                     ).boxed()
                     .into(),
                     AggregateFunctionParams::StandardDeviation => NeighborhoodAggregateProcessor::<_,_, StandardDeviation>::new(
                         p,
-                        self.tiling_specification,
                         self.neighborhood.clone(),
                     ).boxed()
                     .into(),
@@ -238,7 +233,6 @@ impl InitializedRasterOperator for InitializedNeighborhoodAggregate {
 
 pub struct NeighborhoodAggregateProcessor<Q, P, A> {
     source: Q,
-    tiling_specification: TilingSpecification,
     neighborhood: Neighborhood,
     _phantom_types: PhantomData<(P, A)>,
 }
@@ -248,14 +242,9 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
 {
-    pub fn new(
-        source: Q,
-        tiling_specification: TilingSpecification,
-        neighborhood: Neighborhood,
-    ) -> Self {
+    pub fn new(source: Q, neighborhood: Neighborhood) -> Self {
         Self {
             source,
-            tiling_specification,
             neighborhood,
             _phantom_types: PhantomData,
         }
@@ -292,8 +281,8 @@ where
                 let tiling_strat = self
                     .source
                     .result_descriptor()
-                    .tiling_grid_definition(self.tiling_specification)
-                    .generate_data_tiling_strategy();
+                    .tiling_grid_definition()
+                    .tiling_strategy();
 
                 let sq = RasterSubQueryAdapter::<'a, P, _, _, _>::new(
                     &self.source,
@@ -338,6 +327,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileSize;
 
     use super::*;
     use crate::{
@@ -477,8 +467,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_mean_convolution() {
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::with_zero_origin([3, 3].into()),
+        );
 
         let raster = make_raster();
 
@@ -537,8 +528,9 @@ mod tests {
 
     #[tokio::test]
     async fn check_make_raster() {
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::with_zero_origin([3, 3].into()),
+        );
 
         let raster = make_raster();
 
@@ -567,8 +559,8 @@ mod tests {
             RasterTile2D::<i8>::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 3].into(),
+                    tile_position: [-1, 0].into(),
+                    tile_size: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -580,8 +572,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 3].into(),
+                    tile_position: [-1, 1].into(),
+                    tile_size: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -593,8 +585,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 3].into(),
+                    tile_position: [-1, 0].into(),
+                    tile_size: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -606,8 +598,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 3].into(),
+                    tile_position: [-1, 1].into(),
+                    tile_size: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -637,8 +629,8 @@ mod tests {
             RasterTile2D::<i8>::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 3].into(),
+                    tile_position: [-1, 0].into(),
+                    tile_size: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -650,8 +642,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 3].into(),
+                    tile_position: [-1, 1].into(),
+                    tile_size: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -663,8 +655,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 3].into(),
+                    tile_position: [-1, 0].into(),
+                    tile_size: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -676,8 +668,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 3].into(),
+                    tile_position: [-1, 1].into(),
+                    tile_size: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -701,6 +693,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, 0], [0, 6]).unwrap(),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -748,8 +741,8 @@ mod tests {
 
         let query_rect = RasterQueryRectangle::new(
             result_descriptor
-                .tiling_grid_definition(query_ctx.tiling_specification())
-                .tiling_geo_transform()
+                .tiling_grid_definition()
+                .geo_transform
                 .spatial_to_grid_bounds(
                     &SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
                 ),
@@ -819,8 +812,8 @@ mod tests {
 
         let query_rect = RasterQueryRectangle::new(
             result_descriptor
-                .tiling_grid_definition(query_ctx.tiling_specification())
-                .tiling_geo_transform()
+                .tiling_grid_definition()
+                .geo_transform
                 .spatial_to_grid_bounds(
                     &SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
                 ),
@@ -863,8 +856,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_mean_convolution_multi_bands() {
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::with_zero_origin([3, 3].into()),
+        );
 
         let operator = NeighborhoodAggregate {
             params: NeighborhoodAggregateParams {
@@ -876,6 +870,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
+                        output_origin: None,
                         rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {

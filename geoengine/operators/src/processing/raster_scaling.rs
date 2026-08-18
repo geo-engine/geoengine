@@ -317,6 +317,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileSize;
 
     use crate::{
         engine::{
@@ -340,21 +341,22 @@ mod tests {
 
     #[tokio::test]
     async fn test_unscale() {
-        let tile_size_in_pixels = GridShape2D::new_2d(2, 2);
+        let tile_size = GridShape2D::new_2d(2, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size_in_pixels.bounding_box(),
+                tile_size.bounding_box(),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
-        let raster =
-            MaskedGrid2D::from(Grid2D::new(tile_size_in_pixels, vec![7_u8, 7, 7, 6]).unwrap());
+        let tiling_specification =
+            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+        let raster = MaskedGrid2D::from(Grid2D::new(tile_size, vec![7_u8, 7, 7, 6]).unwrap());
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_ctx = ctx.mock_query_context(ChunkByteSize::test_default());
@@ -367,8 +369,8 @@ mod tests {
             TimeInterval::default(),
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
-                global_tile_position: [0, 0].into(),
-                tile_size_in_pixels,
+                tile_position: [0, 0].into(),
+                tile_size: TileSize(tile_size),
             },
             0,
             raster.into(),
@@ -451,22 +453,23 @@ mod tests {
 
     #[tokio::test]
     async fn test_scale() {
-        let tile_size_in_pixels = GridShape2D::new_2d(2, 2);
+        let tile_size = GridShape2D::new_2d(2, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size_in_pixels.bounding_box(),
+                tile_size.bounding_box(),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
 
-        let raster =
-            MaskedGrid2D::from(Grid2D::new(tile_size_in_pixels, vec![15_u8, 15, 15, 13]).unwrap());
+        let raster = MaskedGrid2D::from(Grid2D::new(tile_size, vec![15_u8, 15, 15, 13]).unwrap());
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_ctx = ctx.mock_query_context(ChunkByteSize::test_default());
@@ -479,8 +482,8 @@ mod tests {
             TimeInterval::default(),
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
-                global_tile_position: [0, 0].into(),
-                tile_size_in_pixels,
+                tile_position: [0, 0].into(),
+                tile_size: TileSize(tile_size),
             },
             0,
             raster.into(),

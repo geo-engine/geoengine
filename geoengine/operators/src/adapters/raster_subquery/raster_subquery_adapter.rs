@@ -455,7 +455,7 @@ where
                 time,
                 tile,
                 band,
-                GridOrEmpty::new_empty_shape(tile.tile_size_in_pixels),
+                GridOrEmpty::new_empty_shape(tile.tile_size.0),
                 CacheHint::max_duration(),
             )
         });

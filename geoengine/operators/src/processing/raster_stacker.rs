@@ -6,27 +6,32 @@ use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSources, MultipleRasterSources, Operator, OperatorName, QueryContext,
     QueryProcessor, RasterBandDescriptor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    RasterResultDescriptor, SpatialGridDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::{
     InvalidNumberOfRasterStackerInputs, RasterInputsMustHaveSameSpatialReferenceAndDatatype,
 };
 use crate::optimization::OptimizationError;
+use crate::processing::retile::ReTileProcessor;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, SpatialResolution};
+use geoengine_datatypes::primitives::{
+    BandSelection, Coordinate2D, RasterQueryRectangle, SpatialResolution,
+};
 use geoengine_datatypes::raster::{
-    DynamicRasterDataType, GridBoundingBox2D, Pixel, RasterTile2D, RenameBands,
+    DynamicRasterDataType, GridBoundingBox2D, Pixel, RasterTile2D, RenameBands, TilingSpecification,
 };
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterStackerParams {
     pub rename_bands: RenameBands,
+    #[serde(default)]
+    pub output_origin: Option<Coordinate2D>,
 }
 
 /// This `QueryProcessor` stacks all of it's inputs into a single raster time-series.
@@ -42,6 +47,7 @@ impl OperatorName for RasterStacker {
 
 #[typetag::serde]
 #[async_trait]
+#[allow(clippy::too_many_lines)]
 impl RasterOperator for RasterStacker {
     async fn _initialize(
         self: Box<Self>,
@@ -82,15 +88,49 @@ impl RasterOperator for RasterStacker {
             }
         );
 
-        let first_spatial_grid = in_descriptors[0].spatial_grid;
-        let result_spatial_grid = in_descriptors
-            .iter()
-            .skip(1)
-            .map(|x| x.spatial_grid_descriptor())
-            .try_fold(first_spatial_grid, |a, &b| {
-                a.merge(&b)
-                    .ok_or(crate::error::Error::CantMergeSpatialGridDescriptor { a, b })
+        // All inputs must share the same resolution and be pixel-aligned to the output grid.
+        // The output grid uses the first input's pixel size; its origin is the first input's
+        // origin unless overridden via `output_origin`. Inputs that need a different resolution
+        // or a non-aligned origin must be re-tiled/resampled before stacking.
+        let first_spatial_grid = in_descriptors[0].spatial_grid_descriptor();
+        let output_origin = self
+            .params
+            .output_origin
+            .unwrap_or_else(|| first_spatial_grid.geo_transform().origin_coordinate);
+
+        let mut result_grid = first_spatial_grid
+            .spatial_grid
+            .with_moved_origin_exact_grid(output_origin)
+            .ok_or(crate::error::Error::RasterInputsNotReTileCompatible {
+                origin: output_origin,
+                index: 0,
             })?;
+
+        for (idx, descriptor) in in_descriptors.iter().enumerate() {
+            let aligned_grid = descriptor
+                .spatial_grid_descriptor()
+                .spatial_grid
+                .with_moved_origin_exact_grid(output_origin)
+                .ok_or(crate::error::Error::RasterInputsNotReTileCompatible {
+                    origin: output_origin,
+                    index: idx,
+                })?;
+            result_grid = result_grid.merge(&aligned_grid).ok_or(
+                crate::error::Error::RasterInputsNotReTileCompatible {
+                    origin: output_origin,
+                    index: idx,
+                },
+            )?;
+        }
+
+        let output_tile_size = first_spatial_grid.tile_size;
+        if output_tile_size.axis_size_y() == 0 || output_tile_size.axis_size_x() == 0 {
+            return Err(crate::error::Error::InvalidTileSize {
+                tile_size: output_tile_size,
+            });
+        }
+        let result_spatial_grid = SpatialGridDescriptor::new_source(result_grid, output_tile_size);
+        let output_tiling_spec = TilingSpecification::new(output_tile_size, output_origin);
 
         let time = in_descriptors.iter().skip(1).map(|rd| rd.time).fold(
             in_descriptors
@@ -138,6 +178,7 @@ impl RasterOperator for RasterStacker {
             rename_bands: self.params.rename_bands.clone(),
             raster_sources,
             bands_per_source,
+            output_tiling_spec,
         }))
     }
 
@@ -151,6 +192,7 @@ pub struct InitializedRasterStacker {
     rename_bands: RenameBands,
     raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
     bands_per_source: Vec<u32>,
+    output_tiling_spec: TilingSpecification,
 }
 
 impl InitializedRasterOperator for InitializedRasterStacker {
@@ -158,6 +200,7 @@ impl InitializedRasterOperator for InitializedRasterStacker {
         &self.result_descriptor
     }
 
+    #[allow(clippy::too_many_lines)]
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let typed_raster_processors = self
             .raster_sources
@@ -169,11 +212,13 @@ impl InitializedRasterOperator for InitializedRasterStacker {
         let datatype = typed_raster_processors[0].raster_data_type();
 
         let bands_per_source = self.bands_per_source.clone();
+        let target_spatial_grid = *self.result_descriptor.spatial_grid_descriptor();
+        let tiling_spec = self.output_tiling_spec;
 
         // TODO: use a macro to unpack all the input processor to the same datatype?
         Ok(match datatype {
             geoengine_datatypes::raster::RasterDataType::U8 => {
-                let inputs = typed_raster_processors.into_iter().map(|p| p.get_u8().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
+                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_u8().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
                 let p = RasterStackerProcessor::new(
                     inputs,
                     self.result_descriptor.clone(),
@@ -182,7 +227,7 @@ impl InitializedRasterOperator for InitializedRasterStacker {
                 TypedRasterQueryProcessor::U8(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::U16 => {
-                let inputs = typed_raster_processors.into_iter().map(|p| p.get_u16().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
+                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_u16().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
                 let p = RasterStackerProcessor::new(
                     inputs,
                     self.result_descriptor.clone(),
@@ -191,7 +236,7 @@ impl InitializedRasterOperator for InitializedRasterStacker {
                 TypedRasterQueryProcessor::U16(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::U32 => {
-                let inputs = typed_raster_processors.into_iter().map(|p| p.get_u32().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
+                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_u32().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
                 let p = RasterStackerProcessor::new(
                     inputs,
                     self.result_descriptor.clone(),
@@ -200,7 +245,7 @@ impl InitializedRasterOperator for InitializedRasterStacker {
                 TypedRasterQueryProcessor::U32(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::U64 => {
-                let inputs = typed_raster_processors.into_iter().map(|p| p.get_u64().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
+                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_u64().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
                 let p = RasterStackerProcessor::new(
                     inputs,
                     self.result_descriptor.clone(),
@@ -209,7 +254,7 @@ impl InitializedRasterOperator for InitializedRasterStacker {
                 TypedRasterQueryProcessor::U64(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::I8 => {
-                let inputs = typed_raster_processors.into_iter().map(|p| p.get_i8().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
+                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_i8().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
                 let p = RasterStackerProcessor::new(
                     inputs,
                     self.result_descriptor.clone(),
@@ -218,7 +263,7 @@ impl InitializedRasterOperator for InitializedRasterStacker {
                 TypedRasterQueryProcessor::I8(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::I16 => {
-                let inputs = typed_raster_processors.into_iter().map(|p| p.get_i16().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
+                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_i16().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
                 let p = RasterStackerProcessor::new(
                     inputs,
                     self.result_descriptor.clone(),
@@ -227,7 +272,7 @@ impl InitializedRasterOperator for InitializedRasterStacker {
                 TypedRasterQueryProcessor::I16(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::I32 => {
-                let inputs = typed_raster_processors.into_iter().map(|p| p.get_i32().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
+                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_i32().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
                 let p = RasterStackerProcessor::new(
                     inputs,
                     self.result_descriptor.clone(),
@@ -236,7 +281,7 @@ impl InitializedRasterOperator for InitializedRasterStacker {
                 TypedRasterQueryProcessor::I32(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::I64 => {
-                let inputs = typed_raster_processors.into_iter().map(|p| p.get_i64().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
+                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_i64().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
                 let p = RasterStackerProcessor::new(
                     inputs,
                     self.result_descriptor.clone(),
@@ -245,7 +290,7 @@ impl InitializedRasterOperator for InitializedRasterStacker {
                 TypedRasterQueryProcessor::I64(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::F32 => {
-                let inputs = typed_raster_processors.into_iter().map(|p| p.get_f32().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
+                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_f32().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
                 let p = RasterStackerProcessor::new(
                     inputs,
                     self.result_descriptor.clone(),
@@ -254,7 +299,7 @@ impl InitializedRasterOperator for InitializedRasterStacker {
                 TypedRasterQueryProcessor::F32(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::F64 => {
-                let inputs = typed_raster_processors.into_iter().map(|p| p.get_f64().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
+                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_f64().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
                 let p = RasterStackerProcessor::new(
                     inputs,
                     self.result_descriptor.clone(),
@@ -284,6 +329,7 @@ impl InitializedRasterOperator for InitializedRasterStacker {
         Ok(RasterStacker {
             params: RasterStackerParams {
                 rename_bands: self.rename_bands.clone(),
+                output_origin: Some(self.output_tiling_spec.tiling_origin_reference()),
             },
             sources: MultipleRasterSources {
                 rasters: self
@@ -295,6 +341,31 @@ impl InitializedRasterOperator for InitializedRasterStacker {
         }
         .boxed())
     }
+}
+
+/// Wraps a source processor so that its tiles are produced on the stacker's output grid.
+///
+/// Re-alignment is a blit-only `ReTile` (same pixel size, integer-pixel-aligned origins),
+/// which was already validated in [`RasterStacker::_initialize`].
+///
+/// Sources that already produce tiles on the output grid are passed through unchanged.
+fn re_tile_source<T: Pixel>(
+    processor: BoxRasterQueryProcessor<T>,
+    source: &dyn InitializedRasterOperator,
+    target_spatial_grid: SpatialGridDescriptor,
+    tiling_spec: TilingSpecification,
+) -> BoxRasterQueryProcessor<T> {
+    // ponytail: pass-through avoids unnecessary re-tiling of already-aligned inputs.
+    if source.result_descriptor().spatial_grid_descriptor() == &target_spatial_grid {
+        return processor;
+    }
+
+    let target_desc = RasterResultDescriptor {
+        spatial_grid: target_spatial_grid,
+        ..source.result_descriptor().clone()
+    };
+
+    ReTileProcessor::new(processor, target_desc, tiling_spec).boxed()
 }
 
 pub(crate) struct RasterStackerProcessor<T> {
@@ -356,8 +427,8 @@ where
         let mut sources = vec![];
         let tiling_strat = self
             .result_descriptor
-            .tiling_grid_definition(ctx.tiling_specification())
-            .generate_data_tiling_strategy();
+            .tiling_grid_definition()
+            .tiling_strategy();
 
         for (idx, source) in self.sources.iter().enumerate() {
             // FIXME: find a better way to do the selection and avoid work done without benefit.
@@ -426,11 +497,12 @@ where
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileSize;
     use std::str::FromStr;
 
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{CacheHint, TimeInstance, TimeInterval, TimeStep},
+        primitives::{CacheHint, Coordinate2D, TimeInstance, TimeInterval, TimeStep},
         raster::{
             GeoTransform, Grid, GridBoundingBox2D, GridShape, RasterDataType,
             TilesEqualIgnoringCacheHint,
@@ -442,7 +514,7 @@ mod tests {
     use crate::{
         engine::{
             MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors, SingleRasterSource,
-            SpatialGridDescriptor,
+            SpatialGridDescriptor, TimeDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{Expression, ExpressionParams},
@@ -564,6 +636,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                TileSize::new(2, 2),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -586,6 +659,7 @@ mod tests {
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
+                output_origin: None,
                 rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {
@@ -595,9 +669,9 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
+        exe_ctx.tiling_specification.tile_size = TileSize(GridShape {
             shape_array: [2, 2],
-        };
+        });
 
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
@@ -827,6 +901,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                TileSize::new(2, 2),
             ),
             bands: RasterBandDescriptors::new(vec![
                 RasterBandDescriptor::new_unitless("band_0".into()),
@@ -853,6 +928,7 @@ mod tests {
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
+                output_origin: None,
                 rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {
@@ -862,9 +938,9 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
+        exe_ctx.tiling_specification.tile_size = TileSize(GridShape {
             shape_array: [2, 2],
-        };
+        });
 
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-1, 0], [-1, 2]).unwrap(),
@@ -1019,6 +1095,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                TileSize::new(2, 2),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1041,6 +1118,7 @@ mod tests {
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
+                output_origin: None,
                 rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {
@@ -1050,9 +1128,9 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
+        exe_ctx.tiling_specification.tile_size = TileSize(GridShape {
             shape_array: [2, 2],
-        };
+        });
 
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-1, 0], [-1, 2]).unwrap(),
@@ -1117,6 +1195,7 @@ mod tests {
 
         let operator = RasterStacker {
             params: RasterStackerParams {
+                output_origin: None,
                 rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {
@@ -1203,6 +1282,229 @@ mod tests {
         assert!(result_1.iter().all(|t| t.band == 1));
 
         assert_eq!(result_0.len(), result_1.len());
+    }
+
+    #[tokio::test]
+    async fn output_origin_preserves_input_extent() {
+        let input_grid = SpatialGridDescriptor::source_from_parts(
+            GeoTransform::test_default(),
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TileSize::new(2, 2),
+        );
+        let descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_irregular(None),
+            spatial_grid: input_grid,
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let source = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: Vec::<RasterTile2D<u8>>::new(),
+                result_descriptor: descriptor,
+            },
+        }
+        .boxed();
+        let output_origin = Coordinate2D::new(2., -2.);
+        let expected_grid = input_grid
+            .spatial_grid
+            .with_moved_origin_exact_grid(output_origin)
+            .unwrap();
+        let stacker = RasterStacker {
+            params: RasterStackerParams {
+                output_origin: Some(output_origin),
+                rename_bands: RenameBands::Default,
+            },
+            sources: MultipleRasterSources {
+                rasters: vec![source],
+            },
+        }
+        .boxed();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size = TileSize::new(2, 2);
+
+        let initialized = stacker
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            initialized
+                .result_descriptor()
+                .spatial_grid_descriptor()
+                .spatial_grid,
+            expected_grid
+        );
+    }
+
+    #[tokio::test]
+    async fn rejects_incompatible_input_grids() {
+        let make_source = |geo_transform| {
+            MockRasterSource {
+                params: MockRasterSourceParams {
+                    data: Vec::<RasterTile2D<u8>>::new(),
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        time: TimeDescriptor::new_irregular(None),
+                        spatial_grid: SpatialGridDescriptor::source_from_parts(
+                            geo_transform,
+                            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                            TileSize::new(2, 2),
+                        ),
+                        bands: RasterBandDescriptors::new_single_band(),
+                    },
+                },
+            }
+            .boxed()
+        };
+
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size = TileSize::new(2, 2);
+
+        for second_transform in [
+            GeoTransform::new(Coordinate2D::new(0.5, 0.), 1., -1.),
+            GeoTransform::new(Coordinate2D::new(0., 0.), 2., -2.),
+        ] {
+            let stacker = RasterStacker {
+                params: RasterStackerParams {
+                    output_origin: None,
+                    rename_bands: RenameBands::Default,
+                },
+                sources: MultipleRasterSources {
+                    rasters: vec![
+                        make_source(GeoTransform::test_default()),
+                        make_source(second_transform),
+                    ],
+                },
+            }
+            .boxed();
+
+            assert!(matches!(
+                stacker
+                    .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                    .await,
+                Err(crate::error::Error::RasterInputsNotReTileCompatible { .. })
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn it_retiles_sources_with_different_origin() {
+        // Both sources use valid 2x2 tiles, but the second source uses a
+        // pixel-aligned native origin. The stacker must re-tile it to the first
+        // source's output grid.
+        let data1: Vec<RasterTile2D<u8>> = vec![RasterTile2D {
+            time: TimeInterval::new_unchecked(0, 10),
+            tile_position: [-1, 0].into(),
+            band: 0,
+            global_geo_transform: TestDefault::test_default(),
+            grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
+            properties: Default::default(),
+            cache_hint: CacheHint::default(),
+        }];
+
+        let data2: Vec<RasterTile2D<u8>> = vec![RasterTile2D {
+            time: TimeInterval::new_unchecked(0, 10),
+            tile_position: [-1, -1].into(),
+            band: 0,
+            global_geo_transform: GeoTransform::new(Coordinate2D::new(2., 0.), 1., -1.),
+            grid_array: Grid::new([2, 2].into(), vec![10, 11, 12, 13])
+                .unwrap()
+                .into(),
+            properties: Default::default(),
+            cache_hint: CacheHint::default(),
+        }];
+
+        let descriptor1 = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 10)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-2, 0], [-1, 1]).unwrap(),
+                TileSize::new(2, 2),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
+        let descriptor2 = RasterResultDescriptor {
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(2., 0.), 1., -1.),
+                GridBoundingBox2D::new([-2, -2], [-1, -1]).unwrap(),
+                TileSize::new(2, 2),
+            ),
+            ..descriptor1.clone()
+        };
+
+        let mrs1 = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: data1.clone(),
+                result_descriptor: descriptor1,
+            },
+        }
+        .boxed();
+
+        let mrs2 = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: data2.clone(),
+                result_descriptor: descriptor2,
+            },
+        }
+        .boxed();
+
+        let stacker = RasterStacker {
+            params: RasterStackerParams {
+                output_origin: None,
+                rename_bands: RenameBands::Default,
+            },
+            sources: MultipleRasterSources {
+                rasters: vec![mrs1, mrs2],
+            },
+        }
+        .boxed();
+
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size = TileSize(GridShape {
+            shape_array: [2, 2],
+        });
+
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 1]).unwrap(),
+            TimeInterval::new_unchecked(0, 10),
+            [0, 1].try_into().unwrap(),
+        );
+
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+
+        let op = stacker
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let qp = op.query_processor().unwrap().get_u8().unwrap();
+
+        let result = qp
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+
+        let mut expected = vec![data1[0].clone()];
+        expected.push({
+            let mut tile = data2[0].clone();
+            tile.band = 1;
+            tile.tile_position = [-1, 0].into();
+            tile.global_geo_transform = TestDefault::test_default();
+            tile
+        });
+
+        assert!(expected.tiles_equal_ignoring_cache_hint(&result));
     }
 
     #[test]

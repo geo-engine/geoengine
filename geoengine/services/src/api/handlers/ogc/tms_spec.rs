@@ -12,10 +12,10 @@ use crate::api::handlers::{
 use float_cmp::approx_eq;
 use geoengine_datatypes::{
     operations::reproject::suggest_pixel_size_like_gdal_helper,
-    primitives::{Coordinate2D, SpatialResolution},
+    primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution},
     raster::{
-        GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
-        TilingSpatialGridDefinition, TilingSpecification,
+        GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridShapeAccess, GridSize, TileIdx,
+        TilingGrid, TilingSpecification,
     },
     spatial_reference::SpatialReference,
 };
@@ -51,14 +51,51 @@ pub trait TileMatrixSetProvider: Send + Sync {
     /// Computes the pixel bounds of a tile in the global pixel grid of the tiling scheme.
     ///
     /// The resolution is determined by `tile_matrix`, which corresponds to the zoom level in a TMS.
-    /// The origin and orientation of the tile grid is determined by the `tiling_spatial_grid_definition`.
+    /// The origin and orientation of the tile grid is determined by the `tiling_grid`.
+    #[allow(dead_code)]
     fn tile_grid_bbox(
         &self,
-        tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
+        tiling_grid: &TilingGrid,
         tile_matrix: u8,
         tile_row: u32,
         tile_col: u32,
     ) -> OgcApiResult<GridBoundingBox2D>;
+
+    /// Computes tile bounds in TMS spatial coordinates. API handlers convert
+    /// these bounds into the operator's source pixel grid.
+    fn tile_spatial_bounds(
+        &self,
+        _tiling_grid: &TilingGrid,
+        tile_matrix: u8,
+        tile_row: u32,
+        tile_col: u32,
+    ) -> OgcApiResult<SpatialPartition2D> {
+        let matrix_id = tile_matrix.min(self.max_matrix_id() as u8);
+        let (matrix_shape, origin) = self.grid_shape_and_origin(matrix_id);
+        let tile_size = self.tile_size(matrix_id);
+
+        if u64::from(tile_col) >= matrix_shape.x() as u64
+            || u64::from(tile_row) >= matrix_shape.y() as u64
+        {
+            return Err(OgcApiError::TileCoordinatesOutOfBounds {
+                matrix: matrix_id.to_string(),
+                row: tile_row,
+                col: tile_col,
+            });
+        }
+
+        let resolution = self.spatial_resolution(matrix_id);
+        let upper_left = Coordinate2D::new(
+            origin.x + f64::from(tile_col) * tile_size.x() as f64 * resolution.x,
+            origin.y - f64::from(tile_row) * tile_size.y() as f64 * resolution.y,
+        );
+        let lower_right = Coordinate2D::new(
+            upper_left.x + tile_size.x() as f64 * resolution.x,
+            upper_left.y - tile_size.y() as f64 * resolution.y,
+        );
+
+        Ok(SpatialPartition2D::new_unchecked(upper_left, lower_right))
+    }
 
     /// Returns the maximum matrix ID for this tile matrix set
     fn max_matrix_id(&self) -> u32;
@@ -70,7 +107,7 @@ pub trait TileMatrixSetProvider: Send + Sync {
     fn grid_shape_and_origin(&self, matrix_id: u8) -> (GridShape2D, Coordinate2D);
 
     /// Returns the tile size in pixels for a given tile matrix ID
-    fn tile_size_in_pixels(&self, matrix_id: u8) -> GridShape2D;
+    fn tile_size(&self, matrix_id: u8) -> GridShape2D;
 }
 
 /// A wrapper Tile Matrix Set Provider
@@ -216,30 +253,21 @@ impl TileMatrixSetProvider for TypedTileMatrixSetProvider {
 
     fn tile_grid_bbox(
         &self,
-        tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
+        tiling_grid: &TilingGrid,
         tile_matrix: u8,
         tile_row: u32,
         tile_col: u32,
     ) -> OgcApiResult<GridBoundingBox2D> {
         match self {
-            TypedTileMatrixSetProvider::Custom(provider) => provider.tile_grid_bbox(
-                tiling_spatial_grid_definition,
-                tile_matrix,
-                tile_row,
-                tile_col,
-            ),
-            TypedTileMatrixSetProvider::CustomWebMercator(provider) => provider.tile_grid_bbox(
-                tiling_spatial_grid_definition,
-                tile_matrix,
-                tile_row,
-                tile_col,
-            ),
-            TypedTileMatrixSetProvider::WebMercatorQuad(provider) => provider.tile_grid_bbox(
-                tiling_spatial_grid_definition,
-                tile_matrix,
-                tile_row,
-                tile_col,
-            ),
+            TypedTileMatrixSetProvider::Custom(provider) => {
+                provider.tile_grid_bbox(tiling_grid, tile_matrix, tile_row, tile_col)
+            }
+            TypedTileMatrixSetProvider::CustomWebMercator(provider) => {
+                provider.tile_grid_bbox(tiling_grid, tile_matrix, tile_row, tile_col)
+            }
+            TypedTileMatrixSetProvider::WebMercatorQuad(provider) => {
+                provider.tile_grid_bbox(tiling_grid, tile_matrix, tile_row, tile_col)
+            }
         }
     }
 
@@ -277,15 +305,13 @@ impl TileMatrixSetProvider for TypedTileMatrixSetProvider {
         }
     }
 
-    fn tile_size_in_pixels(&self, matrix_id: u8) -> GridShape2D {
+    fn tile_size(&self, matrix_id: u8) -> GridShape2D {
         match self {
-            TypedTileMatrixSetProvider::Custom(provider) => provider.tile_size_in_pixels(matrix_id),
+            TypedTileMatrixSetProvider::Custom(provider) => provider.tile_size(matrix_id),
             TypedTileMatrixSetProvider::CustomWebMercator(provider) => {
-                provider.tile_size_in_pixels(matrix_id)
+                provider.tile_size(matrix_id)
             }
-            TypedTileMatrixSetProvider::WebMercatorQuad(provider) => {
-                provider.tile_size_in_pixels(matrix_id)
-            }
+            TypedTileMatrixSetProvider::WebMercatorQuad(provider) => provider.tile_size(matrix_id),
         }
     }
 }
@@ -362,23 +388,24 @@ impl TileMatrixSetProvider for CustomNativeTMS {
 
     fn tile_grid_bbox(
         &self,
-        tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
+        tiling_grid: &TilingGrid,
         tile_matrix: u8,
         tile_row: u32,
         tile_col: u32,
     ) -> OgcApiResult<GridBoundingBox2D> {
-        let grid_bounds = tiling_spatial_grid_definition.tiling_grid_bounds();
-        let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
+        let tiling_strategy = tiling_grid.tiling_strategy();
 
-        let tile_grid_bounds = tiling_strategy.raster_spatial_query_to_tiling_grid_box(grid_bounds);
-        let tile_index =
-            tile_grid_bounds.min_index() + GridIdx2D::new([tile_row as isize, tile_col as isize]);
+        let tile_grid_bounds =
+            tiling_strategy.raster_spatial_query_to_tiling_grid_box(tiling_grid.pixel_bounds);
+        let tile_index = TileIdx(
+            tile_grid_bounds.min_index().0 + GridIdx2D::new([tile_row as isize, tile_col as isize]),
+        );
 
         let min_pixel_index = tiling_strategy.tile_idx_to_global_pixel_idx(tile_index);
         let max_pixel_index = min_pixel_index
             + GridIdx2D::new([
-                tiling_strategy.tile_size_in_pixels.x() as isize,
-                tiling_strategy.tile_size_in_pixels.y() as isize,
+                tiling_strategy.tile_size.0.x() as isize,
+                tiling_strategy.tile_size.0.y() as isize,
             ])
             - GridIdx2D::new([1, 1]); // inclusive bounds, e.g. we expect max-min to be 511 and not 512 for a 512 pixel tile
 
@@ -414,7 +441,7 @@ impl TileMatrixSetProvider for CustomNativeTMS {
         )
     }
 
-    fn tile_size_in_pixels(&self, _matrix_id: u8) -> GridShape2D {
+    fn tile_size(&self, _matrix_id: u8) -> GridShape2D {
         self.tiling_specification.grid_shape()
     }
 }
@@ -463,17 +490,13 @@ impl TileMatrixSetProvider for CustomWebMercatorTMS {
 
     fn tile_grid_bbox(
         &self,
-        tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
+        tiling_grid: &TilingGrid,
         tile_matrix: u8,
         tile_row: u32,
         tile_col: u32,
     ) -> OgcApiResult<GridBoundingBox2D> {
-        self.0.tile_grid_bbox(
-            tiling_spatial_grid_definition,
-            tile_matrix,
-            tile_row,
-            tile_col,
-        )
+        self.0
+            .tile_grid_bbox(tiling_grid, tile_matrix, tile_row, tile_col)
     }
 
     fn max_matrix_id(&self) -> u32 {
@@ -488,8 +511,8 @@ impl TileMatrixSetProvider for CustomWebMercatorTMS {
         self.0.grid_shape_and_origin(matrix_id)
     }
 
-    fn tile_size_in_pixels(&self, matrix_id: u8) -> GridShape2D {
-        self.0.tile_size_in_pixels(matrix_id)
+    fn tile_size(&self, matrix_id: u8) -> GridShape2D {
+        self.0.tile_size(matrix_id)
     }
 }
 
@@ -621,7 +644,7 @@ impl TileMatrixSetProvider for WebMercatorQuadTMS {
 
     fn tile_grid_bbox(
         &self,
-        tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
+        tiling_grid: &TilingGrid,
         tile_matrix: u8,
         tile_row: u32,
         tile_col: u32,
@@ -629,8 +652,8 @@ impl TileMatrixSetProvider for WebMercatorQuadTMS {
         // Clamp to max zoom level
         let matrix_id = tile_matrix.min(self.max_matrix_id() as u8);
 
-        // Get total pixel bounds from tiling_spatial_grid_definition (at this zoom level)
-        let grid_bounds = tiling_spatial_grid_definition.tiling_grid_bounds();
+        // Get total pixel bounds from tiling_grid (at this zoom level)
+        let grid_bounds = tiling_grid.pixel_bounds;
         let [total_pixels_y, total_pixels_x] = grid_bounds.axis_size();
         let [min_y, min_x] = grid_bounds.min_index().0;
 
@@ -677,6 +700,38 @@ impl TileMatrixSetProvider for WebMercatorQuadTMS {
                 col: tile_col,
             }
         })
+    }
+
+    fn tile_spatial_bounds(
+        &self,
+        _tiling_grid: &TilingGrid,
+        tile_matrix: u8,
+        tile_row: u32,
+        tile_col: u32,
+    ) -> OgcApiResult<SpatialPartition2D> {
+        let matrix_id = tile_matrix.min(self.max_matrix_id() as u8);
+        let (_, _, cell_size, matrix_width, matrix_height) = Self::DATA[matrix_id as usize];
+
+        if u64::from(tile_col) >= matrix_width || u64::from(tile_row) >= matrix_height {
+            return Err(OgcApiError::TileCoordinatesOutOfBounds {
+                matrix: matrix_id.to_string(),
+                row: tile_row,
+                col: tile_col,
+            });
+        }
+
+        let upper_left = Coordinate2D::new(
+            Self::ORIGIN[0]
+                + f64::from(tile_col) * f64::from(Self::WIDTH_AND_HEIGHT.get()) * cell_size,
+            Self::ORIGIN[1]
+                - f64::from(tile_row) * f64::from(Self::WIDTH_AND_HEIGHT.get()) * cell_size,
+        );
+        let lower_right = Coordinate2D::new(
+            upper_left.x + f64::from(Self::WIDTH_AND_HEIGHT.get()) * cell_size,
+            upper_left.y - f64::from(Self::WIDTH_AND_HEIGHT.get()) * cell_size,
+        );
+
+        Ok(SpatialPartition2D::new_unchecked(upper_left, lower_right))
     }
 
     fn max_matrix_id(&self) -> u32 {
@@ -728,7 +783,7 @@ impl TileMatrixSetProvider for WebMercatorQuadTMS {
         (grid_shape, origin_coordinate)
     }
 
-    fn tile_size_in_pixels(&self, _matrix_id: u8) -> GridShape2D {
+    fn tile_size(&self, _matrix_id: u8) -> GridShape2D {
         GridShape2D::new_2d(
             Self::WIDTH_AND_HEIGHT.get() as usize,
             Self::WIDTH_AND_HEIGHT.get() as usize,
@@ -745,12 +800,13 @@ pub fn build_tile_matrices(
     let tile_width = to_non_zero_u16(tile_width);
     let tile_height = to_non_zero_u16(tile_height);
 
-    let tiling_spatial_grid_definition =
-        result_descriptor.tiling_grid_definition(tiling_specification);
-    let tiling_geo_transform = tiling_spatial_grid_definition.tiling_geo_transform();
+    let tiling_grid = TilingGrid::from_spatial_grid(
+        result_descriptor.spatial_grid_descriptor().spatial_grid,
+        tiling_specification.tile_size,
+    );
     let (x_resolution, y_resolution) = (
-        tiling_geo_transform.x_pixel_size(),
-        tiling_geo_transform.y_pixel_size(),
+        tiling_grid.geo_transform.x_pixel_size(),
+        tiling_grid.geo_transform.y_pixel_size(),
     );
 
     if !approx_eq!(f64, x_resolution.abs(), y_resolution.abs()) {
@@ -840,10 +896,7 @@ pub fn calculate_number_of_zoom_levels(
 
     let grid_shape = result_descriptor.spatial_grid_descriptor().grid_shape();
     let [x_size, y_size] = [grid_shape.x(), grid_shape.y()];
-    let [tile_size_x, tile_size_y] = [
-        tile_size.tile_size_in_pixels.x(),
-        tile_size.tile_size_in_pixels.y(),
-    ];
+    let [tile_size_x, tile_size_y] = [tile_size.tile_size.0.x(), tile_size.tile_size.0.y()];
 
     // we stop when one level is 1
     u32::min(
@@ -887,14 +940,17 @@ pub fn calculate_tiles_for_zoom_level(
     let downsampled_grid = original_spatial_grid.with_changed_resolution(downsampled_resolution);
 
     // Create the tiling definition for this resolution
-    let tiling_def = downsampled_grid.tiling_grid_definition(*tiling_specification);
+    let tiling_def = TilingGrid::from_spatial_grid(
+        downsampled_grid.spatial_grid,
+        tiling_specification.tile_size,
+    );
 
     // Calculate actual tiles (accounts for origin alignment)
-    let grid_bounds = tiling_def.tiling_grid_bounds();
-    let tiling_geo_transform = tiling_def.tiling_geo_transform();
-    let tiling_strategy = tiling_def.generate_data_tiling_strategy();
+    let grid_bounds = tiling_def.pixel_bounds;
+    let tiling_geo_transform = tiling_def.geo_transform;
+    let tiling_strategy = tiling_def.tiling_strategy();
     let tile_bounds = tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
-    let grid_shape = GridShape2D::new(tile_bounds.axis_size());
+    let grid_shape = GridShape2D::new(tile_bounds.0.axis_size());
 
     // Calculate the origin coordinate of the first tile
     let min_pixel_index = tiling_strategy.tile_idx_to_global_pixel_idx(tile_bounds.min_index());
@@ -934,14 +990,17 @@ fn calculate_tiles_for_zoom_levels(
             original_spatial_grid.with_changed_resolution(downsampled_resolution);
 
         // Create the tiling definition for this resolution
-        let tiling_def = downsampled_grid.tiling_grid_definition(*tiling_specification);
+        let tiling_def = TilingGrid::from_spatial_grid(
+            downsampled_grid.spatial_grid,
+            tiling_specification.tile_size,
+        );
 
         // Calculate actual tiles (accounts for origin alignment)
-        let grid_bounds = tiling_def.tiling_grid_bounds();
-        let tiling_geo_transform = tiling_def.tiling_geo_transform();
-        let tiling_strategy = tiling_def.generate_data_tiling_strategy();
+        let grid_bounds = tiling_def.pixel_bounds;
+        let tiling_geo_transform = tiling_def.geo_transform;
+        let tiling_strategy = tiling_def.tiling_strategy();
         let tile_bounds = tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
-        let actual_tiles = GridShape2D::new(tile_bounds.axis_size());
+        let actual_tiles = GridShape2D::new(tile_bounds.0.axis_size());
 
         // Calculate the origin coordinate of the first tile
         let min_pixel_index = tiling_strategy.tile_idx_to_global_pixel_idx(tile_bounds.min_index());
@@ -1040,7 +1099,7 @@ mod tests {
 
         // Zoom level 2 (4x downsampled)
         let (tiles_z2, origin_z2) = calculate_tiles_for_zoom_level(&descriptor, &tiling_spec, 2);
-        assert_eq!(tiles_z2, GridShape2D::new_2d(2, 2));
+        assert_eq!(tiles_z2, GridShape2D::new_2d(1, 2));
         assert!(origin_z2.x.is_finite());
         assert!(origin_z2.y.is_finite());
 
@@ -1074,13 +1133,13 @@ mod tests {
         assert_eq!(tiles_z0, GridShape2D::new_2d(6, 6));
 
         let (tiles_z1, _origin_z1) = calculate_tiles_for_zoom_level(&descriptor, &tiling_spec, 1);
-        assert_eq!(tiles_z1, GridShape2D::new_2d(4, 4));
+        assert_eq!(tiles_z1, GridShape2D::new_2d(3, 3));
 
         let (tiles_z2, _origin_z2) = calculate_tiles_for_zoom_level(&descriptor, &tiling_spec, 2);
         assert_eq!(tiles_z2, GridShape2D::new_2d(2, 2));
 
         let (tiles_z3, _origin_z3) = calculate_tiles_for_zoom_level(&descriptor, &tiling_spec, 3);
-        assert_eq!(tiles_z3, GridShape2D::new_2d(2, 2));
+        assert_eq!(tiles_z3, GridShape2D::new_2d(1, 1));
 
         // Verify consistency with calculate_tiles_for_zoom_levels
         let all_tiles = calculate_tiles_for_zoom_levels(&descriptor, &tiling_spec, max_zoom);
@@ -1112,7 +1171,7 @@ mod tests {
             vec![
                 (0, GridShape2D::new_2d(4, 8)),
                 (1, GridShape2D::new_2d(2, 4)),
-                (2, GridShape2D::new_2d(2, 2)),
+                (2, GridShape2D::new_2d(1, 2)),
             ]
         );
 
@@ -1141,9 +1200,9 @@ mod tests {
             tiles_with_levels,
             vec![
                 (0, GridShape2D::new_2d(6, 6)),
-                (1, GridShape2D::new_2d(4, 4)),
+                (1, GridShape2D::new_2d(3, 3)),
                 (2, GridShape2D::new_2d(2, 2)),
-                (3, GridShape2D::new_2d(2, 2)),
+                (3, GridShape2D::new_2d(1, 1)),
             ]
         );
 
@@ -1175,9 +1234,9 @@ mod tests {
             tiles_with_levels,
             vec![
                 (0, GridShape2D::new_2d(6, 6)),
-                (1, GridShape2D::new_2d(4, 4)),
+                (1, GridShape2D::new_2d(3, 3)),
                 (2, GridShape2D::new_2d(2, 2)),
-                (3, GridShape2D::new_2d(2, 2)),
+                (3, GridShape2D::new_2d(1, 1)),
             ]
         );
 
@@ -1204,13 +1263,14 @@ mod tests {
         .result_descriptor()
         .clone();
 
-        let tiling_spatial_grid_definition =
-            result_descriptor.tiling_grid_definition(tiling_specification);
-        let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
-
-        let tiling_iterator = tiling_strategy.tile_information_iterator_from_pixel_bounds(
-            tiling_spatial_grid_definition.tiling_grid_bounds(),
+        let tiling_grid = TilingGrid::from_spatial_grid(
+            result_descriptor.spatial_grid_descriptor().spatial_grid,
+            tiling_specification.tile_size,
         );
+        let tiling_strategy = tiling_grid.tiling_strategy();
+
+        let tiling_iterator =
+            tiling_strategy.tile_information_iterator_from_pixel_bounds(tiling_grid.pixel_bounds);
 
         let provider = TypedTileMatrixSetProvider::resolve(
             &TileMatrixSetId::Custom(CustomNativeTMS::TILE_MATRIX_SET_ID.to_string()),
@@ -1226,7 +1286,7 @@ mod tests {
         for tile_info in tiling_iterator {
             assert_eq!(
                 provider
-                    .tile_grid_bbox(&tiling_spatial_grid_definition, 0, tile_row, tile_col)
+                    .tile_grid_bbox(&tiling_grid, 0, tile_row, tile_col)
                     .unwrap(),
                 tile_info.global_pixel_bounds(),
                 "Tile row {tile_row}, tile col {tile_col}: Expected {}",
@@ -1264,13 +1324,14 @@ mod tests {
         .result_descriptor()
         .clone();
 
-        let tiling_spatial_grid_definition =
-            result_descriptor.tiling_grid_definition(tiling_specification);
-        let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
-
-        let tiling_iterator = tiling_strategy.tile_information_iterator_from_pixel_bounds(
-            tiling_spatial_grid_definition.tiling_grid_bounds(),
+        let tiling_grid = TilingGrid::from_spatial_grid(
+            result_descriptor.spatial_grid_descriptor().spatial_grid,
+            tiling_specification.tile_size,
         );
+        let tiling_strategy = tiling_grid.tiling_strategy();
+
+        let tiling_iterator =
+            tiling_strategy.tile_information_iterator_from_pixel_bounds(tiling_grid.pixel_bounds);
 
         let provider = TypedTileMatrixSetProvider::resolve(
             &TileMatrixSetId::Custom(CustomNativeTMS::TILE_MATRIX_SET_ID.to_string()),
@@ -1286,7 +1347,7 @@ mod tests {
         for tile_info in tiling_iterator {
             assert_eq!(
                 provider
-                    .tile_grid_bbox(&tiling_spatial_grid_definition, 0, tile_row, tile_col)
+                    .tile_grid_bbox(&tiling_grid, 0, tile_row, tile_col)
                     .unwrap(),
                 tile_info.global_pixel_bounds(),
                 "Tile row {tile_row}, tile col {tile_col}: Expected {}",
@@ -1337,13 +1398,14 @@ mod tests {
             .unwrap();
         let result_descriptor = initialized_operator.result_descriptor();
 
-        let tiling_spatial_grid_definition =
-            result_descriptor.tiling_grid_definition(tiling_specification);
-        let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
-
-        let tiling_iterator = tiling_strategy.tile_information_iterator_from_pixel_bounds(
-            tiling_spatial_grid_definition.tiling_grid_bounds(),
+        let tiling_grid = TilingGrid::from_spatial_grid(
+            result_descriptor.spatial_grid_descriptor().spatial_grid,
+            tiling_specification.tile_size,
         );
+        let tiling_strategy = tiling_grid.tiling_strategy();
+
+        let tiling_iterator =
+            tiling_strategy.tile_information_iterator_from_pixel_bounds(tiling_grid.pixel_bounds);
 
         let provider = TypedTileMatrixSetProvider::resolve(
             &TileMatrixSetId::Custom(CustomNativeTMS::TILE_MATRIX_SET_ID.to_string()),
@@ -1353,9 +1415,9 @@ mod tests {
         .unwrap();
 
         let (matrix_width, _matrix_height) = (2, 1);
-        // the y-area overlaps two tiles, so the output will merge the two tiles in the y-direction, resulting in 2x1 tiles
-        let (actual_width, actual_height) = (2, 2);
-        let actual_matrix_size = calculate_number_of_tiles(&tiling_spatial_grid_definition);
+        // the y-area now fits into one tile, resulting in 1x2 tiles
+        let (actual_width, actual_height) = (2, 1);
+        let actual_matrix_size = calculate_number_of_tiles(&tiling_grid);
 
         assert_eq!(
             actual_matrix_size,
@@ -1368,7 +1430,7 @@ mod tests {
             // this still holds, the y-bounds will be corrected afterwards
             assert_eq!(
                 provider
-                    .tile_grid_bbox(&tiling_spatial_grid_definition, 0, tile_row, tile_col)
+                    .tile_grid_bbox(&tiling_grid, 0, tile_row, tile_col)
                     .unwrap(),
                 tile_info.global_pixel_bounds(),
                 "Tile row {tile_row}, tile col {tile_col}"
@@ -1414,75 +1476,82 @@ mod tests {
 
         // Test case: 0/0/0 - full world at zoom 0
         let tile_matrix = 0;
-        let tiling_grid_definition = initialized_operator
-            .optimize_and_reinitialize(
-                tms_spec.spatial_resolution(tile_matrix), // level 0/0
-                &execution_context,
-            )
-            .await
-            .unwrap()
-            .result_descriptor()
-            .tiling_grid_definition(execution_context.tiling_specification());
+        let tiling_grid = TilingGrid::from_spatial_grid(
+            initialized_operator
+                .optimize_and_reinitialize(
+                    tms_spec.spatial_resolution(tile_matrix), // level 0/0
+                    &execution_context,
+                )
+                .await
+                .unwrap()
+                .result_descriptor()
+                .spatial_grid_descriptor()
+                .spatial_grid,
+            execution_context.tiling_specification().tile_size,
+        );
         let bounds_0_0_0 = tms_spec
-            .tile_grid_bbox(&tiling_grid_definition, tile_matrix, 0, 0)
+            .tile_grid_bbox(&tiling_grid, tile_matrix, 0, 0)
             .unwrap();
         assert_eq!(
             bounds_0_0_0,
-            grid_bbox([-178, -178], [178, 177]),
+            grid_bbox([0, 0], [356, 355]),
             "Bounds mismatch for tile 0/0/0"
         );
         assert_eq!(
-            bounds_0_0_0,
-            tiling_grid_definition.tiling_grid_bounds(),
+            bounds_0_0_0, tiling_grid.pixel_bounds,
             "Total pixel bounds mismatch for tile 0/0/0"
         );
 
         // Test case: zoom level 1 - all four tiles (2x2 matrix)
         let tile_matrix = 1;
-        let tiling_grid_definition = initialized_operator
-            .optimize_and_reinitialize(
-                tms_spec.spatial_resolution(tile_matrix), // level 0/0
-                &execution_context,
-            )
-            .await
-            .unwrap()
-            .result_descriptor()
-            .tiling_grid_definition(execution_context.tiling_specification());
+        let tiling_grid = TilingGrid::from_spatial_grid(
+            initialized_operator
+                .optimize_and_reinitialize(
+                    tms_spec.spatial_resolution(tile_matrix), // level 0/0
+                    &execution_context,
+                )
+                .await
+                .unwrap()
+                .result_descriptor()
+                .spatial_grid_descriptor()
+                .spatial_grid,
+            execution_context.tiling_specification().tile_size,
+        );
 
         // Check each tile individually - ensure all four tiles exist and have valid bounds
         let bounds_1_0_0 = tms_spec
-            .tile_grid_bbox(&tiling_grid_definition, tile_matrix, 0, 0)
+            .tile_grid_bbox(&tiling_grid, tile_matrix, 0, 0)
             .unwrap();
         assert_eq!(
             bounds_1_0_0,
-            grid_bbox([-355, -356], [0, -2]),
+            grid_bbox([0, 0], [355, 354]),
             "Bounds mismatch for tile 1/0/0"
         );
 
         let bounds_1_1_0 = tms_spec
-            .tile_grid_bbox(&tiling_grid_definition, tile_matrix, 0, 1)
+            .tile_grid_bbox(&tiling_grid, tile_matrix, 0, 1)
             .unwrap();
         assert_eq!(
             bounds_1_1_0,
-            grid_bbox([-355, -1], [0, 354]),
+            grid_bbox([0, 355], [355, 710]),
             "Bounds mismatch for tile 1/1/0"
         );
 
         let bounds_1_0_1 = tms_spec
-            .tile_grid_bbox(&tiling_grid_definition, tile_matrix, 1, 0)
+            .tile_grid_bbox(&tiling_grid, tile_matrix, 1, 0)
             .unwrap();
         assert_eq!(
             bounds_1_0_1,
-            grid_bbox([1, -356], [357, -2]),
+            grid_bbox([356, 0], [712, 354]),
             "Bounds mismatch for tile 1/0/1"
         );
 
         let bounds_1_1_1 = tms_spec
-            .tile_grid_bbox(&tiling_grid_definition, tile_matrix, 1, 1)
+            .tile_grid_bbox(&tiling_grid, tile_matrix, 1, 1)
             .unwrap();
         assert_eq!(
             bounds_1_1_1,
-            grid_bbox([1, -1], [357, 354]),
+            grid_bbox([356, 355], [712, 710]),
             "Bounds mismatch for tile 1/1/1"
         );
 
@@ -1490,7 +1559,7 @@ mod tests {
         // by checking that at least one tile touches each edge of the total bounds
         assert_eq!(
             merge_bounds([bounds_1_0_0, bounds_1_0_1, bounds_1_1_0, bounds_1_1_1]),
-            tiling_grid_definition.tiling_grid_bounds(),
+            tiling_grid.pixel_bounds,
             "The merged bounds of all four tiles at zoom level 1 should equal the total bounds"
         );
     }
@@ -1546,12 +1615,15 @@ mod tests {
 
             // Calculate actual tiles from the initialized operator's descriptor
             let resampled_descriptor = initialized_operator.result_descriptor();
-            let resampled_tiling_def = resampled_descriptor.tiling_grid_definition(tiling_spec);
-            let resampled_grid_bounds = resampled_tiling_def.tiling_grid_bounds();
-            let resampled_tiling_strategy = resampled_tiling_def.generate_data_tiling_strategy();
+            let resampled_tiling_def = TilingGrid::from_spatial_grid(
+                resampled_descriptor.spatial_grid_descriptor().spatial_grid,
+                tiling_spec.tile_size,
+            );
+            let resampled_grid_bounds = resampled_tiling_def.pixel_bounds;
+            let resampled_tiling_strategy = resampled_tiling_def.tiling_strategy();
             let resampled_tile_bounds = resampled_tiling_strategy
                 .global_pixel_grid_bounds_to_tile_grid_bounds(resampled_grid_bounds);
-            let actual_from_operator = GridShape2D::new(resampled_tile_bounds.axis_size());
+            let actual_from_operator = GridShape2D::new(resampled_tile_bounds.0.axis_size());
 
             // Compare: tiles from method should match tiles from initialized operator
             assert_eq!(
@@ -1606,17 +1678,20 @@ mod tests {
         let _ = provider.spatial_resolution(invalid_level as u8);
 
         // Error case 3: Out-of-bounds tile coordinates
-        let tiling_spatial_grid_definition = descriptor.tiling_grid_definition(tiling_spec);
+        let tiling_grid = TilingGrid::from_spatial_grid(
+            descriptor.spatial_grid_descriptor().spatial_grid,
+            tiling_spec.tile_size,
+        );
 
         // Try to access tile beyond grid bounds (row too high)
-        let result_oob_row = provider.tile_grid_bbox(&tiling_spatial_grid_definition, 0, 1000, 0);
+        let result_oob_row = provider.tile_grid_bbox(&tiling_grid, 0, 1000, 0);
         assert!(
             result_oob_row.is_err(),
             "Should reject out-of-bounds tile row"
         );
 
         // Try to access tile beyond grid bounds (col too high)
-        let result_oob_col = provider.tile_grid_bbox(&tiling_spatial_grid_definition, 0, 0, 1000);
+        let result_oob_col = provider.tile_grid_bbox(&tiling_grid, 0, 0, 1000);
         assert!(
             result_oob_col.is_err(),
             "Should reject out-of-bounds tile col"
@@ -1625,6 +1700,7 @@ mod tests {
 
     /// Test `GeoEngineCustomWebMercatorTMS` variant properties via `TypedTileMatrixSetProvider`
     #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_validates_custom_web_mercator_tms_properties(app_ctx: PostgresContext<NoTls>) {
         let (session_id, _data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
         let session = app_ctx.session_by_id(session_id).await.unwrap();
@@ -1695,11 +1771,11 @@ mod tests {
                 scale_denominator: 407_286_157.394_767_17,
                 cell_size: 114_040.124_070_534_79,
                 corner_of_origin: CornerOfOrigin::TopLeft,
-                point_of_origin: [-58_354_990.030_488_94, 58_418_366.631_411_66],
+                point_of_origin: [-20_037_508.342_789_244, 20_100_884.943_711_97],
                 tile_width: to_non_zero_u16(512),
                 tile_height: to_non_zero_u16(512),
-                matrix_width: to_non_zero_u64(2),
-                matrix_height: to_non_zero_u64(2),
+                matrix_width: to_non_zero_u64(1),
+                matrix_height: to_non_zero_u64(1),
                 variable_matrix_widths: vec![],
             },
             "Level 0 properties should match expected values"
@@ -1712,22 +1788,49 @@ mod tests {
             )
             .await
             .expect("Failed to initialize operator");
-        let tiling_grid_definition = initialized_operator
-            .optimize_and_reinitialize(
-                tms_spec.spatial_resolution(0), // level 0/0
-                &execution_context,
-            )
+        let initialized_operator = initialized_operator
+            .optimize_and_reinitialize(tms_spec.spatial_resolution(0), &execution_context)
             .await
-            .unwrap()
-            .result_descriptor()
-            .tiling_grid_definition(tiling_spec);
-        let bbox_0_0_0 = tms_spec
-            .tile_grid_bbox(&tiling_grid_definition, 0, 0, 0)
             .unwrap();
+        let tiling_grid = TilingGrid::from_spatial_grid(
+            initialized_operator
+                .result_descriptor()
+                .spatial_grid_descriptor()
+                .spatial_grid,
+            tiling_spec.tile_size,
+        );
+        let spatial_bounds = tms_spec.tile_spatial_bounds(&tiling_grid, 0, 0, 0).unwrap();
+        let expected_upper_left =
+            Coordinate2D::new(level_0.point_of_origin[0], level_0.point_of_origin[1]);
+        let expected_lower_right = Coordinate2D::new(
+            expected_upper_left.x + f64::from(level_0.tile_width.get()) * level_0.cell_size,
+            expected_upper_left.y - f64::from(level_0.tile_height.get()) * level_0.cell_size,
+        );
+        assert_eq!(
+            spatial_bounds,
+            SpatialPartition2D::new_unchecked(expected_upper_left, expected_lower_right),
+            "TMS spatial bounds must match the published matrix geometry"
+        );
 
+        let level_1 = tile_matrices.get(1).expect("matrix 1 should exist");
+        let spatial_bounds = tms_spec.tile_spatial_bounds(&tiling_grid, 1, 0, 1).unwrap();
+        let expected_upper_left = Coordinate2D::new(
+            level_1.point_of_origin[0] + f64::from(level_1.tile_width.get()) * level_1.cell_size,
+            level_1.point_of_origin[1],
+        );
+        let expected_lower_right = Coordinate2D::new(
+            expected_upper_left.x + f64::from(level_1.tile_width.get()) * level_1.cell_size,
+            expected_upper_left.y - f64::from(level_1.tile_height.get()) * level_1.cell_size,
+        );
+        assert_eq!(
+            spatial_bounds,
+            SpatialPartition2D::new_unchecked(expected_upper_left, expected_lower_right),
+            "matrix 1/0/1 must preserve its published Y extent"
+        );
+        let bbox_0_0_0 = tms_spec.tile_grid_bbox(&tiling_grid, 0, 0, 0).unwrap();
         assert_eq!(
             bbox_0_0_0,
-            grid_bbox([-512, -512], [-1, -1]),
+            grid_bbox([0, 0], [511, 511]),
             "Tile 0/0/0 bounds should match expected values"
         );
     }

@@ -164,8 +164,7 @@ impl<P: Pixel> PlotQueryProcessor for MeanRasterPixelValuesOverTimeQueryProcesso
         let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
             &query,
             BandSelection::first(),
-            rd.tiling_grid_definition(ctx.tiling_specification())
-                .tiling_geo_transform(),
+            rd.tiling_grid_definition().geo_transform,
         );
 
         let means = Self::calculate_means(
@@ -277,6 +276,7 @@ impl MeanCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geoengine_datatypes::raster::TileSize;
 
     use crate::{
         engine::{
@@ -349,10 +349,8 @@ mod tests {
 
     #[tokio::test]
     async fn single_raster() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = [3, 2].into();
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
@@ -447,8 +445,8 @@ mod tests {
                 time_interval,
                 TileInformation {
                     global_geo_transform: TestDefault::test_default(),
-                    global_tile_position: [0, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: [0, 0].into(),
+                    tile_size: [3, 2].into(),
                 },
                 0,
                 Grid2D::new([3, 2].into(), values).unwrap().into(),
@@ -470,6 +468,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridShape2D::new_2d(3, 2).bounding_box(),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -485,10 +484,8 @@ mod tests {
 
     #[tokio::test]
     async fn raster_series() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = [3, 2].into();
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {

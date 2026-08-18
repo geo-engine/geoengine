@@ -537,6 +537,7 @@ impl StacMultiBandMetaData {
                     gdal_config_options: gdal_config_options.clone(),
                     allow_alphaband_as_mask: false,
                     retry: Some(GdalRetryOptions { max_retries: 99 }), // TODO: make configurable?
+                    tile_size: None,
                 },
             });
         }
@@ -812,7 +813,7 @@ mod tests {
         TimeGranularity, TimeStep,
     };
     use geoengine_datatypes::raster::{
-        GeoTransform, GridBoundingBox2D, GridIdx2D, GridShape, TileInformation,
+        GeoTransform, GridBoundingBox2D, GridIdx2D, TileIdx, TileInformation, TileSize,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
     use geoengine_datatypes::util::Identifier;
@@ -854,6 +855,7 @@ mod tests {
                     GeoTransform::new((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
                     GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([10979, 10979]))
                         .unwrap(),
+                    TileSize::default_512(),
                 ),
                 bands: vec![
                     crate::datasets::external::stac::StacProviderDatasetBand {
@@ -967,8 +969,8 @@ mod tests {
 
         let tile_geo_transform = GeoTransform::new((499_980.0, 5_800_020.0).into(), 10.0, -10.0);
         let tile = TileInformation::new(
-            GridIdx2D::new([0, 0]),
-            GridShape::new([10980, 10980]),
+            TileIdx::new_y_x(0, 0),
+            TileSize::new(10980, 10980),
             tile_geo_transform,
         );
 
@@ -1052,6 +1054,7 @@ mod tests {
                             GridIdx2D::new([10979, 10979]),
                         )
                         .unwrap(),
+                        TileSize::default_512(),
                     ),
                     bands: vec![
                         crate::datasets::external::stac::StacProviderDatasetBand {
@@ -1089,6 +1092,7 @@ mod tests {
                             GridIdx2D::new([5489, 5489]),
                         )
                         .unwrap(),
+                        TileSize::default_512(),
                     ),
                     bands: vec![
                         crate::datasets::external::stac::StacProviderDatasetBand {

@@ -12,8 +12,7 @@ use geoengine_datatypes::primitives::{
     SpatialPartitioned,
 };
 use geoengine_datatypes::raster::{
-    Grid2D, GridIndexAccess, GridIntersection, GridSize, SpatialGridDefinition,
-    UpdateIndexedElementsParallel,
+    Grid2D, GridIndexAccess, GridIntersection, SpatialGridDefinition, UpdateIndexedElementsParallel,
 };
 use geoengine_datatypes::{
     operations::reproject::{CoordinateProjection, CoordinateProjector},
@@ -147,7 +146,7 @@ fn build_accu<T: Pixel>(
 ) -> impl Future<Output = Result<TileWithProjectionCoordinates<T>>> + use<T> {
     let time_interval = query_rect.time_interval();
     crate::util::spawn_blocking(move || {
-        let output_raster = EmptyGrid::new(tile_info.tile_size_in_pixels);
+        let output_raster = EmptyGrid::new(tile_info.tile_size.0);
 
         let pool = pool.clone();
 
@@ -185,23 +184,19 @@ fn projected_coordinate_grid_parallel(
     valid_out_area: &SpatialPartition2D,
 ) -> Result<Grid2D<Option<Coordinate2D>>> {
     const MIN_ELEMENTS_IN_PAR_CHUNK: usize = 64 * 512; // this must never be smaller than 1
-    let min_rows_in_par_chunk = num::integer::div_ceil(
-        MIN_ELEMENTS_IN_PAR_CHUNK,
-        tile_info.tile_size_in_pixels.axis_size_x(),
-    )
-    .max(1);
+    let min_rows_in_par_chunk =
+        num::integer::div_ceil(MIN_ELEMENTS_IN_PAR_CHUNK, tile_info.tile_size.axis_size_x()).max(1);
 
     let start = std::time::Instant::now();
 
     let parallelism = pool.current_num_threads();
-    let par_chunk_split =
-        num::integer::div_ceil(tile_info.tile_size_in_pixels.axis_size_y(), parallelism)
-            .max(min_rows_in_par_chunk); // don't go below MIN_ROWS_IN_PAR_CHUNK lines per chunk.
-    let par_chunk_size = tile_info.tile_size_in_pixels.axis_size_x() * par_chunk_split;
+    let par_chunk_split = num::integer::div_ceil(tile_info.tile_size.axis_size_y(), parallelism)
+        .max(min_rows_in_par_chunk); // don't go below MIN_ROWS_IN_PAR_CHUNK lines per chunk.
+    let par_chunk_size = tile_info.tile_size.axis_size_x() * par_chunk_split;
 
     let res = pool.install(|| {
         let mut in_coord_grid: Grid2D<Option<Coordinate2D>> =
-            Grid2D::new_filled(tile_info.tile_size_in_pixels, None);
+            Grid2D::new_filled(tile_info.tile_size.0, None);
 
         let out_coords = tile_info
             .spatial_grid_definition()
@@ -257,7 +252,7 @@ fn projected_coordinate_grid_parallel(
     });
     tracing::trace!(
         "projected_coordinate_grid_parallel {:?}, parallelism: threads={} par_chunk_split={} par_chunk_size={} took {} (ns) ",
-        &tile_info.global_tile_position,
+        &tile_info.tile_position,
         pool.current_num_threads(),
         par_chunk_split,
         par_chunk_size,
@@ -364,11 +359,12 @@ impl<T: Pixel> FoldTileAccuMut for TileWithProjectionCoordinates<T> {
 #[cfg(test)]
 mod tests {
     use futures::StreamExt;
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::{
         primitives::{BandSelection, TimeStep},
         raster::{
-            BoundedGrid, GeoTransform, Grid, GridBoundingBox2D, GridShape, GridShape2D,
-            RasterDataType, SpatialGridDefinition, TilingSpecification,
+            GeoTransform, Grid, GridBoundingBox2D, GridShape2D, RasterDataType,
+            SpatialGridDefinition, TilingSpecification,
         },
         util::test::{TestDefault, assert_eq_two_list_of_tiles_u8},
     };
@@ -438,17 +434,21 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5).unwrap()),
-            spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
-                GeoTransform::new(Coordinate2D::new(0., 2.), 1., -1.),
-                GridShape::new_2d(2, 4).bounding_box(),
-            )),
+            spatial_grid: SpatialGridDescriptor::new_source(
+                SpatialGridDefinition::new(
+                    GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                ),
+                TileSize::new(2, 2),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_spec = TilingSpecification::new(GridShape2D::new([2, 2]));
+        let tiling_spec =
+            TilingSpecification::with_zero_origin(GridShape2D::new([2, 2]).shape_array.into());
 
-        let tiling_grid = result_descriptor.tiling_grid_definition(tiling_spec);
-        let tiling_strat = tiling_grid.generate_data_tiling_strategy();
+        let tiling_grid = result_descriptor.tiling_grid_definition();
+        let tiling_strat = tiling_grid.tiling_strategy();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_spec);
 
@@ -481,8 +481,8 @@ mod tests {
             out_srs: projection,
             fold_fn: fold_by_coordinate_lookup_future,
             state: TileReprojectionSubqueryGridInfo {
-                in_spatial_grid: tiling_grid.tiling_spatial_grid_definition(),
-                out_spatial_grid: tiling_grid.tiling_spatial_grid_definition(),
+                in_spatial_grid: tiling_grid.to_spatial_grid(),
+                out_spatial_grid: tiling_grid.to_spatial_grid(),
             },
             _phantom_data: PhantomData,
         };

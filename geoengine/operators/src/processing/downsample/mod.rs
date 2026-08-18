@@ -361,17 +361,14 @@ where
             return self.source.query(query, ctx).await;
         }
 
-        let tiling_grid_definition =
-            out_spatial_grid.tiling_grid_definition(ctx.tiling_specification());
+        let tiling_grid_definition = out_spatial_grid.tiling_grid_definition();
         // This is the tiling strategy we want to fill
         let tiling_strategy: geoengine_datatypes::raster::TilingStrategy =
-            tiling_grid_definition.generate_data_tiling_strategy();
+            tiling_grid_definition.tiling_strategy();
 
         let sub_query = DownsampleSubQuery::<_, P> {
-            input_geo_transform: in_spatial_grid
-                .tiling_grid_definition(ctx.tiling_specification())
-                .tiling_geo_transform(),
-            output_geo_transform: tiling_grid_definition.tiling_geo_transform(),
+            input_geo_transform: in_spatial_grid.tiling_grid_definition().geo_transform,
+            output_geo_transform: tiling_grid_definition.geo_transform,
             fold_fn: fold_future,
             tiling_specification: self.tiling_specification,
             _phantom_pixel_type: PhantomData,
@@ -610,6 +607,7 @@ mod tests {
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
     use geoengine_datatypes::primitives::TimeStep;
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::raster::{Grid, GridShape2D, RasterDataType};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -644,12 +642,12 @@ mod tests {
 
         let in_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 1.0, -1.0);
         let out_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 2.0, -2.0);
-        let tile_size_in_pixels = GridShape2D {
+        let tile_size = GridShape2D {
             shape_array: [4, 4],
         };
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(
-            TilingSpecification::new(tile_size_in_pixels),
+            TilingSpecification::with_zero_origin(tile_size.shape_array.into()),
             8,
         );
 
@@ -660,7 +658,7 @@ mod tests {
                 band: 0,
                 global_geo_transform: in_geo_transform,
                 grid_array: Grid::new(
-                    tile_size_in_pixels,
+                    tile_size,
                     vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
                 )
                 .unwrap()
@@ -674,7 +672,7 @@ mod tests {
                 band: 0,
                 global_geo_transform: in_geo_transform,
                 grid_array: Grid::new(
-                    tile_size_in_pixels,
+                    tile_size,
                     vec![
                         21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
                     ],
@@ -690,7 +688,7 @@ mod tests {
                 band: 0,
                 global_geo_transform: in_geo_transform,
                 grid_array: Grid::new(
-                    tile_size_in_pixels,
+                    tile_size,
                     vec![
                         41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56,
                     ],
@@ -706,7 +704,7 @@ mod tests {
                 band: 0,
                 global_geo_transform: in_geo_transform,
                 grid_array: Grid::new(
-                    tile_size_in_pixels,
+                    tile_size,
                     vec![
                         61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76,
                     ],
@@ -734,6 +732,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 in_geo_transform,
                 GridBoundingBox2D::new_min_max(0, 7, 0, 7).unwrap(),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -825,12 +824,12 @@ mod tests {
 
         let in_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 1.0, -1.0);
         let out_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 3.0, -3.0);
-        let tile_size_in_pixels = GridShape2D {
+        let tile_size = GridShape2D {
             shape_array: [3, 3],
         };
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(
-            TilingSpecification::new(tile_size_in_pixels),
+            TilingSpecification::with_zero_origin(tile_size.shape_array.into()),
             8,
         );
 
@@ -840,7 +839,7 @@ mod tests {
                 tile_position: [0, 0].into(),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(tile_size_in_pixels, vec![0, 1, 2, 3, 4, 5, 6, 7, 8])
+                grid_array: Grid::new(tile_size, vec![0, 1, 2, 3, 4, 5, 6, 7, 8])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -851,12 +850,9 @@ mod tests {
                 tile_position: [0, 1].into(),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(
-                    tile_size_in_pixels,
-                    vec![10, 11, 12, 13, 14, 15, 16, 17, 18],
-                )
-                .unwrap()
-                .into(),
+                grid_array: Grid::new(tile_size, vec![10, 11, 12, 13, 14, 15, 16, 17, 18])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
@@ -865,12 +861,9 @@ mod tests {
                 tile_position: [0, 2].into(),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(
-                    tile_size_in_pixels,
-                    vec![20, 21, 22, 23, 24, 25, 26, 27, 28],
-                )
-                .unwrap()
-                .into(),
+                grid_array: Grid::new(tile_size, vec![20, 21, 22, 23, 24, 25, 26, 27, 28])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
@@ -879,12 +872,9 @@ mod tests {
                 tile_position: [1, 0].into(),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(
-                    tile_size_in_pixels,
-                    vec![30, 31, 32, 33, 34, 35, 36, 37, 38],
-                )
-                .unwrap()
-                .into(),
+                grid_array: Grid::new(tile_size, vec![30, 31, 32, 33, 34, 35, 36, 37, 38])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
@@ -893,12 +883,9 @@ mod tests {
                 tile_position: [1, 1].into(),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(
-                    tile_size_in_pixels,
-                    vec![40, 41, 42, 43, 44, 45, 46, 47, 48],
-                )
-                .unwrap()
-                .into(),
+                grid_array: Grid::new(tile_size, vec![40, 41, 42, 43, 44, 45, 46, 47, 48])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
@@ -907,12 +894,9 @@ mod tests {
                 tile_position: [1, 2].into(),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(
-                    tile_size_in_pixels,
-                    vec![50, 51, 52, 53, 54, 55, 56, 57, 58],
-                )
-                .unwrap()
-                .into(),
+                grid_array: Grid::new(tile_size, vec![50, 51, 52, 53, 54, 55, 56, 57, 58])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
@@ -921,12 +905,9 @@ mod tests {
                 tile_position: [2, 0].into(),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(
-                    tile_size_in_pixels,
-                    vec![60, 61, 62, 63, 64, 65, 66, 67, 68],
-                )
-                .unwrap()
-                .into(),
+                grid_array: Grid::new(tile_size, vec![60, 61, 62, 63, 64, 65, 66, 67, 68])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
@@ -935,12 +916,9 @@ mod tests {
                 tile_position: [2, 1].into(),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(
-                    tile_size_in_pixels,
-                    vec![70, 71, 72, 73, 74, 75, 76, 77, 78],
-                )
-                .unwrap()
-                .into(),
+                grid_array: Grid::new(tile_size, vec![70, 71, 72, 73, 74, 75, 76, 77, 78])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
@@ -949,12 +927,9 @@ mod tests {
                 tile_position: [2, 2].into(),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(
-                    tile_size_in_pixels,
-                    vec![80, 81, 82, 83, 84, 85, 86, 87, 88],
-                )
-                .unwrap()
-                .into(),
+                grid_array: Grid::new(tile_size, vec![80, 81, 82, 83, 84, 85, 86, 87, 88])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
@@ -976,6 +951,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 in_geo_transform,
                 GridBoundingBox2D::new_min_max(0, 8, 0, 8).unwrap(),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
