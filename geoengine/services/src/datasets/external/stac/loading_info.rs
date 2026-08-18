@@ -2,6 +2,7 @@ use super::common;
 use super::{StacDataProvider, StacProviderDataset, StacProviderS3Config, cache::StacQueryCache};
 use crate::error::Result;
 use crate::util::join_base_url_and_path;
+use crate::util::retry::{RetryPolicy, retry_http};
 use async_trait::async_trait;
 use chrono::DateTime as ChronoDateTime;
 use geoengine_datatypes::dataset::DataId;
@@ -60,6 +61,8 @@ async fn query_stac_item_collection(
     client: &reqwest::Client,
     query_state: &StacQueryState,
 ) -> geoengine_operators::util::Result<(stac::ItemCollection, StacQueryState)> {
+    let request_policy = RetryPolicy::new().stop_on_status(&[400, 404]);
+
     match query_state {
         StacQueryState::FirstPage {
             query_url,
@@ -69,23 +72,25 @@ async fn query_stac_item_collection(
 
             let request_started = std::time::Instant::now();
 
-            let item_collection: stac::ItemCollection = client
-                .get(query_url.clone())
-                .query(query_params)
-                .send()
-                .await
-                .map_err(
-                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                        source: Box::new(e),
-                    },
-                )?
-                .json()
-                .await
-                .map_err(
-                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                        source: Box::new(e),
-                    },
-                )?;
+            let item_collection: stac::ItemCollection = retry_http(
+                || async {
+                    client
+                        .get(query_url.clone())
+                        .query(query_params)
+                        .send()
+                        .await?
+                        .error_for_status()?
+                        .json()
+                        .await
+                },
+                &format!("Fetch STAC items from {query_url}"),
+                &request_policy,
+                |e| e.status().map(|s| s.as_u16()),
+            )
+            .await
+            .map_err(|e| geoengine_operators::error::Error::QueryingProcessorFailed {
+                source: Box::new(e),
+            })?;
 
             debug!(
                 "STAC response received in {:?} s",
@@ -108,22 +113,24 @@ async fn query_stac_item_collection(
 
             let request_started = std::time::Instant::now();
 
-            let item_collection: stac::ItemCollection = client
-                .get(next_url.clone())
-                .send()
-                .await
-                .map_err(
-                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                        source: Box::new(e),
-                    },
-                )?
-                .json()
-                .await
-                .map_err(
-                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                        source: Box::new(e),
-                    },
-                )?;
+            let item_collection: stac::ItemCollection = retry_http(
+                || async {
+                    client
+                        .get(next_url.clone())
+                        .send()
+                        .await?
+                        .error_for_status()?
+                        .json()
+                        .await
+                },
+                &format!("Fetch next STAC page from {next_url}"),
+                &request_policy,
+                |e| e.status().map(|s| s.as_u16()),
+            )
+            .await
+            .map_err(|e| geoengine_operators::error::Error::QueryingProcessorFailed {
+                source: Box::new(e),
+            })?;
 
             debug!(
                 "STAC response received in {:?} s",
