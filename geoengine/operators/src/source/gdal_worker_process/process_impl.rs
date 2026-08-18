@@ -439,6 +439,15 @@ impl GdalHandling {
         let dataset_mask_flags = rasterband.mask_flags()?;
 
         if dataset_mask_flags.is_all_valid() {
+            // Even if GDAL reports all pixels as valid, honor an explicit
+            // no_data_value override
+            if let Some(no_data_value) = dataset_params.no_data_value {
+                debug!("all pixels are valid but no-data override is set");
+                return Ok(GdalDataGridVariant::WithNoData {
+                    data: buffer_data,
+                    no_data_value,
+                });
+            }
             debug!("all pixels are valid --> skip no-data and mask handling.");
             return Ok(GdalDataGridVariant::AllValid { data: buffer_data });
         }
@@ -1570,5 +1579,81 @@ mod tests {
 
         assert!(approx_eq!(f64, properties.offset(), 1.));
         assert!(approx_eq!(f64, properties.scale(), 2.));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    #[allow(clippy::float_cmp)]
+    fn read_all_valid_with_no_data_override() {
+        // This test verifies that when GDAL reports all pixels as valid
+        // (is_all_valid returns true), but an explicit no_data_value is set
+        // in the parameters, the override is honored and the result is
+        // WithNoData variant instead of AllValid.
+        //
+        // The file grid_blit_valid_only/expected.tif is used because:
+        // - It has no NoData value set in GDAL
+        // - It has no mask band
+        // - Therefore, is_all_valid() returns true
+        // - We provide an explicit no_data_value override in parameters
+        // - The code should return WithNoData with that override value
+
+        let params = GdalDatasetParameters {
+            file_path: test_data!("raster/grid_blit_valid_only/expected.tif").into(),
+            rasterband_channel: 1,
+            geo_transform: GdalDatasetGeoTransform {
+                origin_coordinate: (0., 4.).into(),
+                x_pixel_size: 1.0,
+                y_pixel_size: -1.0,
+            },
+            width: 4,
+            height: 4,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: Some(100.), // Set explicit override on a file with no nodata
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: true,
+            retry: None,
+        };
+
+        let gdal_read_advice = GdalReadAdvise {
+            gdal_read_widow: GdalReadWindow::new([0, 0].into(), [4, 4].into()),
+            read_window_bounds: GridBoundingBox2D::new([0, 0], [3, 3]).unwrap(),
+            bounds_of_target: GridBoundingBox2D::new([0, 0], [3, 3]).unwrap(),
+            flip_y: false,
+        };
+
+        let mut gdc = GdalDatasetHolder::new();
+        let dataset = gdc.get_or_open(&params).unwrap();
+
+        let reader_payload =
+            GdalHandling::load_tile_data::<u8>(dataset, &params, gdal_read_advice).unwrap();
+
+        // Verify that the override no_data_value is being used
+        // Without the fix, this would return AllValid and the test would fail
+        match &reader_payload.data_variant {
+            GdalDataGridVariant::WithNoData {
+                data,
+                no_data_value,
+            } => {
+                // If we get here, the override is being honored
+                assert!(!data.is_empty());
+                assert_eq!(
+                    *no_data_value, 100.,
+                    "no_data_value should be the override (100.0)"
+                );
+            }
+            GdalDataGridVariant::AllValid { .. } => {
+                // This would fail without the fix, as the override would be ignored
+                panic!(
+                    "Override was not honored: got AllValid variant instead of WithNoData variant. \
+                     The no_data_value override from parameters is not being applied. \
+                     This indicates the fix for honoring explicit no_data_value on all-valid rasters is missing."
+                );
+            }
+            other => {
+                panic!("Expected WithNoData or AllValid variant, but got {other:?}");
+            }
+        }
     }
 }
