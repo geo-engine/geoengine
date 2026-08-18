@@ -24,18 +24,6 @@ export function oidcRedirectPath(location: Location, route: string, currentRoute
     }
 
     const currentPath = currentRoute ? `/${currentRoute}` : '';
-
-    // Temporary deployment diagnostics; remove after the redirect path is verified.
-    // eslint-disable-next-line no-console
-    console.debug('[WildLIVE OIDC] redirect path inputs', {
-        origin: location.origin,
-        originalPathname: location.pathname,
-        normalizedPathname: pathname,
-        currentRoute,
-        currentPath,
-        route,
-    });
-
     let basePath = '';
     if (currentPath && pathname.endsWith(currentPath)) {
         // Remove the current Angular route, leaving the deployment and mount path:
@@ -63,13 +51,5 @@ export function oidcRedirectPath(location: Location, route: string, currentRoute
         .filter(Boolean)
         .join('/');
 
-    const redirectUri = new URL(`/${path}`, location.origin).toString();
-    // eslint-disable-next-line no-console
-    console.debug('[WildLIVE OIDC] redirect path result', {
-        basePath,
-        path,
-        redirectUri,
-    });
-
-    return redirectUri;
+    return new URL(`/${path}`, location.origin).toString();
 }

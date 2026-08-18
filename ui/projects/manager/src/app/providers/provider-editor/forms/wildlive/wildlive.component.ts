@@ -190,18 +190,7 @@ export class WildLiveComponent implements ControlValueAccessor {
      */
     private getWildliveOidcRedirectUri(): string | undefined {
         // This component is rendered only below the manager's `navigation` route.
-        const redirectUri = oidcRedirectPath(window.location, '/oidc-popup', 'navigation');
-        // Temporary deployment diagnostics; remove after the redirect path is verified.
-        // eslint-disable-next-line no-console
-        console.debug('[WildLIVE OIDC] component redirect URI', {
-            origin: window.location.origin,
-            pathname: window.location.pathname,
-            hash: window.location.hash,
-            currentRoute: 'navigation',
-            redirectUri,
-        });
-
-        return redirectUri;
+        return oidcRedirectPath(window.location, '/oidc-popup', 'navigation');
     }
 
     async connectToWildlivePortal(): Promise<void> {
