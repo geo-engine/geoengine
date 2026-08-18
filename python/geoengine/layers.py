@@ -293,13 +293,21 @@ class LayerCollection:
         # TODO: improve type
         workflow: dict[str, Any] | WorkflowBuilderOperator,
         symbology: Symbology | None,
+        replace_existing: bool = False,
         timeout: int = 60,
     ) -> LayerId:
-        """Add a layer to this collection"""
+        """Add a layer to this collection. Removes existing layers with the same name if forced."""
         # pylint: disable=too-many-arguments,too-many-positional-arguments
 
         if self.provider_id != LAYER_DB_PROVIDER_ID:
             raise ModificationNotOnLayerDbException("Layer collection is not stored in the layer database")
+
+        if replace_existing:
+            for item in self.get_items_by_name(name):
+                if isinstance(item, LayerListing):
+                    # pylint: disable=protected-access
+                    item._remove(self.collection_id, self.provider_id, timeout)
+            self.items = [item for item in self.items if not (isinstance(item, LayerListing) and item.name == name)]
 
         layer_id = _add_layer_to_collection(name, description, workflow, symbology, self.collection_id, timeout)
 
@@ -322,13 +330,22 @@ class LayerCollection:
         workflow: dict[str, Any] | WorkflowBuilderOperator,
         symbology: Symbology | None,
         permission_tuples: list[tuple[RoleId, Permission]] | None = None,
+        replace_existing: bool = False,
         timeout: int = 60,
     ) -> LayerId:
         """
         Add a layer to this collection and set permissions.
+        Removes existing layers with the same name if forced.
         """
 
-        layer_id = self.add_layer(name, description, workflow, symbology, timeout)
+        layer_id = self.add_layer(
+            name,
+            description,
+            workflow,
+            symbology,
+            replace_existing=replace_existing,
+            timeout=timeout,
+        )
 
         if permission_tuples is not None:
             res = Resource.from_layer_id(layer_id)

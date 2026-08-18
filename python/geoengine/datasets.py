@@ -552,7 +552,7 @@ def volume_by_name(volume_name: str, timeout: int = 60) -> Volume | None:
 
 
 def add_dataset(
-    data_store: Volume | UploadId,
+    data_store: Volume | UploadId | Literal["external"],
     properties: AddDatasetProperties,
     meta_data: geoengine_api_client.MetaDataDefinition,
     timeout: int = 60,
@@ -561,6 +561,8 @@ def add_dataset(
 
     if isinstance(data_store, Volume):
         dataset_path = geoengine_api_client.DataPath(geoengine_api_client.DataPathVolume(volume=data_store.name))
+    elif isinstance(data_store, str) and data_store == "external":
+        dataset_path = geoengine_api_client.DataPath(data_store)
     else:
         dataset_path = geoengine_api_client.DataPath(geoengine_api_client.DataPathUpload(upload=str(data_store)))
 
@@ -579,7 +581,7 @@ def add_dataset(
 
 
 def add_or_replace_dataset_with_permissions(
-    data_store: Volume | UploadId,
+    data_store: Volume | UploadId | Literal["external"],
     properties: AddDatasetProperties,
     meta_data: geoengine_api_client.MetaDataDefinition,
     permission_tuples: list[tuple[RoleId, Permission]] | None = None,
@@ -606,7 +608,8 @@ def add_or_replace_dataset_with_permissions(
     else:
         dataset_name = DatasetName(properties.name)
         dataset_info = dataset_info_by_name(dataset_name)
-        if dataset_info is None:  # dataset is not existing
+
+        if dataset_info is None:  # dataset is not existing or can't read
             dataset_name = add_dataset_and_permissions()
         else:
             if replace_existing:  # dataset exists and we overwrite it
