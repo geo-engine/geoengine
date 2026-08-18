@@ -1064,8 +1064,8 @@ CREATE TABLE wildlive_captures (
     station_setup_id text NOT NULL,
     capture_time_stamp timestamp with time zone NOT NULL,
     accepted_name_usage_id text NOT NULL,
-    vernacular_name text NOT NULL,
-    scientific_name text NOT NULL,
+    vernacular_name text,
+    scientific_name text,
     content_url text NOT NULL,
     geom public.GEOMETRY (POINT) NOT NULL,
 
