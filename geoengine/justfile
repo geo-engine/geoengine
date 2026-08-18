@@ -93,22 +93,22 @@ test filter="": common::_clear
 # Run the tests for the geoengine-datatypes package. Optionally, a filter can be provided to run only a subset of the tests. Example: just test-datatypes workflows::workflow::tests
 [group("test")]
 test-datatypes filter="": common::_clear
-    cargo test --package geoengine-datatypes -- {{ filter }} --nocapture
+    cargo test --package geoengine-datatypes --lib -- {{ filter }} --nocapture
 
 # Run the tests for the geoengine-operators package. Optionally, a filter can be provided to run only a subset of the tests. Example: just test-operators workflows::workflow::tests
 [group("test")]
 test-operators filter="": common::_clear
-    cargo test --package geoengine-operators -- {{ filter }} --nocapture
+    cargo test --package geoengine-operators --lib -- {{ filter }} --nocapture
 
 # Run the tests for the geoengine-services package. Optionally, a filter can be provided to run only a subset of the tests. Example: just test-services workflows::workflow::tests
 [group("test")]
 test-services filter="": common::_clear
-    cargo test --package geoengine-services -- {{ filter }} --nocapture
+    cargo test --package geoengine-services --lib -- {{ filter }} --nocapture
 
 # Run the tests for the geoengine-macros package. Optionally, a filter can be provided to run only a subset of the tests. Example: just test-macros workflows::workflow::tests
 [group("test")]
 test-macros filter="": common::_clear
-    cargo test --package geoengine-macros -- {{ filter }} --nocapture
+    cargo test --package geoengine-macros --lib -- {{ filter }} --nocapture
 
 # Run doctests
 [group("test")]
