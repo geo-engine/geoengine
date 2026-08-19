@@ -155,10 +155,11 @@ def add_layer(name: str,
               description: str,
               workflow: dict[str, Any] | WorkflowBuilderOperator,
               symbology: Symbology | None,
+              replace_existing: bool = False,
               timeout: int = 60) -> LayerId
 ```
 
-Add a layer to this collection
+Add a layer to this collection. Removes existing layers with the same name if forced.
 
 #### add\_layer\_with\_permissions
 
@@ -171,10 +172,12 @@ def add_layer_with_permissions(name: str,
                                permission_tuples: list[tuple[RoleId,
                                                              Permission]]
                                | None = None,
+                               replace_existing: bool = False,
                                timeout: int = 60) -> LayerId
 ```
 
 Add a layer to this collection and set permissions.
+Removes existing layers with the same name if forced.
 
 #### add\_existing\_layer
 

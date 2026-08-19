@@ -331,7 +331,7 @@ Returns a volume with the specified name or None if none exists
 #### add\_dataset
 
 ```python
-def add_dataset(data_store: Volume | UploadId,
+def add_dataset(data_store: Volume | UploadId | Literal["external"],
                 properties: AddDatasetProperties,
                 meta_data: geoengine_api_client.MetaDataDefinition,
                 timeout: int = 60) -> DatasetName
@@ -343,7 +343,7 @@ Adds a dataset to the Geo Engine
 
 ```python
 def add_or_replace_dataset_with_permissions(
-        data_store: Volume | UploadId,
+        data_store: Volume | UploadId | Literal["external"],
         properties: AddDatasetProperties,
         meta_data: geoengine_api_client.MetaDataDefinition,
         permission_tuples: list[tuple[RoleId, Permission]] | None = None,
