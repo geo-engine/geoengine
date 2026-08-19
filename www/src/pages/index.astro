@@ -10,6 +10,7 @@ import Spacer from '../components/Spacer.astro';
 import {Picture, Image} from 'astro:assets';
 import {getCollection} from 'astro:content';
 import Section from '../components/Section.astro';
+import type {ImageOutputFormat} from 'astro';
 
 const features = (await getCollection('features')).sort((a, b) => {
     // Sort features by their lexicographical order
@@ -17,6 +18,13 @@ const features = (await getCollection('features')).sort((a, b) => {
 });
 
 const components = await getCollection('components');
+
+function asValidOutputFormat(format: string): ImageOutputFormat {
+    if (!['avif', 'png', 'webp', 'jpeg', 'jpg', 'svg'].includes(format)) {
+        throw new Error(`Invalid image output format: ${format}`);
+    }
+    return format as ImageOutputFormat;
+}
 ---
 
 <SiteLayout>
@@ -32,6 +40,7 @@ const components = await getCollection('components');
                             class="shrink-0 mt-2 size-8 text-gray-800 dark:text-white"
                             slot="icon"
                             src={feature.data.icon}
+                            format={asValidOutputFormat(feature.data.icon.format)}
                             alt={feature.data.title}
                         />
                         {feature.body}
@@ -54,7 +63,14 @@ const components = await getCollection('components');
             {
                 components.map((component) => (
                     <Component title={component.data.title} subtitle={component.data.subtitle}>
-                        <Picture class="max-h-64 max-w-64" slot="image" src={component.data.icon} alt={component.data.title} />
+                        <img
+                            class="max-h-32 max-w-32"
+                            slot="image"
+                            src={component.data.icon.src}
+                            width={component.data.icon.width}
+                            height={component.data.icon.height}
+                            alt={component.data.title}
+                        />
                         {component.body}
                         {component.data.links.map((link) => (
                             <ComponentLink slot="link" href={link.url}>

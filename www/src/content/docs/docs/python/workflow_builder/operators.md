@@ -22,7 +22,7 @@ def name() -> str
 
 Returns the name of the operator.
 
-#### to_dict
+#### to\_dict
 
 ```python
 @abstractmethod
@@ -31,7 +31,7 @@ def to_dict() -> dict[str, Any]
 
 Returns a dictionary representation of the operator that can be used to create a JSON request for the API.
 
-#### data_type
+#### data\_type
 
 ```python
 @abstractmethod
@@ -40,7 +40,7 @@ def data_type() -> Literal["Raster", "Vector"]
 
 Returns the type of the operator.
 
-#### to_workflow_dict
+#### to\_workflow\_dict
 
 ```python
 def to_workflow_dict() -> dict[str, Any]
@@ -48,7 +48,7 @@ def to_workflow_dict() -> dict[str, Any]
 
 Returns a dictionary representation of a workflow that calls the operator&quot; &quot;that can be used to create a JSON request for the workflow API.
 
-#### from_workflow_dict
+#### from\_workflow\_dict
 
 ```python
 @classmethod
@@ -65,7 +65,7 @@ class RasterOperator(Operator)
 
 Base class for all raster operators.
 
-#### from_operator_dict
+#### from\_operator\_dict
 
 ```python
 @classmethod
@@ -82,7 +82,7 @@ class VectorOperator(Operator)
 
 Base class for all vector operators.
 
-#### from_operator_dict
+#### from\_operator\_dict
 
 ```python
 @classmethod
@@ -107,7 +107,7 @@ def __init__(dataset: str | DatasetName)
 
 Creates a new GDAL source operator.
 
-#### from_operator_dict
+#### from\_operator\_dict
 
 ```python
 @classmethod
@@ -134,7 +134,7 @@ def __init__(dataset: str | DatasetName,
 
 Creates a new OGR source operator.
 
-#### from_operator_dict
+#### from\_operator\_dict
 
 ```python
 @classmethod
@@ -165,7 +165,7 @@ def __init__(source_operator: RasterOperator,
 
 Creates a new interpolation operator.
 
-#### from_operator_dict
+#### from\_operator\_dict
 
 ```python
 @classmethod
@@ -195,7 +195,7 @@ def __init__(source_operator: RasterOperator,
 
 Creates a new Downsampling operator.
 
-#### from_operator_dict
+#### from\_operator\_dict
 
 ```python
 @classmethod
@@ -212,7 +212,7 @@ class ColumnNames()
 
 Base class for deriving column names from bands of a raster.
 
-#### from_dict
+#### from\_dict
 
 ```python
 @classmethod
@@ -267,7 +267,7 @@ def __init__(raster_sources: list[RasterOperator],
 
 Creates a new RasterVectorJoin operator.
 
-#### from_operator_dict
+#### from\_operator\_dict
 
 ```python
 @classmethod
@@ -292,7 +292,7 @@ def __init__(point_source: VectorOperator, polygon_source: VectorOperator)
 
 Creates a new PointInPolygonFilter filter operator.
 
-#### from_operator_dict
+#### from\_operator\_dict
 
 ```python
 @classmethod
@@ -316,7 +316,7 @@ The scaling is done as follows:
 y = (x - offset) / slope
 
 The unscale mode is the inverse of the scale mode:
-x = y \* slope + offset
+x = y * slope + offset
 
 #### \_\_init\_\_
 
@@ -365,7 +365,7 @@ def __init__(source: Operator, target_spatial_reference: str)
 
 Creates a new Reprojection operator.
 
-#### as_vector
+#### as\_vector
 
 ```python
 def as_vector() -> VectorOperator
@@ -373,7 +373,7 @@ def as_vector() -> VectorOperator
 
 Casts this operator to a VectorOperator.
 
-#### as_raster
+#### as\_raster
 
 ```python
 def as_raster() -> RasterOperator
@@ -381,7 +381,7 @@ def as_raster() -> RasterOperator
 
 Casts this operator to a RasterOperator.
 
-#### from_operator_dict
+#### from\_operator\_dict
 
 ```python
 @classmethod
@@ -508,7 +508,7 @@ def __init__(source: RasterOperator | VectorOperator,
 
 Creates a new RasterTypeConversion operator.
 
-#### as_vector
+#### as\_vector
 
 ```python
 def as_vector() -> VectorOperator
@@ -516,7 +516,7 @@ def as_vector() -> VectorOperator
 
 Casts this operator to a VectorOperator.
 
-#### as_raster
+#### as\_raster
 
 ```python
 def as_raster() -> RasterOperator
@@ -524,7 +524,7 @@ def as_raster() -> RasterOperator
 
 Casts this operator to a RasterOperator.
 
-#### from_operator_dict
+#### from\_operator\_dict
 
 ```python
 @classmethod
@@ -541,7 +541,7 @@ class RenameBands()
 
 Base class for renaming bands of a raster.
 
-#### from_dict
+#### from\_dict
 
 ```python
 @classmethod
@@ -615,7 +615,7 @@ class BandNeighborhoodAggregateParams()
 
 Abstract base class for band neighborhood aggregate params.
 
-#### from_dict
+#### from\_dict
 
 ```python
 @classmethod

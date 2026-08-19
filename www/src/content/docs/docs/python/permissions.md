@@ -13,7 +13,7 @@ class RoleId()
 
 A wrapper for a role id
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -46,7 +46,7 @@ def __init__(role_id: UUID | RoleId | str, role_name: str)
 
 Create a role with name and id
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -64,7 +64,7 @@ def __eq__(other) -> bool
 
 Checks if two role ids are equal
 
-#### role_id
+#### role\_id
 
 ```python
 def role_id() -> RoleId
@@ -80,7 +80,7 @@ class UserId()
 
 A wrapper for a role id
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -113,7 +113,7 @@ def __init__(permission: Permission, resource: Resource, role: Role)
 
 Create a PermissionListing
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -140,7 +140,7 @@ class Permission(str, Enum)
 
 A permission
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.Permission
@@ -148,7 +148,7 @@ def to_api_dict() -> geoengine_api_client.Permission
 
 Convert to a dict for the API
 
-#### add_permission
+#### add\_permission
 
 ```python
 def add_permission(role: RoleId,
@@ -159,7 +159,7 @@ def add_permission(role: RoleId,
 
 Add a permission to a resource for a role. Requires admin role.
 
-#### remove_permission
+#### remove\_permission
 
 ```python
 def remove_permission(role: RoleId,
@@ -170,7 +170,7 @@ def remove_permission(role: RoleId,
 
 Removes a permission to a resource from a role. Requires admin role.
 
-#### list_permissions
+#### list\_permissions
 
 ```python
 def list_permissions(resource: Resource,
@@ -181,7 +181,7 @@ def list_permissions(resource: Resource,
 
 Lists the roles and permissions assigned to a ressource
 
-#### add_role
+#### add\_role
 
 ```python
 def add_role(name: str, timeout: int = 60) -> RoleId
@@ -189,7 +189,7 @@ def add_role(name: str, timeout: int = 60) -> RoleId
 
 Add a new role. Requires admin role.
 
-#### remove_role
+#### remove\_role
 
 ```python
 def remove_role(role: RoleId, timeout: int = 60)
@@ -197,7 +197,7 @@ def remove_role(role: RoleId, timeout: int = 60)
 
 Remove a role. Requires admin role.
 
-#### assign_role
+#### assign\_role
 
 ```python
 def assign_role(role: RoleId, user: UserId, timeout: int = 60)
@@ -205,7 +205,7 @@ def assign_role(role: RoleId, user: UserId, timeout: int = 60)
 
 Assign a role to a user. Requires admin role.
 
-#### revoke_role
+#### revoke\_role
 
 ```python
 def revoke_role(role: RoleId, user: UserId, timeout: int = 60)

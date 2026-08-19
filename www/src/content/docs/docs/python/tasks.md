@@ -13,7 +13,7 @@ class TaskId()
 
 A wrapper for a task id
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -46,7 +46,7 @@ class TaskStatusInfo()
 
 A wrapper for a task status type
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -139,7 +139,7 @@ def __eq__(other)
 
 Check if two task representations are equal
 
-#### get_status
+#### get\_status
 
 ```python
 def get_status(timeout: int = 3600) -> TaskStatusInfo
@@ -155,7 +155,7 @@ def abort(force: bool = False, timeout: int = 3600) -> None
 
 Abort a running task in a Geo Engine instance
 
-#### wait_for_finish
+#### wait\_for\_finish
 
 ```python
 def wait_for_finish(check_interval_seconds: float = 5,
@@ -166,7 +166,7 @@ def wait_for_finish(check_interval_seconds: float = 5,
 Wait for the given task in a Geo Engine instance to finish (status either complete, aborted or failed).
 The status is printed after each check-in. Check-ins happen in intervals of check_interval_seconds seconds.
 
-#### as_future
+#### as\_future
 
 ```python
 async def as_future(request_interval: int = 5,
@@ -175,7 +175,7 @@ async def as_future(request_interval: int = 5,
 
 Returns a future that will be resolved when the task is finished in the backend.
 
-#### get_task_list
+#### get\_task\_list
 
 ```python
 def get_task_list(timeout: int = 3600) -> list[tuple[Task, TaskStatusInfo]]

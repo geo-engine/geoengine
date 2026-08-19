@@ -50,32 +50,32 @@ export default defineConfig({
                 },
                 {
                     label: 'The Geo Engine',
-                    autogenerate: {directory: 'docs/the-geo-engine'},
+                    items: [{autogenerate: {directory: 'docs/the-geo-engine'}}],
                     collapsed: false,
                 },
                 {
                     label: 'API',
-                    autogenerate: {directory: 'docs/api'},
+                    items: [{autogenerate: {directory: 'docs/api'}}],
                     collapsed: false,
                 },
                 {
                     label: 'Datatypes',
-                    autogenerate: {directory: 'docs/datatypes'},
+                    items: [{autogenerate: {directory: 'docs/datatypes'}}],
                     collapsed: false,
                 },
                 {
                     label: 'Operators',
-                    autogenerate: {directory: 'docs/operators'},
+                    items: [{autogenerate: {directory: 'docs/operators'}}],
                     collapsed: false,
                 },
                 {
                     label: 'Plots',
-                    autogenerate: {directory: 'docs/plots'},
+                    items: [{autogenerate: {directory: 'docs/plots'}}],
                     collapsed: false,
                 },
                 {
                     label: 'Python Library',
-                    autogenerate: {directory: 'docs/python'},
+                    items: [{autogenerate: {directory: 'docs/python', collapsed: true}}],
                     collapsed: true,
                 },
             ],

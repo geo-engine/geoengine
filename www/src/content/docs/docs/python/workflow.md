@@ -21,7 +21,7 @@ def __init__(workflow_id: UUID | str) -> None
 
 Create a new WorkflowId from an UUID or uuid as str
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -38,7 +38,7 @@ class RasterStreamProcessing()
 
 Helper class to process raster stream data
 
-#### read_arrow_ipc
+#### read\_arrow\_ipc
 
 ```python
 @classmethod
@@ -47,7 +47,7 @@ def read_arrow_ipc(cls, arrow_ipc: bytes) -> pa.RecordBatch
 
 Read an Arrow IPC file from a byte array
 
-#### process_bytes
+#### process\_bytes
 
 ```python
 @classmethod
@@ -56,7 +56,7 @@ def process_bytes(cls, tile_bytes: bytes | None) -> RasterTile2D | None
 
 Process a tile from a byte array
 
-#### merge_tiles
+#### merge\_tiles
 
 ```python
 @classmethod
@@ -73,7 +73,7 @@ class Workflow()
 
 Holds a workflow id and allows querying data
 
-#### get_result_descriptor
+#### get\_result\_descriptor
 
 ```python
 def get_result_descriptor() -> ResultDescriptor
@@ -81,7 +81,7 @@ def get_result_descriptor() -> ResultDescriptor
 
 Return the metadata of the workflow result
 
-#### workflow_definition
+#### workflow\_definition
 
 ```python
 def workflow_definition(timeout: int = 60) -> geoc.Workflow
@@ -89,7 +89,7 @@ def workflow_definition(timeout: int = 60) -> geoc.Workflow
 
 Return the workflow definition for this workflow
 
-#### get_dataframe
+#### get\_dataframe
 
 ```python
 def get_dataframe(bbox: QueryRectangle,
@@ -102,7 +102,7 @@ Query a workflow and return the WFS result as a GeoPandas `GeoDataFrame`
 The computation ID from the server response is attached as an attribute.
 Access via: `df.attrs.get('computation_id')`
 
-#### wms_get_map_as_image
+#### wms\_get\_map\_as\_image
 
 ```python
 def wms_get_map_as_image(bbox: QueryRectangle,
@@ -112,7 +112,7 @@ def wms_get_map_as_image(bbox: QueryRectangle,
 
 Return the result of a WMS request as a PIL Image
 
-#### plot_json
+#### plot\_json
 
 ```python
 def plot_json(bbox: QueryRectangle,
@@ -122,7 +122,7 @@ def plot_json(bbox: QueryRectangle,
 
 Query a workflow and return the plot chart result as WrappedPlotOutput
 
-#### plot_chart
+#### plot\_chart
 
 ```python
 def plot_chart(bbox: QueryRectangle,
@@ -132,7 +132,7 @@ def plot_chart(bbox: QueryRectangle,
 
 Query a workflow and return the plot chart result as a vega plot
 
-#### get_array
+#### get\_array
 
 ```python
 def get_array(bbox: QueryRectangle,
@@ -143,13 +143,14 @@ def get_array(bbox: QueryRectangle,
 
 Query a workflow and return the raster result as a numpy array
 
-## Parameters
+Parameters
+----------
 
 bbox : A bounding box for the query
 timeout : HTTP request timeout in seconds
 force_no_data_value: If not None, use this value as no data value for the requested raster data. Otherwise, use the Geo Engine will produce masked rasters.
 
-#### get_xarray
+#### get\_xarray
 
 ```python
 def get_xarray(bbox: QueryRectangle,
@@ -160,13 +161,14 @@ def get_xarray(bbox: QueryRectangle,
 
 Query a workflow and return the raster result as a georeferenced xarray
 
-## Parameters
+Parameters
+----------
 
 bbox : A bounding box for the query
 timeout : HTTP request timeout in seconds
 force_no_data_value: If not None, use this value as no data value for the requested raster data. Otherwise, use the Geo Engine will produce masked rasters.
 
-#### download_raster
+#### download\_raster
 
 ```python
 def download_raster(
@@ -180,7 +182,8 @@ def download_raster(
 
 Query a workflow and save the raster result as a file on disk
 
-## Parameters
+Parameters
+----------
 
 bbox : A bounding box for the query
 file_path : The path to the file to save the raster to
@@ -188,7 +191,7 @@ timeout : HTTP request timeout in seconds
 file_format : The format of the returned raster
 force_no_data_value: If not None, use this value as no data value for the requested raster data. Otherwise, use the Geo Engine will produce masked rasters.
 
-#### get_provenance
+#### get\_provenance
 
 ```python
 def get_provenance(timeout: int = 60) -> list[ProvenanceEntry]
@@ -196,7 +199,7 @@ def get_provenance(timeout: int = 60) -> list[ProvenanceEntry]
 
 Query the provenance of the workflow
 
-#### metadata_zip
+#### metadata\_zip
 
 ```python
 def metadata_zip(path: PathLike | BytesIO, timeout: int = 60) -> None
@@ -204,7 +207,7 @@ def metadata_zip(path: PathLike | BytesIO, timeout: int = 60) -> None
 
 Query workflow metadata and citations and stores it as zip file to `path`
 
-#### save_as_dataset
+#### save\_as\_dataset
 
 ```python
 def save_as_dataset(query_rectangle: QueryRectangle,
@@ -216,7 +219,7 @@ def save_as_dataset(query_rectangle: QueryRectangle,
 
 Init task to store the workflow result as a layer
 
-#### raster_stream
+#### raster\_stream
 
 ```python
 async def raster_stream(query_rectangle: QueryRectangle | RasterQueryRectangle,
@@ -225,7 +228,7 @@ async def raster_stream(query_rectangle: QueryRectangle | RasterQueryRectangle,
 
 Stream the workflow result as series of RasterTile2D (transformable to numpy and xarray)
 
-#### raster_stream_into_xarray
+#### raster\_stream\_into\_xarray
 
 ```python
 async def raster_stream_into_xarray(query_rectangle: RasterQueryRectangle,
@@ -237,7 +240,7 @@ Stream the workflow result into memory and output a single xarray.
 
 NOTE: You can run out of memory if the query rectangle is too large.
 
-#### vector_stream
+#### vector\_stream
 
 ```python
 async def vector_stream(
@@ -249,7 +252,7 @@ async def vector_stream(
 
 Stream the workflow result as series of `GeoDataFrame`s
 
-#### vector_stream_into_geopandas
+#### vector\_stream\_into\_geopandas
 
 ```python
 async def vector_stream_into_geopandas(
@@ -263,7 +266,7 @@ Stream the workflow result into memory and output a single geo data frame.
 
 NOTE: You can run out of memory if the query rectangle is too large.
 
-#### register_workflow
+#### register\_workflow
 
 ```python
 def register_workflow(workflow: dict[str, Any] | WorkflowBuilderOperator,
@@ -272,7 +275,7 @@ def register_workflow(workflow: dict[str, Any] | WorkflowBuilderOperator,
 
 Register a workflow in Geo Engine and receive a `WorkflowId`
 
-#### workflow_by_id
+#### workflow\_by\_id
 
 ```python
 def workflow_by_id(workflow_id: UUID | str) -> Workflow
@@ -280,7 +283,7 @@ def workflow_by_id(workflow_id: UUID | str) -> Workflow
 
 Create a workflow object from a workflow id
 
-#### get_quota
+#### get\_quota
 
 ```python
 def get_quota(user_id: UUID | None = None, timeout: int = 60) -> geoc.Quota
@@ -288,7 +291,7 @@ def get_quota(user_id: UUID | None = None, timeout: int = 60) -> geoc.Quota
 
 Gets a user&#x27;s quota. Only admins can get other users&#x27; quota.
 
-#### update_quota
+#### update\_quota
 
 ```python
 def update_quota(user_id: UUID,
@@ -298,7 +301,7 @@ def update_quota(user_id: UUID,
 
 Update a user&#x27;s quota. Only admins can perform this operation.
 
-#### data_usage
+#### data\_usage
 
 ```python
 def data_usage(offset: int = 0, limit: int = 10) -> list[geoc.DataUsage]
@@ -306,7 +309,7 @@ def data_usage(offset: int = 0, limit: int = 10) -> list[geoc.DataUsage]
 
 Get data usage
 
-#### data_usage_summary
+#### data\_usage\_summary
 
 ```python
 def data_usage_summary(granularity: geoc.UsageSummaryGranularity,
@@ -317,7 +320,7 @@ def data_usage_summary(granularity: geoc.UsageSummaryGranularity,
 
 Get data usage summary
 
-#### data_usage_for_computation
+#### data\_usage\_for\_computation
 
 ```python
 def data_usage_for_computation(computation_id: UUID) -> int
