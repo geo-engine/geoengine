@@ -1,24 +1,25 @@
 <geoengine-dialog-header>{{ plot.name }}</geoengine-dialog-header>
 <mat-dialog-content>
-    @switch (plotData?.outputFormat) {
-        @case ('ImagePng') {
-            <img [src]="plotData?.data" [alt]="plot.name" />
-            @if (plotLoading$ | async) {
-                <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+    @if (plotData.isLoading()) {
+        <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+    } @else {
+        @switch (plotData.value().outputFormat) {
+            @case ('ImagePng') {
+                <img [src]="plotData.value().data" [alt]="plot.name" />
             }
-        }
-        @case ('JsonPlain') {
-            <pre>{{ plotData?.data | json }}</pre>
-        }
-        @case ('JsonVega') {
-            @if (maxWidth$ | async; as maxWidth) {
-                @if (maxHeight$ | async; as maxHeight) {
-                    <geoengine-vega-viewer [chartData]="plotData?.data" [width]="maxWidth" [height]="maxHeight"></geoengine-vega-viewer>
-                }
+            @case ('JsonPlain') {
+                <pre>{{ plotData.value().data | json }}</pre>
             }
-        }
-        @default {
-            <pre>{{ plotData?.data }}</pre>
+            @case ('JsonVega') {
+                <geoengine-vega-viewer
+                    [chartData]="plotData.value().data"
+                    [width]="maxWidth()"
+                    [height]="maxHeight()"
+                ></geoengine-vega-viewer>
+            }
+            @default {
+                <pre>{{ plotData.value().data }}</pre>
+            }
         }
     }
 </mat-dialog-content>

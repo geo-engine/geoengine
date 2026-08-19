@@ -1,4 +1,4 @@
-import {Component, Input, output} from '@angular/core';
+import {Component, Input, output, ChangeDetectionStrategy} from '@angular/core';
 import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {ClassificationMeasurement, ContinuousMeasurement, Measurement, UnitlessMeasurement} from '@geoengine/api-client';
 import {MatButtonToggleGroup, MatButtonToggle} from '@angular/material/button-toggle';
@@ -22,6 +22,7 @@ interface AddClassForm {
     selector: 'geoengine-measurement',
     templateUrl: './measurement.component.html',
     styleUrl: './measurement.component.css',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         MatButtonToggleGroup,
         FormsModule,

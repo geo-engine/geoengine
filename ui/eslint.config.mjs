@@ -1,5 +1,5 @@
 import {defineConfig} from 'eslint/config';
-import preferArrow from 'eslint-plugin-prefer-arrow';
+import preferArrow from 'eslint-plugin-prefer-arrow-functions';
 import angular from 'angular-eslint';
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
@@ -148,7 +148,7 @@ export default defineConfig([
             '@typescript-eslint/no-unsafe-member-access': 'warn', // TODO: use typed forms
             '@typescript-eslint/no-unsafe-return': 'warn', // TODO: use typed forms
             '@typescript-eslint/unbound-method': ['error', {ignoreStatic: true}],
-            '@typescript-eslint/no-floating-promises': 'warn', // TODO: fix promises
+            '@typescript-eslint/no-floating-promises': 'error',
             '@typescript-eslint/no-inferrable-types': ['error', {ignoreParameters: true, ignoreProperties: true}],
 
             'prefer-arrow/prefer-arrow-functions': [

@@ -1,4 +1,4 @@
-import {Component, viewChild} from '@angular/core';
+import {Component, viewChild, ChangeDetectionStrategy} from '@angular/core';
 import {DatasetListing} from '@geoengine/api-client';
 import {BehaviorSubject} from 'rxjs';
 import {DatasetListComponent} from './dataset-list/dataset-list.component';
@@ -9,6 +9,7 @@ import {AsyncPipe} from '@angular/common';
     selector: 'geoengine-manager-datasets',
     templateUrl: './datasets.component.html',
     styleUrl: './datasets.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [DatasetListComponent, DatasetEditorComponent, AsyncPipe],
 })
 export class DatasetsComponent {

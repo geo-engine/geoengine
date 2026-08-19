@@ -1,4 +1,4 @@
-import {Component, inject, input, output, viewChild} from '@angular/core';
+import {Component, inject, input, output, viewChild, ChangeDetectionStrategy} from '@angular/core';
 import {FormArray, FormControl} from '@angular/forms';
 import {MatDialog} from '@angular/material/dialog';
 import {CollectionNavigation, ConfirmationComponent, LayerCollectionListComponent, LayersService, CommonModule} from '@geoengine/common';
@@ -19,6 +19,7 @@ export interface CollectionForm {
     selector: 'geoengine-manager-layer-collection-child-list',
     templateUrl: './layer-collection-child-list.component.html',
     styleUrl: './layer-collection-child-list.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [CommonModule, MatButton, MatIcon],
 })
 export class LayerCollectionChildListComponent {

@@ -18,6 +18,6 @@ export class LayerCollectionSelectionComponent {
     readonly collectionName = input('Layer Collection');
 
     selectLayer(layer: LayerListing): void {
-        this.projectService.addLayerbyId(layer.id);
+        void this.projectService.addLayerbyId(layer.id);
     }
 }

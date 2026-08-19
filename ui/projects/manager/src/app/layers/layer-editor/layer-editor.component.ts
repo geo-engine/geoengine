@@ -1,4 +1,4 @@
-import {Component, signal, WritableSignal, inject, input, linkedSignal, effect, output} from '@angular/core';
+import {Component, signal, WritableSignal, inject, input, linkedSignal, effect, output, ChangeDetectionStrategy} from '@angular/core';
 import {FormArray, FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
@@ -40,6 +40,7 @@ export interface LayerForm {
     selector: 'geoengine-manager-layer-editor',
     templateUrl: './layer-editor.component.html',
     styleUrl: './layer-editor.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         FormsModule,
         ReactiveFormsModule,

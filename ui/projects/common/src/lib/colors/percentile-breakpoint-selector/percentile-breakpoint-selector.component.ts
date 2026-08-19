@@ -113,7 +113,7 @@ export class PercentileBreakpointSelectorComponent {
 
         this.form.controls.bounds.setValue({min, max});
 
-        this.updateColorizerData();
+        void this.updateColorizerData();
     }
 
     /**

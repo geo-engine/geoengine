@@ -22,9 +22,10 @@ format write="false": common::_clear
     npm run prettier -- {{ if write != "true" { "--check" } else { "--write" } }} .
 
 [arg("project", long="project", help="Whether to only lint a specific project, e.g. `--project=gis`.")]
-[arg("only-errors", long="only-errors", value="true", help="Whether to only print errors and warnings, without the full linting output.")]
-lint only-errors="false" project="": common::_clear format
-    npm run lint -- {{ if only-errors == "true" { "--quiet" } else { "" } }} {{ project }}
+[arg("fix", long="fix", value="--fix", help="Whether to automatically fix linting errors.")]
+[arg("only-errors", long="only-errors", value="--quiet", help="Whether to only print errors and warnings, without the full linting output.")]
+lint only-errors="" fix="" project="": common::_clear (format (if fix == "--fix" { "true" } else { "false" }))
+    npm run lint -- {{ only-errors }} {{ fix }} {{ project }}
 
 build project="gis": common::_clear
     npm run build-prod:{{ project }}
@@ -33,6 +34,26 @@ build project="gis": common::_clear
 run project="gis" nightly="false": common::_clear
     npm run serve:{{ project }}:{{ if nightly == "true" { "nightly" } else { "local" } }}
 
+[arg("include", long="include", help="Whether to include only specific test files, e.g. `--include=`.")]
 [arg("ci", long="ci", value="true", help="Whether to run tests in CI mode.")]
-test ci="false": common::_clear
-    npm run test{{ if ci == "true" { ":browser:ci" } else { "" } }}
+test ci="false" include="" filter="": common::_clear
+    npm run test{{ if ci == "true" { ":browser:ci" } else { "" } }} \
+        -- \
+        {{ if include == "" { "" } else { "--include=" + include } }} \
+        {{ if filter == "" { "" } else { '--filter="' + filter + '"' } }}
+
+[group("update")]
+update-step1-angular: common::_clear && (lint "--quiet" "--fix" "gis")
+    #!/usr/bin/env bash
+    LATEST_ANGULAR_VERSION=$(npx @angular/cli@latest version --json | jq -r '.cli.version')
+    echo "Updating Angular to version $LATEST_ANGULAR_VERSION"
+
+    npx @angular/cli@latest update --allow-dirty \
+        @angular/cli@latest \
+        @angular/core@latest \
+        @angular/material@latest \
+        angular-eslint
+
+update-step2-npm: common::_clear
+    npx npm-check-updates -u --target minor
+    npm install

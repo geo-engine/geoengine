@@ -1,4 +1,4 @@
-import {Component, effect, input, output, signal} from '@angular/core';
+import {Component, effect, input, output, signal, ChangeDetectionStrategy} from '@angular/core';
 import {TypedDataProviderDefinition, TypedDataProviderDefinitionFromJSON} from '@geoengine/api-client';
 import {MatError} from '@angular/material/form-field';
 import {CodeEditorComponent} from '@geoengine/common';
@@ -8,6 +8,7 @@ import {FormControl, ReactiveFormsModule} from '@angular/forms';
     selector: 'geoengine-manager-provider-json-input',
     templateUrl: './provider-json-input.component.html',
     styleUrl: './provider-json-input.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [MatError, CodeEditorComponent, ReactiveFormsModule],
 })
 export class ProviderJsonInputComponent {

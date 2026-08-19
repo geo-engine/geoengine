@@ -204,9 +204,7 @@ export class LineageGraphComponent implements AfterViewInit {
                 const operatorSources = nonSourceOperator.sources as OperatorSourcesDict;
                 for (const sourceKey of Object.keys(operatorSources)) {
                     const operatorSource = operatorSources[sourceKey] as
-                        | LegacyTypedOperatorOperator
-                        | Array<LegacyTypedOperatorOperator>
-                        | undefined;
+                        LegacyTypedOperatorOperator | Array<LegacyTypedOperatorOperator> | undefined;
 
                     if (!operatorSource) {
                         continue;

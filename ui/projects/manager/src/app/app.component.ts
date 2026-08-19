@@ -1,4 +1,4 @@
-import {OnInit, ViewContainerRef, inject} from '@angular/core';
+import {OnInit, ViewContainerRef, inject, ChangeDetectionStrategy} from '@angular/core';
 import {Component} from '@angular/core';
 import {Router, RouterOutlet} from '@angular/router';
 import {Location} from '@angular/common';
@@ -9,6 +9,7 @@ import {firstValueFrom} from 'rxjs';
     selector: 'geoengine-root',
     templateUrl: './app.component.html',
     styleUrl: './app.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [RouterOutlet],
 })
 export class AppComponent implements OnInit {

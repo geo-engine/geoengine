@@ -1,6 +1,6 @@
 import {DataSource} from '@angular/cdk/collections';
 import {CdkFixedSizeVirtualScroll, CdkVirtualForOf, CdkVirtualScrollViewport} from '@angular/cdk/scrolling';
-import {AfterContentInit, Component, inject, viewChild, output, input, effect, signal} from '@angular/core';
+import {AfterContentInit, Component, inject, viewChild, output, input, effect, signal, ChangeDetectionStrategy} from '@angular/core';
 import {LayerProviderListing} from '@geoengine/api-client';
 import {BehaviorSubject, concatMap, firstValueFrom, Observable, range, scan, startWith, Subject} from 'rxjs';
 import {LayersService} from '@geoengine/common';
@@ -16,6 +16,7 @@ import {MatButton} from '@angular/material/button';
     selector: 'geoengine-manager-provider-list',
     templateUrl: './provider-list.component.html',
     styleUrl: './provider-list.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         CdkVirtualScrollViewport,
         AsyncPipe,
