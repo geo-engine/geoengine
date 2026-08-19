@@ -3,16 +3,26 @@ import {defineConfig} from 'astro/config';
 import tailwindcss from '@tailwindcss/vite';
 import icon from 'astro-icon';
 import starlight from '@astrojs/starlight';
-import openApiOperatorsPlugin from './astro-openapi-plugin.ts';
+import openApiOperatorsPlugin from './plugins/astro-openapi.ts';
+import pydocPlugin from './plugins/pydoc.ts';
+import {generateFavicons} from './plugins/favicon.ts';
 import starlightLinksValidator from 'starlight-links-validator';
-import pydocPlugin from './pydoc-plugin.ts';
 
 // https://astro.build/config
 export default defineConfig({
     site: 'https://www.geoengine.io',
 
     vite: {
-        plugins: [tailwindcss()],
+        plugins: [
+            tailwindcss(),
+            generateFavicons({
+                name: 'Geo Engine – Spatio-Temporal Geodata Processing',
+                shortName: 'Geo Engine',
+                description: 'Website about the Geo Engine platform',
+                themeColor: '#d7e4a5',
+                backgroundColor: '#ffffff',
+            }),
+        ],
     },
 
     integrations: [
