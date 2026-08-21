@@ -52,10 +52,10 @@
         {
           "assetBand": {
             "assetTitle": "Blue (band 2) - 10m",
-            "bandName": "Blue (band 2) - 10m"
+            "bandName": "B02_10m"
           },
           "bandDescriptor": {
-            "name": "Blue (band 2) - 10m",
+            "name": "B02_10m",
             "measurement": {
               "type": "unitless"
             }
@@ -64,22 +64,10 @@
         {
           "assetBand": {
             "assetTitle": "Green (band 3) - 10m",
-            "bandName": "Green (band 3) - 10m"
+            "bandName": "B03_10m"
           },
           "bandDescriptor": {
-            "name": "Green (band 3) - 10m",
-            "measurement": {
-              "type": "unitless"
-            }
-          }
-        },
-        {
-          "assetBand": {
-            "assetTitle": "NIR 1 (band 8) - 10m",
-            "bandName": "NIR 1 (band 8) - 10m"
-          },
-          "bandDescriptor": {
-            "name": "NIR 1 (band 8) - 10m",
+            "name": "B03_10m",
             "measurement": {
               "type": "unitless"
             }
@@ -88,10 +76,22 @@
         {
           "assetBand": {
             "assetTitle": "Red (band 4) - 10m",
-            "bandName": "Red (band 4) - 10m"
+            "bandName": "B04_10m"
           },
           "bandDescriptor": {
-            "name": "Red (band 4) - 10m",
+            "name": "B04_10m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        },
+        {
+          "assetBand": {
+            "assetTitle": "NIR 1 (band 8) - 10m",
+            "bandName": "B08_10m"
+          },
+          "bandDescriptor": {
+            "name": "B08_10m",
             "measurement": {
               "type": "unitless"
             }
@@ -135,10 +135,10 @@
         {
           "assetBand": {
             "assetTitle": "SWIR 1 (band 11) - 20m",
-            "bandName": "SWIR 1 (band 11) - 20m"
+            "bandName": "B11_20m"
           },
           "bandDescriptor": {
-            "name": "SWIR 1 (band 11) - 20m",
+            "name": "B11_20m",
             "measurement": {
               "type": "unitless"
             }
@@ -147,10 +147,10 @@
         {
           "assetBand": {
             "assetTitle": "SWIR 2 (band 12) - 20m",
-            "bandName": "SWIR 2 (band 12) - 20m"
+            "bandName": "B12_20m"
           },
           "bandDescriptor": {
-            "name": "SWIR 2 (band 12) - 20m",
+            "name": "B12_20m",
             "measurement": {
               "type": "unitless"
             }

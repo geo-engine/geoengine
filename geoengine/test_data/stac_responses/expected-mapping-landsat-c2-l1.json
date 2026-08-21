@@ -52,10 +52,10 @@
         {
           "assetBand": {
             "assetTitle": "Blue (band 2) - 30m",
-            "bandName": "Blue (band 2) - 30m"
+            "bandName": "B2_30m"
           },
           "bandDescriptor": {
-            "name": "Blue (band 2) - 30m",
+            "name": "B2_30m",
             "measurement": {
               "type": "unitless"
             }
@@ -64,22 +64,10 @@
         {
           "assetBand": {
             "assetTitle": "Green (band 3) - 30m",
-            "bandName": "Green (band 3) - 30m"
+            "bandName": "B3_30m"
           },
           "bandDescriptor": {
-            "name": "Green (band 3) - 30m",
-            "measurement": {
-              "type": "unitless"
-            }
-          }
-        },
-        {
-          "assetBand": {
-            "assetTitle": "NIR (band 5) - 30m",
-            "bandName": "NIR (band 5) - 30m"
-          },
-          "bandDescriptor": {
-            "name": "NIR (band 5) - 30m",
+            "name": "B3_30m",
             "measurement": {
               "type": "unitless"
             }
@@ -88,10 +76,22 @@
         {
           "assetBand": {
             "assetTitle": "Red (band 4) - 30m",
-            "bandName": "Red (band 4) - 30m"
+            "bandName": "B4_30m"
           },
           "bandDescriptor": {
-            "name": "Red (band 4) - 30m",
+            "name": "B4_30m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        },
+        {
+          "assetBand": {
+            "assetTitle": "NIR (band 5) - 30m",
+            "bandName": "B5_30m"
+          },
+          "bandDescriptor": {
+            "name": "B5_30m",
             "measurement": {
               "type": "unitless"
             }

@@ -191,7 +191,8 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
 
     upload_tiles_to_datasets(&api_config, &params, &tiles_by_dataset).await?;
 
-    create_harvest_layer_collections(&api_config, provider_def, &created_datasets, &params).await?;
+    create_harvest_layer_collections(&api_config, provider_def, &provider_def.datasets, &params)
+        .await?;
 
     let elapsed = start_time.elapsed();
     info!("Harvest completed in {:.2?}", elapsed);
@@ -418,19 +419,14 @@ async fn create_dataset_api(
                 .header("Authorization", format!("Bearer {session_id}"))
                 .json(&create_dataset_req)
                 .send()
-                .await
+                .await?
+                .error_for_status()
         },
         &format!("Create dataset '{dataset_name}'"),
         &RetryPolicy::new(),
         |e| e.status().map(|s| s.as_u16()),
     )
     .await?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        anyhow::bail!("Failed to create dataset '{dataset_name}': HTTP {status}: {body}");
-    }
 
     let created_name = if let Ok(json) = response.json::<serde_json::Value>().await {
         json.get("datasetName")
@@ -481,7 +477,8 @@ async fn share_dataset_api(
                     .header("Authorization", format!("Bearer {session_id}"))
                     .json(permission)
                     .send()
-                    .await
+                    .await?
+                    .error_for_status()
             },
             &format!("Add permission for dataset '{dataset_name}'"),
             &RetryPolicy::new(),
@@ -496,7 +493,7 @@ async fn share_dataset_api(
 async fn create_harvest_layer_collections(
     api_config: &ApiConfig,
     provider_def: &StacDataProviderDefinition,
-    created_datasets: &[(usize, StacProviderDataset)],
+    datasets: &[StacProviderDataset],
     params: &StacHarvest,
 ) -> Result<(), anyhow::Error> {
     let geo_engine_url = &api_config.base_path;
@@ -524,7 +521,7 @@ async fn create_harvest_layer_collections(
     )
     .await?;
 
-    for (_idx, dataset) in created_datasets {
+    for dataset in datasets {
         let dataset_name = dataset_name_for_harvest(&provider_def.collection_name, dataset);
         let layer_name = format!(
             "EPSG:{} {:?} {}m",
@@ -532,6 +529,13 @@ async fn create_harvest_layer_collections(
             dataset.data_type,
             dataset.resolution.x
         );
+
+        if child_layer_exists(api_config, &temp_collection_id, &layer_name).await? {
+            if params.verbose {
+                info!("Found existing layer '{layer_name}'");
+            }
+            continue;
+        }
 
         let add_layer = AddLayer {
             name: layer_name.clone(),
@@ -564,6 +568,7 @@ async fn create_harvest_layer_collections(
                     .json(&add_layer)
                     .send()
                     .await?
+                    .error_for_status()?
                     .json()
                     .await
             },
@@ -614,6 +619,7 @@ async fn create_layer_collection_api(
                 .json(&add_collection)
                 .send()
                 .await?
+                .error_for_status()?
                 .json()
                 .await
         },
@@ -651,6 +657,7 @@ async fn find_child_collection_by_name(
                     .header("Authorization", format!("Bearer {session_id}"))
                     .send()
                     .await?
+                    .error_for_status()?
                     .json()
                     .await
             },
@@ -672,6 +679,53 @@ async fn find_child_collection_by_name(
             return Ok(None);
         }
 
+        offset += limit;
+    }
+}
+
+async fn child_layer_exists(
+    api_config: &ApiConfig,
+    parent_id: &LayerCollectionId,
+    child_name: &str,
+) -> Result<bool, anyhow::Error> {
+    let geo_engine_url = &api_config.base_path;
+    let session_id = api_config.bearer_access_token.as_deref().unwrap_or("");
+    let client = &api_config.client;
+    let mut offset: u32 = 0;
+    let limit: u32 = 20;
+
+    loop {
+        let response: LayerCollection = retry_http(
+            || async {
+                client
+                    .get(format!(
+                        "{geo_engine_url}/layers/collections/{INTERNAL_PROVIDER_ID}/{parent_id}"
+                    ))
+                    .query(&[("offset", offset), ("limit", limit)])
+                    .header("Authorization", format!("Bearer {session_id}"))
+                    .send()
+                    .await?
+                    .error_for_status()?
+                    .json()
+                    .await
+            },
+            &format!("List child layers of {parent_id}"),
+            &RetryPolicy::new(),
+            |e| e.status().map(|s| s.as_u16()),
+        )
+        .await?;
+
+        if response
+            .items
+            .iter()
+            .any(|item| matches!(item, CollectionItem::Layer(layer) if layer.name == child_name))
+        {
+            return Ok(true);
+        }
+
+        if response.items.len() < limit as usize {
+            return Ok(false);
+        }
         offset += limit;
     }
 }
@@ -712,7 +766,8 @@ async fn share_layer_collection_api(
                     .header("Authorization", format!("Bearer {session_id}"))
                     .json(permission)
                     .send()
-                    .await
+                    .await?
+                    .error_for_status()
             },
             &format!("Share collection with role {}", permission.role_id),
             &RetryPolicy::new(),
@@ -757,7 +812,8 @@ async fn share_layer_api(api_config: &ApiConfig, layer_id: &LayerId) -> Result<(
                     .header("Authorization", format!("Bearer {session_id}"))
                     .json(permission)
                     .send()
-                    .await
+                    .await?
+                    .error_for_status()
             },
             &format!("Share layer with role {}", permission.role_id),
             &RetryPolicy::new(),

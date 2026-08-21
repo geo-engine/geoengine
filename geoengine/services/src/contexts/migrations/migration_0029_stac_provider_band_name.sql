@@ -90,7 +90,7 @@ BEGIN
         (def).time_dimension,
         new_datasets,
         (def).query_timeout_secs,
-        (def).page_limit
+        COALESCE((def).page_limit, 100)
     )::"StacDataProviderDefinition";
 END;
 $$ LANGUAGE plpgsql;

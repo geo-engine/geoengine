@@ -190,8 +190,8 @@ fn is_terminal<E: std::fmt::Display>(
 mod tests {
     use super::{RetryPolicy, retry_http};
     use std::fmt;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[derive(Debug, Clone)]
     struct TestError {

@@ -2302,7 +2302,10 @@ fn band_names_from_asset_v1_1_0(asset: &stac::Asset) -> anyhow::Result<Vec<Strin
     Ok(names)
 }
 
-fn band_names_from_item_asset_v1_1_0(asset: &stac::ItemAsset, asset_key: Option<&str>) -> anyhow::Result<Vec<String>> {
+fn band_names_from_item_asset_v1_1_0(
+    asset: &stac::ItemAsset,
+    asset_key: Option<&str>,
+) -> anyhow::Result<Vec<String>> {
     let asset_title = asset
         .title
         .as_deref()
