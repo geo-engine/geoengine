@@ -4,7 +4,7 @@ use anyhow::Context;
 use clap::{Parser, ValueEnum};
 use geoengine_datatypes::{
     dataset::DataProviderId,
-    primitives::SpatialResolution,
+    primitives::{AxisAlignedRectangle, BoundingBox2D, SpatialResolution},
     raster::{GeoTransform, GridBoundingBox2D, GridIdx2D, RasterDataType},
     spatial_reference::{SpatialReference, SpatialReferenceAuthority},
     util::Identifier,
@@ -12,14 +12,15 @@ use geoengine_datatypes::{
 use ordered_float::OrderedFloat;
 use tracing::{info, warn};
 
+use crate::api::model::{
+    datatypes::{TimeGranularity, TimeStep},
+    operators::{RegularTimeDimension, TimeDimension},
+};
 use crate::datasets::external::stac::{
     StacAssetBand, StacDataProviderDefinition, StacProviderDataset, StacProviderDatasetBand,
     StacProviderS3Config, common,
 };
 use crate::util::retry::{RetryPolicy, retry_http};
-use geoengine_datatypes::primitives::{
-    RegularTimeDimension as DtRegularTimeDimension, TimeDimension as DtTimeDimension,
-};
 use geoengine_operators::engine::SpatialGridDescriptor as GeoOpSpatialGridDescriptor;
 
 // ---------------------------------------------------------------------------
@@ -96,12 +97,12 @@ pub struct StacDiscoverMapping {
     pub id: Option<DataProviderId>,
 
     /// Time dimension granularity (default: days)
-    #[arg(long, default_value = "days")]
-    pub time_granularity: String,
+    #[arg(long, default_value = "days", value_parser = parse_time_granularity)]
+    pub time_granularity: TimeGranularity,
 
     /// Time dimension step (default: 1)
     #[arg(long, default_value_t = 1)]
-    pub time_step: u64,
+    pub time_step: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -162,8 +163,15 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         );
     }
 
-    let time_dimension = parse_time_dimension(&params.time_granularity, params.time_step)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let time_dimension: geoengine_datatypes::primitives::TimeDimension =
+        TimeDimension::Regular(RegularTimeDimension {
+            origin: geoengine_datatypes::primitives::TimeInstance::from_millis_unchecked(0).into(),
+            step: TimeStep {
+                granularity: params.time_granularity,
+                step: params.time_step,
+            },
+        })
+        .into();
 
     let s3_config = params
         .s3_endpoint
@@ -625,22 +633,16 @@ fn projection_grid_bounds(gt: GeoTransform, epsg: u32) -> Option<GridBoundingBox
 /// by querying the CRS's area of use via PROJ and projecting it into the CRS's
 /// own coordinate system.
 fn projection_extent(epsg: u32) -> Option<(f64, f64, f64, f64)> {
-    use proj::Proj;
-
-    let proj_crs = Proj::new(&format!("EPSG:{epsg}")).ok()?;
-
-    // Get area of use in degrees (WGS84)
-    let (area, _name) = proj_crs.area_of_use().ok()?;
-    let area = area?;
-
-    // Project the WGS84 bounding box into the target CRS
-    let pipeline = Proj::new_known_crs("EPSG:4326", &format!("EPSG:{epsg}"), None).ok()?;
-    let bounds = pipeline
-        .transform_bounds(area.west, area.south, area.east, area.north, 21)
+    let extent: BoundingBox2D = SpatialReference::new(SpatialReferenceAuthority::Epsg, epsg)
+        .area_of_use_projected()
         .ok()?;
 
-    // transform_bounds returns [west, south, east, north] in the target CRS
-    Some((bounds[0], bounds[2], bounds[1], bounds[3]))
+    Some((
+        extent.lower_left().x,
+        extent.upper_right().x,
+        extent.lower_left().y,
+        extent.upper_right().y,
+    ))
 }
 
 /// A key that uniquely identifies a Geo Engine dataset derived from STAC assets.
@@ -842,38 +844,18 @@ fn merge_dataset_bands(
 /// Determine the unit suffix for a dataset based on its EPSG code.
 /// Geographic CRS (like EPSG:4326) use degrees, projected CRS (like UTM) use meters.
 fn get_unit_suffix(epsg: u32) -> &'static str {
-    match epsg {
-        // Geographic CRS codes (WGS84, ETRS89, and other lat/lon coordinates)
-        4258 | 4267 | 4269 | 4276 | 4277 | 4278 | 4279 | 4289 | 4291 | 4308 | 4309 | 4311
-        | 4312 | 4313 | 4314 | 4315 | 4316 | 4317 | 4318 | 4319 | 4322 | 4326 | 4357 | 4359
-        | 4360 | 4361 | 4362 | 4363 | 4364 | 4365 | 4366 | 4367 | 4368 | 4369 | 4370 | 4371
-        | 4372 | 4373 | 4374 | 4375 | 4376 | 4377 | 4378 | 4379 | 4380 | 4381 | 4382 | 4383
-        | 4384 | 4385 | 4386 | 4387 | 4388 | 4389 | 4390 | 4391 | 4392 | 4393 | 4394 | 4395
-        | 4396 | 4397 | 4398 | 4399 => "deg",
-        // Projected CRS (UTM and others) use meters
-        _ => "m",
+    let spatial_reference = SpatialReference::new(SpatialReferenceAuthority::Epsg, epsg);
+
+    if spatial_reference.uses_meters().unwrap_or(false) {
+        "m"
+    } else {
+        "deg"
     }
 }
 
-fn parse_time_dimension(granularity: &str, step: u64) -> Result<DtTimeDimension, String> {
-    let dt_granularity = match granularity.to_lowercase().as_str() {
-        "days" | "day" => geoengine_datatypes::primitives::TimeGranularity::Days,
-        "months" | "month" => geoengine_datatypes::primitives::TimeGranularity::Months,
-        "years" | "year" => geoengine_datatypes::primitives::TimeGranularity::Years,
-        "hours" | "hour" => geoengine_datatypes::primitives::TimeGranularity::Hours,
-        other => return Err(format!("Unsupported time granularity: {other}")),
-    };
-
-    let step_u32: u32 = step
-        .try_into()
-        .map_err(|_| format!("step {step} exceeds u32 range"))?;
-
-    Ok(DtTimeDimension::Regular(
-        DtRegularTimeDimension::new_with_epoch_origin(geoengine_datatypes::primitives::TimeStep {
-            granularity: dt_granularity,
-            step: step_u32,
-        }),
-    ))
+fn parse_time_granularity(value: &str) -> Result<TimeGranularity, String> {
+    serde_json::from_value(serde_json::Value::String(value.to_lowercase()))
+        .map_err(|error| error.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -1000,7 +982,7 @@ mod tests {
             bbox: None,
             full_projection_grid: false,
             verbose: false,
-            time_granularity: "days".to_string(),
+            time_granularity: TimeGranularity::Days,
             time_step: 1,
             page_limit: 100,
             id: None,
@@ -1112,7 +1094,7 @@ mod tests {
             bbox: None,
             full_projection_grid: false,
             verbose: false,
-            time_granularity: "days".to_string(),
+            time_granularity: TimeGranularity::Days,
             time_step: 1,
             page_limit: 100,
             id: None,
