@@ -6,8 +6,7 @@ use super::operators::TypedResultDescriptor;
 use crate::api::model::datatypes::MlModelName;
 use crate::api::model::operators::{
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
-    MlModelMetadata, MockMetaData, OgrMetaData, RegularTimeDimension, SpatialGridDescriptor,
-    TimeDimension,
+    MlModelMetadata, MockMetaData, OgrMetaData, SpatialGridDescriptor, TimeDimension,
 };
 use crate::datasets::DatasetName;
 use crate::datasets::external::{GdalRetries, WildliveDataConnectorAuth};
@@ -1083,37 +1082,6 @@ impl From<crate::datasets::external::stac::StacProviderDataset> for StacProvider
     }
 }
 
-#[allow(clippy::needless_pass_by_value)]
-fn api_time_dimension_to_datatypes(
-    value: TimeDimension,
-) -> geoengine_datatypes::primitives::TimeDimension {
-    match value {
-        TimeDimension::Regular(RegularTimeDimension { origin, step }) => {
-            geoengine_datatypes::primitives::TimeDimension::Regular(
-                geoengine_datatypes::primitives::RegularTimeDimension {
-                    origin: origin.into(),
-                    step: step.into(),
-                },
-            )
-        }
-        TimeDimension::Irregular => geoengine_datatypes::primitives::TimeDimension::Irregular,
-    }
-}
-
-fn datatypes_time_dimension_to_api(
-    value: geoengine_datatypes::primitives::TimeDimension,
-) -> TimeDimension {
-    match value {
-        geoengine_datatypes::primitives::TimeDimension::Regular(
-            geoengine_datatypes::primitives::RegularTimeDimension { origin, step },
-        ) => TimeDimension::Regular(RegularTimeDimension {
-            origin: origin.into(),
-            step: step.into(),
-        }),
-        geoengine_datatypes::primitives::TimeDimension::Irregular => TimeDimension::Irregular,
-    }
-}
-
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct StacTimeStep {
@@ -1179,7 +1147,7 @@ impl From<StacDataProviderDefinition>
             api_url: value.api_url,
             collection_name: value.collection_name,
             s3_config: value.s3_config.map(Into::into),
-            time_dimension: api_time_dimension_to_datatypes(value.time_dimension),
+            time_dimension: value.time_dimension.into(),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
             page_limit: value.page_limit,
             query_timeout_secs: value.query_timeout_secs,
@@ -1200,7 +1168,7 @@ impl From<crate::datasets::external::stac::StacDataProviderDefinition>
             api_url: value.api_url,
             collection_name: value.collection_name,
             s3_config: value.s3_config.map(Into::into),
-            time_dimension: datatypes_time_dimension_to_api(value.time_dimension),
+            time_dimension: value.time_dimension.into(),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
             page_limit: value.page_limit,
             query_timeout_secs: value.query_timeout_secs,
