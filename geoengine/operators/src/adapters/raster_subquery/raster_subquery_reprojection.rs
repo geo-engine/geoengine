@@ -363,7 +363,7 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{BandSelection, TimeStep},
         raster::{
-            GeoTransform, Grid, GridBoundingBox2D, GridShape2D, RasterDataType,
+            GeoTransform, Grid, GridBoundingBox2D, RasterDataType,
             SpatialGridDefinition, TilingSpecification,
         },
         util::test::{TestDefault, assert_eq_two_list_of_tiles_u8},
@@ -445,7 +445,7 @@ mod tests {
         };
 
         let tiling_spec =
-            TilingSpecification::with_zero_origin(GridShape2D::new([2, 2]).shape_array.into());
+            TilingSpecification::with_zero_origin(TileSize::new(2, 2));
 
         let tiling_grid = result_descriptor.tiling_grid_definition();
         let tiling_strat = tiling_grid.tiling_strategy();

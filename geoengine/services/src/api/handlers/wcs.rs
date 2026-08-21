@@ -458,7 +458,6 @@ async fn wcs_get_coverage<C: ApplicationContext>(
             },
             Some(get_config_element::<crate::config::Wcs>()?.tile_limit),
             conn_closed,
-            execution_context.tiling_specification(),
         )
         .await)?
     .map_err(error::Error::from)?;

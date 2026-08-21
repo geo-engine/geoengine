@@ -271,8 +271,9 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
         ]);
     let accu_end = accu_start
         + GridIdx2D::new_y_x(
-            tiling_strategy.tile_size.0.y() as isize + 2 * neighborhood.y_radius() as isize - 1, // -1 because the end is inclusive
-            tiling_strategy.tile_size.0.x() as isize + 2 * neighborhood.x_radius() as isize - 1,
+            // -1 because the end is inclusive
+            tiling_strategy.tile_size.axis_size_y() as isize + 2 * neighborhood.y_radius() as isize - 1,
+            tiling_strategy.tile_size.axis_size_x() as isize + 2 * neighborhood.x_radius() as isize - 1,
         );
 
     let accu_bounds = GridBoundingBox2D::new(accu_start, accu_end)

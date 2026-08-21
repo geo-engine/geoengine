@@ -17,7 +17,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, GridBoundingBox2D, GridContains, GridIdx2D, GridIndexAccess,
-    GridOrEmpty, Pixel, RasterTile2D, SpatialGridDefinition, TileInformation, TilingGrid,
+    GridOrEmpty, Pixel, RasterTile2D, SpatialGridDefinition, TileInformation, TileSize, TilingGrid,
     TilingSpecification, TilingStrategy, UpdateIndexedElementsParallel,
 };
 use rayon::ThreadPool;
@@ -34,7 +34,7 @@ use std::sync::Arc;
 #[serde(rename_all = "camelCase")]
 pub struct ReTileParams {
     /// Override the output tile size. If `None`, the global tiling specification's tile size is used.
-    pub tile_size: Option<[usize; 2]>,
+    pub tile_size: Option<TileSize>,
     /// Override the output tiling origin. If `None`, the dataset's own geo-transform origin is used
     /// (i.e. tiles are aligned to the data's native grid).
     pub origin: Option<Coordinate2D>,
@@ -76,10 +76,9 @@ impl RasterOperator for ReTile {
             .origin
             .unwrap_or_else(|| in_spatial_grid.geo_transform().origin_coordinate);
 
-        let output_tile_size = self.params.tile_size.map_or_else(
-            || context.tiling_specification().tile_size,
-            std::convert::Into::into,
-        );
+        let output_tile_size = self.params.tile_size.unwrap_or_else(|| {
+            context.tiling_specification().tile_size
+        });
 
         if output_tile_size.axis_size_y() == 0 || output_tile_size.axis_size_x() == 0 {
             return Err(crate::error::Error::InvalidTileSize {
@@ -184,7 +183,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedReTi
     ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
         Ok(ReTile {
             params: ReTileParams {
-                tile_size: Some(self.tiling_specification.tile_size.0.shape_array),
+                tile_size: Some(self.tiling_specification.tile_size),
                 origin: Some(self.tiling_specification.tiling_origin_reference()),
             },
             sources: SingleRasterSource {
@@ -409,8 +408,13 @@ impl<T: Pixel> FoldTileAccu for ReTileAccu<T> {
     type RasterType = T;
 
     async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>> {
+        let time = self
+            .time
+            .ok_or_else(|| crate::error::Error::InvalidOperatorSpec {
+                reason: "ReTile: no input tiles were folded".into(),
+            })?;
         let output_tile = RasterTile2D::new_with_tile_info(
-            self.time.expect("there is at least one input"),
+            time,
             self.output_tile_info,
             0,
             self.output_grid.unbounded(),
@@ -596,12 +600,10 @@ mod tests {
         // Input: origin (0,0), 2x2 tiles of 4x4 pixels each → 8x8 pixel grid
         // Output: origin (2, -2), same tile size
         let in_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 1.0, -1.0);
-        let tile_size = GridShape2D {
-            shape_array: [4, 4],
-        };
+        let tile_size = TileSize::new(4, 4);
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(
-            TilingSpecification::with_zero_origin(TileSize::new(4, 4)),
+            TilingSpecification::with_zero_origin(tile_size),
             8,
         );
 
@@ -613,7 +615,7 @@ mod tests {
                 band: 0,
                 global_geo_transform: in_geo_transform,
                 grid_array: Grid::new(
-                    tile_size,
+                    tile_size.0,
                     vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
                 )
                 .unwrap()
@@ -627,7 +629,7 @@ mod tests {
                 band: 0,
                 global_geo_transform: in_geo_transform,
                 grid_array: Grid::new(
-                    tile_size,
+                    tile_size.0,
                     vec![
                         21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
                     ],
@@ -643,7 +645,7 @@ mod tests {
                 band: 0,
                 global_geo_transform: in_geo_transform,
                 grid_array: Grid::new(
-                    tile_size,
+                    tile_size.0,
                     vec![
                         41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56,
                     ],
@@ -659,7 +661,7 @@ mod tests {
                 band: 0,
                 global_geo_transform: in_geo_transform,
                 grid_array: Grid::new(
-                    tile_size,
+                    tile_size.0,
                     vec![
                         61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76,
                     ],

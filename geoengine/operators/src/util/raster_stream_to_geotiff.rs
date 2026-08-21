@@ -19,7 +19,7 @@ use geoengine_datatypes::primitives::{DateTimeParseFormat, RasterQueryRectangle,
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, GridBlit, GridBoundingBox2D, GridBounds, GridIntersection,
     GridOrEmpty, GridSize, MapElements, MaskedGrid2D, NoDataValueGrid, Pixel, RasterTile2D,
-    TilingSpecification, TilingStrategy,
+    TilingStrategy,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,6 @@ pub async fn raster_stream_to_multiband_geotiff_bytes<T, C: QueryContext + 'stat
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
     conn_closed: BoxFuture<'_, ()>,
-    _tiling_specification: TilingSpecification,
 ) -> Result<(Vec<u8>, CacheHint)>
 where
     T: Pixel + GdalType,
@@ -1070,7 +1069,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BandSelection, CacheHint, DateTime, Duration, SpatialPartition2D, TimeInterval,
     };
-    use geoengine_datatypes::raster::{Grid, GridBoundingBox2D, RasterDataType};
+    use geoengine_datatypes::raster::{Grid, GridBoundingBox2D, RasterDataType, TilingSpecification};
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::{ImageFormat, assert_image_equals_with_format};
@@ -1118,7 +1117,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
+            include_bytes!("../../../test_data/raster/geotiff_with_no_data_from_stream_compressed.tiff")
                 as &[u8],
             bytes.as_slice()
         );
@@ -1714,8 +1713,6 @@ mod tests {
 
         let metadata = create_ndvi_meta_data();
 
-        let tiling_specification = TilingSpecification::with_zero_origin([512, 512].into());
-
         let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
             metadata.result_descriptor.clone(),
             metadata.result_descriptor.tiling_grid_definition(),
@@ -1742,7 +1739,6 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_specification,
         )
         .await
         .unwrap();

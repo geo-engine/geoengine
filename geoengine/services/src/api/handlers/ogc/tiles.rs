@@ -30,7 +30,7 @@ use geoengine_datatypes::{
     primitives::{
         AxisAlignedRectangle, BandSelection, RasterQueryRectangle, TimeInstance, TimeInterval,
     },
-    raster::{GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, TileSize, TilingGrid},
+    raster::GridShape2D,
     util::Identifier,
 };
 use geoengine_operators::{
@@ -462,37 +462,17 @@ pub async fn tile<C: ApplicationContext>(
 
     let tile_size = tms_spec.tile_size(query.tile_matrix);
     let (tile_width, tile_height) = (
-        u32::try_from(tile_size.x()).unwrap_or(u32::MAX),
-        u32::try_from(tile_size.y()).unwrap_or(u32::MAX),
+        u32::try_from(tile_size.axis_size_x()).expect("tile size must fit in u32"),
+        u32::try_from(tile_size.axis_size_y()).expect("tile size must fit in u32"),
     );
 
-    let source_tiling_grid = TilingGrid::from_spatial_grid(
-        initialized_operator
-            .result_descriptor()
-            .spatial_grid_descriptor()
-            .spatial_grid,
-        TileSize(tms_spec.tile_size(query.tile_matrix)),
-    );
-    let tile_spatial_bounds = tms_spec.tile_spatial_bounds(
-        &source_tiling_grid,
-        query.tile_matrix,
-        query.tile_row,
-        query.tile_col,
-    )?;
-    let source_grid = initialized_operator
-        .result_descriptor()
-        .spatial_grid_descriptor()
-        .spatial_grid;
-    let source_tile_min = source_grid
-        .geo_transform()
-        .spatial_to_grid_bounds(&tile_spatial_bounds)
-        .min_index();
-    let source_tile_bounds = GridBoundingBox2D::new_unchecked(
-        source_tile_min,
-        source_tile_min + GridIdx2D::new([tile_height as isize - 1, tile_width as isize - 1]),
-    );
     let query_rect = RasterQueryRectangle::new(
-        source_tile_bounds,
+        tms_spec.tile_grid_bbox(
+            &initialized_operator.result_descriptor().tiling_grid_definition(),
+            query.tile_matrix,
+            query.tile_row,
+            query.tile_col,
+        )?,
         query.time_interval,
         band_selection(&layer),
     );

@@ -7956,6 +7956,21 @@
           },
           "allowAlphabandAsMask": {
             "type": "boolean"
+          },
+          "tilingOrigin": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Coordinate2D",
+                "description": "Optional tiling origin override for this dataset."
+              }
+            ]
+          },
+          "tileSize": {
+            "type": "object",
+            "description": "Optional per-dataset tile size override."
           }
         }
       },
@@ -11240,6 +11255,9 @@
             "$ref": "#/components/schemas/RasterTypeConversion"
           },
           {
+            "$ref": "#/components/schemas/ReTile"
+          },
+          {
             "$ref": "#/components/schemas/Reprojection"
           },
           {
@@ -11258,6 +11276,7 @@
             "MultiBandGdalSource": "#/components/schemas/MultiBandGdalSource",
             "RasterStacker": "#/components/schemas/RasterStacker",
             "RasterTypeConversion": "#/components/schemas/RasterTypeConversion",
+            "ReTile": "#/components/schemas/ReTile",
             "Reprojection": "#/components/schemas/Reprojection",
             "TemporalRasterAggregation": "#/components/schemas/TemporalRasterAggregation"
           }
@@ -11375,6 +11394,17 @@
           "renameBands": {
             "$ref": "#/components/schemas/RenameBands",
             "description": "Strategy for deriving output band names.\n\n- `default`: appends ` (n)` with the smallest `n` that avoids a conflict.\n- `suffix`: appends one suffix per input.\n- `rename`: explicitly provides names for all resulting bands."
+          },
+          "outputOrigin": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Coordinate2D",
+                "description": "Override the origin of the stacked output grid.\nIf `None`, the first input's origin is used."
+              }
+            ]
           }
         }
       },
@@ -11562,6 +11592,87 @@
             "description": "Whether to ignore no data values in the aggregation. Defaults to `false`.",
             "examples": [
               true
+            ]
+          }
+        }
+      },
+      "ReTile": {
+        "type": "object",
+        "title": "ReTile",
+        "description": "The `ReTile` operator re-tiles raster data onto a different tile grid without resampling.\n\nEach output pixel maps to exactly one input pixel (identity). The output origin and tile\nsize can be overridden via the parameters; by default the source's own geo-transform origin\nand the tiling specification's tile size are used.\n\n## Inputs\n\nThe `ReTile` operator expects exactly one _raster_ input.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "ReTile"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/ReTileParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "ReTile",
+            "params": {
+              "tileSize": [
+                512,
+                512
+              ],
+              "origin": {
+                "x": 2.0,
+                "y": -2.0
+              }
+            },
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "example"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ReTileParameters": {
+        "type": "object",
+        "description": "Parameters for the `ReTile` operator.",
+        "properties": {
+          "tileSize": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer",
+              "examples": [
+                [
+                  512,
+                  512
+                ]
+              ],
+              "minimum": 0
+            },
+            "description": "Override the output tile size in pixels `[rows, columns]`.\nIf `None`, the tiling specification's tile size is used."
+          },
+          "origin": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Coordinate2D",
+                "description": "Override the output tiling origin.\nIf `None`, the source's own geo-transform origin is used."
+              }
             ]
           }
         }

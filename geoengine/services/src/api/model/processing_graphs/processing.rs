@@ -11,6 +11,7 @@ use crate::api::model::{
         },
     },
 };
+use geoengine_datatypes::raster::TileSize;
 use geoengine_macros::{api_operator, type_tag};
 use geoengine_operators::processing::{
     Aggregation as OperatorsAggregation, BandFilter as OperatorsBandFilter,
@@ -553,7 +554,7 @@ impl TryFrom<ReTile> for OperatorsReTile {
     fn try_from(value: ReTile) -> Result<Self, Self::Error> {
         Ok(OperatorsReTile {
             params: OperatorsReTileParameters {
-                tile_size: value.params.tile_size,
+                tile_size: value.params.tile_size.map(TileSize::from),
                 origin: value.params.origin.map(Into::into),
             },
             sources: (*value.sources).try_into()?,
@@ -1333,7 +1334,7 @@ mod tests {
 
         let operators = OperatorsReTile::try_from(api).expect("conversion failed");
 
-        assert_eq!(operators.params.tile_size, Some([4, 8]));
+        assert_eq!(operators.params.tile_size, Some(TileSize::new(4, 8)));
         assert_eq!(operators.params.origin, Some((2.0, -2.0).into()));
     }
 

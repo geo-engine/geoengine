@@ -559,7 +559,7 @@ mod tests {
         primitives::{CacheHint, Coordinate2D, TimeInterval},
         raster::{
             EmptyGrid, EmptyGrid2D, GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty,
-            GridShape2D, MaskedGrid2D, RasterDataType, RenameBands, TileInformation,
+            MaskedGrid2D, RasterDataType, RenameBands, TileInformation,
             TilesEqualIgnoringCacheHint,
         },
         spatial_reference::SpatialReference,
@@ -571,7 +571,7 @@ mod tests {
     async fn test_min() {
         let raster_tiles = make_raster();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -587,7 +587,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -701,7 +701,7 @@ mod tests {
     async fn test_max() {
         let raster_tiles = make_raster();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -717,7 +717,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -831,7 +831,7 @@ mod tests {
     async fn test_max_with_no_data() {
         let raster_tiles = make_raster(); // TODO: switch to make_raster_with_no_data?
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -847,7 +847,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -961,7 +961,7 @@ mod tests {
     async fn test_max_with_no_data_but_ignoring_it() {
         let raster_tiles = make_raster(); // TODO: switch to make_raster_with_no_data?
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -977,7 +977,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1089,7 +1089,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_only_no_data() {
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1105,7 +1105,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1186,7 +1186,7 @@ mod tests {
     async fn test_first_with_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1202,7 +1202,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1296,7 +1296,7 @@ mod tests {
     async fn test_last_with_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1312,7 +1312,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1405,7 +1405,7 @@ mod tests {
     async fn test_last() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1421,7 +1421,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1515,7 +1515,7 @@ mod tests {
     async fn test_first() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1531,7 +1531,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1625,7 +1625,7 @@ mod tests {
     async fn test_mean_nodata() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1641,7 +1641,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1735,7 +1735,7 @@ mod tests {
     async fn test_mean_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1751,7 +1751,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1846,7 +1846,7 @@ mod tests {
     async fn test_sum_without_nodata() {
         let raster_tiles = make_raster();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1862,7 +1862,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1975,7 +1975,7 @@ mod tests {
     async fn test_sum_nodata() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1991,7 +1991,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2085,7 +2085,7 @@ mod tests {
     async fn test_sum_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2101,7 +2101,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2196,7 +2196,7 @@ mod tests {
     async fn test_sum_with_larger_data_type() {
         let raster_tiles = make_raster();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2212,7 +2212,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2349,7 +2349,7 @@ mod tests {
     async fn test_count_without_nodata() {
         let raster_tiles = make_raster();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2365,7 +2365,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2478,7 +2478,7 @@ mod tests {
     async fn test_count_nodata() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2494,7 +2494,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2588,7 +2588,7 @@ mod tests {
     async fn test_count_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2604,7 +2604,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2698,7 +2698,7 @@ mod tests {
     async fn test_query_not_aligned_with_window_reference() {
         let raster_tiles = make_raster();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2714,7 +2714,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {

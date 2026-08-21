@@ -215,98 +215,41 @@ impl InitializedRasterOperator for InitializedRasterStacker {
         let target_spatial_grid = *self.result_descriptor.spatial_grid_descriptor();
         let tiling_spec = self.output_tiling_spec;
 
-        // TODO: use a macro to unpack all the input processor to the same datatype?
+        macro_rules! stacker_arm {
+            ($getter:ident, $variant:ident) => {{
+                let inputs = typed_raster_processors
+                    .into_iter()
+                    .zip(self.raster_sources.iter())
+                    .map(|(p, source)| {
+                        re_tile_source(
+                            p.$getter().expect(
+                                "all inputs should have the same datatype because it was checked in the initialization of the operator",
+                            ),
+                            source.as_ref(),
+                            target_spatial_grid,
+                            tiling_spec,
+                        )
+                    })
+                    .collect();
+                let p = RasterStackerProcessor::new(
+                    inputs,
+                    self.result_descriptor.clone(),
+                    bands_per_source,
+                );
+                TypedRasterQueryProcessor::$variant(Box::new(p))
+            }};
+        }
         Ok(match datatype {
-            geoengine_datatypes::raster::RasterDataType::U8 => {
-                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_u8().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
-                let p = RasterStackerProcessor::new(
-                    inputs,
-                    self.result_descriptor.clone(),
-                    bands_per_source,
-                );
-                TypedRasterQueryProcessor::U8(Box::new(p))
-            }
-            geoengine_datatypes::raster::RasterDataType::U16 => {
-                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_u16().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
-                let p = RasterStackerProcessor::new(
-                    inputs,
-                    self.result_descriptor.clone(),
-                    bands_per_source,
-                );
-                TypedRasterQueryProcessor::U16(Box::new(p))
-            }
-            geoengine_datatypes::raster::RasterDataType::U32 => {
-                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_u32().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
-                let p = RasterStackerProcessor::new(
-                    inputs,
-                    self.result_descriptor.clone(),
-                    bands_per_source,
-                );
-                TypedRasterQueryProcessor::U32(Box::new(p))
-            }
-            geoengine_datatypes::raster::RasterDataType::U64 => {
-                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_u64().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
-                let p = RasterStackerProcessor::new(
-                    inputs,
-                    self.result_descriptor.clone(),
-                    bands_per_source,
-                );
-                TypedRasterQueryProcessor::U64(Box::new(p))
-            }
-            geoengine_datatypes::raster::RasterDataType::I8 => {
-                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_i8().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
-                let p = RasterStackerProcessor::new(
-                    inputs,
-                    self.result_descriptor.clone(),
-                    bands_per_source,
-                );
-                TypedRasterQueryProcessor::I8(Box::new(p))
-            }
-            geoengine_datatypes::raster::RasterDataType::I16 => {
-                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_i16().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
-                let p = RasterStackerProcessor::new(
-                    inputs,
-                    self.result_descriptor.clone(),
-                    bands_per_source,
-                );
-                TypedRasterQueryProcessor::I16(Box::new(p))
-            }
-            geoengine_datatypes::raster::RasterDataType::I32 => {
-                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_i32().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
-                let p = RasterStackerProcessor::new(
-                    inputs,
-                    self.result_descriptor.clone(),
-                    bands_per_source,
-                );
-                TypedRasterQueryProcessor::I32(Box::new(p))
-            }
-            geoengine_datatypes::raster::RasterDataType::I64 => {
-                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_i64().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
-                let p = RasterStackerProcessor::new(
-                    inputs,
-                    self.result_descriptor.clone(),
-                    bands_per_source,
-                );
-                TypedRasterQueryProcessor::I64(Box::new(p))
-            }
-            geoengine_datatypes::raster::RasterDataType::F32 => {
-                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_f32().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
-                let p = RasterStackerProcessor::new(
-                    inputs,
-                    self.result_descriptor.clone(),
-                    bands_per_source,
-                );
-                TypedRasterQueryProcessor::F32(Box::new(p))
-            }
-            geoengine_datatypes::raster::RasterDataType::F64 => {
-                let inputs = typed_raster_processors.into_iter().zip(self.raster_sources.iter()).map(|(p, source)| re_tile_source(p.get_f64().expect("all inputs should have the same datatype because it was checked in the initialization of the operator"), source.as_ref(), target_spatial_grid, tiling_spec)).collect();
-                let p = RasterStackerProcessor::new(
-                    inputs,
-                    self.result_descriptor.clone(),
-                    bands_per_source,
-                );
-                TypedRasterQueryProcessor::F64(Box::new(p))
-            }
+            geoengine_datatypes::raster::RasterDataType::U8 => stacker_arm!(get_u8, U8),
+            geoengine_datatypes::raster::RasterDataType::U16 => stacker_arm!(get_u16, U16),
+            geoengine_datatypes::raster::RasterDataType::U32 => stacker_arm!(get_u32, U32),
+            geoengine_datatypes::raster::RasterDataType::U64 => stacker_arm!(get_u64, U64),
+            geoengine_datatypes::raster::RasterDataType::I8 => stacker_arm!(get_i8, I8),
+            geoengine_datatypes::raster::RasterDataType::I16 => stacker_arm!(get_i16, I16),
+            geoengine_datatypes::raster::RasterDataType::I32 => stacker_arm!(get_i32, I32),
+            geoengine_datatypes::raster::RasterDataType::I64 => stacker_arm!(get_i64, I64),
+            geoengine_datatypes::raster::RasterDataType::F32 => stacker_arm!(get_f32, F32),
+            geoengine_datatypes::raster::RasterDataType::F64 => stacker_arm!(get_f64, F64),
         })
     }
 

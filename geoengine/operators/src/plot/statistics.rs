@@ -613,7 +613,7 @@ mod tests {
     use crate::util::input::MultiRasterOrVectorOperator::Raster;
     use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, NoGeometry, TimeInterval};
     use geoengine_datatypes::raster::{
-        BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, GridShape2D, RasterDataType,
+        BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType,
         RasterTile2D, TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -646,9 +646,9 @@ mod tests {
 
     #[tokio::test]
     async fn empty_raster_input() {
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let statistics = Statistics {
             params: StatisticsParams {
@@ -685,19 +685,19 @@ mod tests {
 
     #[tokio::test]
     async fn single_raster_implicit_name() {
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size.bounding_box(),
+                tile_size.0.bounding_box(),
                 TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize(tile_size));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let raster_source = MockRasterSource {
             params: MockRasterSourceParams {
@@ -706,7 +706,7 @@ mod tests {
                     TileInformation {
                         global_geo_transform: TestDefault::test_default(),
                         tile_position: [0, 0].into(),
-                        tile_size: TileSize(tile_size),
+                        tile_size: tile_size,
                     },
                     0,
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -769,19 +769,19 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn two_rasters_implicit_names() {
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size.bounding_box(),
+                tile_size.0.bounding_box(),
                 TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize(tile_size));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let raster_source = vec![
             MockRasterSource {
@@ -791,7 +791,7 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: [0, 0].into(),
-                            tile_size: TileSize(tile_size),
+                            tile_size: tile_size,
                         },
                         0,
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -810,7 +810,7 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: [0, 0].into(),
-                            tile_size: TileSize(tile_size),
+                            tile_size: tile_size,
                         },
                         0,
                         Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
@@ -882,19 +882,19 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn two_rasters_explicit_names() {
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size.bounding_box(),
+                tile_size.0.bounding_box(),
                 TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize(tile_size));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let raster_source = vec![
             MockRasterSource {
@@ -904,7 +904,7 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: [0, 0].into(),
-                            tile_size: TileSize(tile_size),
+                            tile_size: tile_size,
                         },
                         0,
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -923,7 +923,7 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: [0, 0].into(),
-                            tile_size: TileSize(tile_size),
+                            tile_size: tile_size,
                         },
                         0,
                         Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
@@ -994,19 +994,19 @@ mod tests {
 
     #[tokio::test]
     async fn two_rasters_explicit_names_incomplete() {
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size.bounding_box(),
+                tile_size.0.bounding_box(),
                 TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize(tile_size));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let raster_source = vec![
             MockRasterSource {
@@ -1016,7 +1016,7 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: [0, 0].into(),
-                            tile_size: TileSize(tile_size),
+                            tile_size: tile_size,
                         },
                         0,
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -1035,7 +1035,7 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: [0, 0].into(),
-                            tile_size: TileSize(tile_size),
+                            tile_size: tile_size,
                         },
                         0,
                         Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
@@ -1072,7 +1072,7 @@ mod tests {
     #[tokio::test]
     async fn vector_no_column() {
         let tile_size = [3, 2].into();
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize(tile_size));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
             DataCollection::from_slices(
@@ -1167,7 +1167,7 @@ mod tests {
     #[tokio::test]
     async fn vector_single_column() {
         let tile_size = [3, 2].into();
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize(tile_size));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
             DataCollection::from_slices(
@@ -1254,7 +1254,7 @@ mod tests {
     #[tokio::test]
     async fn vector_two_columns() {
         let tile_size = [3, 2].into();
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize(tile_size));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
             DataCollection::from_slices(
@@ -1349,7 +1349,7 @@ mod tests {
     #[tokio::test]
     async fn raster_percentile() {
         let tile_size = [3, 2].into();
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize(tile_size));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
@@ -1370,7 +1370,7 @@ mod tests {
                     TileInformation {
                         global_geo_transform: TestDefault::test_default(),
                         tile_position: [0, 0].into(),
-                        tile_size: TileSize(tile_size),
+                        tile_size: tile_size,
                     },
                     0,
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -1436,7 +1436,7 @@ mod tests {
     #[tokio::test]
     async fn vector_percentiles() {
         let tile_size = [3, 2].into();
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize(tile_size));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
             DataCollection::from_slices(

@@ -908,7 +908,7 @@ mod tests {
 
     #[tokio::test]
     async fn no_data_raster() {
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
 
         let bands = RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
             "band".into(),
@@ -925,13 +925,13 @@ mod tests {
             time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size.bounding_box(),
+                tile_size.0.bounding_box(),
                 TileSize::new(256, 256),
             ),
             bands,
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -944,10 +944,10 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: [0, 0].into(),
-                            tile_size: TileSize(tile_size),
+                            tile_size: tile_size,
                         },
                         0,
-                        Grid2D::new(tile_size, vec![0, 0, 0, 0, 0, 0])
+                        Grid2D::new(tile_size.into(), vec![0, 0, 0, 0, 0, 0])
                             .unwrap()
                             .into(),
                         CacheHint::default(),
@@ -1121,7 +1121,7 @@ mod tests {
 
     #[tokio::test]
     async fn single_value_raster_stream() {
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new(3, 2);
 
         let bands = RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
             "band".into(),
@@ -1138,13 +1138,13 @@ mod tests {
             time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size.bounding_box(),
+                tile_size.0.bounding_box(),
                 TileSize::new(256, 256),
             ),
             bands,
         };
         let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size.shape_array.into());
+            TilingSpecification::with_zero_origin(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = ClassHistogram {
@@ -1156,10 +1156,10 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: [0, 0].into(),
-                            tile_size: TileSize(tile_size),
+                            tile_size: tile_size,
                         },
                         0,
-                        Grid2D::new(tile_size, vec![4; 6]).unwrap().into(),
+                        Grid2D::new(tile_size.into(), vec![4; 6]).unwrap().into(),
                         CacheHint::default(),
                     )],
                     result_descriptor,
