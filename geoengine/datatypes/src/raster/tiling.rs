@@ -136,7 +136,6 @@ impl Iterator for TileIdx2DIter {
 /// The static parameters required to create a `TilingStrategy`
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub struct TilingSpecification {
-    #[serde(alias = "tile_size")]
     pub tile_size: TileSize,
     pub origin: Coordinate2D,
 }
@@ -193,7 +192,6 @@ impl TestDefault for TilingSpecification {
 /// A provider of tile (size) information for a raster/grid
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct TilingStrategy {
-    #[serde(alias = "tile_size")]
     pub tile_size: TileSize,
     pub geo_transform: GeoTransform,
 }
@@ -248,6 +246,19 @@ impl TilingStrategy {
         ])
     }
 
+    /// Convert a tile index directly to the spatial coordinate of its upper-left corner.
+    pub fn tile_idx_to_spatial(&self, tile_idx: TileIdx) -> Coordinate2D {
+        let pixel_idx = self.tile_idx_to_global_pixel_idx(tile_idx);
+        self.geo_transform
+            .grid_idx_to_pixel_upper_left_coordinate_2d(pixel_idx)
+    }
+
+    /// Convert a spatial coordinate to the tile index that contains it.
+    pub fn spatial_to_tile_idx(&self, coord: Coordinate2D) -> TileIdx {
+        let pixel_idx = self.geo_transform.coordinate_to_grid_idx_2d(coord);
+        self.pixel_idx_to_tile_idx(pixel_idx)
+    }
+
     /// Returns the tile grid bounds for the given `raster_spatial_query`.
     /// The query must match the tiling strategy's geo transform for now.
     ///
@@ -261,33 +272,29 @@ impl TilingStrategy {
         self.global_pixel_grid_bounds_to_tile_grid_bounds(raster_spatial_query)
     }
 
-    /// Returns an iterator over all tile indices that intersect with the given `grid_bounds`.
+    /// Returns an iterator over all tile indices that intersect with the given pixel bounds.
     pub fn tile_idx_iterator_from_grid_bounds(
-        // TODO: indicate that this uses pixel bounds!
         &self,
-        grid_bounds: GridBoundingBox2D,
+        pixel_bounds: GridBoundingBox2D,
     ) -> TileIdx2DIter {
-        let tile_bounds = self.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
+        let tile_bounds = self.global_pixel_grid_bounds_to_tile_grid_bounds(pixel_bounds);
         TileIdx2DIter::new(&tile_bounds)
     }
 
-    /// generates the tile information for the tiles intersecting the bounding box
-    /// the iterator moves once along the x-axis and then increases the y-axis
+    /// Generates the tile information for the tiles intersecting the given pixel bounds.
+    /// The iterator moves once along the x-axis and then increases the y-axis.
     pub fn tile_information_iterator_from_pixel_bounds(
-        // TODO: indicate that this uses pixel bounds!
         &self,
-        grid_bounds: GridBoundingBox2D,
+        pixel_bounds: GridBoundingBox2D,
     ) -> TileInformationIter {
-        TileInformationIter::new_with_pixel_bounds(*self, &grid_bounds)
+        TileInformationIter::new_with_pixel_bounds(*self, &pixel_bounds)
     }
 }
 
 /// The `TileInformation` is used to represent the spatial position of each tile
 #[derive(PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct TileInformation {
-    #[serde(alias = "tile_size")]
     pub tile_size: TileSize,
-    #[serde(alias = "tile_position")]
     pub tile_position: TileIdx,
     pub global_geo_transform: GeoTransform,
 }
@@ -461,7 +468,6 @@ pub struct TilingGrid {
     /// Pixel bounds of the grid.
     pub pixel_bounds: GridBoundingBox2D,
     /// The size of each tile in pixels.
-    #[serde(alias = "tile_size")]
     pub tile_size: TileSize,
 }
 
