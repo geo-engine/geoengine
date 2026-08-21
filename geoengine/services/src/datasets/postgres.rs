@@ -27,7 +27,7 @@ use geoengine_datatypes::primitives::{
     TryRegularTimeFillIterExt,
 };
 use geoengine_datatypes::primitives::{TimeInterval, VectorQueryRectangle};
-use geoengine_datatypes::raster::{GridBoundingBox2D, SpatialGridDefinition};
+use geoengine_datatypes::raster::{GridBoundingBoxExt, SpatialGridDefinition};
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::TypedResultDescriptor;
 use geoengine_operators::engine::{
@@ -35,7 +35,7 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo,
+    GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo,
     MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
 };
 use postgres_types::{FromSql, ToSql};
@@ -1447,6 +1447,30 @@ async fn batch_insert_tiles(
     Ok(())
 }
 
+fn extend_time_bounds(
+    time_bounds: Option<TimeInterval>,
+    tile_time: TimeInterval,
+) -> Option<TimeInterval> {
+    Some(match time_bounds {
+        Some(time_bounds) => time_bounds.extend(&tile_time),
+        None => tile_time,
+    })
+}
+
+fn extend_spatial_bounds(
+    dataset_grid: SpatialGridDefinition,
+    tile_partition: SpatialPartition2D,
+) -> SpatialGridDefinition {
+    let tile_grid = dataset_grid.spatial_bounds_to_compatible_spatial_grid(tile_partition.into());
+
+    SpatialGridDefinition::new(
+        dataset_grid.geo_transform(),
+        dataset_grid
+            .grid_bounds()
+            .extended(&tile_grid.grid_bounds()),
+    )
+}
+
 async fn update_dataset_extents(
     tx: &Transaction<'_>,
     dataset: DatasetId,
@@ -1472,22 +1496,9 @@ async fn update_dataset_extents(
         (row.get(0), row.get(1));
 
     for tile in tiles {
-        // TODO: handle datasets with flipped y axis?
-        let tile_grid = SpatialGridDefinition::new(
-            GdalDatasetGeoTransform::from(tile.params.geo_transform).try_into()?,
-            GridBoundingBox2D::new_unchecked(
-                [0, 0],
-                [tile.params.height as isize, tile.params.width as isize],
-            ),
-        );
+        dataset_grid = extend_spatial_bounds(dataset_grid, tile.spatial_partition);
 
-        dataset_grid = dataset_grid
-                .merge(&tile_grid)
-                .expect("grids should be compatible because the compatibility was checked before inserting tiles");
-
-        if let Some(time_bounds) = &mut time_bounds {
-            *time_bounds = time_bounds.extend(&tile.time.into());
-        }
+        time_bounds = extend_time_bounds(time_bounds, tile.time.into());
     }
 
     tx.execute(
@@ -1599,6 +1610,38 @@ mod tests {
         },
     };
     use tokio_postgres::NoTls;
+
+    #[test]
+    fn it_initializes_missing_dataset_time_bounds_from_the_first_tile() {
+        let tile_time = TimeInterval::new_unchecked(
+            TimeInstance::from_millis_unchecked(1_000),
+            TimeInstance::from_millis_unchecked(2_000),
+        );
+
+        assert_eq!(extend_time_bounds(None, tile_time), Some(tile_time));
+    }
+
+    #[test]
+    fn dataset_grid_takes_precedence_when_extending_spatial_bounds() {
+        use geoengine_datatypes::{
+            primitives::SpatialPartition2D as DatatypeSpatialPartition2D,
+            raster::{GeoTransform, GridBoundingBox2D, SpatialGridDefinition},
+        };
+
+        let dataset_grid = SpatialGridDefinition::new(
+            GeoTransform::new_with_coordinate_x_y(0., 10., 0., -10.),
+            GridBoundingBox2D::new_unchecked([0, 0], [9, 9]),
+        );
+        let original_partition = dataset_grid.spatial_partition();
+        let tile_partition =
+            DatatypeSpatialPartition2D::new_unchecked((-15., 25.).into(), (105., -115.).into());
+
+        let extended = extend_spatial_bounds(dataset_grid, tile_partition.into());
+
+        assert_eq!(extended.geo_transform(), dataset_grid.geo_transform());
+        assert!(extended.spatial_partition().contains(&original_partition));
+        assert!(extended.spatial_partition().contains(&tile_partition));
+    }
 
     #[ge_context::test]
     async fn it_autocompletes_datasets(app_ctx: PostgresContext<NoTls>) {
