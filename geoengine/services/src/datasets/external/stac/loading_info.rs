@@ -88,8 +88,10 @@ async fn query_stac_item_collection(
                 |e| e.status().map(|s| s.as_u16()),
             )
             .await
-            .map_err(|e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                source: Box::new(e),
+            .map_err(|e| {
+                geoengine_operators::error::Error::QueryingProcessorFailed {
+                    source: Box::new(e),
+                }
             })?;
 
             debug!(
@@ -128,8 +130,10 @@ async fn query_stac_item_collection(
                 |e| e.status().map(|s| s.as_u16()),
             )
             .await
-            .map_err(|e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                source: Box::new(e),
+            .map_err(|e| {
+                geoengine_operators::error::Error::QueryingProcessorFailed {
+                    source: Box::new(e),
+                }
             })?;
 
             debug!(

@@ -1155,11 +1155,16 @@ pub struct StacDataProviderDefinition {
     /// Timeout in seconds for outgoing STAC API HTTP requests.
     #[serde(default = "default_query_timeout")]
     pub query_timeout_secs: i64,
+    #[serde(default = "default_page_limit")]
     pub page_limit: i64,
 }
 
 fn default_query_timeout() -> i64 {
     60
+}
+
+fn default_page_limit() -> i64 {
+    100
 }
 
 impl From<StacDataProviderDefinition>
