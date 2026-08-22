@@ -93,6 +93,14 @@ impl PlotOperator for Statistics {
                 )
                 .await?;
 
+                // statistics count pixels: halo pixels would count multiple times
+                rasters
+                    .iter()
+                    .try_for_each(|r| {
+                        r.result_descriptor()
+                            .ensure_no_tile_overlap(Statistics::TYPE_NAME)
+                    })?;
+
                 let in_descriptors = rasters
                     .iter()
                     .map(InitializedRasterOperator::result_descriptor)

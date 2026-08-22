@@ -101,6 +101,8 @@ impl PlotOperator for Histogram {
                     .await?;
 
                 let in_desc = raster_source.result_descriptor();
+                // histograms count pixels: halo pixels would count multiple times
+                in_desc.ensure_no_tile_overlap(Histogram::TYPE_NAME)?;
 
                 ensure!(
                     in_desc

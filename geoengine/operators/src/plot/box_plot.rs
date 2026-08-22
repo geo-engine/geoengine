@@ -78,6 +78,14 @@ impl PlotOperator for BoxPlot {
                 )
                 .await?;
 
+                // box plots count pixel values: halo pixels would count multiple times
+                raster_sources
+                    .iter()
+                    .try_for_each(|r| {
+                        r.result_descriptor()
+                            .ensure_no_tile_overlap(BoxPlot::TYPE_NAME)
+                    })?;
+
                 // TODO: implement multi-band functionality and remove this check
                 ensure!(
                     raster_sources

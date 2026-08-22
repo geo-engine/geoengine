@@ -103,6 +103,8 @@ impl RasterOperator for BandNeighborhoodAggregate {
             .raster;
 
         let in_descriptor = source.result_descriptor();
+        // this operator manages its own neighborhood margins per tile
+        in_descriptor.ensure_no_tile_overlap(BandNeighborhoodAggregate::TYPE_NAME)?;
 
         match &self.params.aggregate {
             NeighborhoodAggregate::FirstDerivative { band_distance } => {

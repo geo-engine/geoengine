@@ -155,6 +155,11 @@ impl RasterOperator for NeighborhoodAggregate {
             .await?;
         let raster_source = initialized_source.raster;
 
+        // this operator manages its own neighborhood margins per tile
+        raster_source
+            .result_descriptor()
+            .ensure_no_tile_overlap(NeighborhoodAggregate::TYPE_NAME)?;
+
         let initialized_operator = InitializedNeighborhoodAggregate {
             name,
             path,

@@ -73,6 +73,8 @@ impl RasterOperator for Onnx {
             .raster;
 
         let in_descriptor = source.result_descriptor();
+        // the model expects exactly one core tile per input stack
+        in_descriptor.ensure_no_tile_overlap(Onnx::TYPE_NAME)?;
 
         let model_loading_info = context.ml_model_loading_info(&self.params.model).await?;
 
