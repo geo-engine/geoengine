@@ -271,21 +271,36 @@ tile bounds before the goldens are accepted.
 The MODIS projected raster fixture and GDAL/multi-file raster fixtures were
 left unchanged.
 
+## Review Fixes
+
+Applied during post-implementation review:
+
+- **B1**: `ReTileAccu::into_tile` now returns `Err(InvalidOperatorSpec)` instead of
+  `expect` when the accumulator has no tile data.
+- **D1+D2**: Removed unused `_tiling_grid` parameter from `tile_spatial_bounds`
+  trait method and both implementations. Removed dead `source_tiling_grid`
+  computation in the OGC tile handler.
+- **D3**: Removed unused `_tiling_specification` parameter from
+  `raster_stream_to_multiband_geotiff_bytes`.
+- **D4**: Restored `#[allow(dead_code)]` on `tile_grid_bbox` (test-only usage).
+- **D6**: Removed 5 no-op `#[serde(alias)]` annotations from `tiling.rs`.
+- **D7**: Removed stale TODOs; renamed `grid_bounds` → `pixel_bounds` in
+  `tile_idx_iterator_from_grid_bounds` and `tile_information_iterator_from_pixel_bounds`.
+- **E1+E2**: Replaced 10 duplicated match arms in `raster_stacker.rs` with a
+  `stacker_arm!` macro (~90 lines → ~25 lines).
+- **E4+B5**: Replaced silent `unwrap_or(u32::MAX)` with `expect("tile size must
+  fit in u32")` in the OGC tile handler.
+
 ## Verification
 
 The following focused suites pass:
 
 | Area | Result |
 | --- | ---: |
-| OGC handlers | 38 passed |
-| WMS | 19 passed |
-| WCS | 4 passed |
-| `ReTile` | 2 passed |
-| `RasterStacker` | 11 passed |
-| Datatype tiling tests | 11 passed |
-| Workspace Clippy, all targets, `-D warnings` | passed |
-| Workspace check, all targets | passed |
-| Formatting and diff checks | passed |
+| `geoengine-operators` (full, skip external) | 575 passed |
+| `geoengine-services` (full, skip external) | 461 passed |
+| `geoengine-datatypes` (full) | 739 passed |
+| Workspace check, all targets, zero warnings | passed |
 
 ## Accepted Test Debt And External Limits
 

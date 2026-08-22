@@ -582,6 +582,7 @@ mod tests {
                         },
                         "state": "source",
                         "tileSize": {"shapeArray": [256, 256]},
+                        "overlap": {"y": 0, "x": 0},
                     },
                     "bands": [
                         {

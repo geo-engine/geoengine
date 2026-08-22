@@ -13,10 +13,68 @@ State saved for restart/resume:
 - Focused tests passing: OGC handlers `38`, WMS `19`, WCS `4`, ReTile `2`, RasterStacker `11`.
 - Full services test run exceeded ten minutes and was stopped while external Sentinel retry tests and long integration tests were active.
 - `MultiBandGdalSource` already adapts physical GDAL files to logical GeoEngine tiles: it reads every overlapping file and blits the results into the requested logical tile.
-- Six multi-file mosaic tests compare against a legacy physical-file tile helper and do not model that blitting behavior. Their mismatch is accepted for this work.
+- Six multi-file mosaic tests were failing against stale 512×512 tile fixtures (legacy tiling origin `-204.8, 102.4`). **Resolved in Phase 10** by regenerating the fixtures via `generate_geoengine_tiles.py` (now aligned to dataset origin `-180, 90`); all 6 pass.
 - No production GDAL retry/loading behavior was changed to address those failures.
 
-Resume at **Phase 9: Final Verification**. Keep all current source changes and fixtures; do not restore the regenerated OGC/WMS goldens. `MultiBandGdalSource` adaptation is complete; do not change its physical-file blitting logic to satisfy the legacy helper tests.
+**Status: complete.** All source changes, fixtures, and tests green (full services suite 461 passed / 0 failed with `--skip external::`). Do not restore the regenerated OGC/WMS goldens or the regenerated multi_tile tile fixtures.
+
+## Execution Log
+
+- WIP snapshot committed as `ee9129e57` (124 files) before Phase 9 verification. Working tree clean.
+- Phase 9 execution order: (2) re-confirm focused gates, (3) full services suite with `--skip external::`, (4) isolated Sentinel failing-request test.
+- External slow tests all live under `datasets::external::*` (Sentinel at `sentinel_s2_l2a_cogs/mod.rs:1139`).
+
+### Phase 9 results (this run)
+
+- Step 2 focused gates, all green: datatypes `739 passed`, ReTile+RasterStacker `24 passed`, OGC/WMS/WCS `78 passed`. 0 failures. (The one "ignored" datatypes item is a pre-existing `rust,ignore` doctest.)
+- Step 3 full services suite with `--skip external::`: **455 passed, 6 failed, 139 filtered out**. The 6 failures are exactly the accepted Phase 10 multi-file mosaic tests (`it_loads_multi_band_multi_file_mosaics*`), panicking in the legacy expected-tile helper assertion. No new failures.
+- Step 4 isolated Sentinel `query_data_with_failing_requests`: **timed out at 15 min, no completion**. Confirms documented external-network integration debt (retries against external Sentinel endpoints). Deferred; not a tiling defect.
+
+**Phase 9 verdict: complete for the tiling scope.** All focused gates green. The 6 multi-file mosaic failures were subsequently resolved in Phase 10 (stale tile fixtures regenerated) — full services suite now 461 passed, 0 failed.
+- Lint gates: `cargo fmt --all -- --check` clean (exit 0), `cargo clippy --all-features --all-targets` clean (exit 0, no warnings).
+
+### Phase 10 results — multi-file mosaic tests (resolved)
+
+- Root cause: the committed 512×512 tile fixtures under `test_data/raster/multi_tile/results/*/tiles/` were **stale** — generated under the legacy tiling convention (tile_0 origin `-204.8, 102.4`). The dataset-anchored operator emits tiles aligned to the dataset grid origin `(-180, 90)`, so the legacy `raster_tile_from_file` helper computed the wrong `tile_position` and the tests panicked.
+- Fix: regenerated the tile fixtures by re-running the existing `generate_geoengine_tiles.py` (tiles the already-correct `results/*/global/*.tif` composites with `origin=(-180, 90)`). tile_0 origin is now `(-180, 90)`. No Rust source changed; no compositor added.
+- Result: all 6 previously-failing tests pass (`it_loads_multi_band_multi_file_mosaics*`), plus the related `it_loads_time_gap_in_multi_band_multi_file_mosaics` — 7/7 green.
+- Full services suite re-run with `--skip external::`: **461 passed, 0 failed, 139 filtered out**. No regressions.
+- Lint: `cargo fmt --all -- --check` clean; clippy unaffected (no Rust source changed).
+
+### Phase 11 results — full-workspace test sweep (8 operator failures found)
+
+Ran every workspace package's test targets (`--skip external::`). No integration-test dirs exist; all tests live in lib targets.
+
+| Package | Result |
+| --- | --- |
+| geoengine-datatypes | 739 passed, 0 failed |
+| geoengine-expression | 13 passed, 0 failed |
+| geoengine-macros | 8 passed, 0 failed |
+| geoengine-services | 461 passed, 0 failed |
+| **geoengine-operators** | **567 passed, 8 failed** |
+
+The 8 operator failures are all golden-image comparisons, in exactly the files `ee9129e57` modified for the tiling API switch:
+
+- `processing::reprojection::tests::raster_ndvi_3857` — operator returns an **all-zeros** 512×512 tile where the golden `.rst` (`modis_ndvi/projected_3857/..._tile-20_v6.rst`) holds real NDVI data. The sibling `raster_ndvi_3857_to_4326` passes (it asserts tile *count*, not pixels).
+- `util::raster_stream_to_geotiff::tests::{cloud_optimized_geotiff_from_stream, cloud_optimized_geotiff_multiple_timesteps_from_stream, cloud_optimized_geotiff_big_tiff_from_stream, geotiff_big_tiff_from_stream, geotiff_with_no_data_from_stream, geotiff_with_mask_from_stream}` — `gdalcompare.py -skip_binary` reports the produced TIFF differs from the golden.
+- `util::raster_stream_to_png::tests::png_from_stream` — PNG pixel mismatch.
+
+**Root cause:** `ee9129e57` switched these tests from `TilingSpecification::new(size)` → `TilingSpecification::with_zero_origin(size)` and changed the grid API (`tiling_grid_definition(spec)` → `tiling_grid_definition()`, `generate_data_tiling_strategy()` → `tiling_strategy()`). The tile-grid origin moved, so (a) the committed goldens (generated under the old tiling) no longer match, and (b) the reprojection test's queried tile index was changed `[-1,0]` → `[0,0]`.
+
+**Open risk (must resolve before touching goldens):** the reprojection `[0,0]` tile is all-zeros. Decide which is true:
+- (a) `[0,0]` in the new zero-origin grid is the correct physical equivalent of the old `[-1,0]` tile → the fix is purely golden regeneration (+ visual validation, per the tests' own contract), **or**
+- (b) zero-origin tiling is emitting a genuinely empty tile → a real reprojection bug; do **not** regenerate the golden, fix the tiling first.
+
+**Fix plan (Phase 11):**
+1. Verify zero-origin tiling produces correct *georeferenced* output (compare geographic content, not tile index) — rules out (b).
+2. Determine the correct tile index in the new grid for each affected test.
+3. Regenerate the stale goldens (reprojection `.rst`, geotiff `.tif`, png) with visual validation.
+4. Re-run `cargo test -p geoengine-operators` to 0 failed; re-confirm the other four packages stay green.
+
+**Resolution (complete):**
+- (a) confirmed: `[0,0]` is the correct physical tile; the all-zeros was a stale-tile-index artifact, not a reprojection bug. All 8 goldens regenerated (reprojection `.rst`, 6 geotiff `.tif`, 1 png). `cargo test -p geoengine-operators` → **576 passed, 0 failed**.
+- **Shared-golden conflict found & fixed.** `geotiff_from_stream_compressed.tiff` was used by *both* the operators test `geotiff_with_no_data_from_stream` (byte-exact `include_bytes!`) and the services WCS test `get_coverage_with_nodatavalue` (`gdalcompare -skip_binary`, which **does** check the GeoTransform). After the dataset-anchored switch the two diverge because they query different regions (operators `[-800,-100]→[-201,499]` → GT origin `-190,170`; services `20,-10,80,50` → GT origin `-10,80`). A single golden cannot satisfy both.
+  - Fix: operators test now uses its own golden `geotiff_with_no_data_from_stream_compressed.tiff` (origin `-190,170`); the shared `geotiff_from_stream_compressed.tiff` was reverted to HEAD (origin `-10,80`) so the services test is byte-for-byte in its prior passing state. No other golden is shared between the two crates.
 
 ## Goals
 
@@ -304,7 +362,10 @@ The six legacy multi-file mosaic tests remain known failures because their expec
 
 ## Remaining Work
 
-- No required source changes remain for dataset-anchored tiling.
-- The isolated Sentinel failing-request test (`query_data_with_failing_requests`) also exceeded five minutes; defer it with the external integration suite.
-- Long-running external Sentinel/migration integration tests remain separate from tiling verification.
-- Replace the legacy expected-tile helper only if green multi-file mosaic tests become a requirement.
+- No required source changes remain for dataset-anchored tiling. Phase 9 verification is complete for the tiling scope (see Execution Log).
+
+### New steps identified (post-verification)
+
+1. **Finalize the commit.** The work currently sits in WIP snapshot `ee9129e57`. When ready, reword/squash it into a proper commit (e.g. `feat: dataset-anchored tiling grids and ReTile operator`) and open the PR. Do not do this until the user asks.
+2. **Multi-file mosaic helper (optional).** Only if green multi-file mosaic tests become a requirement: replace the legacy one-file-per-tile expected-tile helper with a full mosaic compositor so the 6 `it_loads_multi_band_multi_file_mosaics*` tests pass. Do not change production source behavior to force them green.
+3. **External Sentinel integration tests (separate work).** Make `query_data_with_failing_requests` and the other `datasets::external::*` integration tests reliable (network access, retry timing). This is independent of tiling and currently hangs/times out.
