@@ -579,6 +579,46 @@ impl RasterResultDescriptor {
     pub fn replace_resolution(&mut self, resolution: SpatialResolution) {
         self.spatial_grid = self.spatial_grid.with_changed_resolution(resolution);
     }
+
+    /// Reject overlapped input tiles for operators that cannot process them.
+    ///
+    /// Operators whose result depends on pixel multiplicity (counting,
+    /// aggregation), that manage their own neighborhood margins, or that assume
+    /// tiles match the tiling specification's core size must call this in
+    /// `_initialize`. Overlap-aware operators may accept padded tiles instead.
+    pub fn ensure_no_tile_overlap(&self, operator: &'static str) -> Result<()> {
+        if self.spatial_grid.has_tile_overlap() {
+            return Err(Error::OverlappingTilesNotSupported { operator });
+        }
+        Ok(())
+    }
+}
+
+/// Checks shared by operators with multiple raster inputs.
+pub mod multi_input {
+    use super::*;
+
+    /// Require all inputs to carry the same overlap halo.
+    ///
+    /// Pixel-local point-wise operators are safe for overlapping tiles as long
+    /// as all inputs are padded identically: corresponding tiles then cover the
+    /// same data window and combine element-wise without double counting.
+    pub fn ensure_equal_tile_overlap(descriptors: &[&RasterResultDescriptor]) -> Result<()> {
+        let Some((first, rest)) = descriptors.split_first() else {
+            return Ok(());
+        };
+        let first_overlap = first.spatial_grid.tile_overlap();
+        for descriptor in rest {
+            let other = descriptor.spatial_grid.tile_overlap();
+            if other != first_overlap {
+                return Err(Error::UnequalTileOverlap {
+                    a: first_overlap,
+                    b: other,
+                });
+            }
+        }
+        Ok(())
+    }
 }
 
 /// A `ResultDescriptor` for vector queries

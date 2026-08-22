@@ -35,6 +35,7 @@ pub use result_descriptor::{
     ResultDescriptor, SpatialGridDescriptor, SpatialGridDescriptorState, TimeDescriptor,
     TypedResultDescriptor, VectorColumnInfo, VectorResultDescriptor,
 };
+pub use result_descriptor::multi_input as descriptor_multi_input;
 use tracing::Span;
 pub use workflow_path::WorkflowOperatorPath;
 mod clonable_operator;
