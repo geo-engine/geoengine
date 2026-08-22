@@ -8,7 +8,7 @@ use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::machine_learning::MlModelName;
 use geoengine_datatypes::primitives::{Coordinate2D, FeatureDataType, TimeInterval};
-use geoengine_datatypes::raster::{RasterDataType, SpatialGridDefinition, TileSize};
+use geoengine_datatypes::raster::{RasterDataType, SpatialGridDefinition, TileOverlap, TileSize};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use itertools::join;
 use ordered_float::FloatIsNan;
@@ -466,6 +466,28 @@ pub enum Error {
     #[snafu(display("Tile dimensions must be greater than zero: {tile_size:?}"))]
     InvalidTileSize {
         tile_size: TileSize,
+    },
+
+    #[snafu(display(
+        "Invalid tile overlap {overlap}: the halo must be strictly smaller than the core tile size on each axis."
+    ))]
+    InvalidOverlap {
+        overlap: TileOverlap,
+    },
+
+    #[snafu(display(
+        "{operator} does not support overlapping tiles. Apply a RemoveTileOverlap operator on the input first."
+    ))]
+    OverlappingTilesNotSupported {
+        operator: &'static str,
+    },
+
+    #[snafu(display(
+        "Raster inputs carry different tile overlaps: {a} vs {b}. Normalize the inputs with AddTileOverlap or RemoveTileOverlap first."
+    ))]
+    UnequalTileOverlap {
+        a: TileOverlap,
+        b: TileOverlap,
     },
 
     #[snafu(display(

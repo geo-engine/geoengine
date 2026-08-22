@@ -70,6 +70,10 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
             .initialize_sources(path.clone(), context)
             .await?;
         let raster = initalized_sources.raster;
+        // means aggregate pixels: halo pixels would count multiple times
+        raster
+            .result_descriptor()
+            .ensure_no_tile_overlap(MeanRasterPixelValuesOverTime::TYPE_NAME)?;
 
         let in_desc = raster.result_descriptor().clone();
 

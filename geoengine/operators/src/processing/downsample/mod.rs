@@ -117,7 +117,9 @@ impl<O: InitializedRasterOperator> InitializedDownsampling<O> {
         params: DownsamplingParams,
         tiling_specification: TilingSpecification,
     ) -> Result<Self> {
+        // downsampling aggregates pixel blocks: halo pixels would skew results
         let in_descriptor = raster_source.result_descriptor();
+        in_descriptor.ensure_no_tile_overlap(Downsampling::TYPE_NAME)?;
 
         let in_spatial_grid = in_descriptor.spatial_grid_descriptor();
 

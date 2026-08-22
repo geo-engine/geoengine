@@ -110,6 +110,11 @@ impl RasterOperator for TemporalRasterAggregation {
             &self.params
         );
 
+        // aggregation counts pixels over time: halo pixels would count multiple times
+        source
+            .result_descriptor()
+            .ensure_no_tile_overlap(TemporalRasterAggregation::TYPE_NAME)?;
+
         let mut out_result_descriptor = source.result_descriptor().clone();
 
         out_result_descriptor.time = TimeDescriptor::new(
