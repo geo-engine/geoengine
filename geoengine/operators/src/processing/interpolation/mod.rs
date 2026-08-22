@@ -112,6 +112,7 @@ impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
         params: &InterpolationParams,
     ) -> Result<Self> {
         let in_descriptor = raster_source.result_descriptor();
+        in_descriptor.ensure_no_tile_overlap(Interpolation::TYPE_NAME)?;
         let in_spatial_grid = in_descriptor.spatial_grid_descriptor();
 
         let output_resolution = match params.output_resolution {

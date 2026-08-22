@@ -78,6 +78,8 @@ impl RasterOperator for BandFilter {
         debug!("Initializing `BandFilter` with {:?}.", &self.params);
 
         let input_descriptor = initialized_sources.raster.result_descriptor().clone();
+        // band filters apply kernels across bands: halo pixels would bleed
+        input_descriptor.ensure_no_tile_overlap(BandFilter::TYPE_NAME)?;
 
         let input_bands = input_descriptor.bands;
 

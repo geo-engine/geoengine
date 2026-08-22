@@ -72,6 +72,11 @@ impl RasterOperator for RasterStacker {
             .map(InitializedRasterOperator::result_descriptor)
             .collect::<Vec<_>>();
 
+        // stacking blits input cores onto one grid: halos would be lost
+        in_descriptors
+            .iter()
+            .try_for_each(|d| d.ensure_no_tile_overlap(RasterStacker::TYPE_NAME))?;
+
         ensure!(
             in_descriptors.iter().all(|d| d.spatial_reference
                 == in_descriptors[0].spatial_reference

@@ -36,6 +36,7 @@ pub use result_descriptor::{
     ResultDescriptor, SpatialGridDescriptor, SpatialGridDescriptorState, TimeDescriptor,
     TypedResultDescriptor, VectorColumnInfo, VectorResultDescriptor,
 };
+pub use result_descriptor::multi_input as descriptor_multi_input;
 use tracing::Span;
 pub use typed_operators::{TypedPlotOperator, TypedRasterOperator, TypedVectorOperator};
 mod clonable_operator;
