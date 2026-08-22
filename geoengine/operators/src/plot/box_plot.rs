@@ -69,6 +69,8 @@ impl PlotOperator for BoxPlot {
 
                 let bands = select_bands(&in_descriptor.bands, &self.params.column_names)?;
 
+                // box plots count pixel values: halo pixels would count multiple times
+                in_descriptor.ensure_no_tile_overlap(BoxPlot::TYPE_NAME)?;
                 ensure!(
                     (1..=MAX_NUMBER_OF_RASTER_BANDS).contains(&bands.len()),
                     error::InvalidOperatorSpec {

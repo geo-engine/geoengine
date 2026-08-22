@@ -96,6 +96,9 @@ impl PlotOperator for Statistics {
 
                 let in_descriptor = initialized_raster.result_descriptor();
 
+                // statistics count pixels: halo pixels would count multiple times
+                in_descriptor.ensure_no_tile_overlap(Statistics::TYPE_NAME)?;
+
                 let bands = select_bands(&in_descriptor.bands, &self.params.column_names)?;
 
                 let bbox = in_descriptor.spatial_bounds();

@@ -63,6 +63,8 @@ impl PlotOperator for ClassHistogram {
                     .await?;
 
                 let in_desc = raster_source.result_descriptor();
+                // histograms count pixels: halo pixels would count multiple times
+                in_desc.ensure_no_tile_overlap(ClassHistogram::TYPE_NAME)?;
 
                 let band_index = match &self.params.column_name {
                     None => 0,
