@@ -15,6 +15,7 @@ mod raster_scaling;
 mod raster_stacker;
 mod raster_type_conversion;
 mod raster_vector_join;
+mod add_tile_overlap;
 mod rasterization;
 mod reprojection;
 mod retile;
@@ -62,6 +63,7 @@ pub use raster_vector_join::{
     ColumnNames, FeatureAggregationMethod, RasterVectorJoin, RasterVectorJoinParams,
     TemporalAggregationMethod,
 };
+pub use add_tile_overlap::{AddTileOverlap, AddTileOverlapParams, AddTileOverlapProcessor};
 pub use rasterization::{Rasterization, RasterizationParams};
 pub use reprojection::{
     DeriveOutRasterSpecsSource, InitializedRasterReprojection, InitializedVectorReprojection,

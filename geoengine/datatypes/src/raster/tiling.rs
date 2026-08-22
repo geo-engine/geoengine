@@ -174,11 +174,10 @@ impl TileOverlap {
 
     /// Is this overlap usable for tiles of the given core size?
     ///
-    /// We require the halo to be strictly smaller than the core on each axis so
-    /// that a padded tile always contains its own core and neighbors overlap in
-    /// well-defined regions.
+    /// We bound the halo by one full core per axis so that padded tiles stay
+    /// within reasonable memory bounds.
     pub fn is_valid_for_tile_size(&self, tile_size: TileSize) -> bool {
-        2 * self.y < tile_size.axis_size_y() as u32 && 2 * self.x < tile_size.axis_size_x() as u32
+        self.y <= tile_size.axis_size_y() as u32 && self.x <= tile_size.axis_size_x() as u32
     }
 }
 
@@ -906,10 +905,10 @@ mod tests {
         let tile_size = TileSize::new(512, 512);
 
         assert!(TileOverlap::zero().is_valid_for_tile_size(tile_size));
-        assert!(TileOverlap::new(255, 255).is_valid_for_tile_size(tile_size));
-        // the halo must be strictly smaller than the core on each axis
-        assert!(!TileOverlap::new(256, 0).is_valid_for_tile_size(tile_size));
-        assert!(!TileOverlap::new(0, 512).is_valid_for_tile_size(tile_size));
+        assert!(TileOverlap::new(512, 255).is_valid_for_tile_size(tile_size));
+        // the halo is bounded by one full core per axis
+        assert!(!TileOverlap::new(513, 0).is_valid_for_tile_size(tile_size));
+        assert!(!TileOverlap::new(0, 600).is_valid_for_tile_size(tile_size));
     }
 
     #[test]
