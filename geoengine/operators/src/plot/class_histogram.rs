@@ -457,6 +457,7 @@ mod tests {
     use geoengine_datatypes::raster::{
         BoundedGrid, GeoTransform, Grid2D, GridShape2D, RasterDataType, RasterTile2D,
         TileInformation, TileSize, TilingSpecification,
+        TileOverlap,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::Identifier;
@@ -527,6 +528,7 @@ mod tests {
                 data: vec![RasterTile2D::new_with_tile_info(
                     TimeInterval::default(),
                     TileInformation {
+                        overlap: TileOverlap::zero(),
                         global_geo_transform: TestDefault::test_default(),
                         tile_position: [0, 0].into(),
                         tile_size: [3, 2].into(),
@@ -942,6 +944,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: [0, 0].into(),
                             tile_size: tile_size,
@@ -1154,6 +1157,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: [0, 0].into(),
                             tile_size: tile_size,

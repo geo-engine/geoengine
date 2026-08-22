@@ -133,6 +133,67 @@ impl Iterator for TileIdx2DIter {
     }
 }
 
+/// Overlap (halo) of tiles around their core region, in pixels per axis.
+///
+/// A tile's *core* is the region addressed by its [`TileIdx`] in the tile grid.
+/// With overlap, each tile additionally carries up to `y`/`x` pixels of
+/// neighboring data on every side of its core. Typical use cases are ML
+/// operators that run convolutions whose input extent exceeds their output.
+///
+/// GIS semantics: dataset coverage and query intersection are always defined by
+/// cores. Overlap pixels are additional data and must never be double-counted.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TileOverlap {
+    /// Overlap in pixel rows on every vertical side (above and below).
+    pub y: u32,
+    /// Overlap in pixel columns on every horizontal side (left and right).
+    pub x: u32,
+}
+
+impl TileOverlap {
+    pub const fn new(y: u32, x: u32) -> Self {
+        Self { y, x }
+    }
+
+    pub const fn zero() -> Self {
+        Self { y: 0, x: 0 }
+    }
+
+    pub const fn is_zero(&self) -> bool {
+        self.y == 0 && self.x == 0
+    }
+
+    pub const fn axis_size_y(&self) -> usize {
+        self.y as usize
+    }
+
+    pub const fn axis_size_x(&self) -> usize {
+        self.x as usize
+    }
+
+    /// Is this overlap usable for tiles of the given core size?
+    ///
+    /// We require the halo to be strictly smaller than the core on each axis so
+    /// that a padded tile always contains its own core and neighbors overlap in
+    /// well-defined regions.
+    pub fn is_valid_for_tile_size(&self, tile_size: TileSize) -> bool {
+        2 * self.y < tile_size.axis_size_y() as u32 && 2 * self.x < tile_size.axis_size_x() as u32
+    }
+}
+
+impl std::fmt::Display for TileOverlap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}x{}", self.y, self.x)
+    }
+}
+
+impl TestDefault for TileOverlap {
+    fn test_default() -> Self {
+        Self::zero()
+    }
+}
+
 /// The static parameters required to create a `TilingStrategy`
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub struct TilingSpecification {
@@ -190,10 +251,16 @@ impl TestDefault for TilingSpecification {
 }
 
 /// A provider of tile (size) information for a raster/grid
+///
+/// The `overlap` denotes the halo carried by every emitted [`TileInformation`].
+/// Tile enumeration is always core-based: tiles are enumerated for the cores
+/// intersecting a query, independent of their overlap.
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct TilingStrategy {
     pub tile_size: TileSize,
     pub geo_transform: GeoTransform,
+    #[serde(default)]
+    pub overlap: TileOverlap,
 }
 
 impl TilingStrategy {
@@ -201,6 +268,19 @@ impl TilingStrategy {
         Self {
             tile_size,
             geo_transform,
+            overlap: TileOverlap::zero(),
+        }
+    }
+
+    pub fn new_with_overlap(
+        tile_size: TileSize,
+        geo_transform: GeoTransform,
+        overlap: TileOverlap,
+    ) -> Self {
+        Self {
+            tile_size,
+            geo_transform,
+            overlap,
         }
     }
 
@@ -292,11 +372,17 @@ impl TilingStrategy {
 }
 
 /// The `TileInformation` is used to represent the spatial position of each tile
+///
+/// `tile_size` is always the size of the tile's *core*. With a non-zero
+/// `overlap`, the tile's actual data grid additionally extends by up to
+/// `overlap` pixels on every side of its core (see [`TileOverlap`]).
 #[derive(PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct TileInformation {
     pub tile_size: TileSize,
     pub tile_position: TileIdx,
     pub global_geo_transform: GeoTransform,
+    #[serde(default)]
+    pub overlap: TileOverlap,
 }
 
 impl TileInformation {
@@ -309,6 +395,22 @@ impl TileInformation {
             tile_size,
             tile_position,
             global_geo_transform,
+            overlap: TileOverlap::zero(),
+        }
+    }
+
+    /// Create tile information for tiles that carry an overlap halo.
+    pub fn new_with_overlap(
+        tile_position: TileIdx,
+        tile_size: TileSize,
+        global_geo_transform: GeoTransform,
+        overlap: TileOverlap,
+    ) -> Self {
+        Self {
+            tile_size,
+            tile_position,
+            global_geo_transform,
+            overlap,
         }
     }
 
@@ -359,6 +461,40 @@ impl TileInformation {
         )
     }
 
+    /// The bounds of the tile's *core* in global pixel coordinates.
+    ///
+    /// This is identical to [`TileInformation::global_pixel_bounds`] and defines
+    /// the tile's contribution to dataset coverage and query intersection.
+    pub fn core_pixel_bounds(&self) -> GridBoundingBox2D {
+        self.global_pixel_bounds()
+    }
+
+    /// The bounds of the tile's actual data in global pixel coordinates:
+    /// the core expanded by the overlap halo on every side.
+    ///
+    /// Note that data bounds may extend beyond the dataset extent; missing
+    /// neighbor data is represented as no-data pixels.
+    pub fn data_pixel_bounds(&self) -> GridBoundingBox2D {
+        let core = self.global_pixel_bounds();
+        if self.overlap.is_zero() {
+            return core;
+        }
+        // `unwrap` is safe because expanding an existing bounding box keeps it valid
+        GridBoundingBox2D::new(
+            core.min_index()
+                - GridIdx([
+                    self.overlap.axis_size_y() as isize,
+                    self.overlap.axis_size_x() as isize,
+                ]),
+            core.max_index()
+                + GridIdx([
+                    self.overlap.axis_size_y() as isize,
+                    self.overlap.axis_size_x() as isize,
+                ]),
+        )
+        .expect("expanding a valid bounding box must yield a valid bounding box")
+    }
+
     pub fn tile_size(&self) -> TileSize {
         self.tile_size
     }
@@ -384,7 +520,7 @@ impl TileInformation {
     }
 
     pub fn tiling_strategy(&self) -> TilingStrategy {
-        TilingStrategy::new(self.tile_size, self.global_geo_transform)
+        TilingStrategy::new_with_overlap(self.tile_size, self.global_geo_transform, self.overlap)
     }
 }
 
@@ -434,10 +570,11 @@ impl Iterator for TileInformationIter {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.tile_idx_iter.next().map(|idx| {
-            TileInformation::new(
+            TileInformation::new_with_overlap(
                 idx,
                 self.tiling_strategy.tile_size,
                 self.tiling_strategy.geo_transform,
+                self.tiling_strategy.overlap,
             )
         })
     }
@@ -515,11 +652,10 @@ impl TilingGrid {
     }
 
     /// Create a [`TilingStrategy`] for tile index computation.
+    ///
+    /// The returned strategy has no tile overlap; `TilingGrid` addresses cores only.
     pub fn tiling_strategy(&self) -> TilingStrategy {
-        TilingStrategy {
-            geo_transform: self.geo_transform,
-            tile_size: self.tile_size,
-        }
+        TilingStrategy::new(self.tile_size, self.geo_transform)
     }
 
     /// Convert to a [`SpatialGridDefinition`] (pixel grid).
@@ -544,10 +680,7 @@ mod tests {
             -2.095_475_792_884_826_7E-8,
         );
 
-        let strat = TilingStrategy {
-            tile_size: TileSize([600, 600].into()),
-            geo_transform,
-        };
+        let strat = TilingStrategy::new(TileSize([600, 600].into()), geo_transform);
 
         let ul_idx = strat
             .geo_transform
@@ -572,10 +705,10 @@ mod tests {
 
     #[test]
     fn it_generates_all_interesected_tiles() {
-        let strat = TilingStrategy {
-            tile_size: TileSize([512, 512].into()),
-            geo_transform: GeoTransform::new((0., -0.).into(), 10., -10.),
-        };
+        let strat = TilingStrategy::new(
+            TileSize([512, 512].into()),
+            GeoTransform::new((0., -0.).into(), 10., -10.),
+        );
 
         let bounds =
             GridBoundingBox2D::new(GridIdx2D::new([-513, -513]), GridIdx2D::new([512, 512]))
@@ -765,6 +898,94 @@ mod tests {
                 TileSize::new(0, 4),
             )
             .is_none()
+        );
+    }
+
+    #[test]
+    fn tile_overlap_validation() {
+        let tile_size = TileSize::new(512, 512);
+
+        assert!(TileOverlap::zero().is_valid_for_tile_size(tile_size));
+        assert!(TileOverlap::new(255, 255).is_valid_for_tile_size(tile_size));
+        // the halo must be strictly smaller than the core on each axis
+        assert!(!TileOverlap::new(256, 0).is_valid_for_tile_size(tile_size));
+        assert!(!TileOverlap::new(0, 512).is_valid_for_tile_size(tile_size));
+    }
+
+    #[test]
+    fn overlapped_tile_information_bounds() {
+        let geo_transform = GeoTransform::new((0., 0.).into(), 1.0, -1.0);
+        let core = GridBoundingBox2D::new_min_max(2048, 3071, 1024, 2047).unwrap();
+
+        let no_overlap =
+            TileInformation::new(TileIdx::new_y_x(2, 1), TileSize::new(1024, 1024), geo_transform);
+        assert_eq!(no_overlap.core_pixel_bounds(), core);
+        assert_eq!(no_overlap.data_pixel_bounds(), core);
+
+        let overlapped = TileInformation::new_with_overlap(
+            TileIdx::new_y_x(2, 1),
+            TileSize::new(1024, 1024),
+            geo_transform,
+            TileOverlap::new(4, 8),
+        );
+        assert_eq!(overlapped.core_pixel_bounds(), core);
+        assert_eq!(
+            overlapped.data_pixel_bounds(),
+            GridBoundingBox2D::new_min_max(2048 - 4, 3071 + 4, 1024 - 8, 2047 + 8).unwrap()
+        );
+    }
+
+    #[test]
+    fn overlapped_tile_data_geo_reference() {
+        // pixel (y, x) has upper-left corner (x * px, -y * px) for this transform
+        let geo_transform = GeoTransform::new((0., 0.).into(), 10., -10.);
+        let overlap = TileOverlap::new(2, 3);
+        let info = TileInformation::new_with_overlap(
+            TileIdx::new_y_x(1, 1),
+            TileSize::new(4, 4),
+            geo_transform,
+            overlap,
+        );
+
+        // the core anchor is unaffected by the overlap
+        let core_ul_coordinate = geo_transform
+            .grid_idx_to_pixel_upper_left_coordinate_2d(info.global_upper_left_pixel_idx());
+        assert_eq!(core_ul_coordinate, Coordinate2D::new(40., -40.));
+
+        // the data grid starts `overlap` pixels before the core anchor
+        let data_ul_coordinate = geo_transform
+            .grid_idx_to_pixel_upper_left_coordinate_2d(info.data_pixel_bounds().min_index());
+        assert_eq!(
+            data_ul_coordinate,
+            Coordinate2D::new(40. - 3. * 10., -40. + 2. * 10.)
+        );
+    }
+
+    #[test]
+    fn overlapping_tiling_strategy_enumerates_cores() {
+        let strat = TilingStrategy::new_with_overlap(
+            TileSize([4, 4].into()),
+            GeoTransform::new((0., 0.).into(), 1.0, -1.0),
+            TileOverlap::new(1, 1),
+        );
+
+        let tiles = strat
+            .tile_information_iterator_from_pixel_bounds(
+                GridBoundingBox2D::new_min_max(0, 3, 0, 3).unwrap(),
+            )
+            .collect::<Vec<_>>();
+
+        // enumeration stays core-based: a single core tile covers the query
+        assert_eq!(tiles.len(), 1);
+        assert_eq!(tiles[0].tile_position, TileIdx::new_y_x(0, 0));
+        assert_eq!(
+            tiles[0].core_pixel_bounds(),
+            GridBoundingBox2D::new_min_max(0, 3, 0, 3).unwrap()
+        );
+        // ... but its data extends into all eight neighboring core tiles
+        assert_eq!(
+            tiles[0].data_pixel_bounds(),
+            GridBoundingBox2D::new_min_max(-1, 4, -1, 4).unwrap()
         );
     }
 }

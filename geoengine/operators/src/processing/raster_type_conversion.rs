@@ -200,6 +200,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::{
         primitives::{CacheHint, Coordinate2D, Measurement, TimeInterval},
@@ -247,6 +248,7 @@ mod tests {
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 0].into(),
                 tile_size: tile_size,

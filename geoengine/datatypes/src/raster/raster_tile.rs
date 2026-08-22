@@ -1,11 +1,12 @@
 use super::masked_grid::MaskedGrid;
 use super::{
-    BoundedGrid, ChangeGridBounds, GridBoundingBox2D, GridIndexAccessMut, RasterProperties,
-    SpatialGridDefinition,
+    BoundedGrid, ChangeGridBounds, EmptyGrid2D, GridBlit, GridBoundingBox2D, GridIdx, GridIdx2D,
+    GridIndexAccessMut, RasterProperties, SpatialGridDefinition,
 };
 use super::{
     GeoTransform, GeoTransformAccess, GridBounds, GridIndexAccess, GridShape, GridShape2D,
-    GridShape3D, GridShapeAccess, GridSize, Raster, TileIdx, TileInformation,
+    GridShape3D, GridShapeAccess, GridSize, Raster, TileIdx, TileInformation, TileOverlap,
+    TileSize,
     grid_or_empty::GridOrEmpty,
 };
 use crate::primitives::CacheHint;
@@ -14,6 +15,7 @@ use crate::primitives::{
     TimeInterval,
 };
 use crate::raster::Pixel;
+use crate::error::Error;
 use crate::util::{ByteSize, Result};
 use float_cmp::approx_eq;
 use serde::{Deserialize, Serialize};
@@ -40,11 +42,20 @@ pub type MaterializedRasterTile3D<T> = MaterializedRasterTile<GridShape3D, T>;
 pub struct BaseTile<G> {
     /// The `TimeInterval` where this tile is valid.
     pub time: TimeInterval,
-    /// The tile position is the position of the tile in the gird of tiles with origin at the origin of the `global_geo_transform`.
+    /// The tile position is the position of the tile's *core* in the grid of tiles
+    /// with origin at the origin of the `global_geo_transform`.
     /// This is NOT a pixel position inside the tile.
     pub tile_position: TileIdx,
     // the band of the tile, relevant for multi-band raster
     pub band: u32,
+    /// The overlap halo of this tile around its core region.
+    ///
+    /// With non-zero overlap, the data grid extends beyond the core on every
+    /// side. The core's upper left pixel is derived as
+    /// `tile_position × core_size` with `core_size = grid shape − 2×overlap`.
+    /// Coverage and query intersection are always defined by cores.
+    #[serde(default)]
+    pub overlap: TileOverlap,
     /// The global geotransform to transform pixels into geographic coordinates
     pub global_geo_transform: GeoTransform,
     /// The pixels of the tile are stored as `Grid` or, in case they are all no-data as `NoDataGrid`.
@@ -64,20 +75,44 @@ where
         self.tile_position
     }
 
+    /// The axis sizes `[y, x]` of the tile's core region: the grid shape minus
+    /// twice the overlap halo.
+    pub fn core_axis_size(&self) -> [usize; 2] {
+        let y = self.grid_array.axis_size_y() - 2 * self.overlap.axis_size_y();
+        let x = self.grid_array.axis_size_x() - 2 * self.overlap.axis_size_x();
+        [y, x]
+    }
+
+    /// The global pixel index of the upper left pixel of the tile's *core*.
+    pub fn global_core_upper_left_pixel_idx(&self) -> GridIdx2D {
+        let [core_size_y, core_size_x] = self.core_axis_size();
+        self.tile_position.0
+            * [core_size_y as isize, core_size_x as isize]
+    }
+
+    /// The global pixel index of the upper left pixel of the tile's actual data.
+    /// This is the core anchor shifted by the overlap halo.
+    pub fn global_data_upper_left_pixel_idx(&self) -> GridIdx2D {
+        self.global_core_upper_left_pixel_idx()
+            - GridIdx([
+                self.overlap.axis_size_y() as isize,
+                self.overlap.axis_size_x() as isize,
+            ])
+    }
+
+    /// Reconstructs the `TileInformation` of this tile, including its overlap.
     pub fn tile_information(&self) -> TileInformation {
-        TileInformation::new(
+        let [y, x] = self.core_axis_size();
+        TileInformation::new_with_overlap(
             self.tile_position,
-            [self.grid_array.axis_size_y(), self.grid_array.axis_size_x()].into(),
+            TileSize(GridShape2D::new_2d(y, x)),
             self.global_geo_transform,
+            self.overlap,
         )
     }
 
     pub fn global_pixel_spatial_grid_definition(&self) -> SpatialGridDefinition {
-        let global_upper_left_idx = self.tile_position.0
-            * [
-                self.grid_array.axis_size_y() as isize,
-                self.grid_array.axis_size_x() as isize,
-            ];
+        let global_upper_left_idx = self.global_data_upper_left_pixel_idx();
 
         SpatialGridDefinition::new(
             self.global_geo_transform,
@@ -93,20 +128,17 @@ where
     }
 
     /// Use this geo transform to transform `Coordinate2D` into local grid indices and vice versa.
+    ///
+    /// Local index `(0, 0)` refers to the tile's upper left *data* pixel, which
+    /// lies `overlap` pixels before the core anchor for padded tiles.
     #[inline]
     pub fn tile_geo_transform(&self) -> GeoTransform {
-        let global_upper_left_idx = self.tile_position.0
-            * [
-                self.grid_array.axis_size_y() as isize,
-                self.grid_array.axis_size_x() as isize,
-            ];
-
-        let tile_upper_left_coord = self
+        let data_upper_left_coord = self
             .global_geo_transform
-            .grid_idx_to_pixel_upper_left_coordinate_2d(global_upper_left_idx);
+            .grid_idx_to_pixel_upper_left_coordinate_2d(self.global_data_upper_left_pixel_idx());
 
         GeoTransform::new(
-            tile_upper_left_coord,
+            data_upper_left_coord,
             self.global_geo_transform.x_pixel_size(),
             self.global_geo_transform.y_pixel_size(),
         )
@@ -212,7 +244,7 @@ where
     T: Pixel,
     D: GridSize + Clone + PartialEq,
 {
-    /// create a new `RasterTile`
+    /// create a new `RasterTile` from tile information, inheriting its overlap
     pub fn new_with_tile_info(
         time: TimeInterval,
         tile_info: TileInformation,
@@ -224,23 +256,19 @@ where
         D: GridSize,
     {
         debug_assert_eq!(
-            tile_info.tile_size.axis_size_x(),
+            tile_info.tile_size.axis_size_x() + 2 * tile_info.overlap.axis_size_x(),
             data.shape_ref().axis_size_x()
         );
 
         debug_assert_eq!(
-            tile_info.tile_size.axis_size_y(),
+            tile_info.tile_size.axis_size_y() + 2 * tile_info.overlap.axis_size_y(),
             data.shape_ref().axis_size_y()
-        );
-
-        debug_assert_eq!(
-            tile_info.tile_size.0.number_of_elements(),
-            data.shape_ref().number_of_elements()
         );
 
         Self {
             time,
             tile_position: tile_info.tile_position,
+            overlap: tile_info.overlap,
             band,
             global_geo_transform: tile_info.global_geo_transform,
             grid_array: data,
@@ -249,7 +277,7 @@ where
         }
     }
 
-    /// create a new `RasterTile`
+    /// create a new `RasterTile` from tile information and properties, inheriting its overlap
     pub fn new_with_tile_info_and_properties(
         time: TimeInterval,
         tile_info: TileInformation,
@@ -259,23 +287,19 @@ where
         cache_hint: CacheHint,
     ) -> Self {
         debug_assert_eq!(
-            tile_info.tile_size.axis_size_x(),
+            tile_info.tile_size.axis_size_x() + 2 * tile_info.overlap.axis_size_x(),
             data.shape_ref().axis_size_x()
         );
 
         debug_assert_eq!(
-            tile_info.tile_size.axis_size_y(),
+            tile_info.tile_size.axis_size_y() + 2 * tile_info.overlap.axis_size_y(),
             data.shape_ref().axis_size_y()
-        );
-
-        debug_assert_eq!(
-            tile_info.tile_size.0.number_of_elements(),
-            data.shape_ref().number_of_elements()
         );
 
         Self {
             time,
             tile_position: tile_info.tile_position,
+            overlap: tile_info.overlap,
             band,
             global_geo_transform: tile_info.global_geo_transform,
             grid_array: data,
@@ -284,7 +308,7 @@ where
         }
     }
 
-    /// create a new `RasterTile`
+    /// create a new `RasterTile` without overlap
     pub fn new(
         time: TimeInterval,
         tile_position: TileIdx,
@@ -296,6 +320,7 @@ where
         Self {
             time,
             tile_position,
+            overlap: TileOverlap::zero(),
             band,
             global_geo_transform,
             grid_array: data,
@@ -304,7 +329,7 @@ where
         }
     }
 
-    /// create a new `RasterTile`
+    /// create a new `RasterTile` without overlap
     pub fn new_with_properties(
         time: TimeInterval,
         tile_position: TileIdx,
@@ -317,6 +342,7 @@ where
         Self {
             time,
             tile_position,
+            overlap: TileOverlap::zero(),
             band,
             global_geo_transform,
             grid_array: data,
@@ -338,6 +364,7 @@ where
         Self {
             time,
             tile_position: TileIdx::new_y_x(0, 0),
+            overlap: TileOverlap::zero(),
             band: 0,
             global_geo_transform,
             grid_array: data.into(),
@@ -357,6 +384,7 @@ where
             grid_array: self.grid_array.into_materialized_masked_grid(),
             time: self.time,
             tile_position: self.tile_position,
+            overlap: self.overlap,
             band: 0,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
@@ -392,6 +420,68 @@ where
         let g = self.grid_array;
         g.set_grid_bounds(b).expect("tile was valid before")
     }
+
+    /// Crops the tile's overlap halo, reducing its overlap by `amount` pixels
+    /// on every side.
+    ///
+    /// The core region and the tile's georeference are unaffected: cropping
+    /// only removes halo pixels (and no-data-fills nothing). Requesting more
+    /// than the available overlap is an error.
+    pub fn crop_overlap(self, amount: TileOverlap) -> Result<Self> {
+        if amount.y > self.overlap.y || amount.x > self.overlap.x {
+            return Err(Error::NotEnoughTileOverlap {
+                requested: amount,
+                available: self.overlap,
+            });
+        }
+
+        if amount.is_zero() {
+            return Ok(self);
+        }
+
+        let Self {
+            time,
+            tile_position,
+            overlap,
+            band,
+            global_geo_transform,
+            grid_array,
+            properties,
+            cache_hint,
+        } = self;
+        let remaining_overlap =
+            TileOverlap::new(overlap.y - amount.y, overlap.x - amount.x);
+
+        // work on the globally positioned grid to reuse intersection-based blitting
+        let data_bounds = grid_array.bounding_box();
+        let positioned = grid_array
+            .set_grid_bounds(data_bounds)
+            .expect("tile was valid before");
+
+        let cropped_bounds = GridBoundingBox2D::new(
+            data_bounds.min_index()
+                + GridIdx([amount.axis_size_y() as isize, amount.axis_size_x() as isize]),
+            data_bounds.max_index()
+                - GridIdx([amount.axis_size_y() as isize, amount.axis_size_x() as isize]),
+        )?;
+
+        let cropped_shape = cropped_bounds.grid_shape();
+
+        let mut target =
+            GridOrEmpty::from(EmptyGrid2D::new(cropped_shape).set_grid_bounds(cropped_bounds)?);
+        target.grid_blit_from(&positioned);
+
+        Ok(Self {
+            time,
+            tile_position,
+            overlap: remaining_overlap,
+            band,
+            global_geo_transform,
+            grid_array: target.unbounded(),
+            properties,
+            cache_hint,
+        })
+    }
 }
 
 impl<T> BoundedGrid for RasterTile2D<T>
@@ -401,15 +491,16 @@ where
     type IndexArray = [isize; 2];
 
     fn bounding_box(&self) -> GridBoundingBox2D {
-        let shape = self.grid_array.shape_ref();
-        let offset =
-            self.tile_position.0 * [shape.axis_size_y() as isize, shape.axis_size_x() as isize];
+        // The bounding box covers the tile's actual data, i.e., the core region
+        // anchored at `tile_position × core_size` plus the overlap halo.
+        let offset = self.global_data_upper_left_pixel_idx();
+        let [axis_size_y, axis_size_x] = self.grid_array.grid_shape_array();
         GridBoundingBox2D::new_unchecked(
             offset,
             offset
                 + [
-                    shape.axis_size_y() as isize - 1,
-                    shape.axis_size_x() as isize - 1,
+                    axis_size_y as isize - 1,
+                    axis_size_x as isize - 1,
                 ],
         )
     }
@@ -500,6 +591,7 @@ where
             grid_array: mat_tile.grid_array.into(),
             global_geo_transform: mat_tile.global_geo_transform,
             tile_position: mat_tile.tile_position,
+            overlap: mat_tile.overlap,
             band: mat_tile.band,
             time: mat_tile.time,
             properties: mat_tile.properties,
@@ -568,7 +660,172 @@ mod tests {
     use crate::{primitives::Coordinate2D, util::test::TestDefault};
 
     use super::*;
-    use crate::raster::GridIdx;
+    use crate::raster::{Grid2D, GridIdx};
+    #[test]
+    fn overlapped_tile_bounding_box_covers_data() {
+        let geo_transform = GeoTransform::test_default();
+        let overlap = TileOverlap::new(1, 2);
+        let core_size = GridShape2D::new_2d(4, 4);
+        let padded_size = GridShape2D::new_2d(
+            core_size.axis_size_y() + 2 * overlap.axis_size_y(),
+            core_size.axis_size_x() + 2 * overlap.axis_size_x(),
+        );
+        let tile = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation::new_with_overlap(
+                TileIdx::new_y_x(2, 3),
+                TileSize(core_size),
+                geo_transform,
+                overlap,
+            ),
+            0,
+            GridOrEmpty::from(Grid2D::new_filled(padded_size, 7_u8)),
+            CacheHint::default(),
+        );
+
+        // the bounding box covers the *data*: the core anchor shifted by the halo
+        let expected_min = [2 * 4 - 1, 3 * 4 - 2];
+        assert_eq!(tile.bounding_box().min_index(), GridIdx(expected_min));
+        assert_eq!(
+            tile.bounding_box().max_index(),
+            GridIdx([expected_min[0] + 5, expected_min[1] + 7])
+        );
+
+        // reconstructed tile information preserves the core geometry
+        let info = tile.tile_information();
+        assert_eq!(info.overlap, overlap);
+        assert_eq!(info.tile_size, TileSize(core_size));
+        assert_eq!(
+            info.core_pixel_bounds(),
+            GridBoundingBox2D::new_unchecked(
+                GridIdx([2 * 4, 3 * 4]),
+                GridIdx([2 * 4 + 3, 3 * 4 + 3])
+            )
+        );
+    }
+
+    #[test]
+    fn crop_full_overlap_restores_core_tile() {
+        let geo_transform = GeoTransform::test_default();
+        let core_size = GridShape2D::new_2d(2, 2);
+        let overlap = TileOverlap::new(1, 1);
+
+        // padded data: 9s are halo, inner values 1..=4 form the core
+        let padded = Grid2D::new(
+            GridShape2D::new_2d(4, 4),
+            vec![9, 9, 9, 9, 9, 1, 2, 9, 9, 3, 4, 9, 9, 9, 9, 9],
+        )
+        .unwrap();
+
+        let padded_tile = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation::new_with_overlap(
+                TileIdx::new_y_x(0, 0),
+                TileSize(core_size),
+                geo_transform,
+                overlap,
+            ),
+            0,
+            GridOrEmpty::from(padded),
+            CacheHint::default(),
+        );
+
+        let cropped = padded_tile.crop_overlap(overlap).unwrap();
+
+        assert_eq!(cropped.overlap, TileOverlap::zero());
+        assert_eq!(cropped.grid_array.shape_ref(), &core_size);
+
+        // the core values survived the crop and sit at their local positions
+        assert_eq!(
+            cropped.get_at_grid_index(GridIdx2D::new_y_x(0, 0)).unwrap(),
+            Some(1)
+        );
+        assert_eq!(
+            cropped.get_at_grid_index(GridIdx2D::new_y_x(1, 1)).unwrap(),
+            Some(4)
+        );
+    }
+
+    #[test]
+    fn crop_partial_overlap_keeps_remainder() {
+        let geo_transform = GeoTransform::test_default();
+        let core_size = GridShape2D::new_2d(2, 2);
+        let overlap = TileOverlap::new(2, 2);
+        let padded_size = GridShape2D::new_2d(6, 6);
+
+        let tile = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation::new_with_overlap(
+                TileIdx::new_y_x(0, 0),
+                TileSize(core_size),
+                geo_transform,
+                overlap,
+            ),
+            0,
+            GridOrEmpty::from(Grid2D::new_filled(padded_size, 1_u8)),
+            CacheHint::default(),
+        );
+
+        let cropped = tile.crop_overlap(TileOverlap::new(1, 1)).unwrap();
+        assert_eq!(cropped.overlap, TileOverlap::new(1, 1));
+        assert_eq!(
+            cropped.grid_array.shape_ref(),
+            &GridShape2D::new_2d(4, 4)
+        );
+    }
+
+    #[test]
+    fn crop_rejects_insufficient_overlap() {
+        let geo_transform = GeoTransform::test_default();
+        let tile = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation::new_with_overlap(
+                TileIdx::new_y_x(0, 0),
+                TileSize(GridShape2D::new_2d(4, 4)),
+                geo_transform,
+                TileOverlap::new(1, 1),
+            ),
+            0,
+            GridOrEmpty::from(Grid2D::new_filled(GridShape2D::new_2d(6, 6), 1_u8)),
+            CacheHint::default(),
+        );
+
+        let err = tile
+            .crop_overlap(TileOverlap::new(2, 1))
+            .err()
+            .expect("must fail");
+        assert!(err.to_string().contains("Not enough tile overlap"));
+    }
+
+    #[test]
+    fn legacy_tile_serialization_defaults_to_zero_overlap() {
+        #[derive(Serialize, Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct LegacyTile {
+            time: TimeInterval,
+            tile_position: TileIdx,
+            band: u32,
+            global_geo_transform: GeoTransform,
+            grid_array: GridOrEmpty<GridShape2D, u8>,
+            properties: RasterProperties,
+            cache_hint: CacheHint,
+        }
+
+        let legacy = LegacyTile {
+            time: TimeInterval::default(),
+            tile_position: TileIdx::new_y_x(1, 2),
+            band: 0,
+            global_geo_transform: GeoTransform::test_default(),
+            grid_array: GridOrEmpty::from(Grid2D::new_filled(GridShape2D::new_2d(1, 1), 5_u8)),
+            properties: RasterProperties::default(),
+            cache_hint: CacheHint::default(),
+        };
+        let json = serde_json::to_string(&legacy).unwrap();
+
+        let deserialized: RasterTile2D<u8> = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.overlap, TileOverlap::zero());
+    }
+
 
     #[test]
     fn tile_information_new() {

@@ -51,6 +51,7 @@ mod test_util {
         BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, GridOrEmpty2D,
         GridShape2D, MaskedGrid2D, Pixel, RasterDataType, RasterProperties, RasterPropertiesEntry,
         RasterPropertiesEntryType, RasterTile2D, TileInformation, TileSize,
+        TileOverlap,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
     use geoengine_datatypes::util::Identifier;
@@ -175,6 +176,7 @@ mod test_util {
         let raster_tile = RasterTile2D::new_with_tile_info_and_properties(
             TimeInterval::default(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 tile_position: [-1, 0].into(),
                 tile_size: [3, 2].into(),
                 global_geo_transform: TestDefault::test_default(),

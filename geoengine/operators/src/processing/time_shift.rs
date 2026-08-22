@@ -593,6 +593,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileOverlap;
     use super::*;
     use geoengine_datatypes::raster::TileSize;
 
@@ -938,6 +939,7 @@ mod tests {
                     DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: [-1, 0].into(),
                     tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
@@ -952,6 +954,7 @@ mod tests {
                     DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: [-1, 1].into(),
                     tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
@@ -966,6 +969,7 @@ mod tests {
                     DateTime::new_utc(2012, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: [-1, 0].into(),
                     tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
@@ -980,6 +984,7 @@ mod tests {
                     DateTime::new_utc(2012, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: [-1, 1].into(),
                     tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
@@ -994,6 +999,7 @@ mod tests {
                     DateTime::new_utc(2013, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: [-1, 0].into(),
                     tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
@@ -1008,6 +1014,7 @@ mod tests {
                     DateTime::new_utc(2013, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: [-1, 1].into(),
                     tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
@@ -1122,6 +1129,7 @@ mod tests {
                     DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: [-1, 0].into(),
                     tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
@@ -1136,6 +1144,7 @@ mod tests {
                     DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: [-1, 1].into(),
                     tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
@@ -1150,6 +1159,7 @@ mod tests {
                     DateTime::new_utc(2012, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: [-1, 0].into(),
                     tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
@@ -1164,6 +1174,7 @@ mod tests {
                     DateTime::new_utc(2012, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: [-1, 1].into(),
                     tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
@@ -1178,6 +1189,7 @@ mod tests {
                     DateTime::new_utc(2013, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: [-1, 0].into(),
                     tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
@@ -1192,6 +1204,7 @@ mod tests {
                     DateTime::new_utc(2013, 1, 1, 0, 0, 0),
                 ),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: [-1, 1].into(),
                     tile_size: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),

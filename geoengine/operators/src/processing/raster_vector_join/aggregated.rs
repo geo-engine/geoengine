@@ -317,6 +317,7 @@ mod tests {
     use geoengine_datatypes::raster::{
         GeoTransform, Grid2D, GridBoundingBox2D, RasterTile2D, TileInformation, TileSize,
         TilingSpecification,
+        TileOverlap,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::test::TestDefault;
@@ -326,6 +327,7 @@ mod tests {
         let raster_tile = RasterTile2D::<u8>::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 0].into(),
                 tile_size: [3, 2].into(),
@@ -413,6 +415,7 @@ mod tests {
         let raster_tile_a = RasterTile2D::<u8>::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 0].into(),
                 tile_size: [3, 2].into(),
@@ -426,6 +429,7 @@ mod tests {
         let raster_tile_b = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 0].into(),
                 tile_size: [3, 2].into(),
@@ -516,6 +520,7 @@ mod tests {
         let raster_tile_a_0 = RasterTile2D::<u8>::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 0].into(),
                 tile_size: [3, 2].into(),
@@ -529,6 +534,7 @@ mod tests {
         let raster_tile_a_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 1].into(),
                 tile_size: [3, 2].into(),
@@ -542,6 +548,7 @@ mod tests {
         let raster_tile_b_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 0].into(),
                 tile_size: [3, 2].into(),
@@ -555,6 +562,7 @@ mod tests {
         let raster_tile_b_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 1].into(),
                 tile_size: [3, 2].into(),
@@ -650,6 +658,7 @@ mod tests {
         let raster_tile_a_0 = RasterTile2D::<u8>::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 0].into(),
                 tile_size: [3, 2].into(),
@@ -663,6 +672,7 @@ mod tests {
         let raster_tile_a_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 1].into(),
                 tile_size: [3, 2].into(),
@@ -676,6 +686,7 @@ mod tests {
         let raster_tile_a_2 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 2].into(),
                 tile_size: [3, 2].into(),
@@ -689,6 +700,7 @@ mod tests {
         let raster_tile_b_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 0].into(),
                 tile_size: [3, 2].into(),
@@ -702,6 +714,7 @@ mod tests {
         let raster_tile_b_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 1].into(),
                 tile_size: [3, 2].into(),
@@ -715,6 +728,7 @@ mod tests {
         let raster_tile_b_2 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 2].into(),
                 tile_size: [3, 2].into(),
@@ -816,6 +830,7 @@ mod tests {
         let raster_tile_a_0_band_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 0].into(),
                 tile_size: [3, 2].into(),
@@ -829,6 +844,7 @@ mod tests {
         let raster_tile_a_0_band_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 0].into(),
                 tile_size: [3, 2].into(),
@@ -843,6 +859,7 @@ mod tests {
         let raster_tile_a_1_band_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 1].into(),
                 tile_size: [3, 2].into(),
@@ -856,6 +873,7 @@ mod tests {
         let raster_tile_a_1_band_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 1].into(),
                 tile_size: [3, 2].into(),
@@ -870,6 +888,7 @@ mod tests {
         let raster_tile_a_2_band_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 2].into(),
                 tile_size: [3, 2].into(),
@@ -883,6 +902,7 @@ mod tests {
         let raster_tile_a_2_band_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 2].into(),
                 tile_size: [3, 2].into(),
@@ -897,6 +917,7 @@ mod tests {
         let raster_tile_b_0_band_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 0].into(),
                 tile_size: [3, 2].into(),
@@ -910,6 +931,7 @@ mod tests {
         let raster_tile_b_0_band_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 0].into(),
                 tile_size: [3, 2].into(),
@@ -923,6 +945,7 @@ mod tests {
         let raster_tile_b_1_band_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 1].into(),
                 tile_size: [3, 2].into(),
@@ -936,6 +959,7 @@ mod tests {
         let raster_tile_b_1_band_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 1].into(),
                 tile_size: [3, 2].into(),
@@ -950,6 +974,7 @@ mod tests {
         let raster_tile_b_2_band_0 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 2].into(),
                 tile_size: [3, 2].into(),
@@ -963,6 +988,7 @@ mod tests {
         let raster_tile_b_2_band_1 = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: [0, 2].into(),
                 tile_size: [3, 2].into(),

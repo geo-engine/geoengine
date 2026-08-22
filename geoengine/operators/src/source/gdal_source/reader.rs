@@ -67,6 +67,7 @@ impl GdalPoolReader {
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::{
         primitives::{AxisAlignedRectangle, CacheHint, SpatialPartition2D, TimeInterval},
         raster::{
@@ -160,6 +161,7 @@ mod tests {
         );
 
         TileInformation {
+            overlap: TileOverlap::zero(),
             tile_size: TileSize(shape),
             tile_position: TileIdx::new_y_x(0, 0),
             global_geo_transform: real_geotransform,
@@ -193,6 +195,7 @@ mod tests {
             time: _,
             properties,
             cache_hint: _,
+            overlap: _,
         } = load_ndvi_jan_2014_by_process(gdal_read_advice, tile_information, gw)
             .await
             .unwrap();

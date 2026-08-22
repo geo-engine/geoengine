@@ -647,6 +647,8 @@ impl GdalHandling {
 #[cfg(test)]
 mod tests {
 
+use geoengine_datatypes::raster::TileOverlap;
+
     use super::super::{
         FileNotFoundHandling, GridAndProperties,
         process_common::{
@@ -725,6 +727,7 @@ mod tests {
         );
 
         TileInformation {
+            overlap: TileOverlap::zero(),
             tile_size: TileSize(shape),
             tile_position: TileIdx::new_y_x(0, 0),
             global_geo_transform: real_geotransform,

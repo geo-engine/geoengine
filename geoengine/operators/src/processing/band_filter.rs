@@ -287,6 +287,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileOverlap;
     use super::*;
     use geoengine_datatypes::raster::TileSize;
 
@@ -332,6 +333,7 @@ mod tests {
         };
 
         let tile_info = TileInformation {
+            overlap: TileOverlap::zero(),
             global_geo_transform: TestDefault::test_default(),
             tile_position: [0, 0].into(),
             tile_size: tile_size,
@@ -457,6 +459,7 @@ mod tests {
         };
 
         let tile_info = TileInformation {
+            overlap: TileOverlap::zero(),
             global_geo_transform: TestDefault::test_default(),
             tile_position: [0, 0].into(),
             tile_size: tile_size,

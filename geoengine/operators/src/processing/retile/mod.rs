@@ -496,6 +496,7 @@ pub fn re_tile_fold<T: Pixel>(
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileOverlap;
     use super::*;
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor,
@@ -532,6 +533,7 @@ mod tests {
             .into(),
             properties: Default::default(),
             cache_hint: CacheHint::default(),
+            overlap: TileOverlap::zero(),
         }];
 
         let result_descriptor = RasterResultDescriptor {
@@ -622,6 +624,7 @@ mod tests {
                 .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -638,6 +641,7 @@ mod tests {
                 .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -654,6 +658,7 @@ mod tests {
                 .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -670,6 +675,7 @@ mod tests {
                 .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
         ];
 

@@ -140,6 +140,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileOverlap;
     use super::*;
     use geoengine_datatypes::raster::TileIdx;
 
@@ -153,6 +154,7 @@ mod tests {
     #[tokio::test]
     async fn simple() {
         let tile_information = TileInformation {
+            overlap: TileOverlap::zero(),
             global_geo_transform: TestDefault::test_default(),
             tile_position: TileIdx::new_y_x(0, 0),
             tile_size: [3, 2].into(),
@@ -220,6 +222,7 @@ mod tests {
     #[tokio::test]
     async fn first_value() {
         let tile_information = TileInformation {
+            overlap: TileOverlap::zero(),
             global_geo_transform: TestDefault::test_default(),
             tile_position: TileIdx::new_y_x(0, 0),
             tile_size: [3, 2].into(),

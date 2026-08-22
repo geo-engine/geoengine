@@ -60,7 +60,7 @@ where
 mod tests {
     use crate::{
         primitives::{CacheHint, TimeInterval},
-        raster::{Grid2D, RasterTile2D, TileIdx, TileInformation, TileSize},
+        raster::{Grid2D, RasterTile2D, TileIdx, TileInformation, TileOverlap, TileSize},
         util::test::TestDefault,
     };
 
@@ -91,6 +91,7 @@ mod tests {
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
                 tile_size: TileSize([3, 2].into()),
@@ -117,6 +118,7 @@ mod tests {
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(1, 1),
                 tile_size: TileSize([3, 2].into()),

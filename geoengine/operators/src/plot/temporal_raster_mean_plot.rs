@@ -275,6 +275,7 @@ impl MeanCalculator {
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileOverlap;
     use super::*;
     use geoengine_datatypes::raster::TileSize;
 
@@ -444,6 +445,7 @@ mod tests {
             tiles.push(RasterTile2D::new_with_tile_info(
                 time_interval,
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     global_geo_transform: TestDefault::test_default(),
                     tile_position: [0, 0].into(),
                     tile_size: [3, 2].into(),

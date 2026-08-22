@@ -795,6 +795,7 @@ mod tests {
         BoundedGrid, EmptyGrid2D, GeoTransform, GridIdx2D, GridShape2D, GridSize,
         RasterPropertiesEntryType, RasterPropertiesKey, SpatialGridDefinition, TileInformation,
         TileSize, TilesEqualIgnoringCacheHint, TilingStrategy,
+        TileOverlap,
     };
     use geoengine_datatypes::util::{gdal::hide_gdal_errors, test::TestDefault};
 
@@ -866,6 +867,7 @@ mod tests {
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size: tile_size.into(),
             geo_transform: dataset_geo_transform,
+            overlap: TileOverlap::zero(),
         };
 
         assert_eq!(
@@ -904,6 +906,7 @@ mod tests {
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size: tile_size.into(),
             geo_transform: central_geo_transform,
+            overlap: TileOverlap::zero(),
         };
 
         assert_eq!(
@@ -942,6 +945,7 @@ mod tests {
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size: tile_size.into(),
             geo_transform: central_geo_transform,
+            overlap: TileOverlap::zero(),
         };
 
         let vres: Vec<GridIdx2D> = origin_split_tileing_strategy
@@ -973,6 +977,7 @@ mod tests {
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size: tile_size.into(),
             geo_transform: central_geo_transform,
+            overlap: TileOverlap::zero(),
         };
 
         let vres: Vec<TileInformation> = origin_split_tileing_strategy
@@ -1170,6 +1175,7 @@ mod tests {
         );
 
         TileInformation {
+            overlap: TileOverlap::zero(),
             tile_size: TileSize(shape),
             tile_position: [0, 0].into(),
             global_geo_transform: real_geotransform,
