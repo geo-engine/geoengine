@@ -216,15 +216,15 @@ impl TileOverlap {
         Self { y: 0, x: 0 }
     }
 
-    pub const fn is_zero(&self) -> bool {
+    pub const fn is_zero(self) -> bool {
         self.y == 0 && self.x == 0
     }
 
-    pub const fn axis_size_y(&self) -> usize {
+    pub const fn axis_size_y(self) -> usize {
         self.y as usize
     }
 
-    pub const fn axis_size_x(&self) -> usize {
+    pub const fn axis_size_x(self) -> usize {
         self.x as usize
     }
 
@@ -232,7 +232,7 @@ impl TileOverlap {
     ///
     /// We bound the halo by one full core per axis so that padded tiles stay
     /// within reasonable memory bounds.
-    pub fn is_valid_for_tile_size(&self, tile_size: TileSize) -> bool {
+    pub fn is_valid_for_tile_size(self, tile_size: TileSize) -> bool {
         self.y <= tile_size.axis_size_y() as u32 && self.x <= tile_size.axis_size_x() as u32
     }
 }
@@ -529,6 +529,9 @@ impl TileInformation {
     ///
     /// Note that data bounds may extend beyond the dataset extent; missing
     /// neighbor data is represented as no-data pixels.
+    ///
+    /// # Panics
+    /// Never in practice: expanding a valid bounding box keeps it valid.
     pub fn data_pixel_bounds(&self) -> GridBoundingBox2D {
         let core = self.global_pixel_bounds();
         if self.overlap.is_zero() {

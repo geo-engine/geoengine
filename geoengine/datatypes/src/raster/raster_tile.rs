@@ -425,6 +425,9 @@ where
     /// The core region and the tile's georeference are unaffected: cropping
     /// only removes halo pixels (and no-data-fills nothing). Requesting more
     /// than the available overlap is an error.
+    ///
+    /// # Panics
+    /// Never in practice: re-bounding a valid grid keeps it valid.
     pub fn crop_overlap(self, amount: TileOverlap) -> Result<Self> {
         if amount.y > self.overlap.y || amount.x > self.overlap.x {
             return Err(Error::NotEnoughTileOverlap {
@@ -782,8 +785,7 @@ mod tests {
 
         let err = tile
             .crop_overlap(TileOverlap::new(2, 1))
-            .err()
-            .expect("must fail");
+            .expect_err("must fail");
         assert!(err.to_string().contains("Not enough tile overlap"));
     }
 
