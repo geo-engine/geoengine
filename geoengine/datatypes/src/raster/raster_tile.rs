@@ -6,16 +6,15 @@ use super::{
 use super::{
     GeoTransform, GeoTransformAccess, GridBounds, GridIndexAccess, GridShape, GridShape2D,
     GridShape3D, GridShapeAccess, GridSize, Raster, TileIdx, TileInformation, TileOverlap,
-    TileSize,
-    grid_or_empty::GridOrEmpty,
+    TileSize, grid_or_empty::GridOrEmpty,
 };
+use crate::error::Error;
 use crate::primitives::CacheHint;
 use crate::primitives::{
     SpatialBounded, SpatialPartition2D, SpatialPartitioned, SpatialResolution, TemporalBounded,
     TimeInterval,
 };
 use crate::raster::Pixel;
-use crate::error::Error;
 use crate::util::{ByteSize, Result};
 use float_cmp::approx_eq;
 use serde::{Deserialize, Serialize};
@@ -86,8 +85,7 @@ where
     /// The global pixel index of the upper left pixel of the tile's *core*.
     pub fn global_core_upper_left_pixel_idx(&self) -> GridIdx2D {
         let [core_size_y, core_size_x] = self.core_axis_size();
-        self.tile_position.0
-            * [core_size_y as isize, core_size_x as isize]
+        self.tile_position.0 * [core_size_y as isize, core_size_x as isize]
     }
 
     /// The global pixel index of the upper left pixel of the tile's actual data.
@@ -427,6 +425,9 @@ where
     /// The core region and the tile's georeference are unaffected: cropping
     /// only removes halo pixels (and no-data-fills nothing). Requesting more
     /// than the available overlap is an error.
+    ///
+    /// # Panics
+    /// Never in practice: re-bounding a valid grid keeps it valid.
     pub fn crop_overlap(self, amount: TileOverlap) -> Result<Self> {
         if amount.y > self.overlap.y || amount.x > self.overlap.x {
             return Err(Error::NotEnoughTileOverlap {
@@ -449,8 +450,7 @@ where
             properties,
             cache_hint,
         } = self;
-        let remaining_overlap =
-            TileOverlap::new(overlap.y - amount.y, overlap.x - amount.x);
+        let remaining_overlap = TileOverlap::new(overlap.y - amount.y, overlap.x - amount.x);
 
         // work on the globally positioned grid to reuse intersection-based blitting
         let data_bounds = grid_array.bounding_box();
@@ -497,11 +497,7 @@ where
         let [axis_size_y, axis_size_x] = self.grid_array.grid_shape_array();
         GridBoundingBox2D::new_unchecked(
             offset,
-            offset
-                + [
-                    axis_size_y as isize - 1,
-                    axis_size_x as isize - 1,
-                ],
+            offset + [axis_size_y as isize - 1, axis_size_x as isize - 1],
         )
     }
 }
@@ -768,10 +764,7 @@ mod tests {
 
         let cropped = tile.crop_overlap(TileOverlap::new(1, 1)).unwrap();
         assert_eq!(cropped.overlap, TileOverlap::new(1, 1));
-        assert_eq!(
-            cropped.grid_array.shape_ref(),
-            &GridShape2D::new_2d(4, 4)
-        );
+        assert_eq!(cropped.grid_array.shape_ref(), &GridShape2D::new_2d(4, 4));
     }
 
     #[test]
@@ -792,8 +785,7 @@ mod tests {
 
         let err = tile
             .crop_overlap(TileOverlap::new(2, 1))
-            .err()
-            .expect("must fail");
+            .expect_err("must fail");
         assert!(err.to_string().contains("Not enough tile overlap"));
     }
 
@@ -825,7 +817,6 @@ mod tests {
         let deserialized: RasterTile2D<u8> = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.overlap, TileOverlap::zero());
     }
-
 
     #[test]
     fn tile_information_new() {
