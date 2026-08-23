@@ -331,8 +331,7 @@ mod tests {
         primitives::{BandSelection, CacheHint, Coordinate2D, TimeInterval},
         raster::{
             BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty2D, GridShape,
-            MaskedGrid2D, RasterDataType, RasterProperties, TileInformation,
-            TilingSpecification,
+            MaskedGrid2D, RasterDataType, RasterProperties, TileInformation, TilingSpecification,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -355,9 +354,9 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size);
-        let raster = MaskedGrid2D::from(Grid2D::new(tile_size.into(), vec![7_u8, 7, 7, 6]).unwrap());
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let raster =
+            MaskedGrid2D::from(Grid2D::new(tile_size.into(), vec![7_u8, 7, 7, 6]).unwrap());
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_ctx = ctx.mock_query_context(ChunkByteSize::test_default());
@@ -468,10 +467,10 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
-        let raster = MaskedGrid2D::from(Grid2D::new(tile_size.into(), vec![15_u8, 15, 15, 13]).unwrap());
+        let raster =
+            MaskedGrid2D::from(Grid2D::new(tile_size.into(), vec![15_u8, 15, 15, 13]).unwrap());
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_ctx = ctx.mock_query_context(ChunkByteSize::test_default());

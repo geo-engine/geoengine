@@ -95,12 +95,10 @@ impl PlotOperator for Statistics {
                 .await?;
 
                 // statistics count pixels: halo pixels would count multiple times
-                rasters
-                    .iter()
-                    .try_for_each(|r| {
-                        r.result_descriptor()
-                            .ensure_no_tile_overlap(Statistics::TYPE_NAME)
-                    })?;
+                rasters.iter().try_for_each(|r| {
+                    r.result_descriptor()
+                        .ensure_no_tile_overlap(Statistics::TYPE_NAME)
+                })?;
 
                 let in_descriptors = rasters
                     .iter()
@@ -621,9 +619,8 @@ mod tests {
     use crate::util::input::MultiRasterOrVectorOperator::Raster;
     use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, NoGeometry, TimeInterval};
     use geoengine_datatypes::raster::{
-        BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType,
-        RasterTile2D, TileInformation, TilingSpecification,
-        TileOverlap,
+        BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, RasterTile2D,
+        TileInformation, TileOverlap, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
 
@@ -656,8 +653,7 @@ mod tests {
     #[tokio::test]
     async fn empty_raster_input() {
         let tile_size = TileSize::new(3, 2);
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let statistics = Statistics {
             params: StatisticsParams {

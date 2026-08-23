@@ -794,8 +794,7 @@ mod tests {
     use geoengine_datatypes::raster::{
         BoundedGrid, EmptyGrid2D, GeoTransform, GridIdx2D, GridShape2D, GridSize,
         RasterPropertiesEntryType, RasterPropertiesKey, SpatialGridDefinition, TileInformation,
-        TileSize, TilesEqualIgnoringCacheHint, TilingStrategy,
-        TileOverlap,
+        TileOverlap, TileSize, TilesEqualIgnoringCacheHint, TilingStrategy,
     };
     use geoengine_datatypes::util::{gdal::hide_gdal_errors, test::TestDefault};
 

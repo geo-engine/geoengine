@@ -49,7 +49,7 @@ async fn write_cache(tile_cache: &SharedCache, op_name: CanonicOperatorName) -> 
             .into(),
         properties: RasterProperties::default(),
         cache_hint: CacheHint::max_duration(),
-    overlap: TileOverlap::zero(),
+        overlap: TileOverlap::zero(),
     };
 
     let start = std::time::Instant::now();

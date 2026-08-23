@@ -315,9 +315,8 @@ mod tests {
         Measurement, MultiPoint, MultiPolygon, TimeInterval, TimeStep,
     };
     use geoengine_datatypes::raster::{
-        GeoTransform, Grid2D, GridBoundingBox2D, RasterTile2D, TileInformation, TileSize,
-        TilingSpecification,
-        TileOverlap,
+        GeoTransform, Grid2D, GridBoundingBox2D, RasterTile2D, TileInformation, TileOverlap,
+        TileSize, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::test::TestDefault;

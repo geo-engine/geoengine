@@ -614,8 +614,7 @@ mod tests {
         CacheHint, Measurement, SpatialPartition2D, TimeInstance,
     };
     use geoengine_datatypes::raster::{
-        GeoTransform, GridBoundingBox2D, GridIdx2D, GridSize, RasterDataType, TileSize,
-        TileOverlap,
+        GeoTransform, GridBoundingBox2D, GridIdx2D, GridSize, RasterDataType, TileOverlap, TileSize,
     };
     use geoengine_datatypes::raster::{RasterPropertiesEntryType, RasterPropertiesKey};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};

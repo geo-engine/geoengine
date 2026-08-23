@@ -672,9 +672,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::raster::TileOverlap;
     use super::*;
     use futures::StreamExt;
+    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::{
         primitives::{

@@ -256,8 +256,7 @@ mod tests {
     use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval};
     use geoengine_datatypes::raster::{
         Grid2D, GridBoundingBox2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D,
-        RenameBands, TileInformation, TileSize, TilingSpecification,
-        TileOverlap,
+        RenameBands, TileInformation, TileOverlap, TileSize, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;

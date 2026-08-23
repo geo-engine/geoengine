@@ -647,7 +647,7 @@ impl GdalHandling {
 #[cfg(test)]
 mod tests {
 
-use geoengine_datatypes::raster::TileOverlap;
+    use geoengine_datatypes::raster::TileOverlap;
 
     use super::super::{
         FileNotFoundHandling, GridAndProperties,

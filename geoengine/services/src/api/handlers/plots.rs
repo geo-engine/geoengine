@@ -233,8 +233,8 @@ mod tests {
     use actix_web::http::{Method, header};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::primitives::CacheHint;
-    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::primitives::DateTime;
+    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::raster::{
         GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, RasterTile2D, TileIdx,
         TileInformation, TileSize, TilingSpecification,

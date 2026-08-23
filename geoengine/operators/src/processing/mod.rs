@@ -1,3 +1,4 @@
+mod add_tile_overlap;
 mod band_filter;
 mod band_neighborhood_aggregate;
 mod bandwise_expression;
@@ -15,8 +16,8 @@ mod raster_scaling;
 mod raster_stacker;
 mod raster_type_conversion;
 mod raster_vector_join;
-mod add_tile_overlap;
 mod rasterization;
+mod remove_tile_overlap;
 mod reprojection;
 mod retile;
 mod temporal_raster_aggregation;
@@ -24,6 +25,7 @@ mod time_projection;
 mod time_shift;
 mod vector_join;
 
+pub use add_tile_overlap::{AddTileOverlap, AddTileOverlapParams, AddTileOverlapProcessor};
 pub use band_filter::{BandFilter, BandFilterError, BandFilterParams};
 pub use band_neighborhood_aggregate::{
     BandNeighborhoodAggregate, BandNeighborhoodAggregateError, BandNeighborhoodAggregateParams,
@@ -63,8 +65,10 @@ pub use raster_vector_join::{
     ColumnNames, FeatureAggregationMethod, RasterVectorJoin, RasterVectorJoinParams,
     TemporalAggregationMethod,
 };
-pub use add_tile_overlap::{AddTileOverlap, AddTileOverlapParams, AddTileOverlapProcessor};
 pub use rasterization::{Rasterization, RasterizationParams};
+pub use remove_tile_overlap::{
+    RemoveTileOverlap, RemoveTileOverlapParams, RemoveTileOverlapProcessor,
+};
 pub use reprojection::{
     DeriveOutRasterSpecsSource, InitializedRasterReprojection, InitializedVectorReprojection,
     Reprojection, ReprojectionParams,

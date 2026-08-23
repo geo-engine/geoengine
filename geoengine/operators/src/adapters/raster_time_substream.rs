@@ -140,9 +140,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::raster::TileOverlap;
     use super::*;
     use geoengine_datatypes::raster::TileIdx;
+    use geoengine_datatypes::raster::TileOverlap;
 
     use futures::stream::{self, StreamExt};
     use geoengine_datatypes::primitives::CacheHint;

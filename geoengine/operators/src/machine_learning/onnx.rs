@@ -511,7 +511,6 @@ impl_no_data_value_none!(i8, u8, i16, u16, i32, u32, i64, u64);
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::raster::TileOverlap;
     use crate::engine::TimeDescriptor;
     use crate::machine_learning::MlModelInputNoDataHandling;
     use crate::machine_learning::MlModelLoadingInfo;
@@ -535,6 +534,7 @@ mod tests {
     use geoengine_datatypes::raster::GridBoundingBox2D;
     use geoengine_datatypes::raster::RasterTile2D;
     use geoengine_datatypes::raster::SpatialGridDefinition;
+    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::raster::TilesEqualIgnoringCacheHint;
     use geoengine_datatypes::{
         machine_learning::{MlModelName, MlTensorShape3D},

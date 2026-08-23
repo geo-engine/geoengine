@@ -779,8 +779,8 @@ impl Accu for MovingAverageAccu {
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::raster::TileOverlap;
     use futures::StreamExt;
+    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::{
         primitives::{BandSelection, CacheHint, TimeInterval, TimeStep},

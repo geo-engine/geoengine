@@ -79,12 +79,10 @@ impl PlotOperator for BoxPlot {
                 .await?;
 
                 // box plots count pixel values: halo pixels would count multiple times
-                raster_sources
-                    .iter()
-                    .try_for_each(|r| {
-                        r.result_descriptor()
-                            .ensure_no_tile_overlap(BoxPlot::TYPE_NAME)
-                    })?;
+                raster_sources.iter().try_for_each(|r| {
+                    r.result_descriptor()
+                        .ensure_no_tile_overlap(BoxPlot::TYPE_NAME)
+                })?;
 
                 // TODO: implement multi-band functionality and remove this check
                 ensure!(
@@ -547,9 +545,8 @@ mod tests {
         BoundingBox2D, DateTime, FeatureData, NoGeometry, TimeInterval,
     };
     use geoengine_datatypes::raster::{
-        BoundedGrid, EmptyGrid2D, GeoTransform, Grid2D, MaskedGrid2D, RasterDataType,
-        RasterTile2D, TileInformation, TileSize, TilingSpecification,
-        TileOverlap,
+        BoundedGrid, EmptyGrid2D, GeoTransform, Grid2D, MaskedGrid2D, RasterDataType, RasterTile2D,
+        TileInformation, TileOverlap, TileSize, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -996,9 +993,7 @@ mod tests {
         };
 
         let tiling_specification =
-            geoengine_datatypes::raster::TilingSpecification::with_zero_origin(
-                tile_size,
-            );
+            geoengine_datatypes::raster::TilingSpecification::with_zero_origin(tile_size);
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -1069,8 +1064,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
@@ -1145,8 +1139,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
@@ -1216,8 +1209,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = BoxPlot {
             params: BoxPlotParams {
@@ -1289,8 +1281,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = BoxPlot {
@@ -1372,8 +1363,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = BoxPlot {
@@ -1448,8 +1438,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let src = MockRasterSource {

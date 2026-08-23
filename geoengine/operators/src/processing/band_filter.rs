@@ -289,8 +289,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::raster::TileOverlap;
     use super::*;
+    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::raster::TileSize;
 
     use crate::{
@@ -304,8 +304,8 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{CacheHint, Coordinate2D, TimeInterval},
         raster::{
-            BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, MaskedGrid2D,
-            RasterDataType, TileInformation, TilesEqualIgnoringCacheHint,
+            BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, MaskedGrid2D, RasterDataType,
+            TileInformation, TilesEqualIgnoringCacheHint,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -341,8 +341,12 @@ mod tests {
             tile_size: tile_size,
         };
 
-        let band_0: MaskedGrid2D<u8> = Grid2D::new(tile_size.into(), vec![1_u8, 2, 3, 4]).unwrap().into();
-        let band_1: MaskedGrid2D<u8> = Grid2D::new(tile_size.into(), vec![5_u8, 6, 7, 8]).unwrap().into();
+        let band_0: MaskedGrid2D<u8> = Grid2D::new(tile_size.into(), vec![1_u8, 2, 3, 4])
+            .unwrap()
+            .into();
+        let band_1: MaskedGrid2D<u8> = Grid2D::new(tile_size.into(), vec![5_u8, 6, 7, 8])
+            .unwrap()
+            .into();
         let band_2: MaskedGrid2D<u8> = Grid2D::new(tile_size.into(), vec![9_u8, 10, 11, 12])
             .unwrap()
             .into();
@@ -390,9 +394,7 @@ mod tests {
         .boxed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            geoengine_datatypes::raster::TilingSpecification::with_zero_origin(
-                tile_size,
-            ),
+            geoengine_datatypes::raster::TilingSpecification::with_zero_origin(tile_size),
         );
         let query_context = execution_context.mock_query_context_test_default();
 
@@ -467,8 +469,12 @@ mod tests {
             tile_size: tile_size,
         };
 
-        let band_0: MaskedGrid2D<u8> = Grid2D::new(tile_size.into(), vec![1_u8, 2, 3, 4]).unwrap().into();
-        let band_1: MaskedGrid2D<u8> = Grid2D::new(tile_size.into(), vec![5_u8, 6, 7, 8]).unwrap().into();
+        let band_0: MaskedGrid2D<u8> = Grid2D::new(tile_size.into(), vec![1_u8, 2, 3, 4])
+            .unwrap()
+            .into();
+        let band_1: MaskedGrid2D<u8> = Grid2D::new(tile_size.into(), vec![5_u8, 6, 7, 8])
+            .unwrap()
+            .into();
         let band_2: MaskedGrid2D<u8> = Grid2D::new(tile_size.into(), vec![9_u8, 10, 11, 12])
             .unwrap()
             .into();
@@ -516,9 +522,7 @@ mod tests {
         .boxed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            geoengine_datatypes::raster::TilingSpecification::with_zero_origin(
-                tile_size,
-            ),
+            geoengine_datatypes::raster::TilingSpecification::with_zero_origin(tile_size),
         );
         let query_context = execution_context.mock_query_context_test_default();
 

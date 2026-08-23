@@ -720,8 +720,7 @@ mod tests {
     use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::raster::{
         BoundedGrid, EmptyGrid2D, GeoTransform, Grid2D, GridShape2D, RasterDataType, RasterTile2D,
-        TileInformation, TilingSpecification,
-        TileOverlap,
+        TileInformation, TileOverlap, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::Identifier;
@@ -1249,8 +1248,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = Histogram {
             params: HistogramParams {
@@ -1458,8 +1456,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = Histogram {

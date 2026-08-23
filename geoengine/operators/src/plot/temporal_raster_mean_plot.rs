@@ -279,8 +279,8 @@ impl MeanCalculator {
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::raster::TileOverlap;
     use super::*;
+    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::raster::TileSize;
 
     use crate::{

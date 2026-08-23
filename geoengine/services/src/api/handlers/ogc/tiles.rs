@@ -468,7 +468,9 @@ pub async fn tile<C: ApplicationContext>(
 
     let query_rect = RasterQueryRectangle::new(
         tms_spec.tile_grid_bbox(
-            &initialized_operator.result_descriptor().tiling_grid_definition(),
+            &initialized_operator
+                .result_descriptor()
+                .tiling_grid_definition(),
             query.tile_matrix,
             query.tile_row,
             query.tile_col,

@@ -1070,7 +1070,9 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BandSelection, CacheHint, DateTime, Duration, SpatialPartition2D, TimeInterval,
     };
-    use geoengine_datatypes::raster::{Grid, GridBoundingBox2D, RasterDataType, TilingSpecification};
+    use geoengine_datatypes::raster::{
+        Grid, GridBoundingBox2D, RasterDataType, TilingSpecification,
+    };
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::{ImageFormat, assert_image_equals_with_format};
@@ -1118,8 +1120,9 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            include_bytes!("../../../test_data/raster/geotiff_with_no_data_from_stream_compressed.tiff")
-                as &[u8],
+            include_bytes!(
+                "../../../test_data/raster/geotiff_with_no_data_from_stream_compressed.tiff"
+            ) as &[u8],
             bytes.as_slice()
         );
     }

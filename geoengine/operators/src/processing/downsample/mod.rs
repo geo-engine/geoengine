@@ -601,7 +601,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::raster::TileOverlap;
     use super::*;
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor,
@@ -610,6 +609,7 @@ mod tests {
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
     use geoengine_datatypes::primitives::TimeStep;
+    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::raster::{Grid, RasterDataType};
     use geoengine_datatypes::spatial_reference::SpatialReference;

@@ -851,9 +851,8 @@ mod tests {
     };
     use geoengine_datatypes::primitives::{Coordinate2D, TimeStep};
     use geoengine_datatypes::raster::{
-        GeoTransform, GridBoundingBox2D, GridSize, SpatialGridDefinition, TileSize,
+        GeoTransform, GridBoundingBox2D, GridSize, SpatialGridDefinition, TileOverlap, TileSize,
         TilesEqualIgnoringCacheHint,
-        TileOverlap,
     };
     use geoengine_datatypes::{
         collections::{
@@ -1281,8 +1280,7 @@ mod tests {
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let tile_size = TileSize::new(512, 512);
-        exe_ctx.tiling_specification =
-            TilingSpecification::with_zero_origin(tile_size);
+        exe_ctx.tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 

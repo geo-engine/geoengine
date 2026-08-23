@@ -76,9 +76,10 @@ impl RasterOperator for ReTile {
             .origin
             .unwrap_or_else(|| in_spatial_grid.geo_transform().origin_coordinate);
 
-        let output_tile_size = self.params.tile_size.unwrap_or_else(|| {
-            context.tiling_specification().tile_size
-        });
+        let output_tile_size = self
+            .params
+            .tile_size
+            .unwrap_or_else(|| context.tiling_specification().tile_size);
 
         if output_tile_size.axis_size_y() == 0 || output_tile_size.axis_size_x() == 0 {
             return Err(crate::error::Error::InvalidTileSize {
@@ -496,7 +497,6 @@ pub fn re_tile_fold<T: Pixel>(
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::raster::TileOverlap;
     use super::*;
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor,
@@ -504,6 +504,7 @@ mod tests {
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
+    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::raster::{Grid, GridShape2D, RasterDataType};
     use geoengine_datatypes::spatial_reference::SpatialReference;

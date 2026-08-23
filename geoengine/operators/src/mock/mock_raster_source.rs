@@ -470,8 +470,7 @@ mod tests {
     use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::raster::{
         BoundedGrid, GeoTransform, Grid, Grid2D, GridBoundingBox2D, GridShape2D, MaskedGrid,
-        RasterDataType, RasterProperties, TileInformation,
-        TileOverlap,
+        RasterDataType, RasterProperties, TileInformation, TileOverlap,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
