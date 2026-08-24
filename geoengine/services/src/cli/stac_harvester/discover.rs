@@ -594,55 +594,60 @@ fn zero_size_grid() -> GridBoundingBox2D {
         .expect("zero-size grid bounds should always be valid")
 }
 
-/// Compute grid bounds that cover the full projected CRS extent for the given
-/// geo-transform and EPSG code. Currently handles UTM projections (zones 32601–32660
-/// and 32701–32760) with known extents. Returns `None` for unsupported CRS types.
+/// Compute the grid bounds (in pixel space) that cover the full extent of the
+/// given CRS, snapping the extent to the pixel grid defined by `gt`'s origin and
+/// pixel size.
+///
+/// The extent is taken from PROJ's area of use for the CRS, projected into the
+/// CRS's own coordinates, so no per-CRS coordinates are hard-coded here.
 fn projection_grid_bounds(gt: GeoTransform, epsg: u32) -> Option<GridBoundingBox2D> {
-    let (min_x, max_x, min_y, max_y) = projection_extent(epsg)?;
+    let extent: BoundingBox2D = SpatialReference::new(SpatialReferenceAuthority::Epsg, epsg)
+        .area_of_use_projected()
+        .ok()?;
 
     let ox = gt.origin_coordinate.x;
     let oy = gt.origin_coordinate.y;
     let ps_x = gt.x_pixel_size();
     let ps_y = gt.y_pixel_size();
 
-    // For north-up images ps_y < 0 and origin is top-left.
-    // Pixel index i = (coord - origin) / pixel_size.
-    let min_x_idx = ((min_x - ox) / ps_x).floor() as isize;
-    let max_x_idx = ((max_x - ox) / ps_x).ceil() as isize - 1;
-
-    let (min_y_idx, max_y_idx) = if ps_y < 0.0 {
-        // ps_y negative: top of area (max_y) → smallest row index
-        let top = ((max_y - oy) / ps_y).ceil() as isize;
-        // bottom of area (min_y) → largest row index
-        let bottom = ((min_y - oy) / ps_y).floor() as isize;
-        (top, bottom)
-    } else {
-        let top = ((max_y - oy) / ps_y).floor() as isize;
-        let bottom = ((min_y - oy) / ps_y).ceil() as isize - 1;
-        (top, bottom)
+    // `grid_to_spatial_bounds` interprets the box's min index as the upper-left
+    // (top) pixel and the max index as the last pixel, so the box spans
+    // [min_idx, max_idx] inclusive in index space.
+    //
+    // In normalized index space a pixel with index `k` occupies `[k, k+1)`, so the
+    // pixel that *contains* a coordinate is `floor((coord - origin)/pixel_size)`.
+    // Using `floor` (rather than `round`/`ceil`) guarantees the resulting box is a
+    // superset of the extent for either pixel-size sign, so no per-axis special
+    // casing is needed. Snapping the extent's corners this way covers the whole
+    // projected area of use.
+    let corner_index = |x: f64, y: f64| -> (isize, isize) {
+        let idx_x = ((x - ox) / ps_x).floor() as isize;
+        let idx_y = ((y - oy) / ps_y).floor() as isize;
+        // The grid index array is ordered [y, x].
+        (idx_y, idx_x)
     };
 
+    let mut y_min = isize::MAX;
+    let mut y_max = isize::MIN;
+    let mut x_min = isize::MAX;
+    let mut x_max = isize::MIN;
+    for (y_idx, x_idx) in [
+        corner_index(extent.lower_left().x, extent.lower_left().y),
+        corner_index(extent.upper_right().x, extent.upper_right().y),
+        corner_index(extent.lower_left().x, extent.upper_right().y),
+        corner_index(extent.upper_right().x, extent.lower_left().y),
+    ] {
+        y_min = y_min.min(y_idx);
+        y_max = y_max.max(y_idx);
+        x_min = x_min.min(x_idx);
+        x_max = x_max.max(x_idx);
+    }
+
     GridBoundingBox2D::new(
-        GridIdx2D::new([min_x_idx, min_y_idx]),
-        GridIdx2D::new([max_x_idx, max_y_idx]),
+        GridIdx2D::new([y_min, x_min]),
+        GridIdx2D::new([y_max, x_max]),
     )
     .ok()
-}
-
-/// Return the projected extent `(min_x, max_x, min_y, max_y)` for a given EPSG code
-/// by querying the CRS's area of use via PROJ and projecting it into the CRS's
-/// own coordinate system.
-fn projection_extent(epsg: u32) -> Option<(f64, f64, f64, f64)> {
-    let extent: BoundingBox2D = SpatialReference::new(SpatialReferenceAuthority::Epsg, epsg)
-        .area_of_use_projected()
-        .ok()?;
-
-    Some((
-        extent.lower_left().x,
-        extent.upper_right().x,
-        extent.lower_left().y,
-        extent.upper_right().y,
-    ))
 }
 
 /// A key that uniquely identifies a Geo Engine dataset derived from STAC assets.
@@ -919,7 +924,135 @@ async fn stac_api_request_with_params(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use float_cmp::approx_eq;
     use httptest::{Expectation, Server, all_of, matchers::request, responders};
+
+    /// Snap a projected coordinate to the pixel that contains it, using the same
+    /// origin/pixel-size convention as `projection_grid_bounds`. The containing
+    /// pixel is `floor` of the normalized index (a pixel at index `k` occupies the
+    /// half-open range `[k, k+1)` in index space), which is independent of the
+    /// pixel-size sign.
+    fn expect_index(coord: f64, origin: f64, pixel_size: f64) -> isize {
+        ((coord - origin) / pixel_size).floor() as isize
+    }
+
+    #[test]
+    fn full_projection_grid_covers_projection_area_of_use() {
+        let geo_transform = GeoTransform::new_with_coordinate_x_y(363_600., 30., 4_105_800., -30.);
+        let extent: BoundingBox2D = SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632)
+            .area_of_use_projected()
+            .expect("EPSG:32632 should have a projected area of use");
+
+        let bounds = projection_grid_bounds(geo_transform, 32632)
+            .expect("grid bounds should be computable for a valid projection");
+
+        // The returned pixel grid must contain the full projected area of use.
+        let covered = geo_transform.grid_to_spatial_bounds(&bounds);
+        assert!(covered.upper_left().x <= extent.lower_left().x);
+        assert!(covered.upper_left().y >= extent.upper_right().y);
+        assert!(covered.lower_right().x >= extent.upper_right().x);
+        assert!(covered.lower_right().y <= extent.lower_left().y);
+    }
+
+    #[test]
+    fn full_projection_grid_epsg_32632_utm_32n_subregion() {
+        // EPSG:32632 (WGS 84 / UTM zone 32N) has an area of use that is a
+        // subregion of the full UTM zone (0..1_000_000 in x, 0..10_000_000 in y).
+        // The expected projected area-of-use bounds (west, east, south, north)
+        // are hard-coded below as the reference.
+        const WEST: f64 = 166_021.44;
+        const EAST: f64 = 833_978.56;
+        const SOUTH: f64 = 0.0;
+        const NORTH: f64 = 9_329_005.18;
+        const TOL: f64 = 1.0;
+
+        let extent: BoundingBox2D = SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632)
+            .area_of_use_projected()
+            .expect("EPSG:32632 should have a projected area of use");
+        assert!(approx_eq!(f64, extent.lower_left().x, WEST, epsilon = TOL));
+        assert!(approx_eq!(f64, extent.upper_right().x, EAST, epsilon = TOL));
+        assert!(approx_eq!(f64, extent.lower_left().y, SOUTH, epsilon = TOL));
+        assert!(approx_eq!(
+            f64,
+            extent.upper_right().y,
+            NORTH,
+            epsilon = TOL
+        ));
+
+        // A north-up raster grid (100 m pixels) whose origin sits inside the
+        // subregion, slightly outside it so the grid extends in both directions.
+        let (ox, oy) = (166_000.0, 9_330_000.0);
+        let ps = 100.0;
+        let gt = GeoTransform::new_with_coordinate_x_y(ox, ps, oy, -ps);
+
+        let bounds = projection_grid_bounds(gt, 32632)
+            .expect("grid bounds should be computable for EPSG:32632");
+
+        // The pixel grid must cover the whole projected area of use.
+        let covered = gt.grid_to_spatial_bounds(&bounds);
+        assert!(covered.upper_left().x <= extent.lower_left().x);
+        assert!(covered.upper_left().y >= extent.upper_right().y);
+        assert!(covered.lower_right().x >= extent.upper_right().x);
+        assert!(covered.lower_right().y <= extent.lower_left().y);
+
+        // The pixel indices must be exactly derived from the reference bounds.
+        assert_eq!(
+            bounds.x_bounds(),
+            [expect_index(WEST, ox, ps), expect_index(EAST, ox, ps)]
+        );
+        assert_eq!(
+            bounds.y_bounds(),
+            [expect_index(NORTH, oy, -ps), expect_index(SOUTH, oy, -ps)]
+        );
+    }
+
+    #[test]
+    fn full_projection_grid_epsg_4326_wgs84_globe() {
+        // EPSG:4326 (WGS 84 lat/lon) has the full globe as its area of use.
+        const WEST: f64 = -180.0;
+        const EAST: f64 = 180.0;
+        const SOUTH: f64 = -90.0;
+        const NORTH: f64 = 90.0;
+        const TOL: f64 = 1e-6;
+
+        let extent: BoundingBox2D = SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326)
+            .area_of_use_projected()
+            .expect("EPSG:4326 should have a projected area of use");
+        assert!(approx_eq!(f64, extent.lower_left().x, WEST, epsilon = TOL));
+        assert!(approx_eq!(f64, extent.upper_right().x, EAST, epsilon = TOL));
+        assert!(approx_eq!(f64, extent.lower_left().y, SOUTH, epsilon = TOL));
+        assert!(approx_eq!(
+            f64,
+            extent.upper_right().y,
+            NORTH,
+            epsilon = TOL
+        ));
+
+        // A north-up geographic grid (1° pixels) with a top-left origin inside
+        // the globe, so the grid must extend west, east and south of it.
+        let (ox, oy) = (0.0, 60.0);
+        let ps = 1.0;
+        let gt = GeoTransform::new_with_coordinate_x_y(ox, ps, oy, -ps);
+
+        let bounds = projection_grid_bounds(gt, 4326)
+            .expect("grid bounds should be computable for EPSG:4326");
+
+        // The pixel grid must cover the whole globe.
+        let covered = gt.grid_to_spatial_bounds(&bounds);
+        assert!(covered.upper_left().x <= extent.lower_left().x);
+        assert!(covered.upper_left().y >= extent.upper_right().y);
+        assert!(covered.lower_right().x >= extent.upper_right().x);
+        assert!(covered.lower_right().y <= extent.lower_left().y);
+
+        assert_eq!(
+            bounds.x_bounds(),
+            [expect_index(WEST, ox, ps), expect_index(EAST, ox, ps)]
+        );
+        assert_eq!(
+            bounds.y_bounds(),
+            [expect_index(NORTH, oy, -ps), expect_index(SOUTH, oy, -ps)]
+        );
+    }
 
     const COLLECTION_PATH: &str = "/v1/collections/sentinel-2-l2a";
     const ITEMS_PATH: &str = "/v1/collections/sentinel-2-l2a/items";
