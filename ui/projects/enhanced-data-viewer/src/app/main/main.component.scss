@@ -15,6 +15,14 @@ mat-toolbar {
     border-bottom: 1px solid var(--geoengine-divider-color);
 }
 
+.loading-indicator {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+}
+
 mat-drawer {
     width: 360px;
 
@@ -53,19 +61,26 @@ mat-drawer {
             }
 
             .data-sources {
-                // display: flex;
-                // flex-direction: row;
-                // flex-wrap: wrap;
-                /* Use gap to create consistent spacing between buttons */
-                // gap: 0.5rem;
+                display: flex;
+                flex-direction: column;
+                gap: 0.25rem;
 
-                // width: 100%;
-                // width: 10rem;
-                // display: block;
+                .data-source-group-label {
+                    font-size: 0.75rem;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                    color: var(--geoengine-primary-color, #2f6dff);
+                    margin-top: 0.5rem;
+                    margin-bottom: 0.125rem;
+
+                    &:first-child {
+                        margin-top: 0;
+                    }
+                }
 
                 mat-radio-button {
                     display: inline-block;
-                    // display: block;
                 }
             }
 
@@ -94,20 +109,44 @@ mat-drawer {
                 display: flex;
                 flex-direction: row;
                 flex-wrap: wrap;
-                gap: 1rem;
+                gap: 0.5rem;
+
+                .preset-group-label {
+                    width: 100%;
+                    font-size: 0.75rem;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                    color: var(--geoengine-primary-color, #2f6dff);
+                    margin-top: 0.5rem;
+
+                    &:first-child {
+                        margin-top: 0;
+                    }
+                }
 
                 width: 100%;
                 border: none;
 
                 mat-list-item {
-                    width: 46%;
+                    width: calc(50% - 0.25rem);
                     text-align: center;
                     padding: 0;
+                    cursor: pointer;
+                    border: 2px solid transparent;
+                    border-radius: 6px;
+                    transition:
+                        border-color 120ms ease,
+                        box-shadow 120ms ease;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 0;
+                    overflow: hidden;
 
                     img {
                         width: 100%;
-                        height: 100%;
-                        object-fit: cover;
+                        display: block;
                         border-radius: 4px;
                     }
 
@@ -115,6 +154,18 @@ mat-drawer {
                         color: white;
                         text-shadow: 0 0 5px rgba(0, 0, 0, 0.7);
                         transform: translateY(-1rem);
+                        margin-bottom: -1rem;
+                        font-size: 0.85rem;
+                        line-height: 1.2;
+                    }
+
+                    &.preset-active {
+                        border-color: var(--geoengine-primary-color, #2f6dff);
+                        box-shadow: 0 0 0 2px rgb(47 109 255 / 25%);
+
+                        span {
+                            font-weight: 600;
+                        }
                     }
                 }
             }
