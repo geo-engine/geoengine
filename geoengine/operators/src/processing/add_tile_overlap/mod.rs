@@ -262,7 +262,7 @@ where
     ) -> Self::TileAccuFuture {
         ready(Ok(OverlapAccu {
             tile_info,
-            grid: GridOrEmpty::new_empty_shape(tile_info.data_pixel_bounds()),
+            grid: GridOrEmpty::new_empty_shape(tile_info.total_pixel_bounds()),
             time: query_rect.time_interval(),
             cache_hint: CacheHint::max_duration(),
             pool: pool.clone(),
@@ -278,7 +278,7 @@ where
         band_idx: u32,
     ) -> util::Result<Option<RasterQueryRectangle>> {
         Ok(Some(RasterQueryRectangle::new(
-            tile_info.data_pixel_bounds(),
+            tile_info.total_pixel_bounds(),
             time,
             band_idx.into(),
         )))
@@ -489,6 +489,68 @@ mod tests {
         assert_eq!(
             top_left.tile_information().core_pixel_bounds().min_index(),
             GridIdx2D::new_y_x(0, 0)
+        );
+    }
+
+    /// A pixel that lies in one tile's halo and a neighbour's core must carry the
+    /// same value in both tiles (halo data is just a copy of the shared source
+    /// region), while each tile's *coverage* stays its 2x2 core (the 4x4 grid is
+    /// data, not coverage).
+    #[tokio::test]
+    async fn it_keeps_halo_equivalent_across_adjacent_tiles() {
+        let tiles = overlapped_tiles(TileOverlap::new(1, 1)).await.unwrap();
+
+        let by_pos = |pos: (isize, isize)| -> &RasterTile2D<f64> {
+            tiles
+                .iter()
+                .find(|t| t.tile_position == TileIdx::new_y_x(pos.0, pos.1))
+                .expect("tile must be present")
+        };
+
+        let top = by_pos((0, 0)); // core value 1
+        let bottom = by_pos((1, 0)); // core value 3
+
+        // top's accu starts at global (-1,-1); bottom's at global (1,-1).
+        // Shared band global y=2: `top`'s bottom halo vs `bottom`'s top core.
+        for global_x in 0..2 {
+            let in_top = top
+                .get_at_grid_index(GridIdx2D::new_y_x(3, global_x + 1))
+                .unwrap();
+            let in_bottom = bottom
+                .get_at_grid_index(GridIdx2D::new_y_x(1, global_x + 1))
+                .unwrap();
+            assert_eq!(
+                in_top, in_bottom,
+                "shared pixel (2, {global_x}) differs across tiles"
+            );
+            assert_eq!(in_top, Some(3.), "expected the bottom core value 3");
+        }
+
+        // Shared band global y=1: `top`'s bottom core row vs `bottom`'s top halo.
+        for global_x in 0..2 {
+            let in_top = top
+                .get_at_grid_index(GridIdx2D::new_y_x(2, global_x + 1))
+                .unwrap();
+            let in_bottom = bottom
+                .get_at_grid_index(GridIdx2D::new_y_x(0, global_x + 1))
+                .unwrap();
+            assert_eq!(
+                in_top, in_bottom,
+                "shared pixel (1, {global_x}) differs across tiles"
+            );
+            assert_eq!(in_top, Some(1.), "expected the top core value 1");
+        }
+
+        // Coverage stays core-based: the core is 2x2, the data grid is 4x4.
+        let core = top.tile_information().core_pixel_bounds();
+        assert_eq!(
+            (core.y_min(), core.y_max(), core.x_min(), core.x_max()),
+            (0, 1, 0, 1)
+        );
+        let data = top.tile_information().total_pixel_bounds();
+        assert_eq!(
+            (data.y_min(), data.y_max(), data.x_min(), data.x_max()),
+            (-1, 2, -1, 2)
         );
     }
 

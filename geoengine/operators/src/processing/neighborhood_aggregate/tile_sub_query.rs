@@ -88,7 +88,7 @@ where
         time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
-        let pixel_bounds = tile_info.global_pixel_bounds();
+        let pixel_bounds = tile_info.core_pixel_bounds();
 
         let margin_y = self.neighborhood.y_radius() as isize;
         let margin_x = self.neighborhood.x_radius() as isize;
@@ -231,7 +231,7 @@ where
         A::apply(&neighborhood.apply(neighborhood_matrix))
     };
 
-    let out_pixel_bounds = info_out.global_pixel_bounds();
+    let out_pixel_bounds = info_out.core_pixel_bounds();
 
     debug_assert!(accu_grid.shape_ref().contains(&out_pixel_bounds));
 
@@ -381,7 +381,7 @@ mod tests {
             .unwrap();
 
         let qrect = RasterQueryRectangle::new(
-            tile_info.global_pixel_bounds(),
+            tile_info.core_pixel_bounds(),
             TimeInstance::from_millis(0).unwrap().into(),
             BandSelection::first(),
         );
@@ -398,7 +398,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            tile_info.global_pixel_bounds(),
+            tile_info.core_pixel_bounds(),
             GridBoundingBox2D::new([-512, 0], [-1, 511]).unwrap()
         );
 

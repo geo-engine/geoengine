@@ -439,7 +439,7 @@ where
         time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
-        let out_tile_pixel_bounds = tile_info.global_pixel_bounds();
+        let out_tile_pixel_bounds = tile_info.core_pixel_bounds();
         //.intersection(&query_rect.spatial_query.grid_bounds());
         //let out_tile_pixel_bounds = out_tile_pixel_bounds;
         let out_tile_spatial_bounds = self
@@ -482,7 +482,7 @@ impl<T: Pixel> DownsampleAccu<T> {
     ) -> Self {
         DownsampleAccu {
             output_tile_info,
-            output_grid: GridOrEmpty::new_empty_shape(output_tile_info.global_pixel_bounds()),
+            output_grid: GridOrEmpty::new_empty_shape(output_tile_info.core_pixel_bounds()),
             input_global_geo_transform,
             time,
             cache_hint,
