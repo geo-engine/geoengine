@@ -12290,8 +12290,7 @@
           "apiUrl",
           "collectionName",
           "timeDimension",
-          "datasets",
-          "pageLimit"
+          "datasets"
         ],
         "properties": {
           "type": {
@@ -12403,7 +12402,7 @@
           },
           "bandDescriptor": {
             "$ref": "#/components/schemas/RasterBandDescriptor",
-            "description": "The band descriptor of the resulting geo engine dataset layer.\n\nIndependent of `assetBand`, which *addresses* the band inside the asset\nfiles. Populated by discovery with the naming fallback\n(`assetBand.bandName`, then `assetBand.assetTitle`) and a unitless\nmeasurement."
+            "description": "The band descriptor of the resulting geo engine dataset layer."
           }
         }
       },
