@@ -4,7 +4,7 @@ use anyhow::Context;
 use futures::StreamExt;
 use geoengine_datatypes::{
     dataset::NamedData,
-    primitives::TimeInstance,
+    primitives::{SpatialPartition2D, TimeInstance},
     raster::{GeoTransform, GridBoundingBox2D, GridIdx2D},
     spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption},
 };
@@ -98,7 +98,7 @@ pub struct StacHarvest {
     #[arg(long, default_value_t = 2)]
     pub prefetch_pages: usize,
 
-    /// Z-index property name
+    /// RFC 3339 timestamp property used for the tile z-index
     #[arg(long, default_value = "updated")]
     pub z_index_property_name: Option<String>,
 
@@ -235,13 +235,10 @@ fn process_harvest_item(
         .map_err(|e| anyhow::anyhow!("Invalid item datetime: {e}"))?;
 
     let z_index = match params.z_index_property_name.as_deref() {
-        Some("updated") => item
-            .properties
-            .updated
-            .as_deref()
-            .and_then(|updated| chrono::DateTime::parse_from_rfc3339(updated).ok())
-            .map_or_else(|| datetime.timestamp_millis(), |dt| dt.timestamp_millis()),
-        _ => 0,
+        Some(property_name) => {
+            z_index_from_timestamp_property(item, property_name, datetime.timestamp_millis())?
+        }
+        None => 0,
     };
 
     for dataset in &provider_def.datasets {
@@ -261,6 +258,44 @@ fn process_harvest_item(
     }
 
     Ok(())
+}
+/// Derive a stable ordering value from any RFC 3339 timestamp property.
+///
+/// Keep the historic `updated` fallback to the acquisition timestamp for catalogs
+/// that omit or provide an invalid update time. Explicitly selected properties fail
+/// loudly when missing or malformed so a harvest cannot silently create z conflicts.
+fn z_index_from_timestamp_property(
+    item: &stac::Item,
+    property_name: &str,
+    updated_fallback: i64,
+) -> Result<i64, anyhow::Error> {
+    let properties = serde_json::to_value(&item.properties)
+        .with_context(|| format!("Cannot serialize properties of STAC item '{}'", item.id))?;
+    let value = properties
+        .get(property_name)
+        .and_then(serde_json::Value::as_str);
+
+    if property_name == "updated" {
+        return Ok(value
+            .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+            .map_or(updated_fallback, |timestamp| timestamp.timestamp_millis()));
+    }
+
+    let value = value.ok_or_else(|| {
+        anyhow::anyhow!(
+            "STAC item '{}' has no string timestamp property '{property_name}'",
+            item.id
+        )
+    })?;
+
+    chrono::DateTime::parse_from_rfc3339(value)
+        .with_context(|| {
+            format!(
+                "STAC item '{}' has invalid timestamp property '{property_name}'",
+                item.id
+            )
+        })
+        .map(|timestamp| timestamp.timestamp_millis())
 }
 
 // ---------------------------------------------------------------------------
@@ -1033,7 +1068,21 @@ fn build_stac_query_params(params: &StacHarvest, page_limit: usize) -> Vec<(Stri
     query_params.push(("limit".to_string(), page_limit.to_string()));
 
     if params.filter_item_fields {
-        query_params.push(("fields".to_string(), common::STAC_ITEM_FIELDS.to_string()));
+        let fields = params.z_index_property_name.as_ref().map_or_else(
+            || common::STAC_ITEM_FIELDS.to_string(),
+            |property_name| {
+                let property_field = format!("properties.{property_name}");
+                if common::STAC_ITEM_FIELDS
+                    .split(',')
+                    .any(|field| field == property_field)
+                {
+                    common::STAC_ITEM_FIELDS.to_string()
+                } else {
+                    format!("{},{property_field}", common::STAC_ITEM_FIELDS)
+                }
+            },
+        );
+        query_params.push(("fields".to_string(), fields));
     }
 
     query_params
@@ -1159,13 +1208,28 @@ async fn upload_tiles_to_datasets(
             if !response.status().is_success() {
                 let status = response.status();
                 let body = response.text().await.unwrap_or_default();
-                warn!("Failed to add tiles to dataset '{dataset_name}' (HTTP {status}): {body}");
-                // Continue with remaining tiles; some conflicts (e.g. z-index) are expected
+                anyhow::bail!(
+                    "Failed to add tiles to dataset '{dataset_name}' (HTTP {status}): {body}"
+                );
             }
         }
     }
 
     Ok(())
+}
+
+fn spatial_partition_from_shape(
+    geo_transform: &GeoTransform,
+    height: usize,
+    width: usize,
+) -> Option<SpatialPartition2D> {
+    let grid_bounds = GridBoundingBox2D::new(
+        GridIdx2D::new([0, 0]),
+        GridIdx2D::new([(height as isize) - 1, (width as isize) - 1]),
+    )
+    .ok()?;
+
+    Some(geo_transform.grid_to_spatial_bounds(&grid_bounds))
 }
 
 /// Try to create a tile for a single band of a single dataset from a STAC item asset.
@@ -1242,13 +1306,7 @@ fn try_create_tile_for_band(
         band_def.asset_band.band_name.as_deref(),
     )?;
 
-    let grid_bounds = GridBoundingBox2D::new(
-        GridIdx2D::new([0, 0]),
-        GridIdx2D::new([(width as isize) - 1, (height as isize) - 1]),
-    )
-    .ok()?;
-
-    let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
+    let spatial_partition = spatial_partition_from_shape(&geo_transform, height, width)?;
 
     let file_path = if asset.href.starts_with("http://")
         || asset.href.starts_with("https://")
@@ -1316,6 +1374,61 @@ mod tests {
     use crate::datasets::external::stac::StacAssetBand;
     use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::raster::RasterDataType;
+
+    fn code_de_test_item() -> stac::Item {
+        let items: stac::ItemCollection = serde_json::from_str(include_str!(
+            "../../../../test_data/stac_responses/items/code-de-harvest-test.json"
+        ))
+        .expect("valid items fixture");
+        items.items[0].clone()
+    }
+
+    #[test]
+    fn test_z_index_uses_configured_timestamp_property() {
+        let mut item = code_de_test_item();
+        item.properties.additional_fields.insert(
+            "published".to_string(),
+            serde_json::json!("2026-04-03T15:28:29.203696Z"),
+        );
+
+        assert_eq!(
+            z_index_from_timestamp_property(&item, "published", 0).unwrap(),
+            chrono::DateTime::parse_from_rfc3339("2026-04-03T15:28:29.203696Z")
+                .unwrap()
+                .timestamp_millis()
+        );
+    }
+
+    #[test]
+    fn test_z_index_rejects_missing_configured_property() {
+        let item = code_de_test_item();
+
+        assert!(z_index_from_timestamp_property(&item, "published", 0).is_err());
+    }
+
+    #[test]
+    fn test_updated_z_index_keeps_acquisition_time_fallback() {
+        let mut item = code_de_test_item();
+        item.properties.updated = Some("not-a-timestamp".to_string());
+
+        assert_eq!(
+            z_index_from_timestamp_property(&item, "updated", 42).unwrap(),
+            42
+        );
+    }
+
+    #[test]
+    fn test_spatial_partition_from_non_square_shape() {
+        let geo_transform = GeoTransform::new((100.0, 200.0).into(), 10.0, -10.0);
+
+        let partition =
+            spatial_partition_from_shape(&geo_transform, 2, 3).expect("positive raster dimensions");
+
+        assert_eq!(
+            partition,
+            SpatialPartition2D::new_unchecked((100.0, 200.0).into(), (130.0, 180.0).into())
+        );
+    }
 
     #[test]
     fn test_dataset_name_for_harvest() {

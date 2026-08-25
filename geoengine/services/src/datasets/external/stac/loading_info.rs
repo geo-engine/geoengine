@@ -14,7 +14,7 @@ use geoengine_datatypes::primitives::{
     TimeInterval, TryRegularTimeFillIterExt, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
-use geoengine_datatypes::spatial_reference::SpatialReference;
+use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterBandDescriptors, RasterResultDescriptor, TimeDescriptor,
     VectorResultDescriptor,
@@ -410,9 +410,10 @@ impl StacMultiBandMetaData {
         };
 
         time_steps.push(time);
+        let item_epsg = common::epsg_code_from_item(item, common::StacExtensionMajorVersion::V2);
 
         for asset in item.assets.values() {
-            self.process_stac_asset(asset, time, z_index, files)?;
+            self.process_stac_asset(asset, item_epsg, time, z_index, files)?;
         }
 
         Ok(())
@@ -455,6 +456,7 @@ impl StacMultiBandMetaData {
     fn process_stac_asset(
         &self,
         asset: &stac::Asset,
+        item_epsg: Option<u32>,
         time: TimeInterval,
         z_index: i64,
         files: &mut Vec<TileFile>,
@@ -463,7 +465,17 @@ impl StacMultiBandMetaData {
             return Ok(());
         }
 
-        if !common::proj_code_matches_dataset(&asset.additional_fields, self.dataset.projection) {
+        let Some(asset_epsg) = common::epsg_code_from_fields(
+            common::StacExtensionMajorVersion::V2,
+            &asset.additional_fields,
+        )
+        .or(item_epsg) else {
+            return Ok(());
+        };
+
+        if SpatialReference::new(SpatialReferenceAuthority::Epsg, asset_epsg)
+            != self.dataset.projection
+        {
             return Ok(());
         }
 
@@ -500,7 +512,7 @@ impl StacMultiBandMetaData {
 
         let grid_bounds = GridBoundingBox2D::new(
             GridIdx2D::new([0, 0]),
-            GridIdx2D::new([(width as isize) - 1, (height as isize) - 1]),
+            GridIdx2D::new([(height as isize) - 1, (width as isize) - 1]),
         )
         .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
         let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
