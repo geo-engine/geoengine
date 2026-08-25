@@ -181,8 +181,8 @@ const DATA_SOURCES: DataSourceDefinition[] = [
         key: 'landsat',
         name: 'Landsat C2 L1 OLI/TIRS',
         defaultPresetIndex: 0,
-        defaultTime: 1767225600000,
-        defaultTimeStep: {durationAmount: 1, durationUnit: 'day'}, // 1-day step — STAC has consecutive days Jan 1-3 only
+        defaultTime: 1767916800000,
+        defaultTimeStep: {durationAmount: 1, durationUnit: 'day'},
         presets: [
             // Static
             {

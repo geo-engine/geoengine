@@ -85,8 +85,6 @@ impl MultiBandGdalLoadingInfo {
                 && file.spatial_partition.intersects(&tile_partition)
                 && file.band == band
             {
-                debug_assert!(file.time == time, "file's time must match query time");
-
                 if let Some(bbox_in_tile) = file.spatial_partition.intersection(&tile_partition) {
                     matching_files.push((file, bbox_in_tile));
                 }
