@@ -301,7 +301,7 @@ where
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        let output_grid = GridOrEmpty::new_empty_shape(tile_info.global_pixel_bounds());
+        let output_grid = GridOrEmpty::new_empty_shape(tile_info.core_pixel_bounds());
         let shift = self.shift;
         let pool = pool.clone();
         Box::pin(async move {
@@ -328,7 +328,7 @@ where
         time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
-        let out_bounds = tile_info.global_pixel_bounds();
+        let out_bounds = tile_info.core_pixel_bounds();
         let input_pixel_bounds = GridBoundingBox2D::new_unchecked(
             out_bounds.min_index() + self.shift,
             out_bounds.max_index() + self.shift,
