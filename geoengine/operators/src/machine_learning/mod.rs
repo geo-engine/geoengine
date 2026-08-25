@@ -3,7 +3,7 @@
 
 use geoengine_datatypes::{
     machine_learning::MlTensorShape3D,
-    raster::{GridShape2D, RasterDataType},
+    raster::{GridShape2D, RasterDataType, TileOverlap},
 };
 pub use metadata::{
     MlModelInputNoDataHandling, MlModelLoadingInfo, MlModelMetadata, MlModelOutputNoDataHandling,
@@ -111,6 +111,21 @@ pub enum MachineLearningError {
     UnsupportedInOutMapping {
         in_shape: MlTensorShape3D,
         out_shape: MlTensorShape3D,
+    },
+    #[snafu(display(
+        "Onnx model overlap is asymmetric: input {in_shape:?} and output {out_shape:?} must differ from the core {core:?} by an even number of pixels per axis. Only symmetric halos are supported."
+    ))]
+    AsymmetricModelOverlap {
+        in_shape: MlTensorShape3D,
+        out_shape: MlTensorShape3D,
+        core: GridShape2D,
+    },
+    #[snafu(display(
+        "Onnx model requires input tile overlap {required:?} but the source provides {available:?}. Add an `AddTileOverlap` operator with the required overlap upstream."
+    ))]
+    ModelOverlapRequired {
+        required: TileOverlap,
+        available: TileOverlap,
     },
 }
 
