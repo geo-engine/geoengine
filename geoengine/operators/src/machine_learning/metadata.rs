@@ -1,7 +1,12 @@
 use std::path::PathBuf;
 
-use geoengine_datatypes::{machine_learning::MlTensorShape3D, raster::RasterDataType};
+use geoengine_datatypes::{
+    machine_learning::MlTensorShape3D,
+    raster::{GridShape2D, GridSize, RasterDataType, TileOverlap},
+};
 use postgres_types::{FromSql, ToSql};
+
+use crate::machine_learning::MachineLearningError;
 
 /// Strategies to handle no-data in model inputs.
 /// - `EncodedNoData`: If inputs have empty (no-data) pixels, pixels are mapped to a `no_data_value`. This is usefull if the model can handle missing data.
@@ -82,5 +87,105 @@ impl MlModelMetadata {
 
     pub fn output_is_single_attribute(&self) -> bool {
         self.num_output_bands() == 1
+    }
+
+    /// Derive the input and output overlap (halo) the model needs relative to `core`.
+    ///
+    /// `halo_in = (input.yx - core) / 2` and `halo_out = (output.yx - core) / 2`.
+    /// Both must be even and non-negative per axis (symmetric halos only). The `core`
+    /// is the shared central region both the input and output grids are centered on
+    /// (typically the source core tile size).
+    pub fn input_output_overlap(
+        &self,
+        core: &GridShape2D,
+    ) -> Result<(TileOverlap, TileOverlap), MachineLearningError> {
+        // a per-pixel model (1x1 in and out) is applied to every pixel and never consumes a halo
+        if self.input_is_single_pixel() && self.output_is_single_pixel() {
+            return Ok((TileOverlap::zero(), TileOverlap::zero()));
+        }
+
+        let halo = |shape: &MlTensorShape3D| {
+            let dy = i64::from(shape.y) - i64::from(core.axis_size_y() as u32);
+            let dx = i64::from(shape.x) - i64::from(core.axis_size_x() as u32);
+            if dy < 0 || dx < 0 || dy % 2 != 0 || dx % 2 != 0 {
+                Err(MachineLearningError::AsymmetricModelOverlap {
+                    in_shape: self.input_shape,
+                    out_shape: self.output_shape,
+                    core: *core,
+                })
+            } else {
+                Ok(TileOverlap::new((dy / 2) as u32, (dx / 2) as u32))
+            }
+        };
+        let halo_in = halo(&self.input_shape)?;
+        let halo_out = halo(&self.output_shape)?;
+        Ok((halo_in, halo_out))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn metadata(in_yx: (u32, u32), out_yx: (u32, u32)) -> MlModelMetadata {
+        MlModelMetadata {
+            input_type: RasterDataType::F32,
+            output_type: RasterDataType::F32,
+            input_shape: MlTensorShape3D::new_y_x_bands(in_yx.0, in_yx.1, 1),
+            output_shape: MlTensorShape3D::new_y_x_bands(out_yx.0, out_yx.1, 1),
+            input_no_data_handling: MlModelInputNoDataHandling::SkipIfNoData,
+            output_no_data_handling: MlModelOutputNoDataHandling::NanIsNoData,
+        }
+    }
+
+    #[test]
+    fn equal_shapes_no_overlap() {
+        let m = metadata((4, 4), (4, 4));
+        let (hi, ho) = m.input_output_overlap(&GridShape2D::new_2d(4, 4)).unwrap();
+        assert_eq!(hi, TileOverlap::zero());
+        assert_eq!(ho, TileOverlap::zero());
+    }
+
+    #[test]
+    fn input_larger_than_core() {
+        let m = metadata((6, 6), (4, 4));
+        let (hi, ho) = m.input_output_overlap(&GridShape2D::new_2d(4, 4)).unwrap();
+        assert_eq!(hi, TileOverlap::new(1, 1));
+        assert_eq!(ho, TileOverlap::zero());
+    }
+
+    #[test]
+    fn both_input_and_output_halo() {
+        let m = metadata((6, 8), (4, 6));
+        let (hi, ho) = m.input_output_overlap(&GridShape2D::new_2d(4, 4)).unwrap();
+        assert_eq!(hi, TileOverlap::new(1, 2));
+        assert_eq!(ho, TileOverlap::new(0, 1));
+    }
+
+    #[test]
+    fn asymmetric_odd_difference_errors() {
+        let m = metadata((5, 4), (4, 4));
+        assert!(matches!(
+            m.input_output_overlap(&GridShape2D::new_2d(4, 4)),
+            Err(MachineLearningError::AsymmetricModelOverlap { .. })
+        ));
+    }
+
+    #[test]
+    fn negative_difference_errors() {
+        let m = metadata((4, 4), (2, 4));
+        assert!(matches!(
+            m.input_output_overlap(&GridShape2D::new_2d(4, 4)),
+            Err(MachineLearningError::AsymmetricModelOverlap { .. })
+        ));
+    }
+
+    #[test]
+    fn single_pixel_model_ignores_core() {
+        // a 1x1 in / 1x1 out model is per-pixel: no halo regardless of the (arbitrary) core size
+        let m = metadata((1, 1), (1, 1));
+        let (hi, ho) = m.input_output_overlap(&GridShape2D::new_2d(2, 2)).unwrap();
+        assert_eq!(hi, TileOverlap::zero());
+        assert_eq!(ho, TileOverlap::zero());
     }
 }
