@@ -1372,6 +1372,7 @@ fn format_duration(secs: u64) -> String {
 mod tests {
     use super::*;
     use crate::datasets::external::stac::StacAssetBand;
+    use float_cmp::approx_eq;
     use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::raster::RasterDataType;
 
@@ -1719,9 +1720,21 @@ mod tests {
             tile.params.file_path.display()
         );
 
-        assert_eq!(tile.params.geo_transform.x_pixel_size, 10.0);
-        assert_eq!(tile.params.geo_transform.origin_coordinate.x, 399_960.0);
-        assert_eq!(tile.params.geo_transform.origin_coordinate.y, 5_700_000.0);
+        assert!(approx_eq!(
+            f64,
+            tile.params.geo_transform.x_pixel_size,
+            10.0
+        ));
+        assert!(approx_eq!(
+            f64,
+            tile.params.geo_transform.origin_coordinate.x,
+            399_960.0
+        ));
+        assert!(approx_eq!(
+            f64,
+            tile.params.geo_transform.origin_coordinate.y,
+            5_700_000.0
+        ));
 
         // The item timestamp (2026-01-28T10:36:43Z) is snapped to the daily time
         // dimension: [2026-01-28T00:00:00Z, 2026-01-29T00:00:00Z).

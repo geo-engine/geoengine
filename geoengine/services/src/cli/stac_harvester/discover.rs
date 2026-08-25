@@ -207,6 +207,21 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         query_timeout_secs: 60,
     };
 
+    write_discovered_mapping(provider_def, params.output.as_ref())?;
+
+    Ok(())
+}
+
+/// Serialize an auto-discovered provider definition to the JSON output format
+/// and write it to `output` (or print it to stdout when none is given).
+///
+/// S3 credentials are kept as plain values (e.g. `__AWS_ACCESS_KEY_ID__` markers)
+/// rather than the `*****` redaction the API model applies, so they can be
+/// substituted at runtime.
+fn write_discovered_mapping(
+    provider_def: StacDataProviderDefinition,
+    output: Option<&PathBuf>,
+) -> Result<(), anyhow::Error> {
     let s3_config = provider_def.s3_config.clone();
 
     let mut json_value = serde_json::to_value(
@@ -231,7 +246,7 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
     let json =
         serde_json::to_string_pretty(&json_value).context("Failed to serialize mapping to JSON")?;
 
-    if let Some(output_path) = &params.output {
+    if let Some(output_path) = output {
         std::fs::write(output_path, &json)
             .with_context(|| format!("Failed to write mapping to {}", output_path.display()))?;
         println!("Mapping written to {}", output_path.display());
@@ -733,12 +748,12 @@ fn scan_collection_item_asset_v1_0_0(
 
         let band_name = if let Some(ref eo_bands_vec) = eo_bands {
             common::v1_0_0_band_name(
-                asset_key.or_else(|| asset.title.as_deref()),
+                asset_key.or(asset.title.as_deref()),
                 Some(&eo_bands_vec[index]),
                 band_count,
             )
         } else {
-            common::v1_0_0_band_name(asset_key.or_else(|| asset.title.as_deref()), None, 1)
+            common::v1_0_0_band_name(asset_key.or(asset.title.as_deref()), None, 1)
         };
 
         dataset_bands

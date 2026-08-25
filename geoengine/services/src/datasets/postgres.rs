@@ -1447,14 +1447,11 @@ async fn batch_insert_tiles(
     Ok(())
 }
 
-fn extend_time_bounds(
-    time_bounds: Option<TimeInterval>,
-    tile_time: TimeInterval,
-) -> Option<TimeInterval> {
-    Some(match time_bounds {
+fn extend_time_bounds(time_bounds: Option<TimeInterval>, tile_time: TimeInterval) -> TimeInterval {
+    match time_bounds {
         Some(time_bounds) => time_bounds.extend(&tile_time),
         None => tile_time,
-    })
+    }
 }
 
 fn extend_spatial_bounds(
@@ -1498,7 +1495,7 @@ async fn update_dataset_extents(
     for tile in tiles {
         dataset_grid = extend_spatial_bounds(dataset_grid, tile.spatial_partition);
 
-        time_bounds = extend_time_bounds(time_bounds, tile.time.into());
+        time_bounds = Some(extend_time_bounds(time_bounds, tile.time.into()));
     }
 
     tx.execute(
@@ -1618,7 +1615,7 @@ mod tests {
             TimeInstance::from_millis_unchecked(2_000),
         );
 
-        assert_eq!(extend_time_bounds(None, tile_time), Some(tile_time));
+        assert_eq!(extend_time_bounds(None, tile_time), tile_time);
     }
 
     #[test]
