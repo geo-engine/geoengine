@@ -117,7 +117,7 @@ impl CoveredPixels<MultiPoint> for MultiPointCoveredPixels {
         feature_index: usize,
         raster: &RasterTile2D<P>,
     ) -> Vec<GridIdx2D> {
-        let geo_transform = raster.tile_information().tile_geo_transform();
+        let geo_transform = raster.tile_information().core_geo_transform();
         if let Some(geometry) = self.collection.geometry_at(feature_index) {
             return geometry
                 .points()
@@ -155,7 +155,7 @@ impl CoveredPixels<MultiPolygon> for MultiPolygonCoveredPixels {
         feature_index: usize,
         raster: &RasterTile2D<P>,
     ) -> Vec<GridIdx2D> {
-        let geo_transform = raster.tile_information().tile_geo_transform();
+        let geo_transform = raster.tile_information().core_geo_transform();
 
         let [height, width] = raster.grid_shape_array();
 

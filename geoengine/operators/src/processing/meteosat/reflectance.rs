@@ -271,13 +271,18 @@ where
         };
         let etsr = channel.etsr / std::f64::consts::PI;
         let esd = calculate_esd(&timestamp);
-        let tile_geo_transform = tile.tile_geo_transform();
+        let tile_geo_transform = tile.core_geo_transform();
+        let overlap_offset = tile.overlap_offset();
 
         let map_fn = move |grid_idx: GridIdx2D, pixel_option: Option<PixelOut>| {
             pixel_option.map(|p| {
                 if let Some(sun_pos) = sun_pos_option {
+                    // The stored grid index is relative to the data corner; shift
+                    // it to the core anchor (negative for halo pixels) before the
+                    // coordinate lookup.
+                    let core_idx = grid_idx - overlap_offset;
                     let geos_coord =
-                        tile_geo_transform.grid_idx_to_pixel_center_coordinate_2d(grid_idx);
+                        tile_geo_transform.grid_idx_to_pixel_center_coordinate_2d(core_idx);
 
                     let (lat, lon) = channel.view_angle_lat_lon(geos_coord, 0.0);
                     let (_, zenith) = sun_pos.solar_azimuth_zenith(lat, lon);
