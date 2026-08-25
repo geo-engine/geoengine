@@ -8,9 +8,10 @@ use crate::{
     error,
     machine_learning::{
         MachineLearningError, MlModelInputNoDataHandling, MlModelLoadingInfo,
-        error::{InputTypeMismatch, Ort},
+        error::{InputTypeMismatch, ModelOverlapRequired, Ort},
         onnx_util::{
-            check_model_input_features, check_model_shape, load_onnx_model_from_loading_info,
+            check_model_input_features, check_model_shape, check_model_shape_overlap,
+            load_onnx_model_from_loading_info, model_data_shape,
         },
     },
     optimization::OptimizationError,
@@ -24,10 +25,13 @@ use geoengine_datatypes::primitives::{
     BandSelection, Measurement, RasterQueryRectangle, SpatialResolution, TimeInterval,
 };
 use geoengine_datatypes::raster::{
-    EmptyGrid2D, Grid2D, GridIdx2D, GridIndexAccess, GridShape2D, GridShapeAccess, GridSize,
-    MaskedGrid, Pixel, RasterTile2D, UpdateIndexedElements,
+    EmptyGrid2D, Grid2D, GridIdx2D, GridIndexAccess, GridIndexAccessMut, GridShape2D, GridSize,
+    MaskedGrid, Pixel, RasterTile2D, TileInformation, TileOverlap, TileSize, UpdateIndexedElements,
 };
-use geoengine_datatypes::{machine_learning::MlModelName, raster::GridBoundingBox2D};
+use geoengine_datatypes::{
+    machine_learning::MlModelName,
+    raster::{GridBoundingBox2D, GridContains},
+};
 use ndarray::{Array2, Array4};
 use ort::value::{IntoTensorElementType, PrimitiveTensorElementType, TensorRef};
 use serde::{Deserialize, Serialize};
@@ -73,20 +77,51 @@ impl RasterOperator for Onnx {
             .raster;
 
         let in_descriptor = source.result_descriptor();
-        // the model expects exactly one core tile per input stack
-        in_descriptor.ensure_no_tile_overlap(Onnx::TYPE_NAME)?;
 
         let model_loading_info = context.ml_model_loading_info(&self.params.model).await?;
 
+        // core tile size; the model's halos are derived relative to this
         let tiling_shape = context.tiling_specification().tile_size.0;
+        let source_overlap = in_descriptor.spatial_grid.tile_overlap();
+
+        // the halos implied by the model's fixed input / output pixel shapes
+        let (halo_in, halo_out) = model_loading_info
+            .metadata
+            .input_output_overlap(&tiling_shape)?;
 
         // check that we can use the model input / output shape with the operator
-        check_model_shape(&model_loading_info.metadata, tiling_shape)?;
-        check_model_input_features(
-            &model_loading_info.metadata,
-            tiling_shape,
-            in_descriptor.bands.count(),
-        )?;
+        if halo_in.is_zero() && halo_out.is_zero() {
+            // plain model: input and output pixel shapes both equal the core
+            check_model_shape(&model_loading_info.metadata, tiling_shape)?;
+            check_model_input_features(
+                &model_loading_info.metadata,
+                tiling_shape,
+                in_descriptor.bands.count(),
+            )?;
+        } else {
+            // convolution-like model: it consumes a halo, so the source must already
+            // carry at least `halo_in` of overlap
+            ensure!(
+                source_overlap.axis_size_y() >= halo_in.axis_size_y()
+                    && source_overlap.axis_size_x() >= halo_in.axis_size_x(),
+                ModelOverlapRequired {
+                    required: halo_in,
+                    available: source_overlap,
+                }
+            );
+            let in_data = model_data_shape(&tiling_shape, halo_in);
+            check_model_shape_overlap(
+                &model_loading_info.metadata,
+                &tiling_shape,
+                halo_in,
+                halo_out,
+            )?;
+            check_model_input_features(
+                &model_loading_info.metadata,
+                in_data,
+                in_descriptor.bands.count(),
+            )?;
+        }
 
         // check that input type fits model input type
         ensure!(
@@ -101,7 +136,8 @@ impl RasterOperator for Onnx {
             data_type: model_loading_info.metadata.output_type,
             spatial_reference: in_descriptor.spatial_reference,
             time: in_descriptor.time,
-            spatial_grid: in_descriptor.spatial_grid,
+            // the output carries its own (possibly smaller) halo
+            spatial_grid: in_descriptor.spatial_grid.with_tile_overlap(halo_out),
             bands: vec![RasterBandDescriptor::new(
                 "prediction".to_string(), // TODO: parameter of the operator?
                 Measurement::Unitless,    // TODO: get output measurement from model metadata
@@ -116,7 +152,10 @@ impl RasterOperator for Onnx {
             result_descriptor: out_descriptor,
             source,
             model_loading_info,
-            tile_shape: context.tiling_specification().grid_shape(),
+            tile_shape: tiling_shape,
+            halo_in,
+            halo_out,
+            source_overlap,
         }))
     }
 
@@ -130,7 +169,14 @@ pub struct InitializedOnnx {
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     model_loading_info: MlModelLoadingInfo,
+    /// core tile size (the region addressed by each tile's `tile_position`)
     tile_shape: GridShape2D,
+    /// halo the model consumes around the core on the input side
+    halo_in: TileOverlap,
+    /// halo the produced output carries around the core
+    halo_out: TileOverlap,
+    /// halo the source tiles actually carry (>= `halo_in`)
+    source_overlap: TileOverlap,
 }
 
 impl InitializedRasterOperator for InitializedOnnx {
@@ -150,6 +196,9 @@ impl InitializedRasterOperator for InitializedOnnx {
                         self.result_descriptor.clone(),
                         self.model_loading_info.clone(),
                         self.tile_shape,
+                        self.halo_in,
+                        self.halo_out,
+                        self.source_overlap,
                     )
                     .boxed()
                 )
@@ -190,7 +239,14 @@ pub(crate) struct OnnxProcessor<TIn, TOut> {
     result_descriptor: RasterResultDescriptor,
     model_loading_info: MlModelLoadingInfo,
     phantom: std::marker::PhantomData<TOut>,
+    /// core tile size
     tile_shape: GridShape2D,
+    /// halo the model consumes around the core on the input side
+    halo_in: TileOverlap,
+    /// halo the produced output carries around the core
+    halo_out: TileOverlap,
+    /// halo the source tiles actually carry (>= `halo_in`)
+    source_overlap: TileOverlap,
 }
 
 impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
@@ -199,6 +255,9 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
         result_descriptor: RasterResultDescriptor,
         model_loading_info: MlModelLoadingInfo,
         tile_shape: GridShape2D,
+        halo_in: TileOverlap,
+        halo_out: TileOverlap,
+        source_overlap: TileOverlap,
     ) -> Self {
         Self {
             source,
@@ -206,6 +265,9 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
             model_loading_info,
             phantom: Default::default(),
             tile_shape,
+            halo_in,
+            halo_out,
+            source_overlap,
         }
     }
 }
@@ -283,9 +345,19 @@ where
                 let global_geo_transform = first_tile.global_geo_transform;
                 let cache_hint = first_tile.cache_hint;
 
-                let tile_shape = self.tile_shape;
-                let width = tile_shape.axis_size_x();
-                let height = tile_shape.axis_size_y();
+                let core = self.tile_shape;
+                // full data extents: the core padded by the (possibly different) input / output halos
+                let in_data = model_data_shape(&core, self.halo_in);
+                let out_data = model_data_shape(&core, self.halo_out);
+                let in_height = in_data.axis_size_y();
+                let in_width = in_data.axis_size_x();
+                let out_height = out_data.axis_size_y();
+                let out_width = out_data.axis_size_x();
+                let core_y = core.axis_size_y();
+                let core_x = core.axis_size_x();
+                // the source may carry a larger halo than the model consumes; crop to the model input
+                let in_off_y = self.source_overlap.axis_size_y() - self.halo_in.axis_size_y();
+                let in_off_x = self.source_overlap.axis_size_x() - self.halo_in.axis_size_x();
 
                 // This determines if the tile the operator currently processes can be skipped entirely.
                 // The Operator uses a "stack" of bands where each band is represented by a raster tile.
@@ -307,17 +379,35 @@ where
                     MlModelInputNoDataHandling::SkipIfNoData => true
                 };
 
-                let mut output_mask = Grid2D::new_filled(self.tile_shape, output_mask_fill_value);
+                // the output validity mask lives on the output data grid; the input-premise is
+                // seeded only over the shared core (the output halo region keeps the fill value)
+                let mut output_mask = Grid2D::new_filled(out_data, output_mask_fill_value);
                 if !(skip_tile) {
+                    let halo_out_y = self.halo_out.axis_size_y();
+                    let halo_out_x = self.halo_out.axis_size_x();
+                    let src_off_y = self.source_overlap.axis_size_y();
+                    let src_off_x = self.source_overlap.axis_size_x();
                     for c in &tiles {
                         if let Some(mg) = c.grid_array.as_masked_grid() {
-                            output_mask.update_indexed_elements(|idx: GridIdx2D, value| {
-                                let mask_value = mg.mask_ref().get_at_grid_index_unchecked(idx);
-                                match self.model_loading_info.metadata.input_no_data_handling {
-                                    MlModelInputNoDataHandling::EncodedNoData { no_data_value: _} => mask_value || value, // if any pixel is valid this sticks to true
-                                    MlModelInputNoDataHandling::SkipIfNoData  => mask_value && value, // if any pixel is invalid, this sticks to false
+                            let src_mask = mg.mask_ref();
+                            // the source tile's core, in its local (core-anchored) coordinates
+                            let core_bounds = c.local_core_pixel_bounds();
+                            for cy in core_bounds.y_min()..=core_bounds.y_max() {
+                                for cx in core_bounds.x_min()..=core_bounds.x_max() {
+                                    let local = GridIdx2D::from([cy, cx]);
+                                    let out_idx =
+                                        local + GridIdx2D::from([halo_out_y as isize, halo_out_x as isize]);
+                                    let src_idx =
+                                        local + GridIdx2D::from([src_off_y as isize, src_off_x as isize]);
+                                    let mask_value = src_mask.get_at_grid_index_unchecked(src_idx);
+                                    let acc = output_mask.get_at_grid_index_unchecked(out_idx);
+                                    let merged = match self.model_loading_info.metadata.input_no_data_handling {
+                                        MlModelInputNoDataHandling::EncodedNoData { no_data_value: _ } => mask_value || acc, // if any pixel is valid this sticks to true
+                                        MlModelInputNoDataHandling::SkipIfNoData => mask_value && acc, // if any pixel is invalid, this sticks to false
+                                    };
+                                    output_mask.set_at_grid_index_unchecked(out_idx, merged);
                                 }
-                            });
+                            }
                         }
                     }
                 }
@@ -325,29 +415,66 @@ where
                 let skip_tile = skip_tile || output_mask.data.iter().all(|&v| !v);
                 tracing::debug!("skip_tile is set to {skip_tile} after merging all input masks.");
 
+                // the output tile carries its own halo; `TileInformation` is `Copy` so it is
+                // shared between the skip path and the normal return below
+                let out_tile_info = TileInformation::new_with_overlap(
+                    tile_position,
+                    TileSize(core),
+                    global_geo_transform,
+                    self.halo_out,
+                );
+
                 // if the tile is skipable or the output mask has no valid pixels:
                 if skip_tile {
                     tracing::trace!("Skipping Tile {tile_position:?}");
-                    return Ok(RasterTile2D::new(
+                    return Ok(RasterTile2D::new_with_tile_info(
                         time,
-                        tile_position,
+                        out_tile_info,
                         0,
-                        global_geo_transform,
-                        EmptyGrid2D::new(tile_shape).into(),
+                        EmptyGrid2D::new(out_data).into(),
                         cache_hint,
                     ))
                 }
 
                 // TODO: use flat array instead of nested Vecs
-                let mut move_axis_pixels: Vec<Vec<TIn>> = vec![vec![TIn::zero(); num_bands]; width * height];
+                let mut move_axis_pixels: Vec<Vec<TIn>> = vec![vec![TIn::zero(); num_bands]; in_width * in_height];
 
                 for (tile_index, tile) in tiles.into_iter().enumerate() {
+                    // one-time per-tile bounds check, expressed in the source tile's local
+                    // (core-anchored) coordinate space: the model input region (the core padded
+                    // by the model's input halo) must be fully contained in the source tile's
+                    // local total pixel bounds. The grid dimensions alone cannot express this
+                    // because the local origin sits at the core corner while the halo lives at
+                    // negative indices, so a source that does not carry enough overlap fails
+                    // cleanly here instead of causing an out-of-bounds read below.
+                    let halo_in_y = self.halo_in.axis_size_y() as isize;
+                    let halo_in_x = self.halo_in.axis_size_x() as isize;
+                    let model_input_local = GridBoundingBox2D::new_unchecked(
+                        [-halo_in_y, -halo_in_x],
+                        [
+                            core_y as isize - 1 + halo_in_y,
+                            core_x as isize - 1 + halo_in_x,
+                        ],
+                    );
+                    let source_local_bounds = tile.local_total_pixel_bounds();
+                    if !source_local_bounds.contains(&model_input_local) {
+                        return Err(error::Error::MustNotHappen {
+                            message: format!(
+                                "source tile local pixel bounds {source_local_bounds:?} do not \
+                                 contain the model input region {model_input_local:?}; the source \
+                                 overlap is too small to read the model input"
+                            ),
+                        });
+                    }
                     // TODO: use map_elements or map_elements_parallel to avoid the double loop
-                    for y in 0..height {
-                        for x in 0..width {
-                            let pixel_index = y * width + x;
+                    for y in 0..in_height {
+                        for x in 0..in_width {
+                            let pixel_index = y * in_width + x;
+                            // read the model input region, cropped out of the (possibly larger) source halo
                             let pixel_value = tile
-                                .get_at_grid_index(GridIdx2D::from([y as isize, x as isize]))?
+                                .get_at_grid_index_unchecked(GridIdx2D::from(
+                                    [(y + in_off_y) as isize, (x + in_off_x) as isize],
+                                ))
                                 .unwrap_or(in_no_data_value); // TODO: properly handle missing values or skip the pixel entirely instead
                             move_axis_pixels[pixel_index][tile_index] = pixel_value;
                         }
@@ -356,14 +483,14 @@ where
 
                 let pixels = move_axis_pixels.into_iter().flatten().collect::<Vec<TIn>>();
                 let outputs = if self.model_loading_info.metadata.input_is_single_pixel() {
-                    let samples = Array2::from_shape_vec((width*height, num_bands), pixels).expect(
+                    let samples = Array2::from_shape_vec((in_width*in_height, num_bands), pixels).expect(
                         "Array2 should be valid because it is created from a Vec with the correct size",
                     );
                     session
                         .run(ort::inputs![&input_name => TensorRef::from_array_view(&samples).context(Ort)?])
                         .context(Ort)
-                } else if self.model_loading_info.metadata.input_shape.yx_matches_tile_shape(&tile_shape){
-                    let samples = Array4::from_shape_vec((1, height, width, num_bands), pixels).expect( // y,x, attributes
+                } else if self.model_loading_info.metadata.input_shape.yx_matches_tile_shape(&in_data){
+                    let samples = Array4::from_shape_vec((1, in_height, in_width, num_bands), pixels).expect( // y,x, attributes
                         "Array4 should be valid because it is created from a Vec with the correct size",
                     );
                     session
@@ -373,7 +500,7 @@ where
                     Err(
                         MachineLearningError::InvalidInputPixelShape {
                             tensor_shape: self.model_loading_info.metadata.input_shape,
-                            tiling_shape: tile_shape
+                            tiling_shape: in_data
                         }
                     )
                 }.map_err(error::Error::from)?;
@@ -382,13 +509,12 @@ where
                 // we don't access the output by name because it can vary, e.g. "output_label" vs "variable"
                 let predictions = outputs[0].try_extract_tensor::<TOut>().context(Ort)?;
 
-                // extract the values as a raw vector because we expect one prediction per pixel.
-                // this works for 1d tensors as well as 2d tensors with a single column
+                // extract the values as a raw vector; the model returns one value per output pixel
                 let (shape, out_tensor_data) = predictions.to_owned();
-                debug_assert_eq!(shape.num_elements(), width * height); // TODO: use shape directly to check
+                debug_assert_eq!(shape.num_elements(), out_width * out_height); // TODO: use shape directly to check
 
-                // transform the output intp a grid
-                let out_grid = Grid2D::new([width, height].into(), Vec::from(out_tensor_data))?;
+                // transform the output into a grid sized to the model output extent
+                let out_grid = Grid2D::new(out_data, Vec::from(out_tensor_data))?;
 
                 // update the mask based on out no data value
                 if let Some(out_no_data) = out_no_data_value { // For float types this will always be Some(NaN) while int might be None!
@@ -402,14 +528,13 @@ where
                 let final_grid = if output_mask.data.iter().any(|&v| v) {
                     MaskedGrid::new(out_grid, output_mask)?.into()
                 } else {
-                    EmptyGrid2D::new(out_grid.shape).into()
+                    EmptyGrid2D::new(out_data).into()
                 };
 
-                Ok(RasterTile2D::new(
+                Ok(RasterTile2D::new_with_tile_info(
                     time,
-                    tile_position,
+                    out_tile_info,
                     0,
-                    global_geo_transform,
                     final_grid,
                     cache_hint,
                 ))
@@ -525,7 +650,7 @@ mod tests {
             WorkflowOperatorPath,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
-        processing::{RasterStacker, RasterStackerParams},
+        processing::{AddTileOverlap, AddTileOverlapParams, RasterStacker, RasterStackerParams},
         util::Result,
     };
     use approx::assert_abs_diff_eq;
@@ -1247,5 +1372,268 @@ mod tests {
         ];
 
         assert!(expected.tiles_equal_ignoring_cache_hint(&result));
+    }
+
+    // A "convolution-like" model: input 4x4 (a 2x2 core padded by a 1px halo) -> output 2x2.
+    fn ml_info(in_yx: (u32, u32), out_yx: (u32, u32)) -> MlModelLoadingInfo {
+        MlModelLoadingInfo {
+            storage_path: test_data!("ml/onnx/test_conv_overlap.onnx").to_owned(),
+            metadata: MlModelMetadata {
+                input_type: RasterDataType::F32,
+                output_type: RasterDataType::F32,
+                input_shape: MlTensorShape3D::new_y_x_bands(in_yx.0, in_yx.1, 1),
+                output_shape: MlTensorShape3D::new_y_x_bands(out_yx.0, out_yx.1, 1),
+                input_no_data_handling: MlModelInputNoDataHandling::SkipIfNoData,
+                output_no_data_handling: MlModelOutputNoDataHandling::NanIsNoData,
+            },
+        }
+    }
+
+    // A source whose descriptor carries the given tile overlap (no data tiles).
+    fn overlap_source(overlap: TileOverlap) -> Box<dyn RasterOperator> {
+        MockRasterSource {
+            params: MockRasterSourceParams {
+                data: Vec::<RasterTile2D<f32>>::new(),
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::F32,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new_min_max(0, 0, 2, 2).unwrap(),
+                        TileSize::new(2, 2),
+                    )
+                    .with_tile_overlap(overlap),
+                    bands: RasterBandDescriptors::new_single_band(),
+                },
+            },
+        }
+        .boxed()
+    }
+
+    // A conv model needs a 1px input halo; a source with *less* overlap must be rejected.
+    #[tokio::test]
+    async fn it_rejects_insufficient_overlap() {
+        let model_name = MlModelName {
+            namespace: None,
+            name: "conv".into(),
+        };
+        let onnx = Onnx {
+            params: OnnxParams::new(model_name.clone()),
+            sources: SingleRasterSource {
+                raster: overlap_source(TileOverlap::zero()),
+            },
+        }
+        .boxed();
+
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size = TileSize(GridShape {
+            shape_array: [2, 2],
+        });
+        exe_ctx
+            .ml_models
+            .insert(model_name, ml_info((4, 4), (2, 2)));
+
+        let err = match onnx
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+        {
+            Ok(_) => panic!("expected initialization to fail"),
+            Err(err) => err,
+        };
+        let msg = err.to_string();
+        assert!(
+            msg.contains("requires input tile overlap"),
+            "expected ModelOverlapRequired, got: {msg}"
+        );
+    }
+
+    // A source with *more* overlap than the model needs is fine: it initialises,
+    // and the extra halo is cropped away during the query.
+    #[tokio::test]
+    async fn it_accepts_excess_overlap() {
+        let model_name = MlModelName {
+            namespace: None,
+            name: "conv".into(),
+        };
+        let onnx = Onnx {
+            params: OnnxParams::new(model_name.clone()),
+            sources: SingleRasterSource {
+                raster: overlap_source(TileOverlap::new(2, 2)),
+            },
+        }
+        .boxed();
+
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size = TileSize(GridShape {
+            shape_array: [2, 2],
+        });
+        exe_ctx
+            .ml_models
+            .insert(model_name, ml_info((4, 4), (2, 2)));
+
+        // must not error: 2px available >= 1px required
+        onnx.initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .expect("excess overlap must be accepted");
+    }
+
+    // The halo must be symmetric: an odd (in - core) difference per axis is rejected.
+    #[tokio::test]
+    async fn it_rejects_asymmetric_overlap() {
+        let model_name = MlModelName {
+            namespace: None,
+            name: "conv".into(),
+        };
+        let onnx = Onnx {
+            params: OnnxParams::new(model_name.clone()),
+            sources: SingleRasterSource {
+                raster: overlap_source(TileOverlap::zero()),
+            },
+        }
+        .boxed();
+
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size = TileSize(GridShape {
+            shape_array: [2, 2],
+        });
+        // 5x5 input on a 2x2 core => an odd 3px difference => asymmetric
+        exe_ctx
+            .ml_models
+            .insert(model_name, ml_info((5, 5), (2, 2)));
+
+        let err = match onnx
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+        {
+            Ok(_) => panic!("expected initialization to fail"),
+            Err(err) => err,
+        };
+        let msg = err.to_string();
+        assert!(
+            msg.contains("overlap is asymmetric"),
+            "expected AsymmetricModelOverlap, got: {msg}"
+        );
+    }
+
+    // End-to-end: a plain source is padded with a 1px halo by `AddTileOverlap`, and the
+    // conv model reads that halo. The center tile's output rows depend on neighbor-tile
+    // pixels (values 1..9 laid out around the center's 5s), so a no-overlap implementation
+    // could not produce the expected values.
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_conv_applies_overlap() {
+        // 3x3 grid of 2x2 core tiles; tile (row, col) is constant 3*row + col + 1.
+        let mut data: Vec<RasterTile2D<f32>> = Vec::new();
+        for row in 0..3 {
+            for col in 0..3 {
+                let value = (3 * row + col + 1) as f32;
+                data.push(RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [row as isize, col as isize].into(),
+                    band: 0,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![value; 4]).unwrap().into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                    overlap: TileOverlap::zero(),
+                });
+            }
+        }
+
+        // the plain source (no overlap): 2x2 tiles over a 3x3 grid of tiles (6x6 pixels)
+        let mrs = MockRasterSource {
+            params: MockRasterSourceParams {
+                data,
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::F32,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new_min_max(0, 5, 0, 5).unwrap(),
+                        TileSize::new(2, 2),
+                    ),
+                    bands: RasterBandDescriptors::new_single_band(),
+                },
+            },
+        }
+        .boxed();
+
+        // pad every core tile with a 1px halo, blitted from its neighbours
+        let with_halo = AddTileOverlap {
+            params: AddTileOverlapParams {
+                overlap: TileOverlap::new(1, 1),
+            },
+            sources: SingleRasterSource { raster: mrs },
+        }
+        .boxed();
+
+        let model_name = MlModelName {
+            namespace: None,
+            name: "conv".into(),
+        };
+        let onnx = Onnx {
+            params: OnnxParams::new(model_name.clone()),
+            sources: SingleRasterSource { raster: with_halo },
+        }
+        .boxed();
+
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size = TileSize(GridShape {
+            shape_array: [2, 2],
+        });
+        exe_ctx
+            .ml_models
+            .insert(model_name, ml_info((4, 4), (2, 2)));
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+
+        let op = onnx
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+        let qp = op.query_processor().unwrap().get_f32().unwrap();
+
+        // query the full 3x3 grid so the center tile's halo is fully populated
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new_min_max(0, 5, 0, 5).unwrap(),
+            TimeInterval::new_unchecked(0, 5),
+            [0].try_into().unwrap(),
+        );
+
+        let result = qp
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+
+        // The center tile's 4x4 model input (halo blitted from neighbours 1..9 around
+        // the 5s core) is:
+        //   [1, 2, 2, 3]  -> row sum 8
+        //   [4, 5, 5, 6]  -> row sum 20
+        //   [4, 5, 5, 6]  -> row sum 20
+        //   [7, 8, 8, 9]  -> row sum 32
+        // out = row-major (2x2) of the four row sums = [[8, 20], [20, 32]].
+        // The halo rows (0 and 3) come from *neighbour* tiles, so a no-overlap
+        // implementation (which would only ever see the 5s core) cannot produce this.
+        let target_position: [isize; 2] = [1, 1];
+        let center = result
+            .iter()
+            .find(|t| t.tile_position == target_position.into())
+            .expect("center tile must be present");
+        let mg = center
+            .grid_array
+            .as_masked_grid()
+            .expect("center tile must be a valid (non-empty) grid");
+        assert_eq!(mg.inner_grid.data, vec![8., 20., 20., 32.]);
+        assert_eq!(mg.validity_mask.data, vec![true; 4]);
     }
 }
