@@ -29,7 +29,7 @@ import {CollectionItem} from '@geoengine/api-client';
 import {ProviderLayerId} from '@geoengine/api-client/dist/models/ProviderLayerId';
 import {A11yModule} from '@angular/cdk/a11y';
 
-type PresetCategory = 'static' | 'harvested' | 'ad-hoc';
+type PresetCategory = 'static' | 'harvested' | 'adHoc';
 
 interface VisualizationPreset {
     displayName: string;
@@ -69,15 +69,10 @@ interface DataSourceLayer {
 const LAYER_DB_PROVIDER_ID = 'ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74';
 const LAYER_DB_ROOT_COLLECTION_ID = '05102bb3-a855-4a37-8a8a-30026a91fef1';
 
-const STAC_PROVIDER_SENTINEL1 = 'b274275c-373d-4a3f-8b45-9b48e9614329';
-const STAC_PROVIDER_SENTINEL2 = 'c385386d-484e-5b40-9c56-0a6ca9f07243';
-const STAC_PROVIDER_LANDSAT = 'd496497e-595f-6c51-ad67-1b7dba0a1834';
-const STAC_PROVIDER_OPENGEOLANDSAT = 'e5a7508f-6a60-7d62-be78-2c8ecb1b2945';
-
 const PRESET_CATEGORY_LABELS: Record<PresetCategory, string> = {
     static: 'Static',
     harvested: 'Harvested',
-    'ad-hoc': 'Ad-hoc (Data Provider)',
+    adHoc: 'Ad-hoc (Data Provider)',
 };
 
 const DATA_SOURCES: DataSourceDefinition[] = [
@@ -121,7 +116,7 @@ const DATA_SOURCES: DataSourceDefinition[] = [
                 connectorId: LAYER_DB_PROVIDER_ID,
                 collectionId: LAYER_DB_ROOT_COLLECTION_ID,
                 name: 'Sentinel-1 Global Mosaics Provider',
-                category: 'ad-hoc',
+                category: 'adHoc',
             },
         ],
     },
@@ -173,7 +168,7 @@ const DATA_SOURCES: DataSourceDefinition[] = [
                 connectorId: LAYER_DB_PROVIDER_ID,
                 collectionId: LAYER_DB_ROOT_COLLECTION_ID,
                 name: 'Sentinel-2 L2A Provider',
-                category: 'ad-hoc',
+                category: 'adHoc',
             },
         ],
     },
@@ -225,7 +220,7 @@ const DATA_SOURCES: DataSourceDefinition[] = [
                 connectorId: LAYER_DB_PROVIDER_ID,
                 collectionId: LAYER_DB_ROOT_COLLECTION_ID,
                 name: 'Landsat C2 L1 OLI/TIRS Provider',
-                category: 'ad-hoc',
+                category: 'adHoc',
             },
             {
                 displayName: 'True Color',
@@ -233,7 +228,7 @@ const DATA_SOURCES: DataSourceDefinition[] = [
                 connectorId: LAYER_DB_PROVIDER_ID,
                 collectionId: LAYER_DB_ROOT_COLLECTION_ID,
                 name: 'Landsat C2 L1 OLI/TIRS Provider True Color',
-                category: 'ad-hoc',
+                category: 'adHoc',
             },
         ],
     },
@@ -285,7 +280,7 @@ const DATA_SOURCES: DataSourceDefinition[] = [
                 connectorId: LAYER_DB_PROVIDER_ID,
                 collectionId: LAYER_DB_ROOT_COLLECTION_ID,
                 name: 'OpenGeoHub Landsat Bimonthly Mosaic Provider',
-                category: 'ad-hoc',
+                category: 'adHoc',
             },
             {
                 displayName: 'True Color',
@@ -293,7 +288,7 @@ const DATA_SOURCES: DataSourceDefinition[] = [
                 connectorId: LAYER_DB_PROVIDER_ID,
                 collectionId: LAYER_DB_ROOT_COLLECTION_ID,
                 name: 'OpenGeoHub Landsat Bimonthly Mosaic Provider True Color',
-                category: 'ad-hoc',
+                category: 'adHoc',
             },
         ],
     },
@@ -452,11 +447,11 @@ export class MainComponent {
 
                 this.zoomToGermany();
 
-                this.setInitialTime();
-
-                this.onToolbarResize();
-                const topToolbarObserver = new ResizeObserver(() => this.onToolbarResize());
-                topToolbarObserver.observe(this.topToolbar().nativeElement);
+                void this.setInitialTime().then(() => {
+                    this.onToolbarResize();
+                    const topToolbarObserver = new ResizeObserver(() => this.onToolbarResize());
+                    topToolbarObserver.observe(this.topToolbar().nativeElement);
+                });
             },
         });
     }
