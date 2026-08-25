@@ -2121,7 +2121,7 @@ async fn scan_collection(
                     raster: StacExtensionMajorVersion::V2,
                     eo: StacExtensionMajorVersion::V2,
                 },
-            ) => scan_item_asset_v1_1_0(asset, Some(asset_key)),
+            ) => scan_item_asset_v1_1_0(asset),
             _ => Err(anyhow::anyhow!(
                 "Unsupported STAC version or extension versions: {:?}, {stac_extension_versions:?}",
                 collection.version
@@ -2230,7 +2230,6 @@ fn scan_item_asset_v1_0_0(
 
 fn scan_item_asset_v1_1_0(
     asset: &stac::ItemAsset,
-    asset_key: Option<&str>,
 ) -> anyhow::Result<Option<HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>>> {
     let mut dataset_bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> = HashMap::new();
 
@@ -2248,7 +2247,7 @@ fn scan_item_asset_v1_1_0(
         .context(format!("Unsupported data_type: {data_type}"))?;
 
     // in STAC 1.1.0 `raster:bands` and `eo:bands` are merged into common metadata `bands`
-    let band_names = band_names_from_item_asset_v1_1_0(asset, asset_key)?;
+    let band_names = band_names_from_item_asset_v1_1_0(asset)?;
 
     let resolution = asset
         .additional_fields
@@ -2302,36 +2301,30 @@ fn band_names_from_asset_v1_1_0(asset: &stac::Asset) -> anyhow::Result<Vec<Strin
     Ok(names)
 }
 
-fn band_names_from_item_asset_v1_1_0(
-    asset: &stac::ItemAsset,
-    asset_key: Option<&str>,
-) -> anyhow::Result<Vec<String>> {
+/// Derive band names for a collection item asset.
+///
+/// This must produce names that match [`band_names_from_asset_v1_1_0`] so that the
+/// bands scanned from the collection line up with the names used while processing
+/// each item's assets. For a missing or empty `bands` list, or a single-band asset,
+/// the asset title is used; for multi-band assets each band is named
+/// `"{title} [{name}]"`.
+fn band_names_from_item_asset_v1_1_0(asset: &stac::ItemAsset) -> anyhow::Result<Vec<String>> {
     let asset_title = asset
         .title
         .as_deref()
         .ok_or(anyhow::anyhow!("Missing title in asset metadata"))?;
 
-    let band_names = asset
+    let Some(bands) = asset
         .additional_fields
         .get("bands")
-        .and_then(serde_json::Value::as_array);
-
-    let Some(bands) = band_names else {
-        // Use asset_key if provided, otherwise fall back to asset_title
-        let name = asset_key.unwrap_or(asset_title).to_string();
-        return Ok(vec![name]);
+        .and_then(serde_json::Value::as_array)
+        .filter(|b| !b.is_empty())
+    else {
+        return Ok(vec![asset_title.to_string()]);
     };
 
-    if bands.is_empty() {
-        // Use asset_key if provided, otherwise fall back to asset_title
-        let name = asset_key.unwrap_or(asset_title).to_string();
-        return Ok(vec![name]);
-    }
-
     if bands.len() == 1 {
-        // Use asset_key if provided, otherwise fall back to asset_title
-        let name = asset_key.unwrap_or(asset_title).to_string();
-        return Ok(vec![name]);
+        return Ok(vec![asset_title.to_string()]);
     }
 
     let mut names = Vec::new();
