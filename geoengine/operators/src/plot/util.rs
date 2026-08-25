@@ -80,7 +80,7 @@ fn tile_bounds_in_query<T: Pixel>(
     query_bounds: &GridBoundingBox2D,
 ) -> Option<GridBoundingBox2D> {
     tile.tile_information()
-        .global_pixel_bounds()
+        .core_pixel_bounds()
         .intersection(query_bounds)
 }
 
@@ -102,7 +102,7 @@ pub(super) fn masked_pixels_in_query<'t, T: Pixel>(
     let bounds = tile_bounds_in_query(tile, query_bounds);
 
     match (&tile.grid_array, bounds) {
-        (GridOrEmpty::Grid(grid), Some(bounds)) if bounds == tile_info.global_pixel_bounds() => {
+        (GridOrEmpty::Grid(grid), Some(bounds)) if bounds == tile_info.core_pixel_bounds() => {
             Either::Left(grid.masked_element_deref_iterator())
         }
         (grid_array, bounds) => {

@@ -198,7 +198,7 @@ where
     fn update_stored_query(&self, query: &mut Self::Query) -> Result<(), CacheError> {
         let stored_spatial_query_mut = query.spatial_bounds_mut();
 
-        stored_spatial_query_mut.extend(&self.tile_information().global_pixel_bounds());
+        stored_spatial_query_mut.extend(&self.tile_information().core_pixel_bounds());
 
         *query.time_interval_mut() = query
             .time_interval()
@@ -209,7 +209,7 @@ where
 
     fn intersects_query(&self, query: &Self::Query) -> bool {
         self.tile_information()
-            .global_pixel_bounds()
+            .core_pixel_bounds()
             .intersects(&query.spatial_bounds())
             && self.time.intersects(&query.time_interval())
             && query.attributes().contains(self.band)
