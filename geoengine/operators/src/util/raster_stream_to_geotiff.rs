@@ -837,7 +837,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
     fn write_tile_into_band(&self, tile: RasterTile2D<P>, raster_band: RasterBand) -> Result<()> {
         let tile_info = tile.tile_information();
 
-        let tile_grid_bounds = tile_info.global_pixel_bounds();
+        let tile_grid_bounds = tile_info.core_pixel_bounds();
 
         let out_data_bounds = self
             .output_pixel_grid_bounds

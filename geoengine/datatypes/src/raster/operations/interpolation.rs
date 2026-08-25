@@ -204,7 +204,7 @@ mod tests {
         };
 
         let output_geo_transform = output_info.global_geo_transform;
-        let output_bounds = output_info.global_pixel_bounds();
+        let output_bounds = output_info.core_pixel_bounds();
 
         let pool = ThreadPoolBuilder::new().num_threads(0).build().unwrap();
 
@@ -291,7 +291,7 @@ mod tests {
         };
 
         let output_geo_transform = output_info.global_geo_transform;
-        let output_bounds = output_info.global_pixel_bounds();
+        let output_bounds = output_info.core_pixel_bounds();
 
         let pool = ThreadPoolBuilder::new().num_threads(0).build().unwrap();
 

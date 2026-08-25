@@ -106,7 +106,7 @@ impl GdalPoolReader {
         );
 
         let mut tile_raster: GridOrEmpty<GridBoundingBox2D, T> =
-            GridOrEmpty::from(EmptyGrid::new(tile_information.global_pixel_bounds()));
+            GridOrEmpty::from(EmptyGrid::new(tile_information.core_pixel_bounds()));
 
         let mut properties = RasterProperties::default();
         let cache_hint = loading_info.cache_hint();

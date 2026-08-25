@@ -509,31 +509,28 @@ impl TileInformation {
         self.global_upper_left_pixel_idx() + self.local_lower_left_pixel_idx()
     }
 
-    pub fn global_pixel_bounds(&self) -> GridBoundingBox2D {
+    /// The bounds of the tile's *core* (coverage) in global pixel coordinates.
+    ///
+    /// In the core-anchored local-index convention, the core spans `[0, tile_size)`
+    /// and the overlap halo lies at negative / beyond-local indices. This defines
+    /// the tile's contribution to dataset coverage and query intersection.
+    pub fn core_pixel_bounds(&self) -> GridBoundingBox2D {
         GridBoundingBox2D::new_unchecked(
             self.global_upper_left_pixel_idx(),
             self.global_lower_right_pixel_idx(),
         )
     }
 
-    /// The bounds of the tile's *core* in global pixel coordinates.
-    ///
-    /// This is identical to [`TileInformation::global_pixel_bounds`] and defines
-    /// the tile's contribution to dataset coverage and query intersection.
-    pub fn core_pixel_bounds(&self) -> GridBoundingBox2D {
-        self.global_pixel_bounds()
-    }
-
-    /// The bounds of the tile's actual data in global pixel coordinates:
+    /// The bounds of the tile's *total* data in global pixel coordinates:
     /// the core expanded by the overlap halo on every side.
     ///
-    /// Note that data bounds may extend beyond the dataset extent; missing
+    /// Note that total bounds may extend beyond the dataset extent; missing
     /// neighbor data is represented as no-data pixels.
     ///
     /// # Panics
     /// Never in practice: expanding a valid bounding box keeps it valid.
-    pub fn data_pixel_bounds(&self) -> GridBoundingBox2D {
-        let core = self.global_pixel_bounds();
+    pub fn total_pixel_bounds(&self) -> GridBoundingBox2D {
+        let core = self.core_pixel_bounds();
         if self.overlap.is_zero() {
             return core;
         }
@@ -561,7 +558,7 @@ impl TileInformation {
         self.global_upper_left_pixel_idx() + local_pixel_position
     }
 
-    pub fn tile_geo_transform(&self) -> GeoTransform {
+    pub fn core_geo_transform(&self) -> GeoTransform {
         let tile_upper_left_coord = self
             .global_geo_transform
             .grid_idx_to_pixel_upper_left_coordinate_2d(self.global_upper_left_pixel_idx());
@@ -574,7 +571,7 @@ impl TileInformation {
     }
 
     pub fn spatial_grid_definition(&self) -> SpatialGridDefinition {
-        SpatialGridDefinition::new(self.global_geo_transform, self.global_pixel_bounds())
+        SpatialGridDefinition::new(self.global_geo_transform, self.core_pixel_bounds())
     }
 
     pub fn tiling_strategy(&self) -> TilingStrategy {
@@ -757,7 +754,7 @@ mod tests {
         assert_eq!(tiles.len(), 2);
 
         for tile in tiles {
-            assert!(grid_bounds.intersects(&tile.global_pixel_bounds()));
+            assert!(grid_bounds.intersects(&tile.core_pixel_bounds()));
         }
     }
 
@@ -981,7 +978,7 @@ mod tests {
             geo_transform,
         );
         assert_eq!(no_overlap.core_pixel_bounds(), core);
-        assert_eq!(no_overlap.data_pixel_bounds(), core);
+        assert_eq!(no_overlap.total_pixel_bounds(), core);
 
         let overlapped = TileInformation::new_with_overlap(
             TileIdx::new_y_x(2, 1),
@@ -991,7 +988,7 @@ mod tests {
         );
         assert_eq!(overlapped.core_pixel_bounds(), core);
         assert_eq!(
-            overlapped.data_pixel_bounds(),
+            overlapped.total_pixel_bounds(),
             GridBoundingBox2D::new_min_max(2048 - 4, 3071 + 4, 1024 - 8, 2047 + 8).unwrap()
         );
     }
@@ -1015,7 +1012,7 @@ mod tests {
 
         // the data grid starts `overlap` pixels before the core anchor
         let data_ul_coordinate = geo_transform
-            .grid_idx_to_pixel_upper_left_coordinate_2d(info.data_pixel_bounds().min_index());
+            .grid_idx_to_pixel_upper_left_coordinate_2d(info.total_pixel_bounds().min_index());
         assert_eq!(
             data_ul_coordinate,
             Coordinate2D::new(40. - 3. * 10., -40. + 2. * 10.)
@@ -1043,10 +1040,21 @@ mod tests {
             tiles[0].core_pixel_bounds(),
             GridBoundingBox2D::new_min_max(0, 3, 0, 3).unwrap()
         );
-        // ... but its data extends into all eight neighboring core tiles
+        // ... but its total data extends into all eight neighboring core tiles
         assert_eq!(
-            tiles[0].data_pixel_bounds(),
+            tiles[0].total_pixel_bounds(),
             GridBoundingBox2D::new_min_max(-1, 4, -1, 4).unwrap()
+        );
+
+        // core-anchored convention: the halo sits at negative local indices, so the
+        // total (data) upper-left is the core upper-left shifted by the overlap.
+        let overlap = GridIdx([
+            tiles[0].overlap.axis_size_y() as isize,
+            tiles[0].overlap.axis_size_x() as isize,
+        ]);
+        assert_eq!(
+            tiles[0].total_pixel_bounds().min_index(),
+            tiles[0].core_pixel_bounds().min_index() - overlap
         );
     }
 }

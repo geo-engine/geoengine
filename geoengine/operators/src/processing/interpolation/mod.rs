@@ -478,7 +478,7 @@ where
     ) -> Result<Option<RasterQueryRectangle>> {
         // enlarge the spatial bounds in order to have the neighbor pixels for the interpolation
 
-        let tile_pixel_bounds = tile_info.global_pixel_bounds();
+        let tile_pixel_bounds = tile_info.core_pixel_bounds();
         let tile_spatial_bounds = self
             .output_geo_transform
             .grid_to_spatial_bounds(&tile_pixel_bounds);
@@ -555,7 +555,7 @@ impl<T: Pixel, I: InterpolationAlgorithm<GridBoundingBox2D, T>> FoldTileAccu
                 self.input_geo_transform,
                 &self.input_tile,
                 self.output_info.global_geo_transform,
-                self.output_info.global_pixel_bounds(),
+                self.output_info.core_pixel_bounds(),
             )
         })
         .await??;
@@ -602,7 +602,7 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<GridBoundingBox2D, T>>(
     let time_interval = query_rect.time_interval();
 
     crate::util::spawn_blocking(move || {
-        let tile_pixel_bounds = tile_info.global_pixel_bounds();
+        let tile_pixel_bounds = tile_info.core_pixel_bounds();
         let tile_spatial_bounds = output_geo_transform.grid_to_spatial_bounds(&tile_pixel_bounds);
         let input_pixel_bounds = input_geo_transform.spatial_to_grid_bounds(&tile_spatial_bounds);
         let enlarged_input_pixel_bounds = GridBoundingBox2D::new(

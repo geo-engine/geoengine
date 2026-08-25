@@ -1355,7 +1355,7 @@ mod tests {
             .await;
 
         // get the worldfile
-        // println!("{}", res[0].tile_geo_transform().worldfile_string());
+        // println!("{}", res[0].core_geo_transform().worldfile_string());
 
         // This check is against a tile produced by the operator itself. It was visually validated. TODO: rebuild when open issues are solved.
         // A perfect validation would be against a GDAL output generated like this:
