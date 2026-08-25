@@ -386,7 +386,7 @@ pub fn band_names_from_asset_v1_1_0(
 
 /// Derive band names from a STAC 1.1.0 `ItemAsset`, using the `bands` additional field.
 ///
-/// Prefers the asset_key when provided (e.g., "B01", "B02" from STAC collection item_assets keys).
+/// Prefers the `asset_key` when provided (e.g., "B01", "B02" from STAC collection `item_assets` keys).
 /// Falls back to band names from the `bands` field, or the asset title.
 pub fn band_names_from_item_asset_v1_1_0(
     asset: &stac::ItemAsset,
