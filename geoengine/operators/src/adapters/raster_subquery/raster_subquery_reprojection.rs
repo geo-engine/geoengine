@@ -97,7 +97,7 @@ where
             .state
             .out_spatial_grid
             .grid_bounds()
-            .intersection(&tile_info.global_pixel_bounds())
+            .intersection(&tile_info.core_pixel_bounds())
             .and_then(|b| b.intersection(&query_rect.spatial_bounds()));
 
         let valid_spatial_bounds = valid_pixel_bounds.map(|pb| {

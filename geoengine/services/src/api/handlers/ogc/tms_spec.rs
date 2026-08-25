@@ -1228,9 +1228,9 @@ mod tests {
                 provider
                     .tile_grid_bbox(&tiling_grid, 0, tile_row, tile_col)
                     .unwrap(),
-                tile_info.global_pixel_bounds(),
+                tile_info.core_pixel_bounds(),
                 "Tile row {tile_row}, tile col {tile_col}: Expected {}",
-                tile_info.global_pixel_bounds()
+                tile_info.core_pixel_bounds()
             );
 
             tile_col += 1;
@@ -1289,9 +1289,9 @@ mod tests {
                 provider
                     .tile_grid_bbox(&tiling_grid, 0, tile_row, tile_col)
                     .unwrap(),
-                tile_info.global_pixel_bounds(),
+                tile_info.core_pixel_bounds(),
                 "Tile row {tile_row}, tile col {tile_col}: Expected {}",
-                tile_info.global_pixel_bounds()
+                tile_info.core_pixel_bounds()
             );
 
             tile_col += 1;
@@ -1372,7 +1372,7 @@ mod tests {
                 provider
                     .tile_grid_bbox(&tiling_grid, 0, tile_row, tile_col)
                     .unwrap(),
-                tile_info.global_pixel_bounds(),
+                tile_info.core_pixel_bounds(),
                 "Tile row {tile_row}, tile col {tile_col}"
             );
 

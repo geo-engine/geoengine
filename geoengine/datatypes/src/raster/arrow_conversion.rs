@@ -1,4 +1,6 @@
-use super::{Grid2D, GridOrEmpty, GridOrEmpty2D, GridSize, Pixel, RasterTile2D, TypedGrid2D};
+use super::{
+    GeoTransform, Grid2D, GridOrEmpty, GridOrEmpty2D, GridSize, Pixel, RasterTile2D, TypedGrid2D,
+};
 use crate::{raster::RasterDataType, spatial_reference::SpatialReferenceOption, util::Result};
 use arrow::{
     array::{Array, ArrayRef, PrimitiveBuilder},
@@ -40,10 +42,22 @@ fn raster_tile_2d_to_arrow_record_batch<P: Pixel>(
     tile: RasterTile2D<P>,
     spatial_ref: SpatialReferenceOption,
 ) -> Result<RecordBatch> {
+    // The serialized worldfile describes the array's geographic extent, which
+    // includes the overlap halo; its origin is therefore the data corner (the
+    // core anchor shifted by the overlap), not the canonical core-anchored
+    // transform of the tile.
+    let data_origin = tile
+        .global_geo_transform
+        .grid_idx_to_pixel_upper_left_coordinate_2d(tile.global_data_upper_left_pixel_idx());
+    let data_geo_transform = GeoTransform::new(
+        data_origin,
+        tile.global_geo_transform.x_pixel_size(),
+        tile.global_geo_transform.y_pixel_size(),
+    );
     let metadata: HashMap<String, String> = [
         (
             GEO_TRANSFORM_KEY.to_string(),
-            serde_json::to_string(&tile.tile_geo_transform()).unwrap_or_default(),
+            serde_json::to_string(&data_geo_transform).unwrap_or_default(),
         ),
         (
             X_SIZE_KEY.to_string(),
