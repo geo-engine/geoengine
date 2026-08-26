@@ -155,7 +155,7 @@ where
         let [y, x] = self.core_axis_size();
         TileInformation::new_with_overlap(
             self.tile_position,
-            TileSize::new(y, x),
+            TileSize::new_y_x(y, x),
             self.global_geo_transform,
             self.overlap,
         )
@@ -778,7 +778,7 @@ mod tests {
             TimeInterval::default(),
             TileInformation::new_with_overlap(
                 TileIdx::new_y_x(2, 3),
-                TileSize(core_size),
+                TileSize::from(core_size),
                 geo_transform,
                 overlap,
             ),
@@ -832,7 +832,7 @@ mod tests {
             TimeInterval::default(),
             TileInformation::new_with_overlap(
                 TileIdx::new_y_x(2, 3),
-                TileSize(core_size),
+                TileSize::from(core_size),
                 geo_transform,
                 overlap,
             ),
@@ -949,7 +949,7 @@ mod tests {
             TimeInterval::default(),
             TileInformation::new_with_overlap(
                 TileIdx::new_y_x(0, 0),
-                TileSize::new(4, 4),
+                TileSize::new_y_x(4, 4),
                 geo_transform,
                 TileOverlap::new(1, 1),
             ),

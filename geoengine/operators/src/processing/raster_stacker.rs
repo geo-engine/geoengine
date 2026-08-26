@@ -470,7 +470,6 @@ mod tests {
     };
 
     use super::*;
-    use geoengine_datatypes::raster::TileSize;
 
     #[tokio::test]
     async fn it_stacks() {

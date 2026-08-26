@@ -504,7 +504,9 @@ mod tests {
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-    use geoengine_datatypes::raster::{Grid, GridShape2D, RasterDataType, TileIdx, TileOverlap, TileSize};
+    use geoengine_datatypes::raster::{
+        Grid, GridShape2D, RasterDataType, TileIdx, TileOverlap, TileSize,
+    };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 

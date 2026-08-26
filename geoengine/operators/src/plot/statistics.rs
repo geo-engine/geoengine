@@ -20,7 +20,8 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, PlotQueryRectangle,
     RasterQueryRectangle, SpatialResolution, partitions_extent, time_interval_extent,
 };
-use geoengine_datatypes::raster::{ConvertDataTypeParallel, GridOrEmpty};
+use geoengine_datatypes::raster::ConvertDataTypeParallel;
+use geoengine_datatypes::raster::{GridOrEmpty, GridSize};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use num_traits::AsPrimitive;
 use ordered_float::NotNan;
@@ -604,10 +605,7 @@ impl From<&StatisticsAggregator<f64>> for StatisticsOutput {
 mod tests {
     use geoengine_datatypes::collections::DataCollection;
     use geoengine_datatypes::primitives::{CacheHint, Coordinate2D, PlotSeriesSelection};
-    use geoengine_datatypes::raster::{
-        BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, RasterTile2D,
-        TileIdx, TileInformation, TileOverlap, TileSize, TilingSpecification,
-    };
+    use geoengine_datatypes::raster::{TileIdx, TileSize};
     use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
@@ -620,6 +618,10 @@ mod tests {
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::util::input::MultiRasterOrVectorOperator::Raster;
     use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, NoGeometry, TimeInterval};
+    use geoengine_datatypes::raster::{
+        BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, RasterTile2D,
+        TileInformation, TileOverlap, TilingSpecification,
+    };
     use geoengine_datatypes::spatial_reference::SpatialReference;
 
     #[test]

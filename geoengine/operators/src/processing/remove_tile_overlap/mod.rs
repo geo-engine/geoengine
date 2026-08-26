@@ -297,7 +297,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         geo_transform,
                         GridBoundingBox2D::new_min_max(0, 3, 0, 3).unwrap(),
-                        TileSize::new(2, 2),
+                        TileSize::new_y_x(2, 2),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -308,7 +308,7 @@ mod tests {
     fn mock_execution_context() -> MockExecutionContext {
         let mut context = MockExecutionContext::test_default();
         // mock tiles are 2x2 pixels
-        context.tiling_specification.tile_size = TileSize(GridShape2D::new_2d(2, 2));
+        context.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
         context
     }
 
@@ -339,7 +339,7 @@ mod tests {
         while let Some(tile) = stream.next().await {
             tiles.push(tile?);
         }
-        tiles.sort_by_key(|t| *t.tile_position.0.inner());
+        tiles.sort_by_key(|t| t.tile_position.grid_idx().0);
         Ok(tiles)
     }
 

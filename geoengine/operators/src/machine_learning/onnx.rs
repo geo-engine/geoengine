@@ -419,7 +419,7 @@ where
                 // shared between the skip path and the normal return below
                 let out_tile_info = TileInformation::new_with_overlap(
                     tile_position,
-                    TileSize(core),
+                    TileSize::from(core),
                     global_geo_transform,
                     self.halo_out,
                 );
@@ -1398,7 +1398,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(0, 0, 2, 2).unwrap(),
-                        TileSize::new(2, 2),
+                        TileSize::new_y_x(2, 2),
                     )
                     .with_tile_overlap(overlap),
                     bands: RasterBandDescriptors::new_single_band(),
@@ -1429,12 +1429,11 @@ mod tests {
             .ml_models
             .insert(model_name, ml_info((4, 4), (2, 2)));
 
-        let err = match onnx
+        let Err(err) = onnx
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
-        {
-            Ok(_) => panic!("expected initialization to fail"),
-            Err(err) => err,
+        else {
+            panic!("expected initialization to fail")
         };
         let msg = err.to_string();
         assert!(
@@ -1493,12 +1492,11 @@ mod tests {
             .ml_models
             .insert(model_name, ml_info((5, 5), (2, 2)));
 
-        let err = match onnx
+        let Err(err) = onnx
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
-        {
-            Ok(_) => panic!("expected initialization to fail"),
-            Err(err) => err,
+        else {
+            panic!("expected initialization to fail")
         };
         let msg = err.to_string();
         assert!(
@@ -1546,7 +1544,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(0, 5, 0, 5).unwrap(),
-                        TileSize::new(2, 2),
+                        TileSize::new_y_x(2, 2),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },

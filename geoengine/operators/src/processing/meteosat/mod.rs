@@ -1,9 +1,4 @@
-use geoengine_datatypes::raster::{
-    BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, GridOrEmpty2D, GridShape2D,
-    MaskedGrid2D, Pixel, RasterDataType, RasterProperties, RasterPropertiesEntry,
-    RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D, TileIdx, TileInformation,
-    TileOverlap, TileSize,
-};
+use geoengine_datatypes::raster::RasterPropertiesKey;
 
 mod radiance;
 mod reflectance;
@@ -51,6 +46,11 @@ mod test_util {
     use geoengine_datatypes::primitives::{
         ContinuousMeasurement, DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle,
         TimeGranularity, TimeInstance, TimeInterval, TimeStep,
+    };
+    use geoengine_datatypes::raster::{
+        BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, GridOrEmpty2D,
+        GridShape2D, MaskedGrid2D, Pixel, RasterDataType, RasterProperties, RasterPropertiesEntry,
+        RasterPropertiesEntryType, RasterTile2D, TileIdx, TileInformation, TileOverlap, TileSize,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
     use geoengine_datatypes::util::Identifier;
