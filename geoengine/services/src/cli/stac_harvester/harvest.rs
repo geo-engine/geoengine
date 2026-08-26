@@ -1634,6 +1634,7 @@ mod tests {
             api_url: "https://earth-search.aws.element84.com/v0".to_string(),
             collection_name: "sentinel-2-l2a".to_string(),
             s3_config: None,
+            authentication: None,
             time_dimension: geoengine_datatypes::primitives::TimeDimension::Regular(
                 geoengine_datatypes::primitives::RegularTimeDimension::new_with_epoch_origin(
                     geoengine_datatypes::primitives::TimeStep {

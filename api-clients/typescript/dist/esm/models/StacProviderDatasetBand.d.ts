@@ -8,6 +8,8 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import type { StacAssetBand } from './StacAssetBand';
+import type { RasterBandDescriptor } from './RasterBandDescriptor';
 /**
  *
  * @export
@@ -15,17 +17,18 @@
  */
 export interface StacProviderDatasetBand {
     /**
-     *
-     * @type {string}
+     * The band inside the STAC asset that this dataset band reads from
+     * (addressing: which asset file + which raster channel within it).
+     * @type {StacAssetBand}
      * @memberof StacProviderDatasetBand
      */
-    assetTitle: string;
+    assetBand: StacAssetBand;
     /**
-     *
-     * @type {string}
+     * The band descriptor of the resulting geo engine dataset layer.
+     * @type {RasterBandDescriptor}
      * @memberof StacProviderDatasetBand
      */
-    bandName?: string | null;
+    bandDescriptor: RasterBandDescriptor;
 }
 /**
  * Check if a given object implements the StacProviderDatasetBand interface.

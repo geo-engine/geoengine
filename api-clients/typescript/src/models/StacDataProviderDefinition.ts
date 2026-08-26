@@ -26,6 +26,13 @@ import {
     StacProviderDatasetToJSON,
     StacProviderDatasetToJSONTyped,
 } from './StacProviderDataset';
+import type { StacProviderAuthentication } from './StacProviderAuthentication';
+import {
+    StacProviderAuthenticationFromJSON,
+    StacProviderAuthenticationFromJSONTyped,
+    StacProviderAuthenticationToJSON,
+    StacProviderAuthenticationToJSONTyped,
+} from './StacProviderAuthentication';
 import type { TimeDimension } from './TimeDimension';
 import {
     TimeDimensionFromJSON,
@@ -90,6 +97,12 @@ export interface StacDataProviderDefinition {
     s3Config?: StacProviderS3Config | null;
     /**
      * 
+     * @type {StacProviderAuthentication}
+     * @memberof StacDataProviderDefinition
+     */
+    authentication?: StacProviderAuthentication | null;
+    /**
+     * 
      * @type {TimeDimension}
      * @memberof StacDataProviderDefinition
      */
@@ -106,6 +119,12 @@ export interface StacDataProviderDefinition {
      * @memberof StacDataProviderDefinition
      */
     queryTimeoutSecs?: number;
+    /**
+     * 
+     * @type {number}
+     * @memberof StacDataProviderDefinition
+     */
+    pageLimit?: number;
 }
 
 
@@ -151,9 +170,11 @@ export function StacDataProviderDefinitionFromJSONTyped(json: any, ignoreDiscrim
         'apiUrl': json['apiUrl'],
         'collectionName': json['collectionName'],
         's3Config': json['s3Config'] == null ? undefined : StacProviderS3ConfigFromJSON(json['s3Config']),
+        'authentication': json['authentication'] == null ? undefined : StacProviderAuthenticationFromJSON(json['authentication']),
         'timeDimension': TimeDimensionFromJSON(json['timeDimension']),
         'datasets': ((json['datasets'] as Array<any>).map(StacProviderDatasetFromJSON)),
         'queryTimeoutSecs': json['queryTimeoutSecs'] == null ? undefined : json['queryTimeoutSecs'],
+        'pageLimit': json['pageLimit'] == null ? undefined : json['pageLimit'],
     };
 }
 
@@ -176,9 +197,11 @@ export function StacDataProviderDefinitionToJSONTyped(value?: StacDataProviderDe
         'apiUrl': value['apiUrl'],
         'collectionName': value['collectionName'],
         's3Config': StacProviderS3ConfigToJSON(value['s3Config']),
+        'authentication': StacProviderAuthenticationToJSON(value['authentication']),
         'timeDimension': TimeDimensionToJSON(value['timeDimension']),
         'datasets': ((value['datasets'] as Array<any>).map(StacProviderDatasetToJSON)),
         'queryTimeoutSecs': value['queryTimeoutSecs'],
+        'pageLimit': value['pageLimit'],
     };
 }
 

@@ -10,6 +10,7 @@
  */
 import type { StacProviderS3Config } from './StacProviderS3Config';
 import type { StacProviderDataset } from './StacProviderDataset';
+import type { StacProviderAuthentication } from './StacProviderAuthentication';
 import type { TimeDimension } from './TimeDimension';
 /**
  *
@@ -67,6 +68,12 @@ export interface StacDataProviderDefinition {
     s3Config?: StacProviderS3Config | null;
     /**
      *
+     * @type {StacProviderAuthentication}
+     * @memberof StacDataProviderDefinition
+     */
+    authentication?: StacProviderAuthentication | null;
+    /**
+     *
      * @type {TimeDimension}
      * @memberof StacDataProviderDefinition
      */
@@ -83,6 +90,12 @@ export interface StacDataProviderDefinition {
      * @memberof StacDataProviderDefinition
      */
     queryTimeoutSecs?: number;
+    /**
+     *
+     * @type {number}
+     * @memberof StacDataProviderDefinition
+     */
+    pageLimit?: number;
 }
 /**
  * @export

@@ -1,5 +1,8 @@
 use super::common;
-use super::{StacDataProvider, StacProviderDataset, StacProviderS3Config, cache::StacQueryCache};
+use super::{
+    StacDataProvider, StacProviderDataset, StacProviderS3Config, auth::StacAuthentication,
+    cache::StacQueryCache,
+};
 use crate::error::Result;
 use crate::util::join_base_url_and_path;
 use crate::util::retry::{RetryPolicy, retry_http};
@@ -41,6 +44,7 @@ struct StacMultiBandMetaData {
     dataset: StacProviderDataset,
     page_limit: i64,
     client: reqwest::Client,
+    authentication: Option<StacAuthentication>,
     /// Shared query-result cache from the provider.
     query_cache: Arc<StacQueryCache>,
 }
@@ -59,6 +63,7 @@ enum StacQueryState {
 
 async fn query_stac_item_collection(
     client: &reqwest::Client,
+    authentication: Option<&StacAuthentication>,
     query_state: &StacQueryState,
 ) -> geoengine_operators::util::Result<(stac::ItemCollection, StacQueryState)> {
     let request_policy = RetryPolicy::new().stop_on_status(&[400, 404]);
@@ -74,14 +79,13 @@ async fn query_stac_item_collection(
 
             let item_collection: stac::ItemCollection = retry_http(
                 || async {
-                    client
-                        .get(query_url.clone())
-                        .query(query_params)
-                        .send()
-                        .await?
-                        .error_for_status()?
-                        .json()
-                        .await
+                    let request = client.get(query_url.clone()).query(query_params);
+                    let request = match authentication {
+                        Some(authentication) => authentication.authorize(request).await,
+                        None => request,
+                    };
+
+                    request.send().await?.error_for_status()?.json().await
                 },
                 &format!("Fetch STAC items from {query_url}"),
                 &request_policy,
@@ -117,13 +121,13 @@ async fn query_stac_item_collection(
 
             let item_collection: stac::ItemCollection = retry_http(
                 || async {
-                    client
-                        .get(next_url.clone())
-                        .send()
-                        .await?
-                        .error_for_status()?
-                        .json()
-                        .await
+                    let request = client.get(next_url.clone());
+                    let request = match authentication {
+                        Some(authentication) => authentication.authorize(request).await,
+                        None => request,
+                    };
+
+                    request.send().await?.error_for_status()?.json().await
                 },
                 &format!("Fetch next STAC page from {next_url}"),
                 &request_policy,
@@ -213,8 +217,12 @@ impl
         let mut time_steps = Vec::new();
 
         while !matches!(query_state, StacQueryState::Finished) {
-            let (item_collection, next_state) =
-                query_stac_item_collection(&self.client, &query_state).await?;
+            let (item_collection, next_state) = query_stac_item_collection(
+                &self.client,
+                self.authentication.as_ref(),
+                &query_state,
+            )
+            .await?;
 
             for item in item_collection.items {
                 self.process_stac_item(&item, &mut time_steps, &mut files)
@@ -643,6 +651,7 @@ impl
             dataset: dataset.clone(),
             page_limit: self.page_limit,
             client: self.client.clone(),
+            authentication: self.authentication.clone(),
             query_cache: self.query_cache.clone(),
         }))
     }
@@ -672,7 +681,12 @@ mod tests {
     use geoengine_operators::source::{
         MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
     };
-    use httptest::{Expectation, Server, matchers::request, responders};
+    use httptest::{
+        Expectation, Server, all_of,
+        matchers::{contains, request, url_decoded},
+        responders,
+    };
+    use std::time::Duration;
     use tokio_postgres::NoTls;
 
     fn make_stac_provider_def(
@@ -687,6 +701,7 @@ mod tests {
             api_url,
             collection_name: "sentinel-2-l2a".to_owned(),
             s3_config: None,
+            authentication: None,
             time_dimension: TimeDimension::Regular(RegularTimeDimension::new_with_epoch_origin(
                 TimeStep {
                     granularity: TimeGranularity::Days,
@@ -730,6 +745,159 @@ mod tests {
         let json_str =
             include_str!("../../../../../test_data/stac_responses/items/code-de-marburg.json");
         serde_json::from_str(json_str).expect("code-de-marburg.json should be valid JSON")
+    }
+
+    fn token_response(
+        access_token: &str,
+        refresh_token: &str,
+        expires_in: u64,
+        refresh_expires_in: u64,
+    ) -> serde_json::Value {
+        serde_json::json!({
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_in": expires_in,
+            "refresh_expires_in": refresh_expires_in,
+            "token_type": "Bearer",
+        })
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn authenticated_stac_requests_use_and_refresh_tokens() {
+        let server = Server::run();
+
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("POST", "/token"),
+                request::headers(contains((
+                    "content-type",
+                    "application/x-www-form-urlencoded"
+                ))),
+                request::body(url_decoded(all_of![
+                    contains(("grant_type", "password")),
+                    contains(("username", "test-user")),
+                    contains(("password", "test-password")),
+                    contains(("client_id", "code-de3-public")),
+                ])),
+            ])
+            .times(1)
+            .respond_with(responders::json_encoded(token_response(
+                "access-token-1",
+                "refresh-token-1",
+                1,
+                1,
+            ))),
+        );
+
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("POST", "/token"),
+                request::body(url_decoded(all_of![
+                    contains(("grant_type", "refresh_token")),
+                    contains(("refresh_token", "refresh-token-1")),
+                    contains(("client_id", "code-de3-public")),
+                ])),
+            ])
+            .times(1)
+            .respond_with(responders::json_encoded(token_response(
+                "access-token-2",
+                "refresh-token-2",
+                1,
+                1,
+            ))),
+        );
+
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("POST", "/token"),
+                request::body(url_decoded(all_of![
+                    contains(("grant_type", "refresh_token")),
+                    contains(("refresh_token", "refresh-token-2")),
+                    contains(("client_id", "code-de3-public")),
+                ])),
+            ])
+            .times(1)
+            .respond_with(responders::json_encoded(token_response(
+                "access-token-3",
+                "refresh-token-3",
+                3_600,
+                7_200,
+            ))),
+        );
+
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/initial-items"),
+                request::headers(contains(("authorization", "Bearer access-token-1"))),
+            ])
+            .times(1)
+            .respond_with(responders::json_encoded(stac_items_response())),
+        );
+
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/next-items"),
+                request::headers(contains(("authorization", "Bearer access-token-1"))),
+            ])
+            .times(1)
+            .respond_with(responders::json_encoded(stac_items_response())),
+        );
+
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/refreshed-items"),
+                request::headers(contains(("authorization", "Bearer access-token-3"))),
+            ])
+            .times(1)
+            .respond_with(responders::json_encoded(stac_items_response())),
+        );
+
+        let client = reqwest::Client::new();
+        let authentication = StacAuthentication::initialize(
+            client.clone(),
+            crate::datasets::external::stac::StacProviderAuthentication {
+                endpoint: server.url_str("/token"),
+                username: "test-user".to_owned(),
+                password: "test-password".to_owned(),
+            },
+        )
+        .await
+        .expect("initial password grant should succeed");
+
+        let initial_query = StacQueryState::FirstPage {
+            query_url: Url::parse(&server.url_str("/initial-items")).unwrap(),
+            query_params: vec![],
+        };
+        query_stac_item_collection(&client, Some(&authentication), &initial_query)
+            .await
+            .expect("initial authenticated STAC request should succeed");
+
+        let next_page_query = StacQueryState::NextPage {
+            next_url: Url::parse(&server.url_str("/next-items")).unwrap(),
+        };
+        query_stac_item_collection(&client, Some(&authentication), &next_page_query)
+            .await
+            .expect("authenticated STAC pagination request should succeed");
+
+        tokio::time::timeout(Duration::from_secs(4), async {
+            loop {
+                if authentication.access_token().await == "access-token-3" {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        })
+        .await
+        .expect("both access and refresh tokens should rotate before they expire");
+
+        let refreshed_query = StacQueryState::FirstPage {
+            query_url: Url::parse(&server.url_str("/refreshed-items")).unwrap(),
+            query_params: vec![],
+        };
+        query_stac_item_collection(&client, Some(&authentication), &refreshed_query)
+            .await
+            .expect("refreshed authenticated STAC request should succeed");
     }
 
     /// Replicates the steps from `test_ndvi.http` without making real web requests:
@@ -888,6 +1056,7 @@ mod tests {
             api_url: server.url_str("/"),
             collection_name: "sentinel-2-l2a".to_owned(),
             s3_config: None,
+            authentication: None,
             time_dimension: TimeDimension::Regular(RegularTimeDimension::new_with_epoch_origin(
                 TimeStep {
                     granularity: TimeGranularity::Days,

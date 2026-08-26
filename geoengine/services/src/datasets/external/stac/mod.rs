@@ -13,6 +13,7 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+mod auth;
 mod cache;
 pub(crate) mod common;
 mod listing;
@@ -32,6 +33,7 @@ pub struct StacDataProviderDefinition {
     pub api_url: String,
     pub collection_name: String,
     pub s3_config: Option<StacProviderS3Config>,
+    pub authentication: Option<StacProviderAuthentication>,
     pub time_dimension: TimeDimension, // TODO: should this be on dataset level?
     pub datasets: Vec<StacProviderDataset>,
     /// Timeout in seconds for outgoing STAC API HTTP requests.
@@ -55,6 +57,14 @@ pub struct StacProviderS3Config {
     pub endpoint: String,
     pub access_key: Option<String>,
     pub secret_key: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
+#[postgres(name = "StacProviderAuthentication")]
+pub struct StacProviderAuthentication {
+    pub endpoint: String,
+    pub username: String,
+    pub password: String,
 }
 
 /// A geo engine dataset derived from a STAC collection.
@@ -140,7 +150,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
         if self.time_dimension == TimeDimension::Irregular {
             return Err(crate::error::Error::StacIrregularTimeDimensionNotSupported);
         }
-        Ok(Box::new(StacDataProvider::new(
+        let mut provider = StacDataProvider::new(
             self.id,
             self.name,
             self.description,
@@ -151,7 +161,16 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
             self.datasets,
             self.page_limit,
             self.query_timeout_secs,
-        )))
+        );
+
+        if let Some(authentication) = self.authentication {
+            provider.authentication = Some(
+                auth::StacAuthentication::initialize(provider.client.clone(), authentication)
+                    .await?,
+            );
+        }
+
+        Ok(Box::new(provider))
     }
 
     fn type_name(&self) -> &'static str {
@@ -189,6 +208,15 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
                     }
                 }
 
+                if let (Some(current_authentication), Some(new_authentication)) =
+                    (&self.authentication, &mut new.authentication)
+                    && new_authentication.password == SECRET_REPLACEMENT
+                {
+                    new_authentication
+                        .password
+                        .clone_from(&current_authentication.password);
+                }
+
                 TypedDataProviderDefinition::StacDataProviderDefinition(new)
             }
             _ => new,
@@ -209,6 +237,7 @@ pub struct StacDataProvider {
     page_limit: i64,
     /// Shared HTTP client, reused across all requests for this provider.
     client: reqwest::Client,
+    authentication: Option<auth::StacAuthentication>,
     /// In-memory cache for STAC query results (tile files), keyed by dataset
     /// name and spatial/temporal query bounds.
     query_cache: Arc<StacQueryCache>,
@@ -243,6 +272,7 @@ impl StacDataProvider {
             datasets,
             page_limit,
             client,
+            authentication: None,
             query_cache: Arc::new(StacQueryCache::default()),
         }
     }

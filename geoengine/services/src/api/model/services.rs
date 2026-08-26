@@ -990,6 +990,38 @@ impl From<crate::datasets::external::stac::StacProviderS3Config> for StacProvide
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct StacProviderAuthentication {
+    pub endpoint: String,
+    pub username: String,
+    pub password: Secret<String>,
+}
+
+impl From<StacProviderAuthentication>
+    for crate::datasets::external::stac::StacProviderAuthentication
+{
+    fn from(value: StacProviderAuthentication) -> Self {
+        Self {
+            endpoint: value.endpoint,
+            username: value.username,
+            password: value.password.0,
+        }
+    }
+}
+
+impl From<crate::datasets::external::stac::StacProviderAuthentication>
+    for StacProviderAuthentication
+{
+    fn from(value: crate::datasets::external::stac::StacProviderAuthentication) -> Self {
+        Self {
+            endpoint: value.endpoint,
+            username: value.username,
+            password: Secret(value.password),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct StacAssetBand {
     pub asset_title: String,
     pub band_name: Option<String>,
@@ -1118,6 +1150,7 @@ pub struct StacDataProviderDefinition {
     pub api_url: String,
     pub collection_name: String,
     pub s3_config: Option<StacProviderS3Config>,
+    pub authentication: Option<StacProviderAuthentication>,
     pub time_dimension: TimeDimension,
     pub datasets: Vec<StacProviderDataset>,
     /// Timeout in seconds for outgoing STAC API HTTP requests.
@@ -1147,6 +1180,7 @@ impl From<StacDataProviderDefinition>
             api_url: value.api_url,
             collection_name: value.collection_name,
             s3_config: value.s3_config.map(Into::into),
+            authentication: value.authentication.map(Into::into),
             time_dimension: value.time_dimension.into(),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
             page_limit: value.page_limit,
@@ -1168,6 +1202,7 @@ impl From<crate::datasets::external::stac::StacDataProviderDefinition>
             api_url: value.api_url,
             collection_name: value.collection_name,
             s3_config: value.s3_config.map(Into::into),
+            authentication: value.authentication.map(Into::into),
             time_dimension: value.time_dimension.into(),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
             page_limit: value.page_limit,
@@ -1483,8 +1518,8 @@ impl TryIntoHeaderPair for ComputationId {
 #[cfg(test)]
 mod tests {
     use super::{
-        SpatialResolution, StacDataProviderDefinition, StacProviderS3Config,
-        TypedDataProviderDefinition,
+        SpatialResolution, StacDataProviderDefinition, StacProviderAuthentication,
+        StacProviderS3Config, TypedDataProviderDefinition,
     };
     use crate::api::model::services::SECRET_REPLACEMENT;
     use geoengine_datatypes::test_data;
@@ -1537,6 +1572,27 @@ mod tests {
                 "endpoint":"https://example-s3.local",
                 "accessKey": SECRET_REPLACEMENT,
                 "secretKey": SECRET_REPLACEMENT
+            })
+        );
+    }
+
+    #[test]
+    fn stac_authentication_password_is_redacted_in_api_conversion() {
+        let internal = crate::datasets::external::stac::StacProviderAuthentication {
+            endpoint: "https://identity.example/token".to_owned(),
+            username: "test-user".to_owned(),
+            password: "test-password".to_owned(),
+        };
+
+        let api: StacProviderAuthentication = internal.into();
+        let api_json = serde_json::to_value(&api).expect("api config must serialize to json");
+
+        assert_eq!(
+            api_json,
+            serde_json::json!({
+                "endpoint": "https://identity.example/token",
+                "username": "test-user",
+                "password": SECRET_REPLACEMENT,
             })
         );
     }

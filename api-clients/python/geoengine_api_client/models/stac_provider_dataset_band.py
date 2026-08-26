@@ -17,8 +17,10 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Any, ClassVar, Dict, List
+from geoengine_api_client.models.raster_band_descriptor import RasterBandDescriptor
+from geoengine_api_client.models.stac_asset_band import StacAssetBand
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -26,9 +28,9 @@ class StacProviderDatasetBand(BaseModel):
     """
     StacProviderDatasetBand
     """ # noqa: E501
-    asset_title: StrictStr = Field(alias="assetTitle")
-    band_name: Optional[StrictStr] = Field(default=None, alias="bandName")
-    __properties: ClassVar[List[str]] = ["assetTitle", "bandName"]
+    asset_band: StacAssetBand = Field(description="The band inside the STAC asset that this dataset band reads from (addressing: which asset file + which raster channel within it).", alias="assetBand")
+    band_descriptor: RasterBandDescriptor = Field(description="The band descriptor of the resulting geo engine dataset layer.", alias="bandDescriptor")
+    __properties: ClassVar[List[str]] = ["assetBand", "bandDescriptor"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -69,11 +71,12 @@ class StacProviderDatasetBand(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if band_name (nullable) is None
-        # and model_fields_set contains the field
-        if self.band_name is None and "band_name" in self.model_fields_set:
-            _dict['bandName'] = None
-
+        # override the default output from pydantic by calling `to_dict()` of asset_band
+        if self.asset_band:
+            _dict['assetBand'] = self.asset_band.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of band_descriptor
+        if self.band_descriptor:
+            _dict['bandDescriptor'] = self.band_descriptor.to_dict()
         return _dict
 
     @classmethod
@@ -86,8 +89,8 @@ class StacProviderDatasetBand(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "assetTitle": obj.get("assetTitle"),
-            "bandName": obj.get("bandName")
+            "assetBand": StacAssetBand.from_dict(obj["assetBand"]) if obj.get("assetBand") is not None else None,
+            "bandDescriptor": RasterBandDescriptor.from_dict(obj["bandDescriptor"]) if obj.get("bandDescriptor") is not None else None
         })
         return _obj
 

@@ -304,7 +304,9 @@ __all__ = [
     "SpatialReferenceSpecification",
     "SpatialResolution",
     "StacApiRetries",
+    "StacAssetBand",
     "StacDataProviderDefinition",
+    "StacProviderAuthentication",
     "StacProviderDataset",
     "StacProviderDatasetBand",
     "StacProviderS3Config",
@@ -697,7 +699,9 @@ from geoengine_api_client.models.spatial_partition2_d import SpatialPartition2D 
 from geoengine_api_client.models.spatial_reference_specification import SpatialReferenceSpecification as SpatialReferenceSpecification
 from geoengine_api_client.models.spatial_resolution import SpatialResolution as SpatialResolution
 from geoengine_api_client.models.stac_api_retries import StacApiRetries as StacApiRetries
+from geoengine_api_client.models.stac_asset_band import StacAssetBand as StacAssetBand
 from geoengine_api_client.models.stac_data_provider_definition import StacDataProviderDefinition as StacDataProviderDefinition
+from geoengine_api_client.models.stac_provider_authentication import StacProviderAuthentication as StacProviderAuthentication
 from geoengine_api_client.models.stac_provider_dataset import StacProviderDataset as StacProviderDataset
 from geoengine_api_client.models.stac_provider_dataset_band import StacProviderDatasetBand as StacProviderDatasetBand
 from geoengine_api_client.models.stac_provider_s3_config import StacProviderS3Config as StacProviderS3Config

@@ -12331,6 +12331,16 @@
               }
             ]
           },
+          "authentication": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StacProviderAuthentication"
+              }
+            ]
+          },
           "timeDimension": {
             "$ref": "#/components/schemas/TimeDimension"
           },
@@ -12348,6 +12358,25 @@
           "pageLimit": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "StacProviderAuthentication": {
+        "type": "object",
+        "required": [
+          "endpoint",
+          "username",
+          "password"
+        ],
+        "properties": {
+          "endpoint": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "$ref": "#/components/schemas/Secret_String"
           }
         }
       },
