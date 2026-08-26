@@ -694,7 +694,6 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
                 wrapX: false,
             });
 
-            // eslint-disable-next-line @typescript-eslint/no-misused-promises
             source.setLoader(async (_extent, _resolution, sourceProjection): Promise<Array<OlFeatureLike>> => {
                 const dataProjection = 'EPSG:4326';
                 const response = await fetch('assets/fallback-base-layer/ne_50m_land.fgb');

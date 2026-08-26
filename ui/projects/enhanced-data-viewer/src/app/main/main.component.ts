@@ -431,7 +431,7 @@ export class MainComponent {
             return {
                 dataConnectorId: id.providerId,
                 layerId: id.layerId,
-            } as DataSourceLayer;
+            };
         },
     });
 
