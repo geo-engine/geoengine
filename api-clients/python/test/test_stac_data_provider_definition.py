@@ -46,6 +46,10 @@ class TestStacDataProviderDefinition(unittest.TestCase):
                     endpoint = '', 
                     access_key = null, 
                     secret_key = null, ),
+                authentication = geoengine_api_client.models.stac_provider_authentication.StacProviderAuthentication(
+                    endpoint = '', 
+                    username = '', 
+                    password = '', ),
                 time_dimension = None,
                 datasets = [
                     geoengine_api_client.models.stac_provider_dataset.StacProviderDataset(
@@ -74,11 +78,12 @@ class TestStacDataProviderDefinition(unittest.TestCase):
                             descriptor = 'source', ), 
                         bands = [
                             geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
-                                asset_title = '', 
-                                band_name = '', )
+                                asset_band = null, 
+                                band_descriptor = null, )
                             ], )
                     ],
-                query_timeout_secs = 56
+                query_timeout_secs = 56,
+                page_limit = 56
             )
         else:
             return StacDataProviderDefinition(
@@ -116,8 +121,8 @@ class TestStacDataProviderDefinition(unittest.TestCase):
                             descriptor = 'source', ), 
                         bands = [
                             geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
-                                asset_title = '', 
-                                band_name = '', )
+                                asset_band = null, 
+                                band_descriptor = null, )
                             ], )
                     ],
         )

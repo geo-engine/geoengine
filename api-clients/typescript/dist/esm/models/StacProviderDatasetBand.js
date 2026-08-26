@@ -10,11 +10,15 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { StacAssetBandFromJSON, StacAssetBandToJSON, } from './StacAssetBand';
+import { RasterBandDescriptorFromJSON, RasterBandDescriptorToJSON, } from './RasterBandDescriptor';
 /**
  * Check if a given object implements the StacProviderDatasetBand interface.
  */
 export function instanceOfStacProviderDatasetBand(value) {
-    if (!('assetTitle' in value) || value['assetTitle'] === undefined)
+    if (!('assetBand' in value) || value['assetBand'] === undefined)
+        return false;
+    if (!('bandDescriptor' in value) || value['bandDescriptor'] === undefined)
         return false;
     return true;
 }
@@ -26,8 +30,8 @@ export function StacProviderDatasetBandFromJSONTyped(json, ignoreDiscriminator) 
         return json;
     }
     return {
-        'assetTitle': json['assetTitle'],
-        'bandName': json['bandName'] == null ? undefined : json['bandName'],
+        'assetBand': StacAssetBandFromJSON(json['assetBand']),
+        'bandDescriptor': RasterBandDescriptorFromJSON(json['bandDescriptor']),
     };
 }
 export function StacProviderDatasetBandToJSON(json) {
@@ -38,7 +42,7 @@ export function StacProviderDatasetBandToJSONTyped(value, ignoreDiscriminator = 
         return value;
     }
     return {
-        'assetTitle': value['assetTitle'],
-        'bandName': value['bandName'],
+        'assetBand': StacAssetBandToJSON(value['assetBand']),
+        'bandDescriptor': RasterBandDescriptorToJSON(value['bandDescriptor']),
     };
 }

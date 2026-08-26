@@ -60,8 +60,8 @@ class TestStacProviderDataset(unittest.TestCase):
                     descriptor = 'source', ),
                 bands = [
                     geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
-                        asset_title = '', 
-                        band_name = '', )
+                        asset_band = null, 
+                        band_descriptor = null, )
                     ]
             )
         else:
@@ -91,8 +91,8 @@ class TestStacProviderDataset(unittest.TestCase):
                     descriptor = 'source', ),
                 bands = [
                     geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
-                        asset_title = '', 
-                        band_name = '', )
+                        asset_band = null, 
+                        band_descriptor = null, )
                     ],
         )
         """
