@@ -8,6 +8,8 @@ docs/AddDatasetTile.md
 docs/AddLayer.md
 docs/AddLayerCollection.md
 docs/AddRole.md
+docs/AddTileOverlap.md
+docs/AddTileOverlapParameters.md
 docs/Aggregation.md
 docs/AggregationCount.md
 docs/AggregationFirst.md
@@ -293,6 +295,8 @@ docs/Reflectance.md
 docs/ReflectanceParameters.md
 docs/Regular.md
 docs/RegularTimeDimension.md
+docs/RemoveTileOverlap.md
+docs/RemoveTileOverlapParameters.md
 docs/Rename.md
 docs/RenameBands.md
 docs/Reprojection.md
@@ -481,6 +485,8 @@ src/models/add_dataset_tile.rs
 src/models/add_layer.rs
 src/models/add_layer_collection.rs
 src/models/add_role.rs
+src/models/add_tile_overlap.rs
+src/models/add_tile_overlap_parameters.rs
 src/models/aggregation.rs
 src/models/aggregation_count.rs
 src/models/aggregation_first.rs
@@ -756,6 +762,8 @@ src/models/reflectance.rs
 src/models/reflectance_parameters.rs
 src/models/regular.rs
 src/models/regular_time_dimension.rs
+src/models/remove_tile_overlap.rs
+src/models/remove_tile_overlap_parameters.rs
 src/models/rename.rs
 src/models/rename_bands.rs
 src/models/reprojection.rs

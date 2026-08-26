@@ -116,7 +116,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new(3, 2),
+                tile_size: TileSize::new_y_x(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -143,7 +143,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(1, 1),
-                tile_size: TileSize::new(3, 2),
+                tile_size: TileSize::new_y_x(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -182,11 +182,11 @@ mod tests {
                 overlap: TileOverlap::new(1, 1),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize([2, 2].into()),
+                tile_size: TileSize::new_y_x(2, 2),
             },
             0,
             grid,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
 
         // Core pixel (0,0) -> stored (1,1) = 5
@@ -227,11 +227,11 @@ mod tests {
                 overlap: TileOverlap::new(1, 1),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize([2, 2].into()),
+                tile_size: TileSize::new_y_x(2, 2),
             },
             0,
             grid,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
 
         let transform = raster_tile.core_geo_transform();

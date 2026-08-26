@@ -441,12 +441,12 @@ mod tests {
                     GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                     GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 ),
-                TileSize::new(2, 2),
+                TileSize::new_y_x(2, 2),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_spec = TilingSpecification::with_zero_origin(TileSize::new(2, 2));
+        let tiling_spec = TilingSpecification::with_zero_origin(TileSize::new_y_x(2, 2));
 
         let tiling_grid = result_descriptor.tiling_grid_definition();
         let tiling_strat = tiling_grid.tiling_strategy();

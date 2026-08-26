@@ -511,7 +511,7 @@ mod tests {
     use tokio_postgres::NoTls;
 
     fn tiling_spec() -> TilingSpecification {
-        TilingSpecification::with_zero_origin(TileSize::new(600, 600))
+        TilingSpecification::with_zero_origin(TileSize::new_y_x(600, 600))
     }
 
     #[ge_context::test]

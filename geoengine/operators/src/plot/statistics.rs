@@ -604,10 +604,7 @@ impl From<&StatisticsAggregator<f64>> for StatisticsOutput {
 mod tests {
     use geoengine_datatypes::collections::DataCollection;
     use geoengine_datatypes::primitives::{CacheHint, Coordinate2D, PlotSeriesSelection};
-    use geoengine_datatypes::raster::{
-        BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, RasterTile2D,
-        TileIdx, TileInformation, TileOverlap, TileSize, TilingSpecification,
-    };
+    use geoengine_datatypes::raster::{TileIdx, TileSize};
     use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
@@ -620,6 +617,10 @@ mod tests {
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::util::input::MultiRasterOrVectorOperator::Raster;
     use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, NoGeometry, TimeInterval};
+    use geoengine_datatypes::raster::{
+        BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, RasterTile2D,
+        TileInformation, TileOverlap, TilingSpecification,
+    };
     use geoengine_datatypes::spatial_reference::SpatialReference;
 
     #[test]
@@ -650,7 +651,7 @@ mod tests {
 
     #[tokio::test]
     async fn empty_raster_input() {
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let statistics = Statistics {
@@ -688,7 +689,7 @@ mod tests {
 
     #[tokio::test]
     async fn single_raster_implicit_name() {
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -696,7 +697,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.grid_shape().bounding_box(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -773,7 +774,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn two_rasters_implicit_names() {
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -781,7 +782,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.grid_shape().bounding_box(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -888,7 +889,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn two_rasters_explicit_names() {
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -896,7 +897,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.grid_shape().bounding_box(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1002,7 +1003,7 @@ mod tests {
 
     #[tokio::test]
     async fn two_rasters_explicit_names_incomplete() {
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1010,7 +1011,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.grid_shape().bounding_box(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1081,7 +1082,7 @@ mod tests {
 
     #[tokio::test]
     async fn vector_no_column() {
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
@@ -1176,7 +1177,7 @@ mod tests {
 
     #[tokio::test]
     async fn vector_single_column() {
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
@@ -1263,7 +1264,7 @@ mod tests {
 
     #[tokio::test]
     async fn vector_two_columns() {
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
@@ -1358,7 +1359,7 @@ mod tests {
 
     #[tokio::test]
     async fn raster_percentile() {
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let result_descriptor = RasterResultDescriptor {
@@ -1368,7 +1369,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 TestDefault::test_default(),
                 GridBoundingBox2D::new_min_max(-90, 89, -180, 179).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1446,7 +1447,7 @@ mod tests {
 
     #[tokio::test]
     async fn vector_percentiles() {
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![

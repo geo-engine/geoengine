@@ -352,7 +352,7 @@ mod tests {
 
     #[tokio::test]
     async fn single_raster() {
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -450,7 +450,7 @@ mod tests {
                     overlap: TileOverlap::zero(),
                     global_geo_transform: TestDefault::test_default(),
                     tile_position: TileIdx::new_y_x(0, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                 },
                 0,
                 Grid2D::new([3, 2].into(), values).unwrap().into(),
@@ -472,7 +472,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridShape2D::new_2d(3, 2).bounding_box(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -488,7 +488,7 @@ mod tests {
 
     #[tokio::test]
     async fn raster_series() {
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 

@@ -406,7 +406,7 @@ mod tests {
                 GeoTransform::new((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([10979, 10979]))
                     .expect("grid bounds"),
-                TileSize::new(512, 512),
+                TileSize::new_y_x(512, 512),
             ),
             bands: vec![],
         }

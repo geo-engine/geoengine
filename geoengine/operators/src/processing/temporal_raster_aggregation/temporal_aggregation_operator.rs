@@ -576,7 +576,7 @@ mod tests {
     async fn test_min() {
         let raster_tiles = make_raster();
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -587,7 +587,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, 0], [-1, 2]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -649,7 +649,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -664,7 +664,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -679,7 +679,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -694,7 +694,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -709,7 +709,7 @@ mod tests {
     async fn test_max() {
         let raster_tiles = make_raster();
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -720,7 +720,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -782,7 +782,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -797,7 +797,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -812,7 +812,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -827,7 +827,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -842,7 +842,7 @@ mod tests {
     async fn test_max_with_no_data() {
         let raster_tiles = make_raster(); // TODO: switch to make_raster_with_no_data?
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -853,7 +853,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -915,7 +915,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -930,7 +930,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -945,7 +945,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -960,7 +960,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -975,7 +975,7 @@ mod tests {
     async fn test_max_with_no_data_but_ignoring_it() {
         let raster_tiles = make_raster(); // TODO: switch to make_raster_with_no_data?
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -986,7 +986,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1048,7 +1048,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1063,7 +1063,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1078,7 +1078,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1093,7 +1093,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1106,7 +1106,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_only_no_data() {
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1117,7 +1117,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new_min_max(-3, -1, 0, 2).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1130,7 +1130,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1190,7 +1190,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1204,7 +1204,7 @@ mod tests {
     async fn test_first_with_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1215,7 +1215,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1277,7 +1277,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1293,7 +1293,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1315,7 +1315,7 @@ mod tests {
     async fn test_last_with_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1326,7 +1326,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1387,7 +1387,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1403,7 +1403,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1425,7 +1425,7 @@ mod tests {
     async fn test_last() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1436,7 +1436,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1499,7 +1499,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1522,7 +1522,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1536,7 +1536,7 @@ mod tests {
     async fn test_first() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1547,7 +1547,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1609,7 +1609,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1625,7 +1625,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1647,7 +1647,7 @@ mod tests {
     async fn test_mean_nodata() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1658,7 +1658,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1720,7 +1720,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1736,7 +1736,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1758,7 +1758,7 @@ mod tests {
     async fn test_mean_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1769,7 +1769,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1831,7 +1831,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1847,7 +1847,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1870,7 +1870,7 @@ mod tests {
     async fn test_sum_without_nodata() {
         let raster_tiles = make_raster();
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1881,7 +1881,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1943,7 +1943,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1957,7 +1957,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1971,7 +1971,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1985,7 +1985,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2002,7 +2002,7 @@ mod tests {
     async fn test_sum_nodata() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2013,7 +2013,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -2075,7 +2075,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2091,7 +2091,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2113,7 +2113,7 @@ mod tests {
     async fn test_sum_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2124,7 +2124,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -2186,7 +2186,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2202,7 +2202,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2225,7 +2225,7 @@ mod tests {
     async fn test_sum_with_larger_data_type() {
         let raster_tiles = make_raster();
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2236,7 +2236,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -2309,7 +2309,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2326,7 +2326,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2343,7 +2343,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2360,7 +2360,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2381,7 +2381,7 @@ mod tests {
     async fn test_count_without_nodata() {
         let raster_tiles = make_raster();
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2392,7 +2392,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -2454,7 +2454,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2468,7 +2468,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2482,7 +2482,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2496,7 +2496,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2513,7 +2513,7 @@ mod tests {
     async fn test_count_nodata() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2524,7 +2524,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -2586,7 +2586,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2602,7 +2602,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2624,7 +2624,7 @@ mod tests {
     async fn test_count_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2635,7 +2635,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -2697,7 +2697,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2713,7 +2713,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2735,7 +2735,7 @@ mod tests {
     async fn test_query_not_aligned_with_window_reference() {
         let raster_tiles = make_raster();
 
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2746,7 +2746,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -2807,7 +2807,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2822,7 +2822,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2839,7 +2839,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2851,7 +2851,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2863,7 +2863,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2875,7 +2875,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2887,7 +2887,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2899,7 +2899,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2911,7 +2911,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2923,7 +2923,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2941,7 +2941,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2953,7 +2953,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2972,7 +2972,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2991,7 +2991,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -3003,7 +3003,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -3022,7 +3022,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new(3, 2),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -3047,7 +3047,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -3128,7 +3128,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -3142,7 +3142,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     1,
@@ -3156,7 +3156,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -3170,7 +3170,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     1,
@@ -3184,7 +3184,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -3198,7 +3198,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     1,
@@ -3212,7 +3212,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -3226,7 +3226,7 @@ mod tests {
                     TileInformation {
                         overlap: TileOverlap::zero(),
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new(3, 2),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     1,
@@ -3253,7 +3253,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -3332,7 +3332,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };

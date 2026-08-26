@@ -1027,7 +1027,7 @@ where
 
                             let source_query = self.source.query(
                                 RasterQueryRectangle::new(
-                                    job.tile_info.global_pixel_bounds(),
+                                    job.tile_info.core_pixel_bounds(),
                                     time_interval,
                                     BandSelection::new_single(job.band)
                                 ),
@@ -1572,7 +1572,7 @@ mod tests {
         GridBoundingBox2D,
         TilingSpecification,
     ) {
-        let tile_size = TileSize::new(2, 2);
+        let tile_size = TileSize::new_y_x(2, 2);
         let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let geo_transform = GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.);
 
@@ -1599,7 +1599,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 geo_transform,
                 tile_size.grid_shape().bounding_box(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };

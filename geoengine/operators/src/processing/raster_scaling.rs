@@ -340,7 +340,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_unscale() {
-        let tile_size = TileSize::new(2, 2);
+        let tile_size = TileSize::new_y_x(2, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -348,7 +348,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.grid_shape().bounding_box(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -453,7 +453,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_scale() {
-        let tile_size = TileSize::new(2, 2);
+        let tile_size = TileSize::new_y_x(2, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -461,7 +461,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.grid_shape().bounding_box(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };

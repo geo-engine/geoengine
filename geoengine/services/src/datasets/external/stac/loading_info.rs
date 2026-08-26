@@ -926,7 +926,7 @@ mod tests {
             .unwrap();
             let tile = TileInformation::new(
                 TileIdx::new_y_x(0, 0),
-                TileSize::new(2, 2),
+                TileSize::new_y_x(2, 2),
                 GeoTransform::new(bounds.upper_left(), 10., -10.),
             );
             // The second lookup must reuse the cached file parameters without another request.
@@ -980,7 +980,7 @@ mod tests {
         ];
         let tile = TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new(1000, 1000),
+            TileSize::new_y_x(1000, 1000),
             GeoTransform::new(bounds.upper_left(), 10., -10.),
         );
 
@@ -1279,7 +1279,7 @@ mod tests {
         let tile_geo_transform = GeoTransform::new((499_980.0, 5_800_020.0).into(), 10.0, -10.0);
         let tile = TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new(10980, 10980),
+            TileSize::new_y_x(10980, 10980),
             tile_geo_transform,
         );
 

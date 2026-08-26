@@ -645,7 +645,7 @@ mod tests {
 
         let in_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 1.0, -1.0);
         let out_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 2.0, -2.0);
-        let tile_size = TileSize::new(4, 4);
+        let tile_size = TileSize::new_y_x(4, 4);
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(
             TilingSpecification::with_zero_origin(tile_size),
@@ -737,7 +737,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 in_geo_transform,
                 GridBoundingBox2D::new_min_max(0, 7, 0, 7).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -829,7 +829,7 @@ mod tests {
 
         let in_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 1.0, -1.0);
         let out_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 3.0, -3.0);
-        let tile_size = TileSize::new(3, 3);
+        let tile_size = TileSize::new_y_x(3, 3);
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(
             TilingSpecification::with_zero_origin(tile_size),
@@ -987,7 +987,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 in_geo_transform,
                 GridBoundingBox2D::new_min_max(0, 8, 0, 8).unwrap(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };

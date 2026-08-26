@@ -50,6 +50,8 @@ __all__ = [
     "AddLayer",
     "AddLayerCollection",
     "AddRole",
+    "AddTileOverlap",
+    "AddTileOverlapParameters",
     "Aggregation",
     "AggregationCount",
     "AggregationFirst",
@@ -324,6 +326,8 @@ __all__ = [
     "ReflectanceParameters",
     "Regular",
     "RegularTimeDimension",
+    "RemoveTileOverlap",
+    "RemoveTileOverlapParameters",
     "Rename",
     "RenameBands",
     "Reprojection",
@@ -518,6 +522,8 @@ from geoengine_api_client.models.add_dataset_tile import AddDatasetTile as AddDa
 from geoengine_api_client.models.add_layer import AddLayer as AddLayer
 from geoengine_api_client.models.add_layer_collection import AddLayerCollection as AddLayerCollection
 from geoengine_api_client.models.add_role import AddRole as AddRole
+from geoengine_api_client.models.add_tile_overlap import AddTileOverlap as AddTileOverlap
+from geoengine_api_client.models.add_tile_overlap_parameters import AddTileOverlapParameters as AddTileOverlapParameters
 from geoengine_api_client.models.aggregation import Aggregation as Aggregation
 from geoengine_api_client.models.aggregation_count import AggregationCount as AggregationCount
 from geoengine_api_client.models.aggregation_first import AggregationFirst as AggregationFirst
@@ -792,6 +798,8 @@ from geoengine_api_client.models.reflectance import Reflectance as Reflectance
 from geoengine_api_client.models.reflectance_parameters import ReflectanceParameters as ReflectanceParameters
 from geoengine_api_client.models.regular import Regular as Regular
 from geoengine_api_client.models.regular_time_dimension import RegularTimeDimension as RegularTimeDimension
+from geoengine_api_client.models.remove_tile_overlap import RemoveTileOverlap as RemoveTileOverlap
+from geoengine_api_client.models.remove_tile_overlap_parameters import RemoveTileOverlapParameters as RemoveTileOverlapParameters
 from geoengine_api_client.models.rename import Rename as Rename
 from geoengine_api_client.models.rename_bands import RenameBands as RenameBands
 from geoengine_api_client.models.reprojection import Reprojection as Reprojection

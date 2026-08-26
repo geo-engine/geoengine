@@ -9,6 +9,8 @@ docs/AddDatasetTile.md
 docs/AddLayer.md
 docs/AddLayerCollection.md
 docs/AddRole.md
+docs/AddTileOverlap.md
+docs/AddTileOverlapParameters.md
 docs/Aggregation.md
 docs/AggregationCount.md
 docs/AggregationFirst.md
@@ -294,6 +296,8 @@ docs/Reflectance.md
 docs/ReflectanceParameters.md
 docs/Regular.md
 docs/RegularTimeDimension.md
+docs/RemoveTileOverlap.md
+docs/RemoveTileOverlapParameters.md
 docs/Rename.md
 docs/RenameBands.md
 docs/Reprojection.md
@@ -485,6 +489,8 @@ geoengine_api_client/models/add_dataset_tile.py
 geoengine_api_client/models/add_layer.py
 geoengine_api_client/models/add_layer_collection.py
 geoengine_api_client/models/add_role.py
+geoengine_api_client/models/add_tile_overlap.py
+geoengine_api_client/models/add_tile_overlap_parameters.py
 geoengine_api_client/models/aggregation.py
 geoengine_api_client/models/aggregation_count.py
 geoengine_api_client/models/aggregation_first.py
@@ -759,6 +765,8 @@ geoengine_api_client/models/reflectance.py
 geoengine_api_client/models/reflectance_parameters.py
 geoengine_api_client/models/regular.py
 geoengine_api_client/models/regular_time_dimension.py
+geoengine_api_client/models/remove_tile_overlap.py
+geoengine_api_client/models/remove_tile_overlap_parameters.py
 geoengine_api_client/models/rename.py
 geoengine_api_client/models/rename_bands.py
 geoengine_api_client/models/reprojection.py
@@ -929,6 +937,8 @@ test/test_add_dataset_tile.py
 test/test_add_layer.py
 test/test_add_layer_collection.py
 test/test_add_role.py
+test/test_add_tile_overlap.py
+test/test_add_tile_overlap_parameters.py
 test/test_aggregation.py
 test/test_aggregation_count.py
 test/test_aggregation_first.py
@@ -1214,6 +1224,8 @@ test/test_reflectance.py
 test/test_reflectance_parameters.py
 test/test_regular.py
 test/test_regular_time_dimension.py
+test/test_remove_tile_overlap.py
+test/test_remove_tile_overlap_parameters.py
 test/test_rename.py
 test/test_rename_bands.py
 test/test_reprojection.py

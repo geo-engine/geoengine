@@ -374,7 +374,7 @@ mod tests {
         empty: bool,
         measurement: Option<Measurement>,
     ) -> Result<RasterTile2D<f32>> {
-        let tile_size = TileSize::new(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);

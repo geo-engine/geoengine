@@ -736,7 +736,7 @@ impl TileMatrixSetProvider for WebMercatorQuadTMS {
     }
 
     fn tile_size(&self, _matrix_id: u8) -> TileSize {
-        TileSize::new(
+        TileSize::new_y_x(
             Self::WIDTH_AND_HEIGHT.get() as usize,
             Self::WIDTH_AND_HEIGHT.get() as usize,
         )
@@ -951,6 +951,7 @@ mod tests {
         ge_context,
         layers::{layer::Layer, listing::LayerCollectionProvider},
     };
+    use float_cmp::assert_approx_eq;
     use geoengine_datatypes::raster::GeoTransform;
     use geoengine_operators::engine::ExecutionContext;
     use tokio_postgres::NoTls;
@@ -1021,7 +1022,7 @@ mod tests {
             geo_transform: GeoTransform::new((0.0, 0.0).into(), 1.0, -1.0),
             pixel_bounds: GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([15, 31]))
                 .unwrap(),
-            tile_size: TileSize::new(4, 8),
+            tile_size: TileSize::new_y_x(4, 8),
         };
 
         let bbox = tile_grid_bbox(&tiling_grid, 0, 1, 2).unwrap();
@@ -1731,25 +1732,43 @@ mod tests {
         // Verify TMS level 0
         let tile_matrices = tms_spec.tile_matrices().unwrap();
         let level_0 = tile_matrices.first().unwrap();
-        assert_eq!(
-            level_0,
-            &TileMatrix {
-                id: 0.to_string(),
-                title: None,
-                description: None,
-                keywords: vec![],
-                scale_denominator: 407_286_157.394_767_17,
-                cell_size: 114_040.124_070_534_79,
-                corner_of_origin: CornerOfOrigin::TopLeft,
-                point_of_origin: [-20_037_508.342_789_244, 20_100_884.943_711_97],
-                tile_width: to_non_zero_u16(512),
-                tile_height: to_non_zero_u16(512),
-                matrix_width: to_non_zero_u64(1),
-                matrix_height: to_non_zero_u64(1),
-                variable_matrix_widths: vec![],
-            },
-            "Level 0 properties should match expected values"
+        // ponytail: the coordinate projector is swappable, so the last digits of the
+        // retiled origin can differ between implementations; compare the geometry
+        // field-wise with a tolerance instead of bit-exactly.
+        assert_eq!(level_0.id, "0");
+        assert_eq!(level_0.title, None);
+        assert_eq!(level_0.description, None);
+        assert_eq!(level_0.keywords, Vec::<String>::new());
+        assert_approx_eq!(
+            f64,
+            level_0.scale_denominator,
+            407_286_157.394_767_17,
+            epsilon = 0.1
         );
+        assert_approx_eq!(
+            f64,
+            level_0.cell_size,
+            114_040.124_070_534_79,
+            epsilon = 0.001
+        );
+        assert_eq!(level_0.corner_of_origin, CornerOfOrigin::TopLeft);
+        assert_approx_eq!(
+            f64,
+            level_0.point_of_origin[0],
+            -20_037_508.342_789_244,
+            epsilon = 0.001
+        );
+        assert_approx_eq!(
+            f64,
+            level_0.point_of_origin[1],
+            20_100_884.943_711_97,
+            epsilon = 0.001
+        );
+        assert_eq!(level_0.tile_width, to_non_zero_u16(512));
+        assert_eq!(level_0.tile_height, to_non_zero_u16(512));
+        assert_eq!(level_0.matrix_width, to_non_zero_u64(1));
+        assert_eq!(level_0.matrix_height, to_non_zero_u64(1));
+        assert!(level_0.variable_matrix_widths.is_empty());
 
         let initialized_operator =
             get_initialized_raster_operator::<PostgresSessionContext<NoTls>>(

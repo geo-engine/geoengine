@@ -2655,7 +2655,8 @@ mod tests {
                 }
             };
 
-            let tiling_specification = TilingSpecification::with_zero_origin(TileSize::new(2, 2));
+            let tiling_specification =
+                TilingSpecification::with_zero_origin(TileSize::new_y_x(2, 2));
 
             let query_rectangle = RasterQueryRectangle::new(
                 GridBoundingBox2D::new_min_max(-2, -1, 0, 1).unwrap(),

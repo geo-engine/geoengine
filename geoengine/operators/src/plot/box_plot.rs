@@ -987,13 +987,13 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
         let tiling_specification =
-            geoengine_datatypes::raster::TilingSpecification::with_zero_origin(TileSize::new(
+            geoengine_datatypes::raster::TilingSpecification::with_zero_origin(TileSize::new_y_x(
                 tile_size.y(),
                 tile_size.x(),
             ));
@@ -1010,7 +1010,7 @@ mod tests {
                             overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
-                            tile_size: TileSize::new(tile_size.y(), tile_size.x()),
+                            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
                         },
                         0,
                         EmptyGrid2D::<u8>::new(tile_size).into(),
@@ -1062,13 +1062,13 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
         let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new(tile_size.y(), tile_size.x()));
+            TilingSpecification::with_zero_origin(TileSize::new_y_x(tile_size.y(), tile_size.x()));
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
@@ -1081,7 +1081,7 @@ mod tests {
                             overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
-                            tile_size: TileSize::new(tile_size.y(), tile_size.x()),
+                            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
                         },
                         0,
                         Grid2D::new(tile_size, vec![0, 0, 0, 0, 0, 0])
@@ -1138,13 +1138,13 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
         let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new(tile_size.y(), tile_size.x()));
+            TilingSpecification::with_zero_origin(TileSize::new_y_x(tile_size.y(), tile_size.x()));
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
@@ -1157,7 +1157,7 @@ mod tests {
                             overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
-                            tile_size: TileSize::new(tile_size.y(), tile_size.x()),
+                            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
                         },
                         0,
                         EmptyGrid2D::<u8>::new(tile_size).into(),
@@ -1209,13 +1209,13 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
         let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new(tile_size.y(), tile_size.x()));
+            TilingSpecification::with_zero_origin(TileSize::new_y_x(tile_size.y(), tile_size.x()));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = BoxPlot {
             params: BoxPlotParams {
@@ -1229,7 +1229,7 @@ mod tests {
                             overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
-                            tile_size: TileSize::new(tile_size.y(), tile_size.x()),
+                            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
                         },
                         0,
                         Grid2D::new(tile_size, vec![4; 6]).unwrap().into(),
@@ -1282,13 +1282,13 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
         let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new(tile_size.y(), tile_size.x()));
+            TilingSpecification::with_zero_origin(TileSize::new_y_x(tile_size.y(), tile_size.x()));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = BoxPlot {
@@ -1303,7 +1303,7 @@ mod tests {
                             overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
-                            tile_size: TileSize::new(tile_size.y(), tile_size.x()),
+                            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
                         },
                         0,
                         MaskedGrid2D::new(
@@ -1365,13 +1365,13 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
         let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new(tile_size.y(), tile_size.x()));
+            TilingSpecification::with_zero_origin(TileSize::new_y_x(tile_size.y(), tile_size.x()));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = BoxPlot {
@@ -1386,7 +1386,7 @@ mod tests {
                             overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
-                            tile_size: TileSize::new(tile_size.y(), tile_size.x()),
+                            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
                         },
                         0,
                         Grid2D::new(tile_size, vec![1, 2, 0, 4, 0, 6, 7, 0])
@@ -1441,13 +1441,13 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
-                TileSize::new(256, 256),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
         let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new(tile_size.y(), tile_size.x()));
+            TilingSpecification::with_zero_origin(TileSize::new_y_x(tile_size.y(), tile_size.x()));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let src = MockRasterSource {
@@ -1458,7 +1458,7 @@ mod tests {
                         overlap: TileOverlap::zero(),
                         global_geo_transform: TestDefault::test_default(),
                         tile_position: TileIdx::new_y_x(0, 0),
-                        tile_size: TileSize::new(tile_size.y(), tile_size.x()),
+                        tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
                     },
                     0,
                     MaskedGrid2D::new(

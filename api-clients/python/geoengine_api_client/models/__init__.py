@@ -19,6 +19,8 @@ from geoengine_api_client.models.add_dataset_tile import AddDatasetTile
 from geoengine_api_client.models.add_layer import AddLayer
 from geoengine_api_client.models.add_layer_collection import AddLayerCollection
 from geoengine_api_client.models.add_role import AddRole
+from geoengine_api_client.models.add_tile_overlap import AddTileOverlap
+from geoengine_api_client.models.add_tile_overlap_parameters import AddTileOverlapParameters
 from geoengine_api_client.models.aggregation import Aggregation
 from geoengine_api_client.models.aggregation_count import AggregationCount
 from geoengine_api_client.models.aggregation_first import AggregationFirst
@@ -293,6 +295,8 @@ from geoengine_api_client.models.reflectance import Reflectance
 from geoengine_api_client.models.reflectance_parameters import ReflectanceParameters
 from geoengine_api_client.models.regular import Regular
 from geoengine_api_client.models.regular_time_dimension import RegularTimeDimension
+from geoengine_api_client.models.remove_tile_overlap import RemoveTileOverlap
+from geoengine_api_client.models.remove_tile_overlap_parameters import RemoveTileOverlapParameters
 from geoengine_api_client.models.rename import Rename
 from geoengine_api_client.models.rename_bands import RenameBands
 from geoengine_api_client.models.reprojection import Reprojection
