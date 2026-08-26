@@ -779,13 +779,13 @@ mod tests {
             TimeInterval::default(),
             TileInformation::new_with_overlap(
                 TileIdx::new_y_x(2, 3),
-                TileSize(core_size),
+                TileSize::from(core_size),
                 geo_transform,
                 overlap,
             ),
             0,
             GridOrEmpty::from(Grid2D::new_filled(padded_size, 7_u8)),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
 
         // core: [tile_position * core_size, + core_size - 1]
@@ -833,13 +833,13 @@ mod tests {
             TimeInterval::default(),
             TileInformation::new_with_overlap(
                 TileIdx::new_y_x(2, 3),
-                TileSize(core_size),
+                TileSize::from(core_size),
                 geo_transform,
                 overlap,
             ),
             0,
             GridOrEmpty::from(Grid2D::new_filled(padded_size, 7_u8)),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
 
         // core: (0, 0) is the core's upper-left pixel
@@ -950,7 +950,7 @@ mod tests {
             TimeInterval::default(),
             TileInformation::new_with_overlap(
                 TileIdx::new_y_x(0, 0),
-                TileSize::new(4, 4),
+                TileSize::new_y_x(4, 4),
                 geo_transform,
                 TileOverlap::new(1, 1),
             ),

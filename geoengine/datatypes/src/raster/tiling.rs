@@ -726,7 +726,7 @@ mod tests {
             -2.095_475_792_884_826_7E-8,
         );
 
-        let strat = TilingStrategy::new(TileSize::new(600, 600), geo_transform);
+        let strat = TilingStrategy::new(TileSize::new_y_x(600, 600), geo_transform);
 
         let ul_idx = strat
             .geo_transform
@@ -871,7 +871,7 @@ mod tests {
         let tiling_grid = TilingGrid::from_spatial_grid_with_origin(
             source,
             (70., -170.).into(),
-            TileSize::new(4, 4),
+            TileSize::new_y_x(4, 4),
         )
         .unwrap();
 
@@ -908,7 +908,7 @@ mod tests {
 
     #[test]
     fn tile_overlap_validation() {
-        let tile_size = TileSize::new(512, 512);
+        let tile_size = TileSize::new_y_x(512, 512);
 
         assert!(TileOverlap::zero().is_valid_for_tile_size(tile_size));
         assert!(TileOverlap::new(512, 255).is_valid_for_tile_size(tile_size));
@@ -924,7 +924,7 @@ mod tests {
 
         let no_overlap = TileInformation::new(
             TileIdx::new_y_x(2, 1),
-            TileSize::new(1024, 1024),
+            TileSize::new_y_x(1024, 1024),
             geo_transform,
         );
         assert_eq!(no_overlap.core_pixel_bounds(), core);
@@ -932,7 +932,7 @@ mod tests {
 
         let overlapped = TileInformation::new_with_overlap(
             TileIdx::new_y_x(2, 1),
-            TileSize::new(1024, 1024),
+            TileSize::new_y_x(1024, 1024),
             geo_transform,
             TileOverlap::new(4, 8),
         );
@@ -950,7 +950,7 @@ mod tests {
         let overlap = TileOverlap::new(2, 3);
         let info = TileInformation::new_with_overlap(
             TileIdx::new_y_x(1, 1),
-            TileSize::new(4, 4),
+            TileSize::new_y_x(4, 4),
             geo_transform,
             overlap,
         );

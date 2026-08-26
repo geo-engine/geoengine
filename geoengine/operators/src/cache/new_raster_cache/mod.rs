@@ -1027,7 +1027,7 @@ where
 
                             let source_query = self.source.query(
                                 RasterQueryRectangle::new(
-                                    job.tile_info.global_pixel_bounds(),
+                                    job.tile_info.core_pixel_bounds(),
                                     time_interval,
                                     BandSelection::new_single(job.band)
                                 ),
