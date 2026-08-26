@@ -170,6 +170,16 @@ class RasterOperator(BaseModel):
             error_messages.append(f"Error! Input type `{type(v)}` is not `RasterTypeConversion`")
         else:
             match += 1
+        # validate data type: RemoveTileOverlap
+        if not isinstance(v, RemoveTileOverlap):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `RemoveTileOverlap`")
+        else:
+            match += 1
+        # validate data type: AddTileOverlap
+        if not isinstance(v, AddTileOverlap):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `AddTileOverlap`")
+        else:
+            match += 1
         # validate data type: ReTile
         if not isinstance(v, ReTile):
             error_messages.append(f"Error! Input type `{type(v)}` is not `ReTile`")
@@ -235,6 +245,11 @@ class RasterOperator(BaseModel):
         _data_type = json.loads(json_str).get(_discriminator_property)
         if not _data_type:
             raise ValueError(f"Failed to lookup data type from the field `{_discriminator_property}` in the input.")
+
+        # check if data type is `AddTileOverlap`
+        if _data_type == "AddTileOverlap":
+            instance.actual_instance = AddTileOverlap.from_json(json_str)
+            return instance
 
         # check if data type is `BandFilter`
         if _data_type == "BandFilter":
@@ -324,6 +339,11 @@ class RasterOperator(BaseModel):
         # check if data type is `Reflectance`
         if _data_type == "Reflectance":
             instance.actual_instance = Reflectance.from_json(json_str)
+            return instance
+
+        # check if data type is `RemoveTileOverlap`
+        if _data_type == "RemoveTileOverlap":
+            instance.actual_instance = RemoveTileOverlap.from_json(json_str)
             return instance
 
         # check if data type is `Reprojection`
@@ -430,6 +450,18 @@ class RasterOperator(BaseModel):
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
+        # deserialize data into RemoveTileOverlap
+        try:
+            instance.actual_instance = RemoveTileOverlap.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into AddTileOverlap
+        try:
+            instance.actual_instance = AddTileOverlap.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
         # deserialize data into ReTile
         try:
             instance.actual_instance = ReTile.from_json(json_str)
@@ -513,6 +545,7 @@ class RasterOperator(BaseModel):
         """Returns the string representation of the actual instance"""
         return pprint.pformat(self.model_dump())
 
+from geoengine_api_client.models.add_tile_overlap import AddTileOverlap
 from geoengine_api_client.models.band_filter import BandFilter
 from geoengine_api_client.models.band_neighborhood_aggregate import BandNeighborhoodAggregate
 from geoengine_api_client.models.bandwise_expression import BandwiseExpression
@@ -529,6 +562,7 @@ from geoengine_api_client.models.raster_type_conversion import RasterTypeConvers
 from geoengine_api_client.models.rasterization import Rasterization
 from geoengine_api_client.models.re_tile import ReTile
 from geoengine_api_client.models.reflectance import Reflectance
+from geoengine_api_client.models.remove_tile_overlap import RemoveTileOverlap
 from geoengine_api_client.models.reprojection import Reprojection
 from geoengine_api_client.models.temperature import Temperature
 from geoengine_api_client.models.temporal_raster_aggregation import TemporalRasterAggregation

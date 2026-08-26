@@ -17,6 +17,7 @@ exports.RasterOperatorFromJSONTyped = RasterOperatorFromJSONTyped;
 exports.RasterOperatorToJSON = RasterOperatorToJSON;
 exports.RasterOperatorToJSONTyped = RasterOperatorToJSONTyped;
 exports.instanceOfRasterOperator = instanceOfRasterOperator;
+const AddTileOverlap_1 = require("./AddTileOverlap");
 const BandFilter_1 = require("./BandFilter");
 const BandNeighborhoodAggregate_1 = require("./BandNeighborhoodAggregate");
 const BandwiseExpression_1 = require("./BandwiseExpression");
@@ -35,6 +36,7 @@ const RasterTypeConversion_1 = require("./RasterTypeConversion");
 const Rasterization_1 = require("./Rasterization");
 const ReTile_1 = require("./ReTile");
 const Reflectance_1 = require("./Reflectance");
+const RemoveTileOverlap_1 = require("./RemoveTileOverlap");
 const Reprojection_1 = require("./Reprojection");
 const Temperature_1 = require("./Temperature");
 const TemporalRasterAggregation_1 = require("./TemporalRasterAggregation");
@@ -47,6 +49,8 @@ function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     switch (json['type']) {
+        case 'AddTileOverlap':
+            return Object.assign({}, (0, AddTileOverlap_1.AddTileOverlapFromJSONTyped)(json, true), { type: 'AddTileOverlap' });
         case 'BandFilter':
             return Object.assign({}, (0, BandFilter_1.BandFilterFromJSONTyped)(json, true), { type: 'BandFilter' });
         case 'BandNeighborhoodAggregate':
@@ -83,6 +87,8 @@ function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, (0, ReTile_1.ReTileFromJSONTyped)(json, true), { type: 'ReTile' });
         case 'Reflectance':
             return Object.assign({}, (0, Reflectance_1.ReflectanceFromJSONTyped)(json, true), { type: 'Reflectance' });
+        case 'RemoveTileOverlap':
+            return Object.assign({}, (0, RemoveTileOverlap_1.RemoveTileOverlapFromJSONTyped)(json, true), { type: 'RemoveTileOverlap' });
         case 'Reprojection':
             return Object.assign({}, (0, Reprojection_1.ReprojectionFromJSONTyped)(json, true), { type: 'Reprojection' });
         case 'Temperature':
@@ -103,6 +109,8 @@ function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     switch (value['type']) {
+        case 'AddTileOverlap':
+            return Object.assign({}, (0, AddTileOverlap_1.AddTileOverlapToJSON)(value), { type: 'AddTileOverlap' });
         case 'BandFilter':
             return Object.assign({}, (0, BandFilter_1.BandFilterToJSON)(value), { 'type': 'BandFilter' });
         case 'BandNeighborhoodAggregate':
