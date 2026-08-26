@@ -21,7 +21,7 @@
                         class="mat-select-{{ i }}"
                         [value]="selectedLayer"
                         (selectionChange)="updateLayer(i, $event.value)"
-                        (onBlur)="touched.emit(true)"
+                        (onBlur)="wasTouched.set(true)"
                     >
                         @for (layer of filteredLayers.value(); track layer.id) {
                             <mat-option class="mat-option-{{ i }}" [value]="layer">{{ layer.name }}</mat-option>

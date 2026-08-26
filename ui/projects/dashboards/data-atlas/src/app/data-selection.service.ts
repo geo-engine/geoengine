@@ -111,7 +111,7 @@ export class DataSelectionService {
             tap(() => {
                 this._rasterLayer.next(layer);
                 this.timeSteps.next(timeSteps);
-                this.projectService.setTime(timeSteps[0]);
+                void this.projectService.setTime(timeSteps[0]);
                 this.dataRange.next(dataRange);
             }),
         );
@@ -141,7 +141,7 @@ export class DataSelectionService {
             tap(() => {
                 this._vectorLayer.next(layer);
                 this.timeSteps.next(timeSteps);
-                this.projectService.setTime(timeSteps[0]);
+                void this.projectService.setTime(timeSteps[0]);
             }),
         );
     }

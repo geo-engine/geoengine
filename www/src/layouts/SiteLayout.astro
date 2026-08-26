@@ -3,12 +3,13 @@ import '../styles/global.css';
 
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
+import Favicons from '../components/Favicons.astro';
 ---
 
 <html lang="en">
     <head>
         <meta charset="utf-8" />
-        <link rel="icon" type="image/svg+xml" href="/favicon.png" />
+        <Favicons />
         <meta name="viewport" content="width=device-width" />
         <meta name="generator" content={Astro.generator} />
         <title>Geo Engine</title>
@@ -20,7 +21,7 @@ import Footer from '../components/Footer.astro';
 
         <!-- Preline UI -->
         <script>
-            import {HSStaticMethods} from 'preline/dist/preline.js';
+            import {HSStaticMethods} from 'preline/non-auto';
 
             // Explicitly calling a method from the import prevents tree-shaking
             const init = () => {

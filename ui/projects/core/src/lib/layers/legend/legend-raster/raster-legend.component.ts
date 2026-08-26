@@ -181,7 +181,7 @@ export class RasterLegendComponent {
         effect(() => {
             const layer = this.layer();
             untracked(() => {
-                firstValueFrom(this.projectService.getRasterLayerMetadata(layer)).then((metadata) => {
+                void firstValueFrom(this.projectService.getRasterLayerMetadata(layer)).then((metadata) => {
                     const bands = metadata.bands;
                     const rasterColorizer = layer.symbology.rasterColorizer;
 

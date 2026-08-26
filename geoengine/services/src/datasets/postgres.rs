@@ -80,6 +80,67 @@ pub struct DatasetMetaData<'m> {
     pub result_descriptor: TypedResultDescriptor,
 }
 
+fn try_get_dataset_by_key_operators<T>(
+    row: &tokio_postgres::Row,
+    index: &str,
+    dataset_id: &DatasetId,
+) -> geoengine_operators::util::Result<T>
+where
+    for<'a> T: postgres_types::FromSql<'a> + Send + Sync + 'static,
+{
+    row.try_get(index).map_err(|error| {
+        tracing::error!(
+            dataset_id = %dataset_id,
+            column = ?index,
+            error = %error,
+            "Malformed dataset value in PostgreSQL row."
+        );
+        geoengine_operators::error::Error::MetaData {
+            source: Box::new(error),
+        }
+    })
+}
+
+fn try_get_dataset_by_index_operators<T>(
+    row: &tokio_postgres::Row,
+    index: usize,
+    dataset_id: &DatasetId,
+) -> geoengine_operators::util::Result<T>
+where
+    for<'a> T: postgres_types::FromSql<'a> + Send + Sync + 'static,
+{
+    row.try_get(index).map_err(|error| {
+        tracing::error!(
+            dataset_id = %dataset_id,
+            column = index,
+            error = %error,
+            "Malformed dataset value in PostgreSQL row."
+        );
+        geoengine_operators::error::Error::MetaData {
+            source: Box::new(error),
+        }
+    })
+}
+
+fn try_get_dataset_by_index<T>(
+    row: &tokio_postgres::Row,
+    index: usize,
+    dataset_id: &DatasetId,
+) -> Result<T>
+where
+    for<'a> T: postgres_types::FromSql<'a> + Send + Sync + 'static,
+{
+    row.try_get(index).map_err(|error| {
+        tracing::error!(
+            dataset_id = %dataset_id,
+            column = index,
+            error = %error,
+            "Malformed dataset value in PostgreSQL row."
+        );
+        error::Error::TokioPostgres { source: error }
+    })
+}
+
 #[derive(Debug, Clone, ToSql, FromSql)]
 pub struct FileUpload {
     pub id: FileId,
@@ -356,7 +417,7 @@ where
             .query_one(&stmt, &[&self.session.user.id, dataset])
             .await?;
 
-        Ok(row.get(0))
+        try_get_dataset_by_index::<MetaDataDefinition>(&row, 0, dataset)
     }
 
     async fn resolve_dataset_name_to_id(
@@ -507,7 +568,8 @@ where
                 source: Box::new(e),
             })?;
 
-        let meta_data: MetaDataDefinition = row.get("meta_data");
+        let meta_data: MetaDataDefinition =
+            try_get_dataset_by_key_operators(&row, "meta_data", &id)?;
 
         let MetaDataDefinition::OgrMetaData(meta_data) = meta_data else {
             return Err(geoengine_operators::error::Error::MetaData {
@@ -593,7 +655,7 @@ where
                 source: Box::new(e),
             })?;
 
-        let meta_data: MetaDataDefinition = row.get(0);
+        let meta_data: MetaDataDefinition = try_get_dataset_by_index_operators(&row, 0, &id)?;
 
         Ok(match meta_data {
             MetaDataDefinition::GdalMetaDataRegular(m) => Box::new(m),
@@ -680,14 +742,14 @@ where
                 source: Box::new(e),
             })?;
 
-        let meta_data: MetaDataDefinition = row.get(0);
+        let meta_data: MetaDataDefinition = try_get_dataset_by_index_operators(&row, 0, &id)?;
 
         let result_descriptor = match meta_data {
             MetaDataDefinition::GdalMultiBand(b) => b.result_descriptor,
             _ => return Err(geoengine_operators::error::Error::DataIdTypeMissMatch),
         };
 
-        let data_path: DataPath = row.get(1);
+        let data_path: DataPath = try_get_dataset_by_index_operators(&row, 1, &id)?;
 
         Ok(Box::new(MultiBandGdalLoadingInfoProvider {
             dataset_id: id,

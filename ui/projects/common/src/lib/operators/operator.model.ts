@@ -387,14 +387,7 @@ export interface TemporalRasterAggregationDict extends OperatorDict {
 export type TimeInstanceDict = string;
 
 export type TemporalRasterAggregationDictAgregationType =
-    | 'min'
-    | 'max'
-    | 'first'
-    | 'last'
-    | 'mean'
-    | 'sum'
-    | 'count'
-    | 'percentileEstimate';
+    'min' | 'max' | 'first' | 'last' | 'mean' | 'sum' | 'count' | 'percentileEstimate';
 
 export interface RasterStackerDict extends OperatorDict {
     type: 'RasterStacker';

@@ -28,7 +28,7 @@ def __init__(dataset_prefix,
 
 Create a new RasterWorkflowGdalWriter instance.
 
-#### close_current_dataset
+#### close\_current\_dataset
 
 ```python
 def close_current_dataset()
@@ -36,7 +36,7 @@ def close_current_dataset()
 
 Close the current dataset
 
-#### create_gdal_geo_transform_width_height
+#### create\_gdal\_geo\_transform\_width\_height
 
 ```python
 def create_gdal_geo_transform_width_height(query: QueryRectangle)
@@ -44,7 +44,7 @@ def create_gdal_geo_transform_width_height(query: QueryRectangle)
 
 Create the tiling geo transform, width and height for the current query.
 
-#### query_and_write
+#### query\_and\_write
 
 ```python
 async def query_and_write(query: RasterQueryRectangle, skip_empty_times=True)

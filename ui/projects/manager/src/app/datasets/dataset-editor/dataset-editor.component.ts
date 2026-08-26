@@ -1,4 +1,4 @@
-import {ChangeDetectorRef, Component, effect, inject, input, linkedSignal, output, viewChild} from '@angular/core';
+import {ChangeDetectorRef, Component, effect, inject, input, linkedSignal, output, viewChild, ChangeDetectionStrategy} from '@angular/core';
 import {
     AbstractControl,
     FormControl,
@@ -57,6 +57,7 @@ export interface DatasetForm {
     selector: 'geoengine-manager-dataset-editor',
     templateUrl: './dataset-editor.component.html',
     styleUrl: './dataset-editor.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         MatCard,
         MatCardHeader,

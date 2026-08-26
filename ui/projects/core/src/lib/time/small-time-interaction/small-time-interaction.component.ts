@@ -39,14 +39,14 @@ export class SmallTimeInteractionComponent {
         const time = await this.projectService.getTimeOnce();
 
         const updatedTime = time.add(this.timeStepDuration().durationAmount, this.timeStepDuration().durationUnit);
-        this.projectService.setTime(updatedTime);
+        void this.projectService.setTime(updatedTime);
     }
 
     async timeBackwards(): Promise<void> {
         const time = await this.projectService.getTimeOnce();
 
         const updatedTime = time.subtract(this.timeStepDuration().durationAmount, this.timeStepDuration().durationUnit);
-        this.projectService.setTime(updatedTime);
+        void this.projectService.setTime(updatedTime);
     }
 
     openTimeConfig(): void {

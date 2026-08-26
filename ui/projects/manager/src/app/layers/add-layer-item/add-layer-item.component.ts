@@ -1,4 +1,4 @@
-import {Component, signal, inject} from '@angular/core';
+import {Component, signal, inject, ChangeDetectionStrategy} from '@angular/core';
 import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {
     CollectionNavigation,
@@ -40,6 +40,7 @@ enum ChildType {
     selector: 'geoengine-manager-add-layer-item',
     templateUrl: './add-layer-item.component.html',
     styleUrl: './add-layer-item.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         MatDialogTitle,
         MatButton,

@@ -7,7 +7,7 @@ This module contains backports of newer Python features.
 
 Usually, those can be removed when the minimum required Python version is increased.
 
-#### to_thread
+#### to\_thread
 
 ```python
 async def to_thread(func, *args, **kwargs)

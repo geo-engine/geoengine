@@ -3,16 +3,26 @@ import {defineConfig} from 'astro/config';
 import tailwindcss from '@tailwindcss/vite';
 import icon from 'astro-icon';
 import starlight from '@astrojs/starlight';
-import openApiOperatorsPlugin from './astro-openapi-plugin.ts';
+import openApiOperatorsPlugin from './plugins/astro-openapi.ts';
+import pydocPlugin from './plugins/pydoc.ts';
+import {generateFavicons} from './plugins/favicon.ts';
 import starlightLinksValidator from 'starlight-links-validator';
-import pydocPlugin from './pydoc-plugin.ts';
 
 // https://astro.build/config
 export default defineConfig({
     site: 'https://www.geoengine.io',
 
     vite: {
-        plugins: [tailwindcss()],
+        plugins: [
+            tailwindcss(),
+            generateFavicons({
+                name: 'Geo Engine – Spatio-Temporal Geodata Processing',
+                shortName: 'Geo Engine',
+                description: 'Website about the Geo Engine platform',
+                themeColor: '#d7e4a5',
+                backgroundColor: '#ffffff',
+            }),
+        ],
     },
 
     integrations: [
@@ -50,32 +60,32 @@ export default defineConfig({
                 },
                 {
                     label: 'The Geo Engine',
-                    autogenerate: {directory: 'docs/the-geo-engine'},
+                    items: [{autogenerate: {directory: 'docs/the-geo-engine'}}],
                     collapsed: false,
                 },
                 {
                     label: 'API',
-                    autogenerate: {directory: 'docs/api'},
+                    items: [{autogenerate: {directory: 'docs/api'}}],
                     collapsed: false,
                 },
                 {
                     label: 'Datatypes',
-                    autogenerate: {directory: 'docs/datatypes'},
+                    items: [{autogenerate: {directory: 'docs/datatypes'}}],
                     collapsed: false,
                 },
                 {
                     label: 'Operators',
-                    autogenerate: {directory: 'docs/operators'},
+                    items: [{autogenerate: {directory: 'docs/operators'}}],
                     collapsed: false,
                 },
                 {
                     label: 'Plots',
-                    autogenerate: {directory: 'docs/plots'},
+                    items: [{autogenerate: {directory: 'docs/plots'}}],
                     collapsed: false,
                 },
                 {
                     label: 'Python Library',
-                    autogenerate: {directory: 'docs/python'},
+                    items: [{autogenerate: {directory: 'docs/python', collapsed: true}}],
                     collapsed: true,
                 },
             ],

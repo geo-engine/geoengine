@@ -14,7 +14,7 @@ class ColorBreakpoint()
 
 This class is used to generate geoengine compatible color breakpoint definitions.
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.Breakpoint
@@ -22,7 +22,7 @@ def to_api_dict() -> geoengine_api_client.Breakpoint
 
 Return the color breakpoint as a dictionary.
 
-#### from_response
+#### from\_response
 
 ```python
 @staticmethod
@@ -41,7 +41,7 @@ class Colorizer()
 
 This class is used to generate geoengine compatible color map definitions as a json string.
 
-#### linear_with_mpl_cmap
+#### linear\_with\_mpl\_cmap
 
 ```python
 @staticmethod
@@ -57,7 +57,7 @@ def linear_with_mpl_cmap(
 
 Initialize the colorizer.
 
-#### logarithmic_with_mpl_cmap
+#### logarithmic\_with\_mpl\_cmap
 
 ```python
 @staticmethod
@@ -86,7 +86,7 @@ def palette(
 
 Initialize the colorizer.
 
-#### palette_with_colormap
+#### palette\_with\_colormap
 
 ```python
 @staticmethod
@@ -101,7 +101,7 @@ def palette_with_colormap(
 This method generates a palette colorizer from a given list of values.
 A colormap can be given as an object or by name only.
 
-#### to_json
+#### to\_json
 
 ```python
 def to_json() -> str
@@ -109,7 +109,7 @@ def to_json() -> str
 
 Return the colorizer as a JSON string.
 
-#### from_response
+#### from\_response
 
 ```python
 @staticmethod
@@ -118,7 +118,7 @@ def from_response(response: geoengine_api_client.Colorizer) -> Colorizer
 
 Create a colorizer from a response.
 
-#### rgba_from_list
+#### rgba\_from\_list
 
 ```python
 def rgba_from_list(values: list[int]) -> Rgba
@@ -135,7 +135,7 @@ class LinearGradientColorizer(Colorizer)
 
 A linear gradient colorizer.
 
-#### from_response_linear
+#### from\_response\_linear
 
 ```python
 @staticmethod
@@ -146,7 +146,7 @@ def from_response_linear(
 
 Create a colorizer from a response.
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.Colorizer
@@ -163,7 +163,7 @@ class LogarithmicGradientColorizer(Colorizer)
 
 A logarithmic gradient colorizer.
 
-#### from_response_logarithmic
+#### from\_response\_logarithmic
 
 ```python
 @staticmethod
@@ -174,7 +174,7 @@ def from_response_logarithmic(
 
 Create a colorizer from a response.
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.Colorizer
@@ -191,7 +191,7 @@ class PaletteColorizer(Colorizer)
 
 A palette colorizer.
 
-#### from_response_palette
+#### from\_response\_palette
 
 ```python
 @staticmethod
@@ -201,7 +201,7 @@ def from_response_palette(
 
 Create a colorizer from a response.
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.Colorizer

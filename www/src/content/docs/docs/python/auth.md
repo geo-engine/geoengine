@@ -53,7 +53,7 @@ def __repr__() -> str
 
 Display representation of a session
 
-#### auth_header
+#### auth\_header
 
 ```python
 @property
@@ -62,7 +62,7 @@ def auth_header() -> dict[str, str]
 
 Create an authentication header for the current session
 
-#### server_url
+#### server\_url
 
 ```python
 @property
@@ -80,7 +80,7 @@ def configuration() -> geoengine_api_client.Configuration
 
 Return the current http configuration
 
-#### user_id
+#### user\_id
 
 ```python
 @property
@@ -89,7 +89,7 @@ def user_id() -> UUID
 
 Return the user id. Only works in Geo Engine Pro.
 
-#### requests_bearer_auth
+#### requests\_bearer\_auth
 
 ```python
 def requests_bearer_auth() -> BearerAuth
@@ -105,7 +105,7 @@ def logout()
 
 Logout the current session
 
-#### get_session
+#### get\_session
 
 ```python
 def get_session() -> Session

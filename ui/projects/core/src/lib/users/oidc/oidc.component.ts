@@ -1,4 +1,4 @@
-import {Component, inject, resource} from '@angular/core';
+import {Component, inject, resource, ChangeDetectionStrategy} from '@angular/core';
 import {User} from '../user.model';
 import {Router} from '@angular/router';
 import {UserService} from '@geoengine/common';
@@ -16,6 +16,7 @@ import {firstValueFrom} from 'rxjs';
     selector: 'geoengine-oidc',
     templateUrl: 'oidc.component.html',
     styleUrls: ['./oidc.component.scss'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         SidenavHeaderComponent,
         MatCard,

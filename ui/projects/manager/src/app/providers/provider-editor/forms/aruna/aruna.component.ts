@@ -1,4 +1,4 @@
-import {Component, inject, output, input, effect, signal} from '@angular/core';
+import {Component, inject, output, input, effect, signal, ChangeDetectionStrategy} from '@angular/core';
 import {
     AbstractControl,
     FormBuilder,
@@ -25,6 +25,7 @@ import {priorityValidator} from '../util/validators';
     selector: 'geoengine-manager-aruna-editor-form',
     templateUrl: './aruna.component.html',
     styleUrl: './aruna.component.scss',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         IdInputComponent,
         ReactiveFormsModule,

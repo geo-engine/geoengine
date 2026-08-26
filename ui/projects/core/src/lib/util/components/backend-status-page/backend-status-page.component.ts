@@ -1,4 +1,4 @@
-import {ChangeDetectorRef, Component, inject} from '@angular/core';
+import {ChangeDetectorRef, Component, inject, ChangeDetectionStrategy} from '@angular/core';
 import {Router} from '@angular/router';
 import {first, skipWhile, Subscription} from 'rxjs';
 import {BackendInfoDict} from '../../../backend/backend.model';
@@ -15,6 +15,7 @@ import {MatButton} from '@angular/material/button';
     selector: 'geoengine-backend-status-page',
     templateUrl: './backend-status-page.component.html',
     styleUrls: ['./backend-status-page.component.scss'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         FxLayoutDirective,
         FxLayoutAlignDirective,
@@ -72,12 +73,12 @@ export class BackendStatusPageComponent {
         });
     }
 
-    refresh(): void {
+    async refresh(): Promise<void> {
         this.goToMapSubscription?.unsubscribe();
-        this.userService.triggerBackendStatusUpdate();
+        await this.userService.triggerBackendStatusUpdate();
     }
 
-    goBack(): void {
+    async goBack(): Promise<void> {
         this.goToMapSubscription?.unsubscribe();
         this.goToMapSubscription = this.userService
             .getBackendStatus()
@@ -90,6 +91,6 @@ export class BackendStatusPageComponent {
                 setTimeout(() => this.router.navigate(['/map']));
             });
 
-        this.userService.triggerBackendStatusUpdate();
+        await this.userService.triggerBackendStatusUpdate();
     }
 }

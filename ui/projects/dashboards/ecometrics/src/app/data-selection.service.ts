@@ -91,7 +91,7 @@ export class DataSelectionService {
                 this._rasterLayer.next(layer);
                 this.timeSteps.next(timeSteps);
                 this.timeFormat.next(estimateTimeFormat(timeSteps));
-                this.projectService.setTime(timeSteps[0]);
+                void this.projectService.setTime(timeSteps[0]);
                 this.dataRange.next(dataRange);
             }),
         );

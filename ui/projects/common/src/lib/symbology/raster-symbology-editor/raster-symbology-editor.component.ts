@@ -118,7 +118,7 @@ export class RasterSymbologyEditorComponent {
         effect(() => {
             this.symbologyWorkflow();
             untracked(() => {
-                this.setUp();
+                void this.setUp();
             });
         });
     }
@@ -153,7 +153,7 @@ export class RasterSymbologyEditorComponent {
     }
 
     resetChanges(): void {
-        this.setUp();
+        void this.setUp();
     }
 
     getColorizerType(): ColorizerType | 'multiBand' {

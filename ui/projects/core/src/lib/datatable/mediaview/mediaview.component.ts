@@ -35,9 +35,9 @@ export class MediaviewComponent implements OnInit {
      */
     public static getType(value: string): string {
         let ret: string;
-        if (!value || value === '') return (ret = '');
+        if (!value || value === '') return '';
         const fileSplits = value.split('.') ?? [];
-        if (fileSplits.length <= 1) return (ret = '');
+        if (fileSplits.length <= 1) return '';
         const fileEnding = fileSplits.pop()?.toLowerCase() ?? '';
         const imageArray = ['jpg', 'jpeg', 'gif', 'png', 'svg', 'bmp'];
         const audioArray = ['wav', 'mp3', 'ogg', 'aac'];

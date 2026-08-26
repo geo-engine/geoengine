@@ -5,13 +5,16 @@
         "declarationMap": true,
         "declaration": true,
         "inlineSources": true,
-        "types": ["@types/hammerjs"],
-        "paths": {
-            "@geoengine/common": ["dist/common"]
-        }
+        "types": ["@types/hammerjs"]
     },
     "angularCompilerOptions": {
         "skipTemplateCodegen": true,
+        "extendedDiagnostics": {
+            "checks": {
+                "nullishCoalescingNotNullable": "suppress",
+                "optionalChainNotNullable": "suppress"
+            }
+        },
         "strictMetadataEmit": true,
         "enableResourceInlining": true
     },

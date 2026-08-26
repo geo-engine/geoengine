@@ -21,7 +21,7 @@ def __init__(xmin: float, ymin: float, xmax: float, ymax: float) -> None
 
 Initialize a new `SpatialBounds` object
 
-#### as_bbox_str
+#### as\_bbox\_str
 
 ```python
 def as_bbox_str(y_axis_first=False) -> str
@@ -29,7 +29,7 @@ def as_bbox_str(y_axis_first=False) -> str
 
 A comma-separated string representation of the spatial bounds with OGC axis ordering
 
-#### as_bbox_tuple
+#### as\_bbox\_tuple
 
 ```python
 def as_bbox_tuple(y_axis_first=False) -> tuple[float, float, float, float]
@@ -37,7 +37,7 @@ def as_bbox_tuple(y_axis_first=False) -> tuple[float, float, float, float]
 
 Return the bbox with OGC axis ordering of the srs
 
-#### x_axis_size
+#### x\_axis\_size
 
 ```python
 def x_axis_size() -> float
@@ -45,7 +45,7 @@ def x_axis_size() -> float
 
 The size of the x axis
 
-#### y_axis_size
+#### y\_axis\_size
 
 ```python
 def y_axis_size() -> float
@@ -61,7 +61,7 @@ class BoundingBox2D(SpatialBounds)
 
 &#x27;A 2D bounding box.
 
-#### from_response
+#### from\_response
 
 ```python
 @staticmethod
@@ -79,7 +79,7 @@ class SpatialPartition2D(SpatialBounds)
 
 A 2D spatial partition.
 
-#### from_response
+#### from\_response
 
 ```python
 @staticmethod
@@ -90,7 +90,7 @@ def from_response(
 
 create a `SpatialPartition2D` from an API response
 
-#### to_bounding_box
+#### to\_bounding\_box
 
 ```python
 def to_bounding_box() -> BoundingBox2D
@@ -98,7 +98,7 @@ def to_bounding_box() -> BoundingBox2D
 
 convert to a `BoundingBox2D`
 
-#### from_bounding_box
+#### from\_bounding\_box
 
 ```python
 @staticmethod
@@ -124,7 +124,7 @@ def __init__(start: datetime | np.datetime64,
 
 Initialize a new `TimeInterval` object
 
-#### time_str
+#### time\_str
 
 ```python
 @property
@@ -133,7 +133,7 @@ def time_str() -> str
 
 Return the time instance or interval as a string representation
 
-#### from_response
+#### from\_response
 
 ```python
 @staticmethod
@@ -143,7 +143,7 @@ def from_response(
 
 create a `TimeInterval` from an API response
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.TimeInterval
@@ -183,7 +183,7 @@ def __init__(x_resolution: float, y_resolution: float) -> None
 
 Initialize a new `SpatialResolution` object
 
-#### from_response
+#### from\_response
 
 ```python
 @staticmethod
@@ -192,7 +192,7 @@ def from_response(response: SpatialResolutionDict) -> SpatialResolution
 
 create a `SpatialResolution` from an API response
 
-#### resolution_ogc
+#### resolution\_ogc
 
 ```python
 def resolution_ogc(srs_code: str) -> tuple[float, float]
@@ -219,7 +219,8 @@ def __init__(spatial_bounds: BoundingBox2D | SpatialPartition2D
 
 Initialize a new `QueryRectangle` object
 
-## Parameters
+Parameters
+----------
 
 spatial_bounds
 The spatial bounds of the query rectangle.
@@ -228,7 +229,7 @@ time_interval
 The time interval of the query rectangle.
 Either a `TimeInterval` or a tuple of `datetime.datetime` objects (start, end)
 
-#### bbox_str
+#### bbox\_str
 
 ```python
 @property
@@ -237,7 +238,7 @@ def bbox_str() -> str
 
 A comma-separated string representation of the spatial bounds
 
-#### bbox_ogc_str
+#### bbox\_ogc\_str
 
 ```python
 @property
@@ -246,7 +247,7 @@ def bbox_ogc_str() -> str
 
 A comma-separated string representation of the spatial bounds with OGC axis ordering
 
-#### bbox_ogc
+#### bbox\_ogc
 
 ```python
 @property
@@ -264,7 +265,7 @@ def time() -> TimeInterval
 
 Return the time instance or interval
 
-#### spatial_bounds
+#### spatial\_bounds
 
 ```python
 @property
@@ -273,7 +274,7 @@ def spatial_bounds() -> BoundingBox2D
 
 Return the spatial bounds
 
-#### time_str
+#### time\_str
 
 ```python
 @property
@@ -299,7 +300,7 @@ def __repr__() -> str
 
 Return a string representation of the query rectangle.
 
-#### with_raster_bands
+#### with\_raster\_bands
 
 ```python
 def with_raster_bands(raster_bands: list[int]) -> RasterQueryRectangle
@@ -327,7 +328,8 @@ def __init__(spatial_bounds: BoundingBox2D | SpatialPartition2D
 
 Initialize a new `QueryRectangle` object
 
-## Parameters
+Parameters
+----------
 
 spatial_bounds
 The spatial bounds of the query rectangle.
@@ -339,7 +341,7 @@ bands
 The raster bands of the query rectangle.
 A List of ints representing the band numbers.
 
-#### raster_bands
+#### raster\_bands
 
 ```python
 @property
@@ -373,7 +375,7 @@ def __init__(spatial_reference: str,
 
 Initialize a new `ResultDescriptor` object
 
-#### from_response
+#### from\_response
 
 ```python
 @staticmethod
@@ -384,7 +386,7 @@ def from_response(
 
 Parse a result descriptor from an http response
 
-#### is_raster_result
+#### is\_raster\_result
 
 ```python
 @classmethod
@@ -393,7 +395,7 @@ def is_raster_result(cls) -> bool
 
 Return true if the result is of type raster
 
-#### is_vector_result
+#### is\_vector\_result
 
 ```python
 @classmethod
@@ -402,7 +404,7 @@ def is_vector_result(cls) -> bool
 
 Return true if the result is of type vector
 
-#### is_plot_result
+#### is\_plot\_result
 
 ```python
 @classmethod
@@ -411,7 +413,7 @@ def is_plot_result(cls) -> bool
 
 Return true if the result is of type plot
 
-#### spatial_reference
+#### spatial\_reference
 
 ```python
 @property
@@ -420,7 +422,7 @@ def spatial_reference() -> str
 
 Return the spatial reference
 
-#### time_bounds
+#### time\_bounds
 
 ```python
 @property
@@ -449,7 +451,7 @@ def __init__(spatial_reference: str,
 
 Initialize a vector result descriptor
 
-#### from_response_vector
+#### from\_response\_vector
 
 ```python
 @staticmethod
@@ -460,7 +462,7 @@ def from_response_vector(
 
 Parse a vector result descriptor from an http response
 
-#### data_type
+#### data\_type
 
 ```python
 @property
@@ -469,7 +471,7 @@ def data_type() -> VectorDataType
 
 Return the data type
 
-#### spatial_reference
+#### spatial\_reference
 
 ```python
 @property
@@ -487,7 +489,7 @@ def columns() -> dict[str, VectorColumnInfo]
 
 Return the columns
 
-#### spatial_bounds
+#### spatial\_bounds
 
 ```python
 @property
@@ -504,7 +506,7 @@ def __repr__() -> str
 
 Display representation of the vector result descriptor
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.TypedResultDescriptor
@@ -520,7 +522,7 @@ class FeatureDataType(str, Enum)
 
 Vector column data type
 
-#### from_string
+#### from\_string
 
 ```python
 @staticmethod
@@ -529,7 +531,7 @@ def from_string(data_type: str) -> FeatureDataType
 
 Create a new `VectorColumnDataType` from a string
 
-#### to_api_enum
+#### to\_api\_enum
 
 ```python
 def to_api_enum() -> geoengine_api_client.FeatureDataType
@@ -546,7 +548,7 @@ class VectorColumnInfo()
 
 Vector column information
 
-#### from_response
+#### from\_response
 
 ```python
 @staticmethod
@@ -556,7 +558,7 @@ def from_response(
 
 Create a new `VectorColumnInfo` from a JSON response
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.VectorColumnInfo
@@ -573,7 +575,7 @@ class RasterBandDescriptor()
 
 A raster band descriptor
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -601,7 +603,7 @@ class GridIdx2D()
 
 A grid index
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -619,7 +621,7 @@ class GridBoundingBox2D()
 
 A grid boundingbox where lower right is inclusive index
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -630,7 +632,7 @@ def from_response(
 
 Parse an http response to a `GridBoundingBox2D` object
 
-#### contains_idx
+#### contains\_idx
 
 ```python
 def contains_idx(idx: GridIdx2D) -> bool
@@ -647,7 +649,7 @@ class SpatialGridDefinition()
 
 A grid boundingbox where lower right is inclusive index
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -675,7 +677,7 @@ class SpatialGridDescriptor()
 
 A grid boundingbox where lower right is inclusive index
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -702,7 +704,7 @@ class RasterDataType(str, Enum)
 
 Raster data type enum
 
-#### from_string
+#### from\_string
 
 ```python
 @staticmethod
@@ -711,7 +713,7 @@ def from_string(data_type: str) -> RasterDataType
 
 Create a new `RasterDataType` from a string
 
-#### from_literal
+#### from\_literal
 
 ```python
 @staticmethod
@@ -723,7 +725,7 @@ def from_literal(
 
 Create a new `RasterDataType` from a literal
 
-#### to_literal
+#### to\_literal
 
 ```python
 def to_literal() -> Literal["U8", "U16", "U32", "U64", "I8", "I16", "I32",
@@ -732,7 +734,7 @@ def to_literal() -> Literal["U8", "U16", "U32", "U64", "I8", "I16", "I32",
 
 Convert to a literal
 
-#### from_api_enum
+#### from\_api\_enum
 
 ```python
 @staticmethod
@@ -742,7 +744,7 @@ def from_api_enum(
 
 Create a new `RasterDataType` from an API enum
 
-#### to_api_enum
+#### to\_api\_enum
 
 ```python
 def to_api_enum() -> geoengine_api_client.RasterDataType
@@ -750,7 +752,7 @@ def to_api_enum() -> geoengine_api_client.RasterDataType
 
 Convert to an API enum
 
-#### to_np_dtype
+#### to\_np\_dtype
 
 ```python
 def to_np_dtype() -> np.dtype
@@ -766,7 +768,7 @@ class TimeDimension()
 
 A time dimension
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -793,7 +795,7 @@ def __init__(step: TimeStep, origin: np.datetime64 | None = None) -> None
 
 Initialize a new `RegularTimeDimension`
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.TimeDimension
@@ -801,7 +803,7 @@ def to_api_dict() -> geoengine_api_client.TimeDimension
 
 Convert the regular time dimension to a dictionary
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -820,7 +822,7 @@ class IrregularTimeDimension(TimeDimension)
 
 The irregular time dimension
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.TimeDimension
@@ -828,7 +830,7 @@ def to_api_dict() -> geoengine_api_client.TimeDimension
 
 Convert the irregular time dimension to a dictionary
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -854,7 +856,7 @@ def __init__(dimension: TimeDimension,
 
 Initialize a new `TimeDescriptor`
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.TimeDescriptor
@@ -862,7 +864,7 @@ def to_api_dict() -> geoengine_api_client.TimeDescriptor
 
 Convert the time descriptor to a dictionary
 
-#### from_response
+#### from\_response
 
 ```python
 @staticmethod
@@ -895,7 +897,7 @@ def __init__(
 
 Initialize a new `RasterResultDescriptor`
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.TypedResultDescriptor
@@ -903,7 +905,7 @@ def to_api_dict() -> geoengine_api_client.TypedResultDescriptor
 
 Convert the raster result descriptor to a dictionary
 
-#### from_response_raster
+#### from\_response\_raster
 
 ```python
 @staticmethod
@@ -914,7 +916,7 @@ def from_response_raster(
 
 Parse a raster result descriptor from an http response
 
-#### spatial_reference
+#### spatial\_reference
 
 ```python
 @property
@@ -957,7 +959,7 @@ def __repr__() -> str
 
 Display representation of the plot result descriptor
 
-#### from_response_plot
+#### from\_response\_plot
 
 ```python
 @staticmethod
@@ -968,7 +970,7 @@ def from_response_plot(
 
 Create a new `PlotResultDescriptor` from a JSON response
 
-#### spatial_reference
+#### spatial\_reference
 
 ```python
 @property
@@ -977,7 +979,7 @@ def spatial_reference() -> str
 
 Return the spatial reference
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.TypedResultDescriptor
@@ -993,7 +995,7 @@ class VectorDataType(str, Enum)
 
 An enum of vector data types
 
-#### from_geopandas_type_name
+#### from\_geopandas\_type\_name
 
 ```python
 @classmethod
@@ -1002,7 +1004,7 @@ def from_geopandas_type_name(cls, name: str) -> VectorDataType
 
 Resolve vector data type from geopandas geometry type
 
-#### from_literal
+#### from\_literal
 
 ```python
 @staticmethod
@@ -1013,7 +1015,7 @@ def from_literal(
 
 Resolve vector data type from literal
 
-#### from_api_enum
+#### from\_api\_enum
 
 ```python
 @staticmethod
@@ -1023,7 +1025,7 @@ def from_api_enum(
 
 Resolve vector data type from API enum
 
-#### from_string
+#### from\_string
 
 ```python
 @staticmethod
@@ -1057,7 +1059,7 @@ def __init__(step: int, granularity: TimeStepGranularity | str) -> None
 
 Initialize a new `TimeStep` object
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -1075,7 +1077,7 @@ class Provenance()
 
 Provenance information as triplet of citation, license and uri
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -1094,7 +1096,7 @@ class ProvenanceEntry()
 
 Provenance of a dataset
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -1113,7 +1115,7 @@ class Symbology()
 
 Base class for symbology
 
-#### from_response
+#### from\_response
 
 ```python
 @staticmethod
@@ -1138,7 +1140,7 @@ class RasterColorizer()
 
 Base class for raster colorizer
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -1183,7 +1185,7 @@ def __init__(raster_colorizer: RasterColorizer, opacity: float = 1.0) -> None
 
 Initialize a new `RasterSymbology`
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.Symbology
@@ -1191,7 +1193,7 @@ def to_api_dict() -> geoengine_api_client.Symbology
 
 Convert the raster symbology to a dictionary
 
-#### from_response_raster
+#### from\_response\_raster
 
 ```python
 @staticmethod
@@ -1217,7 +1219,7 @@ class DataId()
 
 Base class for data ids
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -1234,7 +1236,7 @@ class InternalDataId(DataId)
 
 An internal data id
 
-#### from_response_internal
+#### from\_response\_internal
 
 ```python
 @classmethod
@@ -1268,7 +1270,7 @@ class ExternalDataId(DataId)
 
 An external data id
 
-#### from_response_external
+#### from\_response\_external
 
 ```python
 @classmethod
@@ -1302,7 +1304,7 @@ class Measurement()
 
 Base class for measurements
 
-#### from_response
+#### from\_response
 
 ```python
 @staticmethod
@@ -1351,7 +1353,7 @@ def __init__(measurement: str, unit: str | None) -> None
 
 Initialize a new `ContiuousMeasurement`
 
-#### from_response_continuous
+#### from\_response\_continuous
 
 ```python
 @staticmethod
@@ -1394,7 +1396,7 @@ def __init__(measurement: str, classes: dict[int, str]) -> None
 
 Initialize a new `ClassificationMeasurement`
 
-#### from_response_classification
+#### from\_response\_classification
 
 ```python
 @staticmethod
@@ -1429,11 +1431,11 @@ class GeoTransform()
 
 The `GeoTransform` specifies the relationship between pixel coordinates and geographic coordinates.
 
-#### y_max
+#### y\_max
 
 In Geo Engine, x_pixel_size is always positive.
 
-#### x_pixel_size
+#### x\_pixel\_size
 
 In Geo Engine, y_pixel_size is always negative.
 
@@ -1446,7 +1448,7 @@ def __init__(x_min: float, y_max: float, x_pixel_size: float,
 
 Initialize a new `GeoTransform`
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -1456,7 +1458,7 @@ def from_response(cls,
 
 Parse a geotransform from an HTTP JSON response
 
-#### to_gdal
+#### to\_gdal
 
 ```python
 def to_gdal() -> tuple[float, float, float, float, float, float]
@@ -1464,7 +1466,7 @@ def to_gdal() -> tuple[float, float, float, float, float, float]
 
 Convert to a GDAL geotransform
 
-#### coord_to_pixel_ul
+#### coord\_to\_pixel\_ul
 
 ```python
 def coord_to_pixel_ul(x_cord: float, y_coord: float) -> GridIdx2D
@@ -1472,7 +1474,7 @@ def coord_to_pixel_ul(x_cord: float, y_coord: float) -> GridIdx2D
 
 Convert a coordinate to a pixel index rould towards top left
 
-#### coord_to_pixel_lr
+#### coord\_to\_pixel\_lr
 
 ```python
 def coord_to_pixel_lr(x_cord: float, y_coord: float) -> GridIdx2D
@@ -1480,7 +1482,7 @@ def coord_to_pixel_lr(x_cord: float, y_coord: float) -> GridIdx2D
 
 Convert a coordinate to a pixel index ound towards lower right
 
-#### pixel_ul_to_coord
+#### pixel\_ul\_to\_coord
 
 ```python
 def pixel_ul_to_coord(x_pixel: int, y_pixel: int) -> tuple[float, float]
@@ -1488,7 +1490,7 @@ def pixel_ul_to_coord(x_pixel: int, y_pixel: int) -> tuple[float, float]
 
 Convert a pixel position into a coordinate
 
-#### spatial_to_grid_bounds
+#### spatial\_to\_grid\_bounds
 
 ```python
 def spatial_to_grid_bounds(
@@ -1497,7 +1499,7 @@ def spatial_to_grid_bounds(
 
 Converts a BoundingBox2D or a SpatialPartition2D into a GridBoundingBox2D
 
-#### grid_bounds_to_spatial_bounds
+#### grid\_bounds\_to\_spatial\_bounds
 
 ```python
 def grid_bounds_to_spatial_bounds(

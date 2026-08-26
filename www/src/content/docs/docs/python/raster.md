@@ -32,7 +32,7 @@ def shape() -> tuple[int, int]
 
 Return the shape of the raster tile in numpy order (y_size, x_size)
 
-#### data_type
+#### data\_type
 
 ```python
 @property
@@ -41,7 +41,7 @@ def data_type() -> pa.DataType
 
 Return the arrow data type of the raster tile
 
-#### numpy_data_type
+#### numpy\_data\_type
 
 ```python
 @property
@@ -50,7 +50,7 @@ def numpy_data_type() -> np.dtype
 
 Return the numpy dtype of the raster tile
 
-#### has_null_values
+#### has\_null\_values
 
 ```python
 @property
@@ -59,7 +59,7 @@ def has_null_values() -> bool
 
 Return whether the raster tile has null values
 
-#### to_numpy_data_array
+#### to\_numpy\_data\_array
 
 ```python
 def to_numpy_data_array(fill_null_value=0) -> np.ndarray
@@ -68,7 +68,7 @@ def to_numpy_data_array(fill_null_value=0) -> np.ndarray
 Return the raster tile as a numpy array.
 Caution: this will not mask nodata values but replace them with the provided value !
 
-#### to_numpy_mask_array
+#### to\_numpy\_mask\_array
 
 ```python
 def to_numpy_mask_array(nan_is_null=False) -> np.ndarray | None
@@ -79,7 +79,7 @@ True means no data, False means data.
 If the raster tile has no null values, None is returned.
 It is possible to specify whether NaN values should be considered as no data when creating the mask.
 
-#### to_numpy_masked_array
+#### to\_numpy\_masked\_array
 
 ```python
 def to_numpy_masked_array(nan_is_null=False) -> np.ma.MaskedArray
@@ -87,7 +87,7 @@ def to_numpy_masked_array(nan_is_null=False) -> np.ma.MaskedArray
 
 Return the raster tile as a masked numpy array
 
-#### coords_x
+#### coords\_x
 
 ```python
 def coords_x(pixel_center=False) -> np.ndarray
@@ -97,7 +97,7 @@ Return the x coordinates of the raster tile
 If pixel_center is True, the coordinates will be the center of the pixels.
 Otherwise they will be the upper left edges.
 
-#### coords_y
+#### coords\_y
 
 ```python
 def coords_y(pixel_center=False) -> np.ndarray
@@ -107,7 +107,7 @@ Return the y coordinates of the raster tile
 If pixel_center is True, the coordinates will be the center of the pixels.
 Otherwise they will be the upper left edges.
 
-#### to_xarray
+#### to\_xarray
 
 ```python
 def to_xarray(
@@ -123,7 +123,7 @@ Return the raster tile as an xarray.DataArray.
 - Xarray uses numpy&#x27;s datetime64[ns] which only covers the years from 1678 to 2262.
 - Date times that are outside of the defined range are clipped to the limits of the range.
 
-#### spatial_partition
+#### spatial\_partition
 
 ```python
 def spatial_partition() -> gety.SpatialPartition2D
@@ -131,7 +131,7 @@ def spatial_partition() -> gety.SpatialPartition2D
 
 Return the spatial partition of the raster tile
 
-#### is_empty
+#### is\_empty
 
 ```python
 def is_empty() -> bool
@@ -139,7 +139,7 @@ def is_empty() -> bool
 
 Returns true if the tile is empty
 
-#### from_ge_record_batch
+#### from\_ge\_record\_batch
 
 ```python
 @staticmethod
@@ -166,7 +166,7 @@ def __init__(tile_shape: tuple[int, int], data: list[pa.Array],
 
 Create a RasterTileStack2D object
 
-#### single_band
+#### single\_band
 
 ```python
 def single_band(index: int) -> RasterTile2D
@@ -174,7 +174,7 @@ def single_band(index: int) -> RasterTile2D
 
 Return a single band from the stack
 
-#### to_numpy_masked_array_stack
+#### to\_numpy\_masked\_array\_stack
 
 ```python
 def to_numpy_masked_array_stack() -> np.ma.MaskedArray
@@ -182,7 +182,7 @@ def to_numpy_masked_array_stack() -> np.ma.MaskedArray
 
 Return the raster stack as a 3D masked numpy array
 
-#### to_xarray
+#### to\_xarray
 
 ```python
 def to_xarray(
@@ -191,7 +191,7 @@ def to_xarray(
 
 Return the raster stack as an xarray.DataArray
 
-#### tile_stream_to_stack_stream
+#### tile\_stream\_to\_stack\_stream
 
 ```python
 async def tile_stream_to_stack_stream(

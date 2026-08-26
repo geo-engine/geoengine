@@ -13,7 +13,7 @@ class MlModelName()
 
 A wrapper for an MlModel name
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -40,7 +40,7 @@ class DatasetName()
 
 A wrapper for a dataset name
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -67,7 +67,7 @@ class UploadId()
 
 A wrapper for an upload id
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -84,7 +84,7 @@ def __eq__(other) -> bool
 
 Checks if two upload ids are equal
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.IdResponse
@@ -110,7 +110,7 @@ def __init__(resource_type: Literal["dataset", "layer", "layerCollection",
 
 Create a resource id
 
-#### from_layer_id
+#### from\_layer\_id
 
 ```python
 @classmethod
@@ -119,7 +119,7 @@ def from_layer_id(cls, layer_id: LayerId) -> Resource
 
 Create a resource id from a layer id
 
-#### from_layer_collection_id
+#### from\_layer\_collection\_id
 
 ```python
 @classmethod
@@ -129,7 +129,7 @@ def from_layer_collection_id(
 
 Create a resource id from a layer collection id
 
-#### from_dataset_name
+#### from\_dataset\_name
 
 ```python
 @classmethod
@@ -138,7 +138,7 @@ def from_dataset_name(cls, dataset_name: DatasetName | str) -> Resource
 
 Create a resource id from a dataset name
 
-#### from_ml_model_name
+#### from\_ml\_model\_name
 
 ```python
 @classmethod
@@ -147,7 +147,7 @@ def from_ml_model_name(cls, ml_model_name: MlModelName | str) -> Resource
 
 Create a resource from an ml model name
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.Resource
@@ -155,7 +155,7 @@ def to_api_dict() -> geoengine_api_client.Resource
 
 Convert to a dict for the API
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod

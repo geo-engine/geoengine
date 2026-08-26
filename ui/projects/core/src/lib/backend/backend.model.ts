@@ -136,7 +136,7 @@ export interface RasterSymbologyDict {
     rasterColorizer: RasterColorizerDict;
 }
 
-export type RasterColorizerDict = SingleBandRasterColorizerDict /* TODO: | MultiBandRasterColorizerDict */;
+export type RasterColorizerDict = SingleBandRasterColorizerDict; /* TODO: | MultiBandRasterColorizerDict */
 
 export interface SingleBandRasterColorizerDict {
     type: 'singleBand';

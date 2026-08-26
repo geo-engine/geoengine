@@ -1,4 +1,4 @@
-import {Component, input, output} from '@angular/core';
+import {Component, input, output, ChangeDetectionStrategy} from '@angular/core';
 import {MatNavList, MatListItem} from '@angular/material/list';
 import {MatIcon} from '@angular/material/icon';
 import {MatLine} from '@angular/material/grid-list';
@@ -8,6 +8,7 @@ import {MatTooltip} from '@angular/material/tooltip';
     selector: 'geoengine-mediaview-playlist',
     templateUrl: './mediaview.playlist.component.html',
     styleUrls: ['./mediaview.playlist.component.scss'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [MatNavList, MatListItem, MatIcon, MatLine, MatTooltip],
 })
 

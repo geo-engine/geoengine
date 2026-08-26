@@ -22,7 +22,7 @@ def __repr__() -> str
 
 String representation of a `Listing`
 
-#### html_str
+#### html\_str
 
 ```python
 def html_str() -> str
@@ -30,7 +30,7 @@ def html_str() -> str
 
 HTML representation for Jupyter notebooks
 
-#### \_repr_html\_
+#### \_repr\_html\_
 
 ```python
 def _repr_html_() -> str
@@ -97,7 +97,7 @@ def __init__(name: str, description: str, collection_id: LayerCollectionId,
 
 Create a new `LayerCollection`
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -124,7 +124,7 @@ def __repr__() -> str
 
 String representation of a `LayerCollection`
 
-#### \_repr_html\_
+#### \_repr\_html\_
 
 ```python
 def _repr_html_() -> str | None
@@ -140,7 +140,7 @@ def remove(timeout: int = 60) -> None
 
 Remove the layer collection itself
 
-#### remove_item
+#### remove\_item
 
 ```python
 def remove_item(index: int, timeout: int = 60)
@@ -148,19 +148,20 @@ def remove_item(index: int, timeout: int = 60)
 
 Remove a layer or collection from this collection
 
-#### add_layer
+#### add\_layer
 
 ```python
 def add_layer(name: str,
               description: str,
               workflow: dict[str, Any] | WorkflowBuilderOperator,
               symbology: Symbology | None,
+              replace_existing: bool = False,
               timeout: int = 60) -> LayerId
 ```
 
-Add a layer to this collection
+Add a layer to this collection. Removes existing layers with the same name if forced.
 
-#### add_layer_with_permissions
+#### add\_layer\_with\_permissions
 
 ```python
 def add_layer_with_permissions(name: str,
@@ -171,12 +172,14 @@ def add_layer_with_permissions(name: str,
                                permission_tuples: list[tuple[RoleId,
                                                              Permission]]
                                | None = None,
+                               replace_existing: bool = False,
                                timeout: int = 60) -> LayerId
 ```
 
 Add a layer to this collection and set permissions.
+Removes existing layers with the same name if forced.
 
-#### add_existing_layer
+#### add\_existing\_layer
 
 ```python
 def add_existing_layer(existing_layer: LayerListing | Layer | LayerId,
@@ -185,7 +188,7 @@ def add_existing_layer(existing_layer: LayerListing | Layer | LayerId,
 
 Add an existing layer to this collection
 
-#### add_collection
+#### add\_collection
 
 ```python
 def add_collection(name: str,
@@ -195,7 +198,7 @@ def add_collection(name: str,
 
 Add a collection to this collection
 
-#### add_existing_collection
+#### add\_existing\_collection
 
 ```python
 def add_existing_collection(existing_collection: LayerCollectionListing
@@ -205,7 +208,7 @@ def add_existing_collection(existing_collection: LayerCollectionListing
 
 Add an existing collection to this collection
 
-#### get_items_by_name
+#### get\_items\_by\_name
 
 ```python
 def get_items_by_name(name: str) -> list[Listing]
@@ -213,7 +216,7 @@ def get_items_by_name(name: str) -> list[Listing]
 
 Get all children with the given name
 
-#### get_items_by_name_unique
+#### get\_items\_by\_name\_unique
 
 ```python
 def get_items_by_name_unique(name: str) -> Listing | None
@@ -234,7 +237,7 @@ def search(search_string: str,
 
 Search for a string in the layer collection
 
-#### get_or_create_unique_collection
+#### get\_or\_create\_unique\_collection
 
 ```python
 def get_or_create_unique_collection(
@@ -289,7 +292,7 @@ def __init__(name: str, description: str, layer_id: LayerId,
 
 Create a new `Layer`
 
-#### from_response
+#### from\_response
 
 ```python
 @classmethod
@@ -306,7 +309,7 @@ def __repr__() -> str
 
 String representation of a `Layer`
 
-#### \_repr_html\_
+#### \_repr\_html\_
 
 ```python
 def _repr_html_() -> str | None
@@ -314,7 +317,7 @@ def _repr_html_() -> str | None
 
 HTML representation for Jupyter notebooks
 
-#### save_as_dataset
+#### save\_as\_dataset
 
 ```python
 def save_as_dataset(timeout: int = 60) -> Task
@@ -322,7 +325,7 @@ def save_as_dataset(timeout: int = 60) -> Task
 
 Save a layer as a new dataset.
 
-#### to_api_dict
+#### to\_api\_dict
 
 ```python
 def to_api_dict() -> geoengine_api_client.Layer
@@ -330,7 +333,7 @@ def to_api_dict() -> geoengine_api_client.Layer
 
 Convert to a dictionary that can be serialized to JSON
 
-#### as_workflow_id
+#### as\_workflow\_id
 
 ```python
 def as_workflow_id(timeout: int = 60) -> WorkflowId
@@ -338,7 +341,7 @@ def as_workflow_id(timeout: int = 60) -> WorkflowId
 
 Register a layer as a workflow and returns its workflowId
 
-#### as_workflow
+#### as\_workflow
 
 ```python
 def as_workflow(timeout: int = 60) -> Workflow
@@ -346,7 +349,7 @@ def as_workflow(timeout: int = 60) -> Workflow
 
 Register a layer as a workflow and returns the workflow
 
-#### layer_collection
+#### layer\_collection
 
 ```python
 def layer_collection(layer_collection_id: LayerCollectionId | None = None,
