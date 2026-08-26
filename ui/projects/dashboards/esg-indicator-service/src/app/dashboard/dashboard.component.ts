@@ -125,7 +125,7 @@ export class DashboardComponent implements AfterViewInit, AfterContentInit {
         });
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-misused-promises, @typescript-eslint/require-await
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
     async ngAfterContentInit(): Promise<void> {
         await this.loadData();
 
