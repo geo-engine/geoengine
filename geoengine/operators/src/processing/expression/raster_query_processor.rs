@@ -11,9 +11,9 @@ use futures::{StreamExt, TryStreamExt, stream::BoxStream};
 use geoengine_datatypes::{
     primitives::{BandSelection, CacheHint, RasterQueryRectangle, TimeInterval},
     raster::{
-        ConvertDataType, FromIndexFnParallel, GeoTransform, GridBoundingBox2D, GridIdx2D,
-        GridIndexAccess, GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess,
-        MapElementsParallel, MaskedGrid2D, Pixel, RasterTile2D,
+        ConvertDataType, FromIndexFnParallel, GeoTransform, GridBoundingBox2D, GridIndexAccess,
+        GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess, MapElementsParallel,
+        MaskedGrid2D, Pixel, RasterTile2D, TileIdx,
     },
 };
 use geoengine_expression::LinkedExpression;
@@ -152,13 +152,7 @@ trait ExpressionTupleProcessor<TO: Pixel>: Send + Sync {
 
     fn metadata(
         tuple: &Self::Tuple,
-    ) -> (
-        TimeInterval,
-        GridIdx2D,
-        GeoTransform,
-        GridShape2D,
-        CacheHint,
-    );
+    ) -> (TimeInterval, TileIdx, GeoTransform, GridShape2D, CacheHint);
 
     fn compute_expression(
         tuple: Self::Tuple,
@@ -205,13 +199,7 @@ where
     #[inline]
     fn metadata(
         tuple: &Self::Tuple,
-    ) -> (
-        TimeInterval,
-        GridIdx2D,
-        GeoTransform,
-        GridShape2D,
-        CacheHint,
-    ) {
+    ) -> (TimeInterval, TileIdx, GeoTransform, GridShape2D, CacheHint) {
         let raster = &tuple;
 
         (
@@ -338,13 +326,7 @@ where
     #[inline]
     fn metadata(
         tuple: &Self::Tuple,
-    ) -> (
-        TimeInterval,
-        GridIdx2D,
-        GeoTransform,
-        GridShape2D,
-        CacheHint,
-    ) {
+    ) -> (TimeInterval, TileIdx, GeoTransform, GridShape2D, CacheHint) {
         let raster = &tuple.0;
 
         (
@@ -535,7 +517,7 @@ macro_rules! impl_expression_tuple_processor {
             }
 
             #[inline]
-            fn metadata(tuple: &Self::Tuple) -> (TimeInterval, GridIdx2D, GeoTransform, GridShape2D, CacheHint) {
+            fn metadata(tuple: &Self::Tuple) -> (TimeInterval, TileIdx, GeoTransform, GridShape2D, CacheHint) {
                 let raster = &tuple[0];
 
                 (

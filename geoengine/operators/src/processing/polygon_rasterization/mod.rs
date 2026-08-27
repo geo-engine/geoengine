@@ -527,7 +527,7 @@ impl<T: Pixel> PolygonRasterizationQueryProcessor<T> {
         tile_info: TileInformation,
         ctx: &dyn QueryContext,
     ) -> Result<RasterTile2D<T>> {
-        let shape = tile_info.tile_size_in_pixels();
+        let shape = tile_info.tile_size.grid_shape();
 
         let (values, cache_hint) = self.shared.burn_value(time_slice, tile_info, ctx).await?;
 
@@ -854,7 +854,7 @@ fn burn_chunk<A: PixelAggregator<f64>>(
     ignore_no_data: bool,
 ) -> Result<Option<Vec<A::State>>> {
     let geo_transform = &tile_info.tile_geo_transform();
-    let shape = tile_info.tile_size_in_pixels;
+    let shape = tile_info.tile_size.grid_shape();
 
     let values: Option<Vec<Option<f64>>> = match column {
         Some(column) => Some(chunk.data(column)?.float_options_iter().collect()),

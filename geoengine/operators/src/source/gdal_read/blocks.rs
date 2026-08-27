@@ -39,8 +39,8 @@ use futures::future::{join_all, try_join_all};
 use gdal::raster::GdalType;
 use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds, TimeInterval};
 use geoengine_datatypes::raster::{
-    ChangeGridBounds, EmptyGrid, GeoTransform, GridBlit, GridBoundingBox2D, GridBounds, GridIdx2D,
-    GridOrEmpty, GridShapeAccess, Pixel, RasterTile2D,
+    ChangeGridBounds, EmptyGrid, GeoTransform, GridBlit, GridBoundingBox2D, GridBounds,
+    GridOrEmpty, GridShapeAccess, Pixel, RasterTile2D, TileIdx,
 };
 use num::FromPrimitive;
 use std::num::NonZeroUsize;
@@ -340,7 +340,7 @@ impl BlockIo {
         let inserts = level_window.pieces_in(unit_bounds).map(|other| {
             let tile = RasterTile2D::new_with_properties(
                 TimeInterval::default(),
-                GridIdx2D::new([0, 0]),
+                TileIdx::new_y_x(0, 0),
                 0,
                 GeoTransform::new_unchecked((0., 0.).into(), 1., -1.),
                 compose(level_window.piece_bounds(other), units).unbounded(),

@@ -11,8 +11,8 @@ use futures::TryFuture;
 use geoengine_datatypes::{
     primitives::{CacheHint, RasterQueryRectangle, TimeInterval},
     raster::{
-        GeoTransform, GridIdx2D, GridIndexAccess, GridOrEmpty, GridOrEmpty2D, GridShape2D,
-        GridShapeAccess, GridSize, Pixel, RasterTile2D, TileInformation,
+        GeoTransform, GridIndexAccess, GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess,
+        GridSize, Pixel, RasterTile2D, TileIdx, TileInformation,
     },
 };
 use rayon::{
@@ -38,7 +38,7 @@ pub async fn subquery_all_tiles_fold_fn<P: Pixel, A: PixelAggregator<P> + 'stati
 pub struct TileAccumulator<P: Pixel, A: PixelAggregator<P>> {
     aggregator: Arc<A>,
     time: TimeInterval,
-    tile_position: GridIdx2D,
+    tile_position: TileIdx,
     global_geo_transform: GeoTransform,
     tile_shape: GridShape2D,
     /// The states of the pixels, allocated when the first tile with data arrives
@@ -213,9 +213,9 @@ where
         let accu = TileAccumulator {
             aggregator: self.aggregator.clone(),
             time: query_rect.time_interval(),
-            tile_position: tile_info.global_tile_position,
+            tile_position: tile_info.tile_position,
             global_geo_transform: tile_info.global_geo_transform,
-            tile_shape: tile_info.tile_size_in_pixels,
+            tile_shape: tile_info.tile_size.grid_shape(),
             states: None,
             all_no_data: false,
             pool: pool.clone(),

@@ -583,7 +583,7 @@ async fn read_tiles<T: Pixel + Hash>(
 }
 
 fn hash_tile<T: Pixel + Hash>(tile: &RasterTile2D<T>, hasher: &mut DefaultHasher) {
-    tile.tile_position.inner().hash(hasher);
+    tile.tile_position.grid_idx().inner().hash(hasher);
     tile.band.hash(hasher);
     match &tile.grid_array {
         GridOrEmpty::Grid(grid) => {

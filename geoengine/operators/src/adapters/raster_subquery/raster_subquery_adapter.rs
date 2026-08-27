@@ -164,9 +164,7 @@ where
         let source_data_bounds = source_processor
             .raster_result_descriptor()
             .spatial_grid_descriptor()
-            .tiling_grid_definition(TilingSpecification::new(
-                tiling_strategy.tile_size_in_pixels,
-            ))
+            .tiling_grid_definition(TilingSpecification::new(tiling_strategy.tile_size))
             .tiling_spatial_grid_definition()
             .grid_bounds();
 
@@ -473,7 +471,7 @@ where
                 time,
                 tile,
                 band,
-                GridOrEmpty::new_empty_shape(tile.tile_size_in_pixels),
+                GridOrEmpty::new_empty_shape(tile.tile_size.grid_shape()),
                 CacheHint::max_duration(),
             )
         });
