@@ -160,7 +160,7 @@ impl GdalRasterLoader {
                     None => {
                         debug!(
                             "Tile {:?} not intersecting dataset grid or gdal grid",
-                            &tile_information.global_tile_position
+                            &tile_information.tile_position
                         );
                         Self::create_no_data_tile(tile_information, tile_time, cache_hint)
                     }
@@ -191,7 +191,7 @@ impl GdalRasterLoader {
             tile_time,
             tile_info,
             0,
-            EmptyGrid::new(tile_info.tile_size_in_pixels).into(),
+            EmptyGrid::new(tile_info.tile_size.grid_shape()).into(),
             RasterProperties::default(),
             cache_hint,
         )
@@ -791,9 +791,9 @@ mod tests {
     use geoengine_datatypes::primitives::DateTimeParseFormat;
     use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
     use geoengine_datatypes::raster::{
-        BoundedGrid, EmptyGrid2D, GeoTransform, GridBounds, GridIdx2D, GridShape2D, GridSize,
-        RasterPropertiesEntryType, RasterPropertiesKey, SpatialGridDefinition, TileInformation,
-        TilesEqualIgnoringCacheHint, TilingStrategy,
+        BoundedGrid, EmptyGrid2D, GeoTransform, GridIdx2D, GridShape2D, GridSize,
+        RasterPropertiesEntryType, RasterPropertiesKey, SpatialGridDefinition, TileIdx,
+        TileInformation, TileSize, TilesEqualIgnoringCacheHint, TilingStrategy,
     };
     use geoengine_datatypes::util::{gdal::hide_gdal_errors, test::TestDefault};
 
@@ -850,7 +850,7 @@ mod tests {
 
     #[test]
     fn tiling_strategy_origin() {
-        let tile_size_in_pixels = [600, 600];
+        let tile_size = TileSize::new_y_x(600, 600);
         let dataset_upper_right_coord = (-180.0, 90.0).into();
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
@@ -863,7 +863,7 @@ mod tests {
         let partition = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
-            tile_size_in_pixels: tile_size_in_pixels.into(),
+            tile_size,
             geo_transform: dataset_geo_transform,
         };
 
@@ -881,14 +881,14 @@ mod tests {
         );
 
         let tile_grid = origin_split_tileing_strategy.tile_grid_box(partition);
-        assert_eq!(tile_grid.axis_size(), [3, 6]);
+        assert_eq!(tile_grid.grid_bounds().axis_size(), [3, 6]);
         assert_eq!(tile_grid.min_index(), [0, 0].into());
         assert_eq!(tile_grid.max_index(), [2, 5].into());
     }
 
     #[test]
     fn tiling_strategy_zero() {
-        let tile_size_in_pixels = [600, 600];
+        let tile_size = TileSize::new_y_x(600, 600);
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
         let central_geo_transform = GeoTransform::new_with_coordinate_x_y(
@@ -901,7 +901,7 @@ mod tests {
         let partition = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
-            tile_size_in_pixels: tile_size_in_pixels.into(),
+            tile_size,
             geo_transform: central_geo_transform,
         };
 
@@ -919,14 +919,14 @@ mod tests {
         );
 
         let tile_grid = origin_split_tileing_strategy.tile_grid_box(partition);
-        assert_eq!(tile_grid.axis_size(), [4, 6]);
+        assert_eq!(tile_grid.grid_bounds().axis_size(), [4, 6]);
         assert_eq!(tile_grid.min_index(), [-2, -3].into());
         assert_eq!(tile_grid.max_index(), [1, 2].into());
     }
 
     #[test]
     fn tile_idx_iterator() {
-        let tile_size_in_pixels = [600, 600];
+        let tile_size = TileSize::new_y_x(600, 600);
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
         let central_geo_transform = GeoTransform::new_with_coordinate_x_y(
@@ -939,12 +939,13 @@ mod tests {
         let grid_bounds = GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
-            tile_size_in_pixels: tile_size_in_pixels.into(),
+            tile_size,
             geo_transform: central_geo_transform,
         };
 
         let vres: Vec<GridIdx2D> = origin_split_tileing_strategy
             .tile_idx_iterator_from_grid_bounds(grid_bounds)
+            .map(GridIdx2D::from)
             .collect();
         assert_eq!(vres.len(), 4 * 6);
         assert_eq!(vres[0], [-2, -3].into());
@@ -955,7 +956,7 @@ mod tests {
 
     #[test]
     fn tile_information_iterator() {
-        let tile_size_in_pixels = [600, 600];
+        let tile_size = TileSize::new_y_x(600, 600);
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
 
@@ -969,7 +970,7 @@ mod tests {
         let grid_bounds = GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
-            tile_size_in_pixels: tile_size_in_pixels.into(),
+            tile_size,
             geo_transform: central_geo_transform,
         };
 
@@ -979,35 +980,19 @@ mod tests {
         assert_eq!(vres.len(), 4 * 6);
         assert_eq!(
             vres[0],
-            TileInformation::new(
-                [-2, -3].into(),
-                tile_size_in_pixels.into(),
-                central_geo_transform,
-            )
+            TileInformation::new(TileIdx::new_y_x(-2, -3), tile_size, central_geo_transform,)
         );
         assert_eq!(
             vres[1],
-            TileInformation::new(
-                [-2, -2].into(),
-                tile_size_in_pixels.into(),
-                central_geo_transform,
-            )
+            TileInformation::new(TileIdx::new_y_x(-2, -2), tile_size, central_geo_transform,)
         );
         assert_eq!(
             vres[12],
-            TileInformation::new(
-                [0, -3].into(),
-                tile_size_in_pixels.into(),
-                central_geo_transform,
-            )
+            TileInformation::new(TileIdx::new_y_x(0, -3), tile_size, central_geo_transform,)
         );
         assert_eq!(
             vres[23],
-            TileInformation::new(
-                [1, 2].into(),
-                tile_size_in_pixels.into(),
-                central_geo_transform,
-            )
+            TileInformation::new(TileIdx::new_y_x(1, 2), tile_size, central_geo_transform,)
         );
     }
 
@@ -1071,25 +1056,13 @@ mod tests {
             TimeInterval::new_unchecked(1_388_534_400_000, 1_391_212_800_000)
         );
 
-        assert_eq!(
-            c[0].tile_information().global_tile_position(),
-            [-1, -1].into()
-        );
+        assert_eq!(c[0].tile_information().tile_position(), [-1, -1].into());
 
-        assert_eq!(
-            c[1].tile_information().global_tile_position(),
-            [-1, 0].into()
-        );
+        assert_eq!(c[1].tile_information().tile_position(), [-1, 0].into());
 
-        assert_eq!(
-            c[2].tile_information().global_tile_position(),
-            [0, -1].into()
-        );
+        assert_eq!(c[2].tile_information().tile_position(), [0, -1].into());
 
-        assert_eq!(
-            c[3].tile_information().global_tile_position(),
-            [0, 0].into()
-        );
+        assert_eq!(c[3].tile_information().tile_position(), [0, 0].into());
     }
 
     #[tokio::test]
@@ -1195,8 +1168,8 @@ mod tests {
         );
 
         TileInformation {
-            tile_size_in_pixels: shape,
-            global_tile_position: [0, 0].into(),
+            tile_size: TileSize::new_y_x(shape.y(), shape.x()),
+            tile_position: TileIdx::new_y_x(0, 0),
             global_geo_transform: real_geotransform,
         }
     }

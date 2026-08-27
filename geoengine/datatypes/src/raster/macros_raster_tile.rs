@@ -242,7 +242,9 @@ macro_rules! call_generic_raster_tile_2d_ext {
 mod tests {
     use crate::{
         primitives::{CacheHint, TimeInterval},
-        raster::{GeoTransform, Grid2D, GridIndexAccess, Pixel, RasterTile2D, TypedRasterTile2D},
+        raster::{
+            GeoTransform, Grid2D, GridIndexAccess, Pixel, RasterTile2D, TileIdx, TypedRasterTile2D,
+        },
         util::test::TestDefault,
     };
     use crate::{raster::RasterDataType, util::test::catch_unwind_silent};
@@ -498,7 +500,7 @@ mod tests {
 
         let typed_raster_a = TypedRasterTile2D::U32(RasterTile2D::new(
             TimeInterval::default(),
-            [0, 0].into(),
+            TileIdx::new_y_x(0, 0),
             0,
             [1.0, 1.0, 0.0, 1.0, 0.0, -1.0].into(),
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])

@@ -283,12 +283,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileIdx;
     use geoengine_datatypes::{
         primitives::{CacheHint, TimeInterval, TimeStep},
-        raster::{
-            Grid, GridBoundingBox2D, GridShape, MapElements, RenameBands,
-            TilesEqualIgnoringCacheHint,
-        },
+        raster::{Grid, GridBoundingBox2D, MapElements, RenameBands, TilesEqualIgnoringCacheHint},
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
@@ -303,6 +301,7 @@ mod tests {
     };
 
     use super::*;
+    use geoengine_datatypes::raster::TileSize;
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
@@ -310,7 +309,7 @@ mod tests {
         let data: Vec<RasterTile2D<u8>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
+                tile_position: TileIdx::new_y_x(-1, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![0, 1, 2, 3]).unwrap().into(),
@@ -319,7 +318,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
+                tile_position: TileIdx::new_y_x(-1, 1),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![4, 5, 6, 7]).unwrap().into(),
@@ -328,7 +327,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 0].into(),
+                tile_position: TileIdx::new_y_x(-1, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![8, 9, 10, 11]).unwrap().into(),
@@ -337,7 +336,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 1].into(),
+                tile_position: TileIdx::new_y_x(-1, 1),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![12, 13, 14, 15])
@@ -351,7 +350,7 @@ mod tests {
         let data2: Vec<RasterTile2D<u8>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
+                tile_position: TileIdx::new_y_x(-1, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![16, 17, 18, 19])
@@ -362,7 +361,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
+                tile_position: TileIdx::new_y_x(-1, 1),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![20, 21, 22, 23])
@@ -373,7 +372,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 0].into(),
+                tile_position: TileIdx::new_y_x(-1, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![24, 25, 26, 27])
@@ -384,7 +383,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 1].into(),
+                tile_position: TileIdx::new_y_x(-1, 1),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![28, 29, 30, 31])
@@ -452,9 +451,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
-            shape_array: [2, 2],
-        };
+        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
 
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
