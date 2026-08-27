@@ -21,8 +21,8 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, Grid as GridWithFlexibleBoundType, Grid2D, GridBoundingBox2D,
-    GridIdx, GridOrEmpty, GridSize, RasterDataType, RasterTile2D, TilingSpecification,
-    TilingStrategy, UpdateIndexedElementsParallel,
+    GridIdx, GridOrEmpty, RasterDataType, RasterTile2D, TilingSpecification, TilingStrategy,
+    UpdateIndexedElementsParallel,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use num_traits::FloatConst;
@@ -365,7 +365,7 @@ impl QueryProcessor for GridRasterizationQueryProcessor {
             .then(move |tile_info| async move {
                 let tile_spatial_bounds = tile_info.spatial_partition();
 
-                let grid_size_x = tile_info.tile_size_in_pixels().axis_size_x();
+                let grid_size_x = tile_info.tile_size.axis_size_x();
 
                 let vector_query = VectorQueryRectangle::new(
                     tile_spatial_bounds.as_bbox(),
@@ -511,7 +511,7 @@ impl QueryProcessor for DensityRasterizationQueryProcessor {
 
                 let mut chunks = points_processor.query(vector_query, ctx).await?;
 
-                let mut tile_data = Grid2D::new_filled(tiling_strategy.tile_size_in_pixels, 0.0);
+                let mut tile_data = Grid2D::new_filled(tiling_strategy.tile_size.grid_shape(), 0.0);
 
                 let mut cache_hint = CacheHint::max_duration();
 
@@ -600,7 +600,7 @@ fn generate_zeroed_tiles<'a>(
     tiling_specification: TilingSpecification,
     query: &RasterQueryRectangle,
 ) -> BoxStream<'a, util::Result<RasterTile2D<f64>>> {
-    let tile_shape = tiling_specification.tile_size_in_pixels;
+    let tile_shape = tiling_specification.tile_size;
     let time_interval = query.time_interval();
 
     let tiling_strategy = TilingStrategy::new(tile_shape, tiling_geo_transform);
@@ -610,7 +610,7 @@ fn generate_zeroed_tiles<'a>(
             .tile_information_iterator_from_pixel_bounds(query.spatial_bounds())
             .map(move |tile_info| {
                 let tile_data = vec![0.; tile_shape.number_of_elements()];
-                let tile_grid = Grid2D::new(tile_shape, tile_data)
+                let tile_grid = Grid2D::new(tile_shape.grid_shape(), tile_data)
                     .expect("Data vector length should match the number of pixels in the tile");
 
                 Ok(RasterTile2D::new_with_tile_info(

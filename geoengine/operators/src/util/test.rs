@@ -124,7 +124,7 @@ pub fn raster_tile_from_file<T: Pixel + GdalType>(
     let buffer = rasterband.read_as::<T>(
         (0, 0),
         ds.raster_size(),
-        ds.raster_size(), // or: tile_size_in_pixels
+        ds.raster_size(), // or: tile_size
         None,
     )?;
 
@@ -135,7 +135,7 @@ pub fn raster_tile_from_file<T: Pixel + GdalType>(
     let mask_buffer = mask_band.read_as::<u8>(
         (0, 0),
         ds.raster_size(),
-        ds.raster_size(), // or: tile_size_in_pixels
+        ds.raster_size(), // or: tile_size
         None,
     )?;
     let (_, mask_buffer_data) = mask_buffer.into_shape_and_vec();

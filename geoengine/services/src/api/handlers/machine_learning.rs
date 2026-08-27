@@ -82,7 +82,7 @@ pub(crate) async fn add_ml_model<C: ApplicationContext>(
     // Check that the in/out shapes are ok
     check_model_shape(
         &ml_model_metadata.metadata,
-        exe_context.tiling_specification().tile_size_in_pixels,
+        exe_context.tiling_specification().tile_size.grid_shape(),
     )?;
     // initialize model
     let session = load_onnx_model_from_loading_info(&ml_model_metadata)?;

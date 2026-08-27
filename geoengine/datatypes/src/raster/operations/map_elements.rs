@@ -359,7 +359,7 @@ where
 mod tests {
     use crate::{
         primitives::{CacheHint, TimeInterval},
-        raster::{EmptyGrid2D, GeoTransform, Grid2D},
+        raster::{EmptyGrid2D, GeoTransform, Grid2D, TileIdx},
         util::test::TestDefault,
     };
 
@@ -458,7 +458,7 @@ mod tests {
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
         let t1 = RasterTile2D::new(
             TimeInterval::default(),
-            [0, 0].into(),
+            TileIdx::new_y_x(0, 0),
             0,
             geo,
             r1,
@@ -482,7 +482,7 @@ mod tests {
         let r1 = GridOrEmpty::Grid(MaskedGrid::from(Grid2D::new(dim.into(), data).unwrap()));
         let t1 = RasterTile2D::new(
             TimeInterval::default(),
-            [0, 0].into(),
+            TileIdx::new_y_x(0, 0),
             0,
             geo,
             r1,

@@ -1163,8 +1163,8 @@ mod tests {
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::primitives::{Coordinate2D, TimeInstance};
     use geoengine_datatypes::raster::{
-        BoundedGrid, GeoTransform, Grid2D, GridIdx2D, GridOrEmpty2D, GridShape2D, MaskedGrid2D,
-        RasterDataType, TilingSpecification,
+        BoundedGrid, GeoTransform, Grid2D, GridIdx2D, GridOrEmpty2D, MaskedGrid2D, RasterDataType,
+        TileIdx, TileSize, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use std::str::FromStr;
@@ -1230,7 +1230,7 @@ mod tests {
         let grid: GridOrEmpty2D<u8> = Grid2D::new_filled([2, 2].into(), fill_value).into();
         TypedRasterTile2D::U8(RasterTile2D::new(
             TimeInterval::default(),
-            GridIdx2D::new([0, 0]),
+            TileIdx::new_y_x(0, 0),
             0,
             GeoTransform::test_default(),
             grid,
@@ -1573,18 +1573,19 @@ mod tests {
         GridBoundingBox2D,
         TilingSpecification,
     ) {
-        let tile_size_in_pixels = GridShape2D::new_2d(2, 2);
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tile_size = TileSize::new_y_x(2, 2);
+        let tiling_specification = TilingSpecification::new(tile_size);
         let geo_transform = GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.);
 
-        let raster: MaskedGrid2D<u8> = Grid2D::new_filled(tile_size_in_pixels, fill_value).into();
+        let raster: MaskedGrid2D<u8> =
+            Grid2D::new_filled(tile_size.grid_shape(), fill_value).into();
 
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
                 global_geo_transform: geo_transform,
-                global_tile_position: GridIdx2D::new([0, 0]),
-                tile_size_in_pixels,
+                tile_position: TileIdx::new_y_x(0, 0),
+                tile_size,
             },
             0,
             raster.into(),
@@ -1597,7 +1598,7 @@ mod tests {
             time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 geo_transform,
-                tile_size_in_pixels.bounding_box(),
+                tile_size.grid_shape().bounding_box(),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1613,7 +1614,7 @@ mod tests {
         (
             source,
             raster_tile,
-            tile_size_in_pixels.bounding_box(),
+            tile_size.grid_shape().bounding_box(),
             tiling_specification,
         )
     }

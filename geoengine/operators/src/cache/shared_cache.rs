@@ -1043,6 +1043,7 @@ mod tests {
     use crate::cache::cache_tiles::{CompressedGridOrEmpty, CompressedMaskedGrid};
 
     use super::*;
+    use geoengine_datatypes::raster::TileIdx;
 
     async fn process_query_async(tile_cache: &mut SharedCache, op_name: CanonicOperatorName) {
         let query_id = <SharedCache as AsyncCache<RasterTile2D<u8>>>::insert_query(
@@ -1087,7 +1088,7 @@ mod tests {
     fn create_tile() -> RasterTile2D<u8> {
         RasterTile2D::<u8> {
             time: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
-            tile_position: [-1, 0].into(),
+            tile_position: TileIdx::new_y_x(-1, 0),
             band: 0,
             global_geo_transform: TestDefault::test_default(),
             grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -1101,7 +1102,7 @@ mod tests {
     fn create_compressed_tile() -> CompressedRasterTile2D<u8> {
         CompressedRasterTile2D::<u8> {
             time: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
-            tile_position: [-1, 0].into(),
+            tile_position: TileIdx::new_y_x(-1, 0),
             band: 0,
             global_geo_transform: TestDefault::test_default(),
             grid_array: CompressedGridOrEmpty::Compressed(CompressedMaskedGrid::new(
