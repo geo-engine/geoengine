@@ -134,8 +134,8 @@ mod tests {
             TimeInterval::default(),
             TileInformation {
                 global_geo_transform: GeoTransform::test_default(),
-                global_tile_position: [1, 1].into(),
-                tile_size_in_pixels: [3, 2].into(),
+                tile_position: [1, 1].into(),
+                tile_size: [3, 2].into(),
             },
             0,
             grid_array,

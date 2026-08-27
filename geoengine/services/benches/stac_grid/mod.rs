@@ -10,7 +10,7 @@ use geoengine_datatypes::{
         AxisAlignedRectangle, BandSelection, BoundingBox2D, DateTime, SpatialPartition2D,
         TimeInterval,
     },
-    raster::{GeoTransform, GridIdx2D, GridShape, TileInformation},
+    raster::{GeoTransform, TileIdx, TileInformation, TileSize},
     spatial_reference::SpatialReference,
 };
 use geoengine_operators::{engine::MetaData, source::MultiBandGdalLoadingInfoQueryRectangle};
@@ -102,8 +102,8 @@ fn viewport(z: u8, center: (f64, f64), reverse: bool) -> Vec<Tile> {
 
 fn tile_information(tile: &Tile) -> TileInformation {
     TileInformation::new(
-        GridIdx2D::new([0, 0]),
-        GridShape::new([1, 1]),
+        TileIdx::new_y_x(0, 0),
+        TileSize::new_y_x(1, 1),
         GeoTransform::new_unchecked(
             (tile.bbox.0, tile.bbox.3).into(),
             tile.bbox.2 - tile.bbox.0,

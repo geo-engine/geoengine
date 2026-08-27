@@ -560,6 +560,8 @@ mod tests {
         },
     };
     use futures::stream::StreamExt;
+    use geoengine_datatypes::raster::TileIdx;
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::{
         primitives::{CacheHint, Coordinate2D, TimeInterval},
         raster::{
@@ -576,7 +578,7 @@ mod tests {
     async fn test_min() {
         let raster_tiles = make_raster();
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -590,7 +592,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -646,8 +649,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -660,8 +663,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -674,8 +677,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -688,8 +691,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -704,7 +707,7 @@ mod tests {
     async fn test_max() {
         let raster_tiles = make_raster();
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -718,7 +721,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -774,8 +778,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -788,8 +792,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -802,8 +806,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -816,8 +820,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -832,7 +836,7 @@ mod tests {
     async fn test_max_with_no_data() {
         let raster_tiles = make_raster(); // TODO: switch to make_raster_with_no_data?
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -846,7 +850,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -902,8 +907,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -916,8 +921,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -930,8 +935,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -944,8 +949,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -960,7 +965,7 @@ mod tests {
     async fn test_max_with_no_data_but_ignoring_it() {
         let raster_tiles = make_raster(); // TODO: switch to make_raster_with_no_data?
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -974,7 +979,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1030,8 +1036,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1044,8 +1050,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1058,8 +1064,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1072,8 +1078,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1086,7 +1092,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_only_no_data() {
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1100,15 +1106,16 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
-                        global_tile_position: [-1, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 0),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1166,8 +1173,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1181,7 +1188,7 @@ mod tests {
     async fn test_first_with_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1195,7 +1202,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1251,8 +1259,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1266,8 +1274,8 @@ mod tests {
                 &RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1289,7 +1297,7 @@ mod tests {
     async fn test_last_with_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1303,7 +1311,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1358,8 +1367,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1373,8 +1382,8 @@ mod tests {
                 &RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1396,7 +1405,7 @@ mod tests {
     async fn test_last() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1410,7 +1419,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1467,8 +1477,8 @@ mod tests {
                 &RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
-                        global_tile_position: [-1, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 0),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1489,8 +1499,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1504,7 +1514,7 @@ mod tests {
     async fn test_first() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1518,7 +1528,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1574,8 +1585,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1589,8 +1600,8 @@ mod tests {
                 &RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1612,7 +1623,7 @@ mod tests {
     async fn test_mean_nodata() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1626,7 +1637,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1682,8 +1694,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1697,8 +1709,8 @@ mod tests {
                 &RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1720,7 +1732,7 @@ mod tests {
     async fn test_mean_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1734,7 +1746,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1790,8 +1803,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1805,8 +1818,8 @@ mod tests {
                 &RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1829,7 +1842,7 @@ mod tests {
     async fn test_sum_without_nodata() {
         let raster_tiles = make_raster();
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1843,7 +1856,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1899,8 +1913,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
-                        global_tile_position: [-1, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 0),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1912,8 +1926,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1925,8 +1939,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
-                        global_tile_position: [-1, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 0),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1938,8 +1952,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1956,7 +1970,7 @@ mod tests {
     async fn test_sum_nodata() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1970,7 +1984,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2026,8 +2041,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2041,8 +2056,8 @@ mod tests {
                 &RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2064,7 +2079,7 @@ mod tests {
     async fn test_sum_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2078,7 +2093,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2134,8 +2150,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2149,8 +2165,8 @@ mod tests {
                 &RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2173,7 +2189,7 @@ mod tests {
     async fn test_sum_with_larger_data_type() {
         let raster_tiles = make_raster();
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2187,7 +2203,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2254,8 +2271,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
-                        global_tile_position: [-1, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 0),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2270,8 +2287,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2286,8 +2303,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
-                        global_tile_position: [-1, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 0),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2302,8 +2319,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2324,7 +2341,7 @@ mod tests {
     async fn test_count_without_nodata() {
         let raster_tiles = make_raster();
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2338,7 +2355,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2394,8 +2412,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
-                        global_tile_position: [-1, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 0),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2407,8 +2425,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2420,8 +2438,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
-                        global_tile_position: [-1, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 0),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2433,8 +2451,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2451,7 +2469,7 @@ mod tests {
     async fn test_count_nodata() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2465,7 +2483,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2521,8 +2540,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2536,8 +2555,8 @@ mod tests {
                 &RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2559,7 +2578,7 @@ mod tests {
     async fn test_count_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2573,7 +2592,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2629,8 +2649,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2644,8 +2664,8 @@ mod tests {
                 &RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2667,7 +2687,7 @@ mod tests {
     async fn test_query_not_aligned_with_window_reference() {
         let raster_tiles = make_raster();
 
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2681,7 +2701,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2736,8 +2757,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2750,8 +2771,8 @@ mod tests {
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2766,8 +2787,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2777,8 +2798,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2788,8 +2809,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2799,8 +2820,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2810,8 +2831,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 30),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2821,8 +2842,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 30),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2832,8 +2853,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(30, 40),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2843,8 +2864,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(30, 40),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2860,8 +2881,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2871,8 +2892,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2889,8 +2910,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2907,8 +2928,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2918,8 +2939,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 30),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2936,8 +2957,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(20, 30),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -3038,8 +3059,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
-                        global_tile_position: [-1, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 0),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -3051,8 +3072,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
-                        global_tile_position: [-1, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 0),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     1,
@@ -3064,8 +3085,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -3077,8 +3098,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     1,
@@ -3090,8 +3111,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
-                        global_tile_position: [-1, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 0),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -3103,8 +3124,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
-                        global_tile_position: [-1, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 0),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     1,
@@ -3116,8 +3137,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -3129,8 +3150,8 @@ mod tests {
                 RasterTile2D::new_with_tile_info(
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
-                        global_tile_position: [-1, 1].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
+                        tile_size: TileSize::new_y_x(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     1,
