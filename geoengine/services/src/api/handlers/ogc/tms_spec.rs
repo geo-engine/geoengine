@@ -14,7 +14,7 @@ use geoengine_datatypes::{
     operations::reproject::suggest_pixel_size_like_gdal_helper,
     primitives::{Coordinate2D, SpatialResolution},
     raster::{
-        GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
+        GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridShapeAccess, GridSize, TileIdx,
         TilingSpatialGridDefinition, TilingSpecification,
     },
     spatial_reference::SpatialReference,
@@ -371,14 +371,15 @@ impl TileMatrixSetProvider for CustomNativeTMS {
         let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
 
         let tile_grid_bounds = tiling_strategy.raster_spatial_query_to_tiling_grid_box(grid_bounds);
-        let tile_index =
-            tile_grid_bounds.min_index() + GridIdx2D::new([tile_row as isize, tile_col as isize]);
+        let tile_index = tile_grid_bounds.min_index().grid_idx()
+            + GridIdx2D::new([tile_row as isize, tile_col as isize]);
 
-        let min_pixel_index = tiling_strategy.tile_idx_to_global_pixel_idx(tile_index);
+        let min_pixel_index = tiling_strategy
+            .tile_idx_to_global_pixel_idx(TileIdx::new_y_x(tile_index.y(), tile_index.x()));
         let max_pixel_index = min_pixel_index
             + GridIdx2D::new([
-                tiling_strategy.tile_size_in_pixels.x() as isize,
-                tiling_strategy.tile_size_in_pixels.y() as isize,
+                tiling_strategy.tile_size.axis_size_x() as isize,
+                tiling_strategy.tile_size.axis_size_y() as isize,
             ])
             - GridIdx2D::new([1, 1]); // inclusive bounds, e.g. we expect max-min to be 511 and not 512 for a 512 pixel tile
 
@@ -841,8 +842,8 @@ pub fn calculate_number_of_zoom_levels(
     let grid_shape = result_descriptor.spatial_grid_descriptor().grid_shape();
     let [x_size, y_size] = [grid_shape.x(), grid_shape.y()];
     let [tile_size_x, tile_size_y] = [
-        tile_size.tile_size_in_pixels.x(),
-        tile_size.tile_size_in_pixels.y(),
+        tile_size.tile_size.axis_size_x(),
+        tile_size.tile_size.axis_size_y(),
     ];
 
     // we stop when one level is 1
@@ -894,7 +895,7 @@ pub fn calculate_tiles_for_zoom_level(
     let tiling_geo_transform = tiling_def.tiling_geo_transform();
     let tiling_strategy = tiling_def.generate_data_tiling_strategy();
     let tile_bounds = tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
-    let grid_shape = GridShape2D::new(tile_bounds.axis_size());
+    let grid_shape = GridShape2D::new(tile_bounds.grid_bounds().axis_size());
 
     // Calculate the origin coordinate of the first tile
     let min_pixel_index = tiling_strategy.tile_idx_to_global_pixel_idx(tile_bounds.min_index());
@@ -941,7 +942,7 @@ fn calculate_tiles_for_zoom_levels(
         let tiling_geo_transform = tiling_def.tiling_geo_transform();
         let tiling_strategy = tiling_def.generate_data_tiling_strategy();
         let tile_bounds = tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
-        let actual_tiles = GridShape2D::new(tile_bounds.axis_size());
+        let actual_tiles = GridShape2D::new(tile_bounds.grid_bounds().axis_size());
 
         // Calculate the origin coordinate of the first tile
         let min_pixel_index = tiling_strategy.tile_idx_to_global_pixel_idx(tile_bounds.min_index());
@@ -1551,7 +1552,8 @@ mod tests {
             let resampled_tiling_strategy = resampled_tiling_def.generate_data_tiling_strategy();
             let resampled_tile_bounds = resampled_tiling_strategy
                 .global_pixel_grid_bounds_to_tile_grid_bounds(resampled_grid_bounds);
-            let actual_from_operator = GridShape2D::new(resampled_tile_bounds.axis_size());
+            let actual_from_operator =
+                GridShape2D::new(resampled_tile_bounds.grid_bounds().axis_size());
 
             // Compare: tiles from method should match tiles from initialized operator
             assert_eq!(

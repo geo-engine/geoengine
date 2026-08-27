@@ -145,8 +145,9 @@ where
             .tiling_grid_definition(ctx.tiling_specification())
             .generate_data_tiling_strategy();
 
-        let tiling_bounds =
-            tiling_strat.global_pixel_grid_bounds_to_tile_grid_bounds(query.spatial_bounds());
+        let tiling_bounds = tiling_strat
+            .global_pixel_grid_bounds_to_tile_grid_bounds(query.spatial_bounds())
+            .grid_bounds();
 
         let times = self.time_query(query.time_interval(), ctx).await?;
 
@@ -175,7 +176,7 @@ where
                         tile,
                         band,
                         tiling_strat.geo_transform,
-                        GridOrEmpty::new_empty_shape(tiling_strat.tile_size_in_pixels),
+                        GridOrEmpty::new_empty_shape(tiling_strat.tile_size.grid_shape()),
                         CacheHint::no_cache(),
                     )
                 })
@@ -462,7 +463,7 @@ mod tests {
     };
     use geoengine_datatypes::raster::{
         BoundedGrid, GeoTransform, Grid, Grid2D, GridBoundingBox2D, MaskedGrid, RasterDataType,
-        RasterProperties, TileInformation,
+        RasterProperties, TileIdx, TileInformation, TileSize,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -478,8 +479,8 @@ mod tests {
             TimeInterval::default(),
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
-                global_tile_position: [0, 0].into(),
-                tile_size_in_pixels: [3, 2].into(),
+                tile_position: TileIdx::new_y_x(0, 0),
+                tile_size: TileSize::new_y_x(3, 2),
             },
             0,
             raster.into(),
@@ -582,10 +583,8 @@ mod tests {
 
         let deserialized: Box<dyn RasterOperator> = serde_json::from_value(serialized).unwrap();
 
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = TileSize::new_y_x(3, 2);
+        let tiling_specification = TilingSpecification { tile_size };
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -608,7 +607,7 @@ mod tests {
                 data: vec![
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(1, 2),
-                        tile_position: [-1, 0].into(),
+                        tile_position: TileIdx::new_y_x(-1, 0),
                         band: 0,
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -619,7 +618,7 @@ mod tests {
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(1, 2),
-                        tile_position: [-1, 1].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
                         band: 0,
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: Grid::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
@@ -630,7 +629,7 @@ mod tests {
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 3),
-                        tile_position: [-1, 0].into(),
+                        tile_position: TileIdx::new_y_x(-1, 0),
                         band: 0,
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: Grid::new([3, 2].into(), vec![13, 14, 15, 16, 17, 18])
@@ -641,7 +640,7 @@ mod tests {
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 3),
-                        tile_position: [-1, 1].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
                         band: 0,
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: Grid::new([3, 2].into(), vec![19, 20, 21, 22, 23, 24])
@@ -740,7 +739,7 @@ mod tests {
                 data: vec![
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(1, 2),
-                        tile_position: [-1, 0].into(),
+                        tile_position: TileIdx::new_y_x(-1, 0),
                         band: 0,
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -751,7 +750,7 @@ mod tests {
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(1, 2),
-                        tile_position: [-1, 1].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
                         band: 0,
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: Grid::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
@@ -762,7 +761,7 @@ mod tests {
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 3),
-                        tile_position: [-1, 0].into(),
+                        tile_position: TileIdx::new_y_x(-1, 0),
                         band: 0,
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: Grid::new([3, 2].into(), vec![13, 14, 15, 16, 17, 18])
@@ -773,7 +772,7 @@ mod tests {
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 3),
-                        tile_position: [-1, 1].into(),
+                        tile_position: TileIdx::new_y_x(-1, 1),
                         band: 0,
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: Grid::new([3, 2].into(), vec![19, 20, 21, 22, 23, 24])

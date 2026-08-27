@@ -571,7 +571,7 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::primitives::CacheTtlSeconds;
-    use geoengine_datatypes::raster::{GridBoundingBox2D, GridShape2D, TilingSpecification};
+    use geoengine_datatypes::raster::{GridBoundingBox2D, TileSize, TilingSpecification};
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::assert_image_equals;
     use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
@@ -743,7 +743,7 @@ mod tests {
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn get_map_test_helper_tiling_spec() -> TilingSpecification {
         TilingSpecification {
-            tile_size_in_pixels: GridShape2D::new([600, 600]),
+            tile_size: TileSize::new_y_x(600, 600),
         }
     }
 

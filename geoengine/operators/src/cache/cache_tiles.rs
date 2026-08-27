@@ -619,7 +619,7 @@ mod tests {
     };
     use geoengine_datatypes::{
         primitives::{BandSelection, RasterQueryRectangle},
-        raster::{GeoTransform, GridBoundingBox2D},
+        raster::{GeoTransform, GridBoundingBox2D, TileIdx},
         util::test::TestDefault,
     };
 
@@ -636,7 +636,7 @@ mod tests {
             cache_hint: Default::default(),
             global_geo_transform: GeoTransform::test_default(),
             properties: Default::default(),
-            tile_position: [0, 0].into(),
+            tile_position: TileIdx::new_y_x(0, 0),
             band: 0,
         }
     }
