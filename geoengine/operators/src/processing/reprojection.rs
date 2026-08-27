@@ -866,8 +866,8 @@ mod tests {
     };
     use geoengine_datatypes::primitives::{Coordinate2D, TimeStep};
     use geoengine_datatypes::raster::{
-        GeoTransform, GridBoundingBox2D, GridShape2D, GridSize, SpatialGridDefinition,
-        TilesEqualIgnoringCacheHint,
+        GeoTransform, GridBoundingBox2D, GridShape2D, GridSize, SpatialGridDefinition, TileIdx,
+        TileSize, TilesEqualIgnoringCacheHint,
     };
     use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::{
@@ -1132,7 +1132,7 @@ mod tests {
         let data = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
+                tile_position: TileIdx::new_y_x(-1, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1_u8, 2, 3, 4])
@@ -1143,7 +1143,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
+                tile_position: TileIdx::new_y_x(-1, 1),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
@@ -1152,7 +1152,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [0, 0].into(),
+                tile_position: TileIdx::new_y_x(0, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1_u8, 2, 3, 4])
@@ -1163,7 +1163,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [0, 1].into(),
+                tile_position: TileIdx::new_y_x(0, 1),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
@@ -1172,7 +1172,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 0].into(),
+                tile_position: TileIdx::new_y_x(-1, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
@@ -1183,7 +1183,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 1].into(),
+                tile_position: TileIdx::new_y_x(-1, 1),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
@@ -1194,7 +1194,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [0, 0].into(),
+                tile_position: TileIdx::new_y_x(0, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
@@ -1205,7 +1205,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [0, 1].into(),
+                tile_position: TileIdx::new_y_x(0, 1),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
@@ -1286,7 +1286,8 @@ mod tests {
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let tile_size = GridShape2D::new_2d(512, 512);
-        exe_ctx.tiling_specification = TilingSpecification::new(tile_size);
+        exe_ctx.tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
@@ -1436,7 +1437,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn raster_ndvi_3857_to_4326() -> Result<()> {
-        let tile_size_in_pixels = [200, 200].into();
+        let tile_size = TileSize::new_y_x(200, 200);
         let data_geo_transform = GeoTransform::new_unchecked(
             Coordinate2D::new(-20_037_508.342_789_244, 19_971_868.880_408_562),
             14_052.950_258_048_738,
@@ -1501,9 +1502,8 @@ mod tests {
             cache_ttl: None,
         };
 
-        let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            tile_size_in_pixels,
-        ));
+        let mut exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(tile_size));
 
         let id: DataId = DatasetId::new().into();
         let name = NamedData::with_system_name("ndvi");
@@ -1566,7 +1566,7 @@ mod tests {
 
     #[tokio::test]
     async fn query_outside_projection_area_of_use_produces_empty_tiles() {
-        let tile_size_in_pixels = [600, 600].into();
+        let tile_size = TileSize::new_y_x(600, 600);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636).into(),
@@ -1608,9 +1608,8 @@ mod tests {
             cache_ttl: None,
         };
 
-        let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            tile_size_in_pixels,
-        ));
+        let mut exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(tile_size));
         let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
         let id: DataId = DatasetId::new().into();

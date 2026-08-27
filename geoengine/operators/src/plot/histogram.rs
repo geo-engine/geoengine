@@ -729,7 +729,7 @@ mod tests {
     };
     use geoengine_datatypes::raster::{
         BoundedGrid, EmptyGrid2D, GeoTransform, Grid2D, GridShape2D, RasterDataType, RasterTile2D,
-        TileInformation, TilingSpecification,
+        TileIdx, TileInformation, TileSize, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::Identifier;
@@ -863,8 +863,8 @@ mod tests {
                     TimeInterval::default(),
                     TileInformation {
                         global_geo_transform: TestDefault::test_default(),
-                        global_tile_position: [0, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: TileIdx::new_y_x(0, 0),
+                        tile_size: TileSize::new_y_x(3, 2),
                     },
                     0,
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -889,10 +889,8 @@ mod tests {
 
     #[tokio::test]
     async fn simple_raster() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = TileSize::new_y_x(3, 2);
+        let tiling_specification = TilingSpecification { tile_size };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = Histogram {
@@ -940,10 +938,8 @@ mod tests {
 
     #[tokio::test]
     async fn simple_raster_without_spec() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = TileSize::new_y_x(3, 2);
+        let tiling_specification = TilingSpecification { tile_size };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = Histogram {
@@ -993,9 +989,9 @@ mod tests {
 
     #[tokio::test]
     async fn it_uses_only_pixels_in_query_rectangle() {
-        let tile_size_in_pixels = [3, 2].into();
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
         let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
+            tile_size: TileSize::new_y_x(tile_size_in_pixels.y(), tile_size_in_pixels.x()),
         };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -1313,18 +1309,19 @@ mod tests {
 
     #[tokio::test]
     async fn no_data_raster() {
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size_in_pixels.bounding_box(),
+                tile_size.bounding_box(),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = Histogram {
             params: HistogramParams {
@@ -1341,11 +1338,11 @@ mod tests {
                         TimeInterval::default(),
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
-                            global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels,
+                            tile_position: TileIdx::new_y_x(0, 0),
+                            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
                         },
                         0,
-                        EmptyGrid2D::<u8>::new(tile_size_in_pixels).into(),
+                        EmptyGrid2D::<u8>::new(tile_size).into(),
                         CacheHint::no_cache(),
                     )],
                     result_descriptor,
@@ -1519,18 +1516,19 @@ mod tests {
 
     #[tokio::test]
     async fn single_value_raster_stream() {
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let tile_size = GridShape2D::new_2d(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size_in_pixels.bounding_box(),
+                tile_size.bounding_box(),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = Histogram {
@@ -1548,11 +1546,11 @@ mod tests {
                         TimeInterval::default(),
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
-                            global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels,
+                            tile_position: TileIdx::new_y_x(0, 0),
+                            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
                         },
                         0,
-                        Grid2D::new(tile_size_in_pixels, vec![4; 6]).unwrap().into(),
+                        Grid2D::new(tile_size, vec![4; 6]).unwrap().into(),
                         CacheHint::no_cache(),
                     )],
                     result_descriptor,

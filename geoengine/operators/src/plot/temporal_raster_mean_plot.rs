@@ -351,6 +351,7 @@ impl MeanCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geoengine_datatypes::raster::{TileIdx, TileSize};
 
     use crate::{
         engine::{
@@ -426,10 +427,8 @@ mod tests {
 
     #[tokio::test]
     async fn single_raster() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = TileSize::new_y_x(3, 2);
+        let tiling_specification = TilingSpecification { tile_size };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
@@ -514,9 +513,9 @@ mod tests {
 
     #[tokio::test]
     async fn it_uses_only_pixels_in_query_rectangle() {
-        let tile_size_in_pixels = [3, 2].into();
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
         let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
+            tile_size: TileSize::new_y_x(tile_size_in_pixels.y(), tile_size_in_pixels.x()),
         };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -587,8 +586,8 @@ mod tests {
                 time_interval,
                 TileInformation {
                     global_geo_transform: TestDefault::test_default(),
-                    global_tile_position: [0, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
+                    tile_position: TileIdx::new_y_x(0, 0),
+                    tile_size: TileSize::new_y_x(3, 2),
                 },
                 0,
                 Grid2D::new([3, 2].into(), values).unwrap().into(),
@@ -625,10 +624,8 @@ mod tests {
 
     #[tokio::test]
     async fn raster_series() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = TileSize::new_y_x(3, 2);
+        let tiling_specification = TilingSpecification { tile_size };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
@@ -721,8 +718,8 @@ mod tests {
                     time_interval,
                     TileInformation {
                         global_geo_transform: TestDefault::test_default(),
-                        global_tile_position: [0, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
+                        tile_position: [0, 0].into(),
+                        tile_size: [3, 2].into(),
                     },
                     band as u32,
                     Grid2D::new([3, 2].into(), values)
@@ -762,7 +759,7 @@ mod tests {
         measurements: [Measurement; 2],
     ) -> Result<PlotData> {
         let execution_context = MockExecutionContext::new_with_tiling_spec(TilingSpecification {
-            tile_size_in_pixels: [3, 2].into(),
+            tile_size: [3, 2].into(),
         });
 
         let time_interval = TimeInterval::new(
@@ -913,8 +910,8 @@ mod tests {
                     *time,
                     TileInformation {
                         global_geo_transform: TestDefault::test_default(),
-                        global_tile_position: [0, 0].into(),
-                        tile_size_in_pixels: shape,
+                        tile_position: [0, 0].into(),
+                        tile_size: TileSize::new_y_x(shape.y(), shape.x()),
                     },
                     0,
                     grid,

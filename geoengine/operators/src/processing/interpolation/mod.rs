@@ -681,6 +681,7 @@ where
 mod tests {
     use super::*;
     use futures::StreamExt;
+    use geoengine_datatypes::raster::{TileIdx, TileSize};
     use geoengine_datatypes::{
         primitives::{
             Coordinate2D, RasterQueryRectangle, SpatialResolution, TimeInterval, TimeStep,
@@ -819,8 +820,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-2, -1].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(-2, -1),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -830,8 +831,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-2, 0].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(-2, 0),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -841,8 +842,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-2, 1].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(-2, 1),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -852,8 +853,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-2, 2].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(-2, 2),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -863,8 +864,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-1, -1].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, -1),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -874,8 +875,8 @@ mod tests {
             RasterTile2D::<i8>::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -885,8 +886,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -896,8 +897,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-1, 2].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 2),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -907,8 +908,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [0, -1].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(0, -1),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -918,8 +919,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [0, 0].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(0, 0),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -929,8 +930,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [0, 1].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(0, 1),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -940,8 +941,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [0, 2].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(0, 2),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -951,8 +952,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-2, -1].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(-2, -1),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -962,8 +963,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-2, 0].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(-2, 0),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -973,8 +974,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-2, 1].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(-2, 1),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -984,8 +985,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-2, 2].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(-2, 2),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -995,8 +996,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-1, -1].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, -1),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1006,8 +1007,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1017,8 +1018,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1028,8 +1029,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-1, 2].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(-1, 2),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1039,8 +1040,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [0, -1].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(0, -1),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1050,8 +1051,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [0, 0].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(0, 0),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1061,8 +1062,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [0, 1].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(0, 1),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1072,8 +1073,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [0, 2].into(),
-                    tile_size_in_pixels: [2, 2].into(),
+                    tile_position: TileIdx::new_y_x(0, 2),
+                    tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,

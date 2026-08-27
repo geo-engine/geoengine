@@ -141,11 +141,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geoengine_datatypes::raster::TileIdx;
 
     use futures::stream::{self, StreamExt};
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::TimeInterval;
-    use geoengine_datatypes::raster::{Grid2D, TileInformation};
+    use geoengine_datatypes::raster::{Grid2D, TileInformation, TileSize};
     use geoengine_datatypes::util::test::TestDefault;
     use tokio::pin;
 
@@ -153,8 +154,8 @@ mod tests {
     async fn simple() {
         let tile_information = TileInformation {
             global_geo_transform: TestDefault::test_default(),
-            global_tile_position: [0, 0].into(),
-            tile_size_in_pixels: [3, 2].into(),
+            tile_position: TileIdx::new_y_x(0, 0),
+            tile_size: TileSize::new_y_x(3, 2),
         };
 
         let raster_tiles: Vec<RasterTile2D<u8>> = vec![
@@ -220,8 +221,8 @@ mod tests {
     async fn first_value() {
         let tile_information = TileInformation {
             global_geo_transform: TestDefault::test_default(),
-            global_tile_position: [0, 0].into(),
-            tile_size_in_pixels: [3, 2].into(),
+            tile_position: TileIdx::new_y_x(0, 0),
+            tile_size: TileSize::new_y_x(3, 2),
         };
 
         let raster_tiles: Vec<RasterTile2D<u8>> = vec![

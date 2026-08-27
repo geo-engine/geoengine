@@ -2,8 +2,8 @@
 use geoengine_datatypes::{
     primitives::{AxisAlignedRectangle, BoundingBox2D, SpatialPartition2D, SpatialPartitioned},
     raster::{
-        GeoTransform, GridBoundingBox2D, GridIdx2D, GridIntersection, GridShape2D,
-        SpatialGridDefinition, TileInformation, TileInformationIter, TilingStrategy,
+        GeoTransform, GridBoundingBox2D, GridIdx2D, GridIntersection, SpatialGridDefinition,
+        TileInformation, TileInformationIter, TileSize, TilingStrategy,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -118,7 +118,7 @@ pub type StacGridCells = std::iter::Map<
 impl From<TileInformation> for StacGridCell {
     fn from(tile: TileInformation) -> Self {
         Self {
-            index: tile.global_tile_position(),
+            index: tile.tile_position().grid_idx(),
             bbox: tile.spatial_partition().as_bbox(),
         }
     }
@@ -166,7 +166,7 @@ impl ProjectedStacGrid {
     }
 
     fn cells_for_bounds(self, bounds: Option<GridBoundingBox2D>) -> StacGridCells {
-        let tiling = TilingStrategy::new(GridShape2D::new_2d(1, 1), self.raster.geo_transform());
+        let tiling = TilingStrategy::new(TileSize::new_y_x(1, 1), self.raster.geo_transform());
         let tiles = bounds.map(|bounds| tiling.tile_information_iterator_from_pixel_bounds(bounds));
         tiles
             .into_iter()

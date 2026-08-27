@@ -662,7 +662,7 @@ mod tests {
     };
     use geoengine_datatypes::raster::{
         BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, GridShape2D, RasterDataType,
-        RasterTile2D, TileInformation, TilingSpecification,
+        RasterTile2D, TileIdx, TileInformation, TileSize, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
 
@@ -743,8 +743,11 @@ mod tests {
                             TimeInterval::default(),
                             TileInformation {
                                 global_geo_transform: TestDefault::test_default(),
-                                global_tile_position: [0, 0].into(),
-                                tile_size_in_pixels,
+                                tile_position: [0, 0].into(),
+                                tile_size: TileSize::new_y_x(
+                                    tile_size_in_pixels.y(),
+                                    tile_size_in_pixels.x(),
+                                ),
                             },
                             band as u32,
                             Grid2D::new(tile_size_in_pixels, values).unwrap().into(),
@@ -763,7 +766,7 @@ mod tests {
         bbox: BoundingBox2D,
     ) -> Result<serde_json::Value> {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(GridShape2D::new_2d(3, 2)),
+            TilingSpecification::new(TileSize::new_y_x(3, 2)),
         );
 
         let statistics = Statistics {
@@ -794,7 +797,7 @@ mod tests {
     #[tokio::test]
     async fn it_creates_a_column_per_percentile() {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(GridShape2D::new_2d(3, 2)),
+            TilingSpecification::new(TileSize::new_y_x(3, 2)),
         );
         let plot = Statistics {
             params: StatisticsParams {
@@ -1032,10 +1035,8 @@ mod tests {
 
     #[tokio::test]
     async fn vector_no_column() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = TileSize::new_y_x(3, 2);
+        let tiling_specification = TilingSpecification { tile_size };
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
             DataCollection::from_slices(
@@ -1132,10 +1133,8 @@ mod tests {
 
     #[tokio::test]
     async fn vector_single_column() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = TileSize::new_y_x(3, 2);
+        let tiling_specification = TilingSpecification { tile_size };
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
             DataCollection::from_slices(
@@ -1223,10 +1222,8 @@ mod tests {
 
     #[tokio::test]
     async fn vector_two_columns() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = TileSize::new_y_x(3, 2);
+        let tiling_specification = TilingSpecification { tile_size };
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
             DataCollection::from_slices(
@@ -1323,10 +1320,8 @@ mod tests {
 
     #[tokio::test]
     async fn raster_percentile() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = TileSize::new_y_x(3, 2);
+        let tiling_specification = TilingSpecification { tile_size };
 
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
@@ -1345,8 +1340,8 @@ mod tests {
                     TimeInterval::default(),
                     TileInformation {
                         global_geo_transform: TestDefault::test_default(),
-                        global_tile_position: [0, 0].into(),
-                        tile_size_in_pixels,
+                        tile_position: TileIdx::new_y_x(0, 0),
+                        tile_size,
                     },
                     0,
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -1413,10 +1408,8 @@ mod tests {
 
     #[tokio::test]
     async fn vector_percentiles() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
+        let tile_size = TileSize::new_y_x(3, 2);
+        let tiling_specification = TilingSpecification { tile_size };
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
             DataCollection::from_slices(
