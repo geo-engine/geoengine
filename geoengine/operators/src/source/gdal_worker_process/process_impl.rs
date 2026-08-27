@@ -656,6 +656,8 @@ mod tests {
     };
     use super::*;
     use float_cmp::assert_approx_eq;
+    use geoengine_datatypes::raster::TileIdx;
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::{
         primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance, TimeInterval},
         raster::{
@@ -722,8 +724,8 @@ mod tests {
         );
 
         TileInformation {
-            tile_size_in_pixels: shape,
-            global_tile_position: [0, 0].into(),
+            tile_size: TileSize::new_y_x(shape.y(), shape.x()),
+            tile_position: TileIdx::new_y_x(0, 0),
             global_geo_transform: real_geotransform,
         }
     }

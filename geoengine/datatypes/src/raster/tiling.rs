@@ -9,17 +9,174 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+/// A tile size in pixels — distinguishes tile dimensions from pixel coordinates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TileSize(GridShape2D);
+
+impl TileSize {
+    /// Create a tile size with explicit axis order (y, x).
+    pub fn new_y_x(y_size: usize, x_size: usize) -> Self {
+        Self(GridShape2D::new_2d(y_size, x_size))
+    }
+
+    /// Default tile size (512×512) used when tile size is unknown
+    /// (e.g. deserializing from database).
+    pub fn default_512() -> Self {
+        Self::new_y_x(512, 512)
+    }
+
+    pub fn axis_size_y(&self) -> usize {
+        self.0.axis_size_y()
+    }
+
+    pub fn axis_size_x(&self) -> usize {
+        self.0.axis_size_x()
+    }
+
+    pub fn number_of_elements(&self) -> usize {
+        self.0.number_of_elements()
+    }
+
+    pub fn into_inner(self) -> [usize; 2] {
+        self.0.into_inner()
+    }
+
+    /// Access the underlying pixel-space grid shape.
+    pub fn grid_shape(&self) -> GridShape2D {
+        self.0
+    }
+}
+
+impl GridSize for TileSize {
+    type ShapeArray = [usize; 2];
+    const NDIM: usize = 2;
+
+    fn axis_size(&self) -> Self::ShapeArray {
+        self.0.axis_size()
+    }
+}
+
+impl std::fmt::Display for TileSize {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let [y, x] = self.0.into_inner();
+        write!(f, "{y}x{x}")
+    }
+}
+
+impl From<[usize; 2]> for TileSize {
+    fn from(val: [usize; 2]) -> Self {
+        Self(GridShape2D::from(val))
+    }
+}
+
+impl From<TileSize> for GridShape2D {
+    fn from(val: TileSize) -> Self {
+        val.0
+    }
+}
+
+/// A tile index — distinguishes tile positions from pixel positions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TileIdx(GridIdx2D);
+
+impl TileIdx {
+    pub fn new_y_x(y: isize, x: isize) -> Self {
+        Self(GridIdx2D::new_y_x(y, x))
+    }
+
+    /// Access the underlying pixel-space grid index.
+    pub fn grid_idx(&self) -> GridIdx2D {
+        self.0
+    }
+}
+
+impl From<[isize; 2]> for TileIdx {
+    fn from(val: [isize; 2]) -> Self {
+        Self(GridIdx2D::from(val))
+    }
+}
+
+impl From<TileIdx> for GridIdx2D {
+    fn from(val: TileIdx) -> Self {
+        val.0
+    }
+}
+
+/// Tile-space bounding box — distinguishes from pixel-space `GridBoundingBox2D`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TileBounds(GridBoundingBox2D);
+
+impl TileBounds {
+    pub fn new_y_x(min_y: isize, min_x: isize, max_y: isize, max_x: isize) -> Self {
+        Self(GridBoundingBox2D::new_unchecked(
+            GridIdx2D::new_y_x(min_y, min_x),
+            GridIdx2D::new_y_x(max_y, max_x),
+        ))
+    }
+
+    /// Access the underlying pixel-space grid bounding box.
+    pub fn grid_bounds(&self) -> GridBoundingBox2D {
+        self.0
+    }
+
+    pub fn min_index(&self) -> TileIdx {
+        let min = self.0.min_index();
+        TileIdx::new_y_x(min.y(), min.x())
+    }
+
+    pub fn max_index(&self) -> TileIdx {
+        let max = self.0.max_index();
+        TileIdx::new_y_x(max.y(), max.x())
+    }
+
+    pub fn num_tiles(&self) -> usize {
+        let TileIdx(GridIdx([uy, ux])) = self.min_index();
+        let TileIdx(GridIdx([ly, lx])) = self.max_index();
+        ((ly - uy + 1) * (lx - ux + 1)) as usize
+    }
+}
+
+impl From<TileBounds> for GridBoundingBox2D {
+    fn from(val: TileBounds) -> Self {
+        val.0
+    }
+}
+
+/// Iterator over tile indices. Wraps `GridIdx2DIter` to yield `TileIdx`.
+#[derive(Clone, Debug)]
+pub struct TileIdx2DIter(GridIdx2DIter);
+
+impl TileIdx2DIter {
+    pub fn new(bounds: &TileBounds) -> Self {
+        Self(GridIdx2DIter::new(&bounds.0))
+    }
+
+    pub fn reset(&mut self) {
+        self.0.reset();
+    }
+}
+
+impl Iterator for TileIdx2DIter {
+    type Item = TileIdx;
+
+    fn next(&mut self) -> Option<TileIdx> {
+        self.0.next().map(TileIdx)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+}
+
 /// The static parameters required to create a `TilingStrategy`
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub struct TilingSpecification {
-    pub tile_size_in_pixels: GridShape2D,
+    pub tile_size: TileSize,
 }
 
 impl TilingSpecification {
-    pub fn new(tile_size_in_pixels: GridShape2D) -> Self {
-        Self {
-            tile_size_in_pixels,
-        }
+    pub fn new(tile_size: TileSize) -> Self {
+        Self { tile_size }
     }
 
     #[allow(clippy::unused_self)]
@@ -32,24 +189,24 @@ impl GridShapeAccess for TilingSpecification {
     type ShapeArray = [usize; 2];
 
     fn grid_shape_array(&self) -> Self::ShapeArray {
-        self.tile_size_in_pixels.shape_array
+        self.tile_size.0.shape_array
     }
 
     fn grid_shape(&self) -> GridShape2D {
-        self.tile_size_in_pixels
+        self.tile_size.0
     }
 }
 
 impl From<TilingSpecification> for GridShape2D {
     fn from(val: TilingSpecification) -> Self {
-        val.tile_size_in_pixels
+        val.tile_size.0
     }
 }
 
 impl TestDefault for TilingSpecification {
     fn test_default() -> Self {
         Self {
-            tile_size_in_pixels: GridShape2D::new([512, 512]),
+            tile_size: TileSize::default_512(),
         }
     }
 }
@@ -57,32 +214,30 @@ impl TestDefault for TilingSpecification {
 /// A provider of tile (size) information for a raster/grid
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct TilingStrategy {
-    pub tile_size_in_pixels: GridShape2D,
+    pub tile_size: TileSize,
     pub geo_transform: GeoTransform,
 }
 
 impl TilingStrategy {
-    pub fn new(tile_pixel_size: GridShape2D, geo_transform: GeoTransform) -> Self {
+    pub fn new(tile_size: TileSize, geo_transform: GeoTransform) -> Self {
         Self {
-            tile_size_in_pixels: tile_pixel_size,
+            tile_size,
             geo_transform,
         }
     }
 
-    pub fn pixel_idx_to_tile_idx(&self, pixel_idx: GridIdx2D) -> GridIdx2D {
+    pub fn pixel_idx_to_tile_idx(&self, pixel_idx: GridIdx2D) -> TileIdx {
         let GridIdx([y_pixel_idx, x_pixel_idx]) = pixel_idx;
-        let [y_tile_size, x_tile_size] = self.tile_size_in_pixels.into_inner();
-        //let y_tile_idx = (y_pixel_idx as f64 / y_tile_size as f64).floor() as isize;
-        //let x_tile_idx = (x_pixel_idx as f64 / x_tile_size as f64).floor() as isize;
+        let [y_tile_size, x_tile_size] = self.tile_size.into_inner();
         let y_tile_idx = num::integer::div_floor(y_pixel_idx, y_tile_size as isize);
         let x_tile_idx = num::integer::div_floor(x_pixel_idx, x_tile_size as isize);
-        [y_tile_idx, x_tile_idx].into()
+        TileIdx::new_y_x(y_tile_idx, x_tile_idx)
     }
 
-    pub fn tile_grid_box(&self, partition: SpatialPartition2D) -> GridBoundingBox2D {
+    pub fn tile_grid_box(&self, partition: SpatialPartition2D) -> TileBounds {
         let start = self.pixel_idx_to_tile_idx(self.geo_transform.upper_left_pixel_idx(&partition));
         let end = self.pixel_idx_to_tile_idx(self.geo_transform.lower_right_pixel_idx(&partition));
-        GridBoundingBox2D::new_unchecked(start, end)
+        TileBounds(GridBoundingBox2D::new_unchecked(start.0, end.0))
     }
 
     pub fn num_tiles_intersecting_partition(&self, partition: SpatialPartition2D) -> usize {
@@ -92,30 +247,38 @@ impl TilingStrategy {
 
     pub fn num_tiles_intersecting_grid_bounds(&self, grid_bounds: GridBoundingBox2D) -> usize {
         let tile_bounds = self.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
-
-        let GridIdx([upper_left_tile_y, upper_left_tile_x]) = tile_bounds.min_index();
-        let GridIdx([lower_right_tile_y, lower_right_tile_x]) = tile_bounds.max_index();
-
-        (((lower_right_tile_y - upper_left_tile_y) + 1)
-            * ((lower_right_tile_x - upper_left_tile_x) + 1)) as usize
+        tile_bounds.num_tiles()
     }
 
     pub fn global_pixel_grid_bounds_to_tile_grid_bounds(
         &self,
         global_pixel_grid_bounds: GridBoundingBox2D,
-    ) -> GridBoundingBox2D {
+    ) -> TileBounds {
         let start = self.pixel_idx_to_tile_idx(global_pixel_grid_bounds.min_index());
         let end = self.pixel_idx_to_tile_idx(global_pixel_grid_bounds.max_index());
-        GridBoundingBox2D::new_unchecked(start, end)
+        TileBounds(GridBoundingBox2D::new_unchecked(start.0, end.0))
     }
 
     /// Transforms a tile position into a global pixel position
-    pub fn tile_idx_to_global_pixel_idx(&self, tile_idx: GridIdx2D) -> GridIdx2D {
-        let GridIdx([y_tile_idx, x_tile_idx]) = tile_idx;
+    pub fn tile_idx_to_global_pixel_idx(&self, tile_idx: TileIdx) -> GridIdx2D {
+        let TileIdx(GridIdx([y_tile_idx, x_tile_idx])) = tile_idx;
         GridIdx::new([
-            y_tile_idx * self.tile_size_in_pixels.axis_size_y() as isize,
-            x_tile_idx * self.tile_size_in_pixels.axis_size_x() as isize,
+            y_tile_idx * self.tile_size.axis_size_y() as isize,
+            x_tile_idx * self.tile_size.axis_size_x() as isize,
         ])
+    }
+
+    /// Convert a tile index directly to the spatial coordinate of its upper-left corner.
+    pub fn tile_idx_to_spatial(&self, tile_idx: TileIdx) -> Coordinate2D {
+        let pixel_idx = self.tile_idx_to_global_pixel_idx(tile_idx);
+        self.geo_transform
+            .grid_idx_to_pixel_upper_left_coordinate_2d(pixel_idx)
+    }
+
+    /// Convert a spatial coordinate to the tile index that contains it.
+    pub fn spatial_to_tile_idx(&self, coord: Coordinate2D) -> TileIdx {
+        let pixel_idx = self.geo_transform.coordinate_to_grid_idx_2d(coord);
+        self.pixel_idx_to_tile_idx(pixel_idx)
     }
 
     /// Returns the tile grid bounds for the given `raster_spatial_query`.
@@ -127,49 +290,46 @@ impl TilingStrategy {
     pub fn raster_spatial_query_to_tiling_grid_box(
         &self,
         raster_spatial_query: GridBoundingBox2D,
-    ) -> GridBoundingBox2D {
+    ) -> TileBounds {
         self.global_pixel_grid_bounds_to_tile_grid_bounds(raster_spatial_query)
     }
 
-    /// Returns an iterator over all tile indices that intersect with the given `grid_bounds`.
+    /// Returns an iterator over all tile indices that intersect with the given pixel bounds.
     pub fn tile_idx_iterator_from_grid_bounds(
-        // TODO: indicate that this uses pixel bounds!
         &self,
-        grid_bounds: GridBoundingBox2D,
-    ) -> GridIdx2DIter {
-        let tile_bounds = self.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
-
-        GridIdx2DIter::new(&tile_bounds)
+        pixel_bounds: GridBoundingBox2D,
+    ) -> TileIdx2DIter {
+        let tile_bounds = self.global_pixel_grid_bounds_to_tile_grid_bounds(pixel_bounds);
+        TileIdx2DIter::new(&tile_bounds)
     }
 
-    /// generates the tile information for the tiles intersecting the bounding box
-    /// the iterator moves once along the x-axis and then increases the y-axis
+    /// Generates the tile information for the tiles intersecting the given pixel bounds.
+    /// The iterator moves once along the x-axis and then increases the y-axis.
     pub fn tile_information_iterator_from_pixel_bounds(
-        // TODO: indicate that this uses pixel bounds!
         &self,
-        grid_bounds: GridBoundingBox2D,
+        pixel_bounds: GridBoundingBox2D,
     ) -> TileInformationIter {
-        TileInformationIter::new_with_pixel_bounds(*self, &grid_bounds)
+        TileInformationIter::new_with_pixel_bounds(*self, &pixel_bounds)
     }
 }
 
 /// The `TileInformation` is used to represent the spatial position of each tile
 #[derive(PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct TileInformation {
-    pub tile_size_in_pixels: GridShape2D,
-    pub global_tile_position: GridIdx2D,
+    pub tile_size: TileSize,
+    pub tile_position: TileIdx,
     pub global_geo_transform: GeoTransform,
 }
 
 impl TileInformation {
     pub fn new(
-        global_tile_position: GridIdx2D,
-        tile_size_in_pixels: GridShape2D,
+        tile_position: TileIdx,
+        tile_size: TileSize,
         global_geo_transform: GeoTransform,
     ) -> Self {
         Self {
-            tile_size_in_pixels,
-            global_tile_position,
+            tile_size,
+            tile_position,
             global_geo_transform,
         }
     }
@@ -180,11 +340,11 @@ impl TileInformation {
     }
 
     pub fn local_lower_left_pixel_idx(&self) -> GridIdx2D {
-        [self.tile_size_in_pixels.axis_size_y() as isize - 1, 0].into()
+        [self.tile_size.axis_size_y() as isize - 1, 0].into()
     }
 
     pub fn local_upper_right_pixel_idx(&self) -> GridIdx2D {
-        [0, self.tile_size_in_pixels.axis_size_x() as isize - 1].into()
+        [0, self.tile_size.axis_size_x() as isize - 1].into()
     }
 
     pub fn local_lower_right_pixel_idx(&self) -> GridIdx2D {
@@ -193,13 +353,13 @@ impl TileInformation {
         [y, x].into()
     }
 
-    pub fn global_tile_position(&self) -> GridIdx2D {
-        self.global_tile_position
+    pub fn tile_position(&self) -> TileIdx {
+        self.tile_position
     }
 
     pub fn global_upper_left_pixel_idx(&self) -> GridIdx2D {
-        let [tile_size_y, tile_size_x] = self.tile_size_in_pixels.into_inner();
-        self.global_tile_position() * [tile_size_y as isize, tile_size_x as isize]
+        let [tile_size_y, tile_size_x] = self.tile_size.into_inner();
+        self.tile_position().0 * [tile_size_y as isize, tile_size_x as isize]
     }
 
     pub fn global_upper_right_pixel_idx(&self) -> GridIdx2D {
@@ -221,8 +381,8 @@ impl TileInformation {
         )
     }
 
-    pub fn tile_size_in_pixels(&self) -> GridShape2D {
-        self.tile_size_in_pixels
+    pub fn tile_size(&self) -> TileSize {
+        self.tile_size
     }
 
     pub fn local_to_global_pixel_idx(&self, local_pixel_position: GridIdx2D) -> GridIdx2D {
@@ -246,7 +406,7 @@ impl TileInformation {
     }
 
     pub fn tiling_strategy(&self) -> TilingStrategy {
-        TilingStrategy::new(self.tile_size_in_pixels, self.global_geo_transform)
+        TilingStrategy::new(self.tile_size, self.global_geo_transform)
     }
 }
 
@@ -262,9 +422,9 @@ impl SpatialPartitioned for TileInformation {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 pub struct TileInformationIter {
-    tile_idx_iter: GridIdx2DIter,
+    tile_idx_iter: TileIdx2DIter,
     tiling_strategy: TilingStrategy,
 }
 
@@ -298,7 +458,7 @@ impl Iterator for TileInformationIter {
         self.tile_idx_iter.next().map(|idx| {
             TileInformation::new(
                 idx,
-                self.tiling_strategy.tile_size_in_pixels,
+                self.tiling_strategy.tile_size,
                 self.tiling_strategy.geo_transform,
             )
         })
@@ -326,7 +486,7 @@ mod tests {
         );
 
         let strat = TilingStrategy {
-            tile_size_in_pixels: [600, 600].into(),
+            tile_size: TileSize::new_y_x(600, 600),
             geo_transform,
         };
 
@@ -354,7 +514,7 @@ mod tests {
     #[test]
     fn it_generates_all_interesected_tiles() {
         let strat = TilingStrategy {
-            tile_size_in_pixels: [512, 512].into(),
+            tile_size: TileSize::default_512(),
             geo_transform: GeoTransform::new((0., -0.).into(), 10., -10.),
         };
 
@@ -367,10 +527,10 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(tiles_idxs.len(), 4 * 4);
-        assert_eq!(tiles_idxs[0], [-2, -2].into());
-        assert_eq!(tiles_idxs[1], [-2, -1].into());
-        assert_eq!(tiles_idxs[14], [1, 0].into());
-        assert_eq!(tiles_idxs[15], [1, 1].into());
+        assert_eq!(tiles_idxs[0], TileIdx::new_y_x(-2, -2));
+        assert_eq!(tiles_idxs[1], TileIdx::new_y_x(-2, -1));
+        assert_eq!(tiles_idxs[14], TileIdx::new_y_x(1, 0));
+        assert_eq!(tiles_idxs[15], TileIdx::new_y_x(1, 1));
     }
 
     #[test]
@@ -381,14 +541,14 @@ mod tests {
             -0.000_033_337_4,
         );
 
-        let tile_pixel_size = GridShape2D::new_2d(512, 512);
+        let tile_pixel_size = TileSize(GridShape2D::new_2d(512, 512));
         let tiling_strat = TilingStrategy::new(tile_pixel_size, geo_transform);
 
         let tiling_origin_reference = Coordinate2D::new(0., 0.); // This is the _currently_ fixed tiling origin reference.
         let nearest_to_tiling_origin = geo_transform.nearest_pixel_edge(tiling_origin_reference);
 
         let tile_idx = tiling_strat.pixel_idx_to_tile_idx(nearest_to_tiling_origin);
-        let expected_near_tiling_origin_idx = GridIdx::new([72_329_138_149, 72_329_138_149]);
+        let expected_near_tiling_origin_idx = TileIdx::new_y_x(72_329_138_149, 72_329_138_149);
         assert_eq!(tile_idx, expected_near_tiling_origin_idx);
 
         let pixel_distance_reverse = nearest_to_tiling_origin * -1;
@@ -398,7 +558,7 @@ mod tests {
             tiling_strat.tile_idx_to_global_pixel_idx(origin_pixel_tile) - pixel_distance_reverse;
 
         let expected_origin_in_tiling_based_pixels =
-            GridIdx::new([-72_329_138_150, -72_329_138_150]);
+            TileIdx::new_y_x(-72_329_138_150, -72_329_138_150);
         let expected_tile_offset_from_tiling = GridIdx::new([-85, -85]);
         assert_eq!(origin_pixel_tile, expected_origin_in_tiling_based_pixels);
         assert_eq!(origin_pixel_offset, expected_tile_offset_from_tiling);
@@ -407,44 +567,44 @@ mod tests {
     #[test]
     fn pixel_idx_to_tile_idx() {
         let geo_transform = GeoTransform::new((123., 321.).into(), 1.0, -1.0);
-        let tile_pixel_size = GridShape2D::new_2d(100, 100);
+        let tile_pixel_size = TileSize(GridShape2D::new_2d(100, 100));
 
         let tiling_strat = TilingStrategy::new(tile_pixel_size, geo_transform);
         let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(0, 0));
-        assert_eq!(GridIdx2D::new_y_x(0, 0), pixels);
+        assert_eq!(TileIdx::new_y_x(0, 0), pixels);
         let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(1, 1));
-        assert_eq!(GridIdx2D::new_y_x(0, 0), pixels);
+        assert_eq!(TileIdx::new_y_x(0, 0), pixels);
         let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(57, 57));
-        assert_eq!(GridIdx2D::new_y_x(0, 0), pixels);
+        assert_eq!(TileIdx::new_y_x(0, 0), pixels);
         let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(100, 100));
-        assert_eq!(GridIdx2D::new_y_x(1, 1), pixels);
+        assert_eq!(TileIdx::new_y_x(1, 1), pixels);
         let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(200, 200));
-        assert_eq!(GridIdx2D::new_y_x(2, 2), pixels);
+        assert_eq!(TileIdx::new_y_x(2, 2), pixels);
         let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(1000, 1000));
-        assert_eq!(GridIdx2D::new_y_x(10, 10), pixels);
+        assert_eq!(TileIdx::new_y_x(10, 10), pixels);
         let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(-57, -57));
-        assert_eq!(GridIdx2D::new_y_x(-1, -1), pixels);
+        assert_eq!(TileIdx::new_y_x(-1, -1), pixels);
         let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(-300, -300));
-        assert_eq!(GridIdx2D::new_y_x(-3, -3), pixels);
+        assert_eq!(TileIdx::new_y_x(-3, -3), pixels);
     }
 
     #[test]
     fn tile_idx_to_pixel_idx() {
         let geo_transform = GeoTransform::new((123., 321.).into(), 1.0, -1.0);
-        let tile_pixel_size = GridShape2D::new_2d(100, 100);
+        let tile_pixel_size = TileSize(GridShape2D::new_2d(100, 100));
 
         let tiling_strat = TilingStrategy::new(tile_pixel_size, geo_transform);
-        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(GridIdx2D::new_y_x(0, 0));
+        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(TileIdx::new_y_x(0, 0));
         assert_eq!(GridIdx2D::new_y_x(0, 0), pixels);
-        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(GridIdx2D::new_y_x(1, 1));
+        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(TileIdx::new_y_x(1, 1));
         assert_eq!(GridIdx2D::new_y_x(100, 100), pixels);
-        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(GridIdx2D::new_y_x(2, 2));
+        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(TileIdx::new_y_x(2, 2));
         assert_eq!(GridIdx2D::new_y_x(200, 200), pixels);
-        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(GridIdx2D::new_y_x(3, 3));
+        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(TileIdx::new_y_x(3, 3));
         assert_eq!(GridIdx2D::new_y_x(300, 300), pixels);
-        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(GridIdx2D::new_y_x(10, 10));
+        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(TileIdx::new_y_x(10, 10));
         assert_eq!(GridIdx2D::new_y_x(1000, 1000), pixels);
-        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(GridIdx2D::new_y_x(-3, -3));
+        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(TileIdx::new_y_x(-3, -3));
         assert_eq!(GridIdx2D::new_y_x(-300, -300), pixels);
     }
 }

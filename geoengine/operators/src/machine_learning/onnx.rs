@@ -76,7 +76,7 @@ impl RasterOperator for Onnx {
 
         let model_loading_info = context.ml_model_loading_info(&self.params.model).await?;
 
-        let tiling_shape = context.tiling_specification().tile_size_in_pixels;
+        let tiling_shape = context.tiling_specification().tile_size.grid_shape();
 
         // check that we can use the model input / output shape with the operator
         check_model_shape(&model_loading_info.metadata, tiling_shape)?;
@@ -509,6 +509,7 @@ impl_no_data_value_none!(i8, u8, i16, u16, i32, u32, i64, u64);
 
 #[cfg(test)]
 mod tests {
+
     use crate::engine::TimeDescriptor;
     use crate::machine_learning::MlModelInputNoDataHandling;
     use crate::machine_learning::MlModelLoadingInfo;
@@ -532,11 +533,13 @@ mod tests {
     use geoengine_datatypes::raster::GridBoundingBox2D;
     use geoengine_datatypes::raster::RasterTile2D;
     use geoengine_datatypes::raster::SpatialGridDefinition;
+    use geoengine_datatypes::raster::TileIdx;
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::raster::TilesEqualIgnoringCacheHint;
     use geoengine_datatypes::{
         machine_learning::{MlModelName, MlTensorShape3D},
         primitives::{CacheHint, RasterQueryRectangle, TimeInterval},
-        raster::{Grid, GridOrEmpty, GridShape, RasterDataType, RenameBands},
+        raster::{Grid, GridOrEmpty, RasterDataType, RenameBands},
         spatial_reference::SpatialReference,
         test_data,
         util::test::TestDefault,
@@ -650,7 +653,7 @@ mod tests {
         let data: Vec<RasterTile2D<f32>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
+                tile_position: TileIdx::new_y_x(-1, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![0.1f32, 0.1, 0.2, 0.2])
@@ -661,7 +664,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
+                tile_position: TileIdx::new_y_x(-1, 1),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![0.2f32, 0.2, 0.1, 0.1])
@@ -675,7 +678,7 @@ mod tests {
         let data2: Vec<RasterTile2D<f32>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
+                tile_position: TileIdx::new_y_x(-1, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![0.2f32, 0.2, 0.1, 0.1])
@@ -686,7 +689,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
+                tile_position: TileIdx::new_y_x(-1, 1),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![0.1f32, 0.1, 0.2, 0.2])
@@ -772,9 +775,7 @@ mod tests {
         };
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
-            shape_array: [2, 2],
-        };
+        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
         exe_ctx.ml_models.insert(model_name, ml_model_loading_info);
 
         let query_rect = RasterQueryRectangle::new(
@@ -803,7 +804,7 @@ mod tests {
         let expected: Vec<RasterTile2D<i64>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
+                tile_position: TileIdx::new_y_x(-1, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![33i64, 33, 42, 42])
@@ -814,7 +815,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
+                tile_position: TileIdx::new_y_x(-1, 1),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![42i64, 42, 33, 33])
@@ -834,7 +835,7 @@ mod tests {
         let data: Vec<RasterTile2D<f32>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
+                tile_position: TileIdx::new_y_x(-1, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![0.1f32, 0.2, 0.3, 0.4])
@@ -845,7 +846,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
+                tile_position: TileIdx::new_y_x(-1, 1),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![0.5f32, 0.6, 0.7, 0.8])
@@ -859,7 +860,7 @@ mod tests {
         let data2: Vec<RasterTile2D<f32>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
+                tile_position: TileIdx::new_y_x(-1, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![0.9f32, 0.8, 0.7, 0.6])
@@ -870,7 +871,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
+                tile_position: TileIdx::new_y_x(-1, 1),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![0.5f32, 0.4, 0.3, 0.22])
@@ -884,7 +885,7 @@ mod tests {
         let data3: Vec<RasterTile2D<f32>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
+                tile_position: TileIdx::new_y_x(-1, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![0.1f32, 0.2, 0.3, 0.4])
@@ -895,7 +896,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
+                tile_position: TileIdx::new_y_x(-1, 1),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![0.5f32, 0.6, 0.7, 0.8])
@@ -1001,9 +1002,7 @@ mod tests {
         };
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
-            shape_array: [2, 2],
-        };
+        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
         exe_ctx.ml_models.insert(model_name, ml_model_loading_info);
 
         let query_rect = RasterQueryRectangle::new(
@@ -1052,7 +1051,7 @@ mod tests {
         let data: Vec<RasterTile2D<f32>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
+                tile_position: TileIdx::new_y_x(-1, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([512, 512].into(), vec![0.1f32; 512 * 512])
@@ -1063,7 +1062,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
+                tile_position: TileIdx::new_y_x(-1, 1),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([512, 512].into(), vec![1.0f32; 512 * 512])
@@ -1077,7 +1076,7 @@ mod tests {
         let data2: Vec<RasterTile2D<f32>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
+                tile_position: TileIdx::new_y_x(-1, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([512, 512].into(), vec![0.2f32; 512 * 512])
@@ -1088,7 +1087,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
+                tile_position: TileIdx::new_y_x(-1, 1),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([512, 512].into(), vec![2.0f32; 512 * 512])
@@ -1161,9 +1160,7 @@ mod tests {
         };
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
-            shape_array: [512, 512],
-        };
+        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(512, 512);
         exe_ctx.ml_models.insert(model_name, ml_model_loading_info);
 
         let query_rect = RasterQueryRectangle::new(
@@ -1192,7 +1189,7 @@ mod tests {
         let expected: Vec<RasterTile2D<f32>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
+                tile_position: TileIdx::new_y_x(-1, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([512, 512].into(), vec![0.3f32; 512 * 512])
@@ -1203,7 +1200,7 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
+                tile_position: TileIdx::new_y_x(-1, 1),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([512, 512].into(), vec![3.0f32; 512 * 512])

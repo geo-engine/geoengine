@@ -1,6 +1,8 @@
 use crate::{
     primitives::{BandSelection, BandSelectionIter},
-    raster::{GridBoundingBox2D, GridIdx2D, GridIdx2DIter, TileInformation, TileInformationIter},
+    raster::{
+        GridBoundingBox2D, GridIdx2D, GridIdx2DIter, TileIdx, TileInformation, TileInformationIter,
+    },
 };
 
 #[derive(Clone, Debug)]
@@ -46,20 +48,20 @@ impl TileIdxBandCrossProductIter {
 }
 
 impl Iterator for TileIdxBandCrossProductIter {
-    type Item = (GridIdx2D, u32);
+    type Item = (TileIdx, u32);
 
     fn next(&mut self) -> Option<Self::Item> {
         let current_t = self.current_tile;
 
         match (current_t, self.band_iter.next()) {
             (None, _) => None,
-            (Some(t), Some(b)) => Some((t, b)),
+            (Some(t), Some(b)) => Some((TileIdx::new_y_x(t.y(), t.x()), b)),
             (Some(_t), None) => {
                 self.band_iter.reset();
                 self.current_tile = self.tile_iter.next();
                 self.current_tile.map(|t| {
                     (
-                        t,
+                        TileIdx::new_y_x(t.y(), t.x()),
                         self.band_iter
                             .next()
                             .expect("There must be at least one band"),
