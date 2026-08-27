@@ -141,11 +141,10 @@ impl RasterOperator for NeighborhoodAggregate {
         // dimensions must not be larger as the neighboring tiles
         let dimensions = self.params.neighborhood.dimensions();
         ensure!(
-            dimensions.axis_size_x() <= tiling_specification.tile_size_in_pixels.axis_size_x()
-                && dimensions.axis_size_y()
-                    <= tiling_specification.tile_size_in_pixels.axis_size_y(),
+            dimensions.axis_size_x() <= tiling_specification.tile_size.axis_size_x()
+                && dimensions.axis_size_y() <= tiling_specification.tile_size.axis_size_y(),
             error::NeighborhoodTooLarge {
-                limit: tiling_specification.tile_size_in_pixels,
+                limit: tiling_specification.tile_size.grid_shape(),
                 actual: dimensions
             }
         );
