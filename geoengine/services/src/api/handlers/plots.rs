@@ -249,7 +249,7 @@ mod tests {
     use tokio_postgres::NoTls;
 
     fn json_tiling_spec() -> TilingSpecification {
-        TilingSpecification::new([3, 2].into())
+        TilingSpecification::with_zero_origin([3, 2].into())
     }
 
     #[ge_context::test(tiling_spec = "json_tiling_spec")]
@@ -334,7 +334,7 @@ mod tests {
     }
 
     fn json_vega_tiling_spec() -> TilingSpecification {
-        TilingSpecification::new([3, 2].into())
+        TilingSpecification::with_zero_origin([3, 2].into())
     }
 
     #[ge_context::test(tiling_spec = "json_vega_tiling_spec")]

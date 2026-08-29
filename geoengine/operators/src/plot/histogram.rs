@@ -404,8 +404,7 @@ impl HistogramRasterQueryProcessor {
         let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
             &query,
             BandSelection::new_single(self.band_idx),
-            rd.tiling_grid_definition(ctx.tiling_specification())
-                .tiling_geo_transform(),
+            rd.tiling_grid_definition().geo_transform,
         );
 
         call_on_generic_raster_processor!(&self.input, processor => {
@@ -433,8 +432,7 @@ impl HistogramRasterQueryProcessor {
         let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
             &query,
             BandSelection::new_single(self.band_idx),
-            rd.tiling_grid_definition(ctx.tiling_specification())
-                .tiling_geo_transform(),
+            rd.tiling_grid_definition().geo_transform,
         );
 
         call_on_generic_raster_processor!(&self.input, processor => {
@@ -869,6 +867,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                         GridShape2D::new_2d(3, 2).bounding_box(),
+                        TileSize::new_y_x(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -880,7 +879,7 @@ mod tests {
     #[tokio::test]
     async fn simple_raster() {
         let tile_size = TileSize::new_y_x(3, 2);
-        let tiling_specification = TilingSpecification { tile_size };
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = Histogram {
@@ -929,7 +928,7 @@ mod tests {
     #[tokio::test]
     async fn simple_raster_without_spec() {
         let tile_size = TileSize::new_y_x(3, 2);
-        let tiling_specification = TilingSpecification { tile_size };
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = Histogram {
@@ -1241,11 +1240,12 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::with_zero_origin(TileSize::new_y_x(tile_size.y(), tile_size.x()));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = Histogram {
             params: HistogramParams {
@@ -1448,11 +1448,12 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::with_zero_origin(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = Histogram {

@@ -287,6 +287,8 @@ from geoengine_api_client.models.raster_vector_join import RasterVectorJoin
 from geoengine_api_client.models.raster_vector_join_parameters import RasterVectorJoinParameters
 from geoengine_api_client.models.rasterization import Rasterization
 from geoengine_api_client.models.rasterization_parameters import RasterizationParameters
+from geoengine_api_client.models.re_tile import ReTile
+from geoengine_api_client.models.re_tile_parameters import ReTileParameters
 from geoengine_api_client.models.reflectance import Reflectance
 from geoengine_api_client.models.reflectance_parameters import ReflectanceParameters
 from geoengine_api_client.models.regular import Regular

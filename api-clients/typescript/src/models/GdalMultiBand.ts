@@ -39,8 +39,9 @@ export interface GdalMultiBand {
      */
     resultDescriptor: RasterResultDescriptor;
     /**
-     * Dataset-level cache TTL used when no tile-level TTL is set.
+     * Dataset-level TTL fallback used when no tile-level TTL is provided.
      * @type {number}
+     * @memberof GdalMultiBand
      */
     cacheTtl?: number | null;
 }

@@ -38,6 +38,7 @@ fn expression_on_sources(
         sources: SingleRasterSource {
             raster: RasterStacker {
                 params: RasterStackerParams {
+                    output_origin: None,
                     rename_bands: RenameBands::Default,
                 },
                 sources: MultipleRasterSources {

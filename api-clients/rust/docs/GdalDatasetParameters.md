@@ -15,6 +15,7 @@ Name | Type | Description | Notes
 **gdal_open_options** | Option<**Vec<String>**> |  | [optional]
 **gdal_config_options** | Option<[**Vec<Vec<String>>**](Vec.md)> |  | [optional]
 **allow_alphaband_as_mask** | Option<**bool**> |  | [optional]
+**tile_size** | Option<**serde_json::Value**> | Optional per-dataset tile size override. | [optional]
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

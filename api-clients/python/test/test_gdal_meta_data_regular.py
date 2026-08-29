@@ -94,7 +94,8 @@ class TestGdalMetaDataRegular(unittest.TestCase):
                             ''
                             ]
                         ], 
-                    allow_alphaband_as_mask = True, ),
+                    allow_alphaband_as_mask = True, 
+                    tile_size = geoengine_api_client.models.tile_size.tileSize(), ),
                 time_placeholders = {
                     'key' : geoengine_api_client.models.gdal_source_time_placeholder.GdalSourceTimePlaceholder(
                         format = '', 
@@ -169,7 +170,8 @@ class TestGdalMetaDataRegular(unittest.TestCase):
                             ''
                             ]
                         ], 
-                    allow_alphaband_as_mask = True, ),
+                    allow_alphaband_as_mask = True, 
+                    tile_size = geoengine_api_client.models.tile_size.tileSize(), ),
                 time_placeholders = {
                     'key' : geoengine_api_client.models.gdal_source_time_placeholder.GdalSourceTimePlaceholder(
                         format = '', 

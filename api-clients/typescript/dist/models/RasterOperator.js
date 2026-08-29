@@ -32,6 +32,7 @@ const RasterScaling_1 = require("./RasterScaling");
 const RasterStacker_1 = require("./RasterStacker");
 const RasterTypeConversion_1 = require("./RasterTypeConversion");
 const Rasterization_1 = require("./Rasterization");
+const ReTile_1 = require("./ReTile");
 const Reflectance_1 = require("./Reflectance");
 const Reprojection_1 = require("./Reprojection");
 const Temperature_1 = require("./Temperature");
@@ -75,6 +76,8 @@ function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, (0, RasterTypeConversion_1.RasterTypeConversionFromJSONTyped)(json, true), { type: 'RasterTypeConversion' });
         case 'Rasterization':
             return Object.assign({}, (0, Rasterization_1.RasterizationFromJSONTyped)(json, true), { type: 'Rasterization' });
+        case 'ReTile':
+            return Object.assign({}, (0, ReTile_1.ReTileFromJSONTyped)(json, true), { type: 'ReTile' });
         case 'Reflectance':
             return Object.assign({}, (0, Reflectance_1.ReflectanceFromJSONTyped)(json, true), { type: 'Reflectance' });
         case 'Reprojection':
@@ -127,6 +130,8 @@ function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, (0, RasterTypeConversion_1.RasterTypeConversionToJSON)(value), { type: 'RasterTypeConversion' });
         case 'Rasterization':
             return Object.assign({}, (0, Rasterization_1.RasterizationToJSON)(value), { type: 'Rasterization' });
+        case 'ReTile':
+            return Object.assign({}, (0, ReTile_1.ReTileToJSON)(value), { type: 'ReTile' });
         case 'Reflectance':
             return Object.assign({}, (0, Reflectance_1.ReflectanceToJSON)(value), { type: 'Reflectance' });
         case 'Reprojection':

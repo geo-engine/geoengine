@@ -778,7 +778,7 @@ impl Accu for MovingAverageAccu {
 #[cfg(test)]
 mod tests {
     use futures::StreamExt;
-    use geoengine_datatypes::raster::TileIdx;
+    use geoengine_datatypes::raster::{TileIdx, TileSize};
     use geoengine_datatypes::{
         primitives::{BandSelection, CacheHint, TimeInterval, TimeStep},
         raster::{Grid, GridBoundingBox2D, RasterDataType, TilesEqualIgnoringCacheHint},
@@ -794,7 +794,6 @@ mod tests {
     };
 
     use super::*;
-    use geoengine_datatypes::raster::TileSize;
 
     #[test]
     fn it_computes_first_derivative() {
@@ -1229,6 +1228,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                        TileSize::new_y_x(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_multiple_bands(3),
                 },
@@ -1379,6 +1379,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                        TileSize::new_y_x(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_multiple_bands(3),
                 },

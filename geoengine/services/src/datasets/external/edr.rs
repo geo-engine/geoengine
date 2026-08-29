@@ -21,7 +21,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{
     BoundedGrid, GeoTransform, GridIdx2D, GridShape2D, GridSize, RasterDataType,
-    SpatialGridDefinition,
+    SpatialGridDefinition, TileSize,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{
@@ -702,7 +702,8 @@ impl EdrCollectionMetaData {
                 ))
         };
 
-        let spatial_grid_def = SpatialGridDescriptor::new_source(spatial_grid);
+        let spatial_grid_def =
+            SpatialGridDescriptor::new_source(spatial_grid, TileSize::default_512());
 
         Ok(RasterResultDescriptor {
             data_type: RasterDataType::U8,
@@ -764,6 +765,7 @@ impl EdrCollectionMetaData {
                 ]),
                 allow_alphaband_as_mask: false,
                 retry: None,
+                tile_size: None,
             }),
             cache_ttl: provider.cache_ttl,
         })
@@ -1858,6 +1860,7 @@ mod tests {
                         ),]),
                         allow_alphaband_as_mask: false,
                         retry: None,
+                        tile_size: None,
                     }),
                     cache_ttl: Default::default(),
                 },
@@ -1888,6 +1891,7 @@ mod tests {
                         ),]),
                         allow_alphaband_as_mask: false,
                         retry: None,
+                        tile_size: None,
                     }),
                     cache_ttl: Default::default(),
                 }
@@ -1910,6 +1914,7 @@ mod tests {
                             -0.498_614_958_448_753_5
                         ),
                         GridBoundingBox2D::new_min_max(0, 360, 0, 719).unwrap(),
+                        TileSize::default_512(),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 }

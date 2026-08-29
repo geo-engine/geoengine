@@ -94,7 +94,8 @@ class TestGdalMetadataNetCdfCf(unittest.TestCase):
                             ''
                             ]
                         ], 
-                    allow_alphaband_as_mask = True, ),
+                    allow_alphaband_as_mask = True, 
+                    tile_size = geoengine_api_client.models.tile_size.tileSize(), ),
                 start = 56,
                 end = 56,
                 step = geoengine_api_client.models.time_step.TimeStep(
@@ -164,7 +165,8 @@ class TestGdalMetadataNetCdfCf(unittest.TestCase):
                             ''
                             ]
                         ], 
-                    allow_alphaband_as_mask = True, ),
+                    allow_alphaband_as_mask = True, 
+                    tile_size = geoengine_api_client.models.tile_size.tileSize(), ),
                 start = 56,
                 end = 56,
                 step = geoengine_api_client.models.time_step.TimeStep(

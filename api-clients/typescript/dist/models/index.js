@@ -290,6 +290,8 @@ __exportStar(require("./RasterVectorJoin"), exports);
 __exportStar(require("./RasterVectorJoinParameters"), exports);
 __exportStar(require("./Rasterization"), exports);
 __exportStar(require("./RasterizationParameters"), exports);
+__exportStar(require("./ReTile"), exports);
+__exportStar(require("./ReTileParameters"), exports);
 __exportStar(require("./Reflectance"), exports);
 __exportStar(require("./ReflectanceParameters"), exports);
 __exportStar(require("./Regular"), exports);

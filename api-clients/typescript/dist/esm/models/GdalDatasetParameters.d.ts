@@ -83,6 +83,12 @@ export interface GdalDatasetParameters {
      * @memberof GdalDatasetParameters
      */
     allowAlphabandAsMask?: boolean;
+    /**
+     * Optional per-dataset tile size override.
+     * @type {object}
+     * @memberof GdalDatasetParameters
+     */
+    tileSize?: object;
 }
 /**
  * Check if a given object implements the GdalDatasetParameters interface.

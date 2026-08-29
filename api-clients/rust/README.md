@@ -405,6 +405,8 @@ Class | Method | HTTP request | Description
  - [RasterVectorJoinParameters](docs/RasterVectorJoinParameters.md)
  - [Rasterization](docs/Rasterization.md)
  - [RasterizationParameters](docs/RasterizationParameters.md)
+ - [ReTile](docs/ReTile.md)
+ - [ReTileParameters](docs/ReTileParameters.md)
  - [Reflectance](docs/Reflectance.md)
  - [ReflectanceParameters](docs/ReflectanceParameters.md)
  - [Regular](docs/Regular.md)

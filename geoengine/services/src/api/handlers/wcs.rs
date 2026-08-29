@@ -14,11 +14,11 @@ use crate::{
     workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
+use geoengine_datatypes::raster::{GridShape2D, TilingGrid};
 use geoengine_datatypes::{
     primitives::{
         AxisAlignedRectangle, BandSelection, RasterQueryRectangle, SpatialResolution, TimeInterval,
     },
-    raster::GridShape2D,
     spatial_reference::SpatialReference,
     util::Identifier,
 };
@@ -420,12 +420,15 @@ async fn wcs_get_coverage<C: ApplicationContext>(
         )
         .await?;
 
-    let query_tiling_pixel_grid = wrapped
-        .result_descriptor
-        .spatial_grid_descriptor()
-        .tiling_grid_definition(tiling_spec)
-        .tiling_spatial_grid_definition()
-        .spatial_bounds_to_compatible_spatial_grid(request_partition);
+    let query_tiling_pixel_grid = TilingGrid::from_spatial_grid(
+        wrapped
+            .result_descriptor
+            .spatial_grid_descriptor()
+            .spatial_grid,
+        tiling_spec.tile_size,
+    )
+    .to_spatial_grid()
+    .spatial_bounds_to_compatible_spatial_grid(request_partition);
 
     let query_rect = RasterQueryRectangle::new(
         query_tiling_pixel_grid.grid_bounds(),
@@ -455,7 +458,6 @@ async fn wcs_get_coverage<C: ApplicationContext>(
             },
             Some(get_config_element::<crate::config::Wcs>()?.tile_limit),
             conn_closed,
-            execution_context.tiling_specification(),
         )
         .await)?
     .map_err(error::Error::from)?;
@@ -509,7 +511,7 @@ mod tests {
     use tokio_postgres::NoTls;
 
     fn tiling_spec() -> TilingSpecification {
-        TilingSpecification::new(TileSize::new_y_x(600, 600))
+        TilingSpecification::with_zero_origin(TileSize::new_y_x(600, 600))
     }
 
     #[ge_context::test]
