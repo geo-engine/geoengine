@@ -280,9 +280,7 @@ impl MeanCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::raster::TileIdx;
-    use geoengine_datatypes::raster::TileOverlap;
-    use geoengine_datatypes::raster::TileSize;
+    use geoengine_datatypes::raster::{GeoTransform, TileIdx, TileOverlap, TileSize};
 
     use crate::{
         engine::{
@@ -298,7 +296,6 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, CacheHint, Coordinate2D, Measurement, PlotSeriesSelection, TimeInterval,
     };
-    use geoengine_datatypes::raster::GeoTransform;
     use geoengine_datatypes::{
         dataset::NamedData,
         plots::PlotMetaData,

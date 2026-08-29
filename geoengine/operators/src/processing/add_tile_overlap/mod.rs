@@ -245,7 +245,7 @@ where
 #[derive(Debug, Clone, Copy, Default)]
 struct OverlapAggregator;
 
-impl<'a, P> SubQueryTileAggregator<'a, P> for OverlapAggregator
+impl<P> SubQueryTileAggregator<'_, P> for OverlapAggregator
 where
     P: Pixel,
 {
@@ -400,9 +400,7 @@ mod tests {
         context
     }
 
-    async fn overlapped_tiles(
-        overlap: TileOverlap,
-    ) -> util::Result<Vec<RasterTile2D<f64>>> {
+    async fn overlapped_tiles(overlap: TileOverlap) -> util::Result<Vec<RasterTile2D<f64>>> {
         let operator = AddTileOverlap {
             params: AddTileOverlapParams { overlap },
             sources: SingleRasterSource {
@@ -413,7 +411,10 @@ mod tests {
 
         let execution_context = mock_execution_context();
         let initialized = operator
-            .initialize(crate::engine::WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                crate::engine::WorkflowOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await?;
 
         let query_rect = RasterQueryRectangle::new(
@@ -476,8 +477,14 @@ mod tests {
 
         let top_left = &tiles[0];
         // data starts one halo pixel before the core anchor
-        assert_eq!(top_left.bounding_box().min_index(), GridIdx2D::new_y_x(-1, -1));
-        assert_eq!(top_left.bounding_box().max_index(), GridIdx2D::new_y_x(2, 2));
+        assert_eq!(
+            top_left.bounding_box().min_index(),
+            GridIdx2D::new_y_x(-1, -1)
+        );
+        assert_eq!(
+            top_left.bounding_box().max_index(),
+            GridIdx2D::new_y_x(2, 2)
+        );
         // the core anchor is unaffected by the overlap
         assert_eq!(
             top_left.tile_information().core_pixel_bounds().min_index(),
@@ -508,12 +515,16 @@ mod tests {
 
         let execution_context = mock_execution_context();
         let result = outer
-            .initialize(crate::engine::WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                crate::engine::WorkflowOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await;
 
         let err = result.err().expect("must reject overlapping input");
         assert!(
-            err.to_string().contains("does not support overlapping tiles"),
+            err.to_string()
+                .contains("does not support overlapping tiles"),
             "unexpected error: {err}"
         );
     }
@@ -532,7 +543,10 @@ mod tests {
 
         let execution_context = mock_execution_context();
         let result = operator
-            .initialize(crate::engine::WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                crate::engine::WorkflowOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await;
 
         let err = result.err().expect("must reject too-large overlap");

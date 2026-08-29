@@ -1171,7 +1171,7 @@ mod db_types {
                 spatial_grid: value.spatial_grid,
                 state: SpatialGridDescriptorState::from(value.state),
                 tile_size: TileSize::default_512(), // runtime-only; sources overwrite this
-                overlap: TileOverlap::zero(), // runtime-only; operators overwrite this
+                overlap: TileOverlap::zero(),       // runtime-only; operators overwrite this
             }
         }
     }

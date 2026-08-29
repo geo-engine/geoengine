@@ -6,7 +6,8 @@ use crate::error::{self, Optimization};
 use crate::processing::{
     DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParams,
     DownsamplingResolution, Interpolation, InterpolationMethod, InterpolationParams,
-    InterpolationResolution, Reprojection, ReprojectionParams,
+    InterpolationResolution, RemoveTileOverlap, RemoveTileOverlapParams, Reprojection,
+    ReprojectionParams,
 };
 use crate::util::Result;
 use crate::util::input::RasterOrVectorOperator;
@@ -248,6 +249,39 @@ impl WrapWithProjectionAndResample {
         Ok(Self::new(iop, iip.boxed(), rd))
     }
 
+    /// Strips the tile overlap halo before any output processing.
+    ///
+    /// Sinks must never receive overlapping tiles: halo pixels would be written
+    /// or rendered in addition to the cores. Projection and resampling also
+    /// expect non-overlapping inputs.
+    pub async fn wrap_with_overlap_removal(self, exe_ctx: &dyn ExecutionContext) -> Result<Self> {
+        if !self
+            .result_descriptor
+            .spatial_grid_descriptor()
+            .has_tile_overlap()
+        {
+            return Ok(self);
+        }
+
+        tracing::debug!("Workflow produces overlapping tiles --> stripping overlap for output");
+
+        let remove_overlap = RemoveTileOverlap {
+            params: RemoveTileOverlapParams { amount: None },
+            sources: crate::engine::SingleRasterSource {
+                raster: self.operator,
+            },
+        }
+        .boxed();
+
+        let initialized = remove_overlap
+            .clone()
+            .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+            .await?;
+
+        let rd = initialized.result_descriptor().clone();
+        Ok(Self::new(remove_overlap, initialized.boxed(), rd))
+    }
+
     pub async fn wrap_with_projection_and_resample(
         self,
         target_origin_reference: Option<Coordinate2D>,
@@ -255,7 +289,9 @@ impl WrapWithProjectionAndResample {
         target_sref: SpatialReference,
         exe_ctx: &dyn ExecutionContext,
     ) -> Result<Self> {
-        self.wrap_with_projection(target_sref, target_origin_reference, exe_ctx)
+        self.wrap_with_overlap_removal(exe_ctx)
+            .await?
+            .wrap_with_projection(target_sref, target_origin_reference, exe_ctx)
             .await?
             .wrap_with_resample(target_origin_reference, target_spatial_resolution, exe_ctx)
             .await

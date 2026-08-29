@@ -359,9 +359,7 @@ impl<T: Pixel> FoldTileAccuMut for TileWithProjectionCoordinates<T> {
 #[cfg(test)]
 mod tests {
     use futures::StreamExt;
-    use geoengine_datatypes::raster::TileIdx;
-    use geoengine_datatypes::raster::TileOverlap;
-    use geoengine_datatypes::raster::TileSize;
+    use geoengine_datatypes::raster::{TileIdx, TileOverlap, TileSize};
     use geoengine_datatypes::{
         primitives::{BandSelection, TimeStep},
         raster::{

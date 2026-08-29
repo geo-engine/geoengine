@@ -491,6 +491,16 @@ pub enum Error {
     },
 
     #[snafu(display(
+        "Not enough tile overlap available: requested {}, but only {} is present.",
+        requested,
+        available
+    ))]
+    NotEnoughTileOverlap {
+        requested: TileOverlap,
+        available: TileOverlap,
+    },
+
+    #[snafu(display(
         "Input stream {stream_index} is not temporally aligned. Expected {expected:?}, found {found:?}."
     ))]
     InputStreamsMustBeTemporallyAligned {

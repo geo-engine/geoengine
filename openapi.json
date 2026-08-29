@@ -5976,6 +5976,73 @@
           }
         }
       },
+      "AddTileOverlap": {
+        "type": "object",
+        "title": "AddTileOverlap",
+        "description": "The `AddTileOverlap` operator equips every output tile with an overlap (halo) around its core region.\n\nFor each tile, neighboring data is fetched so that convolutions or other neighborhood\ncomputations have input beyond the tile boundary. Regions beyond the dataset extent are\nno-data. Coverage and queries remain defined by the tile cores.\n\n## Inputs\n\nThe `AddTileOverlap` operator expects exactly one _raster_ input without overlap.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "AddTileOverlap"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/AddTileOverlapParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "AddTileOverlap",
+            "params": {
+              "overlap": [
+                16,
+                16
+              ]
+            },
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "example"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "AddTileOverlapParameters": {
+        "type": "object",
+        "description": "Parameters for the `AddTileOverlap` operator.",
+        "required": [
+          "overlap"
+        ],
+        "properties": {
+          "overlap": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "examples": [
+                [
+                  16,
+                  16
+                ]
+              ],
+              "minimum": 0
+            },
+            "description": "Overlap halo in pixels `[rows, columns]` added on every side of each tile."
+          }
+        }
+      },
       "Aggregation": {
         "oneOf": [
           {
@@ -11223,6 +11290,9 @@
             "$ref": "#/components/schemas/BandFilter"
           },
           {
+            "$ref": "#/components/schemas/AddTileOverlap"
+          },
+          {
             "$ref": "#/components/schemas/Downsampling"
           },
           {
@@ -11244,6 +11314,9 @@
             "$ref": "#/components/schemas/RasterTypeConversion"
           },
           {
+            "$ref": "#/components/schemas/RemoveTileOverlap"
+          },
+          {
             "$ref": "#/components/schemas/ReTile"
           },
           {
@@ -11257,6 +11330,7 @@
         "discriminator": {
           "propertyName": "type",
           "mapping": {
+            "AddTileOverlap": "#/components/schemas/AddTileOverlap",
             "BandFilter": "#/components/schemas/BandFilter",
             "Downsampling": "#/components/schemas/Downsampling",
             "Expression": "#/components/schemas/Expression",
@@ -11266,6 +11340,7 @@
             "RasterStacker": "#/components/schemas/RasterStacker",
             "RasterTypeConversion": "#/components/schemas/RasterTypeConversion",
             "ReTile": "#/components/schemas/ReTile",
+            "RemoveTileOverlap": "#/components/schemas/RemoveTileOverlap",
             "Reprojection": "#/components/schemas/Reprojection",
             "TemporalRasterAggregation": "#/components/schemas/TemporalRasterAggregation"
           }
@@ -11678,6 +11753,79 @@
           },
           "step": {
             "$ref": "#/components/schemas/TimeStep"
+          }
+        }
+      },
+      "RemoveTileOverlap": {
+        "type": "object",
+        "title": "RemoveTileOverlap",
+        "description": "The `RemoveTileOverlap` operator crops the overlap halo from all tiles of its input raster.\n\nIt is the inverse of `AddTileOverlap`: each tile shrinks symmetrically while its core region\nand georeference stay untouched. Removing all overlap restores plain tiles that every\noperator accepts. Use it after ML segmentation to crop model output back to cores.\n\n## Inputs\n\nThe `RemoveTileOverlap` operator expects exactly one _raster_ input.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "RemoveTileOverlap"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/RemoveTileOverlapParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "RemoveTileOverlap",
+            "params": {},
+            "sources": {
+              "raster": {
+                "type": "AddTileOverlap",
+                "params": {
+                  "overlap": [
+                    16,
+                    16
+                  ]
+                },
+                "sources": {
+                  "raster": {
+                    "type": "GdalSource",
+                    "params": {
+                      "data": "example"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "RemoveTileOverlapParameters": {
+        "type": "object",
+        "description": "Parameters for the `RemoveTileOverlap` operator.",
+        "properties": {
+          "amount": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "examples": [
+                [
+                  16,
+                  16
+                ]
+              ],
+              "minimum": 0
+            },
+            "description": "Halo cropped from every side in pixels `[rows, columns]`.\nIf `None`, all available overlap is removed."
           }
         }
       },
