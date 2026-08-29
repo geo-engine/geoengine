@@ -24,7 +24,7 @@ use geoengine_datatypes::primitives::{AxisAlignedRectangle, CacheTtlSeconds};
 use geoengine_datatypes::primitives::{
     DateTime, Duration, RasterQueryRectangle, TimeInstance, TimeInterval, VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::{GeoTransform, SpatialGridDefinition};
+use geoengine_datatypes::raster::{GeoTransform, SpatialGridDefinition, TileSize};
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, OperatorName, RasterBandDescriptors, RasterOperator,
@@ -644,6 +644,7 @@ impl SentinelS2L2aCogsMetaData {
                 retry: Some(GdalRetryOptions {
                     max_retries: self.gdal_retries.number_of_retries,
                 }),
+                tile_size: None,
             }),
             cache_ttl,
         })
@@ -816,7 +817,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             )
             .into(),
             time: geoengine_operators::engine::TimeDescriptor::new_irregular(None), // TODO: can we get the time bounds?
-            spatial_grid: SpatialGridDescriptor::new_source(spatial_grid),
+            spatial_grid: SpatialGridDescriptor::new_source(spatial_grid, TileSize::default_512()),
             bands: RasterBandDescriptors::new_single_band(),
         })
     }
@@ -944,10 +945,7 @@ mod tests {
         util::{Identifier, gdal::hide_gdal_errors, test::TestDefault},
     };
     use geoengine_operators::{
-        engine::{
-            ChunkByteSize, ExecutionContext, MockExecutionContext, RasterOperator,
-            WorkflowOperatorPath,
-        },
+        engine::{ChunkByteSize, MockExecutionContext, RasterOperator, WorkflowOperatorPath},
         source::{FileNotFoundHandling, GdalMetaDataStatic, GdalSource, GdalSourceParameters},
     };
     use httptest::{
@@ -967,8 +965,6 @@ mod tests {
         ))?;
 
         let session_context = app_ctx.session_context(app_ctx.create_anonymous_session().await?);
-        let exe_ctx = session_context.execution_context().unwrap();
-
         let provider = Box::new(def).initialize(session_context.db()).await?;
 
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
@@ -990,13 +986,12 @@ mod tests {
                 .unwrap();
 
         let raster_result_descriptor = meta.result_descriptor().await.unwrap();
-        let tiling_grid_definition = raster_result_descriptor
+        let geo_transform = raster_result_descriptor
             .spatial_grid_descriptor()
-            .tiling_grid_definition(exe_ctx.tiling_specification());
+            .spatial_grid
+            .geo_transform;
 
-        let data_bounds_in_pixel_grid = tiling_grid_definition
-            .tiling_geo_transform()
-            .spatial_to_grid_bounds(&data_bounds);
+        let data_bounds_in_pixel_grid = geo_transform.spatial_to_grid_bounds(&data_bounds);
 
         let loading_info = meta
             .loading_info(RasterQueryRectangle::new(
@@ -1032,6 +1027,7 @@ mod tests {
                     ]),
                 allow_alphaband_as_mask: true,
                 retry: Some(GdalRetryOptions { max_retries: 10 }),
+                tile_size: None,
             }),
             cache_ttl: CacheTtlSeconds::new(86_400),
         }];
@@ -1114,8 +1110,8 @@ mod tests {
         let sp = processor
             .raster_result_descriptor()
             .spatial_grid_descriptor()
-            .tiling_grid_definition(exe.tiling_specification)
-            .tiling_geo_transform()
+            .spatial_grid
+            .geo_transform
             .spatial_to_grid_bounds(&sp);
 
         let query = RasterQueryRectangle::new(
@@ -1132,8 +1128,8 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        // This are 5 x 5 tiles since the sentinel tile intersects 5 x5 geo engine tiles
-        assert_eq!(result.len(), 25); // 
+        // The sentinel COG source is natively 512x512-tiled; the queried region (~1830 px) spans 4 x 4 = 16 tiles
+        assert_eq!(result.len(), 16);
 
         Ok(())
     }
@@ -1272,7 +1268,6 @@ mod tests {
             ]),
         );
 
-        // GET request of the COG tile
         server.expect(
             Expectation::matching(all_of![
                 request::method_path(
@@ -1290,7 +1285,7 @@ mod tests {
                     std::time::Duration::from_secs(2),
                     responders::status_code(500)
                 ),
-                // then return incomplete tile (to force error "band 1: IReadBlock failed at X offset 0, Y offset 0: TIFFReadEncodedTile() failed.")
+                // then return incomplete tile
                 responders::status_code(206)
                     .append_header("Content-Type", "application/json")
                     .body(
@@ -1298,7 +1293,8 @@ mod tests {
                             "../../../../../test_data/stac_responses/cog-tile.bin"
                         )[0..2]
                         .to_vec()
-                    ).append_header(
+                    )
+                    .append_header(
                         "x-amz-id-2",
                         "avRd0/ks4ATH99UNXBCfqZAEQ3BckuLJTj7iG1jQrGoxOtwswqHrok10u+VMHO3twVIhUmQKLwg=",
                     )
@@ -1315,31 +1311,6 @@ mod tests {
                     )
                     .append_header("Server", "AmazonS3")
                     .append_header("Content-Length", "2"),
-                 // then succeed
-                responders::status_code(206)
-                    .append_header("Content-Type", "application/json")
-                    .body(
-                        include_bytes!(
-                            "../../../../../test_data/stac_responses/cog-tile.bin"
-                        )
-                        .to_vec()
-                    ).append_header(
-                        "x-amz-id-2",
-                        "avRd0/ks4ATH99UNXBCfqZAEQ3BckuLJTj7iG1jQrGoxOtwswqHrok10u+VMHO3twVIhUmQKLwg=",
-                    )
-                    .append_header("x-amz-request-id", "VVHWX1P45NP7KNWV")
-                    .append_header("Date", "Tue, 11 Oct 2022 16:06:03 GMT")
-                    .append_header("Last-Modified", "Fri, 09 Sep 2022 00:32:25 GMT")
-                    .append_header("ETag", "\"09a4c36021930e67dd1c71ed303cdf4e-24\"")
-                    .append_header("Cache-Control", "public, max-age=31536000, immutable")
-                    .append_header("Accept-Ranges", "bytes")
-                    .append_header("Content-Range", "bytes 46170112-46186495/173560205")
-                    .append_header(
-                        "Content-Type",
-                        "image/tiff; application=geotiff; profile=cloud-optimized",
-                    )
-                    .append_header("Server", "AmazonS3")
-                    .append_header("Content-Length", "16384"),
             ]),
         );
 
@@ -1377,7 +1348,6 @@ mod tests {
                 .await
                 .unwrap();
 
-        let exe_ctx = session_ctx.execution_context().unwrap();
         let result_descriptor = meta.result_descriptor().await.unwrap();
 
         let data_bounds = SpatialPartition2D::new_unchecked(
@@ -1387,8 +1357,8 @@ mod tests {
 
         let tiling_geo_transform = result_descriptor
             .spatial_grid_descriptor()
-            .tiling_grid_definition(exe_ctx.tiling_specification())
-            .tiling_geo_transform();
+            .spatial_grid
+            .geo_transform;
 
         let sp: geoengine_datatypes::raster::GridBoundingBox<[isize; 2]> =
             tiling_geo_transform.spatial_to_grid_bounds(&data_bounds);
@@ -1432,6 +1402,7 @@ mod tests {
                         ]),
                     allow_alphaband_as_mask: true,
                     retry: Some(GdalRetryOptions { max_retries: 999 }),
+                    tile_size: None,
                 }),
                 cache_ttl: CacheTtlSeconds::default(),
             }]
@@ -1486,8 +1457,8 @@ mod tests {
         let query_context = execution_context.mock_query_context_test_default();
 
         let data_bounds = SpatialPartition2D::new_unchecked(
-            (499_980., 9_804_800.).into(),
-            (499_990., 9_804_810.).into(),
+            (499_990., 9_790_000.).into(),
+            (500_000., 9_790_010.).into(),
         );
 
         let sp: geoengine_datatypes::raster::GridBoundingBox<[isize; 2]> =

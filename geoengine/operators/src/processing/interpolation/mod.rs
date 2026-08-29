@@ -372,18 +372,15 @@ where
             return self.source.query(query, ctx).await;
         }
 
-        let tiling_grid_definition =
-            out_spatial_grid.tiling_grid_definition(ctx.tiling_specification());
+        let tiling_grid_definition = out_spatial_grid.tiling_grid_definition();
 
         // This is the tiling strategy we want to fill
         let tiling_strategy: geoengine_datatypes::raster::TilingStrategy =
-            tiling_grid_definition.generate_data_tiling_strategy();
+            tiling_grid_definition.tiling_strategy();
 
-        let input_geo_transform = in_spatial_grid
-            .tiling_grid_definition(ctx.tiling_specification())
-            .tiling_geo_transform();
+        let input_geo_transform = in_spatial_grid.tiling_grid_definition().geo_transform;
 
-        let output_geo_transform = tiling_grid_definition.tiling_geo_transform();
+        let output_geo_transform = tiling_grid_definition.geo_transform;
 
         let sub_query = InterpolationSubQuery::<_, P, I> {
             input_geo_transform,
@@ -676,7 +673,8 @@ where
 mod tests {
     use super::*;
     use futures::StreamExt;
-    use geoengine_datatypes::raster::{TileIdx, TileSize};
+    use geoengine_datatypes::raster::TileIdx;
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::{
         primitives::{
             Coordinate2D, RasterQueryRectangle, SpatialResolution, TimeInterval, TimeStep,
@@ -700,8 +698,9 @@ mod tests {
 
     #[tokio::test]
     async fn nearest_neighbor_operator() -> Result<()> {
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::with_zero_origin([2, 2].into()),
+        );
 
         // test raster:
         // [0, 10)
@@ -1094,6 +1093,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1.0, -1.0),
                 GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1109,8 +1109,9 @@ mod tests {
 
     #[tokio::test]
     async fn it_attaches_cache_hint() -> Result<()> {
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::with_zero_origin([2, 2].into()),
+        );
 
         let cache_hint = CacheHint::seconds(1234);
         let raster = make_raster(cache_hint);
@@ -1154,8 +1155,9 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn it_interpolates_multiple_bands() -> Result<()> {
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::with_zero_origin([2, 2].into()),
+        );
         let operator = Interpolation {
             params: InterpolationParams {
                 interpolation: InterpolationMethod::NearestNeighbor,
@@ -1167,6 +1169,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
+                        output_origin: None,
                         rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {

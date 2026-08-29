@@ -12,7 +12,7 @@ use geoengine_datatypes::{
         AxisAlignedRectangle, CacheTtlSeconds, DateTime, RasterQueryRectangle, TimeInstance,
         TimeInterval,
     },
-    raster::{GeoTransform, SpatialGridDefinition},
+    raster::{GeoTransform, SpatialGridDefinition, TileSize},
     spatial_reference::{SpatialReference, SpatialReferenceAuthority},
 };
 use geoengine_operators::{
@@ -254,17 +254,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
         let grid_bounds = geo_transform.spatial_to_grid_bounds(&utm_extent);
         let spatial_grid = SpatialGridDefinition::new(geo_transform, grid_bounds);
 
-        // TODO: maybe get tiling_specification from self/ctx?
-        let tiling_specification = crate::config::get_config_element::<
-            crate::config::TilingSpecification,
-        >()
-        .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-            source: Box::new(e),
-        })?;
-
-        let spatial_bounds = SpatialGridDescriptor::new_source(spatial_grid)
-            .tiling_grid_definition(tiling_specification.into())
-            .tiling_geo_transform()
+        let spatial_bounds = spatial_grid
+            .geo_transform
             .grid_to_spatial_bounds(&query.spatial_bounds());
 
         let spatial_bounds_query =
@@ -284,7 +275,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
         let grid_bounds = geo_transform.spatial_to_grid_bounds(&utm_extent);
         let spatial_grid = SpatialGridDefinition::new(geo_transform, grid_bounds);
 
-        let spatial_grid_desc = SpatialGridDescriptor::new_source(spatial_grid);
+        let spatial_grid_desc =
+            SpatialGridDescriptor::new_source(spatial_grid, TileSize::default_512());
 
         Ok(RasterResultDescriptor {
             data_type: self.product_band.data_type(),
@@ -600,6 +592,7 @@ mod tests {
                     ),
                     allow_alphaband_as_mask: true,
                     retry: None,
+                    tile_size: None,
                 },
             ),
             cache_ttl: CacheTtlSeconds::new(

@@ -11,7 +11,7 @@ use geoengine_datatypes::{
     primitives::{CacheHint, RasterQueryRectangle, TimeInterval},
     raster::{
         GeoTransform, Grid, GridOrEmpty, GridShape2D, MapElements, MaskedGrid, Pixel, RasterTile2D,
-        TilingSpatialGridDefinition,
+        TilingGrid,
     },
     util::test::assert_eq_two_list_of_tiles_u8,
 };
@@ -102,7 +102,7 @@ pub async fn assert_eq_two_raster_operator_res_u8<E: ExecutionContext, Q: QueryC
 /// This assumes that the file actually contains exactly one geoengine tile according to the spatial grid definition.
 pub fn raster_tile_from_file<T: Pixel + GdalType>(
     file_path: &Path,
-    tiling_spatial_grid: TilingSpatialGridDefinition,
+    tiling_grid: TilingGrid,
     time: TimeInterval,
     band: u32,
 ) -> Result<RasterTile2D<T>> {
@@ -110,12 +110,9 @@ pub fn raster_tile_from_file<T: Pixel + GdalType>(
 
     let gf: GeoTransform = ds.geo_transform()?.into();
 
-    let tiling_strategy = tiling_spatial_grid.generate_data_tiling_strategy();
+    let tiling_strategy = tiling_grid.tiling_strategy();
 
-    let tiling_geo_transform = tiling_spatial_grid.tiling_geo_transform();
-    let tile_origin_pixel_idx =
-        tiling_geo_transform.coordinate_to_grid_idx_2d(gf.origin_coordinate);
-    let tile_position = tiling_strategy.pixel_idx_to_tile_idx(tile_origin_pixel_idx);
+    let tiling_geo_transform = tiling_grid.geo_transform;
 
     let rasterband = ds.rasterband(1)?;
 
@@ -142,6 +139,9 @@ pub fn raster_tile_from_file<T: Pixel + GdalType>(
     let mask_grid = Grid::new(out_shape, mask_buffer_data)?.map_elements(|p: u8| p > 0);
 
     let masked_grid = MaskedGrid::new(data_grid, mask_grid)?;
+    let tile_origin_pixel_idx =
+        tiling_geo_transform.coordinate_to_grid_idx_2d(gf.origin_coordinate);
+    let tile_position = tiling_strategy.pixel_idx_to_tile_idx(tile_origin_pixel_idx);
 
     Ok(RasterTile2D::<T>::new(
         time,

@@ -494,7 +494,7 @@ mod tests {
     use geoengine_datatypes::{
         collections::VectorDataType,
         primitives::{CacheTtlSeconds, TimeGranularity, TimeStep},
-        raster::{GeoTransform, GridBoundingBox, RasterDataType},
+        raster::{GeoTransform, GridBoundingBox, RasterDataType, TileSize},
         spatial_reference::SpatialReferenceOption,
     };
     use geoengine_operators::{
@@ -745,6 +745,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new((0., 0.).into(), 1., -1.),
                 GridBoundingBox::new([0, 0], [0, 0]).unwrap(),
+                TileSize::default_512(),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -786,6 +787,7 @@ mod tests {
             gdal_config_options: None,
             allow_alphaband_as_mask: false,
             retry: None,
+            tile_size: None,
         };
 
         let vector_meta = StaticMetaData {

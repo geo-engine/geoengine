@@ -317,6 +317,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileIdx;
+    use geoengine_datatypes::raster::TileSize;
 
     use crate::{
         engine::{
@@ -325,38 +327,36 @@ mod tests {
         },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
-    use geoengine_datatypes::raster::TileIdx;
     use geoengine_datatypes::{
         primitives::{BandSelection, CacheHint, Coordinate2D, TimeInterval},
         raster::{
             BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty2D, GridShape,
-            GridShape2D, MaskedGrid2D, RasterDataType, RasterProperties, TileInformation,
-            TilingSpecification,
+            MaskedGrid2D, RasterDataType, RasterProperties, TileInformation, TilingSpecification,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
 
     use super::*;
-    use geoengine_datatypes::raster::TileSize;
 
     #[tokio::test]
     async fn test_unscale() {
-        let tile_size = GridShape2D::new_2d(2, 2);
+        let tile_size = TileSize::new_y_x(2, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size.bounding_box(),
+                tile_size.grid_shape().bounding_box(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
-        let raster = MaskedGrid2D::from(Grid2D::new(tile_size, vec![7_u8, 7, 7, 6]).unwrap());
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let raster =
+            MaskedGrid2D::from(Grid2D::new(tile_size.into(), vec![7_u8, 7, 7, 6]).unwrap());
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_ctx = ctx.mock_query_context(ChunkByteSize::test_default());
@@ -370,7 +370,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
+                tile_size,
             },
             0,
             raster.into(),
@@ -453,22 +453,23 @@ mod tests {
 
     #[tokio::test]
     async fn test_scale() {
-        let tile_size = GridShape2D::new_2d(2, 2);
+        let tile_size = TileSize::new_y_x(2, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size.bounding_box(),
+                tile_size.grid_shape().bounding_box(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
-        let raster = MaskedGrid2D::from(Grid2D::new(tile_size, vec![15_u8, 15, 15, 13]).unwrap());
+        let raster =
+            MaskedGrid2D::from(Grid2D::new(tile_size.into(), vec![15_u8, 15, 15, 13]).unwrap());
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_ctx = ctx.mock_query_context(ChunkByteSize::test_default());
@@ -482,7 +483,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
+                tile_size,
             },
             0,
             raster.into(),
