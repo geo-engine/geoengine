@@ -195,6 +195,7 @@ mod test_util {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
                         GridBoundingBox2D::new([-3, 0], [0, 2]).unwrap(),
+                        TileSize::new_y_x(256, 256),
                     ),
                     bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "band".into(),
@@ -270,6 +271,7 @@ mod test_util {
                 gdal_config_options: None,
                 allow_alphaband_as_mask: true,
                 retry: None,
+                tile_size: None,
             },
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::I16,
@@ -288,6 +290,7 @@ mod test_util {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new(origin_coordinate, x_pixel_size, y_pixel_size),
                     GridShape2D::new_2d(3712, 3712).bounding_box(),
+                    TileSize::new_y_x(256, 256),
                 ),
                 bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                     "band".into(),

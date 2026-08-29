@@ -1,6 +1,6 @@
 use super::{
     FromIndexFn, GeoTransform, GeoTransformAccess, Grid, GridBoundingBox2D, GridBoundingBoxExt,
-    GridBounds, GridIdx, GridIdx2D, GridIntersection, TilingSpecification, TilingStrategy,
+    GridBounds, GridIdx, GridIdx2D, GridIntersection,
 };
 use crate::{
     operations::reproject::{
@@ -12,7 +12,7 @@ use crate::{
     },
     util::Result,
 };
-use float_cmp::{ApproxEq, approx_eq};
+use float_cmp::ApproxEq;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
@@ -104,9 +104,16 @@ impl SpatialGridDefinition {
         }
     }
 
-    /// Merges two spatial grids
-    /// If the second grid is not compatible with selfit returns None
-    /// If the second grid has a different `GeoTransform` it is transformed to the `GroTransform` of self
+    /// Merges two spatial grids.
+    /// If the second grid is not compatible with self it returns `None`.
+    /// If the second grid has a different `GeoTransform` it is transformed to
+    /// the `GeoTransform` of self.
+    ///
+    /// # Tolerance
+    ///
+    /// Compatibility is checked via [`GeoTransform::is_compatible_grid`], which
+    /// uses `approx_eq!` (default `F64Margin`) to compare pixel sizes and
+    /// origin alignment.
     pub fn merge(&self, other: &Self) -> Option<Self> {
         if !self.is_compatible_grid_generic(other) {
             return None;
@@ -114,7 +121,6 @@ impl SpatialGridDefinition {
 
         let other_shift =
             other.with_moved_origin_exact_grid(self.geo_transform.origin_coordinate)?;
-
         let merged_bounds = self.grid_bounds().extended(&other_shift.grid_bounds());
 
         Some(Self::new(self.geo_transform, merged_bounds))
@@ -284,75 +290,6 @@ impl GeoTransformAccess for SpatialGridDefinition {
     }
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
-pub struct TilingSpatialGridDefinition {
-    // Don't make this public to avoid leaking inner
-    element_grid_definition: SpatialGridDefinition,
-    tiling_specification: TilingSpecification,
-}
-
-impl TilingSpatialGridDefinition {
-    pub fn new(
-        element_grid_definition: SpatialGridDefinition,
-        tiling_specification: TilingSpecification,
-    ) -> Self {
-        Self {
-            element_grid_definition,
-            tiling_specification,
-        }
-    }
-
-    pub fn tiling_spatial_grid_definition(&self) -> SpatialGridDefinition {
-        // TODO: maybe do this in new and store it?
-        self.element_grid_definition
-            .with_moved_origin_to_nearest_grid_edge(
-                self.tiling_specification.tiling_origin_reference(),
-            )
-    }
-
-    pub fn tiling_geo_transform(&self) -> GeoTransform {
-        self.tiling_spatial_grid_definition().geo_transform()
-    }
-
-    pub fn tiling_grid_bounds(&self) -> GridBoundingBox2D {
-        self.tiling_spatial_grid_definition().grid_bounds()
-    }
-
-    pub fn is_compatible_grid_generic<G: GeoTransformAccess>(&self, g: &G) -> bool {
-        // TODO: use tiling_spatial_grid_definition?
-        self.element_grid_definition.is_compatible_grid_generic(g)
-    }
-
-    pub fn is_same_tiled_grid(&self, other: &TilingSpatialGridDefinition) -> bool {
-        // TODO: re-implement when decided how to model struct
-        let a = self.tiling_spatial_grid_definition();
-        let b = other.tiling_spatial_grid_definition();
-        approx_eq!(GeoTransform, a.geo_transform(), b.geo_transform())
-    }
-
-    /// Returns the data tiling strategy for the given tile size in pixels.
-    #[must_use]
-    pub fn generate_data_tiling_strategy(&self) -> TilingStrategy {
-        TilingStrategy {
-            geo_transform: self.tiling_geo_transform(),
-            tile_size: self.tiling_specification.tile_size,
-        }
-    }
-
-    #[must_use]
-    pub fn with_other_bounds(&self, new_bounds: GridBoundingBox2D) -> Self {
-        let new_grid = SpatialGridDefinition::new(self.tiling_geo_transform(), new_bounds);
-        Self::new(new_grid, self.tiling_specification)
-    }
-}
-
-impl SpatialPartitioned for TilingSpatialGridDefinition {
-    fn spatial_partition(&self) -> SpatialPartition2D {
-        // TODO: use tiling bounds and geotransform? must be equal!!!
-        self.element_grid_definition.spatial_partition()
-    }
-}
-
 impl<P: CoordinateProjection> Reproject<P> for SpatialGridDefinition {
     type Out = Self;
 
@@ -405,6 +342,7 @@ mod tests {
         test_data,
         util::gdal::gdal_open_dataset,
     };
+    use float_cmp::approx_eq;
 
     use super::*;
 
@@ -461,17 +399,36 @@ mod tests {
     }
 
     #[test]
-    fn no_merge_origin() {
+    fn merge_pixel_aligned_origins() {
         let s = SpatialGridDefinition::new(
             GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0),
             GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
         );
 
+        // Origin offset by exactly 1 pixel (pixel-aligned)
+        let s_2 = SpatialGridDefinition::new(
+            GeoTransform::new_with_coordinate_x_y(1.0, 1.0, -1.0, -1.0),
+            GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
+        );
+
+        let merged = s.merge(&s_2).unwrap();
+        assert_eq!(s.geo_transform, merged.geo_transform);
+        assert_eq!(
+            GridBoundingBox2D::new_min_max(-2, 1, 0, 3).unwrap(),
+            merged.grid_bounds
+        );
+    }
+
+    #[test]
+    fn no_merge_origin() {
+        let s = SpatialGridDefinition::new(
+            GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0),
+            GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
+        );
         let s_2 = SpatialGridDefinition::new(
             GeoTransform::new_with_coordinate_x_y(1.1, 1.0, -1.1, -1.0),
             GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
         );
-
         assert!(s.merge(&s_2).is_none());
     }
 
