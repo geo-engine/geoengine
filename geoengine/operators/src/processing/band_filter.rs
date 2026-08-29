@@ -290,9 +290,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::raster::TileIdx;
-    use geoengine_datatypes::raster::TileOverlap;
-    use geoengine_datatypes::raster::TileSize;
+    use geoengine_datatypes::raster::{TileIdx, TileOverlap, TileSize};
 
     use crate::{
         engine::{

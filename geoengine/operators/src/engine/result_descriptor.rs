@@ -1172,7 +1172,7 @@ mod db_types {
                     .max_overview_level
                     .and_then(|level| u32::try_from(level).ok()),
                 tile_size: TileSize::default_512(), // runtime-only; sources overwrite this
-                overlap: TileOverlap::zero(), // runtime-only; operators overwrite this
+                overlap: TileOverlap::zero(),       // runtime-only; operators overwrite this
             }
         }
     }
