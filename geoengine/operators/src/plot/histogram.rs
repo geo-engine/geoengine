@@ -731,7 +731,6 @@ mod tests {
         BoundingBox2D, Coordinate2D, DateTime, FeatureData, NoGeometry, PlotSeriesSelection,
         TimeInterval, VectorQueryRectangle,
     };
-    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::Identifier;
     use geoengine_datatypes::util::test::TestDefault;

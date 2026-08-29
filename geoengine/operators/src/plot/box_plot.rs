@@ -498,8 +498,8 @@ mod tests {
         BoundingBox2D, DateTime, FeatureData, NoGeometry, TimeInterval,
     };
     use geoengine_datatypes::raster::{
-        BoundedGrid, EmptyGrid2D, GeoTransform, Grid2D, MaskedGrid2D, RasterDataType, RasterTile2D,
-        TileIdx, TileInformation, TileOverlap, TileSize, TilingSpecification,
+        BoundedGrid, EmptyGrid2D, GeoTransform, Grid2D, GridShape2D, MaskedGrid2D, RasterDataType,
+        RasterTile2D, TileIdx, TileInformation, TileOverlap, TileSize, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -945,9 +945,11 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification = geoengine_datatypes::raster::TilingSpecification::new(
-            TileSize::new_unchecked(tile_size.y(), tile_size.x()),
-        );
+        let tiling_specification =
+            geoengine_datatypes::raster::TilingSpecification::new(TileSize::new_unchecked(
+                tile_size.y(),
+                tile_size.x(),
+            ));
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {

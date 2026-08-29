@@ -636,7 +636,7 @@ mod tests {
                 compression_marker: Default::default(),
             }),
             time: Default::default(),
-            cache_hint: Default::default(),
+            cache_hint: geoengine_datatypes::primitives::CacheHint::no_cache(),
             overlap: TileOverlap::zero(),
             global_geo_transform: GeoTransform::test_default(),
             properties: Default::default(),

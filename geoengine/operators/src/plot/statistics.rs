@@ -25,7 +25,7 @@ use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialResolution,
 };
 use geoengine_datatypes::raster::ConvertDataTypeParallel;
-use geoengine_datatypes::raster::GridOrEmpty;
+use geoengine_datatypes::raster::{GridOrEmpty, GridSize};
 use itertools::Itertools;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
