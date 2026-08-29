@@ -4,7 +4,8 @@ use crate::engine::{
 };
 use crate::error;
 use crate::processing::{
-    Warp, WarpMethod, WarpParams, source_at_overview_level, warped_spatial_grid,
+    RemoveTileOverlap, RemoveTileOverlapParams, Warp, WarpMethod, WarpParams,
+    source_at_overview_level, warped_spatial_grid,
 };
 use crate::util::Result;
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialResolution};
@@ -41,7 +42,58 @@ impl WrapWithProjectionAndResample {
     /// the origin, in one `Warp`.
     /// If the output is coarser than the operator, the operator is optimized to an overview level
     /// first, so that it computes no more pixels than the output needs.
+    /// Overlapping tiles are stripped to their cores first.
     pub async fn wrap_with_projection_and_resample(
+        self,
+        target_origin_reference: Option<Coordinate2D>,
+        target_spatial_resolution: Option<SpatialResolution>,
+        target_sref: SpatialReference,
+        exe_ctx: &dyn ExecutionContext,
+    ) -> Result<Self> {
+        self.wrap_with_overlap_removal(exe_ctx)
+            .await?
+            .wrap_with_warp(
+                target_origin_reference,
+                target_spatial_resolution,
+                target_sref,
+                exe_ctx,
+            )
+            .await
+    }
+
+    /// Strips the tile overlap halo before any output processing.
+    ///
+    /// Sinks must never receive overlapping tiles: halo pixels would be written
+    /// or rendered in addition to the cores. Projection and resampling also
+    /// expect non-overlapping inputs.
+    pub async fn wrap_with_overlap_removal(self, exe_ctx: &dyn ExecutionContext) -> Result<Self> {
+        if !self
+            .result_descriptor
+            .spatial_grid_descriptor()
+            .has_tile_overlap()
+        {
+            return Ok(self);
+        }
+
+        tracing::debug!("Processing graph produces overlapping tiles --> stripping overlap for output");
+
+        let remove_overlap = RemoveTileOverlap {
+            params: RemoveTileOverlapParams { amount: None },
+            sources: crate::engine::SingleRasterSource {
+                raster: self.operator,
+            },
+        }
+        .typed();
+
+        let initialized = remove_overlap
+            .clone()
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
+            .await?;
+
+        Ok(Self::new_create_result_descriptor(remove_overlap, initialized))
+    }
+
+    async fn wrap_with_warp(
         self,
         target_origin_reference: Option<Coordinate2D>,
         target_spatial_resolution: Option<SpatialResolution>,
