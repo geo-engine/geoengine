@@ -24,7 +24,7 @@ export function oidcRedirectPath(location: Location, route: string, currentRoute
     }
 
     const currentPath = currentRoute ? `/${currentRoute}` : '';
-    let basePath = '';
+    let basePath: string | undefined;
     if (currentPath && pathname.endsWith(currentPath)) {
         // Remove the current Angular route, leaving the deployment and mount path:
         // `/gis/manager/navigation` becomes `/gis/manager`.
