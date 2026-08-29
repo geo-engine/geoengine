@@ -390,6 +390,9 @@ pub enum Error {
         requested: TileOverlap,
         available: TileOverlap,
     },
+    GeodesyProjector {
+        source: crate::spatial_reference::GeodesyProjectorError,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {

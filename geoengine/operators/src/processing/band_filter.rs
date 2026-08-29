@@ -290,9 +290,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::raster::TileIdx;
-    use geoengine_datatypes::raster::TileOverlap;
-    use geoengine_datatypes::raster::TileSize;
+    use geoengine_datatypes::raster::{TileIdx, TileOverlap, TileSize};
 
     use crate::{
         engine::{
@@ -315,7 +313,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn it_filters_bands() {
-        let tile_size = TileSize::new_y_x(2, 2);
+        let tile_size = TileSize::new(2, 2);
         let time_interval = TimeInterval::default();
 
         let result_descriptor = RasterResultDescriptor {
@@ -325,7 +323,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.grid_shape().bounding_box(),
-                TileSize::new_y_x(256, 256),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new(vec![
                 RasterBandDescriptor::new_unitless("red".into()),
@@ -443,7 +441,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn it_filters_bands_by_index() {
-        let tile_size = TileSize::new_y_x(2, 2);
+        let tile_size = TileSize::new(2, 2);
         let time_interval = TimeInterval::default();
 
         let result_descriptor = RasterResultDescriptor {
@@ -453,7 +451,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.grid_shape().bounding_box(),
-                TileSize::new_y_x(256, 256),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new(vec![
                 RasterBandDescriptor::new_unitless("band0".into()),

@@ -709,7 +709,7 @@ mod tests {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new((-180., -90.).into(), 1., -1.),
                     GridShape2D::new_2d(180, 360).bounding_box(),
-                    TileSize::new_y_x(256, 256),
+                    TileSize::new(256, 256),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
@@ -792,7 +792,7 @@ mod tests {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new((-180., -90.).into(), 1., -1.),
                     GridShape2D::new_2d(180, 360).bounding_box(),
-                    TileSize::new_y_x(256, 256),
+                    TileSize::new(256, 256),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             }
@@ -1014,7 +1014,7 @@ mod tests {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new((-180., -90.).into(), 1., -1.),
                     GridShape2D::new_2d(180, 360).bounding_box(),
-                    TileSize::new_y_x(256, 256),
+                    TileSize::new(256, 256),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
@@ -1088,7 +1088,7 @@ mod tests {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new((-180., -90.).into(), 1., -1.),
                     GridShape2D::new_2d(180, 360).bounding_box(),
-                    TileSize::new_y_x(256, 256),
+                    TileSize::new(256, 256),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             }
@@ -1134,7 +1134,7 @@ mod tests {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new((0., 0.).into(), 1., -1.),
                     GridShape2D::new_2d(128, 128).bounding_box(),
-                    TileSize::new_y_x(256, 256),
+                    TileSize::new(256, 256),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
@@ -1205,7 +1205,7 @@ mod tests {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new((-180., -90.).into(), 1., -1.),
                     GridShape2D::new_2d(180, 360).bounding_box(),
-                    TileSize::new_y_x(256, 256),
+                    TileSize::new(256, 256),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
@@ -1279,7 +1279,7 @@ mod tests {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new((-180., -90.).into(), 1., -1.),
                     GridShape2D::new_2d(180, 360).bounding_box(),
-                    TileSize::new_y_x(256, 256),
+                    TileSize::new(256, 256),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             },

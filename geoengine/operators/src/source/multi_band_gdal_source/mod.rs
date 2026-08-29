@@ -660,7 +660,7 @@ mod tests {
 
     #[test]
     fn tiling_strategy_origin() {
-        let tile_size = TileSize::new_y_x(600, 600);
+        let tile_size = TileSize::new(600, 600);
         let dataset_upper_right_coord = (-180.0, 90.0).into();
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
@@ -699,7 +699,7 @@ mod tests {
 
     #[test]
     fn tiling_strategy_zero() {
-        let tile_size = TileSize::new_y_x(600, 600);
+        let tile_size = TileSize::new(600, 600);
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
         let central_geo_transform = GeoTransform::new_with_coordinate_x_y(
@@ -738,7 +738,7 @@ mod tests {
 
     #[test]
     fn tile_idx_iterator() {
-        let tile_size = TileSize::new_y_x(600, 600);
+        let tile_size = TileSize::new(600, 600);
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
         let central_geo_transform = GeoTransform::new_with_coordinate_x_y(
@@ -769,7 +769,7 @@ mod tests {
 
     #[test]
     fn tile_information_iterator() {
-        let tile_size = TileSize::new_y_x(600, 600);
+        let tile_size = TileSize::new(600, 600);
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
 
@@ -980,7 +980,7 @@ mod tests {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new((-180.0, 90.0).into(), 0.2, -0.2),
                     GridBoundingBox2D::new([0, 0], [899, 1799]).unwrap(),
-                    TileSize::new_y_x(256, 256),
+                    TileSize::new(256, 256),
                 ),
                 bands: vec![
                     RasterBandDescriptor::new("band 0".to_string(), Measurement::Unitless),
@@ -1978,7 +1978,7 @@ mod tests {
             dataset_spatial_grid: data_grid,
         });
 
-        let tile_size = TileSize::new_y_x(height, width);
+        let tile_size = TileSize::new(height, width);
         let tile_info = TileInformation::new(
             [0, 0].into(),
             tile_size,

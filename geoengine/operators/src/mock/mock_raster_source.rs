@@ -118,7 +118,7 @@ where
 {
     for tile in tiles {
         if tile.grid_shape() != tiling_spec.grid_shape() {
-            return Some(TileSize::new_y_x(
+            return Some(TileSize::new(
                 tiling_spec.tile_size.axis_size_y(),
                 tiling_spec.tile_size.axis_size_x(),
             ));
@@ -487,7 +487,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             raster.into(),
@@ -504,7 +504,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., 0.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 2).bounding_box(),
-                        TileSize::new_y_x(256, 256),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -597,7 +597,7 @@ mod tests {
 
         let deserialized: Box<dyn RasterOperator> = serde_json::from_value(serialized).unwrap();
 
-        let tile_size = TileSize::new_y_x(3, 2);
+        let tile_size = TileSize::new(3, 2);
         let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
@@ -679,7 +679,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),
-                        TileSize::new_y_x(256, 256),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -813,7 +813,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),
-                        TileSize::new_y_x(256, 256),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },

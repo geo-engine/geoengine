@@ -717,7 +717,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
-                        TileSize::new_y_x(256, 256),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -738,7 +738,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
-                        TileSize::new_y_x(256, 256),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -782,7 +782,7 @@ mod tests {
         };
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new(2, 2);
         exe_ctx.ml_models.insert(model_name, ml_model_loading_info);
 
         let query_rect = RasterQueryRectangle::new(
@@ -935,7 +935,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
-                        TileSize::new_y_x(256, 256),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -956,7 +956,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
-                        TileSize::new_y_x(256, 256),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -977,7 +977,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
-                        TileSize::new_y_x(256, 256),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -1021,7 +1021,7 @@ mod tests {
         };
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new(2, 2);
         exe_ctx.ml_models.insert(model_name, ml_model_loading_info);
 
         let query_rect = RasterQueryRectangle::new(
@@ -1129,7 +1129,7 @@ mod tests {
                     TestDefault::test_default(),
                     GridBoundingBox2D::new_min_max(-512, -1, 0, 1023).unwrap(),
                 ),
-                TileSize::new_y_x(256, 256),
+                TileSize::new(256, 256),
             ),
             time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5).unwrap()),
             bands: RasterBandDescriptors::new_single_band(),
@@ -1187,7 +1187,7 @@ mod tests {
         };
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(512, 512);
+        exe_ctx.tiling_specification.tile_size = TileSize::new(512, 512);
         exe_ctx.ml_models.insert(model_name, ml_model_loading_info);
 
         let query_rect = RasterQueryRectangle::new(

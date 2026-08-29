@@ -14,7 +14,7 @@ use geoengine_operators::{
         Statistics as OperatorsStatistics,
     },
     processing::{
-        BandFilter as OperatorsBandFilter,
+        AddTileOverlap as OperatorsAddTileOverlap, BandFilter as OperatorsBandFilter,
         BandNeighborhoodAggregate as OperatorsBandNeighborhoodAggregate,
         BandwiseExpression as OperatorsBandwiseExpression,
         ColumnRangeFilter as OperatorsColumnRangeFilter, Downsampling as OperatorsDownsampling,
@@ -26,7 +26,8 @@ use geoengine_operators::{
         RasterTypeConversion as OperatorsRasterTypeConversion,
         RasterVectorJoin as OperatorsRasterVectorJoin, Rasterization as OperatorsRasterization,
         ReTile as OperatorsReTile, Reflectance as OperatorsReflectance,
-        Reprojection as OperatorsReprojection, Temperature as OperatorsTemperature,
+        RemoveTileOverlap as OperatorsRemoveTileOverlap, Reprojection as OperatorsReprojection,
+        Temperature as OperatorsTemperature,
         TemporalRasterAggregation as OperatorsTemporalRasterAggregation,
         TimeProjection as OperatorsTimeProjection, TimeShift as OperatorsTimeShift,
         VectorExpression as OperatorsVectorExpression, VectorJoin as OperatorsVectorJoin,
@@ -61,12 +62,13 @@ pub use crate::api::model::processing_graphs::{
         PieChartParameters, ScatterPlot, ScatterPlotParameters, Statistics, StatisticsParameters,
     },
     processing::{
-        Aggregation, AggregationMin, BandFilter, BandFilterParameters, BandNeighborhoodAggregate,
-        BandNeighborhoodAggregateMethod, BandNeighborhoodAggregateParameters, BandsByNameOrIndex,
-        BandwiseExpression, BandwiseExpressionParameters, ColumnRangeFilter,
-        ColumnRangeFilterParameters, DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod,
-        DownsamplingParameters, DownsamplingResolution, Expression, ExpressionParameters,
-        Interpolation, InterpolationMethod, InterpolationParameters, InterpolationResolution,
+        AddTileOverlap, AddTileOverlapParameters, Aggregation, AggregationMin, BandFilter,
+        BandFilterParameters, BandNeighborhoodAggregate, BandNeighborhoodAggregateMethod,
+        BandNeighborhoodAggregateParameters, BandsByNameOrIndex, BandwiseExpression,
+        BandwiseExpressionParameters, ColumnRangeFilter, ColumnRangeFilterParameters,
+        DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParameters,
+        DownsamplingResolution, Expression, ExpressionParameters, Interpolation,
+        InterpolationMethod, InterpolationParameters, InterpolationResolution,
         InterpolationResolutionFraction, LineSimplification, LineSimplificationAlgorithm,
         LineSimplificationParameters, NeighborhoodAggregate, NeighborhoodAggregateParameters,
         NeighborhoodKernel, Onnx, OnnxParameters, PointInPolygonFilter,
@@ -74,8 +76,9 @@ pub use crate::api::model::processing_graphs::{
         RasterScaling, RasterScalingParameters, RasterStacker, RasterStackerParameters,
         RasterTypeConversion, RasterTypeConversionParameters, RasterVectorJoin,
         RasterVectorJoinParameters, Rasterization, RasterizationParameters, ReTile,
-        ReTileParameters, Reflectance, ReflectanceParameters, RenameBands, Reprojection,
-        ReprojectionParameters, Temperature, TemperatureParameters, TemporalRasterAggregation,
+        ReTileParameters, Reflectance, ReflectanceParameters, RemoveTileOverlap,
+        RemoveTileOverlapParameters, RenameBands, Reprojection, ReprojectionParameters,
+        Temperature, TemperatureParameters, TemporalRasterAggregation,
         TemporalRasterAggregationParameters, TimeProjection, TimeProjectionParameters, TimeShift,
         TimeShiftParameters, VectorExpression, VectorExpressionParameters, VectorJoin,
         VectorJoinParameters, VectorJoinSources, VisualPointClustering,
@@ -171,6 +174,8 @@ pub enum RasterOperator {
     RasterScaling(RasterScaling),
     RasterStacker(RasterStacker),
     RasterTypeConversion(RasterTypeConversion),
+    RemoveTileOverlap(RemoveTileOverlap),
+    AddTileOverlap(AddTileOverlap),
     ReTile(ReTile),
     Rasterization(Rasterization),
     Reprojection(Reprojection),
@@ -260,6 +265,14 @@ impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
             }
             RasterOperator::ReTile(re_tile) => {
                 OperatorsReTile::try_from(re_tile).map(OperatorsRasterOperator::boxed)
+            }
+            RasterOperator::AddTileOverlap(add_tile_overlap) => {
+                OperatorsAddTileOverlap::try_from(add_tile_overlap)
+                    .map(OperatorsRasterOperator::boxed)
+            }
+            RasterOperator::RemoveTileOverlap(remove_tile_overlap) => {
+                OperatorsRemoveTileOverlap::try_from(remove_tile_overlap)
+                    .map(OperatorsRasterOperator::boxed)
             }
             RasterOperator::RasterTypeConversion(type_conversion) => {
                 OperatorsRasterTypeConversion::try_from(type_conversion)
@@ -451,6 +464,10 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     RadianceParameters,
     ReTile,
     ReTileParameters,
+    AddTileOverlap,
+    AddTileOverlapParameters,
+    RemoveTileOverlap,
+    RemoveTileOverlapParameters,
     RenameBands,
     Reprojection,
     ReprojectionParameters,

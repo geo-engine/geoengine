@@ -329,7 +329,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -345,7 +345,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [2, 1]).unwrap(),
-                TileSize::new_y_x(256, 256),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -417,7 +417,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
@@ -431,7 +431,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -450,7 +450,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [2, 1]).unwrap(),
-                TileSize::new_y_x(256, 256),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -522,7 +522,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
@@ -536,7 +536,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 1),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
@@ -550,7 +550,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -564,7 +564,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 1),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
@@ -583,7 +583,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [2, 3]).unwrap(),
-                TileSize::new_y_x(256, 256),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -660,7 +660,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
@@ -674,7 +674,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 1),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
@@ -688,7 +688,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 2),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![160, 150, 140, 130, 120, 110])
@@ -702,7 +702,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -716,7 +716,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 1),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
@@ -730,7 +730,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 2),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![110, 120, 130, 140, 150, 160])
@@ -749,7 +749,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [2, 5]).unwrap(),
-                TileSize::new_y_x(256, 256),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -832,7 +832,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
@@ -846,7 +846,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             1,
             Grid2D::new([3, 2].into(), vec![255, 254, 253, 251, 250, 249])
@@ -861,7 +861,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 1),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
@@ -875,7 +875,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 1),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             1,
             Grid2D::new([3, 2].into(), vec![160, 150, 140, 130, 120, 110])
@@ -890,7 +890,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 2),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![600, 500, 400, 300, 200, 100])
@@ -904,7 +904,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 2),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             1,
             Grid2D::new([3, 2].into(), vec![610, 510, 410, 310, 210, 110])
@@ -919,7 +919,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -933,7 +933,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             1,
             Grid2D::new([3, 2].into(), vec![11, 22, 33, 44, 55, 66])
@@ -947,7 +947,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 1),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
@@ -961,7 +961,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 1),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             1,
             Grid2D::new([3, 2].into(), vec![100, 220, 300, 400, 500, 600])
@@ -976,7 +976,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 2),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![100, 200, 300, 400, 500, 600])
@@ -990,7 +990,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 2),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             1,
             Grid2D::new([3, 2].into(), vec![101, 201, 301, 401, 501, 601])
@@ -1025,7 +1025,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(0, 2, 0, 5).unwrap(),
-                        TileSize::new_y_x(256, 256),
+                        TileSize::new(256, 256),
                     ),
                     bands: RasterBandDescriptors::new(vec![
                         RasterBandDescriptor::new_unitless("band_0".into()),

@@ -727,7 +727,7 @@ mod tests {
 
         TileInformation {
             overlap: TileOverlap::zero(),
-            tile_size: TileSize::new_y_x(shape.y(), shape.x()),
+            tile_size: TileSize::new(shape.y(), shape.x()),
             tile_position: TileIdx::new_y_x(0, 0),
             global_geo_transform: real_geotransform,
         }

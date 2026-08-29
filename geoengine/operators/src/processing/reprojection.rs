@@ -1223,7 +1223,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 geo_transform,
                 GridBoundingBox2D::new([-2, 0], [1, 3]).unwrap(),
-                TileSize::new_y_x(256, 256),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1282,7 +1282,7 @@ mod tests {
         let mut exe_ctx = MockExecutionContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
-        let tile_size = TileSize::new_y_x(512, 512);
+        let tile_size = TileSize::new(512, 512);
         exe_ctx.tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
@@ -1414,7 +1414,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn raster_ndvi_3857_to_4326() -> Result<()> {
-        let tile_size = TileSize::new_y_x(200, 200);
+        let tile_size = TileSize::new(200, 200);
         let data_geo_transform = GeoTransform::new(
             Coordinate2D::new(-20_037_508.342_789_244, 19_971_868.880_408_562),
             14_052.950_258_048_738,
@@ -1434,7 +1434,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 data_geo_transform,
                 data_bounds,
-                TileSize::new_y_x(256, 256),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1546,7 +1546,7 @@ mod tests {
 
     #[tokio::test]
     async fn query_outside_projection_area_of_use_produces_empty_tiles() {
-        let tile_size = TileSize::new_y_x(600, 600);
+        let tile_size = TileSize::new(600, 600);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636).into(),
@@ -1558,7 +1558,7 @@ mod tests {
                     -9_329_005.18,
                 ),
                 GridBoundingBox2D::new_min_max(0, 100, 0, 100).unwrap(),
-                TileSize::new_y_x(256, 256),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };

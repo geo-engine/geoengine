@@ -746,7 +746,7 @@ mod tests {
 
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn get_map_test_helper_tiling_spec() -> TilingSpecification {
-        TilingSpecification::with_zero_origin(TileSize::new_y_x(600, 600))
+        TilingSpecification::with_zero_origin(TileSize::new(600, 600))
     }
 
     async fn get_map_test_helper(

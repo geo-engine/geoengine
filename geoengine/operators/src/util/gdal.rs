@@ -117,7 +117,7 @@ pub fn create_ndvi_result_descriptor(as_regular_timeseries: bool) -> RasterResul
         spatial_grid: SpatialGridDescriptor::source_from_parts(
             GeoTransform::new((-180., 90.).into(), 0.1, -0.1),
             GridBoundingBox2D::new([0, 0], [1799, 3599]).expect("should only be used in tests"),
-            TileSize::new_y_x(256, 256),
+            TileSize::new(256, 256),
         ),
         bands: vec![RasterBandDescriptor {
             name: "ndvi".to_string(),
@@ -179,7 +179,7 @@ pub fn create_ndvi_meta_data_cropped_to_valid_webmercator_bounds_with_cache_ttl(
                 GeoTransform::new((0., 0.).into(), 0.1, -0.1),
                 GridBoundingBox2D::new([-850, -1800], [-845, -1799])
                     .expect("should only be used in tests"),
-                TileSize::new_y_x(256, 256),
+                TileSize::new(256, 256),
             ),
             time: TimeDescriptor::new_regular_with_epoch(Some(time_bounds), time_step),
             bands: vec![RasterBandDescriptor {
@@ -272,7 +272,7 @@ pub fn create_ndvi_downscaled_3x_meta_data_with_cache_ttl(
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new((-180., 90.).into(), 0.3, -0.3),
                 GridBoundingBox2D::new([0, 0], [599, 1199]).expect("should only be used in tests"),
-                TileSize::new_y_x(256, 256),
+                TileSize::new(256, 256),
             ),
             bands: vec![RasterBandDescriptor {
                 name: "ndvi".to_string(),
@@ -441,7 +441,7 @@ pub fn raster_descriptor_from_dataset(
         spatial_grid: SpatialGridDescriptor::source_from_parts(
             data_geo_transfrom,
             data_shape.bounding_box(),
-            TileSize::new_y_x(256, 256),
+            TileSize::new(256, 256),
         ),
         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
             "band".into(), // TODO: derive better name?

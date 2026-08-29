@@ -816,7 +816,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-2, -1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -828,7 +828,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-2, 0),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -840,7 +840,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-2, 1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -852,7 +852,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-2, 2),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -864,7 +864,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, -1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -876,7 +876,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -888,7 +888,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -900,7 +900,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 2),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -912,7 +912,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(0, -1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -924,7 +924,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(0, 0),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -936,7 +936,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(0, 1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -948,7 +948,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(0, 2),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -960,7 +960,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-2, -1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -972,7 +972,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-2, 0),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -984,7 +984,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-2, 1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -996,7 +996,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-2, 2),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1008,7 +1008,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, -1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1020,7 +1020,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1032,7 +1032,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1044,7 +1044,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 2),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1056,7 +1056,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(0, -1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1068,7 +1068,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(0, 0),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1080,7 +1080,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(0, 1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1092,7 +1092,7 @@ mod tests {
                 TileInformation {
                     overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(0, 2),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1117,7 +1117,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1.0, -1.0),
                 GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
-                TileSize::new_y_x(256, 256),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };

@@ -159,7 +159,7 @@ pub async fn session_and_ndvi_multi_band_layer_id(
                 geoengine_datatypes::raster::GeoTransform::new((-180.0, 90.0).into(), 0.1, -0.1),
                 geoengine_datatypes::raster::GridBoundingBox2D::new([0, 0], [1799, 3599]).unwrap(),
             ),
-            geoengine_datatypes::raster::TileSize::new_y_x(512, 512),
+            geoengine_datatypes::raster::TileSize::new(512, 512),
         ),
         bands: vec![geoengine_operators::engine::RasterBandDescriptor::new(
             "ndvi".to_string(),

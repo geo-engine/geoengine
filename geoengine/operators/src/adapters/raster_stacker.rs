@@ -488,7 +488,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [0, 4]).unwrap(),
-                TileSize::new_y_x(2, 2),
+                TileSize::new(2, 2),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -606,7 +606,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new(2, 2);
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -679,7 +679,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 4]).unwrap(),
-                TileSize::new_y_x(2, 2),
+                TileSize::new(2, 2),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -738,7 +738,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new(2, 2);
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -785,7 +785,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                TileSize::new_y_x(2, 2),
+                TileSize::new(2, 2),
             ),
             bands: vec![
                 RasterBandDescriptor::new("mrs1 band1".to_string(), Measurement::Unitless),
@@ -802,7 +802,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                TileSize::new_y_x(2, 2),
+                TileSize::new(2, 2),
             ),
             bands: vec![
                 RasterBandDescriptor::new("mrs2 band1".to_string(), Measurement::Unitless),
@@ -1015,7 +1015,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new(2, 2);
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1097,7 +1097,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                TileSize::new_y_x(2, 2),
+                TileSize::new(2, 2),
             ),
 
             bands: vec![
@@ -1115,7 +1115,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                TileSize::new_y_x(2, 2),
+                TileSize::new(2, 2),
             ),
             bands: vec![
                 RasterBandDescriptor::new("mrs2 band1".to_string(), Measurement::Unitless),
@@ -1328,7 +1328,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new(2, 2);
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1665,7 +1665,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                TileSize::new_y_x(2, 2),
+                TileSize::new(2, 2),
             ),
             bands: vec![
                 RasterBandDescriptor::new("mrs1 band1".to_string(), Measurement::Unitless),
@@ -1683,7 +1683,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                TileSize::new_y_x(2, 2),
+                TileSize::new(2, 2),
             ),
             bands: vec![RasterBandDescriptor::new(
                 "mrs2 band2".to_string(),
@@ -1700,7 +1700,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                TileSize::new_y_x(2, 2),
+                TileSize::new(2, 2),
             ),
             bands: vec![
                 RasterBandDescriptor::new("mrs3 band1".to_string(), Measurement::Unitless),
@@ -2023,7 +2023,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new(2, 2);
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

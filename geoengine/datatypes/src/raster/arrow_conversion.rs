@@ -242,7 +242,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -294,7 +294,7 @@ mod tests {
                 overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new(3, 2),
             },
             0,
             EmptyGrid2D::<f64>::new([3, 2].into()).into(),

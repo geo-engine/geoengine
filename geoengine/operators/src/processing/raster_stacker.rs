@@ -470,7 +470,6 @@ mod tests {
     };
 
     use super::*;
-    use geoengine_datatypes::raster::TileSize;
 
     #[tokio::test]
     async fn it_stacks() {
@@ -592,7 +591,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                TileSize::new_y_x(2, 2),
+                TileSize::new(2, 2),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -625,7 +624,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new(2, 2);
 
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
@@ -871,7 +870,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                TileSize::new_y_x(2, 2),
+                TileSize::new(2, 2),
             ),
             bands: RasterBandDescriptors::new(vec![
                 RasterBandDescriptor::new_unitless("band_0".into()),
@@ -908,7 +907,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new(2, 2);
 
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-1, 0], [-1, 2]).unwrap(),
@@ -1071,7 +1070,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                TileSize::new_y_x(2, 2),
+                TileSize::new(2, 2),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1104,7 +1103,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new(2, 2);
 
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-1, 0], [-1, 2]).unwrap(),
@@ -1263,7 +1262,7 @@ mod tests {
         let input_grid = SpatialGridDescriptor::source_from_parts(
             GeoTransform::test_default(),
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-            TileSize::new_y_x(2, 2),
+            TileSize::new(2, 2),
         );
         let descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
@@ -1295,7 +1294,7 @@ mod tests {
         }
         .boxed();
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new(2, 2);
 
         let initialized = stacker
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1324,7 +1323,7 @@ mod tests {
                         spatial_grid: SpatialGridDescriptor::source_from_parts(
                             geo_transform,
                             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                            TileSize::new_y_x(2, 2),
+                            TileSize::new(2, 2),
                         ),
                         bands: RasterBandDescriptors::new_single_band(),
                     },
@@ -1334,7 +1333,7 @@ mod tests {
         };
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new(2, 2);
 
         for second_transform in [
             GeoTransform::new(Coordinate2D::new(0.5, 0.), 1., -1.),
@@ -1402,7 +1401,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 1]).unwrap(),
-                TileSize::new_y_x(2, 2),
+                TileSize::new(2, 2),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1411,7 +1410,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(2., 0.), 1., -1.),
                 GridBoundingBox2D::new([-2, -2], [-1, -1]).unwrap(),
-                TileSize::new_y_x(2, 2),
+                TileSize::new(2, 2),
             ),
             ..descriptor1.clone()
         };
@@ -1444,7 +1443,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new(2, 2);
 
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 1]).unwrap(),

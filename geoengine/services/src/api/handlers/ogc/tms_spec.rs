@@ -736,7 +736,7 @@ impl TileMatrixSetProvider for WebMercatorQuadTMS {
     }
 
     fn tile_size(&self, _matrix_id: u8) -> TileSize {
-        TileSize::new_y_x(
+        TileSize::new(
             Self::WIDTH_AND_HEIGHT.get() as usize,
             Self::WIDTH_AND_HEIGHT.get() as usize,
         )
@@ -1021,7 +1021,7 @@ mod tests {
             geo_transform: GeoTransform::new((0.0, 0.0).into(), 1.0, -1.0),
             pixel_bounds: GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([15, 31]))
                 .unwrap(),
-            tile_size: TileSize::new_y_x(4, 8),
+            tile_size: TileSize::new(4, 8),
         };
 
         let bbox = tile_grid_bbox(&tiling_grid, 0, 1, 2).unwrap();

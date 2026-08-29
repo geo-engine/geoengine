@@ -504,7 +504,9 @@ mod tests {
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-    use geoengine_datatypes::raster::{Grid, GridShape2D, RasterDataType, TileIdx, TileOverlap, TileSize};
+    use geoengine_datatypes::raster::{
+        Grid, GridShape2D, RasterDataType, TileIdx, TileOverlap, TileSize,
+    };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
@@ -513,7 +515,7 @@ mod tests {
         let in_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 1.0, -1.0);
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(
-            TilingSpecification::with_zero_origin(TileSize::new_y_x(4, 4)),
+            TilingSpecification::with_zero_origin(TileSize::new(4, 4)),
             8,
         );
 
@@ -542,7 +544,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 in_geo_transform,
                 GridBoundingBox2D::new_min_max(0, 3, 0, 3).unwrap(),
-                TileSize::new_y_x(4, 4),
+                TileSize::new(4, 4),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -601,7 +603,7 @@ mod tests {
         // Input: origin (0,0), 2x2 tiles of 4x4 pixels each → 8x8 pixel grid
         // Output: origin (2, -2), same tile size
         let in_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 1.0, -1.0);
-        let tile_size = TileSize::new_y_x(4, 4);
+        let tile_size = TileSize::new(4, 4);
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(
             TilingSpecification::with_zero_origin(tile_size),
@@ -685,7 +687,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 in_geo_transform,
                 GridBoundingBox2D::new_min_max(0, 7, 0, 7).unwrap(),
-                TileSize::new_y_x(4, 4),
+                TileSize::new(4, 4),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };

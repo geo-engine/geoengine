@@ -1163,7 +1163,7 @@ mod tests {
     use geoengine_datatypes::primitives::{Coordinate2D, TimeInstance};
     use geoengine_datatypes::raster::{
         BoundedGrid, GeoTransform, Grid2D, GridIdx2D, GridOrEmpty2D, MaskedGrid2D, RasterDataType,
-        TileIdx, TileSize, TilingSpecification,
+        TileIdx, TileOverlap, TileSize, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use std::str::FromStr;
@@ -1572,7 +1572,7 @@ mod tests {
         GridBoundingBox2D,
         TilingSpecification,
     ) {
-        let tile_size = TileSize::new_y_x(2, 2);
+        let tile_size = TileSize::new(2, 2);
         let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let geo_transform = GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.);
 
@@ -1582,6 +1582,7 @@ mod tests {
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: geo_transform,
                 tile_position: TileIdx::new_y_x(0, 0),
                 tile_size,
@@ -1598,7 +1599,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 geo_transform,
                 tile_size.grid_shape().bounding_box(),
-                TileSize::new_y_x(256, 256),
+                TileSize::new(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };

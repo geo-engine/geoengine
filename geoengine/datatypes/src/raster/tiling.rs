@@ -216,15 +216,15 @@ impl TileOverlap {
         Self { y: 0, x: 0 }
     }
 
-    pub const fn is_zero(&self) -> bool {
+    pub const fn is_zero(self) -> bool {
         self.y == 0 && self.x == 0
     }
 
-    pub const fn axis_size_y(&self) -> usize {
+    pub const fn axis_size_y(self) -> usize {
         self.y as usize
     }
 
-    pub const fn axis_size_x(&self) -> usize {
+    pub const fn axis_size_x(self) -> usize {
         self.x as usize
     }
 
@@ -232,7 +232,7 @@ impl TileOverlap {
     ///
     /// We bound the halo by one full core per axis so that padded tiles stay
     /// within reasonable memory bounds.
-    pub fn is_valid_for_tile_size(&self, tile_size: TileSize) -> bool {
+    pub fn is_valid_for_tile_size(self, tile_size: TileSize) -> bool {
         self.y <= tile_size.axis_size_y() as u32 && self.x <= tile_size.axis_size_x() as u32
     }
 }
@@ -529,6 +529,10 @@ impl TileInformation {
     ///
     /// Note that data bounds may extend beyond the dataset extent; missing
     /// neighbor data is represented as no-data pixels.
+    ///
+    /// # Panics
+    /// Panics if the expanded bounds would overflow the grid index type, which
+    /// cannot happen for a tile whose core bounds are already representable.
     pub fn data_pixel_bounds(&self) -> GridBoundingBox2D {
         let core = self.global_pixel_bounds();
         if self.overlap.is_zero() {
@@ -788,7 +792,7 @@ mod tests {
             -0.000_033_337_4,
         );
 
-        let tile_pixel_size = TileSize(GridShape2D::new_2d(512, 512));
+        let tile_pixel_size = TileSize::new(512, 512);
         let tiling_strat = TilingStrategy::new(tile_pixel_size, geo_transform);
 
         let tiling_origin_reference = Coordinate2D::new(0., 0.); // This is the _currently_ fixed tiling origin reference.
@@ -814,7 +818,7 @@ mod tests {
     #[test]
     fn pixel_idx_to_tile_idx() {
         let geo_transform = GeoTransform::new((123., 321.).into(), 1.0, -1.0);
-        let tile_pixel_size = TileSize(GridShape2D::new_2d(100, 100));
+        let tile_pixel_size = TileSize::new(100, 100);
 
         let tiling_strat = TilingStrategy::new(tile_pixel_size, geo_transform);
         let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(0, 0));
@@ -838,7 +842,7 @@ mod tests {
     #[test]
     fn tile_idx_to_pixel_idx() {
         let geo_transform = GeoTransform::new((123., 321.).into(), 1.0, -1.0);
-        let tile_pixel_size = TileSize(GridShape2D::new_2d(100, 100));
+        let tile_pixel_size = TileSize::new(100, 100);
 
         let tiling_strat = TilingStrategy::new(tile_pixel_size, geo_transform);
         let pixels = tiling_strat.tile_idx_to_global_pixel_idx(TileIdx::new_y_x(0, 0));
@@ -857,7 +861,7 @@ mod tests {
 
     #[test]
     fn tiling_specification_with_origin() {
-        let spec = TilingSpecification::with_zero_origin(TileSize(GridShape2D::new_2d(512, 512)));
+        let spec = TilingSpecification::with_zero_origin(TileSize::new(512, 512));
         assert_eq!(spec.origin, Coordinate2D::new(0., 0.));
 
         let custom_origin = Coordinate2D::new(12.5, -3.7);
@@ -870,7 +874,7 @@ mod tests {
     fn tiling_strategy_with_custom_origin() {
         let origin = Coordinate2D::new(10., -10.);
         let geo_transform = GeoTransform::new(origin, 1.0, -1.0);
-        let tile_pixel_size = TileSize(GridShape2D::new_2d(100, 100));
+        let tile_pixel_size = TileSize::new(100, 100);
         let strat = TilingStrategy::new(tile_pixel_size, geo_transform);
 
         // The pixel at the tiling origin (10, -10) maps to pixel idx (0, 0)
@@ -885,14 +889,14 @@ mod tests {
     #[test]
     fn tiling_grid_definition_with_custom_origin() {
         let origin = Coordinate2D::new(100., -200.);
-        let spec = TilingSpecification::new(TileSize(GridShape2D::new_2d(512, 512)), origin);
+        let spec = TilingSpecification::new(TileSize::new(512, 512), origin);
 
         let geo_transform = GeoTransform::new(origin, 30., -30.);
 
         // Verify that TilingStrategy built from this spec uses the custom origin
         let strat = TilingStrategy::new(spec.tile_size, geo_transform);
         assert_eq!(strat.geo_transform.origin_coordinate, origin);
-        assert_eq!(strat.tile_size, TileSize(GridShape2D::new_2d(512, 512)));
+        assert_eq!(strat.tile_size, TileSize::new(512, 512));
     }
 
     #[test]

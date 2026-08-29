@@ -30,12 +30,12 @@ pub use query_processor::{
     RasterQueryProcessor, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
     TypedVectorQueryProcessor, VectorQueryProcessor,
 };
+pub use result_descriptor::multi_input as descriptor_multi_input;
 pub use result_descriptor::{
     PlotResultDescriptor, RasterBandDescriptor, RasterBandDescriptors, RasterResultDescriptor,
     ResultDescriptor, SpatialGridDescriptor, SpatialGridDescriptorState, TimeDescriptor,
     TypedResultDescriptor, VectorColumnInfo, VectorResultDescriptor,
 };
-pub use result_descriptor::multi_input as descriptor_multi_input;
 use tracing::Span;
 pub use workflow_path::WorkflowOperatorPath;
 mod clonable_operator;
