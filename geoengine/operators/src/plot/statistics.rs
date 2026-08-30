@@ -646,7 +646,7 @@ impl StatisticsOutput {
 mod tests {
     use geoengine_datatypes::collections::DataCollection;
     use geoengine_datatypes::primitives::{CacheHint, Coordinate2D, PlotSeriesSelection};
-    use geoengine_datatypes::raster::{GridShape2D, TileSize};
+    use geoengine_datatypes::raster::{GridShape2D, TileOverlap, TileSize};
     use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
@@ -1341,6 +1341,7 @@ mod tests {
                 data: vec![RasterTile2D::new_with_tile_info(
                     TimeInterval::default(),
                     TileInformation {
+                        overlap: TileOverlap::zero(),
                         global_geo_transform: TestDefault::test_default(),
                         tile_position: TileIdx::new_y_x(0, 0),
                         tile_size,

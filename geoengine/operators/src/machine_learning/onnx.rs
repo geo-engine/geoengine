@@ -532,7 +532,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::primitives::TimeStep;
     use geoengine_datatypes::raster::{
-        GridBoundingBox2D, RasterTile2D, SpatialGridDefinition, TileIdx,
+        GridBoundingBox2D, RasterTile2D, SpatialGridDefinition, TileIdx, TileOverlap,
         TilesEqualIgnoringCacheHint,
     };
     use geoengine_datatypes::{
@@ -660,6 +660,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -671,6 +672,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
         ];
 
@@ -685,6 +687,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -696,6 +699,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
         ];
 
@@ -814,6 +818,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -825,6 +830,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
         ];
 
@@ -845,6 +851,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -856,6 +863,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
         ];
 
@@ -870,6 +878,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -881,6 +890,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
         ];
 
@@ -895,6 +905,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -906,6 +917,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
         ];
 
@@ -1065,6 +1077,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1076,6 +1089,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
         ];
 
@@ -1090,6 +1104,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1101,6 +1116,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
         ];
 
@@ -1207,6 +1223,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1218,6 +1235,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
         ];
 

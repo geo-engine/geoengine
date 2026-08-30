@@ -821,9 +821,9 @@ mod tests {
     use geoengine_datatypes::primitives::DateTimeParseFormat;
     use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
     use geoengine_datatypes::raster::{
-        BoundedGrid, EmptyGrid2D, GeoTransform, GridShape2D, GridSize, RasterPropertiesEntryType,
-        RasterPropertiesKey, SpatialGridDefinition, TileIdx, TileInformation, TileSize,
-        TilesEqualIgnoringCacheHint, TilingStrategy,
+        BoundedGrid, EmptyGrid2D, GeoTransform, GridIdx2D, GridShape2D, GridSize,
+        RasterPropertiesEntryType, RasterPropertiesKey, SpatialGridDefinition, TileIdx,
+        TileInformation, TileOverlap, TileSize, TilesEqualIgnoringCacheHint, TilingStrategy,
     };
     use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::util::{gdal::hide_gdal_errors, test::TestDefault};
@@ -896,6 +896,7 @@ mod tests {
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size,
             geo_transform: dataset_geo_transform,
+            overlap: TileOverlap::zero(),
         };
 
         assert_eq!(
@@ -934,6 +935,7 @@ mod tests {
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size,
             geo_transform: central_geo_transform,
+            overlap: TileOverlap::zero(),
         };
 
         assert_eq!(
@@ -972,6 +974,7 @@ mod tests {
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size,
             geo_transform: central_geo_transform,
+            overlap: TileOverlap::zero(),
         };
 
         let vres: Vec<TileIdx> = origin_split_tileing_strategy
@@ -1002,6 +1005,7 @@ mod tests {
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size,
             geo_transform: central_geo_transform,
+            overlap: TileOverlap::zero(),
         };
 
         let vres: Vec<TileInformation> = origin_split_tileing_strategy
@@ -1199,6 +1203,7 @@ mod tests {
         );
 
         TileInformation {
+            overlap: TileOverlap::zero(),
             tile_size: TileSize::new_unchecked(shape.y(), shape.x()),
             tile_position: TileIdx::new_y_x(0, 0),
             global_geo_transform: real_geotransform,
