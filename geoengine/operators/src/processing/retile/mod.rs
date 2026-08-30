@@ -466,6 +466,7 @@ mod tests {
             .into(),
             properties: Default::default(),
             cache_hint: CacheHint::no_cache(),
+            overlap: TileOverlap::zero(),
         }];
 
         let result_descriptor = RasterResultDescriptor {
@@ -585,6 +586,7 @@ mod tests {
                 .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -601,6 +603,7 @@ mod tests {
                 .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -617,6 +620,7 @@ mod tests {
                 .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -633,6 +637,7 @@ mod tests {
                 .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
         ];
 
