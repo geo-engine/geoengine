@@ -142,6 +142,7 @@ where
 mod tests {
     use super::*;
     use geoengine_datatypes::raster::TileIdx;
+    use geoengine_datatypes::raster::TileOverlap;
 
     use futures::stream::{self, StreamExt};
     use geoengine_datatypes::primitives::CacheHint;
@@ -153,6 +154,7 @@ mod tests {
     #[tokio::test]
     async fn simple() {
         let tile_information = TileInformation {
+            overlap: TileOverlap::zero(),
             global_geo_transform: TestDefault::test_default(),
             tile_position: TileIdx::new_y_x(0, 0),
             tile_size: TileSize::new_y_x(3, 2),
@@ -220,6 +222,7 @@ mod tests {
     #[tokio::test]
     async fn first_value() {
         let tile_information = TileInformation {
+            overlap: TileOverlap::zero(),
             global_geo_transform: TestDefault::test_default(),
             tile_position: TileIdx::new_y_x(0, 0),
             tile_size: TileSize::new_y_x(3, 2),

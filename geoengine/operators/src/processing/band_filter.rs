@@ -289,6 +289,7 @@ where
 mod tests {
     use super::*;
     use geoengine_datatypes::raster::TileIdx;
+    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::raster::TileSize;
 
     use crate::{
@@ -333,6 +334,7 @@ mod tests {
         };
 
         let tile_info = TileInformation {
+            overlap: TileOverlap::zero(),
             global_geo_transform: TestDefault::test_default(),
             tile_position: TileIdx::new_y_x(0, 0),
             tile_size,
@@ -460,6 +462,7 @@ mod tests {
         };
 
         let tile_info = TileInformation {
+            overlap: TileOverlap::zero(),
             global_geo_transform: TestDefault::test_default(),
             tile_position: TileIdx::new_y_x(0, 0),
             tile_size,

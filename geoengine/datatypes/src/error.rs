@@ -1,7 +1,7 @@
 use crate::{
     collections::FeatureCollectionError,
     primitives::{BoundingBox2D, Coordinate2D, PrimitivesError, TimeInstance, TimeInterval},
-    raster::RasterDataType,
+    raster::{RasterDataType, TileOverlap},
     spatial_reference::SpatialReference,
 };
 use snafu::{AsErrorSource, ErrorCompat, IntoError, prelude::*};
@@ -380,6 +380,15 @@ pub enum Error {
         srs_in: SpatialReference,
         srs_out: SpatialReference,
         bounds: BoundingBox2D,
+    },
+    #[snafu(display(
+        "Not enough tile overlap available: requested {}, but only {} is present",
+        requested,
+        available
+    ))]
+    NotEnoughTileOverlap {
+        requested: TileOverlap,
+        available: TileOverlap,
     },
 }
 
