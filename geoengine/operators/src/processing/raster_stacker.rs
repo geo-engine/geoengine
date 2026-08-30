@@ -1132,6 +1132,7 @@ mod tests {
             grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
             properties: Default::default(),
             cache_hint: CacheHint::no_cache(),
+            overlap: TileOverlap::zero(),
         }];
 
         let data2: Vec<RasterTile2D<u8>> = vec![RasterTile2D {
@@ -1144,6 +1145,7 @@ mod tests {
                 .into(),
             properties: Default::default(),
             cache_hint: CacheHint::no_cache(),
+            overlap: TileOverlap::zero(),
         }];
 
         let descriptor1 = RasterResultDescriptor {
