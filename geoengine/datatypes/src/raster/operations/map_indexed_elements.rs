@@ -1,6 +1,6 @@
 use crate::raster::{
     EmptyGrid, Grid, GridIdx, GridIndexAccess, GridOrEmpty, GridOrEmpty2D, GridSize,
-    GridSpaceToLinearSpace, MaskedGrid, MaskedGrid2D, RasterTile2D,
+    GridSpaceToLinearSpace, MaskedGrid, MaskedGrid2D, RasterTile2D, TileOverlap,
 };
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
@@ -318,6 +318,7 @@ where
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
             cache_hint: self.cache_hint.clone_with_current_datetime(),
+            overlap: TileOverlap::zero(),
         }
     }
 }
@@ -641,6 +642,7 @@ where
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
             cache_hint: self.cache_hint.clone_with_current_datetime(),
+            overlap: TileOverlap::zero(),
         }
     }
 }

@@ -244,9 +244,59 @@ mod tests {
     };
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::primitives::DateTime;
-    use geoengine_datatypes::raster::TilingSpecification;
+    use geoengine_datatypes::raster::TileOverlap;
+    use geoengine_datatypes::raster::{
+        GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, RasterTile2D, TileIdx,
+        TileInformation, TileSize, TilingSpecification,
+    };
+    use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_operators::engine::TimeDescriptor;
+    use geoengine_operators::engine::{
+        PlotOperator, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
+        SpatialGridDescriptor,
+    };
+    use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
+    use geoengine_operators::plot::{
+        Histogram, HistogramBounds, HistogramBuckets, HistogramParams, Statistics, StatisticsParams,
+    };
     use serde_json::{Value, json};
     use tokio_postgres::NoTls;
+
+    fn example_raster_source() -> Box<dyn RasterOperator> {
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new_min_max(-3, 0, 0, 2).unwrap(),
+                TileSize::default_512(),
+            ),
+            time: TimeDescriptor::new_irregular(None),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
+        MockRasterSource {
+            params: MockRasterSourceParams {
+                data: vec![RasterTile2D::new_with_tile_info(
+                    geoengine_datatypes::primitives::TimeInterval::default(),
+                    TileInformation {
+                        overlap: TileOverlap::zero(),
+                        global_geo_transform: TestDefault::test_default(),
+                        tile_position: TileIdx::new_y_x(0, 0),
+                        tile_size: TileSize::new_y_x(3, 2),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
+                        .unwrap()
+                        .into(),
+                    CacheHint::no_cache(),
+                )],
+                result_descriptor,
+            },
+        }
+        .boxed()
+    }
 
     fn json_tiling_spec() -> TilingSpecification {
         TilingSpecification::with_zero_origin([3, 2].into())

@@ -169,7 +169,8 @@ mod tests {
     use crate::{
         primitives::{CacheHint, TimeInterval},
         raster::{
-            EmptyGrid2D, GridIndexAccessMut, MaskedGrid2D, TileIdx, TileInformation, TileSize,
+            EmptyGrid2D, GridIndexAccessMut, MaskedGrid2D, TileIdx, TileInformation, TileOverlap,
+            TileSize,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -238,6 +239,7 @@ mod tests {
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
                 tile_size: TileSize::new_y_x(3, 2),
@@ -289,6 +291,7 @@ mod tests {
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
                 tile_size: TileSize::new_y_x(3, 2),

@@ -1,8 +1,8 @@
 use crate::{
     collections::FeatureCollectionError,
     primitives::{BoundingBox2D, Coordinate2D, PrimitivesError, TimeInstance, TimeInterval},
-    raster::RasterDataType,
-    spatial_reference::{self, SpatialReference},
+    raster::{RasterDataType, TileOverlap},
+    spatial_reference::SpatialReference,
 };
 use snafu::{AsErrorSource, ErrorCompat, IntoError, prelude::*};
 use std::{any::Any, convert::Infallible, path::PathBuf, sync::Arc};
@@ -381,8 +381,14 @@ pub enum Error {
         srs_out: SpatialReference,
         bounds: BoundingBox2D,
     },
-    GeodesyProjector {
-        source: spatial_reference::GeodesyProjectorError,
+    #[snafu(display(
+        "Not enough tile overlap available: requested {}, but only {} is present",
+        requested,
+        available
+    ))]
+    NotEnoughTileOverlap {
+        requested: TileOverlap,
+        available: TileOverlap,
     },
 }
 
