@@ -2,7 +2,8 @@
  * Generates a redirect URI for OIDC authentication flows.
  * @param route The route to append to the redirect URI.
  * @param currentRoute The current Angular route, e.g. `navigation`.
- * @returns The full redirect URI, or `undefined` when the current route cannot be resolved.
+ * @returns The full redirect URI.
+ * @throws When the current route cannot be resolved from the browser URL.
  * @example
  * Standalone manager at `https://example.com/navigation`:
  * `oidcRedirectPath(location, '/oidc-popup', 'navigation')` returns
@@ -12,7 +13,7 @@
  * `oidcRedirectPath(location, '/oidc-popup', 'navigation')` returns
  * `https://example.com/gis/manager/oidc-popup`.
  */
-export function oidcRedirectPath(location: Location, route: string, currentRoute: string): string | undefined {
+export function oidcRedirectPath(location: Location, route: string, currentRoute: string): string {
     // A trailing slash is equivalent for browser routes, but would prevent the
     // suffix check below from recognizing URLs such as `/manager/navigation/`.
     let pathname = location.pathname;
@@ -36,7 +37,6 @@ export function oidcRedirectPath(location: Location, route: string, currentRoute
     } else {
         // Never send an unverified root URI to Keycloak. A wrong but valid-looking
         // redirect URI is harder to diagnose than stopping the authentication flow.
-        // eslint-disable-next-line no-console
         throw new Error(`[WildLIVE OIDC] current route does not match pathname: ${pathname} vs ${currentPath}`);
     }
 

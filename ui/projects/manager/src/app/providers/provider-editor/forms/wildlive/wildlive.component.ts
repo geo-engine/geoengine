@@ -189,7 +189,7 @@ export class WildLiveComponent implements ControlValueAccessor {
      * Builds the callback URL from the current manager route.
      * `/gis/manager/navigation` becomes `/gis/manager/oidc-popup`.
      */
-    private getWildliveOidcRedirectUri(): string | undefined {
+    private getWildliveOidcRedirectUri(): string {
         // This component is rendered only below the manager's `navigation` route.
         return oidcRedirectPath(window.location, '/oidc-popup', 'navigation');
     }
@@ -198,9 +198,11 @@ export class WildLiveComponent implements ControlValueAccessor {
         const orientation = window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
         const [popupWidth, popupHeight] = orientation === 'landscape' ? [700, 500] : [360, 660];
 
-        const redirectUri = this.getWildliveOidcRedirectUri();
-        if (!redirectUri) {
-            console.error('Could not determine the WildLIVE OIDC redirect URI.');
+        let redirectUri: string;
+        try {
+            redirectUri = this.getWildliveOidcRedirectUri();
+        } catch (error) {
+            console.error('Could not determine the WildLIVE OIDC redirect URI.', error);
             return;
         }
 

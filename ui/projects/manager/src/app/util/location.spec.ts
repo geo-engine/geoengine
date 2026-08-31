@@ -27,11 +27,12 @@ describe('oidcRedirectPath', () => {
         await expect(redirectUri).toBe('https://example.com/gis/manager/oidc-popup');
     });
 
-    it('should reject a route that is not in the current URL', async () => {
+    it('should reject a route that is not in the current URL', () => {
         const location = urlToLocation(new URL('https://example.com/gis/manager/navigation'));
 
-        const redirectUri = oidcRedirectPath(location, '/oidc-popup', 'signin');
-        await expect(redirectUri).toBeUndefined();
+        expect(() => oidcRedirectPath(location, '/oidc-popup', 'signin')).toThrowError(
+            '[WildLIVE OIDC] current route does not match pathname',
+        );
     });
 
     it('should use the manager mount when navigation is not in the URL', async () => {
