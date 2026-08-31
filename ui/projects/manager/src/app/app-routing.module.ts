@@ -29,7 +29,6 @@ export const routes: (subdir: string) => Routes = (subdir) => [
 @NgModule({
     imports: [
         RouterModule.forRoot(routes(''), {
-            initialNavigation: 'disabled', // navigation is enabled in app component after the session is loaded
             onSameUrlNavigation: 'reload', // for reload the page and checking if the user is logged in again
             bindToComponentInputs: true,
             // enableTracing: true, // TODO: remove after debugging

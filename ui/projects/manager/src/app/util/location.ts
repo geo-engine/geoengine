@@ -37,19 +37,12 @@ export function oidcRedirectPath(location: Location, route: string, currentRoute
         // Never send an unverified root URI to Keycloak. A wrong but valid-looking
         // redirect URI is harder to diagnose than stopping the authentication flow.
         // eslint-disable-next-line no-console
-        console.debug('[WildLIVE OIDC] current route does not match pathname', {
-            normalizedPathname: pathname,
-            currentPath,
-        });
-        return undefined;
+        throw new Error(`[WildLIVE OIDC] current route does not match pathname: ${pathname} vs ${currentPath}`);
     }
 
-    // Split on `/` instead of relying on regular expressions so leading and
-    // trailing slashes cannot create duplicate separators in the URI.
-    const path = [basePath, route]
-        .flatMap((part) => part.split('/'))
-        .filter(Boolean)
-        .join('/');
+    // basePath has no trailing slash and we ensure route has a leading slash, so the result will have exactly one slash between them.
+    const routeWithLeadingSlash = route.startsWith('/') ? route : `/${route}`;
+    const path = `${basePath}${routeWithLeadingSlash}`;
 
-    return new URL(`/${path}`, location.origin).toString();
+    return new URL(`${path}`, location.origin).toString();
 }

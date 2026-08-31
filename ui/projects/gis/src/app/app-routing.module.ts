@@ -30,7 +30,6 @@ const routes: Routes = [
 @NgModule({
     imports: [
         RouterModule.forRoot(routes, {
-            initialNavigation: 'disabled', // navigation is enabled in app component after application setup
             onSameUrlNavigation: 'reload', // for reload the page and checking if the user is logged in again
             bindToComponentInputs: true,
         }),
