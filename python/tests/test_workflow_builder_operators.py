@@ -467,6 +467,15 @@ class OperatorsTests(unittest.TestCase):
 
         workflow = wb.operators.BandFilter(source=source_operator, bands=[0, 1])
 
+    def test_retile(self):
+        source_operator = wb.operators.GdalSource("ndvi")
+
+        workflow = wb.operators.ReTile(
+            source_operator=source_operator,
+            tile_size=(640, 640),
+            output_origin=(100.0, -200.0),
+        )
+
         self.assertEqual(
             workflow.to_dict(),
             {
