@@ -11,11 +11,12 @@ use crate::api::model::{
         },
     },
 };
-use geoengine_datatypes::raster::TileSize;
+use geoengine_datatypes::raster::{TileOverlap, TileSize};
 use geoengine_macros::{api_operator, type_tag};
 use geoengine_operators::processing::{
-    Aggregation as OperatorsAggregation, BandFilter as OperatorsBandFilter,
-    BandFilterParams as OperatorsBandFilterParameters,
+    AddTileOverlap as OperatorsAddTileOverlap,
+    AddTileOverlapParams as OperatorsAddTileOverlapParameters, Aggregation as OperatorsAggregation,
+    BandFilter as OperatorsBandFilter, BandFilterParams as OperatorsBandFilterParameters,
     DeriveOutRasterSpecsSource as OperatorsDeriveOutRasterSpecsSource,
     Downsampling as OperatorsDownsampling, DownsamplingMethod as OperatorsDownsamplingMethod,
     DownsamplingParams as OperatorsDownsamplingParameters,
@@ -30,8 +31,9 @@ use geoengine_operators::processing::{
     RasterTypeConversionParams as OperatorsRasterTypeConversionParameters,
     RasterVectorJoin as OperatorsRasterVectorJoin,
     RasterVectorJoinParams as OperatorsRasterVectorJoinParameters, ReTile as OperatorsReTile,
-    ReTileParams as OperatorsReTileParameters, Reprojection as OperatorsReprojection,
-    ReprojectionParams as OperatorsReprojectionParameters,
+    ReTileParams as OperatorsReTileParameters, RemoveTileOverlap as OperatorsRemoveTileOverlap,
+    RemoveTileOverlapParams as OperatorsRemoveTileOverlapParameters,
+    Reprojection as OperatorsReprojection, ReprojectionParams as OperatorsReprojectionParameters,
     TemporalRasterAggregation as OperatorsTemporalRasterAggregation,
     TemporalRasterAggregationParameters as OperatorsTemporalRasterAggregationParameters,
     VectorExpression as OperatorsVectorExpression,
@@ -556,6 +558,114 @@ impl TryFrom<ReTile> for OperatorsReTile {
             params: OperatorsReTileParameters {
                 tile_size: value.params.tile_size.map(TileSize::from),
                 origin: value.params.origin.map(Into::into),
+            },
+            sources: (*value.sources).try_into()?,
+        })
+    }
+}
+
+/// The `AddTileOverlap` operator equips every output tile with an overlap (halo) around its core region.
+///
+/// For each tile, neighboring data is fetched so that convolutions or other neighborhood
+/// computations have input beyond the tile boundary. Regions beyond the dataset extent are
+/// no-data. Coverage and queries remain defined by the tile cores.
+///
+/// ## Inputs
+///
+/// The `AddTileOverlap` operator expects exactly one _raster_ input without overlap.
+#[api_operator(
+    title = "AddTileOverlap",
+    examples(json!({
+        "type": "AddTileOverlap",
+        "params": {
+            "overlap": [16, 16]
+        },
+        "sources": {
+            "raster": {
+                "type": "GdalSource",
+                "params": { "data": "example" }
+            }
+        }
+    }))
+)]
+pub struct AddTileOverlap {
+    pub params: AddTileOverlapParameters,
+    pub sources: Box<SingleRasterSource>,
+}
+
+/// Parameters for the `AddTileOverlap` operator.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AddTileOverlapParameters {
+    /// Overlap halo in pixels `[rows, columns]` added on every side of each tile.
+    #[schema(examples(json!([16, 16])))]
+    pub overlap: [u32; 2],
+}
+
+impl TryFrom<AddTileOverlap> for OperatorsAddTileOverlap {
+    type Error = anyhow::Error;
+
+    fn try_from(value: AddTileOverlap) -> Result<Self, Self::Error> {
+        let [y, x] = value.params.overlap;
+        Ok(OperatorsAddTileOverlap {
+            params: OperatorsAddTileOverlapParameters {
+                overlap: TileOverlap::new(y, x),
+            },
+            sources: (*value.sources).try_into()?,
+        })
+    }
+}
+
+/// The `RemoveTileOverlap` operator crops the overlap halo from all tiles of its input raster.
+///
+/// It is the inverse of `AddTileOverlap`: each tile shrinks symmetrically while its core region
+/// and georeference stay untouched. Removing all overlap restores plain tiles that every
+/// operator accepts. Use it after ML segmentation to crop model output back to cores.
+///
+/// ## Inputs
+///
+/// The `RemoveTileOverlap` operator expects exactly one _raster_ input.
+#[api_operator(
+    title = "RemoveTileOverlap",
+    examples(json!({
+        "type": "RemoveTileOverlap",
+        "params": {},
+        "sources": {
+            "raster": {
+                "type": "AddTileOverlap",
+                "params": { "overlap": [16, 16] },
+                "sources": {
+                    "raster": {
+                        "type": "GdalSource",
+                        "params": { "data": "example" }
+                    }
+                }
+            }
+        }
+    }))
+)]
+pub struct RemoveTileOverlap {
+    pub params: RemoveTileOverlapParameters,
+    pub sources: Box<SingleRasterSource>,
+}
+
+/// Parameters for the `RemoveTileOverlap` operator.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveTileOverlapParameters {
+    /// Halo cropped from every side in pixels `[rows, columns]`.
+    /// If `None`, all available overlap is removed.
+    #[schema(examples(json!([16, 16])))]
+    pub amount: Option<[u32; 2]>,
+}
+
+impl TryFrom<RemoveTileOverlap> for OperatorsRemoveTileOverlap {
+    type Error = anyhow::Error;
+
+    fn try_from(value: RemoveTileOverlap) -> Result<Self, Self::Error> {
+        Ok(OperatorsRemoveTileOverlap {
+            params: OperatorsRemoveTileOverlapParameters {
+                amount: value.params.amount.map(|[y, x]| TileOverlap::new(y, x)),
             },
             sources: (*value.sources).try_into()?,
         })

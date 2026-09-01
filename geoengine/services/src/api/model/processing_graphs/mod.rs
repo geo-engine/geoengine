@@ -12,12 +12,12 @@ use geoengine_operators::{
     mock::MockPointSource as OperatorsMockPointSource,
     plot::{Histogram as OperatorsHistogram, Statistics as OperatorsStatistics},
     processing::{
-        BandFilter as OperatorsBandFilter, Downsampling as OperatorsDownsampling,
-        Expression as OperatorsExpression, Interpolation as OperatorsInterpolation,
-        RasterStacker as OperatorsRasterStacker,
+        AddTileOverlap as OperatorsAddTileOverlap, BandFilter as OperatorsBandFilter,
+        Downsampling as OperatorsDownsampling, Expression as OperatorsExpression,
+        Interpolation as OperatorsInterpolation, RasterStacker as OperatorsRasterStacker,
         RasterTypeConversion as OperatorsRasterTypeConversion,
         RasterVectorJoin as OperatorsRasterVectorJoin, ReTile as OperatorsReTile,
-        Reprojection as OperatorsReprojection,
+        RemoveTileOverlap as OperatorsRemoveTileOverlap, Reprojection as OperatorsReprojection,
         TemporalRasterAggregation as OperatorsTemporalRasterAggregation,
         VectorExpression as OperatorsVectorExpression,
     },
@@ -42,13 +42,13 @@ pub(crate) use crate::api::model::processing_graphs::parameters::SpatialBoundsDe
 pub(crate) use crate::api::model::processing_graphs::{
     plots::{Histogram, HistogramParameters, Statistics, StatisticsParameters},
     processing::{
-        Aggregation, BandFilter, BandFilterParameters, BandsByNameOrIndex,
+        AddTileOverlap, Aggregation, BandFilter, BandFilterParameters, BandsByNameOrIndex,
         DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParameters,
         DownsamplingResolution, Expression, ExpressionParameters, Interpolation,
         InterpolationMethod, InterpolationParameters, InterpolationResolution, RasterStacker,
         RasterStackerParameters, RasterTypeConversion, RasterTypeConversionParameters,
-        RasterVectorJoin, RasterVectorJoinParameters, ReTile, ReTileParameters, RenameBands,
-        Reprojection, ReprojectionParameters, TemporalRasterAggregation,
+        RasterVectorJoin, RasterVectorJoinParameters, ReTile, ReTileParameters, RemoveTileOverlap,
+        RenameBands, Reprojection, ReprojectionParameters, TemporalRasterAggregation,
         TemporalRasterAggregationParameters, VectorExpression, VectorExpressionParameters,
     },
     source::{
@@ -81,6 +81,7 @@ pub enum TypedOperator {
 #[schema(discriminator = "type")]
 pub enum RasterOperator {
     BandFilter(BandFilter),
+    AddTileOverlap(AddTileOverlap),
     Downsampling(Downsampling),
     Expression(Expression),
     GdalSource(GdalSource),
@@ -88,6 +89,7 @@ pub enum RasterOperator {
     MultiBandGdalSource(MultiBandGdalSource),
     RasterStacker(RasterStacker),
     RasterTypeConversion(RasterTypeConversion),
+    RemoveTileOverlap(RemoveTileOverlap),
     ReTile(ReTile),
     Reprojection(Reprojection),
     TemporalRasterAggregation(TemporalRasterAggregation),
@@ -146,6 +148,14 @@ impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
             }
             RasterOperator::MultiBandGdalSource(gdal_source) => {
                 OperatorsMultiBandGdalSource::try_from(gdal_source)
+                    .map(OperatorsRasterOperator::boxed)
+            }
+            RasterOperator::AddTileOverlap(add_tile_overlap) => {
+                OperatorsAddTileOverlap::try_from(add_tile_overlap)
+                    .map(OperatorsRasterOperator::boxed)
+            }
+            RasterOperator::RemoveTileOverlap(remove_tile_overlap) => {
+                OperatorsRemoveTileOverlap::try_from(remove_tile_overlap)
                     .map(OperatorsRasterOperator::boxed)
             }
             RasterOperator::RasterStacker(raster_stacker) => {

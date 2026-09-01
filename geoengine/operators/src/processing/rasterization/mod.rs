@@ -380,7 +380,7 @@ impl QueryProcessor for GridRasterizationQueryProcessor {
                 let mut cache_hint = CacheHint::max_duration();
 
                 let mut grid_data =
-                    GridWithFlexibleBoundType::new_filled(tile_info.global_pixel_bounds(), 0.);
+                    GridWithFlexibleBoundType::new_filled(tile_info.core_pixel_bounds(), 0.);
                 while let Some(chunk) = chunks.next().await {
                     let chunk = chunk?;
 
@@ -507,7 +507,7 @@ impl QueryProcessor for DensityRasterizationQueryProcessor {
                     ColumnSelection::all(), // FIXME: should be configurable
                 );
 
-                let tile_geo_transform = tile_info.tile_geo_transform();
+                let tile_geo_transform = tile_info.core_geo_transform();
 
                 let mut chunks = points_processor.query(vector_query, ctx).await?;
 

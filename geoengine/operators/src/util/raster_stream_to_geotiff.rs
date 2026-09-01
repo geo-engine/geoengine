@@ -19,7 +19,7 @@ use geoengine_datatypes::primitives::{DateTimeParseFormat, RasterQueryRectangle,
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, GridBlit, GridBoundingBox2D, GridBounds, GridIntersection,
     GridOrEmpty, GridSize, MapElements, MaskedGrid2D, NoDataValueGrid, Pixel, RasterTile2D,
-    TilingStrategy,
+    TileOverlap, TilingStrategy,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
@@ -130,6 +130,7 @@ where
     let strat = TilingStrategy {
         tile_size: initial_tile_info.tile_size,
         geo_transform: initial_tile_info.global_geo_transform,
+        overlap: TileOverlap::zero(),
     };
     let num_tiles_per_timestep = strat
         .global_pixel_grid_bounds_to_tile_grid_bounds(query_rect.spatial_bounds())
@@ -836,7 +837,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
     fn write_tile_into_band(&self, tile: RasterTile2D<P>, raster_band: RasterBand) -> Result<()> {
         let tile_info = tile.tile_information();
 
-        let tile_grid_bounds = tile_info.global_pixel_bounds();
+        let tile_grid_bounds = tile_info.core_pixel_bounds();
 
         let out_data_bounds = self
             .output_pixel_grid_bounds
@@ -1570,6 +1571,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: *time_intervals.get(1).unwrap(),
@@ -1579,6 +1581,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
         ];
 

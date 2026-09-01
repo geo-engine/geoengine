@@ -234,6 +234,7 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::DateTime;
+    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::raster::{
         GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, RasterTile2D, TileIdx,
         TileInformation, TileSize, TilingSpecification,
@@ -270,6 +271,7 @@ mod tests {
                 data: vec![RasterTile2D::new_with_tile_info(
                     geoengine_datatypes::primitives::TimeInterval::default(),
                     TileInformation {
+                        overlap: TileOverlap::zero(),
                         global_geo_transform: TestDefault::test_default(),
                         tile_position: TileIdx::new_y_x(0, 0),
                         tile_size: TileSize::new_y_x(3, 2),

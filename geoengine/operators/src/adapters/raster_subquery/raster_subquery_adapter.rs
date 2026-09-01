@@ -496,7 +496,7 @@ where
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         Ok(Some(RasterQueryRectangle::new(
-            tile_info.global_pixel_bounds(),
+            tile_info.core_pixel_bounds(),
             time,
             band_idx.into(),
         )))

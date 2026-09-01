@@ -393,6 +393,7 @@ where
 #[cfg(test)]
 mod tests {
     use futures::{StreamExt, stream};
+    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::{
         primitives::{CacheHint, TimeInterval},
         raster::{Grid, TilesEqualIgnoringCacheHint},
@@ -495,6 +496,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![0, 1, 2, 3]).unwrap().into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -504,6 +506,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![4, 5, 6, 7]).unwrap().into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -513,6 +516,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![8, 9, 10, 11]).unwrap().into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -524,6 +528,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
         ];
 
@@ -538,6 +543,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -549,6 +555,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -560,6 +567,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -571,6 +579,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
         ];
 
@@ -613,6 +622,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![0, 1, 2, 3]).unwrap().into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -622,6 +632,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![3, 2, 1, 0]).unwrap().into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -631,6 +642,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![4, 5, 6, 7]).unwrap().into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -640,6 +652,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![7, 6, 5, 4]).unwrap().into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -649,6 +662,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![8, 9, 10, 11]).unwrap().into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -658,6 +672,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![11, 10, 9, 8]).unwrap().into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -669,6 +684,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -680,6 +696,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
         ];
 
@@ -694,6 +711,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -705,6 +723,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -716,6 +735,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -727,6 +747,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -738,6 +759,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -749,6 +771,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -760,6 +783,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -771,6 +795,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
+                overlap: TileOverlap::zero(),
             },
         ];
 
@@ -818,6 +843,7 @@ mod tests {
             grid_array: Grid::new([2, 2].into(), vec![0, 1, 2, 3]).unwrap().into(),
             properties: Default::default(),
             cache_hint: CacheHint::default(),
+            overlap: TileOverlap::zero(),
         }];
 
         let data2: Vec<RasterTile2D<u8>> = vec![RasterTile2D {
@@ -830,6 +856,7 @@ mod tests {
                 .into(),
             properties: Default::default(),
             cache_hint: CacheHint::default(),
+            overlap: TileOverlap::zero(),
         }];
 
         let stream = stream::iter(data.clone().into_iter().map(Result::Ok)).boxed();

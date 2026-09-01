@@ -78,6 +78,12 @@ impl PlotOperator for BoxPlot {
                 )
                 .await?;
 
+                // box plots count pixel values: halo pixels would count multiple times
+                raster_sources.iter().try_for_each(|r| {
+                    r.result_descriptor()
+                        .ensure_no_tile_overlap(BoxPlot::TYPE_NAME)
+                })?;
+
                 // TODO: implement multi-band functionality and remove this check
                 ensure!(
                     raster_sources
@@ -540,7 +546,7 @@ mod tests {
     };
     use geoengine_datatypes::raster::{
         BoundedGrid, EmptyGrid2D, GeoTransform, Grid2D, MaskedGrid2D, RasterDataType, RasterTile2D,
-        TileIdx, TileInformation, TileSize, TilingSpecification,
+        TileIdx, TileInformation, TileOverlap, TileSize, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -998,6 +1004,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size,
@@ -1067,6 +1074,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size,
@@ -1141,6 +1149,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size,
@@ -1211,6 +1220,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size,
@@ -1283,6 +1293,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size,
@@ -1364,6 +1375,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size,
@@ -1434,6 +1446,7 @@ mod tests {
                 data: vec![RasterTile2D::new_with_tile_info(
                     TimeInterval::default(),
                     TileInformation {
+                        overlap: TileOverlap::zero(),
                         global_geo_transform: TestDefault::test_default(),
                         tile_position: TileIdx::new_y_x(0, 0),
                         tile_size,

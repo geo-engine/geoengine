@@ -8,7 +8,7 @@ use super::shared_cache::{
 use crate::util::Result;
 use geoengine_datatypes::raster::{
     BaseTile, EmptyGrid, Grid, GridBoundingBoxExt, GridIntersection, GridOrEmpty, GridShape2D,
-    GridSize, GridSpaceToLinearSpace, MaskedGrid, RasterTile,
+    GridSize, GridSpaceToLinearSpace, MaskedGrid, RasterTile, TileOverlap,
 };
 use geoengine_datatypes::{
     primitives::RasterQueryRectangle,
@@ -198,7 +198,7 @@ where
     fn update_stored_query(&self, query: &mut Self::Query) -> Result<(), CacheError> {
         let stored_spatial_query_mut = query.spatial_bounds_mut();
 
-        stored_spatial_query_mut.extend(&self.tile_information().global_pixel_bounds());
+        stored_spatial_query_mut.extend(&self.tile_information().core_pixel_bounds());
 
         *query.time_interval_mut() = query
             .time_interval()
@@ -209,7 +209,7 @@ where
 
     fn intersects_query(&self, query: &Self::Query) -> bool {
         self.tile_information()
-            .global_pixel_bounds()
+            .core_pixel_bounds()
             .intersects(&query.spatial_bounds())
             && self.time.intersects(&query.time_interval())
             && query.attributes().contains(self.band)
@@ -484,6 +484,7 @@ where
             grid_array: compressed_grid,
             time: tile.time,
             cache_hint: tile.cache_hint,
+            overlap: TileOverlap::zero(),
             global_geo_transform: tile.global_geo_transform,
             properties: tile.properties,
             tile_position: tile.tile_position,
@@ -504,6 +505,7 @@ where
             grid_array,
             time: self.time,
             cache_hint: self.cache_hint,
+            overlap: TileOverlap::zero(),
             global_geo_transform: self.global_geo_transform,
             properties: self.properties.clone(),
             tile_position: self.tile_position,
@@ -604,6 +606,7 @@ impl TileCompression for Lz4FlexCompression {
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileOverlap;
     use std::sync::Arc;
 
     use super::{
@@ -634,6 +637,7 @@ mod tests {
             }),
             time: Default::default(),
             cache_hint: Default::default(),
+            overlap: TileOverlap::zero(),
             global_geo_transform: GeoTransform::test_default(),
             properties: Default::default(),
             tile_position: TileIdx::new_y_x(0, 0),

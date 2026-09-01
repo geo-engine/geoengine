@@ -3,7 +3,7 @@
 use futures::future::join_all;
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
-use geoengine_datatypes::raster::{GridBoundingBox2D, RasterProperties};
+use geoengine_datatypes::raster::{GridBoundingBox2D, RasterProperties, TileOverlap};
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, TimeInterval},
     raster::{Grid, RasterTile2D, TileIdx},
@@ -49,6 +49,7 @@ async fn write_cache(tile_cache: &SharedCache, op_name: CanonicOperatorName) -> 
             .into(),
         properties: RasterProperties::default(),
         cache_hint: CacheHint::max_duration(),
+        overlap: TileOverlap::zero(),
     };
 
     let start = std::time::Instant::now();

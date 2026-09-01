@@ -1,5 +1,6 @@
 use crate::raster::{
     EmptyGrid, GridOrEmpty, GridOrEmpty2D, GridSize, MapElements, MaskedGrid, RasterTile2D,
+    TileOverlap,
 };
 use num_traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
 use std::ops::{Add, Div, Mul, Sub};
@@ -184,6 +185,7 @@ where
             tile_position: self.tile_position,
             time: self.time,
             cache_hint: self.cache_hint.clone_with_current_datetime(),
+            overlap: TileOverlap::zero(),
         }
     }
 }

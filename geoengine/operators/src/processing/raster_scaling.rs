@@ -317,8 +317,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::raster::TileIdx;
-    use geoengine_datatypes::raster::TileSize;
+    use geoengine_datatypes::raster::{TileIdx, TileOverlap, TileSize};
 
     use crate::{
         engine::{
@@ -368,6 +367,7 @@ mod tests {
         let raster_tile = RasterTile2D::new_with_tile_info_and_properties(
             TimeInterval::default(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
                 tile_size,
@@ -481,6 +481,7 @@ mod tests {
         let raster_tile = RasterTile2D::new_with_tile_info_and_properties(
             TimeInterval::default(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
                 tile_size,

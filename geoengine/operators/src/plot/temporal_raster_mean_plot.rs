@@ -70,6 +70,10 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
             .initialize_sources(path.clone(), context)
             .await?;
         let raster = initalized_sources.raster;
+        // means aggregate pixels: halo pixels would count multiple times
+        raster
+            .result_descriptor()
+            .ensure_no_tile_overlap(MeanRasterPixelValuesOverTime::TYPE_NAME)?;
 
         let in_desc = raster.result_descriptor().clone();
 
@@ -276,8 +280,7 @@ impl MeanCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::raster::TileIdx;
-    use geoengine_datatypes::raster::TileSize;
+    use geoengine_datatypes::raster::{GeoTransform, TileIdx, TileOverlap, TileSize};
 
     use crate::{
         engine::{
@@ -293,7 +296,6 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, CacheHint, Coordinate2D, Measurement, PlotSeriesSelection, TimeInterval,
     };
-    use geoengine_datatypes::raster::GeoTransform;
     use geoengine_datatypes::{
         dataset::NamedData,
         plots::PlotMetaData,
@@ -445,6 +447,7 @@ mod tests {
             tiles.push(RasterTile2D::new_with_tile_info(
                 time_interval,
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     global_geo_transform: TestDefault::test_default(),
                     tile_position: TileIdx::new_y_x(0, 0),
                     tile_size: TileSize::new_y_x(3, 2),

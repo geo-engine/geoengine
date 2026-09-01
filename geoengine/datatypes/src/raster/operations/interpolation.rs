@@ -172,7 +172,7 @@ mod tests {
         primitives::CacheHint,
         raster::{
             GeoTransform, GeoTransformAccess, Grid2D, GridOrEmpty, MaskedGrid, RasterTile2D,
-            TileIdx, TileInformation, TileSize,
+            TileIdx, TileInformation, TileOverlap, TileSize,
         },
     };
 
@@ -181,6 +181,7 @@ mod tests {
         let input = RasterTile2D::new_with_tile_info(
             Default::default(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 tile_position: TileIdx::new_y_x(0, 0),
                 tile_size: TileSize::new_y_x(3, 3),
                 global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 1.0, -1.0),
@@ -196,13 +197,14 @@ mod tests {
         let input_grid = input.into_inner_positioned_grid();
 
         let output_info = TileInformation {
+            overlap: TileOverlap::zero(),
             tile_position: TileIdx::new_y_x(0, 0),
             tile_size: TileSize::new_y_x(3, 3),
             global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 0.5, -0.5),
         };
 
         let output_geo_transform = output_info.global_geo_transform;
-        let output_bounds = output_info.global_pixel_bounds();
+        let output_bounds = output_info.core_pixel_bounds();
 
         let pool = ThreadPoolBuilder::new().num_threads(0).build().unwrap();
 
@@ -266,6 +268,7 @@ mod tests {
         let input = RasterTile2D::new_with_tile_info(
             Default::default(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 tile_position: TileIdx::new_y_x(0, 0),
                 tile_size: TileSize::new_y_x(3, 3),
                 global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 1.0, -1.0),
@@ -281,13 +284,14 @@ mod tests {
         let input_grid = input.into_inner_positioned_grid();
 
         let output_info = TileInformation {
+            overlap: TileOverlap::zero(),
             tile_position: TileIdx::new_y_x(0, 0),
             tile_size: TileSize::new_y_x(4, 4),
             global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 0.5, -0.5),
         };
 
         let output_geo_transform = output_info.global_geo_transform;
-        let output_bounds = output_info.global_pixel_bounds();
+        let output_bounds = output_info.core_pixel_bounds();
 
         let pool = ThreadPoolBuilder::new().num_threads(0).build().unwrap();
 
