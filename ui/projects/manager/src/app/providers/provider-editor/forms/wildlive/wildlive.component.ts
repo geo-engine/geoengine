@@ -69,7 +69,6 @@ type WildLiveFormRaw = ReturnType<WildLiveComponent['form']['getRawValue']>;
 })
 export class WildLiveComponent implements ControlValueAccessor {
     protected readonly formBuilder = inject(FormBuilder).nonNullable;
-
     readonly isNew = input<boolean>(false);
 
     readonly form: FormGroup<WildLiveForm>;
@@ -186,11 +185,26 @@ export class WildLiveComponent implements ControlValueAccessor {
         }
     }
 
+    /**
+     * Builds the callback URL from the current manager route.
+     * `/gis/manager/navigation` becomes `/gis/manager/oidc-popup`.
+     */
+    private getWildliveOidcRedirectUri(): string {
+        // This component is rendered only below the manager's `navigation` route.
+        return oidcRedirectPath(window.location, '/oidc-popup', 'navigation');
+    }
+
     async connectToWildlivePortal(): Promise<void> {
         const orientation = window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
         const [popupWidth, popupHeight] = orientation === 'landscape' ? [700, 500] : [360, 660];
 
-        const redirectUri = oidcRedirectPath(window.location, '/oidc-popup');
+        let redirectUri: string;
+        try {
+            redirectUri = this.getWildliveOidcRedirectUri();
+        } catch (error) {
+            console.error('Could not determine the WildLIVE OIDC redirect URI.', error);
+            return;
+        }
 
         const clientId = 'geoengine';
         const keycloakBaseUrl = 'https://auth.geoengine.io/realms/AI4WildLIVE/protocol/openid-connect/auth';
