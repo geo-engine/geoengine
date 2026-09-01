@@ -142,7 +142,7 @@ impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
         path: WorkflowOperatorPath,
         params: ReprojectionParams,
         source_raster_operator: O,
-        tiling_spec: TilingSpecification,
+        _tiling_spec: TilingSpecification,
     ) -> Result<Self> {
         let in_desc: RasterResultDescriptor = source_raster_operator.result_descriptor().clone();
         let in_srs = Into::<Option<SpatialReference>>::into(in_desc.spatial_reference)
@@ -185,11 +185,9 @@ impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
         let state = TileReprojectionSubqueryGridInfo {
             in_spatial_grid: in_desc
                 .spatial_grid_descriptor()
-                .tiling_grid_definition(tiling_spec)
-                .tiling_spatial_grid_definition(),
-            out_spatial_grid: out_spatial_grid
-                .tiling_grid_definition(tiling_spec)
-                .tiling_spatial_grid_definition(),
+                .tiling_grid_definition()
+                .to_spatial_grid(),
+            out_spatial_grid: out_spatial_grid.tiling_grid_definition().to_spatial_grid(),
         };
 
         Ok(InitializedRasterReprojection {
@@ -787,8 +785,8 @@ where
         let tiling_strat = self
             .result_descriptor
             .spatial_grid_descriptor()
-            .tiling_grid_definition(ctx.tiling_specification())
-            .generate_data_tiling_strategy();
+            .tiling_grid_definition()
+            .tiling_strategy();
 
         let time_stream = self.time_query(query.time_interval(), ctx).await?;
 
@@ -853,8 +851,8 @@ mod tests {
     };
     use geoengine_datatypes::primitives::{Coordinate2D, TimeStep};
     use geoengine_datatypes::raster::{
-        GeoTransform, GridBoundingBox2D, GridShape2D, GridSize, SpatialGridDefinition, TileIdx,
-        TileSize, TilesEqualIgnoringCacheHint,
+        GeoTransform, GridBoundingBox2D, GridSize, SpatialGridDefinition, TileIdx, TileSize,
+        TilesEqualIgnoringCacheHint,
     };
     use geoengine_datatypes::{
         collections::{
@@ -1214,12 +1212,14 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 geo_transform,
                 GridBoundingBox2D::new([-2, 0], [1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::with_zero_origin([2, 2].into()),
+        );
 
         let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
@@ -1271,9 +1271,8 @@ mod tests {
         let mut exe_ctx = MockExecutionContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
-        let tile_size = GridShape2D::new_2d(512, 512);
-        exe_ctx.tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tile_size = TileSize::new_y_x(512, 512);
+        exe_ctx.tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
@@ -1332,9 +1331,9 @@ mod tests {
 
         let tlz = result_descritptor
             .spatial_grid_descriptor()
-            .tiling_grid_definition(query_ctx.tiling_specification())
-            .generate_data_tiling_strategy();
-        let query_tl_pixel = tlz.tile_idx_to_global_pixel_idx([-1, 0].into());
+            .tiling_grid_definition()
+            .tiling_strategy();
+        let query_tl_pixel = tlz.tile_idx_to_global_pixel_idx([0, 0].into());
         let query_bounds =
             GridBoundingBox2D::new(query_tl_pixel, query_tl_pixel + [511, 511]).unwrap();
 
@@ -1349,23 +1348,6 @@ mod tests {
 
         // get the worldfile
         // println!("{}", res[0].tile_geo_transform().worldfile_string());
-
-        // Write the tile to a file
-
-        /*
-        let mut buffer = std::fs::File::create("MOD13A2_M_NDVI_2014-04-01_tile-20_v6.rst")?;
-
-        std::io::Write::write(
-            &mut buffer,
-            res[0]
-                .clone()
-                .into_materialized_tile()
-                .grid_array
-                .inner_grid
-                .data
-                .as_slice(),
-        )?;
-        */
 
         // This check is against a tile produced by the operator itself. It was visually validated. TODO: rebuild when open issues are solved.
         // A perfect validation would be against a GDAL output generated like this:
@@ -1437,7 +1419,11 @@ mod tests {
                 )),
                 TimeStep::months(1).unwrap(),
             ),
-            spatial_grid: SpatialGridDescriptor::source_from_parts(data_geo_transform, data_bounds),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                data_geo_transform,
+                data_bounds,
+                TileSize::new_y_x(256, 256),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -1476,13 +1462,15 @@ mod tests {
                 gdal_config_options: None,
                 allow_alphaband_as_mask: true,
                 retry: None,
+                tile_size: None,
             },
             result_descriptor: result_descriptor.clone(),
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let mut exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(tile_size));
+        let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::with_zero_origin(tile_size),
+        );
 
         let id: DataId = DatasetId::new().into();
         let name = NamedData::with_system_name("ndvi");
@@ -1520,8 +1508,8 @@ mod tests {
             .raster_query(
                 RasterQueryRectangle::new(
                     qr.spatial_grid_descriptor()
-                        .tiling_grid_definition(query_ctx.tiling_specification())
-                        .tiling_grid_bounds(),
+                        .tiling_grid_definition()
+                        .pixel_bounds,
                     time_interval,
                     BandSelection::first(),
                 ),
@@ -1535,8 +1523,9 @@ mod tests {
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
 
-        // the test should generate 18x10 tiles. However, since the real procucrd pixel size is < 0.1 we will get 20 tiles on the x-axis
-        assert_eq!(tiles.len(), /*18*/ 20 * 10);
+        // the test should generate 18x10 tiles. However, since the real product pixel size is < 0.1 we get 20 tiles on the x-axis
+        // with tiling aligned to the output grid origin we get 19x9 tiles
+        assert_eq!(tiles.len(), /*18*/ 19 * 9);
 
         // none of the tiles should be empty
         assert!(tiles.iter().all(|t| !t.is_empty()));
@@ -1557,6 +1546,7 @@ mod tests {
                     -9_329_005.18,
                 ),
                 GridBoundingBox2D::new_min_max(0, 100, 0, 100).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1580,13 +1570,15 @@ mod tests {
                 gdal_config_options: None,
                 allow_alphaband_as_mask: true,
                 retry: None,
+                tile_size: None,
             },
             result_descriptor: result_descriptor.clone(),
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let mut exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(tile_size));
+        let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::with_zero_origin(tile_size),
+        );
         let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
         let id: DataId = DatasetId::new().into();

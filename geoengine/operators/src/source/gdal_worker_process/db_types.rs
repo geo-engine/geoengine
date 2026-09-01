@@ -65,6 +65,7 @@ impl TryFrom<GdalDatasetParametersDbType> for GdalDatasetParameters {
                 .map(|v| v.into_iter().map(Into::into).collect()),
             allow_alphaband_as_mask: other.allow_alphaband_as_mask,
             retry: other.retry,
+            tile_size: None,
         })
     }
 }

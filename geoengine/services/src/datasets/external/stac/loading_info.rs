@@ -492,11 +492,7 @@ impl StacMultiBandMetaData {
             return Ok(());
         };
 
-        let grid_bounds = GridBoundingBox2D::new(
-            GridIdx2D::new([0, 0]),
-            GridIdx2D::new([(width as isize) - 1, (height as isize) - 1]),
-        )
-        .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+        let grid_bounds = stac_grid_bounds(height, width)?;
         let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
 
         let file_path = gdal_file_path(&asset.href)
@@ -537,6 +533,7 @@ impl StacMultiBandMetaData {
                     gdal_config_options: gdal_config_options.clone(),
                     allow_alphaband_as_mask: false,
                     retry: Some(GdalRetryOptions { max_retries: 99 }), // TODO: make configurable?
+                    tile_size: None,
                 },
             });
         }
@@ -686,6 +683,15 @@ fn proj_shape_from_fields(fields: &serde_json::Map<String, Value>) -> Option<(us
     let width = proj_shape.get(1)?.as_u64()? as usize;
 
     Some((height, width))
+}
+
+fn stac_grid_bounds(height: usize, width: usize) -> Result<GridBoundingBox2D> {
+    let grid_bounds = GridBoundingBox2D::new(
+        GridIdx2D::new([0, 0]),
+        GridIdx2D::new([(height as isize) - 1, (width as isize) - 1]),
+    )
+    .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+    Ok(grid_bounds)
 }
 
 fn geo_transform_from_fields(fields: &serde_json::Map<String, Value>) -> Option<GeoTransform> {
@@ -854,6 +860,7 @@ mod tests {
                     GeoTransform::new((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
                     GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([10979, 10979]))
                         .unwrap(),
+                    TileSize::default_512(),
                 ),
                 bands: vec![
                     crate::datasets::external::stac::StacProviderDatasetBand {
@@ -874,6 +881,15 @@ mod tests {
         let json_str =
             include_str!("../../../../../test_data/stac_responses/items/code-de-marburg.json");
         serde_json::from_str(json_str).expect("code-de-marburg.json should be valid JSON")
+    }
+
+    #[test]
+    fn stac_grid_bounds_puts_height_on_y_and_width_on_x() {
+        let bounds = stac_grid_bounds(4, 8).unwrap();
+        assert_eq!(bounds.y_min(), 0);
+        assert_eq!(bounds.y_max(), 3);
+        assert_eq!(bounds.x_min(), 0);
+        assert_eq!(bounds.x_max(), 7);
     }
 
     /// Replicates the steps from `test_ndvi.http` without making real web requests:
@@ -1052,6 +1068,7 @@ mod tests {
                             GridIdx2D::new([10979, 10979]),
                         )
                         .unwrap(),
+                        TileSize::default_512(),
                     ),
                     bands: vec![
                         crate::datasets::external::stac::StacProviderDatasetBand {
@@ -1089,6 +1106,7 @@ mod tests {
                             GridIdx2D::new([5489, 5489]),
                         )
                         .unwrap(),
+                        TileSize::default_512(),
                     ),
                     bands: vec![
                         crate::datasets::external::stac::StacProviderDatasetBand {

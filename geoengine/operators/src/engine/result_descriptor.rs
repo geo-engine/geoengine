@@ -11,7 +11,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{
     GeoTransform, GeoTransformAccess, Grid, GridBoundingBox2D, GridShape2D, GridShapeAccess,
-    SpatialGridDefinition, TilingSpatialGridDefinition, TilingSpecification,
+    SpatialGridDefinition, TileSize, TilingGrid, TilingStrategy,
 };
 use geoengine_datatypes::util::ByteSize;
 use geoengine_datatypes::{
@@ -107,20 +107,30 @@ impl SpatialGridDescriptorState {
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SpatialGridDescriptor {
-    spatial_grid: SpatialGridDefinition,
+    pub spatial_grid: SpatialGridDefinition,
     state: SpatialGridDescriptorState,
+    #[serde(default = "TileSize::default_512")]
+    pub tile_size: TileSize,
 }
 
 impl SpatialGridDescriptor {
-    pub fn new_source(spatial_grid_def: SpatialGridDefinition) -> Self {
+    pub fn new_source(spatial_grid_def: SpatialGridDefinition, tile_size: TileSize) -> Self {
         Self {
             spatial_grid: spatial_grid_def,
             state: SpatialGridDescriptorState::Source,
+            tile_size,
         }
     }
 
-    pub fn source_from_parts(geo_transform: GeoTransform, grid_bounds: GridBoundingBox2D) -> Self {
-        Self::new_source(SpatialGridDefinition::new(geo_transform, grid_bounds))
+    pub fn source_from_parts(
+        geo_transform: GeoTransform,
+        grid_bounds: GridBoundingBox2D,
+        tile_size: TileSize,
+    ) -> Self {
+        Self::new_source(
+            SpatialGridDefinition::new(geo_transform, grid_bounds),
+            tile_size,
+        )
     }
 
     #[must_use]
@@ -132,7 +142,6 @@ impl SpatialGridDescriptor {
     }
 
     pub fn merge(&self, other: &SpatialGridDescriptor) -> Option<Self> {
-        // TODO: merge directly to tiling origin?
         let merged_grid = self.spatial_grid.merge(&other.spatial_grid)?;
         let state = if self.spatial_grid.grid_bounds == merged_grid.grid_bounds
             && other.spatial_grid.grid_bounds == merged_grid.grid_bounds
@@ -142,9 +151,18 @@ impl SpatialGridDescriptor {
             SpatialGridDescriptorState::Merged
         };
 
+        let tile_size = if self.tile_size == other.tile_size {
+            self.tile_size
+        } else {
+            // When merging descriptors with different tile sizes, prefer self's
+            // (the left/primary descriptor's) tile size.
+            self.tile_size
+        };
+
         Some(Self {
             spatial_grid: merged_grid,
             state,
+            tile_size,
         })
     }
 
@@ -174,12 +192,12 @@ impl SpatialGridDescriptor {
         self.is_compatible_grid_generic(&other.spatial_grid)
     }
 
-    pub fn tiling_grid_definition(
-        &self,
-        tiling_specification: TilingSpecification,
-    ) -> TilingSpatialGridDefinition {
-        // TODO: we could also store the tiling_origin_reference and then use that directly?
-        TilingSpatialGridDefinition::new(self.spatial_grid, tiling_specification)
+    pub fn tiling_grid_definition(&self) -> TilingGrid {
+        TilingGrid::from_spatial_grid(self.spatial_grid, self.tile_size)
+    }
+
+    pub fn tiling_strategy(&self) -> TilingStrategy {
+        self.tiling_grid_definition().tiling_strategy()
     }
 
     pub fn is_source(&self) -> bool {
@@ -243,6 +261,7 @@ impl SpatialGridDescriptor {
             Some(p) => Ok(Some(Self {
                 spatial_grid: p,
                 state: SpatialGridDescriptorState::Merged,
+                tile_size: self.tile_size,
             })),
             None => Ok(None),
         }
@@ -260,11 +279,8 @@ impl SpatialGridDescriptor {
         self.map(|x| x.spatial_bounds_to_compatible_spatial_grid(spatial_partition))
     }
 
-    pub fn intersection_with_tiling_grid(
-        &self,
-        tiling_grid: &TilingSpatialGridDefinition,
-    ) -> Option<Self> {
-        let tiling_spatial_grid = tiling_grid.tiling_spatial_grid_definition();
+    pub fn intersection_with_tiling_grid(&self, tiling_grid: &TilingGrid) -> Option<Self> {
+        let tiling_spatial_grid = tiling_grid.to_spatial_grid();
         let intersection = self.spatial_grid.intersection(&tiling_spatial_grid)?;
 
         let descriptor = if self.spatial_grid.grid_bounds == intersection.grid_bounds {
@@ -276,15 +292,17 @@ impl SpatialGridDescriptor {
         Some(Self {
             spatial_grid: intersection,
             state: descriptor,
+            tile_size: self.tile_size,
         })
     }
 
-    pub fn as_parts(&self) -> (SpatialGridDescriptorState, SpatialGridDefinition) {
+    pub fn as_parts(&self) -> (SpatialGridDescriptorState, SpatialGridDefinition, TileSize) {
         let SpatialGridDescriptor {
             spatial_grid,
             state,
+            tile_size,
         } = *self;
-        (state, spatial_grid)
+        (state, spatial_grid, tile_size)
     }
 }
 
@@ -471,12 +489,12 @@ impl RasterResultDescriptor {
     }
 
     /// Returns tiling grid definition of the data.
-    pub fn tiling_grid_definition(
-        &self,
-        tiling_specification: TilingSpecification,
-    ) -> TilingSpatialGridDefinition {
-        self.spatial_grid
-            .tiling_grid_definition(tiling_specification)
+    pub fn tiling_grid_definition(&self) -> TilingGrid {
+        self.spatial_grid.tiling_grid_definition()
+    }
+
+    pub fn tiling_strategy(&self) -> TilingStrategy {
+        self.spatial_grid.tiling_strategy()
     }
 
     pub fn spatial_bounds(&self) -> SpatialPartition2D {
@@ -494,10 +512,11 @@ impl RasterResultDescriptor {
             data_type,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             time,
-            spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
-                geo_transform,
-                pixel_bounds,
-            )),
+            spatial_grid: SpatialGridDescriptor {
+                spatial_grid: SpatialGridDefinition::new(geo_transform, pixel_bounds),
+                state: SpatialGridDescriptorState::Source,
+                tile_size: TileSize::default_512(),
+            },
             bands: RasterBandDescriptors::new_multiple_bands(num_bands),
         }
     }
@@ -1056,6 +1075,7 @@ mod db_types {
             Self {
                 spatial_grid: value.spatial_grid,
                 state: SpatialGridDescriptorState::from(value.state),
+                tile_size: TileSize::default_512(), // runtime-only; sources overwrite this
             }
         }
     }

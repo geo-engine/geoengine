@@ -385,7 +385,9 @@ impl StacQueryCache {
 mod tests {
     use super::*;
     use geoengine_datatypes::primitives::SpatialResolution;
-    use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, GridIdx2D, RasterDataType};
+    use geoengine_datatypes::raster::{
+        GeoTransform, GridBoundingBox2D, GridIdx2D, RasterDataType, TileSize,
+    };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
     use geoengine_operators::engine::SpatialGridDescriptor;
     use geoengine_operators::source::{
@@ -404,6 +406,7 @@ mod tests {
                 GeoTransform::new((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([10979, 10979]))
                     .expect("grid bounds"),
+                TileSize::new_y_x(512, 512),
             ),
             bands: vec![],
         }
@@ -441,6 +444,7 @@ mod tests {
                 gdal_config_options: None,
                 allow_alphaband_as_mask: false,
                 retry: Some(GdalRetryOptions { max_retries: 1 }),
+                tile_size: None,
             },
         }
     }

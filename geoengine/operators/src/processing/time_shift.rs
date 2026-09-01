@@ -910,7 +910,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_absolute_raster_shift() {
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -924,13 +924,13 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
                 GridShape2D::new_2d(3, 4).bounding_box(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
-        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size));
+        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size.into()));
         let raster_tiles = vec![
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -1093,7 +1093,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_relative_raster_shift() {
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1107,13 +1107,13 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, 0], [0, 4]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
-        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size));
+        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size.into()));
         let raster_tiles = vec![
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -1299,6 +1299,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
+                        output_origin: None,
                         rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {

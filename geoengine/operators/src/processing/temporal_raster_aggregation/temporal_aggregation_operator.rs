@@ -27,12 +27,12 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
+use geoengine_datatypes::primitives::TimeStep;
 use geoengine_datatypes::primitives::{
     BandSelection, RasterQueryRectangle, RegularTimeDimension, SpatialResolution, TimeFilledItem,
     TimeInstance,
 };
 use geoengine_datatypes::raster::{GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D};
-use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
@@ -138,7 +138,6 @@ impl RasterOperator for TemporalRasterAggregation {
                 .unwrap_or(TimeInstance::EPOCH_START),
             result_descriptor: out_result_descriptor,
             source,
-            tiling_specification: context.tiling_specification(),
             output_type: self.params.output_type,
         };
 
@@ -156,7 +155,6 @@ pub struct InitializedTemporalRasterAggregation {
     window_reference: TimeInstance,
     source: Box<dyn InitializedRasterOperator>,
     result_descriptor: RasterResultDescriptor,
-    tiling_specification: TilingSpecification,
     output_type: Option<RasterDataType>,
 }
 
@@ -189,7 +187,6 @@ impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
                 self.result_descriptor.clone(),
                 self.aggregation_type,
                 p,
-                self.tiling_specification,
             ).boxed()
             .into()
         );
@@ -236,7 +233,6 @@ where
     result_descriptor: RasterResultDescriptor,
     aggregation_type: Aggregation,
     source: Q,
-    tiling_specification: TilingSpecification,
 }
 
 impl<Q, P> TemporalRasterAggregationProcessor<Q, P>
@@ -254,13 +250,11 @@ where
         result_descriptor: RasterResultDescriptor,
         aggregation_type: Aggregation,
         source: Q,
-        tiling_specification: TilingSpecification,
     ) -> Self {
         Self {
             result_descriptor,
             aggregation_type,
             source,
-            tiling_specification,
         }
     }
 
@@ -319,9 +313,7 @@ where
         );
 
         let grid_desc = self.result_descriptor.spatial_grid_descriptor();
-        let tiling_strategy = grid_desc
-            .tiling_grid_definition(self.tiling_specification)
-            .generate_data_tiling_strategy();
+        let tiling_strategy = grid_desc.tiling_grid_definition().tiling_strategy();
 
         let time_stream: std::pin::Pin<
             Box<
@@ -562,13 +554,12 @@ mod tests {
         },
     };
     use futures::stream::StreamExt;
-    use geoengine_datatypes::raster::TileIdx;
-    use geoengine_datatypes::raster::TileSize;
+    use geoengine_datatypes::raster::{TileIdx, TileSize, TilingSpecification};
     use geoengine_datatypes::{
         primitives::{CacheHint, Coordinate2D, TimeInterval},
         raster::{
             EmptyGrid, EmptyGrid2D, GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty,
-            GridShape2D, MaskedGrid2D, RasterDataType, RenameBands, TileInformation,
+            MaskedGrid2D, RasterDataType, RenameBands, TileInformation,
             TilesEqualIgnoringCacheHint,
         },
         spatial_reference::SpatialReference,
@@ -580,7 +571,7 @@ mod tests {
     async fn test_min() {
         let raster_tiles = make_raster();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -591,11 +582,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, 0], [-1, 2]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -709,7 +700,7 @@ mod tests {
     async fn test_max() {
         let raster_tiles = make_raster();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -720,11 +711,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -838,7 +829,7 @@ mod tests {
     async fn test_max_with_no_data() {
         let raster_tiles = make_raster(); // TODO: switch to make_raster_with_no_data?
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -849,11 +840,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -967,7 +958,7 @@ mod tests {
     async fn test_max_with_no_data_but_ignoring_it() {
         let raster_tiles = make_raster(); // TODO: switch to make_raster_with_no_data?
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -978,11 +969,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1094,7 +1085,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_only_no_data() {
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1105,11 +1096,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new_min_max(-3, -1, 0, 2).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1190,7 +1181,7 @@ mod tests {
     async fn test_first_with_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1201,11 +1192,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1299,7 +1290,7 @@ mod tests {
     async fn test_last_with_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1310,11 +1301,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1407,7 +1398,7 @@ mod tests {
     async fn test_last() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1418,11 +1409,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1516,7 +1507,7 @@ mod tests {
     async fn test_first() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1527,11 +1518,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1625,7 +1616,7 @@ mod tests {
     async fn test_mean_nodata() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1636,11 +1627,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1734,7 +1725,7 @@ mod tests {
     async fn test_mean_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1745,11 +1736,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1844,7 +1835,7 @@ mod tests {
     async fn test_sum_without_nodata() {
         let raster_tiles = make_raster();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1855,11 +1846,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1972,7 +1963,7 @@ mod tests {
     async fn test_sum_nodata() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1983,11 +1974,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2081,7 +2072,7 @@ mod tests {
     async fn test_sum_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2092,11 +2083,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2191,7 +2182,7 @@ mod tests {
     async fn test_sum_with_larger_data_type() {
         let raster_tiles = make_raster();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2202,11 +2193,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2343,7 +2334,7 @@ mod tests {
     async fn test_count_without_nodata() {
         let raster_tiles = make_raster();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2354,11 +2345,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2471,7 +2462,7 @@ mod tests {
     async fn test_count_nodata() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2482,11 +2473,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2580,7 +2571,7 @@ mod tests {
     async fn test_count_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2591,11 +2582,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2689,7 +2680,7 @@ mod tests {
     async fn test_query_not_aligned_with_window_reference() {
         let raster_tiles = make_raster();
 
-        let tile_size = GridShape2D::new_2d(3, 2);
+        let tile_size = TileSize::new_y_x(3, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
@@ -2700,11 +2691,11 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2985,6 +2976,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -3004,6 +2996,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
+                        output_origin: None,
                         rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
@@ -3030,8 +3023,9 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::with_zero_origin([3, 2].into()),
+        );
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
@@ -3180,6 +3174,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -3209,8 +3204,9 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::with_zero_origin([3, 2].into()),
+        );
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),

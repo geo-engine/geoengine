@@ -598,7 +598,7 @@ mod tests {
             FeatureDataType, Measurement, RasterQueryRectangle, TimeGranularity, TimeInstance,
             TimeInterval, TimeStep, VectorQueryRectangle,
         },
-        raster::{GeoTransform, GridBoundingBox2D, RasterDataType},
+        raster::{GeoTransform, GridBoundingBox2D, RasterDataType, TileSize},
         spatial_reference::{SpatialReference, SpatialReferenceOption},
         test_data,
         util::Identifier,
@@ -1649,6 +1649,7 @@ mod tests {
             spatial_grid: geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
+                TileSize::default_512(),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1690,6 +1691,7 @@ mod tests {
             gdal_config_options: None,
             allow_alphaband_as_mask: false,
             retry: None,
+            tile_size: None,
         };
 
         let meta = StaticMetaData {
