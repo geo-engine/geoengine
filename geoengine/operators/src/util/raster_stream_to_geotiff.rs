@@ -129,11 +129,12 @@ where
     };
 
     let strat = TilingStrategy {
-        tile_size_in_pixels: initial_tile_info.tile_size_in_pixels,
+        tile_size: initial_tile_info.tile_size,
         geo_transform: initial_tile_info.global_geo_transform,
     };
     let num_tiles_per_timestep = strat
         .global_pixel_grid_bounds_to_tile_grid_bounds(query_rect.spatial_bounds())
+        .grid_bounds()
         .number_of_elements();
     let num_timesteps = tiles.len() / num_tiles_per_timestep;
 
@@ -1068,7 +1069,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BandSelection, CacheHint, DateTime, Duration, SpatialPartition2D, TimeInterval,
     };
-    use geoengine_datatypes::raster::{Grid, GridBoundingBox2D, RasterDataType};
+    use geoengine_datatypes::raster::{Grid, GridBoundingBox2D, RasterDataType, TileIdx};
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::{ImageFormat, assert_image_equals_with_format};
@@ -1555,7 +1556,7 @@ mod tests {
         let data = vec![
             RasterTile2D {
                 time: *time_intervals.first().unwrap(),
-                tile_position: [-1, 0].into(),
+                tile_position: TileIdx::new_y_x(-1, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
@@ -1564,7 +1565,7 @@ mod tests {
             },
             RasterTile2D {
                 time: *time_intervals.get(1).unwrap(),
-                tile_position: [-1, 0].into(),
+                tile_position: TileIdx::new_y_x(-1, 0),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),

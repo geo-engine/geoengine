@@ -200,6 +200,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileIdx;
     use geoengine_datatypes::{
         primitives::{CacheHint, Coordinate2D, Measurement, TimeInterval},
         raster::{
@@ -219,26 +220,26 @@ mod tests {
     };
 
     use super::*;
+    use geoengine_datatypes::raster::TileSize;
 
     #[tokio::test]
     #[allow(clippy::float_cmp)]
     async fn test_type_conversion() {
-        let tile_size_in_pixels = GridShape2D::new_2d(2, 2);
+        let tile_size = GridShape2D::new_2d(2, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size_in_pixels.bounding_box(),
+                tile_size.bounding_box(),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
 
-        let raster: MaskedGrid2D<u8> = Grid2D::new(tile_size_in_pixels, vec![7_u8, 7, 7, 6])
-            .unwrap()
-            .into();
+        let raster: MaskedGrid2D<u8> = Grid2D::new(tile_size, vec![7_u8, 7, 7, 6]).unwrap().into();
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_ctx = ctx.mock_query_context(ChunkByteSize::test_default());
@@ -247,8 +248,8 @@ mod tests {
             TimeInterval::default(),
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
-                global_tile_position: [0, 0].into(),
-                tile_size_in_pixels,
+                tile_position: TileIdx::new_y_x(0, 0),
+                tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
             },
             0,
             raster.into(),

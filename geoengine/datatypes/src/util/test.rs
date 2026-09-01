@@ -1,8 +1,8 @@
 use crate::{
     primitives::TimeInterval,
     raster::{
-        EmptyGrid, GeoTransform, Grid, GridIdx2D, GridIndexAccess, GridOrEmpty, GridSize,
-        MaskedGrid, Pixel, RasterTile2D, grid_idx_iter_2d,
+        EmptyGrid, GeoTransform, Grid, GridIndexAccess, GridOrEmpty, GridSize, MaskedGrid, Pixel,
+        RasterTile2D, TileIdx, grid_idx_iter_2d,
     },
 };
 use float_cmp::approx_eq;
@@ -125,7 +125,7 @@ pub fn assert_eq_two_list_of_tiles<P: Pixel>(
     list_b: &[RasterTile2D<P>],
     compare_cache_hint: bool,
 ) {
-    fn tile_pos<T>(tile: &RasterTile2D<T>) -> (TimeInterval, GridIdx2D, u32) {
+    fn tile_pos<T>(tile: &RasterTile2D<T>) -> (TimeInterval, TileIdx, u32) {
         (tile.time, tile.tile_position, tile.band)
     }
 
