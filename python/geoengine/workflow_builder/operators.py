@@ -77,6 +77,8 @@ class RasterOperator(Operator):
             return Downsampling.from_operator_dict(operator_dict)
         if operator_dict["type"] == "Interpolation":
             return Interpolation.from_operator_dict(operator_dict)
+        if operator_dict["type"] == "ReTile":
+            return ReTile.from_operator_dict(operator_dict)
         if operator_dict["type"] == "Expression":
             return Expression.from_operator_dict(operator_dict)
         if operator_dict["type"] == "BandwiseExpression":
@@ -401,6 +403,63 @@ class Downsampling(RasterOperator):
             )
 
         return op
+
+
+class ReTile(RasterOperator):
+    """A ReTile operator."""
+
+    source: RasterOperator
+    tile_size: tuple[int, int] | None
+    output_origin: tuple[float, float] | None
+
+    def __init__(
+        self,
+        source_operator: RasterOperator,
+        tile_size: tuple[int, int] | None = None,
+        output_origin: tuple[float, float] | None = None,
+    ):
+        """Creates a new ReTile operator.
+
+        ``tile_size`` is given as a ``(rows, columns)`` tuple.
+        """
+        self.source = source_operator
+        self.tile_size = tile_size
+        self.output_origin = output_origin
+
+    def name(self) -> str:
+        return "ReTile"
+
+    def to_dict(self) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if self.tile_size is not None:
+            params["tileSize"] = [self.tile_size[0], self.tile_size[1]]
+        if self.output_origin is not None:
+            params["origin"] = {"x": self.output_origin[0], "y": self.output_origin[1]}
+
+        return {
+            "type": self.name(),
+            "params": params,
+            "sources": {"raster": self.source.to_dict()},
+        }
+
+    @classmethod
+    def from_operator_dict(cls, operator_dict: dict[str, Any]) -> ReTile:
+        """Returns an operator from a dictionary."""
+        if operator_dict["type"] != "ReTile":
+            raise ValueError("Invalid operator type")
+
+        source = RasterOperator.from_operator_dict(cast(dict[str, Any], operator_dict["sources"]["raster"]))
+
+        params = operator_dict["params"]
+        tile_size = None
+        if params.get("tileSize") is not None:
+            tile_size = (int(params["tileSize"][0]), int(params["tileSize"][1]))
+
+        output_origin = None
+        if params.get("origin") is not None:
+            output_origin = (float(params["origin"]["x"]), float(params["origin"]["y"]))
+
+        return ReTile(source_operator=source, tile_size=tile_size, output_origin=output_origin)
 
 
 class ColumnNames:
