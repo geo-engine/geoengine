@@ -276,7 +276,9 @@ docs/SpatialReferenceSpecification.md
 docs/SpatialReferencesApi.md
 docs/SpatialResolution.md
 docs/StacApiRetries.md
+docs/StacAssetBand.md
 docs/StacDataProviderDefinition.md
+docs/StacProviderAuthentication.md
 docs/StacProviderDataset.md
 docs/StacProviderDatasetBand.md
 docs/StacProviderS3Config.md
@@ -664,7 +666,9 @@ geoengine_api_client/models/spatial_reference_specification.py
 geoengine_api_client/models/spatial_resolution.py
 geoengine_api_client/models/st_rectangle.py
 geoengine_api_client/models/stac_api_retries.py
+geoengine_api_client/models/stac_asset_band.py
 geoengine_api_client/models/stac_data_provider_definition.py
+geoengine_api_client/models/stac_provider_authentication.py
 geoengine_api_client/models/stac_provider_dataset.py
 geoengine_api_client/models/stac_provider_dataset_band.py
 geoengine_api_client/models/stac_provider_s3_config.py
@@ -1046,7 +1050,9 @@ test/test_spatial_references_api.py
 test/test_spatial_resolution.py
 test/test_st_rectangle.py
 test/test_stac_api_retries.py
+test/test_stac_asset_band.py
 test/test_stac_data_provider_definition.py
+test/test_stac_provider_authentication.py
 test/test_stac_provider_dataset.py
 test/test_stac_provider_dataset_band.py
 test/test_stac_provider_s3_config.py
