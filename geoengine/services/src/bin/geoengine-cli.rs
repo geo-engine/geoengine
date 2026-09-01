@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
 use geoengine_services::cli::{
-    CheckSuccessfulStartup, ExpressionToolchainFile, Heartbeat, OpenAPIGenerate, StacImport,
-    TileImport, check_heartbeat, check_successful_startup, output_openapi_json,
-    output_toolchain_file, stac_import, tile_import,
+    CheckSuccessfulStartup, ExpressionToolchainFile, Heartbeat, OpenAPIGenerate, StacHarvester,
+    StacImport, TileImport, check_heartbeat, check_successful_startup, output_openapi_json,
+    output_toolchain_file, stac_harvester, stac_import, tile_import,
 };
 
 /// CLI for Geo Engine Utilities
@@ -25,6 +25,9 @@ enum Commands {
     #[command(name = "openapi")]
     OpenAPI(OpenAPIGenerate),
 
+    // Harvests STAC collections using a dataset mapping
+    StacHarvest(StacHarvester),
+
     // Imports a STAC catalog as a dataset
     StacImport(StacImport),
 
@@ -42,6 +45,7 @@ impl Commands {
             Commands::CheckSuccessfulStartup(params) => check_successful_startup(params).await,
             Commands::Heartbeat(params) => check_heartbeat(params).await,
             Commands::OpenAPI(params) => output_openapi_json(params).await,
+            Commands::StacHarvest(params) => stac_harvester(params).await,
             Commands::StacImport(params) => stac_import(params).await,
             Commands::TileImport(params) => tile_import(params).await,
             Commands::ExpressionToolchainFile(params) => output_toolchain_file(params).await,

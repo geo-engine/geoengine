@@ -86,6 +86,26 @@ pub enum TimeDimension {
     Irregular,
 }
 
+impl From<TimeDimension> for geoengine_datatypes::primitives::TimeDimension {
+    fn from(value: TimeDimension) -> Self {
+        match value {
+            TimeDimension::Regular(regular) => Self::Regular(regular.into()),
+            TimeDimension::Irregular => Self::Irregular,
+        }
+    }
+}
+
+impl From<geoengine_datatypes::primitives::TimeDimension> for TimeDimension {
+    fn from(value: geoengine_datatypes::primitives::TimeDimension) -> Self {
+        match value {
+            geoengine_datatypes::primitives::TimeDimension::Regular(regular) => {
+                Self::Regular(regular.into())
+            }
+            geoengine_datatypes::primitives::TimeDimension::Irregular => Self::Irregular,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RegularTimeDimension {
@@ -122,14 +142,7 @@ impl From<TimeDescriptor> for geoengine_operators::engine::TimeDescriptor {
     fn from(value: TimeDescriptor) -> Self {
         geoengine_operators::engine::TimeDescriptor::new(
             value.bounds.map(Into::into),
-            match value.dimension {
-                TimeDimension::Regular(d) => {
-                    geoengine_datatypes::primitives::TimeDimension::Regular(d.into())
-                }
-                TimeDimension::Irregular => {
-                    geoengine_datatypes::primitives::TimeDimension::Irregular
-                }
-            },
+            value.dimension.into(),
         )
     }
 }
@@ -138,14 +151,7 @@ impl From<geoengine_operators::engine::TimeDescriptor> for TimeDescriptor {
     fn from(value: geoengine_operators::engine::TimeDescriptor) -> Self {
         Self {
             bounds: value.bounds.map(Into::into),
-            dimension: match value.dimension {
-                geoengine_datatypes::primitives::TimeDimension::Regular(d) => {
-                    TimeDimension::Regular(d.into())
-                }
-                geoengine_datatypes::primitives::TimeDimension::Irregular => {
-                    TimeDimension::Irregular
-                }
-            },
+            dimension: value.dimension.into(),
         }
     }
 }

@@ -1,0 +1,164 @@
+{
+  "type": "StacProviderDefinition",
+  "name": "sentinel-2-l2a from STAC",
+  "id": "00000000-0000-0000-0000-000000000000",
+  "description": "Auto-discovered mapping for STAC collection 'sentinel-2-l2a' at https://stac.test/v1",
+  "priority": 50,
+  "apiUrl": "https://stac.test/v1",
+  "collectionName": "sentinel-2-l2a",
+  "s3Config": null,
+  "timeDimension": {
+    "type": "regular",
+    "origin": 0,
+    "step": {
+      "granularity": "days",
+      "step": 1
+    }
+  },
+  "datasets": [
+    {
+      "name": "sentinel-2-l2a EPSG:32632 U16 10m",
+      "description": "Auto-discovered from STAC collection 'sentinel-2-l2a'",
+      "dataType": "U16",
+      "resolution": {
+        "x": 10.0,
+        "y": 10.0
+      },
+      "projection": "EPSG:32632",
+      "spatialGrid": {
+        "spatialGrid": {
+          "geoTransform": {
+            "originCoordinate": {
+              "x": 399960.0,
+              "y": 5700000.0
+            },
+            "xPixelSize": 10.0,
+            "yPixelSize": -10.0
+          },
+          "gridBounds": {
+            "topLeftIdx": {
+              "yIdx": 0,
+              "xIdx": 0
+            },
+            "bottomRightIdx": {
+              "yIdx": 10979,
+              "xIdx": 10979
+            }
+          }
+        },
+        "descriptor": "source"
+      },
+      "bands": [
+        {
+          "assetBand": {
+            "assetTitle": "Blue (band 2) - 10m",
+            "bandName": "B02_10m"
+          },
+          "bandDescriptor": {
+            "name": "B02_10m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        },
+        {
+          "assetBand": {
+            "assetTitle": "Green (band 3) - 10m",
+            "bandName": "B03_10m"
+          },
+          "bandDescriptor": {
+            "name": "B03_10m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        },
+        {
+          "assetBand": {
+            "assetTitle": "Red (band 4) - 10m",
+            "bandName": "B04_10m"
+          },
+          "bandDescriptor": {
+            "name": "B04_10m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        },
+        {
+          "assetBand": {
+            "assetTitle": "NIR 1 (band 8) - 10m",
+            "bandName": "B08_10m"
+          },
+          "bandDescriptor": {
+            "name": "B08_10m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "sentinel-2-l2a EPSG:32632 U16 20m",
+      "description": "Auto-discovered from STAC collection 'sentinel-2-l2a'",
+      "dataType": "U16",
+      "resolution": {
+        "x": 20.0,
+        "y": 20.0
+      },
+      "projection": "EPSG:32632",
+      "spatialGrid": {
+        "spatialGrid": {
+          "geoTransform": {
+            "originCoordinate": {
+              "x": 399960.0,
+              "y": 5700000.0
+            },
+            "xPixelSize": 20.0,
+            "yPixelSize": -20.0
+          },
+          "gridBounds": {
+            "topLeftIdx": {
+              "yIdx": 0,
+              "xIdx": 0
+            },
+            "bottomRightIdx": {
+              "yIdx": 5489,
+              "xIdx": 5489
+            }
+          }
+        },
+        "descriptor": "source"
+      },
+      "bands": [
+        {
+          "assetBand": {
+            "assetTitle": "SWIR 1 (band 11) - 20m",
+            "bandName": "B11_20m"
+          },
+          "bandDescriptor": {
+            "name": "B11_20m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        },
+        {
+          "assetBand": {
+            "assetTitle": "SWIR 2 (band 12) - 20m",
+            "bandName": "B12_20m"
+          },
+          "bandDescriptor": {
+            "name": "B12_20m",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "pageLimit": 100,
+  "queryTimeoutSecs": 60
+}

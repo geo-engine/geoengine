@@ -1901,9 +1901,21 @@ impl DatasetKey {
             })
             .collect::<String>();
 
+        let resolution_str = format!("{}", self.resolution);
+        let clean_resolution: String = resolution_str
+            .chars()
+            .map(|c| {
+                if geoengine_datatypes::dataset::is_invalid_name_char(c) {
+                    '_'
+                } else {
+                    c
+                }
+            })
+            .collect();
+
         format!(
             "{}_EPSG{}_{:?}_{}",
-            cleaned_name, self.epsg, self.data_type, self.resolution
+            cleaned_name, self.epsg, self.data_type, clean_resolution
         )
     }
 }
@@ -2289,24 +2301,27 @@ fn band_names_from_asset_v1_1_0(asset: &stac::Asset) -> anyhow::Result<Vec<Strin
     Ok(names)
 }
 
+/// Derive band names for a collection item asset.
+///
+/// This must produce names that match [`band_names_from_asset_v1_1_0`] so that the
+/// bands scanned from the collection line up with the names used while processing
+/// each item's assets. For a missing or empty `bands` list, or a single-band asset,
+/// the asset title is used; for multi-band assets each band is named
+/// `"{title} [{name}]"`.
 fn band_names_from_item_asset_v1_1_0(asset: &stac::ItemAsset) -> anyhow::Result<Vec<String>> {
     let asset_title = asset
         .title
         .as_deref()
         .ok_or(anyhow::anyhow!("Missing title in asset metadata"))?;
 
-    let band_names = asset
+    let Some(bands) = asset
         .additional_fields
         .get("bands")
-        .and_then(serde_json::Value::as_array);
-
-    let Some(bands) = band_names else {
+        .and_then(serde_json::Value::as_array)
+        .filter(|b| !b.is_empty())
+    else {
         return Ok(vec![asset_title.to_string()]);
     };
-
-    if bands.is_empty() {
-        return Ok(vec![asset_title.to_string()]);
-    }
 
     if bands.len() == 1 {
         return Ok(vec![asset_title.to_string()]);
