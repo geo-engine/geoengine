@@ -1,8 +1,6 @@
-#![allow(clippy::needless_for_each)] // TODO: remove when clippy is fixed for utoipa <https://github.com/juhaku/utoipa/issues/1420>
-
 use crate::api::handlers::ogc::common::CollectionsResponseFormat;
 use crate::{api::handlers::ogc::error::OgcApiError, contexts::ApplicationContext, error::Result};
-use actix_web::{FromRequest, web};
+use actix_web::{FromRequest, middleware, web};
 use ogcapi_types::{
     common::{Collection, Collections, Conformance, LandingPage},
     tiles::{TileMatrixSet, TileMatrixSetItem, TileMatrixSets, TileSet, TileSetItem, TileSets},
@@ -10,6 +8,7 @@ use ogcapi_types::{
 use utoipa::OpenApi;
 
 mod common;
+mod cors;
 mod error;
 #[cfg(test)]
 mod test_util;
@@ -23,7 +22,8 @@ where
     C: ApplicationContext,
     C::Session: FromRequest,
 {
-    let mut scope = web::scope("/ogc/{dataConnectorId}/{layerId}");
+    let mut scope = web::scope("/ogc/{dataConnectorId}/{layerId}")
+        .wrap(middleware::from_fn(cors::cors_middleware));
 
     macro_rules! bind_routes {
         ($($method:ident $path:literal -> $handler:expr),* $(,)? ) => {
