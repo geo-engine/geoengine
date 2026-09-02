@@ -34,6 +34,7 @@
         "serve:dashboards/nfdi-portal-demo:local": "npm run ng-serve-local nfdi-portal-demo",
         "serve:dashboards/nfdi-portal-demo:nightly": "ng serve --configuration development nfdi-portal-demo --proxy-config proxy-nfdi-portal-demo.conf.json",
         "serve:edv:local": "npm run ng-serve-local enhanced-data-viewer",
+        "serve:edv:staging": "ng serve --configuration development enhanced-data-viewer --proxy-config proxy-edv-staging.json",
         "serve:gis:local": "npm run ng-serve-local gis",
         "serve:gis:nightly": "ng serve --configuration development gis --proxy-config proxy-geoengine.conf.json",
         "serve:manager:local": "npm run ng-serve-local manager",
