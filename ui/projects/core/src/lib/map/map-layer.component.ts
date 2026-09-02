@@ -94,7 +94,7 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
             return undefined;
         }
 
-        return change.currentValue;
+        return change.currentValue as T;
     }
 }
 
@@ -343,34 +343,32 @@ export class OlRasterLayerComponent
             const tileZoomLevel = tileCoord[0];
             const tileExtent = tileGrid.getTileCoordExtent(tileCoord) as Extent;
 
-            const client = new XMLHttpRequest();
+            const image = tile.getImage() as HTMLImageElement;
+            const abortController = new AbortController();
 
-            const cancelSub = this.projectService
+            const abortSubscription = this.projectService
                 .createQueryAbortStream(this.layerId(), tileZoomLevel, tileExtent)
-                .subscribe(() => client.abort());
+                .subscribe(() => abortController.abort());
 
-            client.open('GET', src);
-            client.responseType = 'blob';
-            client.setRequestHeader('Authorization', `Bearer ${this.sessionToken()}`);
-            client.addEventListener('loadend', (_event) => {
-                cancelSub.unsubscribe();
-                const data = client.response;
-
-                if (!data) {
+            fetch(src, {headers: {Authorization: `Bearer ${this.sessionToken()}`}, signal: abortController.signal})
+                .then((response) => response.blob())
+                .then((blob) => {
+                    const objectUrl = URL.createObjectURL(blob);
+                    image.addEventListener('load', () => URL.revokeObjectURL(objectUrl), {once: true});
+                    image.addEventListener('error', () => URL.revokeObjectURL(objectUrl), {once: true});
+                    image.src = objectUrl;
+                })
+                .catch((error) => {
                     tile.setState(TileState.ERROR);
-                } else {
-                    if (data.type === 'image/png') {
-                        (tile.getImage() as HTMLImageElement).src = URL.createObjectURL(data);
+                    if (error instanceof Error) {
+                        this.notificationService.error(error.message);
                     } else {
-                        tile.setState(TileState.ERROR);
-                        data.text().then((m: string) => this.notificationService.error(JSON.parse(m)['message']));
+                        this.notificationService.error('An unknown error occurred while fetching the tile.');
                     }
-                }
-            });
-            client.addEventListener('error', () => {
-                tile.setState(TileState.ERROR);
-            });
-            client.send();
+                })
+                .finally(() => {
+                    abortSubscription.unsubscribe();
+                });
         });
 
         this.addStateListenersToOlSource();
@@ -552,7 +550,7 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
         let blob;
         switch (type) {
             case 'JSON': {
-                const metadata = await response.json();
+                const metadata = (await response.json()) as JSON;
 
                 if (interceptor) {
                     await interceptor(metadata);

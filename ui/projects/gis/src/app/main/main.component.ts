@@ -1,18 +1,19 @@
 import {Observable, BehaviorSubject, of, concat} from 'rxjs';
 import {map, mergeMap, tap} from 'rxjs/operators';
 import {
-    AfterViewInit,
     ChangeDetectionStrategy,
     ChangeDetectorRef,
     Component,
     ElementRef,
-    HostListener,
-    OnInit,
     ViewContainerRef,
+    afterNextRender,
+    computed,
+    effect,
     inject,
+    signal,
     viewChild,
 } from '@angular/core';
-import {MatDrawerToggleResult, MatSidenav, MatSidenavContainer} from '@angular/material/sidenav';
+import {MatSidenav, MatSidenavContainer} from '@angular/material/sidenav';
 import {MatTabGroup} from '@angular/material/tabs';
 import {
     AddDataComponent,
@@ -41,6 +42,7 @@ import {MatButton} from '@angular/material/button';
 import {MatIcon} from '@angular/material/icon';
 import {MatTooltip} from '@angular/material/tooltip';
 import {AsyncPipe} from '@angular/common';
+import {rxResource, toObservable} from '@angular/core/rxjs-interop';
 
 @Component({
     selector: 'geoengine-main',
@@ -60,8 +62,12 @@ import {AsyncPipe} from '@angular/common';
         AsyncNumberSanitizer,
         AsyncValueDefault,
     ],
+    host: {
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        '(window:resize)': 'onResize()',
+    },
 })
-export class MainComponent implements OnInit, AfterViewInit {
+export class MainComponent {
     readonly config = inject(AppConfig);
     readonly layoutService = inject(LayoutService);
     readonly projectService = inject(ProjectService);
@@ -79,6 +85,9 @@ export class MainComponent implements OnInit, AfterViewInit {
         read: ElementRef,
     });
     readonly rightSidenavContainer = viewChild.required(SidenavContainerComponent);
+    private readonly sidenavConfig = rxResource({
+        stream: () => this.layoutService.getSidenavContentComponentStream(),
+    });
 
     readonly layersReverse$: Observable<Array<Layer>>;
     readonly layerListVisible$: Observable<boolean>;
@@ -93,7 +102,11 @@ export class MainComponent implements OnInit, AfterViewInit {
     layerListHeight$: Observable<number>;
     mapIsGrid$: Observable<boolean>;
 
-    private windowHeight$ = new BehaviorSubject<number>(window.innerHeight);
+    private readonly windowHeight$ = signal<number>(window.innerHeight);
+    private readonly totalHeight$ = computed(() => {
+        this.windowHeight$();
+        return this.sidenavContainerElement().nativeElement.offsetHeight;
+    });
 
     constructor() {
         const config = this.config;
@@ -108,13 +121,13 @@ export class MainComponent implements OnInit, AfterViewInit {
 
         this.mapIsGrid$ = this.mapService.isGrid$;
 
-        const totalHeight$ = this.windowHeight$.pipe(map((_height) => this.sidenavContainerElement().nativeElement.offsetHeight));
-
-        this.middleContainerHeight$ = this.layoutService.getMapHeightStream(totalHeight$).pipe(tap(() => this.mapComponent().resize()));
+        this.middleContainerHeight$ = this.layoutService
+            .getMapHeightStream(toObservable(this.totalHeight$))
+            .pipe(tap(() => this.mapComponent().resize()));
         this.layerListHeight$ = config.COMPONENTS.MAP_RESOLUTION_EXTENT_OVERLAY.AVAILABLE
             ? this.middleContainerHeight$.pipe(map((height) => height - 62))
             : this.middleContainerHeight$;
-        this.bottomContainerHeight$ = this.layoutService.getLayerDetailViewStream(totalHeight$);
+        this.bottomContainerHeight$ = this.layoutService.getLayerDetailViewStream(toObservable(this.totalHeight$));
 
         this.createAddDataConfigStream().subscribe((addDataConfig) => this.addDataConfig.next(addDataConfig));
         this.createNavigationButtonStream().subscribe((navigationButtons) => {
@@ -122,43 +135,33 @@ export class MainComponent implements OnInit, AfterViewInit {
             // loading spinners somewhat don't show up without this
             setTimeout(() => this.changeDetectorRef.detectChanges());
         });
-    }
 
-    ngOnInit(): void {
-        this.mapService.registerMapComponent(this.mapComponent());
+        effect(() => {
+            const sidenavConfig = this.sidenavConfig.value();
 
-        this.layoutService.setLayerDetailViewVisibility(false);
-    }
-
-    ngAfterViewInit(): void {
-        this.layoutService.getSidenavContentComponentStream().subscribe((sidenavConfig) => {
             this.rightSidenavContainer().load(sidenavConfig);
+            const rightSidenav = this.rightSidenav();
 
-            let openClosePromise: Promise<MatDrawerToggleResult>;
-            if (sidenavConfig) {
-                openClosePromise = this.rightSidenav().open();
-            } else {
-                openClosePromise = this.rightSidenav().close();
+            const shouldBeOpen = !!sidenavConfig;
+
+            if (shouldBeOpen !== rightSidenav.opened) {
+                void (shouldBeOpen ? rightSidenav.open() : rightSidenav.close()).then(() => {
+                    this.mapComponent().resize();
+                });
             }
-
-            void openClosePromise.then(() => this.mapComponent().resize());
         });
-        this.projectService
-            .getNewPlotStream()
-            .subscribe(() => this.layoutService.setSidenavContentComponent({component: PlotListComponent}));
 
-        // emit window height once to resize components if necessary
-        this.windowHeight();
+        afterNextRender(() => {
+            this.mapService.registerMapComponent(this.mapComponent());
 
-        // set the stored tab index
-        // this.layoutService.getLayerDetailViewTabIndexStream().subscribe(tabIndex => {
-        //     if (this.bottomTabs.selectedIndex !== tabIndex) {
-        //         this.bottomTabs.selectedIndex = tabIndex;
-        //         setTimeout(() => this.changeDetectorRef.markForCheck());
-        //     }
-        // });
+            this.layoutService.setLayerDetailViewVisibility(false);
 
-        // this.debugCallDialog();
+            this.onResize();
+
+            this.projectService
+                .getNewPlotStream()
+                .subscribe(() => this.layoutService.setSidenavContentComponent({component: PlotListComponent}));
+        });
     }
 
     setTabIndex(index: number): void {
@@ -258,9 +261,8 @@ export class MainComponent implements OnInit, AfterViewInit {
         ];
     }
 
-    @HostListener('window:resize')
-    windowHeight(): void {
-        this.windowHeight$.next(window.innerHeight);
+    onResize(): void {
+        this.windowHeight$.set(window.innerHeight);
     }
 
     // private async debugCallDialog(): Promise<void> {
