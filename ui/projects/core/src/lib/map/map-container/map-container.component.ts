@@ -1,8 +1,4 @@
-import {combineLatest, Observable, Subscription} from 'rxjs';
-import {first, map as rxMap, mergeMap, startWith} from 'rxjs/operators';
-
 import {
-    AfterViewInit,
     ChangeDetectionStrategy,
     ChangeDetectorRef,
     Component,
@@ -10,13 +6,14 @@ import {
     effect,
     ElementRef,
     inject,
-    OnChanges,
-    OnDestroy,
-    QueryList,
-    SimpleChange,
     input,
     viewChild,
     viewChildren,
+    contentChildren,
+    computed,
+    signal,
+    afterEveryRender,
+    untracked,
 } from '@angular/core';
 
 import OlMap from 'ol/Map';
@@ -60,6 +57,7 @@ import {containsCoordinate, getCenter} from 'ol/extent';
 import {applyBackground, stylefunction} from 'ol-mapbox-style';
 import {olExtentToTuple, SpatialReference, Symbology, VectorSymbology} from '@geoengine/common';
 import {allowedBasemapProjections, BasemapService} from '../../layers/basemap.service';
+import {rxResource} from '@angular/core/rxjs-interop';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MapLayer = MapLayerComponent<OlLayer<OlSource, any>, OlSource, Symbology>;
@@ -82,7 +80,7 @@ const MAX_ZOOM_LEVEL = 28;
     changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [MatGridListModule],
 })
-export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestroy {
+export class MapContainerComponent {
     private config = inject(CoreConfig);
     private changeDetectorRef = inject(ChangeDetectorRef);
     private mapService = inject(MapService);
@@ -92,26 +90,32 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
     /**
      * display a grid of maps or all layers on a single map
      */
-    readonly grid = input(true); // TODO: false;
+    readonly grid = input(false);
 
     readonly gridListElement = viewChild.required(MatGridList, {read: ElementRef});
-    readonly mapContainers = viewChildren(MatGridTile, {read: ElementRef});
+    readonly mapContainers = viewChildren<MatGridTile, ElementRef<HTMLElement>>(MatGridTile, {read: ElementRef});
 
     /**
      * These are the layers from the layer list (as dom elements in the template)
      */
-    @ContentChildren(MapLayerComponent) mapLayersRaw!: QueryList<MapLayer>;
-    mapLayers: Array<MapLayer> = []; // filtered
+    private readonly mapLayersRaw = contentChildren<MapLayer>(MapLayerComponent);
+    readonly mapLayers = computed<Array<MapLayer>>(() => this.mapLayersRaw().filter((mapLayer) => mapLayer.isVisible()));
 
-    numberOfRows = 1;
-    numberOfColumns = 1;
-    rowHeight = 'fit';
+    readonly numberOfColumns = computed<number>(() => {
+        const numberOfLayers = this.desiredNumberOfMaps();
+        const gridListElement = this.gridListElement().nativeElement as HTMLElement;
+        return this.calculateNumberOfColumnsInGrid(numberOfLayers, gridListElement.clientWidth, gridListElement.clientHeight);
+    });
+    rowHeight = 'fit' as const;
+    private readonly desiredNumberOfMaps = computed<number>(() => (this.grid() ? Math.max(this.mapLayers().length, 1) : 1));
 
-    private projection$: Observable<SpatialReference> = this.projectService.getSpatialReferenceStream();
+    private readonly projection = rxResource<SpatialReference, SpatialReference>({
+        stream: () => this.projectService.getSpatialReferenceStream(),
+    });
 
     private maps: Array<OlMap>;
     private view: OlView;
-    private backgroundLayerSource?: OlSource;
+    private readonly backgroundLayerSource = signal<OlSource | undefined>(undefined);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private backgroundLayers: Array<OlLayer<OlSource, any>> = [];
 
@@ -128,13 +132,13 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
     private drawInteractionLayers: Array<OlLayerVector<OlSourceVector<OlFeature>>> = [];
     private endDrawCallback?: (feature: OlFeature<OlGeometry>) => void;
 
-    private subscriptions: Array<Subscription> = [];
-
     private readonly attributions = new OlAttribution({
         collapsible: true,
     });
 
     private readonly basemapService = inject(BasemapService);
+
+    private readonly forceRedraw = signal<void>(undefined, {equal: () => false});
 
     /**
      * Create the component and inject several dependencies via DI.
@@ -152,60 +156,100 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
 
         effect(() => {
             this.basemapService.basemap();
-            this.projection$.pipe(first()).subscribe((projection) => {
-                this.backgroundLayerSource = undefined; // reset source to force recreation
-                this.redrawLayers(projection);
+            this.mapLayers();
+            this.forceRedraw();
+            this.grid();
+            const projection = this.projection.value();
+
+            if (!projection) return;
+
+            this.backgroundLayerSource.set(undefined); // reset source to force recreation
+            untracked(() => this.redrawLayers(projection));
+        });
+
+        effect(() => console.log('Basemap changed', this.basemapService.basemap()));
+        effect(() => console.log('Map layers changed', this.mapLayers()));
+        effect(() => console.log('Grid changed', this.grid()));
+        effect(() => console.log('Projection changed', this.projection.value()));
+        effect(() => console.log('Force redraw triggered', this.forceRedraw()));
+
+        effect(() => {
+            this.mapLayers();
+
+            untracked(() => {
+                this.resetSelection();
+                this.performSelection(this.projectService.getSelectedFeature());
             });
         });
-    }
 
-    ngOnDestroy(): void {
-        this.subscriptions.forEach((s) => s.unsubscribe());
-    }
+        const renderRef = afterEveryRender({
+            // initializations
+            write: () => {
+                const projection = this.projection.value();
+                if (!projection) return;
 
-    ngAfterViewInit(): void {
-        this.projection$.pipe(first()).subscribe((projection) => {
-            this.maps.forEach((map) => map.setTarget(undefined)); // initially reset all DOM bindings
+                renderRef.destroy();
 
-            this.initOpenlayersMap(projection);
+                this.maps.forEach((map) => map.setTarget(undefined)); // initially reset all DOM bindings
 
-            // since all viewports are linked and there will always be the first map, we link the event only to map 0
-            this.maps[0].on('moveend', (_event) => this.emitViewportSize());
+                this.initOpenlayersMap(projection);
 
-            this.initUserSelect();
+                // since all viewports are linked and there will always be the first map, we link the event only to map 0
+                this.maps[0].on('moveend', (_event) => this.emitViewportSize());
 
-            this.subscriptions.push(
-                combineLatest([(this.mapLayersRaw.changes as Observable<MapLayer>).pipe(startWith({})), this.projection$])
-                    .pipe(rxMap(([_changes, newProjection]) => newProjection))
-                    .subscribe((newProjection: SpatialReference) => {
-                        this.redrawLayers(newProjection);
-                    }),
-            );
+                this.initUserSelect();
+                this.forceRedraw.set();
+            },
         });
-
-        this.subscriptions.push(
-            this.mapLayersRaw.changes
-                .pipe(mergeMap((layers: Array<MapLayer>) => combineLatest(layers.map((l) => l.loadedData$))))
-                .subscribe(() => {
-                    this.resetSelection();
-                    this.performSelection(this.projectService.getSelectedFeature());
-                }),
-        );
-    }
-
-    ngOnChanges(changes: Record<string, SimpleChange>): void {
-        for (const propName in changes) {
-            if (propName === 'grid') {
-                this.projection$.pipe(first()).subscribe((projection) => this.redrawLayers(projection));
-            }
-        }
     }
 
     /**
      * Notify the map that the container has resized.
      */
     resize(): void {
-        setTimeout(() => this.projection$.pipe(first()).subscribe((projection) => this.redrawLayers(projection)));
+        console.log('resize()');
+        this.forceRedraw.set();
+    }
+
+    /**
+     * Returns the first OpenLayers map instance for this container.
+     */
+    public getMap(): OlMap {
+        if (this.maps.length === 0) {
+            throw new Error('no map initialized');
+        }
+
+        return this.maps[0];
+    }
+
+    /**
+     * Exports the current map viewport as a PNG file.
+     */
+    public exportMapImage(filename = 'geoengine-map.png'): void {
+        const map = this.getMap();
+        const canvas = map.getViewport().querySelector('canvas');
+
+        if (!(canvas instanceof HTMLCanvasElement)) {
+            throw new Error('Map canvas is not available');
+        }
+
+        if (!canvas.toBlob) {
+            throw new Error('Map canvas does not support exporting as a blob');
+        }
+
+        canvas.toBlob((blob) => {
+            if (!blob) {
+                console.error('Could not export map image');
+                return;
+            }
+
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.click();
+            URL.revokeObjectURL(url);
+        }, 'image/png');
     }
 
     /**
@@ -290,7 +334,8 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
      * Force a redraw for each map layer
      */
     public layerForcesRedraw(): void {
-        this.projection$.pipe(first()).subscribe((projection) => this.redrawLayers(projection));
+        console.log('layerForcesRedraw()');
+        this.forceRedraw.set();
     }
 
     private createDrawInteractionLayer(): OlLayerVector<OlSourceVector<OlFeature>> {
@@ -346,11 +391,11 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
         }
     }
 
-    private calculateGrid(): void {
-        const numberOfLayers = this.desiredNumberOfMaps();
+    private calculateNumberOfColumnsInGrid(numberOfLayers: number, containerWidth: number, containerHeight: number): number {
+        // const numberOfLayers = this.desiredNumberOfMaps();
 
-        const containerWidth = this.gridListElement().nativeElement.clientWidth;
-        const containerHeight = this.gridListElement().nativeElement.clientHeight;
+        // const containerWidth = this.gridListElement().nativeElement.clientWidth;
+        // const containerHeight = this.gridListElement().nativeElement.clientHeight;
         const ratio = containerWidth / containerHeight;
 
         let rows = 1;
@@ -370,8 +415,7 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
             columns -= 1;
         }
 
-        this.numberOfRows = columns;
-        this.numberOfColumns = columns;
+        return columns;
     }
 
     private initOpenlayersMap(projection: SpatialReference): void {
@@ -410,19 +454,23 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
             return;
         }
         // TODO: avoid going through all layers
-        for (const layer of this.mapLayersRaw) {
+        for (const layer of this.mapLayersRaw()) {
             const source = layer.mapLayer.getSource();
-            if (source instanceof OlSourceVector) {
-                for (const feature of source.getFeatures()) {
-                    if (feature.getId() === selection.feature) {
-                        this.selectedFeature = feature;
-                        this.selectedFeatureOriginalStyle = feature.getStyle();
-                        const style = (layer.symbology() as VectorSymbology).createHighlightStyle(feature);
-                        feature.setStyle(style);
-                        this.userSelect?.getFeatures().push(feature);
-                        return;
-                    }
+            if (!(source instanceof OlSourceVector)) {
+                continue;
+            }
+
+            for (const feature of source.getFeatures() as OlFeature<OlGeometry>[]) {
+                if (feature.getId() !== selection.feature) {
+                    continue;
                 }
+
+                this.selectedFeature = feature;
+                this.selectedFeatureOriginalStyle = feature.getStyle();
+                const style = (layer.symbology() as VectorSymbology).createHighlightStyle(feature);
+                feature.setStyle(style);
+                this.userSelect?.getFeatures().push(feature);
+                return;
             }
         }
     }
@@ -434,16 +482,18 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
         }
 
         // TODO: avoid going through all layers
-        for (const layer of this.mapLayersRaw) {
+        for (const layer of this.mapLayersRaw()) {
             const source = layer.mapLayer.getSource();
-            if (source instanceof OlSourceVector) {
-                for (const feature of source.getFeatures()) {
-                    if (feature.getId() === this.selectedFeature.getId()) {
-                        this.selectedFeature = undefined;
-                        feature.setStyle(this.selectedFeatureOriginalStyle);
-                        return;
-                    }
-                }
+            if (!(source instanceof OlSourceVector)) {
+                continue;
+            }
+
+            for (const feature of source.getFeatures() as OlFeature<OlGeometry>[]) {
+                if (feature.getId() !== this.selectedFeature.getId()) continue;
+
+                this.selectedFeature = undefined;
+                feature.setStyle(this.selectedFeatureOriginalStyle);
+                return;
             }
         }
     }
@@ -460,17 +510,10 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
     }
 
     private redrawLayers(projection: SpatialReference): void {
-        if (!this.mapLayersRaw) {
-            return;
-        }
-        this.mapLayers = this.mapLayersRaw.filter((mapLayer) => mapLayer.isVisible());
-
-        this.calculateGrid();
-        this.changeDetectorRef.detectChanges();
-
         const mapContainers = this.mapContainers();
-        if (this.grid() && this.mapLayers.length && mapContainers.length !== this.mapLayers.length) {
-            console.error('race condition!');
+        const mapLayers = this.mapLayers();
+        if (this.grid() && mapLayers.length && mapContainers.length !== mapLayers.length) {
+            console.error('race condition!', {mapContainersLength: mapContainers.length, mapLayersLength: mapLayers.length});
         }
 
         while (this.maps.length > this.desiredNumberOfMaps()) {
@@ -488,7 +531,7 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
         }
 
         mapContainers.forEach((mapContainer, i) => {
-            const mapTarget: HTMLElement = mapContainer.nativeElement.children[0];
+            const mapTarget: HTMLElement = mapContainer.nativeElement.firstElementChild as HTMLElement;
             this.maps[i].setTarget(mapTarget);
             this.maps[i].updateSize();
         });
@@ -500,8 +543,8 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
             this.createAndSetView(projection);
         }
 
-        if (projectionChanged || !this.backgroundLayerSource) {
-            this.backgroundLayerSource = this.createBackgroundLayerSource(projection, this.basemapService.basemap());
+        if (projectionChanged || !this.backgroundLayerSource()) {
+            this.backgroundLayerSource.set(this.createBackgroundLayerSource(projection, this.basemapService.basemap()));
 
             this.backgroundLayers.length = 0;
         }
@@ -519,23 +562,19 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
             map.getLayers().clear();
             map.getLayers().push(this.backgroundLayers[index]);
 
-            if (this.grid()) {
-                if (this.mapLayers.length) {
-                    const inverseIndex = this.mapLayers.length - index - 1;
-                    map.getLayers().push(this.mapLayers[inverseIndex].mapLayer);
-                }
+            if (this.grid() && mapLayers.length) {
+                const inverseIndex = mapLayers.length - index - 1;
+                map.getLayers().push(mapLayers[inverseIndex].mapLayer);
             } else {
-                this.mapLayers.forEach((layerComponent) => map.addLayer(layerComponent.mapLayer));
+                mapLayers.forEach((layerComponent) => map.addLayer(layerComponent.mapLayer));
             }
         });
 
         this.reattachDrawInteractions();
 
         this.attachUserSelectToMap();
-    }
 
-    private desiredNumberOfMaps(): number {
-        return this.grid() ? Math.max(this.mapLayers.length, 1) : 1;
+        this.changeDetectorRef.detectChanges(); // TODO: remove
     }
 
     private createAndSetView(projection: SpatialReference): void {
@@ -590,8 +629,7 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
 
             // In theory, there could be a race-condition if the size is set before adding the `once` trigger.
             if (this.maps[0].getSize()) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                firstMap.un(listener.type as any, listener.listener); // the type of the listener is a string but the method expects a literal
+                firstMap.un(listener.type as 'change' | 'error', listener.listener); // the type of the listener is a string but the method expects a literal
                 this.zoomTo(focusExtent);
             }
         }
@@ -636,7 +674,7 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
 
             // use fallback if background layer is not available for projection
             return new OlLayerVector({
-                source: this.backgroundLayerSource as OlSourceVector,
+                source: this.backgroundLayerSource() as OlSourceVector,
                 background: 'rgba(158, 189, 255, 1)',
                 style: (feature: OlFeatureLike, _resolution: number): OlStyleStyle => {
                     if (feature.getId() === 'BACKGROUND') {
@@ -664,7 +702,7 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
             case 'MVT': {
                 const vectorTilesBasemap = basemap as VectorTiles;
 
-                const layer = new OlLayerVectorTile({source: this.backgroundLayerSource as OlSourceVectorTile});
+                const layer = new OlLayerVectorTile({source: this.backgroundLayerSource() as OlSourceVectorTile});
 
                 void fetch(vectorTilesBasemap.STYLE_URL)
                     .then((response) => response.json())
@@ -679,7 +717,7 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
             }
             case 'WMS': {
                 return new OlLayerTile({
-                    source: this.backgroundLayerSource as OlTileWmsSource,
+                    source: this.backgroundLayerSource() as OlTileWmsSource,
                 });
             }
         }
@@ -694,7 +732,6 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
                 wrapX: false,
             });
 
-            // eslint-disable-next-line @typescript-eslint/no-misused-promises
             source.setLoader(async (_extent, _resolution, sourceProjection): Promise<Array<OlFeatureLike>> => {
                 const dataProjection = 'EPSG:4326';
                 const response = await fetch('assets/fallback-base-layer/ne_50m_land.fgb');

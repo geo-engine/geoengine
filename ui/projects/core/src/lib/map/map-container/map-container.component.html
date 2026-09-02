@@ -1,6 +1,6 @@
-<mat-grid-list [cols]="numberOfColumns" [rowHeight]="rowHeight" gutterSize="1">
+<mat-grid-list [cols]="numberOfColumns()" [rowHeight]="rowHeight" gutterSize="1">
     @if (grid() && mapLayers.length) {
-        @for (layerRef of mapLayers; track layerRef) {
+        @for (layerRef of mapLayers(); track layerRef.layerId()) {
             <mat-grid-tile class="map"></mat-grid-tile>
         }
     } @else {
