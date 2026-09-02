@@ -211,12 +211,12 @@
                 <mat-icon>straighten</mat-icon>
             </button>
 
-            <button type="button" matMiniFab aria-label="Plot" color="secondary">
+            <!-- <button type="button" matMiniFab aria-label="Plot" color="secondary">
                 <mat-icon>show_chart</mat-icon>
-            </button>
+            </button> -->
 
-            <button type="button" matMiniFab aria-label="Download" color="secondary">
-                <mat-icon>file_download</mat-icon>
+            <button type="button" matMiniFab aria-label="Download" color="secondary" (click)="downloadMapImage()">
+                <mat-icon>image</mat-icon>
             </button>
         </div>
     </mat-drawer-content>
