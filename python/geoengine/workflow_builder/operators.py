@@ -67,6 +67,8 @@ class RasterOperator(Operator):
         """Returns an operator from a dictionary."""
         if operator_dict["type"] == "GdalSource":
             return GdalSource.from_operator_dict(operator_dict)
+        if operator_dict["type"] == "MultiBandGdalSource":
+            return MultiBandGdalSource.from_operator_dict(operator_dict)
         if operator_dict["type"] == "RasterScaling":
             return RasterScaling.from_operator_dict(operator_dict)
         if operator_dict["type"] == "RasterTypeConversion":
@@ -87,6 +89,8 @@ class RasterOperator(Operator):
             return TemporalRasterAggregation.from_operator_dict(operator_dict)
         if operator_dict["type"] == "RasterStacker":
             return RasterStacker.from_operator_dict(operator_dict)
+        if operator_dict["type"] == "BandFilter":
+            return BandFilter.from_operator_dict(operator_dict)
         if operator_dict["type"] == "BandNeighborhoodAggregate":
             return BandNeighborhoodAggregate.from_operator_dict(operator_dict)
 
@@ -145,6 +149,32 @@ class GdalSource(RasterOperator):
             raise ValueError("Invalid operator type")
 
         return GdalSource(cast(str, operator_dict["params"]["data"]))
+
+
+class MultiBandGdalSource(RasterOperator):
+    """A multi-band GDAL source operator referencing a named dataset with all its bands."""
+
+    dataset: str
+
+    def __init__(self, dataset: str | DatasetName):
+        """Creates a new multi-band GDAL source operator."""
+        if isinstance(dataset, DatasetName):
+            dataset = str(dataset)
+        self.dataset = dataset
+
+    def name(self) -> str:
+        return "MultiBandGdalSource"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": self.name(), "params": {"data": self.dataset}}
+
+    @classmethod
+    def from_operator_dict(cls, operator_dict: dict[str, Any]) -> MultiBandGdalSource:
+        """Returns an operator from a dictionary."""
+        if operator_dict["type"] != "MultiBandGdalSource":
+            raise ValueError("Invalid operator type")
+
+        return MultiBandGdalSource(cast(str, operator_dict["params"]["data"]))
 
 
 class OgrSource(VectorOperator):
@@ -1236,6 +1266,47 @@ class RasterStacker(RasterOperator):
         rename = RenameBands.from_dict(operator_dict["params"]["renameBands"])
 
         return RasterStacker(sources=sources, rename=rename)
+
+
+class BandFilter(RasterOperator):
+    """The BandFilter operator.
+
+    Selects a subset of the source's bands, either by band names or by band
+    indices. The order of the remaining bands is preserved and the output
+    bands are renumbered to 0..n.
+    """
+
+    source: RasterOperator
+    bands: list[str] | list[int]
+
+    def __init__(self, source: RasterOperator, bands: list[str] | list[int]):
+        """Creates a new BandFilter operator."""
+        if not bands:
+            raise ValueError("Must select at least one band")
+
+        self.source = source
+        self.bands = bands
+
+    def name(self) -> str:
+        return "BandFilter"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "type": self.name(),
+            "params": {"bands": self.bands},
+            "sources": {"raster": self.source.to_dict()},
+        }
+
+    @classmethod
+    def from_operator_dict(cls, operator_dict: dict[str, Any]) -> BandFilter:
+        """Returns an operator from a dictionary."""
+        if operator_dict["type"] != "BandFilter":
+            raise ValueError("Invalid operator type")
+
+        source = RasterOperator.from_operator_dict(cast(dict[str, Any], operator_dict["sources"]["raster"]))
+        bands = cast(list[str] | list[int], operator_dict["params"]["bands"])
+
+        return BandFilter(source=source, bands=bands)
 
 
 class BandNeighborhoodAggregate(RasterOperator):

@@ -396,6 +396,66 @@ class OperatorsTests(unittest.TestCase):
             wb.operators.RasterStacker.from_operator_dict(workflow.to_dict()).to_dict(), workflow.to_dict()
         )
 
+    def test_multiband_gdal_source(self):
+        workflow = wb.operators.MultiBandGdalSource("multi_tile")
+
+        self.assertEqual(
+            workflow.to_dict(),
+            {"type": "MultiBandGdalSource", "params": {"data": "multi_tile"}},
+        )
+
+        self.assertEqual(
+            wb.operators.MultiBandGdalSource.from_operator_dict(workflow.to_dict()).to_dict(), workflow.to_dict()
+        )
+
+    def test_multiband_gdal_source_from_dataset_name(self):
+        from geoengine.datasets import DatasetName
+
+        workflow = wb.operators.MultiBandGdalSource(DatasetName("multi_tile"))
+
+        self.assertEqual(
+            workflow.to_dict(),
+            {"type": "MultiBandGdalSource", "params": {"data": "multi_tile"}},
+        )
+
+    def test_band_filter_by_names(self):
+        source_operator = wb.operators.MultiBandGdalSource("multi_tile")
+
+        workflow = wb.operators.BandFilter(source=source_operator, bands=["band_1", "band_2"])
+
+        self.assertEqual(
+            workflow.to_dict(),
+            {
+                "type": "BandFilter",
+                "params": {"bands": ["band_1", "band_2"]},
+                "sources": {"raster": {"type": "MultiBandGdalSource", "params": {"data": "multi_tile"}}},
+            },
+        )
+
+        self.assertEqual(wb.operators.BandFilter.from_operator_dict(workflow.to_dict()).to_dict(), workflow.to_dict())
+
+    def test_band_filter_by_indices(self):
+        source_operator = wb.operators.GdalSource("ndvi")
+
+        workflow = wb.operators.BandFilter(source=source_operator, bands=[0, 1])
+
+        self.assertEqual(
+            workflow.to_dict(),
+            {
+                "type": "BandFilter",
+                "params": {"bands": [0, 1]},
+                "sources": {"raster": {"type": "GdalSource", "params": {"data": "ndvi"}}},
+            },
+        )
+
+        self.assertEqual(wb.operators.BandFilter.from_operator_dict(workflow.to_dict()).to_dict(), workflow.to_dict())
+
+    def test_band_filter_rejects_empty_bands(self):
+        source_operator = wb.operators.GdalSource("ndvi")
+
+        with self.assertRaises(ValueError):
+            wb.operators.BandFilter(source=source_operator, bands=[])
+
 
 if __name__ == "__main__":
     unittest.main()
