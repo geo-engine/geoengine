@@ -12,7 +12,7 @@ import {
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {ProjectService, MapService, MapContainerComponent, CoreModule} from '@geoengine/core';
 import {AppConfig} from '../app-config.service';
-import {Layer, LayersService, Time, UserService} from '@geoengine/common';
+import {assertNever, Layer, LayersService, Time, UserService} from '@geoengine/common';
 import {MatToolbar, MatToolbarModule} from '@angular/material/toolbar';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
