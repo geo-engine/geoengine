@@ -563,6 +563,32 @@ pub struct Cache {
     pub enabled: bool,
     pub size_in_mb: usize,
     pub landing_zone_ratio: f64,
+    /// use the new raster cache implementation for raster data instead of the old cache
+    #[allow(clippy::struct_field_names)]
+    pub enable_new_raster_cache: bool,
+    /// if `enable_new_raster_cache` is set, the fraction of `size_in_mb` reserved for the new
+    /// raster cache; the remainder is used by the old cache (which then only holds vector data).
+    /// Ignored if `enable_new_raster_cache` is `false`, in which case the old cache holds both
+    /// vector and raster data and gets the full `size_in_mb`.
+    pub raster_cache_size_ratio: f64,
+}
+
+impl Cache {
+    pub fn shared_cache_size(&self) -> usize {
+        self.size_in_mb - self.new_raster_cache_size_in_mb()
+    }
+
+    pub fn new_raster_cache_size(&self) -> usize {
+        self.new_raster_cache_size_in_mb() * 1024 * 1024
+    }
+
+    fn new_raster_cache_size_in_mb(&self) -> usize {
+        if self.enable_new_raster_cache {
+            (self.size_in_mb as f64 * self.raster_cache_size_ratio) as usize
+        } else {
+            0
+        }
+    }
 }
 
 impl TestDefault for Cache {
@@ -571,6 +597,8 @@ impl TestDefault for Cache {
             enabled: false,
             size_in_mb: 1_000,       // 1 GB
             landing_zone_ratio: 0.1, // 10% of cache size
+            enable_new_raster_cache: false,
+            raster_cache_size_ratio: 0.5,
         }
     }
 }

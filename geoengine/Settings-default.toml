@@ -219,8 +219,15 @@ volumes = { test_data = "test_data/" }
 enabled = false
 # storage limit for the cache
 size_in_mb = 1_000 # 1 GB
-# storage limit for collecting query results before insertion into the cache in 
+# storage limit for collecting query results before insertion into the cache in
 landing_zone_ratio = 0.1 # 10% of total cache size
+# use the new raster cache implementation for raster data instead of the old cache
+enable_new_raster_cache = false
+# if `enable_new_raster_cache` is set, the fraction of `size_in_mb` reserved for the new raster
+# cache; the remainder is used by the old cache (which then only holds vector data).
+# Ignored if `enable_new_raster_cache` is `false`, in which case the old cache holds both
+# vector and raster data and gets the full `size_in_mb`.
+raster_cache_size_ratio = 0.5
 
 [stac_cache]
 # maximum size of the STAC query cache in MB
