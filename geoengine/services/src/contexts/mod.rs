@@ -26,7 +26,11 @@ use geoengine_datatypes::{
     raster::TilingSpecification,
 };
 use geoengine_operators::{
-    cache::{cache_operator::InitializedCacheOperator, shared_cache::SharedCache},
+    cache::{
+        cache_operator::InitializedCacheOperator,
+        new_raster_cache::{NewRasterCacheEnum, RasterCacheOperator},
+        shared_cache::SharedCache,
+    },
     engine::{
         ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
         InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
@@ -135,6 +139,7 @@ pub struct QueryContextImpl {
     tiling_specification: TilingSpecification,
     thread_pool: Arc<ThreadPool>,
     cache: Option<Arc<SharedCache>>,
+    new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     quota_tracking: Option<QuotaTracking>,
     quota_checker: Option<QuotaChecker>,
     abort_registration: QueryAbortRegistration,
@@ -155,6 +160,7 @@ impl QueryContextImpl {
             tiling_specification,
             thread_pool,
             cache: None,
+            new_raster_cache: None,
             quota_tracking: None,
             quota_checker: None,
             abort_registration,
@@ -163,13 +169,14 @@ impl QueryContextImpl {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new_with_extensions(
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
         thread_pool: Arc<ThreadPool>,
         gdal_process_pool: Arc<GdalProcessPool>,
-
         cache: Option<Arc<SharedCache>>,
+        new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
         quota_tracking: Option<QuotaTracking>,
         quota_checker: Option<QuotaChecker>,
     ) -> Self {
@@ -179,6 +186,7 @@ impl QueryContextImpl {
             tiling_specification,
             thread_pool,
             cache,
+            new_raster_cache,
             quota_checker,
             quota_tracking,
             abort_registration,
@@ -223,6 +231,10 @@ impl QueryContext for QueryContextImpl {
     fn cache(&self) -> Option<Arc<geoengine_operators::cache::shared_cache::SharedCache>> {
         self.cache.clone()
     }
+
+    fn new_raster_cache(&self) -> Option<Arc<NewRasterCacheEnum>> {
+        self.new_raster_cache.clone()
+    }
 }
 
 impl GdalProcessPoolAccess for QueryContextImpl {
@@ -239,6 +251,7 @@ where
     thread_pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
     gdal_process_pool: Arc<GdalProcessPool>,
+    new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
 }
 
 impl<D> ExecutionContextImpl<D>
@@ -250,12 +263,14 @@ where
         thread_pool: Arc<ThreadPool>,
         tiling_specification: TilingSpecification,
         gdal_process_pool: Arc<GdalProcessPool>,
+        new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     ) -> Self {
         Self {
             db,
             thread_pool,
             tiling_specification,
             gdal_process_pool,
+            new_raster_cache,
         }
     }
 }
@@ -293,12 +308,18 @@ where
         let wrapped = Box::new(InitializedOperatorWrapper::new(op, span))
             as Box<dyn geoengine_operators::engine::InitializedRasterOperator>;
 
-        if get_config_element::<Cache>()
-            .expect(
-                "Cache config should be present because it is part of the Settings-default.toml",
-            )
-            .enabled
+        let cache_config = get_config_element::<Cache>().expect(
+            "Cache config should be present because it is part of the Settings-default.toml",
+        );
+
+        if cache_config.enabled
+            && cache_config.enable_new_raster_cache
+            && self.new_raster_cache.is_some()
         {
+            return Box::new(RasterCacheOperator::wrap_operator(wrapped));
+        }
+
+        if cache_config.enabled {
             return Box::new(InitializedCacheOperator::new(wrapped));
         }
 

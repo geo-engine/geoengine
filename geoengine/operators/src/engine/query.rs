@@ -65,6 +65,10 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
 
     fn cache(&self) -> Option<Arc<SharedCache>>;
 
+    fn new_raster_cache(&self) -> Option<Arc<crate::cache::new_raster_cache::NewRasterCacheEnum>> {
+        None
+    }
+
     fn abort_registration(&self) -> &QueryAbortRegistration;
     fn abort_trigger(&mut self) -> Result<QueryAbortTrigger>;
 
@@ -132,6 +136,7 @@ pub struct MockQueryContext {
     pub cache: Option<Arc<SharedCache>>,
     pub quota_tracking: Option<QuotaTracking>,
     pub quota_checker: Option<QuotaChecker>,
+    pub new_raster_cache: Option<Arc<crate::cache::new_raster_cache::NewRasterCacheEnum>>,
 
     pub abort_registration: QueryAbortRegistration,
     pub abort_trigger: Option<QueryAbortTrigger>,
@@ -153,6 +158,9 @@ impl MockQueryContext {
             cache: None,
             quota_checker: None,
             quota_tracking: None,
+            new_raster_cache: Some(Arc::new(
+                crate::cache::new_raster_cache::NewRasterCacheEnum::new_lru(usize::MAX / 2),
+            )),
             abort_registration,
             abort_trigger: Some(abort_trigger),
             gdal_process_pool,
@@ -175,6 +183,9 @@ impl MockQueryContext {
             cache,
             quota_checker,
             quota_tracking,
+            new_raster_cache: Some(Arc::new(
+                crate::cache::new_raster_cache::NewRasterCacheEnum::new_lru(usize::MAX / 2),
+            )),
             abort_registration,
             abort_trigger: Some(abort_trigger),
             gdal_process_pool,
@@ -196,6 +207,9 @@ impl MockQueryContext {
             cache: None,
             quota_checker: None,
             quota_tracking: None,
+            new_raster_cache: Some(Arc::new(
+                crate::cache::new_raster_cache::NewRasterCacheEnum::new_lru(usize::MAX / 2),
+            )),
             abort_registration,
             abort_trigger: Some(abort_trigger),
         }
@@ -235,6 +249,10 @@ impl QueryContext for MockQueryContext {
 
     fn cache(&self) -> Option<Arc<SharedCache>> {
         self.cache.clone()
+    }
+
+    fn new_raster_cache(&self) -> Option<Arc<crate::cache::new_raster_cache::NewRasterCacheEnum>> {
+        self.new_raster_cache.clone()
     }
 }
 
