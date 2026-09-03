@@ -12,7 +12,7 @@ import {
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {ProjectService, MapService, MapContainerComponent, CoreModule} from '@geoengine/core';
 import {AppConfig} from '../app-config.service';
-import {Layer, LayersService, Time, UserService} from '@geoengine/common';
+import {assertNever, Layer, LayersService, Time, UserService} from '@geoengine/common';
 import {MatToolbar, MatToolbarModule} from '@angular/material/toolbar';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
@@ -23,6 +23,7 @@ import {MatRadioModule} from '@angular/material/radio';
 import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
 import {ProviderLayerId} from '@geoengine/api-client/dist/models/ProviderLayerId';
 import {A11yModule} from '@angular/cdk/a11y';
+import {MeasureDirective, MeasurementType} from './measure.directive';
 
 @Component({
     selector: 'geoengine-main',
@@ -30,6 +31,7 @@ import {A11yModule} from '@angular/cdk/a11y';
     styleUrls: ['./main.component.scss'],
     changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
+        A11yModule,
         CoreModule,
         MapContainerComponent,
         MatButtonModule,
@@ -40,7 +42,7 @@ import {A11yModule} from '@angular/cdk/a11y';
         MatSidenavModule,
         MatToolbarModule,
         MatTooltipModule,
-        A11yModule,
+        MeasureDirective,
     ],
     host: {
         // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -79,6 +81,7 @@ export class MainComponent {
         return time.start.toDate();
     });
     readonly spatialReference = toSignal(this.projectService.getSpatialReferenceStream());
+    readonly MeasurementType = MeasurementType;
 
     readonly landCover = resource({
         params: () => ({}),

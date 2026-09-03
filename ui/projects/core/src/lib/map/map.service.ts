@@ -4,13 +4,13 @@ import {BehaviorSubject, Observable} from 'rxjs';
 import {Injectable} from '@angular/core';
 import {containsExtent as olExtentContainsExtent, getIntersection as olExtentGetIntersection} from 'ol/extent';
 import OlGeometry from 'ol/geom/Geometry';
-import {Vector as OlSourceVector} from 'ol/source';
 import {Type as OlGeometryType} from 'ol/geom/Geometry';
+import {Vector as OlSourceVector} from 'ol/source';
 import OlView from 'ol/View';
 import OlFeature from 'ol/Feature';
 
 import {MapContainerComponent} from './map-container/map-container.component';
-import {createBox} from 'ol/interaction/Draw';
+import {createBox, GeometryFunction} from 'ol/interaction/Draw';
 import {olExtentToTuple} from '@geoengine/common';
 
 /**
@@ -86,11 +86,16 @@ export class MapService {
         this.mapComponent = mapComponent;
     }
 
-    public startDrawInteraction(drawType: OlGeometryType): void {
+    public startDrawInteraction(
+        drawType: OlGeometryType,
+        drawSingleFeature = false,
+        geometryFunction?: GeometryFunction,
+        endDrawCallback?: (feature: OlFeature<OlGeometry>) => void,
+    ): void {
         if (!this.mapComponent) {
             throw new Error('no MapComponent registered');
         }
-        this.mapComponent.startDrawInteraction(drawType);
+        this.mapComponent.startDrawInteraction(drawType, drawSingleFeature, geometryFunction, endDrawCallback);
     }
 
     public startBoxDrawInteraction(endDrawCallback?: (feature: OlFeature<OlGeometry>) => void): void {

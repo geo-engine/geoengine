@@ -89,13 +89,14 @@ export * from './lib/util/guards/can-register.guard';
 export * from './lib/util/guards/log-in.guard';
 
 // Misc
-export * from './lib/colors/colormaps/mpl-colormaps';
 export * from './lib/colors/colormaps/colormaps';
+export * from './lib/colors/colormaps/mpl-colormaps';
+export * from './lib/util/assertions';
 export * from './lib/util/constants';
 export * from './lib/util/conversions';
-export * from './lib/util/directives/flexbox-legacy.directive';
 export * from './lib/util/directives/autocomplete-select.directive';
+export * from './lib/util/directives/flexbox-legacy.directive';
 export * from './lib/util/errors';
 export * from './lib/util/form.validators';
-export * from './lib/util/symbologies';
 export * from './lib/util/icons';
+export * from './lib/util/symbologies';
