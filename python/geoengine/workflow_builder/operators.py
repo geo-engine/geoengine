@@ -663,7 +663,7 @@ class RasterScaling(RasterOperator):
                 return {"type": "constant", "value": float(key_or_value)}
 
             # TODO: incorporate `domain` field
-            return {"type": "metadataKey", "key": key_or_value}
+            return {"type": "metadataKey", "value": {"key": key_or_value}}
 
         return {
             "type": self.name(),
@@ -689,7 +689,7 @@ class RasterScaling(RasterOperator):
             if key_or_value["type"] == "constant":
                 return key_or_value["value"]
             if key_or_value["type"] == "metadataKey":
-                return key_or_value["key"]
+                return key_or_value["value"]["key"]
             return None
 
         return RasterScaling(

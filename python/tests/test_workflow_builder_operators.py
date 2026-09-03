@@ -151,6 +151,34 @@ class OperatorsTests(unittest.TestCase):
             wb.operators.RasterScaling.from_operator_dict(workflow.to_dict()).to_dict(), workflow.to_dict()
         )
 
+    def test_raster_scaling_metadata_key(self):
+        source_operator = wb.operators.GdalSource("ndvi")
+
+        workflow = wb.operators.RasterScaling(
+            source=source_operator,
+            slope="msg.calibration_slope",
+            offset="msg.calibration_offset",
+            scaling_mode="subOffsetDivSlope",
+            output_measurement=None,
+        )
+
+        self.assertEqual(
+            workflow.to_dict(),
+            {
+                "type": "RasterScaling",
+                "params": {
+                    "offset": {"type": "metadataKey", "value": {"key": "msg.calibration_offset"}},
+                    "slope": {"type": "metadataKey", "value": {"key": "msg.calibration_slope"}},
+                    "scalingMode": "subOffsetDivSlope",
+                },
+                "sources": {"raster": {"type": "GdalSource", "params": {"data": "ndvi"}}},
+            },
+        )
+
+        self.assertEqual(
+            wb.operators.RasterScaling.from_operator_dict(workflow.to_dict()).to_dict(), workflow.to_dict()
+        )
+
     def test_raster_type_conversion(self):
         source_operator = wb.operators.GdalSource("ndvi")
 
