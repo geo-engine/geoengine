@@ -6,7 +6,7 @@ import {GeometryFunction as OlGeometryFunction, createBox} from 'ol/interaction/
 import {Type as OlGeometryType} from 'ol/geom/Geometry';
 import {drawContrastStrokeStyle, drawStyle, MapContainerComponent, MapService} from '@geoengine/core';
 import {getArea, getLength} from 'ol/sphere.js';
-import {assertNever} from '../../../../common/src/lib/util/assertions';
+import {assertNever} from '@geoengine/common';
 import {getCenter} from 'ol/extent';
 import OlFeature from 'ol/Feature';
 import OlGeometry from 'ol/geom/Geometry';
