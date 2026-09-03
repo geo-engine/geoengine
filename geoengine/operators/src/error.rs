@@ -441,6 +441,11 @@ pub enum Error {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    #[snafu(display("Cache error: {source}"))]
+    Cache {
+        source: crate::cache::error::CacheError,
+    },
+
     #[snafu(display("RasterResults are incompatible error: {a:?} vs {b:?}"))]
     CantMergeSpatialGridDescriptor {
         a: SpatialGridDescriptor,
@@ -600,5 +605,11 @@ impl From<crate::util::statistics::StatisticsError> for Error {
 impl From<ordered_float::FloatIsNan> for Error {
     fn from(source: FloatIsNan) -> Self {
         Error::InvalidNotNanFloatKey { source }
+    }
+}
+
+impl From<crate::cache::error::CacheError> for Error {
+    fn from(source: crate::cache::error::CacheError) -> Self {
+        Error::Cache { source }
     }
 }
