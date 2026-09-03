@@ -34,11 +34,13 @@ build project="gis": common::_clear
 run project="gis" nightly="false": common::_clear
     npm run serve:{{ project }}:{{ if nightly == "true" { "nightly" } else { "local" } }}
 
+[arg("app", long="app", help="Whether to only run tests for a specific app, e.g. `--app=gis`.")]
 [arg("include", long="include", help="Whether to include only specific test files, e.g. `--include=`.")]
 [arg("ci", long="ci", value="true", help="Whether to run tests in CI mode.")]
-test ci="false" include="" filter="": common::_clear
+test ci="false" app="" include="" filter="": common::_clear
     npm run test{{ if ci == "true" { ":browser:ci" } else { "" } }} \
         -- \
+        {{ app }} \
         {{ if include == "" { "" } else { "--include=" + include } }} \
         {{ if filter == "" { "" } else { '--filter="' + filter + '"' } }}
 

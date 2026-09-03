@@ -112,7 +112,7 @@
                 <mat-divider></mat-divider>
 
                 <div>
-                    <h4>Vizualization Presets</h4>
+                    <h4>Visualization Presets</h4>
                     <mat-nav-list class="visualization-presets">
                         <mat-list-item [activated]="true">
                             <img matListItemTitle src="assets/rgb.jpg" alt="RGB" class="preset-icon" />
@@ -207,13 +207,31 @@
                 </mat-button-toggle>
             </mat-button-toggle-group>
 
-            <button type="button" matMiniFab aria-label="Measure" color="secondary">
+            <button
+                #measureButton="geoengineMeasure"
+                type="button"
+                matMiniFab
+                aria-label="Measure"
+                [disabled]="boxButton.isActive()"
+                [color]="measureButton.isActive() ? 'primary' : null"
+                [geoengineMeasure]="map"
+                [measurementType]="MeasurementType.Line"
+            >
                 <mat-icon>straighten</mat-icon>
             </button>
 
-            <!-- <button type="button" matMiniFab aria-label="Plot" color="secondary">
-                <mat-icon>show_chart</mat-icon>
-            </button> -->
+            <button
+                #boxButton="geoengineMeasure"
+                type="button"
+                matMiniFab
+                aria-label="Box"
+                [disabled]="measureButton.isActive()"
+                [color]="boxButton.isActive() ? 'primary' : null"
+                [geoengineMeasure]="map"
+                [measurementType]="MeasurementType.Box"
+            >
+                <mat-icon>crop_square</mat-icon>
+            </button>
 
             <button type="button" matMiniFab aria-label="Download" color="secondary" (click)="downloadMapImage()">
                 <mat-icon>image</mat-icon>
