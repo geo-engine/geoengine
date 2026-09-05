@@ -93,6 +93,8 @@ class RasterOperator(Operator):
             return BandFilter.from_operator_dict(operator_dict)
         if operator_dict["type"] == "BandNeighborhoodAggregate":
             return BandNeighborhoodAggregate.from_operator_dict(operator_dict)
+        if operator_dict["type"] == "Onnx":
+            return Onnx.from_operator_dict(operator_dict)
 
         raise NotImplementedError(f"Unknown operator type {operator_dict['type']}")
 

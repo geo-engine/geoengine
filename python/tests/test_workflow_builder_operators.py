@@ -484,6 +484,20 @@ class OperatorsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             wb.operators.BandFilter(source=source_operator, bands=[])
 
+    def test_raster_onnx_via_dispatcher(self):
+        source_operator = wb.operators.GdalSource("ndvi")
+
+        parsed = wb.operators.RasterOperator.from_operator_dict(
+            {
+                "type": "Onnx",
+                "params": {"model": "cat_by_shadow.onnx"},
+                "sources": {"raster": source_operator.to_dict()},
+            }
+        )
+
+        self.assertEqual(parsed.name(), "Onnx")
+        self.assertEqual(parsed.to_dict()["type"], "Onnx")
+
 
 if __name__ == "__main__":
     unittest.main()
