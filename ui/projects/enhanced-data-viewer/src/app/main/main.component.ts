@@ -5,6 +5,7 @@ import {
     afterNextRender,
     computed,
     inject,
+    linkedSignal,
     resource,
     signal,
     viewChild,
@@ -12,7 +13,7 @@ import {
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {ProjectService, MapService, MapContainerComponent, CoreModule} from '@geoengine/core';
 import {AppConfig} from '../app-config.service';
-import {Layer, LayersService, Time, UserService} from '@geoengine/common';
+import {assertNever, Layer, LayersService, UserService} from '@geoengine/common';
 import {MatToolbar, MatToolbarModule} from '@angular/material/toolbar';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
@@ -20,10 +21,12 @@ import {MatTooltipModule} from '@angular/material/tooltip';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {MatRadioModule} from '@angular/material/radio';
-import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
 import {ProviderLayerId} from '@geoengine/api-client/dist/models/ProviderLayerId';
 import {A11yModule} from '@angular/cdk/a11y';
 import {MeasureDirective, MeasurementType} from './measure.directive';
+import {ComponentPortal} from '@angular/cdk/portal';
+import {LayersComponent} from '../layers/layers.component';
+import {ComputeComponent} from '../compute/compute.component';
 
 @Component({
     selector: 'geoengine-main',
@@ -36,7 +39,6 @@ import {MeasureDirective, MeasurementType} from './measure.directive';
         MapContainerComponent,
         MatButtonModule,
         MatButtonToggleModule,
-        MatDatepickerModule,
         MatIconModule,
         MatRadioModule,
         MatSidenavModule,
@@ -63,24 +65,39 @@ export class MainComponent {
 
     readonly totalHeight = signal(window.innerHeight);
     readonly topToolbarHeight = signal(64);
+    readonly middleContainerHeight = computed(() => this.totalHeight() - this.topToolbarHeight());
 
     readonly sessionToken = toSignal(this.userService.getSessionTokenStream());
 
-    readonly middleContainerHeight = computed(() => this.totalHeight() - this.topToolbarHeight());
-
-    readonly currentTime = toSignal(this.projectService.getTimeStream());
-    readonly formattedTime = computed<string>(() => {
-        const projectTime = this.currentTime();
-        if (!projectTime) return '';
-        return projectTime.start.format('DD.MM.YYYY');
-    });
-    readonly timeStepDuration = toSignal(this.projectService.getTimeStepDurationStream());
-    readonly currentDate = computed<Date | undefined>(() => {
-        const time = this.currentTime();
-        if (!time) return undefined;
-        return time.start.toDate();
-    });
     readonly spatialReference = toSignal(this.projectService.getSpatialReferenceStream());
+    readonly currentTime = toSignal(this.projectService.getTimeStream());
+
+    readonly selectedLayer = linkedSignal(() => this.landCover.value());
+
+    private readonly openTab = signal<Tab>(Tab.Layers);
+    readonly tabComponent = computed<ComponentPortal<unknown>>(() => {
+        const tab = this.openTab();
+
+        switch (tab) {
+            case Tab.Layers:
+                return new ComponentPortal(LayersComponent);
+            case Tab.Compute:
+                return new ComponentPortal(ComputeComponent);
+            case Tab.Search:
+                // TODO: create component
+                return new ComponentPortal(EmptyComponent);
+            case Tab.About:
+                // TODO: create component
+                return new ComponentPortal(EmptyComponent);
+            default:
+                assertNever(tab);
+        }
+    });
+    readonly isLayersActive = computed(() => this.openTab() === Tab.Layers);
+    readonly isComputeActive = computed(() => this.openTab() === Tab.Compute);
+    readonly isSearchActive = computed(() => this.openTab() === Tab.Search);
+    readonly isAboutActive = computed(() => this.openTab() === Tab.About);
+
     readonly MeasurementType = MeasurementType;
 
     readonly mapImageLoading = signal(false);
@@ -159,34 +176,6 @@ export class MainComponent {
         return layer.id;
     }
 
-    async timeForward(): Promise<void> {
-        const time = this.currentTime();
-        const timeStepDuration = this.timeStepDuration();
-
-        if (!time || !timeStepDuration) return;
-
-        const updatedTime = time.add(timeStepDuration.durationAmount, timeStepDuration.durationUnit);
-        await this.projectService.setTime(updatedTime);
-    }
-
-    async timeBackwards(): Promise<void> {
-        const time = this.currentTime();
-        const timeStepDuration = this.timeStepDuration();
-
-        if (!time || !timeStepDuration) return;
-
-        const updatedTime = time.subtract(timeStepDuration.durationAmount, timeStepDuration.durationUnit);
-        await this.projectService.setTime(updatedTime);
-    }
-
-    async setDate(event: MatDatepickerInputEvent<Date>): Promise<void> {
-        if (!event?.value) return;
-
-        const utcDate = new Date(Date.UTC(event.value.getFullYear(), event.value.getMonth(), event.value.getDate()));
-        const time = new Time(utcDate);
-        await this.projectService.setTime(time);
-    }
-
     /**
      * Downloads the current map view as an image.
      */
@@ -209,4 +198,38 @@ export class MainComponent {
             this.mapImageLoading.set(false);
         }
     }
+
+    openLayersTab(): void {
+        this.openTab.set(Tab.Layers);
+    }
+
+    openComputeTab(): void {
+        this.openTab.set(Tab.Compute);
+    }
+
+    openSearchTab(): void {
+        this.openTab.set(Tab.Search);
+    }
+
+    openAboutTab(): void {
+        this.openTab.set(Tab.About);
+    }
+}
+
+enum Tab {
+    Layers,
+    Compute,
+    Search,
+    About,
+}
+
+@Component({
+    standalone: true,
+    template: '', // Renders nothing
+})
+export class EmptyComponent {}
+
+export interface LayerIdPair {
+    dataConnectorId: string;
+    layerId: string;
 }
