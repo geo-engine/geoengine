@@ -60,7 +60,11 @@ __all__ = [
     "BandFilterParameters",
     "BandsByNameOrIndex",
     "BoundingBox2D",
+    "BoxPlot",
+    "BoxPlotParameters",
     "Breakpoint",
+    "ClassHistogram",
+    "ClassHistogramParameters",
     "ClassificationMeasurement",
     "Collection",
     "CollectionItem",
@@ -113,6 +117,8 @@ __all__ = [
     "Extent",
     "ExternalDataId",
     "FeatureAggregationMethod",
+    "FeatureAttributeValuesOverTime",
+    "FeatureAttributeValuesOverTimeParameters",
     "FeatureDataType",
     "FileNotFoundHandling",
     "FirstAggregation",
@@ -176,6 +182,9 @@ __all__ = [
     "LogarithmicGradient",
     "MaxAggregation",
     "MeanAggregation",
+    "MeanRasterPixelValuesOverTime",
+    "MeanRasterPixelValuesOverTimeParameters",
+    "MeanRasterPixelValuesOverTimePosition",
     "Measurement",
     "MetaDataDefinition",
     "MetaDataSuggestion",
@@ -233,6 +242,9 @@ __all__ = [
     "Permission",
     "PermissionListing",
     "PermissionRequest",
+    "PieChart",
+    "PieChartCountType",
+    "PieChartParameters",
     "Plot",
     "PlotOperator",
     "PlotOutputFormat",
@@ -280,6 +292,8 @@ __all__ = [
     "Role",
     "RoleDescription",
     "STRectangle",
+    "ScatterPlot",
+    "ScatterPlotParameters",
     "SearchCapabilities",
     "SearchType",
     "SearchTypes",
@@ -453,7 +467,11 @@ from geoengine_api_client.models.band_filter import BandFilter as BandFilter
 from geoengine_api_client.models.band_filter_parameters import BandFilterParameters as BandFilterParameters
 from geoengine_api_client.models.bands_by_name_or_index import BandsByNameOrIndex as BandsByNameOrIndex
 from geoengine_api_client.models.bounding_box2_d import BoundingBox2D as BoundingBox2D
+from geoengine_api_client.models.box_plot import BoxPlot as BoxPlot
+from geoengine_api_client.models.box_plot_parameters import BoxPlotParameters as BoxPlotParameters
 from geoengine_api_client.models.breakpoint import Breakpoint as Breakpoint
+from geoengine_api_client.models.class_histogram import ClassHistogram as ClassHistogram
+from geoengine_api_client.models.class_histogram_parameters import ClassHistogramParameters as ClassHistogramParameters
 from geoengine_api_client.models.classification_measurement import ClassificationMeasurement as ClassificationMeasurement
 from geoengine_api_client.models.collection import Collection as Collection
 from geoengine_api_client.models.collection_item import CollectionItem as CollectionItem
@@ -506,6 +524,8 @@ from geoengine_api_client.models.expression_parameters import ExpressionParamete
 from geoengine_api_client.models.extent import Extent as Extent
 from geoengine_api_client.models.external_data_id import ExternalDataId as ExternalDataId
 from geoengine_api_client.models.feature_aggregation_method import FeatureAggregationMethod as FeatureAggregationMethod
+from geoengine_api_client.models.feature_attribute_values_over_time import FeatureAttributeValuesOverTime as FeatureAttributeValuesOverTime
+from geoengine_api_client.models.feature_attribute_values_over_time_parameters import FeatureAttributeValuesOverTimeParameters as FeatureAttributeValuesOverTimeParameters
 from geoengine_api_client.models.feature_data_type import FeatureDataType as FeatureDataType
 from geoengine_api_client.models.file_not_found_handling import FileNotFoundHandling as FileNotFoundHandling
 from geoengine_api_client.models.first_aggregation import FirstAggregation as FirstAggregation
@@ -569,6 +589,9 @@ from geoengine_api_client.models.link import Link as Link
 from geoengine_api_client.models.logarithmic_gradient import LogarithmicGradient as LogarithmicGradient
 from geoengine_api_client.models.max_aggregation import MaxAggregation as MaxAggregation
 from geoengine_api_client.models.mean_aggregation import MeanAggregation as MeanAggregation
+from geoengine_api_client.models.mean_raster_pixel_values_over_time import MeanRasterPixelValuesOverTime as MeanRasterPixelValuesOverTime
+from geoengine_api_client.models.mean_raster_pixel_values_over_time_parameters import MeanRasterPixelValuesOverTimeParameters as MeanRasterPixelValuesOverTimeParameters
+from geoengine_api_client.models.mean_raster_pixel_values_over_time_position import MeanRasterPixelValuesOverTimePosition as MeanRasterPixelValuesOverTimePosition
 from geoengine_api_client.models.measurement import Measurement as Measurement
 from geoengine_api_client.models.meta_data_definition import MetaDataDefinition as MetaDataDefinition
 from geoengine_api_client.models.meta_data_suggestion import MetaDataSuggestion as MetaDataSuggestion
@@ -626,6 +649,9 @@ from geoengine_api_client.models.percentile_estimate_aggregation import Percenti
 from geoengine_api_client.models.permission import Permission as Permission
 from geoengine_api_client.models.permission_listing import PermissionListing as PermissionListing
 from geoengine_api_client.models.permission_request import PermissionRequest as PermissionRequest
+from geoengine_api_client.models.pie_chart import PieChart as PieChart
+from geoengine_api_client.models.pie_chart_count_type import PieChartCountType as PieChartCountType
+from geoengine_api_client.models.pie_chart_parameters import PieChartParameters as PieChartParameters
 from geoengine_api_client.models.plot import Plot as Plot
 from geoengine_api_client.models.plot_operator import PlotOperator as PlotOperator
 from geoengine_api_client.models.plot_output_format import PlotOutputFormat as PlotOutputFormat
@@ -673,6 +699,8 @@ from geoengine_api_client.models.resource import Resource as Resource
 from geoengine_api_client.models.role import Role as Role
 from geoengine_api_client.models.role_description import RoleDescription as RoleDescription
 from geoengine_api_client.models.st_rectangle import STRectangle as STRectangle
+from geoengine_api_client.models.scatter_plot import ScatterPlot as ScatterPlot
+from geoengine_api_client.models.scatter_plot_parameters import ScatterPlotParameters as ScatterPlotParameters
 from geoengine_api_client.models.search_capabilities import SearchCapabilities as SearchCapabilities
 from geoengine_api_client.models.search_type import SearchType as SearchType
 from geoengine_api_client.models.search_types import SearchTypes as SearchTypes

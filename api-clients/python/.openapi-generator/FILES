@@ -19,7 +19,11 @@ docs/BandFilter.md
 docs/BandFilterParameters.md
 docs/BandsByNameOrIndex.md
 docs/BoundingBox2D.md
+docs/BoxPlot.md
+docs/BoxPlotParameters.md
 docs/Breakpoint.md
+docs/ClassHistogram.md
+docs/ClassHistogramParameters.md
 docs/ClassificationMeasurement.md
 docs/Collection.md
 docs/CollectionItem.md
@@ -73,6 +77,8 @@ docs/ExpressionParameters.md
 docs/Extent.md
 docs/ExternalDataId.md
 docs/FeatureAggregationMethod.md
+docs/FeatureAttributeValuesOverTime.md
+docs/FeatureAttributeValuesOverTimeParameters.md
 docs/FeatureDataType.md
 docs/FileNotFoundHandling.md
 docs/FirstAggregation.md
@@ -139,6 +145,9 @@ docs/LogarithmicGradient.md
 docs/MLApi.md
 docs/MaxAggregation.md
 docs/MeanAggregation.md
+docs/MeanRasterPixelValuesOverTime.md
+docs/MeanRasterPixelValuesOverTimeParameters.md
+docs/MeanRasterPixelValuesOverTimePosition.md
 docs/Measurement.md
 docs/MetaDataDefinition.md
 docs/MetaDataSuggestion.md
@@ -201,6 +210,9 @@ docs/Permission.md
 docs/PermissionListing.md
 docs/PermissionRequest.md
 docs/PermissionsApi.md
+docs/PieChart.md
+docs/PieChartCountType.md
+docs/PieChartParameters.md
 docs/Plot.md
 docs/PlotOperator.md
 docs/PlotOutputFormat.md
@@ -250,6 +262,8 @@ docs/Resource.md
 docs/Role.md
 docs/RoleDescription.md
 docs/STRectangle.md
+docs/ScatterPlot.md
+docs/ScatterPlotParameters.md
 docs/SearchCapabilities.md
 docs/SearchType.md
 docs/SearchTypes.md
@@ -420,7 +434,11 @@ geoengine_api_client/models/band_filter.py
 geoengine_api_client/models/band_filter_parameters.py
 geoengine_api_client/models/bands_by_name_or_index.py
 geoengine_api_client/models/bounding_box2_d.py
+geoengine_api_client/models/box_plot.py
+geoengine_api_client/models/box_plot_parameters.py
 geoengine_api_client/models/breakpoint.py
+geoengine_api_client/models/class_histogram.py
+geoengine_api_client/models/class_histogram_parameters.py
 geoengine_api_client/models/classification_measurement.py
 geoengine_api_client/models/collection.py
 geoengine_api_client/models/collection_item.py
@@ -473,6 +491,8 @@ geoengine_api_client/models/expression_parameters.py
 geoengine_api_client/models/extent.py
 geoengine_api_client/models/external_data_id.py
 geoengine_api_client/models/feature_aggregation_method.py
+geoengine_api_client/models/feature_attribute_values_over_time.py
+geoengine_api_client/models/feature_attribute_values_over_time_parameters.py
 geoengine_api_client/models/feature_data_type.py
 geoengine_api_client/models/file_not_found_handling.py
 geoengine_api_client/models/first_aggregation.py
@@ -536,6 +556,9 @@ geoengine_api_client/models/link.py
 geoengine_api_client/models/logarithmic_gradient.py
 geoengine_api_client/models/max_aggregation.py
 geoengine_api_client/models/mean_aggregation.py
+geoengine_api_client/models/mean_raster_pixel_values_over_time.py
+geoengine_api_client/models/mean_raster_pixel_values_over_time_parameters.py
+geoengine_api_client/models/mean_raster_pixel_values_over_time_position.py
 geoengine_api_client/models/measurement.py
 geoengine_api_client/models/meta_data_definition.py
 geoengine_api_client/models/meta_data_suggestion.py
@@ -593,6 +616,9 @@ geoengine_api_client/models/percentile_estimate_aggregation.py
 geoengine_api_client/models/permission.py
 geoengine_api_client/models/permission_listing.py
 geoengine_api_client/models/permission_request.py
+geoengine_api_client/models/pie_chart.py
+geoengine_api_client/models/pie_chart_count_type.py
+geoengine_api_client/models/pie_chart_parameters.py
 geoengine_api_client/models/plot.py
 geoengine_api_client/models/plot_operator.py
 geoengine_api_client/models/plot_output_format.py
@@ -639,6 +665,8 @@ geoengine_api_client/models/resolution.py
 geoengine_api_client/models/resource.py
 geoengine_api_client/models/role.py
 geoengine_api_client/models/role_description.py
+geoengine_api_client/models/scatter_plot.py
+geoengine_api_client/models/scatter_plot_parameters.py
 geoengine_api_client/models/search_capabilities.py
 geoengine_api_client/models/search_type.py
 geoengine_api_client/models/search_types.py
@@ -789,7 +817,11 @@ test/test_band_filter.py
 test/test_band_filter_parameters.py
 test/test_bands_by_name_or_index.py
 test/test_bounding_box2_d.py
+test/test_box_plot.py
+test/test_box_plot_parameters.py
 test/test_breakpoint.py
+test/test_class_histogram.py
+test/test_class_histogram_parameters.py
 test/test_classification_measurement.py
 test/test_collection.py
 test/test_collection_item.py
@@ -843,6 +875,8 @@ test/test_expression_parameters.py
 test/test_extent.py
 test/test_external_data_id.py
 test/test_feature_aggregation_method.py
+test/test_feature_attribute_values_over_time.py
+test/test_feature_attribute_values_over_time_parameters.py
 test/test_feature_data_type.py
 test/test_file_not_found_handling.py
 test/test_first_aggregation.py
@@ -908,6 +942,9 @@ test/test_link.py
 test/test_logarithmic_gradient.py
 test/test_max_aggregation.py
 test/test_mean_aggregation.py
+test/test_mean_raster_pixel_values_over_time.py
+test/test_mean_raster_pixel_values_over_time_parameters.py
+test/test_mean_raster_pixel_values_over_time_position.py
 test/test_measurement.py
 test/test_meta_data_definition.py
 test/test_meta_data_suggestion.py
@@ -971,6 +1008,9 @@ test/test_permission.py
 test/test_permission_listing.py
 test/test_permission_request.py
 test/test_permissions_api.py
+test/test_pie_chart.py
+test/test_pie_chart_count_type.py
+test/test_pie_chart_parameters.py
 test/test_plot.py
 test/test_plot_operator.py
 test/test_plot_output_format.py
@@ -1019,6 +1059,8 @@ test/test_resolution.py
 test/test_resource.py
 test/test_role.py
 test/test_role_description.py
+test/test_scatter_plot.py
+test/test_scatter_plot_parameters.py
 test/test_search_capabilities.py
 test/test_search_type.py
 test/test_search_types.py
