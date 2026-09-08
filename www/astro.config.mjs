@@ -2,6 +2,7 @@
 import {defineConfig} from 'astro/config';
 import tailwindcss from '@tailwindcss/vite';
 import icon from 'astro-icon';
+import mermaid from 'astro-mermaid';
 import starlight from '@astrojs/starlight';
 import openApiOperatorsPlugin from './plugins/astro-openapi.ts';
 import pydocPlugin from './plugins/pydoc.ts';
@@ -26,6 +27,10 @@ export default defineConfig({
     },
 
     integrations: [
+        mermaid({
+            theme: 'default',
+            autoTheme: true,
+        }),
         icon(),
         openApiOperatorsPlugin({
             input: '../openapi.json',

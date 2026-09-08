@@ -10,7 +10,7 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// TemporalRasterAggregation : The `TemporalRasterAggregation` operator aggregates a raster time series into uniform time windows. The output starts with the first window that contains the query start and contains all windows that overlap the query interval.  Pixel values are computed by aggregating all input rasters that contribute to the current window.  ## Inputs  The `TemporalRasterAggregation` operator expects exactly one _raster_ input.  ## Errors  If the aggregation method is `first`, `last`, or `mean` and the input raster has no NO DATA value, an error is returned.
+/// TemporalRasterAggregation : The `TemporalRasterAggregation` operator aggregates a raster time series into uniform time windows. The output starts with the first window that contains the query start and contains all windows that overlap the query interval.  Pixel values are computed by aggregating all input rasters that contribute to the current window.  ## Errors  If the aggregation method is `first`, `last`, or `mean` and the input raster has no NO DATA value, an error is returned.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TemporalRasterAggregation {
     #[serde(rename = "type")]
@@ -22,7 +22,7 @@ pub struct TemporalRasterAggregation {
 }
 
 impl TemporalRasterAggregation {
-    /// The `TemporalRasterAggregation` operator aggregates a raster time series into uniform time windows. The output starts with the first window that contains the query start and contains all windows that overlap the query interval.  Pixel values are computed by aggregating all input rasters that contribute to the current window.  ## Inputs  The `TemporalRasterAggregation` operator expects exactly one _raster_ input.  ## Errors  If the aggregation method is `first`, `last`, or `mean` and the input raster has no NO DATA value, an error is returned.
+    /// The `TemporalRasterAggregation` operator aggregates a raster time series into uniform time windows. The output starts with the first window that contains the query start and contains all windows that overlap the query interval.  Pixel values are computed by aggregating all input rasters that contribute to the current window.  ## Errors  If the aggregation method is `first`, `last`, or `mean` and the input raster has no NO DATA value, an error is returned.
     pub fn new(r#type: Type, params: models::TemporalRasterAggregationParameters, sources: models::SingleRasterSource) -> TemporalRasterAggregation {
         TemporalRasterAggregation {
             r#type,

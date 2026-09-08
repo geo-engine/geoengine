@@ -60,6 +60,7 @@ export function StacDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminato
         'timeDimension': TimeDimensionFromJSON(json['timeDimension']),
         'datasets': (json['datasets'].map(StacProviderDatasetFromJSON)),
         'queryTimeoutSecs': json['queryTimeoutSecs'] == null ? undefined : json['queryTimeoutSecs'],
+        'pageLimit': json['pageLimit'] == null ? undefined : json['pageLimit'],
     };
 }
 export function StacDataProviderDefinitionToJSON(json) {
@@ -81,5 +82,6 @@ export function StacDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator
         'timeDimension': TimeDimensionToJSON(value['timeDimension']),
         'datasets': (value['datasets'].map(StacProviderDatasetToJSON)),
         'queryTimeoutSecs': value['queryTimeoutSecs'],
+        'pageLimit': value['pageLimit'],
     };
 }

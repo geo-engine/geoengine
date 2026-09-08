@@ -12,6 +12,21 @@
  */
 
 import { mapValues } from '../runtime';
+import type { StacAssetBand } from './StacAssetBand';
+import {
+    StacAssetBandFromJSON,
+    StacAssetBandFromJSONTyped,
+    StacAssetBandToJSON,
+    StacAssetBandToJSONTyped,
+} from './StacAssetBand';
+import type { RasterBandDescriptor } from './RasterBandDescriptor';
+import {
+    RasterBandDescriptorFromJSON,
+    RasterBandDescriptorFromJSONTyped,
+    RasterBandDescriptorToJSON,
+    RasterBandDescriptorToJSONTyped,
+} from './RasterBandDescriptor';
+
 /**
  * 
  * @export
@@ -19,24 +34,26 @@ import { mapValues } from '../runtime';
  */
 export interface StacProviderDatasetBand {
     /**
-     * 
-     * @type {string}
+     * The band inside the STAC asset that this dataset band reads from
+     * (addressing: which asset file + which raster channel within it).
+     * @type {StacAssetBand}
      * @memberof StacProviderDatasetBand
      */
-    assetTitle: string;
+    assetBand: StacAssetBand;
     /**
-     * 
-     * @type {string}
+     * The band descriptor of the resulting geo engine dataset layer.
+     * @type {RasterBandDescriptor}
      * @memberof StacProviderDatasetBand
      */
-    bandName?: string | null;
+    bandDescriptor: RasterBandDescriptor;
 }
 
 /**
  * Check if a given object implements the StacProviderDatasetBand interface.
  */
 export function instanceOfStacProviderDatasetBand(value: object): value is StacProviderDatasetBand {
-    if (!('assetTitle' in value) || value['assetTitle'] === undefined) return false;
+    if (!('assetBand' in value) || value['assetBand'] === undefined) return false;
+    if (!('bandDescriptor' in value) || value['bandDescriptor'] === undefined) return false;
     return true;
 }
 
@@ -50,8 +67,8 @@ export function StacProviderDatasetBandFromJSONTyped(json: any, ignoreDiscrimina
     }
     return {
         
-        'assetTitle': json['assetTitle'],
-        'bandName': json['bandName'] == null ? undefined : json['bandName'],
+        'assetBand': StacAssetBandFromJSON(json['assetBand']),
+        'bandDescriptor': RasterBandDescriptorFromJSON(json['bandDescriptor']),
     };
 }
 
@@ -66,8 +83,8 @@ export function StacProviderDatasetBandToJSONTyped(value?: StacProviderDatasetBa
 
     return {
         
-        'assetTitle': value['assetTitle'],
-        'bandName': value['bandName'],
+        'assetBand': StacAssetBandToJSON(value['assetBand']),
+        'bandDescriptor': RasterBandDescriptorToJSON(value['bandDescriptor']),
     };
 }
 

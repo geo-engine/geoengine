@@ -35,6 +35,8 @@ pub struct StacDataProviderDefinition {
     /// Timeout in seconds for outgoing STAC API HTTP requests.
     #[serde(rename = "queryTimeoutSecs", skip_serializing_if = "Option::is_none")]
     pub query_timeout_secs: Option<i64>,
+    #[serde(rename = "pageLimit", skip_serializing_if = "Option::is_none")]
+    pub page_limit: Option<i64>,
 }
 
 impl StacDataProviderDefinition {
@@ -51,6 +53,7 @@ impl StacDataProviderDefinition {
             time_dimension: Box::new(time_dimension),
             datasets,
             query_timeout_secs: None,
+            page_limit: None,
         }
     }
 }

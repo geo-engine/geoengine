@@ -37,9 +37,6 @@ import {
  * it is clipped to the valid range of that type.
  * For example, converting `F32` value `300.0` to `U8` results in `255`.
  * 
- * ## Inputs
- * 
- * The `RasterTypeConversion` operator expects exactly one _raster_ input.
  * @export
  * @interface RasterTypeConversion
  */

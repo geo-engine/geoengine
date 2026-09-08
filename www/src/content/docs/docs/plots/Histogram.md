@@ -20,18 +20,18 @@ If the `buckets` parameter is set to `squareRootChoiceRule`, the operator estima
 
 ## Parameters
 
-| Name        | Type             | Description                                                                                                                  | Examples        |
-| ----------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------- |
-| columnName  | string           | Name of the (numeric) vector attribute or raster band to compute the histogram on.                                           | `"temperature"` |
-| bounds      | HistogramBounds  | If `data`, it computes the bounds of the underlying data.<br>If `{ "min": ..., "max": ... }`, one can specify custom bounds. |                 |
-| buckets     | HistogramBuckets | The number of buckets. The value can be specified or calculated.                                                             |                 |
-| interactive | boolean          | Flag, if the histogram should have user interactions for a range selection. It is `false` by default.                        | `true`          |
+| Name        | Type             | Description                                                                                                                  | Examples                       |
+| ----------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| columnName  | string           | Name of the (numeric) vector attribute or raster band to compute the histogram on.                                           | `"temperature"`<br>`"foobar"`  |
+| bounds      | HistogramBounds  | If `data`, it computes the bounds of the underlying data.<br>If `{ "min": ..., "max": ... }`, one can specify custom bounds. | `{"min":5,"max":10}`           |
+| buckets     | HistogramBuckets | The number of buckets. The value can be specified or calculated.                                                             | `{"type":"number","value":15}` |
+| interactive | boolean          | Flag, if the histogram should have user interactions for a range selection. It is `false` by default.                        | `true`<br>`false`              |
 
 ## Sources
 
 | Name   | Type                         | Description                                                         |
 | ------ | ---------------------------- | ------------------------------------------------------------------- |
-| vector | SingleRasterOrVectorOperator | It is either a set of `RasterOperator` or a single `VectorOperator` |
+| source | SingleRasterOrVectorOperator | It is either a set of `RasterOperator` or a single `VectorOperator` |
 
 ## Examples
 

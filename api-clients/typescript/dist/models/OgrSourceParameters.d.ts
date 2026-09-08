@@ -8,6 +8,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import type { AttributeFilter } from './AttributeFilter';
 /**
  * Parameters for the [`OgrSource`] operator.
  * @export
@@ -26,6 +27,12 @@ export interface OgrSourceParameters {
      * @memberof OgrSourceParameters
      */
     attributeProjection?: Array<string> | null;
+    /**
+     * *Optional*: list of attribute filters to apply. When `None`, no filters are applied.
+     * @type {Array<AttributeFilter>}
+     * @memberof OgrSourceParameters
+     */
+    attributeFilters?: Array<AttributeFilter> | null;
 }
 /**
  * Check if a given object implements the OgrSourceParameters interface.

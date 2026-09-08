@@ -16,8 +16,8 @@ exports.DownsamplingResolutionFromJSON = DownsamplingResolutionFromJSON;
 exports.DownsamplingResolutionFromJSONTyped = DownsamplingResolutionFromJSONTyped;
 exports.DownsamplingResolutionToJSON = DownsamplingResolutionToJSON;
 exports.DownsamplingResolutionToJSONTyped = DownsamplingResolutionToJSONTyped;
-const Fraction_1 = require("./Fraction");
-const Resolution_1 = require("./Resolution");
+const DownsamplingResolutionFraction_1 = require("./DownsamplingResolutionFraction");
+const DownsamplingResolutionResolution_1 = require("./DownsamplingResolutionResolution");
 function DownsamplingResolutionFromJSON(json) {
     return DownsamplingResolutionFromJSONTyped(json, false);
 }
@@ -25,16 +25,14 @@ function DownsamplingResolutionFromJSONTyped(json, ignoreDiscriminator) {
     if (json == null) {
         return json;
     }
-    if (typeof json !== 'object') {
-        return json;
+    switch (json['type']) {
+        case 'fraction':
+            return Object.assign({}, (0, DownsamplingResolutionFraction_1.DownsamplingResolutionFractionFromJSONTyped)(json, true), { type: 'fraction' });
+        case 'resolution':
+            return Object.assign({}, (0, DownsamplingResolutionResolution_1.DownsamplingResolutionResolutionFromJSONTyped)(json, true), { type: 'resolution' });
+        default:
+            return json;
     }
-    if ((0, Fraction_1.instanceOfFraction)(json)) {
-        return (0, Fraction_1.FractionFromJSONTyped)(json, true);
-    }
-    if ((0, Resolution_1.instanceOfResolution)(json)) {
-        return (0, Resolution_1.ResolutionFromJSONTyped)(json, true);
-    }
-    return {};
 }
 function DownsamplingResolutionToJSON(json) {
     return DownsamplingResolutionToJSONTyped(json, false);
@@ -43,14 +41,12 @@ function DownsamplingResolutionToJSONTyped(value, ignoreDiscriminator = false) {
     if (value == null) {
         return value;
     }
-    if (typeof value !== 'object') {
-        return value;
+    switch (value['type']) {
+        case 'fraction':
+            return Object.assign({}, (0, DownsamplingResolutionFraction_1.DownsamplingResolutionFractionToJSON)(value), { type: 'fraction' });
+        case 'resolution':
+            return Object.assign({}, (0, DownsamplingResolutionResolution_1.DownsamplingResolutionResolutionToJSON)(value), { type: 'resolution' });
+        default:
+            return value;
     }
-    if ((0, Fraction_1.instanceOfFraction)(value)) {
-        return (0, Fraction_1.FractionToJSON)(value);
-    }
-    if ((0, Resolution_1.instanceOfResolution)(value)) {
-        return (0, Resolution_1.ResolutionToJSON)(value);
-    }
-    return {};
 }

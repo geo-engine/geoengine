@@ -7,8 +7,10 @@ mod node;
 mod operator;
 mod quadtree;
 
+pub use aggregates::AttributeAggregateType;
 pub use operator::{
-    InitializedVisualPointClustering, VisualPointClustering, VisualPointClusteringParams,
+    AttributeAggregateDef, InitializedVisualPointClustering, VisualPointClustering,
+    VisualPointClusteringParams,
 };
 
 /// Compute a weighted mean using parts of Welford's incremental algorithm

@@ -1,7 +1,7 @@
 use crate::api::model::{
-    datatypes::Coordinate2D, processing_graphs::parameters::SpatialBoundsDerive,
+    datatypes::{Coordinate2D, NamedData},
+    processing_graphs::{parameters::SpatialBoundsDerive, processing::StringOrNumberRange},
 };
-use geoengine_datatypes::dataset::NamedData;
 use geoengine_macros::{api_operator, type_tag};
 use geoengine_operators::{
     mock::{
@@ -9,7 +9,8 @@ use geoengine_operators::{
         MockPointSourceParams as OperatorsMockPointSourceParameters,
     },
     source::{
-        GdalSource as OperatorsGdalSource, GdalSourceParameters as OperatorsGdalSourceParameters,
+        AttributeFilter as OperatorsAttributeFilter, GdalSource as OperatorsGdalSource,
+        GdalSourceParameters as OperatorsGdalSourceParameters,
         MultiBandGdalSource as OperatorsMultiBandGdalSource,
         MultiBandGdalSourceParameters as OperatorsMultiBandGdalSourceParameters,
         OgrSource as OperatorsOgrSource,
@@ -44,13 +45,14 @@ pub struct GdalSource {
 #[serde(rename_all = "camelCase")]
 pub struct GdalSourceParameters {
     /// Dataset name or identifier to be loaded.
-    #[schema(examples("ndvi"))]
-    pub data: String,
+    #[schema(value_type = String, examples("ndvi"))]
+    pub data: NamedData,
 
     /// *Optional*: overview level to use.
     ///
     /// If not provided, the data source will determine the resolution, i.e., uses its native resolution.
     #[schema(examples(3))]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub overview_level: Option<u32>,
 }
 
@@ -59,9 +61,7 @@ impl TryFrom<GdalSource> for OperatorsGdalSource {
     fn try_from(value: GdalSource) -> Result<Self, Self::Error> {
         Ok(OperatorsGdalSource {
             params: OperatorsGdalSourceParameters {
-                data: serde_json::from_str::<NamedData>(&serde_json::to_string(
-                    &value.params.data,
-                )?)?,
+                data: value.params.data.into(),
                 overview_level: value.params.overview_level,
             },
         })
@@ -89,9 +89,7 @@ impl TryFrom<MultiBandGdalSource> for OperatorsMultiBandGdalSource {
     fn try_from(value: MultiBandGdalSource) -> Result<Self, Self::Error> {
         Ok(OperatorsMultiBandGdalSource {
             params: OperatorsMultiBandGdalSourceParameters {
-                data: serde_json::from_str::<NamedData>(&serde_json::to_string(
-                    &value.params.data,
-                )?)?,
+                data: value.params.data.into(),
                 overview_level: value.params.overview_level,
             },
         })
@@ -130,6 +128,7 @@ pub struct MockPointSourceParameters {
     ///
     /// Defaults to `None`.
     #[schema(examples(json!({ "type": "derive" })))]
+    #[serde(skip_serializing_if = "SpatialBoundsDerive::is_none", default)]
     pub spatial_bounds: SpatialBoundsDerive,
 }
 
@@ -170,11 +169,23 @@ pub struct OgrSource {
 #[serde(rename_all = "camelCase")]
 pub struct OgrSourceParameters {
     /// Dataset name or identifier to be loaded.
-    #[schema(examples("ndvi"))]
-    pub data: String,
+    #[schema(value_type = String, examples("ndvi"))]
+    pub data: NamedData,
 
     /// *Optional*: list of attributes to include. When `None`, all attributes are included.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub attribute_projection: Option<Vec<String>>,
+    /// *Optional*: list of attribute filters to apply. When `None`, no filters are applied.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attribute_filters: Option<Vec<AttributeFilter>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AttributeFilter {
+    pub attribute: String,
+    pub ranges: Vec<StringOrNumberRange>,
+    pub keep_nulls: bool,
 }
 
 impl TryFrom<OgrSource> for OperatorsOgrSource {
@@ -182,11 +193,18 @@ impl TryFrom<OgrSource> for OperatorsOgrSource {
     fn try_from(value: OgrSource) -> Result<Self, Self::Error> {
         Ok(OperatorsOgrSource {
             params: geoengine_operators::source::OgrSourceParameters {
-                data: serde_json::from_str::<NamedData>(&serde_json::to_string(
-                    &value.params.data,
-                )?)?,
+                data: value.params.data.into(),
                 attribute_projection: value.params.attribute_projection,
-                attribute_filters: None,
+                attribute_filters: value.params.attribute_filters.map(|filters| {
+                    filters
+                        .into_iter()
+                        .map(|filter| OperatorsAttributeFilter {
+                            attribute: filter.attribute,
+                            ranges: filter.ranges.into_iter().map(Into::into).collect(),
+                            keep_nulls: filter.keep_nulls,
+                        })
+                        .collect()
+                }),
             },
         })
     }
@@ -196,6 +214,7 @@ impl TryFrom<OgrSource> for OperatorsOgrSource {
 mod tests {
     use super::*;
     use crate::api::model::processing_graphs::{RasterOperator, TypedOperator, VectorOperator};
+    use geoengine_datatypes::dataset::NamedData as OperatorsNamedData;
     use geoengine_operators::engine::TypedOperator as OperatorsTypedOperator;
 
     #[test]
@@ -203,7 +222,7 @@ mod tests {
         let api_operator = GdalSource {
             r#type: Default::default(),
             params: GdalSourceParameters {
-                data: "example_dataset".to_string(),
+                data: NamedData::with_system_name("example_dataset"),
                 overview_level: None,
             },
         };
@@ -213,13 +232,13 @@ mod tests {
 
         assert_eq!(
             operators_operator.params.data,
-            NamedData::with_system_name("example_dataset")
+            OperatorsNamedData::with_system_name("example_dataset")
         );
 
         let typed_operator = TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
             r#type: Default::default(),
             params: GdalSourceParameters {
-                data: "example_dataset".to_string(),
+                data: NamedData::with_system_name("example_dataset"),
                 overview_level: None,
             },
         }));
@@ -232,7 +251,7 @@ mod tests {
         let api_operator = MultiBandGdalSource {
             r#type: Default::default(),
             params: GdalSourceParameters {
-                data: "example_dataset".to_string(),
+                data: NamedData::with_system_name("example_dataset"),
                 overview_level: None,
             },
         };
@@ -242,14 +261,14 @@ mod tests {
 
         assert_eq!(
             operators_operator.params.data,
-            NamedData::with_system_name("example_dataset")
+            OperatorsNamedData::with_system_name("example_dataset")
         );
 
         let typed_operator =
             TypedOperator::Raster(RasterOperator::MultiBandGdalSource(MultiBandGdalSource {
                 r#type: Default::default(),
                 params: GdalSourceParameters {
-                    data: "example_dataset".to_string(),
+                    data: NamedData::with_system_name("example_dataset"),
                     overview_level: None,
                 },
             }));
@@ -304,7 +323,7 @@ mod tests {
 
         let parsed: OgrSource = serde_json::from_value(example).expect("example must parse");
 
-        assert_eq!(parsed.params.data, "ndvi");
+        assert_eq!(parsed.params.data, NamedData::with_system_name("ndvi"));
     }
 
     #[test]
@@ -312,8 +331,9 @@ mod tests {
         let api_operator = OgrSource {
             r#type: Default::default(),
             params: OgrSourceParameters {
-                data: "ndvi".to_string(),
+                data: NamedData::with_system_name("ndvi"),
                 attribute_projection: None,
+                attribute_filters: None,
             },
         };
 
@@ -322,14 +342,15 @@ mod tests {
 
         assert_eq!(
             operators_operator.params.data,
-            NamedData::with_system_name("ndvi")
+            OperatorsNamedData::with_system_name("ndvi")
         );
 
         let typed_operator = TypedOperator::Vector(VectorOperator::OgrSource(OgrSource {
             r#type: Default::default(),
             params: OgrSourceParameters {
-                data: "ndvi".to_string(),
+                data: NamedData::with_system_name("ndvi"),
                 attribute_projection: None,
+                attribute_filters: None,
             },
         }));
 

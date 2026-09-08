@@ -1,6 +1,13 @@
 use crate::{
-    api::handlers::datasets::AddDatasetTile,
-    api::model::datatypes::{DataProviderId, LayerId},
+    api::{
+        handlers::datasets::AddDatasetTile,
+        model::{
+            datatypes::{DataProviderId, LayerId},
+            processing_graphs::{
+                GdalSourceParameters, MultiBandGdalSource, RasterOperator, TypedOperator,
+            },
+        },
+    },
     contexts::{ApplicationContext, PostgresContext, Session, SessionContext, SessionId},
     datasets::storage::DatasetStore,
     layers::{
@@ -240,17 +247,14 @@ pub async fn session_and_ndvi_multi_band_layer_id(
 
     let root_collection_id = db.get_root_layer_collection_id().await.unwrap();
 
-    let operator = crate::api::model::processing_graphs::TypedOperator::Raster(
-        crate::api::model::processing_graphs::RasterOperator::MultiBandGdalSource(
-            crate::api::model::processing_graphs::MultiBandGdalSource {
-                r#type: Default::default(),
-                params: crate::api::model::processing_graphs::GdalSourceParameters {
-                    data: dataset.name.to_string(),
-                    overview_level: None,
-                },
+    let operator =
+        TypedOperator::Raster(RasterOperator::MultiBandGdalSource(MultiBandGdalSource {
+            r#type: Default::default(),
+            params: GdalSourceParameters {
+                data: dataset.name.into(),
+                overview_level: None,
             },
-        ),
-    );
+        }));
 
     db.add_layer_with_id(
         &db_layer_id,

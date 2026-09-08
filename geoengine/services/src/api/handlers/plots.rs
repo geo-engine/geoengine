@@ -220,70 +220,34 @@ pub struct WrappedPlotOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::PostgresContext;
-    use crate::contexts::Session;
-    use crate::ge_context;
-    use crate::users::UserAuth;
-    use crate::util::tests::{
-        check_allowed_http_methods, read_body_json, read_body_string, send_test_request,
+    use crate::{
+        api::model::processing_graphs::{
+            GdalSource, GdalSourceParameters, Histogram, HistogramBounds, HistogramBoundsValues,
+            HistogramBuckets, HistogramBucketsNumber, HistogramParameters,
+            MultipleRasterOrSingleVectorOperator, MultipleRasterOrSingleVectorSource, PlotOperator,
+            RasterOperator, SingleRasterOrVectorOperator, SingleRasterOrVectorSource, Statistics,
+            StatisticsParameters, TypedOperator,
+        },
+        contexts::{PostgresContext, Session},
+        ge_context,
+        users::UserAuth,
+        util::tests::{
+            add_ndvi_to_datasets, check_allowed_http_methods, read_body_json, read_body_string,
+            send_test_request,
+        },
+        workflows::workflow::Workflow,
     };
-    use crate::workflows::workflow::Workflow;
-    use actix_web;
-    use actix_web::dev::ServiceResponse;
-    use actix_web::http::{Method, header};
+    use actix_web::{
+        self,
+        dev::ServiceResponse,
+        http::{Method, header},
+    };
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::primitives::CacheHint;
-    use geoengine_datatypes::primitives::DateTime;
-    use geoengine_datatypes::raster::{
-        GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, RasterTile2D, TileInformation,
-        TilingSpecification,
-    };
-    use geoengine_datatypes::spatial_reference::SpatialReference;
-    use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_operators::engine::TimeDescriptor;
-    use geoengine_operators::engine::{
-        PlotOperator, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
-        SpatialGridDescriptor,
-    };
-    use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
-    use geoengine_operators::plot::{
-        Histogram, HistogramBounds, HistogramBuckets, HistogramParams, Statistics, StatisticsParams,
+    use geoengine_datatypes::{
+        primitives::DateTime, raster::TilingSpecification, spatial_reference::SpatialReference,
     };
     use serde_json::{Value, json};
     use tokio_postgres::NoTls;
-
-    fn example_raster_source() -> Box<dyn RasterOperator> {
-        let result_descriptor = RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: SpatialReference::epsg_4326().into(),
-            spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::test_default(),
-                GridBoundingBox2D::new_min_max(-3, 0, 0, 2).unwrap(),
-            ),
-            time: TimeDescriptor::new_irregular(None),
-            bands: RasterBandDescriptors::new_single_band(),
-        };
-
-        MockRasterSource {
-            params: MockRasterSourceParams {
-                data: vec![RasterTile2D::new_with_tile_info(
-                    geoengine_datatypes::primitives::TimeInterval::default(),
-                    TileInformation {
-                        global_geo_transform: TestDefault::test_default(),
-                        global_tile_position: [0, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
-                    },
-                    0,
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
-                        .unwrap()
-                        .into(),
-                    CacheHint::default(),
-                )],
-                result_descriptor,
-            },
-        }
-        .boxed()
-    }
 
     fn json_tiling_spec() -> TilingSpecification {
         TilingSpecification::new([3, 2].into())
@@ -291,20 +255,31 @@ mod tests {
 
     #[ge_context::test(tiling_spec = "json_tiling_spec")]
     async fn json(app_ctx: PostgresContext<NoTls>) {
+        let (_, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
+
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
 
-        let workflow = Workflow::Legacy {
-            operator: Statistics {
-                params: StatisticsParams {
+        let workflow = Workflow::Typed {
+            operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
+                r#type: Default::default(),
+                params: StatisticsParameters {
                     column_names: vec![],
                     percentiles: vec![],
                 },
-                sources: vec![example_raster_source()].into(),
-            }
-            .boxed()
-            .into(),
+                sources: MultipleRasterOrSingleVectorSource {
+                    source: MultipleRasterOrSingleVectorOperator::Raster(vec![
+                        RasterOperator::GdalSource(GdalSource {
+                            r#type: Default::default(),
+                            params: GdalSourceParameters {
+                                data: dataset_name.into(),
+                                overview_level: None,
+                            },
+                        }),
+                    ]),
+                },
+            })),
         };
 
         let id = app_ctx
@@ -315,9 +290,9 @@ mod tests {
             .unwrap();
 
         let params = &[
-            ("bbox", "0,-0.3,0.2,0"),
+            ("bbox", "51,10,52,11"),
             ("crs", "EPSG:4326"),
-            ("time", "2020-01-01T00:00:00.0Z"),
+            ("time", "2014-05-01T00:00:00.0Z"),
             ("spatialResolution", "0.1,0.1"),
         ];
         let req = actix_web::test::TestRequest::get()
@@ -329,7 +304,13 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, app_ctx).await;
 
-        assert_eq!(res.status(), 200);
+        assert_eq!(
+            res.status(),
+            200,
+            "Error {code}: {body:?}",
+            code = res.status(),
+            body = read_body_string(res).await
+        );
 
         assert_eq!(
             read_body_json(res).await,
@@ -338,12 +319,12 @@ mod tests {
                 "plotType": "Statistics",
                 "data": {
                     "Raster-1": {
-                        "valueCount": 6, // TODO: investigate why the bbox is satisfied with 6 pixels while the borders should in theory also be included ...
-                        "validCount": 6,
-                        "min": 1.0,
-                        "max": 6.0,
-                        "mean": 3.5,
-                        "stddev": 1.707_825_127_659_933,
+                        "valueCount": 144,
+                        "validCount": 144,
+                        "min": 29.0,
+                        "max": 255.0,
+                        "mean": 226.333_333_333_333_3,
+                        "stddev": 71.463_277_282_811_49,
                         "percentiles": []
                     }
                 }
@@ -356,26 +337,44 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "json_vega_tiling_spec")]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "The test setup is necessarily verbose"
+    )]
     async fn json_vega(app_ctx: PostgresContext<NoTls>) {
+        let (_, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
+
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
 
-        let workflow = Workflow::Legacy {
-            operator: Histogram {
-                params: HistogramParams {
-                    attribute_name: "band".to_string(),
-                    bounds: HistogramBounds::Values {
-                        min: 0.0,
-                        max: 10.0,
-                    },
-                    buckets: HistogramBuckets::Number { value: 4 },
+        let workflow = Workflow::Typed {
+            operator: TypedOperator::Plot(PlotOperator::Histogram(Histogram {
+                r#type: Default::default(),
+                params: HistogramParameters {
+                    column_name: "ndvi".to_string(),
+                    bounds: HistogramBounds::Values(HistogramBoundsValues {
+                        min: 0.0.try_into().unwrap(),
+                        max: 255.0.try_into().unwrap(),
+                    }),
+                    buckets: HistogramBuckets::Number(HistogramBucketsNumber {
+                        r#type: Default::default(),
+                        value: 4,
+                    }),
                     interactive: false,
                 },
-                sources: example_raster_source().into(),
-            }
-            .boxed()
-            .into(),
+                sources: SingleRasterOrVectorSource {
+                    source: SingleRasterOrVectorOperator::Raster(RasterOperator::GdalSource(
+                        GdalSource {
+                            r#type: Default::default(),
+                            params: GdalSourceParameters {
+                                data: dataset_name.into(),
+                                overview_level: None,
+                            },
+                        },
+                    )),
+                },
+            })),
         };
 
         let id = app_ctx
@@ -386,9 +385,9 @@ mod tests {
             .unwrap();
 
         let params = &[
-            ("bbox", "0,-0.3,0.2,0"),
+            ("bbox", "51,10,52,11"),
             ("crs", "EPSG:4326"),
-            ("time", "2020-01-01T00:00:00.0Z"),
+            ("time", "2014-05-01T00:00:00.0Z"),
             ("spatialResolution", "0.1,0.1"),
         ];
         let req = actix_web::test::TestRequest::get()
@@ -400,7 +399,13 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, app_ctx).await;
 
-        assert_eq!(res.status(), 200);
+        assert_eq!(
+            res.status(),
+            200,
+            "Error {code}: {body:?}",
+            code = res.status(),
+            body = read_body_string(res).await
+        );
 
         let response = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
 
@@ -418,20 +423,20 @@ mod tests {
                 "data": {
                     "values": [{
                         "binStart": 0.0,
-                        "binEnd": 2.5,
-                        "Frequency": 2
+                        "binEnd": 63.75,
+                        "Frequency": 20
                     }, {
-                        "binStart": 2.5,
-                        "binEnd": 5.0,
-                        "Frequency": 2
-                    }, {
-                        "binStart": 5.0,
-                        "binEnd": 7.5,
-                        "Frequency": 2
-                    }, {
-                        "binStart": 7.5,
-                        "binEnd": 10.0,
+                        "binStart": 63.75,
+                        "binEnd": 127.5,
                         "Frequency": 0
+                    }, {
+                        "binStart": 127.5,
+                        "binEnd": 191.25,
+                        "Frequency": 0
+                    }, {
+                        "binStart": 191.25,
+                        "binEnd": 255.0,
+                        "Frequency": 124
                     }]
                 },
                 "mark": "bar",
@@ -440,10 +445,10 @@ mod tests {
                         "field": "binStart",
                         "bin": {
                             "binned": true,
-                            "step": 2.5
+                            "step": 63.75
                         },
                         "axis": {
-                            "title": ""
+                            "title": "vegetation"
                         }
                     },
                     "x2": {
@@ -495,16 +500,17 @@ mod tests {
 
             let session_id = session.id();
 
-            let workflow = Workflow::Legacy {
-                operator: Statistics {
-                    params: StatisticsParams {
+            let workflow = Workflow::Typed {
+                operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
+                    r#type: Default::default(),
+                    params: StatisticsParameters {
                         column_names: vec![],
                         percentiles: vec![],
                     },
-                    sources: vec![example_raster_source()].into(),
-                }
-                .boxed()
-                .into(),
+                    sources: MultipleRasterOrSingleVectorSource {
+                        source: MultipleRasterOrSingleVectorOperator::Raster(vec![]),
+                    },
+                })),
             };
 
             let id = ctx.db().register_workflow(workflow).await.unwrap();

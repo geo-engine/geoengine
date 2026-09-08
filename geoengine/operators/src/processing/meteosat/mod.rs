@@ -5,6 +5,10 @@ mod reflectance;
 mod satellite;
 mod temperature;
 
+pub use radiance::{Radiance, RadianceParams};
+pub use reflectance::{Reflectance, ReflectanceParams};
+pub use temperature::{Temperature, TemperatureParams};
+
 fn new_slope_key() -> RasterPropertiesKey {
     RasterPropertiesKey {
         domain: Some("msg".into()),

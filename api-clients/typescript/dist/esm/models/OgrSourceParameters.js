@@ -10,6 +10,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { AttributeFilterFromJSON, AttributeFilterToJSON, } from './AttributeFilter';
 /**
  * Check if a given object implements the OgrSourceParameters interface.
  */
@@ -28,6 +29,7 @@ export function OgrSourceParametersFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'data': json['data'],
         'attributeProjection': json['attributeProjection'] == null ? undefined : json['attributeProjection'],
+        'attributeFilters': json['attributeFilters'] == null ? undefined : (json['attributeFilters'].map(AttributeFilterFromJSON)),
     };
 }
 export function OgrSourceParametersToJSON(json) {
@@ -40,5 +42,6 @@ export function OgrSourceParametersToJSONTyped(value, ignoreDiscriminator = fals
     return {
         'data': value['data'],
         'attributeProjection': value['attributeProjection'],
+        'attributeFilters': value['attributeFilters'] == null ? undefined : (value['attributeFilters'].map(AttributeFilterToJSON)),
     };
 }

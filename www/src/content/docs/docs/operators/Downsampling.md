@@ -7,10 +7,6 @@ The `Downsampling` operator decreases raster resolution by sampling values of an
 If queried with a resolution that is finer than the input resolution,
 downsampling is not applicable and an error is returned.
 
-## Inputs
-
-The `Downsampling` operator expects exactly one _raster_ input.
-
 ## Resolution
 
 The target resolution can be specified either as an explicit `Resolution` (in pixel units)
@@ -28,11 +24,11 @@ DownsamplingResolution::Resolution(SpatialResolution { x: 200.0, y: 200.0 })
 
 ## Parameters
 
-| Name                  | Type                   | Description               | Examples |
-| --------------------- | ---------------------- | ------------------------- | -------- |
-| samplingMethod        | DownsamplingMethod     | Downsampling method.      |          |
-| outputResolution      | DownsamplingResolution | Target output resolution. |          |
-| outputOriginReference | null or Coordinate2D   |                           |          |
+| Name                  | Type                   | Description               | Examples                          |
+| --------------------- | ---------------------- | ------------------------- | --------------------------------- |
+| samplingMethod        | DownsamplingMethod     | Downsampling method.      | `"nearestNeighbor"`               |
+| outputResolution      | DownsamplingResolution | Target output resolution. | `{"type":"fraction","x":2,"y":2}` |
+| outputOriginReference | null or Coordinate2D   |                           |                                   |
 
 ## Sources
 

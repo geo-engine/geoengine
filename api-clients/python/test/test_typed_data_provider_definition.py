@@ -140,11 +140,12 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                             descriptor = 'source', ), 
                         bands = [
                             geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
-                                asset_title = '', 
-                                band_name = '', )
+                                asset_band = null, 
+                                band_descriptor = null, )
                             ], )
                     ],
                 query_timeout_secs = 56,
+                page_limit = 56,
                 user = '',
                 refresh_token = '',
                 expiry_date = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f')
@@ -230,8 +231,8 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                             descriptor = 'source', ), 
                         bands = [
                             geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
-                                asset_title = '', 
-                                band_name = '', )
+                                asset_band = null, 
+                                band_descriptor = null, )
                             ], )
                     ],
         )

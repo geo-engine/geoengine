@@ -36,9 +36,6 @@ import {
  * 
  * All inputs must have the same data type and spatial reference.
  * 
- * ## Inputs
- * 
- * The `RasterStacker` operator expects multiple raster inputs.
  * @export
  * @interface RasterStacker
  */

@@ -36,10 +36,10 @@ impl OperatorName for TimeProjection {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimeProjectionParams {
     /// Specify the time step granularity and size
-    step: TimeStep,
+    pub step: TimeStep,
     /// Define an anchor point for `step`
     /// If `None`, the anchor point is `1970-01-01T00:00:00Z` by default
-    step_reference: Option<TimeInstance>,
+    pub step_reference: Option<TimeInstance>,
 }
 
 #[derive(Debug, Snafu)]

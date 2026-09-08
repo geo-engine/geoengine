@@ -35,12 +35,21 @@ class TestStacProviderDatasetBand(unittest.TestCase):
         model = StacProviderDatasetBand()
         if include_optional:
             return StacProviderDatasetBand(
-                asset_title = '',
-                band_name = ''
+                asset_band = geoengine_api_client.models.stac_asset_band.StacAssetBand(
+                    asset_title = '', 
+                    band_name = '', ),
+                band_descriptor = geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
+                    name = '', 
+                    measurement = null, )
             )
         else:
             return StacProviderDatasetBand(
-                asset_title = '',
+                asset_band = geoengine_api_client.models.stac_asset_band.StacAssetBand(
+                    asset_title = '', 
+                    band_name = '', ),
+                band_descriptor = geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
+                    name = '', 
+                    measurement = null, ),
         )
         """
 

@@ -29,14 +29,6 @@ import type { RasterVectorJoinParameters } from './RasterVectorJoinParameters';
  * The default is `none` which will create a new feature for each month.
  * Other options are `first` and `mean` which will calculate the first or mean NDVI value for each field over time.
  *
- * ## Inputs
- *
- * The `RasterVectorJoin` operator expects one _vector_ input and one or more _raster_ inputs.
- *
- * | Parameter | Type                                |
- * | --------- | ----------------------------------- |
- * | `sources` | `SingleVectorMultipleRasterSources` |
- *
  * ## Errors
  *
  * If the length of `names` is not equal to the number of raster inputs, an error is thrown.

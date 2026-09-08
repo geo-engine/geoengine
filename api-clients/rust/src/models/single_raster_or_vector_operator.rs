@@ -27,15 +27,15 @@ impl Default for SingleRasterOrVectorOperator {
 /// 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum Type {
-    #[serde(rename = "TemporalRasterAggregation")]
-    TemporalRasterAggregation,
-    #[serde(rename = "VectorExpression")]
-    VectorExpression,
+    #[serde(rename = "TimeShift")]
+    TimeShift,
+    #[serde(rename = "VisualPointClustering")]
+    VisualPointClustering,
 }
 
 impl Default for Type {
     fn default() -> Type {
-        Self::TemporalRasterAggregation
+        Self::TimeShift
     }
 }
 

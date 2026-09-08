@@ -49,7 +49,6 @@ class TestMockPointSourceParameters(unittest.TestCase):
                         x = 1.337, 
                         y = 1.337, )
                     ],
-                spatial_bounds = None,
         )
         """
 

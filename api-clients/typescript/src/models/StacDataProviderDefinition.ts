@@ -106,6 +106,12 @@ export interface StacDataProviderDefinition {
      * @memberof StacDataProviderDefinition
      */
     queryTimeoutSecs?: number;
+    /**
+     * 
+     * @type {number}
+     * @memberof StacDataProviderDefinition
+     */
+    pageLimit?: number;
 }
 
 
@@ -154,6 +160,7 @@ export function StacDataProviderDefinitionFromJSONTyped(json: any, ignoreDiscrim
         'timeDimension': TimeDimensionFromJSON(json['timeDimension']),
         'datasets': ((json['datasets'] as Array<any>).map(StacProviderDatasetFromJSON)),
         'queryTimeoutSecs': json['queryTimeoutSecs'] == null ? undefined : json['queryTimeoutSecs'],
+        'pageLimit': json['pageLimit'] == null ? undefined : json['pageLimit'],
     };
 }
 
@@ -179,6 +186,7 @@ export function StacDataProviderDefinitionToJSONTyped(value?: StacDataProviderDe
         'timeDimension': TimeDimensionToJSON(value['timeDimension']),
         'datasets': ((value['datasets'] as Array<any>).map(StacProviderDatasetToJSON)),
         'queryTimeoutSecs': value['queryTimeoutSecs'],
+        'pageLimit': value['pageLimit'],
     };
 }
 

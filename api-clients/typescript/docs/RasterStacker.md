@@ -1,7 +1,7 @@
 
 # RasterStacker
 
-The `RasterStacker` stacks all of its inputs into a single raster time series. It queries all inputs and combines them by band, space, and then time.  The output raster has as many bands as the sum of all input bands. Tiles are automatically temporally aligned.  All inputs must have the same data type and spatial reference.  ## Inputs  The `RasterStacker` operator expects multiple raster inputs.
+The `RasterStacker` stacks all of its inputs into a single raster time series. It queries all inputs and combines them by band, space, and then time.  The output raster has as many bands as the sum of all input bands. Tiles are automatically temporally aligned.  All inputs must have the same data type and spatial reference. 
 
 ## Properties
 

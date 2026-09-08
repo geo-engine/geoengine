@@ -14,21 +14,33 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum VectorOperator {
+    #[serde(rename="ColumnRangeFilter")]
+    ColumnRangeFilter(Box<models::ColumnRangeFilter>),
+    #[serde(rename="LineSimplification")]
+    LineSimplification(Box<models::LineSimplification>),
     #[serde(rename="MockPointSource")]
     MockPointSource(Box<models::MockPointSource>),
     #[serde(rename="OgrSource")]
     OgrSource(Box<models::OgrSource>),
+    #[serde(rename="PointInPolygonFilter")]
+    PointInPolygonFilter(Box<models::PointInPolygonFilter>),
     #[serde(rename="RasterVectorJoin")]
     RasterVectorJoin(Box<models::RasterVectorJoin>),
     #[serde(rename="Reprojection")]
     Reprojection(Box<models::Reprojection>),
+    #[serde(rename="TimeProjection")]
+    TimeProjection(Box<models::TimeProjection>),
     #[serde(rename="VectorExpression")]
     VectorExpression(Box<models::VectorExpression>),
+    #[serde(rename="VectorJoin")]
+    VectorJoin(Box<models::VectorJoin>),
+    #[serde(rename="VisualPointClustering")]
+    VisualPointClustering(Box<models::VisualPointClustering>),
 }
 
 impl Default for VectorOperator {
     fn default() -> Self {
-        Self::MockPointSource(Default::default())
+        Self::ColumnRangeFilter(Default::default())
     }
 }
 

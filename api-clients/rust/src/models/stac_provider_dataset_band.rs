@@ -12,17 +12,19 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StacProviderDatasetBand {
-    #[serde(rename = "assetTitle")]
-    pub asset_title: String,
-    #[serde(rename = "bandName", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub band_name: Option<Option<String>>,
+    /// The band inside the STAC asset that this dataset band reads from (addressing: which asset file + which raster channel within it).
+    #[serde(rename = "assetBand")]
+    pub asset_band: Box<models::StacAssetBand>,
+    /// The band descriptor of the resulting geo engine dataset layer.
+    #[serde(rename = "bandDescriptor")]
+    pub band_descriptor: Box<models::RasterBandDescriptor>,
 }
 
 impl StacProviderDatasetBand {
-    pub fn new(asset_title: String) -> StacProviderDatasetBand {
+    pub fn new(asset_band: models::StacAssetBand, band_descriptor: models::RasterBandDescriptor) -> StacProviderDatasetBand {
         StacProviderDatasetBand {
-            asset_title,
-            band_name: None,
+            asset_band: Box::new(asset_band),
+            band_descriptor: Box::new(band_descriptor),
         }
     }
 }

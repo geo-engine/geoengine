@@ -12,10 +12,10 @@ Then, you can use this operator to generate a time series plot.
 
 ## Parameters
 
-| Name         | Type                                  | Description                                                                                         | Examples |
-| ------------ | ------------------------------------- | --------------------------------------------------------------------------------------------------- | -------- |
-| timePosition | MeanRasterPixelValuesOverTimePosition | Where should the x-axis (time) tick be positioned? At either time start, time end or in the center. |          |
-| area         | boolean                               | Whether to fill the area under the curve. Defaults to `true`.                                       | `false`  |
+| Name         | Type                                  | Description                                                                                         | Examples          |
+| ------------ | ------------------------------------- | --------------------------------------------------------------------------------------------------- | ----------------- |
+| timePosition | MeanRasterPixelValuesOverTimePosition | Where should the x-axis (time) tick be positioned? At either time start, time end or in the center. | `"start"`         |
+| area         | boolean                               | Whether to fill the area under the curve. Defaults to `true`.                                       | `false`<br>`true` |
 
 ## Sources
 

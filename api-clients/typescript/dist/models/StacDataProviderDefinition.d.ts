@@ -83,6 +83,12 @@ export interface StacDataProviderDefinition {
      * @memberof StacDataProviderDefinition
      */
     queryTimeoutSecs?: number;
+    /**
+     *
+     * @type {number}
+     * @memberof StacDataProviderDefinition
+     */
+    pageLimit?: number;
 }
 /**
  * @export

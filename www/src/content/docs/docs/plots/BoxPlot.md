@@ -12,14 +12,6 @@ Thereby, the operator considers all data in the given query rectangle.
 The boxes of the plot span the 1st and 3rd quartile and highlight the median.
 The whiskers indicate the minimum and maximum values of the corresponding attribute or raster.
 
-## Inputs
-
-The operator consumes exactly one _vector_ or multiple _raster_ operators.
-
-| Parameter | Type                                 |
-| --------- | ------------------------------------ |
-| `source`  | `MultipleRasterOrSingleVectorSource` |
-
 ## Errors
 
 The operator returns an error in the following cases.
@@ -41,9 +33,9 @@ Volume 28 (October), Number 10, 1985, p. 1076-1085.
 
 ## Parameters
 
-| Name        | Type  | Description                                                                                                                                                                                                                                                                                                                                                                   | Examples |
-| ----------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| columnNames | array | ## Vector Data<br>The names of the attributes to generate boxes for.<br><br>## Raster Data<br>_Optional_: An alias for each input source.<br>The operator will automatically name the boxes `Raster-1`, `Raster-2`, ... if this parameter is empty.<br>If aliases are given, the number of aliases must match the number of input rasters.<br>Otherwise an error is returned. |          |
+| Name        | Type  | Description                                                                                                                                                                                                                                                                                                                                                                   | Examples                                    |
+| ----------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| columnNames | array | ## Vector Data<br>The names of the attributes to generate boxes for.<br><br>## Raster Data<br>_Optional_: An alias for each input source.<br>The operator will automatically name the boxes `Raster-1`, `Raster-2`, ... if this parameter is empty.<br>If aliases are given, the number of aliases must match the number of input rasters.<br>Otherwise an error is returned. | `["temperature","humidity"]`<br>`["A","B"]` |
 
 ## Sources
 

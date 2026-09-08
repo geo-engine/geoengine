@@ -9,7 +9,7 @@ Name | Type
 ------------ | -------------
 `type` | string
 `params` | [HistogramParameters](HistogramParameters.md)
-`sources` | [SingleVectorOrRasterSource](SingleVectorOrRasterSource.md)
+`sources` | [SingleRasterOrVectorSource](SingleRasterOrVectorSource.md)
 
 ## Example
 

@@ -18,8 +18,8 @@ exports.HistogramFromJSON = HistogramFromJSON;
 exports.HistogramFromJSONTyped = HistogramFromJSONTyped;
 exports.HistogramToJSON = HistogramToJSON;
 exports.HistogramToJSONTyped = HistogramToJSONTyped;
-const SingleVectorOrRasterSource_1 = require("./SingleVectorOrRasterSource");
 const HistogramParameters_1 = require("./HistogramParameters");
+const SingleRasterOrVectorSource_1 = require("./SingleRasterOrVectorSource");
 /**
  * @export
  */
@@ -48,7 +48,7 @@ function HistogramFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'type': json['type'],
         'params': (0, HistogramParameters_1.HistogramParametersFromJSON)(json['params']),
-        'sources': (0, SingleVectorOrRasterSource_1.SingleVectorOrRasterSourceFromJSON)(json['sources']),
+        'sources': (0, SingleRasterOrVectorSource_1.SingleRasterOrVectorSourceFromJSON)(json['sources']),
     };
 }
 function HistogramToJSON(json) {
@@ -61,6 +61,6 @@ function HistogramToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'type': value['type'],
         'params': (0, HistogramParameters_1.HistogramParametersToJSON)(value['params']),
-        'sources': (0, SingleVectorOrRasterSource_1.SingleVectorOrRasterSourceToJSON)(value['sources']),
+        'sources': (0, SingleRasterOrVectorSource_1.SingleRasterOrVectorSourceToJSON)(value['sources']),
     };
 }

@@ -6,6 +6,9 @@ use crate::api::handlers::permissions::{
 };
 use crate::api::model::datatypes::LayerId;
 use crate::api::model::operators::{GdalDatasetParameters, GdalMultiBand};
+use crate::api::model::processing_graphs::{
+    GdalSourceParameters, MultiBandGdalSource, RasterOperator, TypedOperator,
+};
 use crate::api::model::responses::IdResponse;
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
@@ -26,10 +29,8 @@ use geoengine_datatypes::primitives::{
     Coordinate2D, DateTime, Measurement, SpatialPartition2D, TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::raster::GdalGeoTransform;
-use geoengine_operators::engine::{RasterBandDescriptor, RasterOperator, RasterResultDescriptor};
-use geoengine_operators::source::{
-    GdalDatasetGeoTransform, MultiBandGdalSource, MultiBandGdalSourceParameters,
-};
+use geoengine_operators::engine::{RasterBandDescriptor, RasterResultDescriptor};
+use geoengine_operators::source::GdalDatasetGeoTransform;
 use geoengine_operators::util::gdal::{
     measurement_from_rasterband, raster_descriptor_from_dataset,
 };
@@ -223,20 +224,21 @@ async fn add_dataset_to_collection(
     let add_layer = AddLayer {
         name: layer_name.to_string(),
         description: String::new(),
-        workflow: Workflow::Legacy {
-            operator: geoengine_operators::engine::TypedOperator::Raster(
+        workflow: Workflow::Typed {
+            operator: TypedOperator::Raster(RasterOperator::MultiBandGdalSource(
                 MultiBandGdalSource {
-                    params: MultiBandGdalSourceParameters {
+                    r#type: Default::default(),
+                    params: GdalSourceParameters {
                         data: NamedData {
                             namespace: None,
                             provider: None,
                             name: dataset_name.to_string(),
-                        },
+                        }
+                        .into(),
                         overview_level: None,
                     },
-                }
-                .boxed(),
-            ),
+                },
+            )),
         },
         symbology: None, // TODO: add symbology
         properties: vec![],

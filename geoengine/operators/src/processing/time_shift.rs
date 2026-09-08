@@ -659,7 +659,6 @@ mod tests {
                         "type": "GdalSource",
                         "params": {
                             "data": "test-raster",
-                            "overviewLevel": null
                         }
                     }
                 }
@@ -705,7 +704,6 @@ mod tests {
                         "type": "GdalSource",
                         "params": {
                             "data": "test-raster",
-                            "overviewLevel": null
                         }
                     }
                 }
