@@ -16,14 +16,14 @@ exports.AggregationFromJSON = AggregationFromJSON;
 exports.AggregationFromJSONTyped = AggregationFromJSONTyped;
 exports.AggregationToJSON = AggregationToJSON;
 exports.AggregationToJSONTyped = AggregationToJSONTyped;
-const CountAggregation_1 = require("./CountAggregation");
-const FirstAggregation_1 = require("./FirstAggregation");
-const LastAggregation_1 = require("./LastAggregation");
-const MaxAggregation_1 = require("./MaxAggregation");
-const MeanAggregation_1 = require("./MeanAggregation");
-const MinAggregation_1 = require("./MinAggregation");
-const PercentileEstimateAggregation_1 = require("./PercentileEstimateAggregation");
-const SumAggregation_1 = require("./SumAggregation");
+const AggregationCount_1 = require("./AggregationCount");
+const AggregationFirst_1 = require("./AggregationFirst");
+const AggregationLast_1 = require("./AggregationLast");
+const AggregationMax_1 = require("./AggregationMax");
+const AggregationMean_1 = require("./AggregationMean");
+const AggregationMin_1 = require("./AggregationMin");
+const AggregationPercentileEstimate_1 = require("./AggregationPercentileEstimate");
+const AggregationSum_1 = require("./AggregationSum");
 function AggregationFromJSON(json) {
     return AggregationFromJSONTyped(json, false);
 }
@@ -31,34 +31,26 @@ function AggregationFromJSONTyped(json, ignoreDiscriminator) {
     if (json == null) {
         return json;
     }
-    if (typeof json !== 'object') {
-        return json;
+    switch (json['type']) {
+        case 'count':
+            return Object.assign({}, (0, AggregationCount_1.AggregationCountFromJSONTyped)(json, true), { type: 'count' });
+        case 'first':
+            return Object.assign({}, (0, AggregationFirst_1.AggregationFirstFromJSONTyped)(json, true), { type: 'first' });
+        case 'last':
+            return Object.assign({}, (0, AggregationLast_1.AggregationLastFromJSONTyped)(json, true), { type: 'last' });
+        case 'max':
+            return Object.assign({}, (0, AggregationMax_1.AggregationMaxFromJSONTyped)(json, true), { type: 'max' });
+        case 'mean':
+            return Object.assign({}, (0, AggregationMean_1.AggregationMeanFromJSONTyped)(json, true), { type: 'mean' });
+        case 'min':
+            return Object.assign({}, (0, AggregationMin_1.AggregationMinFromJSONTyped)(json, true), { type: 'min' });
+        case 'percentileEstimate':
+            return Object.assign({}, (0, AggregationPercentileEstimate_1.AggregationPercentileEstimateFromJSONTyped)(json, true), { type: 'percentileEstimate' });
+        case 'sum':
+            return Object.assign({}, (0, AggregationSum_1.AggregationSumFromJSONTyped)(json, true), { type: 'sum' });
+        default:
+            return json;
     }
-    if ((0, CountAggregation_1.instanceOfCountAggregation)(json)) {
-        return (0, CountAggregation_1.CountAggregationFromJSONTyped)(json, true);
-    }
-    if ((0, FirstAggregation_1.instanceOfFirstAggregation)(json)) {
-        return (0, FirstAggregation_1.FirstAggregationFromJSONTyped)(json, true);
-    }
-    if ((0, LastAggregation_1.instanceOfLastAggregation)(json)) {
-        return (0, LastAggregation_1.LastAggregationFromJSONTyped)(json, true);
-    }
-    if ((0, MaxAggregation_1.instanceOfMaxAggregation)(json)) {
-        return (0, MaxAggregation_1.MaxAggregationFromJSONTyped)(json, true);
-    }
-    if ((0, MeanAggregation_1.instanceOfMeanAggregation)(json)) {
-        return (0, MeanAggregation_1.MeanAggregationFromJSONTyped)(json, true);
-    }
-    if ((0, MinAggregation_1.instanceOfMinAggregation)(json)) {
-        return (0, MinAggregation_1.MinAggregationFromJSONTyped)(json, true);
-    }
-    if ((0, PercentileEstimateAggregation_1.instanceOfPercentileEstimateAggregation)(json)) {
-        return (0, PercentileEstimateAggregation_1.PercentileEstimateAggregationFromJSONTyped)(json, true);
-    }
-    if ((0, SumAggregation_1.instanceOfSumAggregation)(json)) {
-        return (0, SumAggregation_1.SumAggregationFromJSONTyped)(json, true);
-    }
-    return {};
 }
 function AggregationToJSON(json) {
     return AggregationToJSONTyped(json, false);
@@ -67,32 +59,24 @@ function AggregationToJSONTyped(value, ignoreDiscriminator = false) {
     if (value == null) {
         return value;
     }
-    if (typeof value !== 'object') {
-        return value;
+    switch (value['type']) {
+        case 'count':
+            return Object.assign({}, (0, AggregationCount_1.AggregationCountToJSON)(value), { type: 'count' });
+        case 'first':
+            return Object.assign({}, (0, AggregationFirst_1.AggregationFirstToJSON)(value), { type: 'first' });
+        case 'last':
+            return Object.assign({}, (0, AggregationLast_1.AggregationLastToJSON)(value), { type: 'last' });
+        case 'max':
+            return Object.assign({}, (0, AggregationMax_1.AggregationMaxToJSON)(value), { type: 'max' });
+        case 'mean':
+            return Object.assign({}, (0, AggregationMean_1.AggregationMeanToJSON)(value), { type: 'mean' });
+        case 'min':
+            return Object.assign({}, (0, AggregationMin_1.AggregationMinToJSON)(value), { type: 'min' });
+        case 'percentileEstimate':
+            return Object.assign({}, (0, AggregationPercentileEstimate_1.AggregationPercentileEstimateToJSON)(value), { type: 'percentileEstimate' });
+        case 'sum':
+            return Object.assign({}, (0, AggregationSum_1.AggregationSumToJSON)(value), { type: 'sum' });
+        default:
+            return value;
     }
-    if ((0, CountAggregation_1.instanceOfCountAggregation)(value)) {
-        return (0, CountAggregation_1.CountAggregationToJSON)(value);
-    }
-    if ((0, FirstAggregation_1.instanceOfFirstAggregation)(value)) {
-        return (0, FirstAggregation_1.FirstAggregationToJSON)(value);
-    }
-    if ((0, LastAggregation_1.instanceOfLastAggregation)(value)) {
-        return (0, LastAggregation_1.LastAggregationToJSON)(value);
-    }
-    if ((0, MaxAggregation_1.instanceOfMaxAggregation)(value)) {
-        return (0, MaxAggregation_1.MaxAggregationToJSON)(value);
-    }
-    if ((0, MeanAggregation_1.instanceOfMeanAggregation)(value)) {
-        return (0, MeanAggregation_1.MeanAggregationToJSON)(value);
-    }
-    if ((0, MinAggregation_1.instanceOfMinAggregation)(value)) {
-        return (0, MinAggregation_1.MinAggregationToJSON)(value);
-    }
-    if ((0, PercentileEstimateAggregation_1.instanceOfPercentileEstimateAggregation)(value)) {
-        return (0, PercentileEstimateAggregation_1.PercentileEstimateAggregationToJSON)(value);
-    }
-    if ((0, SumAggregation_1.instanceOfSumAggregation)(value)) {
-        return (0, SumAggregation_1.SumAggregationToJSON)(value);
-    }
-    return {};
 }

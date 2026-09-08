@@ -11,6 +11,20 @@
  * Do not edit the class manually.
  */
 
+import type { ColumnRangeFilter } from './ColumnRangeFilter';
+import {
+    instanceOfColumnRangeFilter,
+    ColumnRangeFilterFromJSON,
+    ColumnRangeFilterFromJSONTyped,
+    ColumnRangeFilterToJSON,
+} from './ColumnRangeFilter';
+import type { LineSimplification } from './LineSimplification';
+import {
+    instanceOfLineSimplification,
+    LineSimplificationFromJSON,
+    LineSimplificationFromJSONTyped,
+    LineSimplificationToJSON,
+} from './LineSimplification';
 import type { MockPointSource } from './MockPointSource';
 import {
     instanceOfMockPointSource,
@@ -25,6 +39,13 @@ import {
     OgrSourceFromJSONTyped,
     OgrSourceToJSON,
 } from './OgrSource';
+import type { PointInPolygonFilter } from './PointInPolygonFilter';
+import {
+    instanceOfPointInPolygonFilter,
+    PointInPolygonFilterFromJSON,
+    PointInPolygonFilterFromJSONTyped,
+    PointInPolygonFilterToJSON,
+} from './PointInPolygonFilter';
 import type { RasterVectorJoin } from './RasterVectorJoin';
 import {
     instanceOfRasterVectorJoin,
@@ -39,6 +60,13 @@ import {
     ReprojectionFromJSONTyped,
     ReprojectionToJSON,
 } from './Reprojection';
+import type { TimeProjection } from './TimeProjection';
+import {
+    instanceOfTimeProjection,
+    TimeProjectionFromJSON,
+    TimeProjectionFromJSONTyped,
+    TimeProjectionToJSON,
+} from './TimeProjection';
 import type { VectorExpression } from './VectorExpression';
 import {
     instanceOfVectorExpression,
@@ -46,13 +74,27 @@ import {
     VectorExpressionFromJSONTyped,
     VectorExpressionToJSON,
 } from './VectorExpression';
+import type { VectorJoin } from './VectorJoin';
+import {
+    instanceOfVectorJoin,
+    VectorJoinFromJSON,
+    VectorJoinFromJSONTyped,
+    VectorJoinToJSON,
+} from './VectorJoin';
+import type { VisualPointClustering } from './VisualPointClustering';
+import {
+    instanceOfVisualPointClustering,
+    VisualPointClusteringFromJSON,
+    VisualPointClusteringFromJSONTyped,
+    VisualPointClusteringToJSON,
+} from './VisualPointClustering';
 
 /**
  * @type VectorOperator
  * An operator that produces vector data.
  * @export
  */
-export type VectorOperator = { type: 'MockPointSource' } & MockPointSource | { type: 'OgrSource' } & OgrSource | { type: 'RasterVectorJoin' } & RasterVectorJoin | { type: 'Reprojection' } & Reprojection | { type: 'VectorExpression' } & VectorExpression;
+export type VectorOperator = { type: 'ColumnRangeFilter' } & ColumnRangeFilter | { type: 'LineSimplification' } & LineSimplification | { type: 'MockPointSource' } & MockPointSource | { type: 'OgrSource' } & OgrSource | { type: 'PointInPolygonFilter' } & PointInPolygonFilter | { type: 'RasterVectorJoin' } & RasterVectorJoin | { type: 'Reprojection' } & Reprojection | { type: 'TimeProjection' } & TimeProjection | { type: 'VectorExpression' } & VectorExpression | { type: 'VectorJoin' } & VectorJoin | { type: 'VisualPointClustering' } & VisualPointClustering;
 
 export function VectorOperatorFromJSON(json: any): VectorOperator {
     return VectorOperatorFromJSONTyped(json, false);
@@ -63,16 +105,28 @@ export function VectorOperatorFromJSONTyped(json: any, ignoreDiscriminator: bool
         return json;
     }
     switch (json['type']) {
+        case 'ColumnRangeFilter':
+            return Object.assign({}, ColumnRangeFilterFromJSONTyped(json, true), { type: 'ColumnRangeFilter' } as const);
+        case 'LineSimplification':
+            return Object.assign({}, LineSimplificationFromJSONTyped(json, true), { type: 'LineSimplification' } as const);
         case 'MockPointSource':
             return Object.assign({}, MockPointSourceFromJSONTyped(json, true), { type: 'MockPointSource' } as const);
         case 'OgrSource':
             return Object.assign({}, OgrSourceFromJSONTyped(json, true), { type: 'OgrSource' } as const);
+        case 'PointInPolygonFilter':
+            return Object.assign({}, PointInPolygonFilterFromJSONTyped(json, true), { type: 'PointInPolygonFilter' } as const);
         case 'RasterVectorJoin':
             return Object.assign({}, RasterVectorJoinFromJSONTyped(json, true), { type: 'RasterVectorJoin' } as const);
         case 'Reprojection':
             return Object.assign({}, ReprojectionFromJSONTyped(json, true), { type: 'Reprojection' } as const);
+        case 'TimeProjection':
+            return Object.assign({}, TimeProjectionFromJSONTyped(json, true), { type: 'TimeProjection' } as const);
         case 'VectorExpression':
             return Object.assign({}, VectorExpressionFromJSONTyped(json, true), { type: 'VectorExpression' } as const);
+        case 'VectorJoin':
+            return Object.assign({}, VectorJoinFromJSONTyped(json, true), { type: 'VectorJoin' } as const);
+        case 'VisualPointClustering':
+            return Object.assign({}, VisualPointClusteringFromJSONTyped(json, true), { type: 'VisualPointClustering' } as const);
         default:
             return json;
     }
@@ -87,16 +141,28 @@ export function VectorOperatorToJSONTyped(value?: VectorOperator | null, ignoreD
         return value;
     }
     switch (value['type']) {
+        case 'ColumnRangeFilter':
+            return Object.assign({}, ColumnRangeFilterToJSON(value), { type: 'ColumnRangeFilter' } as const);
+        case 'LineSimplification':
+            return Object.assign({}, LineSimplificationToJSON(value), { type: 'LineSimplification' } as const);
         case 'MockPointSource':
             return Object.assign({}, MockPointSourceToJSON(value), { type: 'MockPointSource' } as const);
         case 'OgrSource':
             return Object.assign({}, OgrSourceToJSON(value), { type: 'OgrSource' } as const);
+        case 'PointInPolygonFilter':
+            return Object.assign({}, PointInPolygonFilterToJSON(value), { type: 'PointInPolygonFilter' } as const);
         case 'RasterVectorJoin':
             return Object.assign({}, RasterVectorJoinToJSON(value), { type: 'RasterVectorJoin' } as const);
         case 'Reprojection':
             return Object.assign({}, ReprojectionToJSON(value), { type: 'Reprojection' } as const);
+        case 'TimeProjection':
+            return Object.assign({}, TimeProjectionToJSON(value), { type: 'TimeProjection' } as const);
         case 'VectorExpression':
             return Object.assign({}, VectorExpressionToJSON(value), { type: 'VectorExpression' } as const);
+        case 'VectorJoin':
+            return Object.assign({}, VectorJoinToJSON(value), { type: 'VectorJoin' } as const);
+        case 'VisualPointClustering':
+            return Object.assign({}, VisualPointClusteringToJSON(value), { type: 'VisualPointClustering' } as const);
         default:
             return value;
     }

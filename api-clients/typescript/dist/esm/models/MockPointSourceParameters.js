@@ -18,8 +18,6 @@ import { Coordinate2DFromJSON, Coordinate2DToJSON, } from './Coordinate2D';
 export function instanceOfMockPointSourceParameters(value) {
     if (!('points' in value) || value['points'] === undefined)
         return false;
-    if (!('spatialBounds' in value) || value['spatialBounds'] === undefined)
-        return false;
     return true;
 }
 export function MockPointSourceParametersFromJSON(json) {
@@ -31,7 +29,7 @@ export function MockPointSourceParametersFromJSONTyped(json, ignoreDiscriminator
     }
     return {
         'points': (json['points'].map(Coordinate2DFromJSON)),
-        'spatialBounds': SpatialBoundsDeriveFromJSON(json['spatialBounds']),
+        'spatialBounds': json['spatialBounds'] == null ? undefined : SpatialBoundsDeriveFromJSON(json['spatialBounds']),
     };
 }
 export function MockPointSourceParametersToJSON(json) {

@@ -17,10 +17,6 @@ import type { SingleRasterSource } from './SingleRasterSource';
  *
  * Pixel values are computed by aggregating all input rasters that contribute to the current window.
  *
- * ## Inputs
- *
- * The `TemporalRasterAggregation` operator expects exactly one _raster_ input.
- *
  * ## Errors
  *
  * If the aggregation method is `first`, `last`, or `mean` and the input raster has no NO DATA value,

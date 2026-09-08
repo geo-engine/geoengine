@@ -105,14 +105,6 @@ import type { SingleVectorSource } from './SingleVectorSource';
  * centroid(geom)
  * ```
  *
- * ## Inputs
- *
- * The `VectorExpression` operator expects one vector input with at most 8 bands.
- *
- * | Parameter | Type                 |
- * | --------- | -------------------- |
- * | `vector`  | `SingleVectorSource` |
- *
  * ## Errors
  *
  * The parsing of the expression can fail if there are, e.g., syntax errors.

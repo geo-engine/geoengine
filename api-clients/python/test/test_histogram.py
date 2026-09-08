@@ -41,8 +41,8 @@ class TestHistogram(unittest.TestCase):
                     bounds = null, 
                     buckets = null, 
                     interactive = True, ),
-                sources = geoengine_api_client.models.single_vector_or_raster_source.SingleVectorOrRasterSource(
-                    vector = null, )
+                sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
+                    source = null, )
             )
         else:
             return Histogram(
@@ -52,8 +52,8 @@ class TestHistogram(unittest.TestCase):
                     bounds = null, 
                     buckets = null, 
                     interactive = True, ),
-                sources = geoengine_api_client.models.single_vector_or_raster_source.SingleVectorOrRasterSource(
-                    vector = null, ),
+                sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
+                    source = null, ),
         )
         """
 

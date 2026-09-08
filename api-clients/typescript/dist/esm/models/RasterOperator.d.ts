@@ -9,15 +9,25 @@
  * Do not edit the class manually.
  */
 import type { BandFilter } from './BandFilter';
+import type { BandNeighborhoodAggregate } from './BandNeighborhoodAggregate';
+import type { BandwiseExpression } from './BandwiseExpression';
 import type { Downsampling } from './Downsampling';
 import type { Expression } from './Expression';
 import type { GdalSource } from './GdalSource';
 import type { Interpolation } from './Interpolation';
 import type { MultiBandGdalSource } from './MultiBandGdalSource';
+import type { NeighborhoodAggregate } from './NeighborhoodAggregate';
+import type { Onnx } from './Onnx';
+import type { Radiance } from './Radiance';
+import type { RasterScaling } from './RasterScaling';
 import type { RasterStacker } from './RasterStacker';
 import type { RasterTypeConversion } from './RasterTypeConversion';
+import type { Rasterization } from './Rasterization';
+import type { Reflectance } from './Reflectance';
 import type { Reprojection } from './Reprojection';
+import type { Temperature } from './Temperature';
 import type { TemporalRasterAggregation } from './TemporalRasterAggregation';
+import type { TimeShift } from './TimeShift';
 /**
  * @type RasterOperator
  * An operator that produces raster data.
@@ -26,6 +36,10 @@ import type { TemporalRasterAggregation } from './TemporalRasterAggregation';
 export type RasterOperator = {
     type: 'BandFilter';
 } & BandFilter | {
+    type: 'BandNeighborhoodAggregate';
+} & BandNeighborhoodAggregate | {
+    type: 'BandwiseExpression';
+} & BandwiseExpression | {
     type: 'Downsampling';
 } & Downsampling | {
     type: 'Expression';
@@ -36,14 +50,30 @@ export type RasterOperator = {
 } & Interpolation | {
     type: 'MultiBandGdalSource';
 } & MultiBandGdalSource | {
+    type: 'NeighborhoodAggregate';
+} & NeighborhoodAggregate | {
+    type: 'Onnx';
+} & Onnx | {
+    type: 'Radiance';
+} & Radiance | {
+    type: 'RasterScaling';
+} & RasterScaling | {
     type: 'RasterStacker';
 } & RasterStacker | {
     type: 'RasterTypeConversion';
 } & RasterTypeConversion | {
+    type: 'Rasterization';
+} & Rasterization | {
+    type: 'Reflectance';
+} & Reflectance | {
     type: 'Reprojection';
 } & Reprojection | {
+    type: 'Temperature';
+} & Temperature | {
     type: 'TemporalRasterAggregation';
-} & TemporalRasterAggregation;
+} & TemporalRasterAggregation | {
+    type: 'TimeShift';
+} & TimeShift;
 export declare function RasterOperatorFromJSON(json: any): RasterOperator;
 export declare function RasterOperatorFromJSONTyped(json: any, ignoreDiscriminator: boolean): RasterOperator;
 export declare function RasterOperatorToJSON(json: any): any;

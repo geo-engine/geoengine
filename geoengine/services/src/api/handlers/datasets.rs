@@ -49,8 +49,8 @@ use geoengine_operators::{
         VectorColumnInfo, VectorResultDescriptor,
     },
     source::{
-        MultiBandGdalSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
-        OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
+        MultiBandGdalSource as OperatorsMultiBandGdalSource, OgrSourceColumnSpec, OgrSourceDataset,
+        OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
     },
     util::gdal::{
         gdal_open_dataset, gdal_open_dataset_ex, gdal_parameters_from_dataset,
@@ -239,7 +239,7 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
         .context(CannotLoadDatasetForAddingTiles)?;
 
     ensure!(
-        dataset.source_operator == MultiBandGdalSource::TYPE_NAME,
+        dataset.source_operator == OperatorsMultiBandGdalSource::TYPE_NAME,
         DatasetIsNotGdalMultiBand
     );
 
@@ -1659,8 +1659,6 @@ async fn create_external_dataset<C: ApplicationContext>(
 #[cfg(test)]
 mod tests {
 
-    use std::str::FromStr;
-
     use super::*;
     use crate::{
         api::model::{
@@ -1673,6 +1671,9 @@ mod tests {
                 FileNotFoundHandling, GdalMultiBand, RasterBandDescriptor, RasterBandDescriptors,
                 RasterResultDescriptor, SpatialGridDescriptor, SpatialGridDescriptorState,
                 TimeDescriptor, TimeDimension,
+            },
+            processing_graphs::{
+                GdalSourceParameters, MultiBandGdalSource, RasterOperator, TypedOperator,
             },
             responses::{IdResponse, datasets::DatasetNameResponse},
             services::{DatasetDefinition, Provenance},
@@ -1716,13 +1717,12 @@ mod tests {
     use geoengine_operators::{
         engine::{
             ExecutionContext, InitializedVectorOperator, MetaData, MetaDataProvider,
-            QueryProcessor, RasterOperator, StaticMetaData, VectorOperator, VectorResultDescriptor,
-            WorkflowOperatorPath,
+            QueryProcessor, RasterOperator as _, StaticMetaData, VectorOperator,
+            VectorResultDescriptor, WorkflowOperatorPath,
         },
         source::{
-            MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, MultiBandGdalSource,
-            MultiBandGdalSourceParameters, OgrSource, OgrSourceDataset, OgrSourceErrorSpec,
-            OgrSourceParameters,
+            MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, OgrSource,
+            OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
         },
         util::{
             gdal::{create_ndvi_meta_data, create_ndvi_result_descriptor},
@@ -1731,6 +1731,7 @@ mod tests {
     };
     use httptest::{Expectation, Server, all_of, matchers::request, responders::status_code};
     use serde_json::{Value, json};
+    use std::str::FromStr;
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
@@ -3682,13 +3683,16 @@ mod tests {
         assert_eq!(res.status(), 200, "response: {res:?}");
 
         // create workflow
-        let workflow = Workflow::Legacy {
-            operator: geoengine_operators::engine::TypedOperator::Raster(
+        let workflow = Workflow::Typed {
+            operator: TypedOperator::Raster(RasterOperator::MultiBandGdalSource(
                 MultiBandGdalSource {
-                    params: MultiBandGdalSourceParameters::new(dataset_name.into()),
-                }
-                .boxed(),
-            ),
+                    r#type: Default::default(),
+                    params: GdalSourceParameters {
+                        data: dataset_name.into(),
+                        overview_level: None,
+                    },
+                },
+            )),
         };
 
         let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
@@ -3866,13 +3870,16 @@ mod tests {
         assert_eq!(res.status(), 200, "response: {res:?}");
 
         // create workflow
-        let workflow = Workflow::Legacy {
-            operator: geoengine_operators::engine::TypedOperator::Raster(
+        let workflow = Workflow::Typed {
+            operator: TypedOperator::Raster(RasterOperator::MultiBandGdalSource(
                 MultiBandGdalSource {
-                    params: MultiBandGdalSourceParameters::new(dataset_name.into()),
-                }
-                .boxed(),
-            ),
+                    r#type: Default::default(),
+                    params: GdalSourceParameters {
+                        data: dataset_name.into(),
+                        overview_level: None,
+                    },
+                },
+            )),
         };
 
         let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
@@ -4098,16 +4105,20 @@ mod tests {
         let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false, true).await?;
 
         let operator = MultiBandGdalSource {
-            params: MultiBandGdalSourceParameters::new(dataset_name.into()),
-        }
-        .boxed();
+            r#type: Default::default(),
+            params: GdalSourceParameters {
+                data: dataset_name.into(),
+                overview_level: None,
+            },
+        };
 
         let execution_context = ctx.execution_context()?;
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
-        let initialized = operator
-            .clone()
+        let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
+            .unwrap()
+            .boxed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
@@ -4192,16 +4203,20 @@ mod tests {
         let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false, false).await?;
 
         let operator = MultiBandGdalSource {
-            params: MultiBandGdalSourceParameters::new(dataset_name.into()),
-        }
-        .boxed();
+            r#type: Default::default(),
+            params: GdalSourceParameters {
+                data: dataset_name.into(),
+                overview_level: None,
+            },
+        };
 
         let execution_context = ctx.execution_context()?;
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
-        let initialized = operator
-            .clone()
+        let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
+            .unwrap()
+            .boxed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
@@ -4295,16 +4310,20 @@ mod tests {
         let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false, false).await?;
 
         let operator = MultiBandGdalSource {
-            params: MultiBandGdalSourceParameters::new(dataset_name.into()),
-        }
-        .boxed();
+            r#type: Default::default(),
+            params: GdalSourceParameters {
+                data: dataset_name.into(),
+                overview_level: None,
+            },
+        };
 
         let execution_context = ctx.execution_context()?;
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
-        let initialized = operator
-            .clone()
+        let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
+            .unwrap()
+            .boxed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
@@ -4424,16 +4443,20 @@ mod tests {
         let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false, true).await?;
 
         let operator = MultiBandGdalSource {
-            params: MultiBandGdalSourceParameters::new(dataset_name.into()),
-        }
-        .boxed();
+            r#type: Default::default(),
+            params: GdalSourceParameters {
+                data: dataset_name.into(),
+                overview_level: None,
+            },
+        };
 
         let execution_context = ctx.execution_context()?;
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
-        let initialized = operator
-            .clone()
+        let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
+            .unwrap()
+            .boxed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
@@ -4651,16 +4674,20 @@ mod tests {
         let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false, false).await?;
 
         let operator = MultiBandGdalSource {
-            params: MultiBandGdalSourceParameters::new(dataset_name.into()),
-        }
-        .boxed();
+            r#type: Default::default(),
+            params: GdalSourceParameters {
+                data: dataset_name.into(),
+                overview_level: None,
+            },
+        };
 
         let execution_context = ctx.execution_context()?;
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
-        let initialized = operator
-            .clone()
+        let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
+            .unwrap()
+            .boxed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
@@ -4875,16 +4902,20 @@ mod tests {
         let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, true, false).await?;
 
         let operator = MultiBandGdalSource {
-            params: MultiBandGdalSourceParameters::new(dataset_name.into()),
-        }
-        .boxed();
+            r#type: Default::default(),
+            params: GdalSourceParameters {
+                data: dataset_name.into(),
+                overview_level: None,
+            },
+        };
 
         let execution_context = ctx.execution_context()?;
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
-        let initialized = operator
-            .clone()
+        let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
+            .unwrap()
+            .boxed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
@@ -4969,16 +5000,20 @@ mod tests {
         let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false, false).await?;
 
         let operator = MultiBandGdalSource {
-            params: MultiBandGdalSourceParameters::new(dataset_name.into()),
-        }
-        .boxed();
+            r#type: Default::default(),
+            params: GdalSourceParameters {
+                data: dataset_name.into(),
+                overview_level: None,
+            },
+        };
 
         let execution_context = ctx.execution_context()?;
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
-        let initialized = operator
-            .clone()
+        let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
+            .unwrap()
+            .boxed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
@@ -5583,16 +5618,20 @@ mod tests {
         let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false, false).await?;
 
         let operator = MultiBandGdalSource {
-            params: MultiBandGdalSourceParameters::new(dataset_name.into()),
-        }
-        .boxed();
+            r#type: Default::default(),
+            params: GdalSourceParameters {
+                data: dataset_name.into(),
+                overview_level: None,
+            },
+        };
 
         let execution_context = ctx.execution_context()?;
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
-        let initialized = operator
-            .clone()
+        let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
+            .unwrap()
+            .boxed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
@@ -5673,16 +5712,20 @@ mod tests {
         let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false, false).await?;
 
         let operator = MultiBandGdalSource {
-            params: MultiBandGdalSourceParameters::new(dataset_name.into()),
-        }
-        .boxed();
+            r#type: Default::default(),
+            params: GdalSourceParameters {
+                data: dataset_name.into(),
+                overview_level: None,
+            },
+        };
 
         let execution_context = ctx.execution_context()?;
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
-        let initialized = operator
-            .clone()
+        let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
+            .unwrap()
+            .boxed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 

@@ -36,24 +36,16 @@ class TestRasterOperator(unittest.TestCase):
         if include_optional:
             return RasterOperator(
                 type = 'BandFilter',
-                params = geoengine_api_client.models.temporal_raster_aggregation_parameters.TemporalRasterAggregationParameters(
-                    aggregation = null, 
-                    window = null, 
-                    window_reference = null, 
-                    output_type = null, ),
-                sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
-                    raster = null, )
+                params = None,
+                sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
+                    source = null, )
             )
         else:
             return RasterOperator(
                 type = 'BandFilter',
-                params = geoengine_api_client.models.temporal_raster_aggregation_parameters.TemporalRasterAggregationParameters(
-                    aggregation = null, 
-                    window = null, 
-                    window_reference = null, 
-                    output_type = null, ),
-                sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
-                    raster = null, ),
+                params = None,
+                sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
+                    source = null, ),
         )
         """
 

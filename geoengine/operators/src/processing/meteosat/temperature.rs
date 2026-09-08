@@ -35,7 +35,7 @@ use RasterDataType::F32 as RasterOut;
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct TemperatureParams {
-    force_satellite: Option<u8>,
+    pub force_satellite: Option<u8>,
 }
 
 /// The temperature operator approximates BT from

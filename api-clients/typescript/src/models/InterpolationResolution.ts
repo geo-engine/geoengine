@@ -11,27 +11,27 @@
  * Do not edit the class manually.
  */
 
-import type { Fraction } from './Fraction';
+import type { InterpolationResolutionFraction } from './InterpolationResolutionFraction';
 import {
-    instanceOfFraction,
-    FractionFromJSON,
-    FractionFromJSONTyped,
-    FractionToJSON,
-} from './Fraction';
-import type { Resolution } from './Resolution';
+    instanceOfInterpolationResolutionFraction,
+    InterpolationResolutionFractionFromJSON,
+    InterpolationResolutionFractionFromJSONTyped,
+    InterpolationResolutionFractionToJSON,
+} from './InterpolationResolutionFraction';
+import type { InterpolationResolutionResolution } from './InterpolationResolutionResolution';
 import {
-    instanceOfResolution,
-    ResolutionFromJSON,
-    ResolutionFromJSONTyped,
-    ResolutionToJSON,
-} from './Resolution';
+    instanceOfInterpolationResolutionResolution,
+    InterpolationResolutionResolutionFromJSON,
+    InterpolationResolutionResolutionFromJSONTyped,
+    InterpolationResolutionResolutionToJSON,
+} from './InterpolationResolutionResolution';
 
 /**
  * @type InterpolationResolution
  * 
  * @export
  */
-export type InterpolationResolution = Fraction | Resolution;
+export type InterpolationResolution = { type: 'fraction' } & InterpolationResolutionFraction | { type: 'resolution' } & InterpolationResolutionResolution;
 
 export function InterpolationResolutionFromJSON(json: any): InterpolationResolution {
     return InterpolationResolutionFromJSONTyped(json, false);
@@ -41,16 +41,14 @@ export function InterpolationResolutionFromJSONTyped(json: any, ignoreDiscrimina
     if (json == null) {
         return json;
     }
-    if (typeof json !== 'object') {
-        return json;
+    switch (json['type']) {
+        case 'fraction':
+            return Object.assign({}, InterpolationResolutionFractionFromJSONTyped(json, true), { type: 'fraction' } as const);
+        case 'resolution':
+            return Object.assign({}, InterpolationResolutionResolutionFromJSONTyped(json, true), { type: 'resolution' } as const);
+        default:
+            return json;
     }
-    if (instanceOfFraction(json)) {
-        return FractionFromJSONTyped(json, true);
-    }
-    if (instanceOfResolution(json)) {
-        return ResolutionFromJSONTyped(json, true);
-    }
-    return {} as any;
 }
 
 export function InterpolationResolutionToJSON(json: any): any {
@@ -61,15 +59,13 @@ export function InterpolationResolutionToJSONTyped(value?: InterpolationResoluti
     if (value == null) {
         return value;
     }
-    if (typeof value !== 'object') {
-        return value;
+    switch (value['type']) {
+        case 'fraction':
+            return Object.assign({}, InterpolationResolutionFractionToJSON(value), { type: 'fraction' } as const);
+        case 'resolution':
+            return Object.assign({}, InterpolationResolutionResolutionToJSON(value), { type: 'resolution' } as const);
+        default:
+            return value;
     }
-    if (instanceOfFraction(value)) {
-        return FractionToJSON(value as Fraction);
-    }
-    if (instanceOfResolution(value)) {
-        return ResolutionToJSON(value as Resolution);
-    }
-    return {};
 }
 

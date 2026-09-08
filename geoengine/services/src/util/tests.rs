@@ -511,7 +511,7 @@ pub async fn add_file_definition_to_datasets_and_return_layer<D: GeoEngineDb>(
         "GdalSource" => NewTypedOperator::Raster(NewRasterOperator::GdalSource(NewGdalSource {
             r#type: Default::default(),
             params: NewGdalSourceParameters {
-                data: dataset.name.to_string(),
+                data: dataset.name.into(),
                 overview_level: None,
             },
         })),
@@ -519,7 +519,7 @@ pub async fn add_file_definition_to_datasets_and_return_layer<D: GeoEngineDb>(
             crate::api::model::processing_graphs::MultiBandGdalSource {
                 r#type: Default::default(),
                 params: crate::api::model::processing_graphs::GdalSourceParameters {
-                    data: dataset.name.to_string(),
+                    data: dataset.name.into(),
                     overview_level: None,
                 },
             },
@@ -1020,7 +1020,7 @@ pub async fn add_ndvi_to_layers<C: ApplicationContext<Session = UserSession>>(
                 operator: NewTypedOperator::Raster(NewRasterOperator::GdalSource(NewGdalSource {
                     r#type: Default::default(),
                     params: NewGdalSourceParameters {
-                        data: named_data.to_string(),
+                        data: named_data.into(),
                         overview_level: None,
                     },
                 })),
@@ -1360,7 +1360,7 @@ pub async fn add_ndvi_3857_to_layers<C: ApplicationContext<Session = UserSession
                             NewRasterOperator::GdalSource(NewGdalSource {
                                 r#type: Default::default(),
                                 params: NewGdalSourceParameters {
-                                    data: named_data.to_string(),
+                                    data: named_data.into(),
                                     overview_level: None,
                                 },
                             }),

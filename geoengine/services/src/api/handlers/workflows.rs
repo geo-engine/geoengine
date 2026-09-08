@@ -754,57 +754,57 @@ pub enum WorkflowApiError {
 mod tests {
 
     use super::*;
-    use crate::api::model::responses::ErrorResponse;
-    use crate::contexts::PostgresContext;
-    use crate::contexts::Session;
-    use crate::datasets::storage::DatasetStore;
-    use crate::datasets::{DatasetName, RasterDatasetFromWorkflowResult};
-    use crate::ge_context;
-    use crate::tasks::util::test::wait_for_task_to_finish;
-    use crate::tasks::{TaskManager, TaskStatus};
-    use crate::users::UserAuth;
-    use crate::util::tests::add_ports_to_datasets;
-    use crate::util::tests::admin_login;
-    use crate::util::tests::{
-        TestDataUploads, add_ndvi_to_datasets, check_allowed_http_methods,
-        check_allowed_http_methods2, read_body_string, register_ndvi_workflow_helper,
-        send_test_request,
+    use crate::{
+        api::model::{
+            datatypes::Coordinate2D,
+            processing_graphs::{
+                GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
+                MultipleRasterOrSingleVectorOperator, PlotOperator, RasterOperator,
+                SpatialBoundsDerive, Statistics, StatisticsParameters, TypedOperator,
+                VectorOperator,
+            },
+            responses::ErrorResponse,
+        },
+        contexts::{PostgresContext, Session},
+        datasets::{DatasetName, RasterDatasetFromWorkflowResult, storage::DatasetStore},
+        ge_context,
+        tasks::{TaskManager, TaskStatus, util::test::wait_for_task_to_finish},
+        users::UserAuth,
+        util::{
+            tests::{
+                TestDataUploads, add_ndvi_to_datasets, add_ports_to_datasets, admin_login,
+                check_allowed_http_methods, check_allowed_http_methods2, read_body_string,
+                register_ndvi_workflow_helper, send_test_request,
+            },
+            websocket_tests,
+        },
+        workflows::registry::WorkflowRegistry,
     };
-    use crate::util::websocket_tests;
-    use crate::workflows::registry::WorkflowRegistry;
-    use actix_web::dev::ServiceResponse;
-    use actix_web::{http::Method, http::header, test};
+    use actix_web::{
+        dev::ServiceResponse,
+        http::{Method, header},
+        test,
+    };
     use actix_web_httpauth::headers::authorization::Bearer;
     use futures::StreamExt;
-    use geoengine_datatypes::collections::MultiPointCollection;
-    use geoengine_datatypes::primitives::CacheHint;
-    use geoengine_datatypes::primitives::DateTime;
-    use geoengine_datatypes::primitives::{
-        ContinuousMeasurement, FeatureData, Measurement, MultiPoint, RasterQueryRectangle,
-        TimeInterval,
+    use geoengine_datatypes::{
+        collections::MultiPointCollection,
+        primitives::{
+            CacheHint, ContinuousMeasurement, DateTime, FeatureData, Measurement, MultiPoint,
+            RasterQueryRectangle, TimeInterval,
+        },
+        raster::{GeoTransform, GridBoundingBox2D, GridShape, RasterDataType, TilingSpecification},
+        spatial_reference::SpatialReference,
+        util::{arrow::arrow_ipc_file_to_record_batches, test::TestDefault},
     };
-    use geoengine_datatypes::raster::{
-        GeoTransform, GridBoundingBox2D, GridShape, RasterDataType, TilingSpecification,
+    use geoengine_operators::{
+        engine::{
+            RasterBandDescriptor, RasterBandDescriptors, RasterOperator as OperatorsRasterOperator,
+            RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor, VectorOperator as _,
+        },
+        mock::{MockFeatureCollectionSource, MockRasterSourceParams},
+        util::test::assert_eq_two_raster_operator_res_u8,
     };
-    use geoengine_datatypes::spatial_reference::SpatialReference;
-    use geoengine_datatypes::util::arrow::arrow_ipc_file_to_record_batches;
-    use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_operators::engine::TimeDescriptor;
-    use geoengine_operators::engine::{
-        MultipleRasterOrSingleVectorSource, PlotOperator, RasterBandDescriptor,
-        RasterBandDescriptors, SpatialGridDescriptor, TypedOperator,
-    };
-    use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
-    use geoengine_operators::mock::{
-        MockFeatureCollectionSource, MockPointSource, MockPointSourceParams, MockRasterSource,
-        MockRasterSourceParams,
-    };
-    use geoengine_operators::plot::{Statistics, StatisticsParams};
-    use geoengine_operators::source::OgrSource;
-    use geoengine_operators::source::OgrSourceParameters;
-    use geoengine_operators::source::{GdalSource, GdalSourceParameters};
-    use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
-    use geoengine_operators::util::test::assert_eq_two_raster_operator_res_u8;
     use serde_json::json;
     use std::io::Read;
     use std::sync::Arc;
@@ -820,12 +820,19 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow::Legacy {
-            operator: MockPointSource {
-                params: MockPointSourceParams::new(vec![(0.0, 0.1).into(), (1.0, 1.1).into()]),
-            }
-            .boxed()
-            .into(),
+        let workflow = Workflow::Typed {
+            operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
+                r#type: Default::default(),
+                params: crate::api::model::processing_graphs::MockPointSourceParameters {
+                    points: vec![
+                        Coordinate2D { x: 0.0, y: 0.1 },
+                        Coordinate2D { x: 1.0, y: 1.1 },
+                    ],
+                    spatial_bounds: crate::api::model::processing_graphs::SpatialBoundsDerive::None(
+                        Default::default(),
+                    ),
+                },
+            })),
         };
 
         // insert workflow
@@ -858,12 +865,23 @@ mod tests {
 
     #[ge_context::test]
     async fn register_missing_header(app_ctx: PostgresContext<NoTls>) {
-        let workflow = Workflow::Legacy {
-            operator: MockPointSource {
-                params: MockPointSourceParams::new(vec![(0.0, 0.1).into(), (1.0, 1.1).into()]),
-            }
-            .boxed()
-            .into(),
+        let workflow = Workflow::Typed {
+            operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
+                r#type: Default::default(),
+                params: crate::api::model::processing_graphs::MockPointSourceParameters {
+                    points: vec![
+                        Coordinate2D::from(geoengine_datatypes::primitives::Coordinate2D::new(
+                            0.0, 0.1,
+                        )),
+                        Coordinate2D::from(geoengine_datatypes::primitives::Coordinate2D::new(
+                            1.0, 1.1,
+                        )),
+                    ],
+                    spatial_bounds: crate::api::model::processing_graphs::SpatialBoundsDerive::None(
+                        Default::default(),
+                    ),
+                },
+            })),
         };
 
         // insert workflow
@@ -1094,7 +1112,7 @@ mod tests {
         let session_id = session.id();
 
         let workflow = Workflow::Legacy {
-            operator: MockRasterSource::<u8> {
+            operator: geoengine_operators::mock::MockRasterSource::<u8> {
                 params: MockRasterSourceParams::<u8> {
                     data: vec![],
                     result_descriptor: RasterResultDescriptor {
@@ -1186,24 +1204,16 @@ mod tests {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
-        let workflow = Workflow::Legacy {
-            operator: MockFeatureCollectionSource::single(
-                MultiPointCollection::from_data(
-                    MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
-                    vec![TimeInterval::default()],
-                    [
-                        ("foo".to_string(), FeatureData::Float(vec![42.0])),
-                        ("bar".to_string(), FeatureData::Int(vec![23])),
-                    ]
-                    .iter()
-                    .cloned()
-                    .collect(),
-                    CacheHint::default(),
-                )
-                .unwrap(),
-            )
-            .boxed()
-            .into(),
+        let workflow = Workflow::Typed {
+            operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
+                r#type: Default::default(),
+                params: MockPointSourceParameters {
+                    points: vec![Coordinate2D::from(
+                        geoengine_datatypes::primitives::Coordinate2D::new(0.0, 0.1),
+                    )],
+                    spatial_bounds: SpatialBoundsDerive::None(Default::default()),
+                },
+            })),
         };
 
         let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
@@ -1227,18 +1237,17 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow::Legacy {
-            operator: Statistics {
-                params: StatisticsParams {
+        let workflow = Workflow::Typed {
+            operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
+                r#type: Default::default(),
+                params: StatisticsParameters {
                     column_names: vec![],
                     percentiles: vec![],
                 },
-                sources: MultipleRasterOrSingleVectorSource {
-                    source: Raster(vec![]),
+                sources: crate::api::model::processing_graphs::MultipleRasterOrSingleVectorSource {
+                    source: MultipleRasterOrSingleVectorOperator::Raster(vec![]),
                 },
-            }
-            .boxed()
-            .into(),
+            })),
         };
 
         let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
@@ -1271,13 +1280,14 @@ mod tests {
         let session_id = session.id();
         let (dataset_id, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
-        let workflow = Workflow::Legacy {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters::new(dataset),
-                }
-                .boxed(),
-            ),
+        let workflow = Workflow::Typed {
+            operator: TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
+                r#type: Default::default(),
+                params: GdalSourceParameters {
+                    data: dataset.into(),
+                    overview_level: None,
+                },
+            })),
         };
 
         let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
@@ -1374,13 +1384,14 @@ mod tests {
 
         let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
 
-        let workflow = Workflow::Legacy {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters::new(dataset_name.clone()),
-                }
-                .boxed(),
-            ),
+        let workflow = Workflow::Typed {
+            operator: TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
+                r#type: Default::default(),
+                params: GdalSourceParameters {
+                    data: dataset_name.clone().into(),
+                    overview_level: None,
+                },
+            })),
         };
 
         let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
@@ -1407,7 +1418,6 @@ mod tests {
                     "type": "GdalSource",
                     "params": {
                         "data": dataset_name,
-                        "overviewLevel": null
                     }
                 }
             })
@@ -1498,13 +1508,22 @@ mod tests {
 
         let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
-        let operator_a = GdalSource {
-            params: GdalSourceParameters::new(dataset),
+        let operator_a = geoengine_operators::source::GdalSource {
+            params: geoengine_operators::source::GdalSourceParameters {
+                data: dataset.clone(),
+                overview_level: None,
+            },
         }
         .boxed();
 
-        let workflow = Workflow::Legacy {
-            operator: TypedOperator::Raster(operator_a.clone()),
+        let workflow = Workflow::Typed {
+            operator: TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
+                r#type: Default::default(),
+                params: GdalSourceParameters {
+                    data: dataset.into(),
+                    overview_level: None,
+                },
+            })),
         };
 
         let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
@@ -1569,8 +1588,11 @@ mod tests {
         };
 
         // query the newly created dataset
-        let operator_b = GdalSource {
-            params: GdalSourceParameters::new(response.dataset.into()),
+        let operator_b = geoengine_operators::source::GdalSource {
+            params: geoengine_operators::source::GdalSourceParameters {
+                data: response.dataset.into(),
+                overview_level: None,
+            },
         }
         .boxed();
 
@@ -1600,16 +1622,14 @@ mod tests {
 
         let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
-        let workflow = Workflow::Legacy {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: dataset,
-                        overview_level: None,
-                    },
-                }
-                .boxed(),
-            ),
+        let workflow = Workflow::Typed {
+            operator: TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
+                r#type: Default::default(),
+                params: GdalSourceParameters {
+                    data: dataset.into(),
+                    overview_level: None,
+                },
+            })),
         };
 
         let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
@@ -1679,17 +1699,17 @@ mod tests {
 
         let (_, dataset) = add_ports_to_datasets(&app_ctx, true, true).await;
 
-        let workflow = Workflow::Legacy {
-            operator: TypedOperator::Vector(
-                OgrSource {
-                    params: OgrSourceParameters {
-                        data: dataset,
+        let workflow = Workflow::Typed {
+            operator: TypedOperator::Vector(VectorOperator::OgrSource(
+                crate::api::model::processing_graphs::OgrSource {
+                    r#type: Default::default(),
+                    params: crate::api::model::processing_graphs::OgrSourceParameters {
+                        data: dataset.into(),
                         attribute_projection: None,
                         attribute_filters: None,
                     },
-                }
-                .boxed(),
-            ),
+                },
+            )),
         };
 
         let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();

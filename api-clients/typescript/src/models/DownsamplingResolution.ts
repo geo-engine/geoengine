@@ -11,27 +11,27 @@
  * Do not edit the class manually.
  */
 
-import type { Fraction } from './Fraction';
+import type { DownsamplingResolutionFraction } from './DownsamplingResolutionFraction';
 import {
-    instanceOfFraction,
-    FractionFromJSON,
-    FractionFromJSONTyped,
-    FractionToJSON,
-} from './Fraction';
-import type { Resolution } from './Resolution';
+    instanceOfDownsamplingResolutionFraction,
+    DownsamplingResolutionFractionFromJSON,
+    DownsamplingResolutionFractionFromJSONTyped,
+    DownsamplingResolutionFractionToJSON,
+} from './DownsamplingResolutionFraction';
+import type { DownsamplingResolutionResolution } from './DownsamplingResolutionResolution';
 import {
-    instanceOfResolution,
-    ResolutionFromJSON,
-    ResolutionFromJSONTyped,
-    ResolutionToJSON,
-} from './Resolution';
+    instanceOfDownsamplingResolutionResolution,
+    DownsamplingResolutionResolutionFromJSON,
+    DownsamplingResolutionResolutionFromJSONTyped,
+    DownsamplingResolutionResolutionToJSON,
+} from './DownsamplingResolutionResolution';
 
 /**
  * @type DownsamplingResolution
  * 
  * @export
  */
-export type DownsamplingResolution = Fraction | Resolution;
+export type DownsamplingResolution = { type: 'fraction' } & DownsamplingResolutionFraction | { type: 'resolution' } & DownsamplingResolutionResolution;
 
 export function DownsamplingResolutionFromJSON(json: any): DownsamplingResolution {
     return DownsamplingResolutionFromJSONTyped(json, false);
@@ -41,16 +41,14 @@ export function DownsamplingResolutionFromJSONTyped(json: any, ignoreDiscriminat
     if (json == null) {
         return json;
     }
-    if (typeof json !== 'object') {
-        return json;
+    switch (json['type']) {
+        case 'fraction':
+            return Object.assign({}, DownsamplingResolutionFractionFromJSONTyped(json, true), { type: 'fraction' } as const);
+        case 'resolution':
+            return Object.assign({}, DownsamplingResolutionResolutionFromJSONTyped(json, true), { type: 'resolution' } as const);
+        default:
+            return json;
     }
-    if (instanceOfFraction(json)) {
-        return FractionFromJSONTyped(json, true);
-    }
-    if (instanceOfResolution(json)) {
-        return ResolutionFromJSONTyped(json, true);
-    }
-    return {} as any;
 }
 
 export function DownsamplingResolutionToJSON(json: any): any {
@@ -61,15 +59,13 @@ export function DownsamplingResolutionToJSONTyped(value?: DownsamplingResolution
     if (value == null) {
         return value;
     }
-    if (typeof value !== 'object') {
-        return value;
+    switch (value['type']) {
+        case 'fraction':
+            return Object.assign({}, DownsamplingResolutionFractionToJSON(value), { type: 'fraction' } as const);
+        case 'resolution':
+            return Object.assign({}, DownsamplingResolutionResolutionToJSON(value), { type: 'resolution' } as const);
+        default:
+            return value;
     }
-    if (instanceOfFraction(value)) {
-        return FractionToJSON(value as Fraction);
-    }
-    if (instanceOfResolution(value)) {
-        return ResolutionToJSON(value as Resolution);
-    }
-    return {};
 }
 

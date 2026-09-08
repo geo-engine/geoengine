@@ -21,7 +21,11 @@ If the attribute has a [`Measurement`](/docs/datatypes/measurement) of type `Cla
 
 ## Parameters
 
-No parameters.
+| Name       | Type    | Description                                      | Examples |
+| ---------- | ------- | ------------------------------------------------ | -------- |
+| type       | string  |                                                  |          |
+| columnName | string  | The names of the attribute to generate pies for. | `"name"` |
+| donut      | boolean | Whether to render the chart as a donut.          |          |
 
 ## Sources
 

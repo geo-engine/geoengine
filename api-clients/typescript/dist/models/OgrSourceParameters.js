@@ -17,6 +17,7 @@ exports.OgrSourceParametersFromJSON = OgrSourceParametersFromJSON;
 exports.OgrSourceParametersFromJSONTyped = OgrSourceParametersFromJSONTyped;
 exports.OgrSourceParametersToJSON = OgrSourceParametersToJSON;
 exports.OgrSourceParametersToJSONTyped = OgrSourceParametersToJSONTyped;
+const AttributeFilter_1 = require("./AttributeFilter");
 /**
  * Check if a given object implements the OgrSourceParameters interface.
  */
@@ -35,6 +36,7 @@ function OgrSourceParametersFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'data': json['data'],
         'attributeProjection': json['attributeProjection'] == null ? undefined : json['attributeProjection'],
+        'attributeFilters': json['attributeFilters'] == null ? undefined : (json['attributeFilters'].map(AttributeFilter_1.AttributeFilterFromJSON)),
     };
 }
 function OgrSourceParametersToJSON(json) {
@@ -47,5 +49,6 @@ function OgrSourceParametersToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'data': value['data'],
         'attributeProjection': value['attributeProjection'],
+        'attributeFilters': value['attributeFilters'] == null ? undefined : (value['attributeFilters'].map(AttributeFilter_1.AttributeFilterToJSON)),
     };
 }

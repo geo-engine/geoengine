@@ -5979,164 +5979,193 @@
       "Aggregation": {
         "oneOf": [
           {
-            "type": "object",
-            "title": "MinAggregation",
-            "required": [
-              "ignoreNoData",
-              "type"
-            ],
-            "properties": {
-              "ignoreNoData": {
-                "type": "boolean"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "min"
-                ]
-              }
-            }
+            "$ref": "#/components/schemas/AggregationMin"
           },
           {
-            "type": "object",
-            "title": "MaxAggregation",
-            "required": [
-              "ignoreNoData",
-              "type"
-            ],
-            "properties": {
-              "ignoreNoData": {
-                "type": "boolean"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "max"
-                ]
-              }
-            }
+            "$ref": "#/components/schemas/AggregationMax"
           },
           {
-            "type": "object",
-            "title": "FirstAggregation",
-            "required": [
-              "ignoreNoData",
-              "type"
-            ],
-            "properties": {
-              "ignoreNoData": {
-                "type": "boolean"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "first"
-                ]
-              }
-            }
+            "$ref": "#/components/schemas/AggregationFirst"
           },
           {
-            "type": "object",
-            "title": "LastAggregation",
-            "required": [
-              "ignoreNoData",
-              "type"
-            ],
-            "properties": {
-              "ignoreNoData": {
-                "type": "boolean"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "last"
-                ]
-              }
-            }
+            "$ref": "#/components/schemas/AggregationLast"
           },
           {
-            "type": "object",
-            "title": "MeanAggregation",
-            "required": [
-              "ignoreNoData",
-              "type"
-            ],
-            "properties": {
-              "ignoreNoData": {
-                "type": "boolean"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "mean"
-                ]
-              }
-            }
+            "$ref": "#/components/schemas/AggregationMean"
           },
           {
-            "type": "object",
-            "title": "SumAggregation",
-            "required": [
-              "ignoreNoData",
-              "type"
-            ],
-            "properties": {
-              "ignoreNoData": {
-                "type": "boolean"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "sum"
-                ]
-              }
-            }
+            "$ref": "#/components/schemas/AggregationSum"
           },
           {
-            "type": "object",
-            "title": "CountAggregation",
-            "required": [
-              "ignoreNoData",
-              "type"
-            ],
-            "properties": {
-              "ignoreNoData": {
-                "type": "boolean"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "count"
-                ]
-              }
-            }
+            "$ref": "#/components/schemas/AggregationCount"
           },
           {
-            "type": "object",
-            "title": "PercentileEstimateAggregation",
-            "required": [
-              "ignoreNoData",
-              "percentile",
-              "type"
-            ],
-            "properties": {
-              "ignoreNoData": {
-                "type": "boolean"
-              },
-              "percentile": {
-                "type": "number",
-                "format": "double"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "percentileEstimate"
-                ]
-              }
-            }
+            "$ref": "#/components/schemas/AggregationPercentileEstimate"
           }
         ],
-        "description": "Aggregation methods for `TemporalRasterAggregation`.\n\nAvailable variants are `min`, `max`, `first`, `last`, `mean`, `sum`, `count`, and `percentileEstimate`.\nEncountering NO DATA makes the aggregation result NO DATA unless `ignoreNoData` is `true`."
+        "description": "Aggregation methods for `TemporalRasterAggregation`.\n\nAvailable variants are `min`, `max`, `first`, `last`, `mean`, `sum`, `count`, and `percentileEstimate`.\nEncountering NO DATA makes the aggregation result NO DATA unless `ignoreNoData` is `true`.",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "count": "#/components/schemas/AggregationCount",
+            "first": "#/components/schemas/AggregationFirst",
+            "last": "#/components/schemas/AggregationLast",
+            "max": "#/components/schemas/AggregationMax",
+            "mean": "#/components/schemas/AggregationMean",
+            "min": "#/components/schemas/AggregationMin",
+            "percentileEstimate": "#/components/schemas/AggregationPercentileEstimate",
+            "sum": "#/components/schemas/AggregationSum"
+          }
+        }
+      },
+      "AggregationCount": {
+        "type": "object",
+        "required": [
+          "type",
+          "ignoreNoData"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "count"
+            ]
+          },
+          "ignoreNoData": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AggregationFirst": {
+        "type": "object",
+        "required": [
+          "type",
+          "ignoreNoData"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "first"
+            ]
+          },
+          "ignoreNoData": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AggregationLast": {
+        "type": "object",
+        "required": [
+          "type",
+          "ignoreNoData"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "last"
+            ]
+          },
+          "ignoreNoData": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AggregationMax": {
+        "type": "object",
+        "required": [
+          "type",
+          "ignoreNoData"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "max"
+            ]
+          },
+          "ignoreNoData": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AggregationMean": {
+        "type": "object",
+        "required": [
+          "type",
+          "ignoreNoData"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "mean"
+            ]
+          },
+          "ignoreNoData": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AggregationMin": {
+        "type": "object",
+        "required": [
+          "type",
+          "ignoreNoData"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "min"
+            ]
+          },
+          "ignoreNoData": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AggregationPercentileEstimate": {
+        "type": "object",
+        "required": [
+          "type",
+          "ignoreNoData",
+          "percentile"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "percentileEstimate"
+            ]
+          },
+          "ignoreNoData": {
+            "type": "boolean"
+          },
+          "percentile": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "AggregationSum": {
+        "type": "object",
+        "required": [
+          "type",
+          "ignoreNoData"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "sum"
+            ]
+          },
+          "ignoreNoData": {
+            "type": "boolean"
+          }
+        }
       },
       "ArunaDataProviderDefinition": {
         "type": "object",
@@ -6187,6 +6216,68 @@
           },
           "cacheTtl": {
             "$ref": "#/components/schemas/CacheTtlSeconds"
+          }
+        }
+      },
+      "AttributeAggregateDef": {
+        "type": "object",
+        "required": [
+          "columnName",
+          "aggregateType"
+        ],
+        "properties": {
+          "columnName": {
+            "type": "string",
+            "description": "Name of the source column to aggregate.",
+            "examples": [
+              "population",
+              "name"
+            ]
+          },
+          "aggregateType": {
+            "$ref": "#/components/schemas/AttributeAggregateType",
+            "description": "Aggregation function applied to the source column."
+          },
+          "measurement": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Measurement",
+                "description": "Optional measurement metadata for the aggregated result."
+              }
+            ]
+          }
+        }
+      },
+      "AttributeAggregateType": {
+        "type": "string",
+        "enum": [
+          "meanNumber",
+          "stringSample",
+          "null"
+        ]
+      },
+      "AttributeFilter": {
+        "type": "object",
+        "required": [
+          "attribute",
+          "ranges",
+          "keepNulls"
+        ],
+        "properties": {
+          "attribute": {
+            "type": "string"
+          },
+          "ranges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StringOrNumberRange"
+            }
+          },
+          "keepNulls": {
+            "type": "boolean"
           }
         }
       },
@@ -6275,10 +6366,46 @@
           "eastNorth"
         ]
       },
+      "BandDistance": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/BandDistanceEquallySpaced"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "equallySpaced": "#/components/schemas/BandDistanceEquallySpaced"
+          }
+        }
+      },
+      "BandDistanceEquallySpaced": {
+        "type": "object",
+        "required": [
+          "type",
+          "distance"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "equallySpaced"
+            ]
+          },
+          "distance": {
+            "type": "number",
+            "format": "double",
+            "description": "Constant distance between consecutive bands.",
+            "examples": [
+              1.0
+            ]
+          }
+        }
+      },
       "BandFilter": {
         "type": "object",
         "title": "Band Filter",
-        "description": "The `BandFilter` operator selects bands from a raster source by band names or band indices.\n\nIt removes all non-selected bands while preserving the original order of remaining bands.\n\n## Inputs\n\nThe `BandFilter` operator expects exactly one _raster_ input.\n\n## Errors\n\nThe operator returns an error if no bands are selected or if selected band names/indices\ncannot be mapped to existing input bands.",
+        "description": "The `BandFilter` operator selects bands from a raster source by band names or band indices.\n\nIt removes all non-selected bands while preserving the original order of remaining bands.\n\n## Errors\n\nThe operator returns an error if no bands are selected or if selected band names/indices\ncannot be mapped to existing input bands.",
         "required": [
           "type",
           "params",
@@ -6331,6 +6458,122 @@
           }
         }
       },
+      "BandNeighborhoodAggregate": {
+        "type": "object",
+        "title": "Band Neighborhood Aggregate",
+        "description": "The `BandNeighborhoodAggregate` operator performs a pixel-wise aggregate function over neighboring bands.\nThe output is a raster time series with the same number of bands as the input raster.\nThe pixel values are replaced by the result of the aggregate function.\nThis allows, for example, the computation of a moving average over the bands of a raster time series.\n\n## Types\n\nThe following describes the types used in the parameters.\n\n### NeighborhoodAggregate\n\nThere are several types of neighborhood aggregate functions.\n\n#### Average\n\nThis aggregate function computes the average of the neighboring bands.\nThe `windowSize` parameter defines the number of bands to consider for the average and must be an odd number.\nFor the borders, the window is reduced to the available bands.\n\n#### `FirstDerivative`\n\nThis aggregate function computes an approximation of the first derivative of the neighboring bands using the central difference method.\nTo compute the distance between neighboring bands, a `bandDistance` parameter is required.\n\n## Errors\n\nThe operation fails if there are not enough bands in the input raster to compute the aggregate function or the number of bands does not match the requirements of the aggregate function.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "BandNeighborhoodAggregate"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/BandNeighborhoodAggregateParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "BandNeighborhoodAggregate",
+            "params": {
+              "aggregate": {
+                "type": "average",
+                "windowSize": 3
+              }
+            },
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "sentinel-2"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "BandNeighborhoodAggregateMethod": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/BandNeighborhoodAggregateMethodFirstDerivative"
+          },
+          {
+            "$ref": "#/components/schemas/BandNeighborhoodAggregateMethodAverage"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "average": "#/components/schemas/BandNeighborhoodAggregateMethodAverage",
+            "firstDerivative": "#/components/schemas/BandNeighborhoodAggregateMethodFirstDerivative"
+          }
+        }
+      },
+      "BandNeighborhoodAggregateMethodAverage": {
+        "type": "object",
+        "required": [
+          "type",
+          "windowSize"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "average"
+            ]
+          },
+          "windowSize": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of neighboring bands to include in the moving average window.\nThe window size must be odd; at the raster borders the window is reduced.",
+            "examples": [
+              3,
+              5
+            ],
+            "minimum": 0
+          }
+        }
+      },
+      "BandNeighborhoodAggregateMethodFirstDerivative": {
+        "type": "object",
+        "required": [
+          "type",
+          "bandDistance"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "firstDerivative"
+            ]
+          },
+          "bandDistance": {
+            "$ref": "#/components/schemas/BandDistance",
+            "description": "Distance between neighboring bands used to approximate the first derivative."
+          }
+        }
+      },
+      "BandNeighborhoodAggregateParameters": {
+        "type": "object",
+        "required": [
+          "aggregate"
+        ],
+        "properties": {
+          "aggregate": {
+            "$ref": "#/components/schemas/BandNeighborhoodAggregateMethod",
+            "description": "The aggregation method to apply to neighboring bands.\n\nThe average method computes the mean over the current band window, while the\nfirst-derivative method approximates the derivative using the configured band distance."
+          }
+        }
+      },
       "BandsByNameOrIndex": {
         "oneOf": [
           {
@@ -6349,6 +6592,78 @@
             "description": "Select bands by zero-based band indices."
           }
         ]
+      },
+      "BandwiseExpression": {
+        "type": "object",
+        "title": "Bandwise Expression",
+        "description": "The `BandwiseExpression` operator performs a pixel-wise mathematical expression on each band of a raster source.\nFor more details on the expression syntax, see the `Expression` operator.\nNote that in the `BandwiseExpression` operator it is only possible to map one pixel value to another and not reference any other pixels or bands.\nThe variable name for the pixel value is `x`.\n\n## Errors\n\nThe parsing of the expression can fail if there are, for example, syntax errors.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "BandwiseExpression"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/BandwiseExpressionParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "BandwiseExpression",
+            "params": {
+              "expression": "x * 2.0",
+              "outputType": "F64",
+              "mapNoData": false
+            },
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "example"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "BandwiseExpressionParameters": {
+        "type": "object",
+        "required": [
+          "expression",
+          "outputType",
+          "mapNoData"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "Scalar expression applied to each band value.",
+            "examples": [
+              "x * 2.0",
+              "ln(1 / x)"
+            ]
+          },
+          "outputType": {
+            "$ref": "#/components/schemas/RasterDataType",
+            "description": "Output raster data type for the computed band values."
+          },
+          "mapNoData": {
+            "type": "boolean",
+            "description": "Whether NO DATA values should be mapped with the expression.\nOtherwise, they are mapped automatically to NO DATA.",
+            "examples": [
+              false,
+              true
+            ]
+          }
+        }
       },
       "Bbox": {
         "oneOf": [
@@ -6388,7 +6703,7 @@
       "BoxPlot": {
         "type": "object",
         "title": "BoxPlot",
-        "description": "The `BoxPlot` is a _plot operator_ that computes a box plot over\n\n- a selection of numerical columns of a single vector dataset, or\n- multiple raster datasets.\n\nThereby, the operator considers all data in the given query rectangle.\n\nThe boxes of the plot span the 1st and 3rd quartile and highlight the median.\nThe whiskers indicate the minimum and maximum values of the corresponding attribute or raster.\n\n## Inputs\n\nThe operator consumes exactly one _vector_ or multiple _raster_ operators.\n\n| Parameter | Type                                 |\n| --------- | ------------------------------------ |\n| `source`  | `MultipleRasterOrSingleVectorSource` |\n\n## Errors\n\nThe operator returns an error in the following cases.\n\n- Vector data: The `attribute` for one of the given `columnNames` is not numeric.\n- Vector data: The `attribute` for one of the given `columnNames` does not exist.\n- Raster data: The length of the `columnNames` parameter does not match the number of input rasters.\n\n## Notes\n\nIf your dataset contains `infinite` or `NAN` values, they are ignored for the computation.\nMoreover, if your dataset contains more than `10.000`values (which is likely for rasters),\nthe median and quartiles are estimated using the P^2 algorithm described in:\n\nR. Jain and I. Chlamtac, The P^2 algorithm for dynamic calculation of quantiles and\nhistograms without storing observations, Communications of the ACM,\nVolume 28 (October), Number 10, 1985, p. 1076-1085.\n<https://www.cse.wustl.edu/~jain/papers/ftp/psqr.pdf>",
+        "description": "The `BoxPlot` is a _plot operator_ that computes a box plot over\n\n- a selection of numerical columns of a single vector dataset, or\n- multiple raster datasets.\n\nThereby, the operator considers all data in the given query rectangle.\n\nThe boxes of the plot span the 1st and 3rd quartile and highlight the median.\nThe whiskers indicate the minimum and maximum values of the corresponding attribute or raster.\n\n## Errors\n\nThe operator returns an error in the following cases.\n\n- Vector data: The `attribute` for one of the given `columnNames` is not numeric.\n- Vector data: The `attribute` for one of the given `columnNames` does not exist.\n- Raster data: The length of the `columnNames` parameter does not match the number of input rasters.\n\n## Notes\n\nIf your dataset contains `infinite` or `NAN` values, they are ignored for the computation.\nMoreover, if your dataset contains more than `10.000`values (which is likely for rasters),\nthe median and quartiles are estimated using the P^2 algorithm described in:\n\nR. Jain and I. Chlamtac, The P^2 algorithm for dynamic calculation of quantiles and\nhistograms without storing observations, Communications of the ACM,\nVolume 28 (October), Number 10, 1985, p. 1076-1085.\n<https://www.cse.wustl.edu/~jain/papers/ftp/psqr.pdf>",
         "required": [
           "type",
           "params",
@@ -6831,6 +7146,88 @@
             }
           }
         ]
+      },
+      "ColumnRangeFilter": {
+        "type": "object",
+        "title": "Column Range Filter",
+        "description": "The `ColumnRangeFilter` operator allows filtering `FeatureCollection`s.\nUsers can define one or more data ranges for a column in the data table that is then filtered.\nThe filter can be used for numerical as well as textual columns.\nEach range is inclusive, i.e. `[start, end]` includes both the `start` and the `end` values.\n\n## Errors\n\nIf the value in the `column` parameter is not a column of the feature collection, an error is thrown.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "ColumnRangeFilter"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/ColumnRangeFilterParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleVectorSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "ColumnRangeFilter",
+            "params": {
+              "column": "temperature",
+              "ranges": [
+                {
+                  "type": "float",
+                  "start": 0.0,
+                  "end": 50.0
+                }
+              ],
+              "keepNulls": true
+            },
+            "sources": {
+              "vector": {
+                "type": "OgrSource",
+                "params": {
+                  "data": "example"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ColumnRangeFilterParameters": {
+        "type": "object",
+        "required": [
+          "column",
+          "ranges",
+          "keepNulls"
+        ],
+        "properties": {
+          "column": {
+            "type": "string",
+            "description": "Column name to filter on.",
+            "examples": [
+              "temperature",
+              "population",
+              "name"
+            ]
+          },
+          "ranges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StringOrNumberRange"
+            },
+            "description": "One or more inclusive ranges for the selected column values.\nNumeric ranges use `[start, end]`; string ranges use `[\"a\", \"k\"]`."
+          },
+          "keepNulls": {
+            "type": "boolean",
+            "description": "Whether rows whose column value is NULL should be retained.",
+            "examples": [
+              true,
+              false
+            ]
+          }
+        }
       },
       "ComputationId": {
         "type": "string",
@@ -7462,6 +7859,31 @@
       "DateTimeParseFormat": {
         "type": "string"
       },
+      "DensityParams": {
+        "type": "object",
+        "required": [
+          "cutoff",
+          "stddev"
+        ],
+        "properties": {
+          "cutoff": {
+            "type": "number",
+            "format": "double",
+            "description": "Cutoff percentage of maximum density, expressed as a fraction in [0, 1).",
+            "examples": [
+              0.01
+            ]
+          },
+          "stddev": {
+            "type": "number",
+            "format": "double",
+            "description": "Standard deviation parameter for the Gaussian density function.",
+            "examples": [
+              1.0
+            ]
+          }
+        }
+      },
       "DeriveOutRasterSpecsSource": {
         "type": "string",
         "enum": [
@@ -7522,7 +7944,7 @@
       "Downsampling": {
         "type": "object",
         "title": "Downsampling",
-        "description": "The `Downsampling` operator decreases raster resolution by sampling values of an input raster.\n\nIf queried with a resolution that is finer than the input resolution,\ndownsampling is not applicable and an error is returned.\n\n## Inputs\n\nThe `Downsampling` operator expects exactly one _raster_ input.\n\n## Resolution\n\nThe target resolution can be specified either as an explicit `Resolution` (in pixel units)\nor as a `Fraction` that scales the input resolution.\n\n```rust,ignore\n// Scale the input resolution by a factor of 2 in both x and y directions\nDownsamplingResolution::Fraction(Fraction { x: 2.0, y: 2.0 })\n```\n\n```rust,ignore\n// Use an explicit resolution of 200×200 pixel units\nDownsamplingResolution::Resolution(SpatialResolution { x: 200.0, y: 200.0 })\n```",
+        "description": "The `Downsampling` operator decreases raster resolution by sampling values of an input raster.\n\nIf queried with a resolution that is finer than the input resolution,\ndownsampling is not applicable and an error is returned.\n\n## Resolution\n\nThe target resolution can be specified either as an explicit `Resolution` (in pixel units)\nor as a `Fraction` that scales the input resolution.\n\n```rust,ignore\n// Scale the input resolution by a factor of 2 in both x and y directions\nDownsamplingResolution::Fraction(Fraction { x: 2.0, y: 2.0 })\n```\n\n```rust,ignore\n// Use an explicit resolution of 200×200 pixel units\nDownsamplingResolution::Resolution(SpatialResolution { x: 200.0, y: 200.0 })\n```",
         "required": [
           "type",
           "params",
@@ -7602,58 +8024,69 @@
       "DownsamplingResolution": {
         "oneOf": [
           {
-            "type": "object",
-            "title": "Resolution",
-            "description": "Explicit output resolution (`x`, `y`) in target coordinates.",
-            "required": [
-              "x",
-              "y",
-              "type"
-            ],
-            "properties": {
-              "x": {
-                "type": "number",
-                "format": "double"
-              },
-              "y": {
-                "type": "number",
-                "format": "double"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "resolution"
-                ]
-              }
-            }
+            "$ref": "#/components/schemas/DownsamplingResolutionResolution"
           },
           {
-            "type": "object",
-            "title": "Fraction",
-            "description": "Scaling factor in x/y direction.",
-            "required": [
-              "x",
-              "y",
-              "type"
-            ],
-            "properties": {
-              "x": {
-                "type": "number",
-                "format": "double"
-              },
-              "y": {
-                "type": "number",
-                "format": "double"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "fraction"
-                ]
-              }
-            }
+            "$ref": "#/components/schemas/DownsamplingResolutionFraction"
           }
-        ]
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "fraction": "#/components/schemas/DownsamplingResolutionFraction",
+            "resolution": "#/components/schemas/DownsamplingResolutionResolution"
+          }
+        }
+      },
+      "DownsamplingResolutionFraction": {
+        "type": "object",
+        "required": [
+          "type",
+          "x",
+          "y"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "fraction"
+            ]
+          },
+          "x": {
+            "type": "number",
+            "format": "double",
+            "description": "Scaling factor in x/y direction."
+          },
+          "y": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "DownsamplingResolutionResolution": {
+        "type": "object",
+        "required": [
+          "type",
+          "x",
+          "y"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "resolution"
+            ]
+          },
+          "x": {
+            "type": "number",
+            "format": "double",
+            "description": "Explicit output resolution (`x`, `y`) in target coordinates."
+          },
+          "y": {
+            "type": "number",
+            "format": "double"
+          }
+        }
       },
       "EbvPortalDataProviderDefinition": {
         "type": "object",
@@ -8817,7 +9250,7 @@
             "$ref": "#/components/schemas/HistogramParameters"
           },
           "sources": {
-            "$ref": "#/components/schemas/SingleVectorOrRasterSource"
+            "$ref": "#/components/schemas/SingleRasterOrVectorSource"
           }
         },
         "examples": [
@@ -8983,7 +9416,7 @@
       "Interpolation": {
         "type": "object",
         "title": "Interpolation",
-        "description": "The `Interpolation` operator increases raster resolution by interpolating values of an input raster.\n\nIf queried with a resolution that is coarser than the input resolution,\ninterpolation is not applicable and an error is returned.\n\n## Inputs\n\nThe `Interpolation` operator expects exactly one _raster_ input.\n\n## Resolution\n\nThe target resolution can be specified either as an explicit `Resolution` (in pixel units)\nor as a `Fraction` that scales the input resolution.\n\n```rust,ignore\n// Scale the input resolution by a factor of 2 in both x and y directions\nInterpolationResolution::Fraction(Fraction { x: 2.0, y: 2.0 })\n```\n\n```rust,ignore\n// Use an explicit resolution of 50×50 pixel units\nInterpolationResolution::Resolution(SpatialResolution { x: 50.0, y: 50.0 })\n```",
+        "description": "The `Interpolation` operator increases raster resolution by interpolating values of an input raster.\n\nIf queried with a resolution that is coarser than the input resolution,\ninterpolation is not applicable and an error is returned.\n\n## Resolution\n\nThe target resolution can be specified either as an explicit `Resolution` (in pixel units)\nor as a `Fraction` that scales the input resolution.\n\n```rust,ignore\n// Scale the input resolution by a factor of 2 in both x and y directions\nInterpolationResolution::Fraction(Fraction { x: 2.0, y: 2.0 })\n```\n\n```rust,ignore\n// Use an explicit resolution of 50×50 pixel units\nInterpolationResolution::Resolution(SpatialResolution { x: 50.0, y: 50.0 })\n```",
         "required": [
           "type",
           "params",
@@ -9064,58 +9497,69 @@
       "InterpolationResolution": {
         "oneOf": [
           {
-            "type": "object",
-            "title": "Resolution",
-            "description": "Explicit output resolution (`x`, `y`) in target coordinates.",
-            "required": [
-              "x",
-              "y",
-              "type"
-            ],
-            "properties": {
-              "x": {
-                "type": "number",
-                "format": "double"
-              },
-              "y": {
-                "type": "number",
-                "format": "double"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "resolution"
-                ]
-              }
-            }
+            "$ref": "#/components/schemas/InterpolationResolutionResolution"
           },
           {
-            "type": "object",
-            "title": "Fraction",
-            "description": "Scaling factor in x/y direction.",
-            "required": [
-              "x",
-              "y",
-              "type"
-            ],
-            "properties": {
-              "x": {
-                "type": "number",
-                "format": "double"
-              },
-              "y": {
-                "type": "number",
-                "format": "double"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "fraction"
-                ]
-              }
-            }
+            "$ref": "#/components/schemas/InterpolationResolutionFraction"
           }
-        ]
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "fraction": "#/components/schemas/InterpolationResolutionFraction",
+            "resolution": "#/components/schemas/InterpolationResolutionResolution"
+          }
+        }
+      },
+      "InterpolationResolutionFraction": {
+        "type": "object",
+        "required": [
+          "type",
+          "x",
+          "y"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "fraction"
+            ]
+          },
+          "x": {
+            "type": "number",
+            "format": "double",
+            "description": "Scaling factor in x/y direction."
+          },
+          "y": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "InterpolationResolutionResolution": {
+        "type": "object",
+        "required": [
+          "type",
+          "x",
+          "y"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "resolution"
+            ]
+          },
+          "x": {
+            "type": "number",
+            "format": "double",
+            "description": "Explicit output resolution (`x`, `y`) in target coordinates."
+          },
+          "y": {
+            "type": "number",
+            "format": "double"
+          }
+        }
       },
       "LandingPage": {
         "type": "object",
@@ -9435,6 +9879,76 @@
             }
           }
         ]
+      },
+      "LineSimplification": {
+        "type": "object",
+        "title": "Line Simplification",
+        "description": "The `LineSimplification` operator allows simplifying `FeatureCollection`s of (multi-)lines or (multi-)polygons by removing vertices.\nUsers can select a simplification algorithm and specify an `epsilon` for parametrization.\nAlternatively, they can omit the `epsilon`, which results in the epsilon being automatically determined by the query's spatial resolution.\n\n## Errors\n\n- If `epsilon` is set but <= 0, an error is thrown.\n- If the input is not a `MultiPolygon` or `MultiLineString`, an error is thrown.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "LineSimplification"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/LineSimplificationParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleVectorSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "LineSimplification",
+            "params": {
+              "algorithm": "douglasPeucker",
+              "epsilon": 0.5
+            },
+            "sources": {
+              "vector": {
+                "type": "OgrSource",
+                "params": {
+                  "data": "roads"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "LineSimplificationAlgorithm": {
+        "type": "string",
+        "enum": [
+          "douglasPeucker",
+          "visvalingam"
+        ]
+      },
+      "LineSimplificationParameters": {
+        "type": "object",
+        "required": [
+          "algorithm",
+          "epsilon"
+        ],
+        "properties": {
+          "algorithm": {
+            "$ref": "#/components/schemas/LineSimplificationAlgorithm",
+            "description": "Simplification algorithm used to reduce the geometry complexity."
+          },
+          "epsilon": {
+            "type": "number",
+            "format": "double",
+            "description": "Distance threshold for the simplification algorithm.",
+            "examples": [
+              0.5,
+              1.0
+            ]
+          }
+        }
       },
       "LineSymbology": {
         "type": "object",
@@ -9972,8 +10486,7 @@
         "type": "object",
         "description": "Parameters for the [`MockPointSource`] operator.",
         "required": [
-          "points",
-          "spatialBounds"
+          "points"
         ],
         "properties": {
           "points": {
@@ -10197,6 +10710,210 @@
             "items": {
               "$ref": "#/components/schemas/RasterOperator"
             }
+          }
+        }
+      },
+      "NeighborhoodAggregate": {
+        "type": "object",
+        "title": "Neighborhood Aggregate",
+        "description": "The `NeighborhoodAggregate` operator computes an aggregate function for a pixel and its neighborhood.\nThe operator can be defined as a neighborhood matrix with either weights or predefined shapes and an aggregate function.\nFor each time step in the raster time series, the operator computes the aggregate for each pixel and its neighborhood.\n\n## Types\n\nThere are several types of neighborhoods. They define a matrix of weights. The rows and columns of this matrix must be odd.\n\n### `WeightsMatrix`\n\nThe weights matrix is defined as an n × m matrix of floating-point values. It is applied to the pixel and its neighborhood to serve as the input for the aggregate function.\n\n### Rectangle\n\nThe rectangle neighborhood is defined by its shape n × m. The result is a weights matrix with all weights set to `1.0`.\n\n### `AggregateFunction`\n\nThe aggregate function computes a single value from a set of values. Supported functions are `sum` and `standardDeviation`.\n\n## Errors\n\nIf the neighborhood rows or columns are not positive or odd, an error is thrown.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "NeighborhoodAggregate"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/NeighborhoodAggregateParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "NeighborhoodAggregate",
+            "params": {
+              "neighborhood": {
+                "type": "rectangle",
+                "dimensions": [
+                  3,
+                  3
+                ]
+              },
+              "aggregateFunction": "sum"
+            },
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "example"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "NeighborhoodAggregateMethod": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/NeighborhoodAggregateMethodSum"
+          },
+          {
+            "$ref": "#/components/schemas/NeighborhoodAggregateMethodStandardDeviation"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "standardDeviation": "#/components/schemas/NeighborhoodAggregateMethodStandardDeviation",
+            "sum": "#/components/schemas/NeighborhoodAggregateMethodSum"
+          }
+        }
+      },
+      "NeighborhoodAggregateMethodStandardDeviation": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "standardDeviation"
+            ]
+          }
+        }
+      },
+      "NeighborhoodAggregateMethodSum": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "sum"
+            ]
+          }
+        }
+      },
+      "NeighborhoodAggregateParameters": {
+        "type": "object",
+        "required": [
+          "neighborhood",
+          "aggregateFunction"
+        ],
+        "properties": {
+          "neighborhood": {
+            "$ref": "#/components/schemas/NeighborhoodKernel",
+            "description": "Neighborhood definition applied around each pixel.\nThis can be a rectangular neighborhood or a custom weights matrix."
+          },
+          "aggregateFunction": {
+            "$ref": "#/components/schemas/NeighborhoodAggregateMethod",
+            "description": "Aggregate function applied across the neighborhood values."
+          }
+        }
+      },
+      "NeighborhoodKernel": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/NeighborhoodKernelRectangle"
+          },
+          {
+            "$ref": "#/components/schemas/NeighborhoodKernelWeightsMatrix"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "rectangle": "#/components/schemas/NeighborhoodKernelRectangle",
+            "weightsMatrix": "#/components/schemas/NeighborhoodKernelWeightsMatrix"
+          }
+        }
+      },
+      "NeighborhoodKernelRectangle": {
+        "type": "object",
+        "required": [
+          "type",
+          "dimensions"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "rectangle"
+            ]
+          },
+          "dimensions": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "examples": [
+                [
+                  3,
+                  3
+                ],
+                [
+                  5,
+                  5
+                ]
+              ],
+              "minimum": 0
+            },
+            "description": "Width and height of the rectangular neighborhood in pixels."
+          }
+        }
+      },
+      "NeighborhoodKernelWeightsMatrix": {
+        "type": "object",
+        "required": [
+          "type",
+          "weights"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "weightsMatrix"
+            ]
+          },
+          "weights": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double",
+                "examples": [
+                  [
+                    [
+                      1.0,
+                      0.0,
+                      -1.0
+                    ],
+                    [
+                      2.0,
+                      0.0,
+                      -2.0
+                    ],
+                    [
+                      1.0,
+                      0.0,
+                      -1.0
+                    ]
+                  ]
+                ]
+              }
+            },
+            "description": "Explicit matrix of neighborhood weights."
           }
         }
       },
@@ -10678,6 +11395,16 @@
               "type": "string"
             },
             "description": "*Optional*: list of attributes to include. When `None`, all attributes are included."
+          },
+          "attributeFilters": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AttributeFilter"
+            },
+            "description": "*Optional*: list of attribute filters to apply. When `None`, no filters are applied."
           }
         }
       },
@@ -10749,6 +11476,57 @@
           },
           "timestampType": {
             "$ref": "#/components/schemas/UnixTimeStampType"
+          }
+        }
+      },
+      "Onnx": {
+        "type": "object",
+        "title": "ONNX",
+        "description": "The `Onnx` operator applies a machine learning model to a raster stack.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "Onnx"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/OnnxParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "Onnx",
+            "params": {
+              "model": "my-model"
+            },
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "example"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "OnnxParameters": {
+        "type": "object",
+        "required": [
+          "model"
+        ],
+        "properties": {
+          "model": {
+            "$ref": "#/components/schemas/MlModelName"
           }
         }
       },
@@ -11136,6 +11914,74 @@
           }
         }
       },
+      "PointInPolygonFilter": {
+        "type": "object",
+        "title": "Point In Polygon Filter",
+        "description": "The `PointInPolygonFilter` operator filters point features of a (multi-)point collection with polygons.\nIn more detail, the points of each feature are checked against the polygons of the other collection.\nIf one or more point is included in any polygon's ring, the feature is included in the output.\n\nFor instance, you can filter tree features inside the polygons of a forest.\nAll features, that weren't inside any forest polygon, are considered either part of another forest or outliers and are thus removed.\n\n## Errors\n\nIf the `points` vector input is not a (multi-)point feature collection, an error is thrown.\n\nIf the `polygons` vector input is not a (multi-)polygon feature collection, an error is thrown.\n",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "PointInPolygonFilter"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/PointInPolygonFilterParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/PointInPolygonFilterSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "PointInPolygonFilter",
+            "params": {},
+            "sources": {
+              "points": {
+                "type": "OgrSource",
+                "params": {
+                  "data": "places",
+                  "attributeProjection": [
+                    "name",
+                    "population"
+                  ]
+                }
+              },
+              "polygons": {
+                "type": "OgrSource",
+                "params": {
+                  "data": "germany_outline"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "PointInPolygonFilterParameters": {
+        "type": "object"
+      },
+      "PointInPolygonFilterSource": {
+        "type": "object",
+        "required": [
+          "points",
+          "polygons"
+        ],
+        "properties": {
+          "points": {
+            "$ref": "#/components/schemas/VectorOperator",
+            "description": "Point collection that is checked against the polygon collection."
+          },
+          "polygons": {
+            "$ref": "#/components/schemas/VectorOperator",
+            "description": "Polygon collection used as the filter mask."
+          }
+        }
+      },
       "PointSymbology": {
         "type": "object",
         "required": [
@@ -11485,6 +12331,47 @@
           }
         }
       },
+      "Radiance": {
+        "type": "object",
+        "title": "Radiance",
+        "description": "The `Radiance` operator converts raw raster values to radiance.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "Radiance"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/RadianceParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "Radiance",
+            "params": {},
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "msg_raw"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "RadianceParameters": {
+        "type": "object"
+      },
       "RasterBandDescriptor": {
         "type": "object",
         "required": [
@@ -11601,6 +12488,12 @@
             "$ref": "#/components/schemas/BandFilter"
           },
           {
+            "$ref": "#/components/schemas/BandNeighborhoodAggregate"
+          },
+          {
+            "$ref": "#/components/schemas/BandwiseExpression"
+          },
+          {
             "$ref": "#/components/schemas/Downsampling"
           },
           {
@@ -11616,16 +12509,40 @@
             "$ref": "#/components/schemas/MultiBandGdalSource"
           },
           {
+            "$ref": "#/components/schemas/NeighborhoodAggregate"
+          },
+          {
+            "$ref": "#/components/schemas/Onnx"
+          },
+          {
+            "$ref": "#/components/schemas/RasterScaling"
+          },
+          {
             "$ref": "#/components/schemas/RasterStacker"
           },
           {
             "$ref": "#/components/schemas/RasterTypeConversion"
           },
           {
+            "$ref": "#/components/schemas/Rasterization"
+          },
+          {
             "$ref": "#/components/schemas/Reprojection"
           },
           {
+            "$ref": "#/components/schemas/Reflectance"
+          },
+          {
+            "$ref": "#/components/schemas/Radiance"
+          },
+          {
             "$ref": "#/components/schemas/TemporalRasterAggregation"
+          },
+          {
+            "$ref": "#/components/schemas/Temperature"
+          },
+          {
+            "$ref": "#/components/schemas/TimeShift"
           }
         ],
         "description": "An operator that produces raster data.",
@@ -11633,15 +12550,25 @@
           "propertyName": "type",
           "mapping": {
             "BandFilter": "#/components/schemas/BandFilter",
+            "BandNeighborhoodAggregate": "#/components/schemas/BandNeighborhoodAggregate",
+            "BandwiseExpression": "#/components/schemas/BandwiseExpression",
             "Downsampling": "#/components/schemas/Downsampling",
             "Expression": "#/components/schemas/Expression",
             "GdalSource": "#/components/schemas/GdalSource",
             "Interpolation": "#/components/schemas/Interpolation",
             "MultiBandGdalSource": "#/components/schemas/MultiBandGdalSource",
+            "NeighborhoodAggregate": "#/components/schemas/NeighborhoodAggregate",
+            "Onnx": "#/components/schemas/Onnx",
+            "Radiance": "#/components/schemas/Radiance",
+            "RasterScaling": "#/components/schemas/RasterScaling",
             "RasterStacker": "#/components/schemas/RasterStacker",
             "RasterTypeConversion": "#/components/schemas/RasterTypeConversion",
+            "Rasterization": "#/components/schemas/Rasterization",
+            "Reflectance": "#/components/schemas/Reflectance",
             "Reprojection": "#/components/schemas/Reprojection",
-            "TemporalRasterAggregation": "#/components/schemas/TemporalRasterAggregation"
+            "Temperature": "#/components/schemas/Temperature",
+            "TemporalRasterAggregation": "#/components/schemas/TemporalRasterAggregation",
+            "TimeShift": "#/components/schemas/TimeShift"
           }
         }
       },
@@ -11697,10 +12624,93 @@
           }
         }
       },
+      "RasterScaling": {
+        "type": "object",
+        "title": "Raster Scaling",
+        "description": "The raster scaling operator scales/unscales the values of a raster by a given slope factor and offset.\nThis allows to shrink and expand the value range of the pixel values needed to store a raster. It also allows to shift values to all-positive values and back.\nWe use the [GDAL](https://gdal.org/index.html) terms of [scale](https://gdal.org/programs/gdal_translate.html#cmdoption-gdal_translate-scale) and [unscale](https://gdal.org/programs/gdal_translate.html#cmdoption-gdal_translate-unscale).\nRaster data is often scaled to reduce memory/storage consumption.\nTo get the \"real\" raster values the unscale operation is applied.\nKeep in mind that scaling might reduce the precision of the pixel values.\n(To actually reduce the size of the raster, use the [raster type conversion operator](/docs/operators/rastertypeconversion) and transform to a smaller datatype after scaling.)\n\nThe operator applies the following formulas to every pixel.\n\nFor _unscaling_ the formula is: `p_new = p_old * slope + offset`. The key for this mode is `mulSlopeAddOffset`.\n\nFor _scaling_ the formula is: `p_new = (p_old - offset) / slope`. The key for this mode is `subOffsetDivSlope`.\n\n`p_old` and `p_new` refer to the old and new pixel value. The slope and offset values are either properties attached to the input raster or a fixed value.\n\nAn example for Meteosat Second Generation properties is:\n\n- offset: `msg.calibration_offset`\n- slope: `msg.calibration_slope`\n\n\\*if no `outputMeasurement` is given, the measurement of the input raster is used.\n\nThe `RasterScaling` operator expects exactly one _raster_ input.\n\n| Parameter | Type |\n| --------- | ----- |\n| `source` | `SingleRasterSource` |\n\n## Types\n\nThe following describes the types used in the parameters.\n\n### `SlopeOffsetSelection`\n\nThe `SlopeOffsetSelection` type is used to specify a metadata key or a constant value.\n\n| Value | Description |\n| ----- | ----------- |\n| `{\"type\": \"auto\"}` * | Use slope and offset from the tiles properties |\n| `{\"type\": \"constant\", \"value\": number}` | A constant value. |\n| `{\"type\": \"metadataKey\", \"domain\": string, \"key\": string}` | A metadata key to lookup dynamic values from raster (tile) properties. |\n\n* if set to `\"auto\"`, the operator will use the values from the dedicated (GDAL) raster properties for scale and offset.\n",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "RasterScaling"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/RasterScalingParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "RasterScaling",
+            "params": {
+              "slope": {
+                "type": "metadataKey",
+                "domain": "",
+                "key": "scale"
+              },
+              "offset": {
+                "type": "constant",
+                "value": 1.0
+              },
+              "outputMeasurement": null,
+              "scalingMode": "mulSlopeAddOffset"
+            },
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "modis-b6"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "RasterScalingParameters": {
+        "type": "object",
+        "required": [
+          "slope",
+          "offset",
+          "scalingMode"
+        ],
+        "properties": {
+          "slope": {
+            "$ref": "#/components/schemas/SlopeOffsetSelection",
+            "description": "The slope factor used for the scaling or unscaling operation."
+          },
+          "offset": {
+            "$ref": "#/components/schemas/SlopeOffsetSelection",
+            "description": "The offset used for the scaling or unscaling operation."
+          },
+          "outputMeasurement": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Measurement",
+                "description": "Optional output measurement of the result of the scaling operation."
+              }
+            ]
+          },
+          "scalingMode": {
+            "$ref": "#/components/schemas/ScalingMode",
+            "description": "Selects whether the values are scaled or unscaled."
+          }
+        }
+      },
       "RasterStacker": {
         "type": "object",
         "title": "Raster Stacker",
-        "description": "The `RasterStacker` stacks all of its inputs into a single raster time series.\nIt queries all inputs and combines them by band, space, and then time.\n\nThe output raster has as many bands as the sum of all input bands.\nTiles are automatically temporally aligned.\n\nAll inputs must have the same data type and spatial reference.\n\n## Inputs\n\nThe `RasterStacker` operator expects multiple raster inputs.",
+        "description": "The `RasterStacker` stacks all of its inputs into a single raster time series.\nIt queries all inputs and combines them by band, space, and then time.\n\nThe output raster has as many bands as the sum of all input bands.\nTiles are automatically temporally aligned.\n\nAll inputs must have the same data type and spatial reference.\n",
         "required": [
           "type",
           "params",
@@ -11809,7 +12819,7 @@
       "RasterTypeConversion": {
         "type": "object",
         "title": "Raster Type Conversion",
-        "description": "The `RasterTypeConversion` operator changes the data type of raster pixels.\n\nApplying this conversion may cause precision loss.\nFor example, converting `F32` value `3.1` to `U8` results in `3`.\n\nIf a value is outside of the range of the target data type,\nit is clipped to the valid range of that type.\nFor example, converting `F32` value `300.0` to `U8` results in `255`.\n\n## Inputs\n\nThe `RasterTypeConversion` operator expects exactly one _raster_ input.",
+        "description": "The `RasterTypeConversion` operator changes the data type of raster pixels.\n\nApplying this conversion may cause precision loss.\nFor example, converting `F32` value `3.1` to `U8` results in `3`.\n\nIf a value is outside of the range of the target data type,\nit is clipped to the valid range of that type.\nFor example, converting `F32` value `300.0` to `U8` results in `255`.\n",
         "required": [
           "type",
           "params",
@@ -11862,7 +12872,7 @@
       "RasterVectorJoin": {
         "type": "object",
         "title": "Raster Vector Join",
-        "description": "The `RasterVectorJoin` operator allows combining a single vector input and multiple raster inputs.\nFor each raster input, a new column is added to the collection from the vector input.\nThe new column contains the value of the raster at the location of the vector feature.\nFor features covering multiple pixels like `MultiPoints` or `MultiPolygons`, the value is calculated using an aggregation function selected by the user.\nThe same is true if the temporal extent of a vector feature covers multiple raster time steps.\nMore details are described below.\n\n**Example**:\nYou have a collection of agricultural fields (`Polygons`) and a collection of raster images containing each pixel's monthly NDVI value.\nFor your application, you want to know the NDVI value of each field.\nThe `RasterVectorJoin` operator allows you to combine the vector and raster data and offers multiple spatial and temporal aggregation strategies.\nFor example, you can use the `first` aggregation function to get the NDVI value of the first pixel that intersects with each field.\nThis is useful for exploratory analysis since the computation is very fast.\nTo calculate the mean NDVI value of all pixels that intersect with the field you should use the `mean` aggregation function.\nSince the NDVI data is a monthly time series, you have to specify the temporal aggregation function as well.\nThe default is `none` which will create a new feature for each month.\nOther options are `first` and `mean` which will calculate the first or mean NDVI value for each field over time.\n\n## Inputs\n\nThe `RasterVectorJoin` operator expects one _vector_ input and one or more _raster_ inputs.\n\n| Parameter | Type                                |\n| --------- | ----------------------------------- |\n| `sources` | `SingleVectorMultipleRasterSources` |\n\n## Errors\n\nIf the length of `names` is not equal to the number of raster inputs, an error is thrown.\n",
+        "description": "The `RasterVectorJoin` operator allows combining a single vector input and multiple raster inputs.\nFor each raster input, a new column is added to the collection from the vector input.\nThe new column contains the value of the raster at the location of the vector feature.\nFor features covering multiple pixels like `MultiPoints` or `MultiPolygons`, the value is calculated using an aggregation function selected by the user.\nThe same is true if the temporal extent of a vector feature covers multiple raster time steps.\nMore details are described below.\n\n**Example**:\nYou have a collection of agricultural fields (`Polygons`) and a collection of raster images containing each pixel's monthly NDVI value.\nFor your application, you want to know the NDVI value of each field.\nThe `RasterVectorJoin` operator allows you to combine the vector and raster data and offers multiple spatial and temporal aggregation strategies.\nFor example, you can use the `first` aggregation function to get the NDVI value of the first pixel that intersects with each field.\nThis is useful for exploratory analysis since the computation is very fast.\nTo calculate the mean NDVI value of all pixels that intersect with the field you should use the `mean` aggregation function.\nSince the NDVI data is a monthly time series, you have to specify the temporal aggregation function as well.\nThe default is `none` which will create a new feature for each month.\nOther options are `first` and `mean` which will calculate the first or mean NDVI value for each field over time.\n\n## Errors\n\nIf the length of `names` is not equal to the number of raster inputs, an error is thrown.\n",
         "required": [
           "type",
           "params",
@@ -11948,6 +12958,173 @@
           }
         }
       },
+      "Rasterization": {
+        "type": "object",
+        "title": "Rasterization",
+        "description": "The `Rasterization` operator creates a raster from a point vector source.\nIt offers two options for rasterization: A grid rasterization and a (gaussian) density rasterization (heatmap).\n\n## Errors\n\nIf the `cutoff` is not in `[0, 1)` or the `stddev` is negative, an error will be thrown.\n",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "Rasterization"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/RasterizationParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleVectorSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "Raster",
+            "operator": {
+              "type": "Rasterization",
+              "params": {
+                "type": "grid",
+                "spatialResolution": {
+                  "x": 10,
+                  "y": 10
+                },
+                "gridSizeMode": "fixed",
+                "originCoordinate": {
+                  "x": 0,
+                  "y": 0
+                }
+              },
+              "sources": {
+                "vector": {
+                  "type": "OgrSource",
+                  "params": {
+                    "data": "ne_10m_ports",
+                    "attributeProjection": null,
+                    "attributeFilters": null
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "Raster",
+            "operator": {
+              "type": "Rasterization",
+              "params": {
+                "type": "density",
+                "cutoff": 0.01,
+                "stddev": 1
+              },
+              "sources": {
+                "vector": {
+                  "type": "OgrSource",
+                  "params": {
+                    "data": "ne_10m_ports",
+                    "attributeProjection": null,
+                    "attributeFilters": null
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "RasterizationParameters": {
+        "type": "object",
+        "required": [
+          "spatialResolution",
+          "originCoordinate"
+        ],
+        "properties": {
+          "spatialResolution": {
+            "$ref": "#/components/schemas/SpatialResolution",
+            "description": "Spatial resolution of the output grid in x/y direction."
+          },
+          "originCoordinate": {
+            "$ref": "#/components/schemas/Coordinate2D",
+            "description": "Origin coordinate to which the raster grid is aligned."
+          },
+          "densityParams": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DensityParams",
+                "description": "Optional density parameters for a Gaussian density rasterization."
+              }
+            ]
+          }
+        }
+      },
+      "Reflectance": {
+        "type": "object",
+        "title": "Reflectance",
+        "description": "The `Reflectance` operator converts radiance values to reflectance.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "Reflectance"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/ReflectanceParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "Reflectance",
+            "params": {
+              "solarCorrection": true,
+              "forceHRV": false
+            },
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "msg"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ReflectanceParameters": {
+        "type": "object",
+        "required": [
+          "solarCorrection",
+          "forceHRV"
+        ],
+        "properties": {
+          "solarCorrection": {
+            "type": "boolean"
+          },
+          "forceHRV": {
+            "type": "boolean"
+          },
+          "forceSatellite": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "RegularTimeDimension": {
         "type": "object",
         "required": [
@@ -12029,7 +13206,7 @@
       "Reprojection": {
         "type": "object",
         "title": "Reprojection",
-        "description": "The `Reprojection` operator reprojects data from one spatial reference system to another.\nIt accepts exactly one input which can either be a raster or a vector data stream.\nThe operator produces all data that, after reprojection, is contained in the query rectangle.\n\n## Data Type Specifics\n\nThe concrete behavior depends on the data type.\n\n### Vector Data\n\nThe operator reprojects all coordinates of the features individually.\nThe result contains all features that, after reprojection, are intersected by the query rectangle.\n\n### Raster Data\n\nTo create tiles in the target projection, the operator loads corresponding tiles in the source projection.\nFor each output pixel, the value of the nearest input pixel is used.\n\nIf parts of a tile are outside of the source extent after projection, the operator produces NO DATA values.\n\n## Inputs\n\nThe `Reprojection` operator expects exactly one _raster_ or _vector_ input.\n\n## Errors\n\nThe operator returns an error if the target projection is unknown or if input data cannot be reprojected.",
+        "description": "The `Reprojection` operator reprojects data from one spatial reference system to another.\nIt accepts exactly one input which can either be a raster or a vector data stream.\nThe operator produces all data that, after reprojection, is contained in the query rectangle.\n\n## Data Type Specifics\n\nThe concrete behavior depends on the data type.\n\n### Vector Data\n\nThe operator reprojects all coordinates of the features individually.\nThe result contains all features that, after reprojection, are intersected by the query rectangle.\n\n### Raster Data\n\nTo create tiles in the target projection, the operator loads corresponding tiles in the source projection.\nFor each output pixel, the value of the nearest input pixel is used.\n\nIf parts of a tile are outside of the source extent after projection, the operator produces NO DATA values.\n\n## Errors\n\nThe operator returns an error if the target projection is unknown or if input data cannot be reprojected.",
         "required": [
           "type",
           "params",
@@ -12187,6 +13364,51 @@
           },
           "timeInterval": {
             "$ref": "#/components/schemas/TimeInterval"
+          }
+        }
+      },
+      "ScalingMode": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ScalingModeMulSlopeAddOffset"
+          },
+          {
+            "$ref": "#/components/schemas/ScalingModeSubOffsetDivSlope"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "mulSlopeAddOffset": "#/components/schemas/ScalingModeMulSlopeAddOffset",
+            "subOffsetDivSlope": "#/components/schemas/ScalingModeSubOffsetDivSlope"
+          }
+        }
+      },
+      "ScalingModeMulSlopeAddOffset": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "mulSlopeAddOffset"
+            ]
+          }
+        }
+      },
+      "ScalingModeSubOffsetDivSlope": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "subOffsetDivSlope"
+            ]
           }
         }
       },
@@ -12456,18 +13678,6 @@
           }
         }
       },
-      "SingleVectorOrRasterSource": {
-        "type": "object",
-        "description": "A single vector or raster operator as source for this operator, keyed as \"vector\" in JSON.",
-        "required": [
-          "vector"
-        ],
-        "properties": {
-          "vector": {
-            "$ref": "#/components/schemas/SingleRasterOrVectorOperator"
-          }
-        }
-      },
       "SingleVectorSource": {
         "type": "object",
         "description": "A single vector operator as a source for this operator.",
@@ -12477,6 +13687,99 @@
         "properties": {
           "vector": {
             "$ref": "#/components/schemas/VectorOperator"
+          }
+        }
+      },
+      "SlopeOffsetSelection": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SlopeOffsetSelectionAuto"
+          },
+          {
+            "$ref": "#/components/schemas/SlopeOffsetSelectionMetadataKey"
+          },
+          {
+            "$ref": "#/components/schemas/SlopeOffsetSelectionConstant"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "auto": "#/components/schemas/SlopeOffsetSelectionAuto",
+            "constant": "#/components/schemas/SlopeOffsetSelectionConstant",
+            "metadataKey": "#/components/schemas/SlopeOffsetSelectionMetadataKey"
+          }
+        }
+      },
+      "SlopeOffsetSelectionAuto": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "auto"
+            ]
+          }
+        }
+      },
+      "SlopeOffsetSelectionConstant": {
+        "type": "object",
+        "required": [
+          "type",
+          "value"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "constant"
+            ]
+          },
+          "value": {
+            "type": "number",
+            "format": "double",
+            "description": "Fixed slope or offset value.",
+            "examples": [
+              0.1,
+              1.0
+            ]
+          }
+        }
+      },
+      "SlopeOffsetSelectionMetadataKey": {
+        "type": "object",
+        "required": [
+          "type",
+          "key"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "metadataKey"
+            ]
+          },
+          "domain": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional metadata domain to look up the raster property.",
+            "examples": [
+              "",
+              "msg"
+            ]
+          },
+          "key": {
+            "type": "string",
+            "description": "Raster property key that contains the slope or offset value.",
+            "examples": [
+              "scale",
+              "calibration_slope"
+            ]
           }
         }
       },
@@ -12917,7 +14220,7 @@
       "Statistics": {
         "type": "object",
         "title": "Statistics",
-        "description": "The `Statistics` operator is a _plot operator_ that computes count statistics over\n\n- a selection of numerical columns of a single vector dataset, or\n- multiple raster datasets.\n\nThe output is a JSON description.\n\nFor instance, you want to get an overview of a raster data source.\nThen, you can use this operator to get basic count statistics.\n\n## Vector Data\n\nIn the case of vector data, the operator generates one statistic for each of the selected numerical attributes.\nThe operator returns an error if one of the selected attributes is not numeric.\n\n## Raster Data\n\nFor raster data, the operator generates one statistic for each input raster.\n\n## Inputs\n\nThe operator consumes exactly one _vector_ or multiple _raster_ operators.\n\n| Parameter | Type                                 |\n| --------- | ------------------------------------ |\n| `source`  | `MultipleRasterOrSingleVectorSource` |\n\n## Errors\n\nThe operator returns an error in the following cases.\n\n- Vector data: The `attribute` for one of the given `columnNames` is not numeric.\n- Vector data: The `attribute` for one of the given `columnNames` does not exist.\n- Raster data: The length of the `columnNames` parameter does not match the number of input rasters.\n\n### Example Output\n\n```json\n{\n  \"A\": {\n    \"valueCount\": 6,\n    \"validCount\": 6,\n    \"min\": 1.0,\n    \"max\": 6.0,\n    \"mean\": 3.5,\n    \"stddev\": 1.707,\n    \"percentiles\": [\n      {\n        \"percentile\": 0.25,\n        \"value\": 2.0\n      },\n      {\n        \"percentile\": 0.5,\n        \"value\": 3.5\n      },\n      {\n        \"percentile\": 0.75,\n        \"value\": 5.0\n      }\n    ]\n  }\n}\n```\n",
+        "description": "The `Statistics` operator is a _plot operator_ that computes count statistics over\n\n- a selection of numerical columns of a single vector dataset, or\n- multiple raster datasets.\n\nThe output is a JSON description.\n\nFor instance, you want to get an overview of a raster data source.\nThen, you can use this operator to get basic count statistics.\n\n## Vector Data\n\nIn the case of vector data, the operator generates one statistic for each of the selected numerical attributes.\nThe operator returns an error if one of the selected attributes is not numeric.\n\n## Raster Data\n\nFor raster data, the operator generates one statistic for each input raster.\n\n## Errors\n\nThe operator returns an error in the following cases.\n\n- Vector data: The `attribute` for one of the given `columnNames` is not numeric.\n- Vector data: The `attribute` for one of the given `columnNames` does not exist.\n- Raster data: The length of the `columnNames` parameter does not match the number of input rasters.\n\n### Example Output\n\n```json\n{\n  \"A\": {\n    \"valueCount\": 6,\n    \"validCount\": 6,\n    \"min\": 1.0,\n    \"max\": 6.0,\n    \"mean\": 3.5,\n    \"stddev\": 1.707,\n    \"percentiles\": [\n      {\n        \"percentile\": 0.25,\n        \"value\": 2.0\n      },\n      {\n        \"percentile\": 0.5,\n        \"value\": 3.5\n      },\n      {\n        \"percentile\": 0.75,\n        \"value\": 5.0\n      }\n    ]\n  }\n}\n```\n",
         "required": [
           "type",
           "params",
@@ -12996,6 +14299,30 @@
             "description": "The percentiles to compute for each attribute."
           }
         }
+      },
+      "StringOrNumberRange": {
+        "oneOf": [
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ]
       },
       "StringPair": {
         "type": "array",
@@ -13261,6 +14588,59 @@
           }
         ]
       },
+      "Temperature": {
+        "type": "object",
+        "title": "Temperature",
+        "description": "The `Temperature` operator converts raw raster values to temperature.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "Temperature"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/TemperatureParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "Temperature",
+            "params": {
+              "forceSatellite": 8
+            },
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "msg_raw"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "TemperatureParameters": {
+        "type": "object",
+        "properties": {
+          "forceSatellite": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "TemporalAggregationMethod": {
         "type": "string",
         "enum": [
@@ -13299,7 +14679,7 @@
       "TemporalRasterAggregation": {
         "type": "object",
         "title": "Temporal Raster Aggregation",
-        "description": "The `TemporalRasterAggregation` operator aggregates a raster time series into uniform time windows.\nThe output starts with the first window that contains the query start and contains all windows\nthat overlap the query interval.\n\nPixel values are computed by aggregating all input rasters that contribute to the current window.\n\n## Inputs\n\nThe `TemporalRasterAggregation` operator expects exactly one _raster_ input.\n\n## Errors\n\nIf the aggregation method is `first`, `last`, or `mean` and the input raster has no NO DATA value,\nan error is returned.",
+        "description": "The `TemporalRasterAggregation` operator aggregates a raster time series into uniform time windows.\nThe output starts with the first window that contains the query start and contains all windows\nthat overlap the query interval.\n\nPixel values are computed by aggregating all input rasters that contribute to the current window.\n\n## Errors\n\nIf the aggregation method is `first`, `last`, or `mean` and the input raster has no NO DATA value,\nan error is returned.",
         "required": [
           "type",
           "params",
@@ -14084,12 +15464,206 @@
           }
         }
       },
+      "TimeProjection": {
+        "type": "object",
+        "title": "Time Projection",
+        "description": "The `TimeProjection` projects vector dataset timestamps to new granularities and ranges.\nThe output is a new vector dataset with the same geometry and attributes as the input.\nHowever, each time step is projected to a new time range.\nMoreover, the [`QueryRectangle`'s](../datatypes/queryrectangle) temporal extent is enlarged as well to include the projected time range.\n\nAn example usage scenario is to transform snapshot observations into yearly time slices.\nFor instance, animal occurrences are observed at a daily granularity.\nIf you want to aggregate the data to a yearly granularity, you can use the `TimeProjection` operator.\nThis will change the validity of each element in the dataset to the full year where it was observed.\nThis is, for instance, useful when you want to combine it with raster time series and use different temporal semantics than the originally recorded validities.\n\n## Errors\n\nIf the `step` is negative, an error is thrown.\n",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "TimeProjection"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/TimeProjectionParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleVectorSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "TimeProjection",
+            "params": {
+              "step": {
+                "granularity": "years",
+                "step": 1
+              }
+            },
+            "sources": {
+              "vector": {
+                "type": "OgrSource",
+                "params": {
+                  "data": "ndvi"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "TimeProjectionParameters": {
+        "type": "object",
+        "required": [
+          "step"
+        ],
+        "properties": {
+          "step": {
+            "$ref": "#/components/schemas/TimeStep",
+            "description": "Time granularity and size for the projection step."
+          },
+          "stepReference": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TimeInstance",
+                "description": "Optional anchor point for the time step."
+              }
+            ]
+          }
+        }
+      },
       "TimeReference": {
         "type": "string",
         "enum": [
           "start",
           "end"
         ]
+      },
+      "TimeShift": {
+        "type": "object",
+        "title": "Time Shift",
+        "description": "The `TimeShift` operator allows retrieving data temporally relative to the actual [`QueryRectangle`](../datatypes/queryrectangle).\nIt shifts the query rectangle by a given amount of time and modifies the result data accordingly.\nUsers have two options for specifying the time shift:\n\n1. Relative shift – shift relatively to the query rectangle, e.g., one month or one year to the past.\n   This can be useful for comparing multiple points in time relative to the query rectangle.\n2. Absolute shift – change query rectangle to a fixed temporal reference, e.g., January 2014.\n   This can be used to compare data in the query rectangle's time to a fixed point of reference.\n\nThe output is either a stream of raster data or a stream of vector data depending on the input.\n\nAn example usage scenario is to compare the current time with the previous time of the same raster data.\nFor instance, a raster source outputs monthly data aggregates of mean temperatures.\nIf you want to compute the difference between the current month and the previous month, you can use the `TimeShift` operator.\nYou will have two workflows.\nOne is the unmodified temperature raster source.\nThe other is the same source, shifted by one month.\nThen, you can use both workflows as sources of an [`Expression`](/docs/operators/expression) operator.\n\n_Note_: This operator modifies the time values of the returned data.\nFor rasters and vector data, it shifts the time intervals opposite to the time shift specified in the operator.\nThis is necessary to have only data inside the result that is part of the [`QueryRectangle`'s](../datatypes/queryrectangle) time interval.\nAs an example, we shift monthly data by one month to the past.\nOur query rectangle points to February.\nThen, the operator shifts the query rectangle to January.\nThe data, originally valid for January, is shifted forward to February again, to fit into the original query rectangle, which is February.\n",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "TimeShift"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/TimeShiftParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterOrVectorSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "TimeShift",
+            "params": {
+              "type": "relative",
+              "granularity": "months",
+              "value": -1
+            },
+            "sources": {
+              "source": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "ndvi"
+                }
+              }
+            }
+          },
+          {
+            "type": "TimeShift",
+            "params": {
+              "type": "absolute",
+              "time_interval": {
+                "start": "2010-01-01T00:00:00Z",
+                "end": "2010-02-01T00:00:00Z"
+              }
+            },
+            "sources": {
+              "source": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "ndvi"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "TimeShiftParameters": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TimeShiftParametersRelative"
+          },
+          {
+            "$ref": "#/components/schemas/TimeShiftParametersAbsolute"
+          }
+        ],
+        "description": "Time shifts can be expressed either as a relative offset or as a fixed absolute time interval.",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "absolute": "#/components/schemas/TimeShiftParametersAbsolute",
+            "relative": "#/components/schemas/TimeShiftParametersRelative"
+          }
+        }
+      },
+      "TimeShiftParametersAbsolute": {
+        "type": "object",
+        "description": "If the `type` is `absolute`, you need to specify the following parameters:",
+        "required": [
+          "type",
+          "timeInterval"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "absolute"
+            ]
+          },
+          "timeInterval": {
+            "$ref": "#/components/schemas/TimeInterval",
+            "description": "Fixed time interval used as the shift target."
+          }
+        }
+      },
+      "TimeShiftParametersRelative": {
+        "type": "object",
+        "description": "If `type` is `relative`, you need to specify the following parameters:",
+        "required": [
+          "type",
+          "granularity",
+          "value"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "relative"
+            ]
+          },
+          "granularity": {
+            "$ref": "#/components/schemas/TimeGranularity",
+            "description": "Time granularity for the relative shift."
+          },
+          "value": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Signed time step for the relative shift.",
+            "examples": [
+              -1,
+              1
+            ]
+          }
+        }
       },
       "TimeStep": {
         "type": "object",
@@ -14850,7 +16424,7 @@
       "VectorExpression": {
         "type": "object",
         "title": "Vector Expression",
-        "description": "The `VectorExpression` operator performs a feature-wise expression function on a feature collection of a vector source.\nThe expression is specified as a user-defined script in a very simple language.\nThe output is a feature collection with the result of the expression and with time intervals that are the same as for the inputs.\nUsers can either add a new column or replace the geometry column with the outputs of the expression.\nInternally, the expression is evaluated using floating-point numbers.\n\nAn example usage scenario is to calculate a population density from an `area` and a `population_size` column.\nThe expression uses a feature collection with two columns, referred to with their column names `area` and a `population_size`, and calculates the formula `area / population_size`.\nThe output feature collection contains the result of the density expression in a new column.\n\nAnother example is to calculate the centroid of a polygon geometry.\nThe expression uses a feature collection with a geometry column and calculates the formula `centroid(geom)`.\nThe output feature collection contains the result of the centroid expression replacing the original geometries.\n\n## Types\n\nThe following describes the types used in the parameters.\n\n### Expression\n\nExpressions are simple scripts to perform feature-wise computations.\nOne can refer to the columns with their name, e.g., `area` and a `population_size`.\nFurthermore, expressions can check with `A IS NODATA`, `B IS NODATA`, etc. for empty or NO DATA values.\nFinally, the value `NODATA` can be used to output empty or NO DATA.\n\nUsers can think of this implicit function signature for, e.g., two inputs:\n\n```rust,ignore\nfn (A: f64, B: f64) -> f64\n```\n\nAs a start, expressions contain algebraic operations and mathematical functions.\n\n```rust,ignore\n(A + B) / 2\n```\n\nIn addition, branches can be used to check for conditions.\n\n```rust,ignore\nif A IS NODATA {\n    B\n} else {\n    A\n}\n```\n\nTo generate more complex expressions, it is possible to have variable assignments.\n\n```rust,ignore\nlet mean = (A + B) / 2;\nlet coefficient = 0.357;\nmean * coefficient\n```\n\nNote, that all assignments are separated by semicolons.\nHowever, the last expression must be without a semicolon.\n\n#### Numbers\n\nFunction calls can be used to access utility functions.\n\n```rust,ignore\nmax(A, 0)\n```\n\nCurrently, the following functions are available:\n\n- `abs(a)`: absolute value\n- `min(a, b)`, `min(a, b, c)`: minimum value\n- `max(a, b)`, `max(a, b, c)`: maximum value\n- `sqrt(a)`: square root\n- `ln(a)`: natural logarithm\n- `log10(a)`: base 10 logarithm\n- `cos(a)`, `sin(a)`, `tan(a)`, `acos(a)`, `asin(a)`, `atan(a)`: trigonometric functions\n- `pi()`, `e()`: mathematical constants\n- `round(a)`, `ceil(a)`, `floor(a)`: rounding functions\n- `mod(a, b)`: division remainder\n- `to_degrees(a)`, `to_radians(a)`: conversion to degrees or radians\n\n#### Geometries\n\nGeometries can be referred to using the `geometryColumnName`, which is `geom` by default.\nThere are several functions to work with geometries:\n\n- `centroid(geom)`: returns the centroid of the geometry\n- `area(geom)`: returns the area of the geometry\n\nAn example expression to calculate the centroid of a geometry is:\n\n```rust,ignore\ncentroid(geom)\n```\n\n## Inputs\n\nThe `VectorExpression` operator expects one vector input with at most 8 bands.\n\n| Parameter | Type                 |\n| --------- | -------------------- |\n| `vector`  | `SingleVectorSource` |\n\n## Errors\n\nThe parsing of the expression can fail if there are, e.g., syntax errors.\n",
+        "description": "The `VectorExpression` operator performs a feature-wise expression function on a feature collection of a vector source.\nThe expression is specified as a user-defined script in a very simple language.\nThe output is a feature collection with the result of the expression and with time intervals that are the same as for the inputs.\nUsers can either add a new column or replace the geometry column with the outputs of the expression.\nInternally, the expression is evaluated using floating-point numbers.\n\nAn example usage scenario is to calculate a population density from an `area` and a `population_size` column.\nThe expression uses a feature collection with two columns, referred to with their column names `area` and a `population_size`, and calculates the formula `area / population_size`.\nThe output feature collection contains the result of the density expression in a new column.\n\nAnother example is to calculate the centroid of a polygon geometry.\nThe expression uses a feature collection with a geometry column and calculates the formula `centroid(geom)`.\nThe output feature collection contains the result of the centroid expression replacing the original geometries.\n\n## Types\n\nThe following describes the types used in the parameters.\n\n### Expression\n\nExpressions are simple scripts to perform feature-wise computations.\nOne can refer to the columns with their name, e.g., `area` and a `population_size`.\nFurthermore, expressions can check with `A IS NODATA`, `B IS NODATA`, etc. for empty or NO DATA values.\nFinally, the value `NODATA` can be used to output empty or NO DATA.\n\nUsers can think of this implicit function signature for, e.g., two inputs:\n\n```rust,ignore\nfn (A: f64, B: f64) -> f64\n```\n\nAs a start, expressions contain algebraic operations and mathematical functions.\n\n```rust,ignore\n(A + B) / 2\n```\n\nIn addition, branches can be used to check for conditions.\n\n```rust,ignore\nif A IS NODATA {\n    B\n} else {\n    A\n}\n```\n\nTo generate more complex expressions, it is possible to have variable assignments.\n\n```rust,ignore\nlet mean = (A + B) / 2;\nlet coefficient = 0.357;\nmean * coefficient\n```\n\nNote, that all assignments are separated by semicolons.\nHowever, the last expression must be without a semicolon.\n\n#### Numbers\n\nFunction calls can be used to access utility functions.\n\n```rust,ignore\nmax(A, 0)\n```\n\nCurrently, the following functions are available:\n\n- `abs(a)`: absolute value\n- `min(a, b)`, `min(a, b, c)`: minimum value\n- `max(a, b)`, `max(a, b, c)`: maximum value\n- `sqrt(a)`: square root\n- `ln(a)`: natural logarithm\n- `log10(a)`: base 10 logarithm\n- `cos(a)`, `sin(a)`, `tan(a)`, `acos(a)`, `asin(a)`, `atan(a)`: trigonometric functions\n- `pi()`, `e()`: mathematical constants\n- `round(a)`, `ceil(a)`, `floor(a)`: rounding functions\n- `mod(a, b)`: division remainder\n- `to_degrees(a)`, `to_radians(a)`: conversion to degrees or radians\n\n#### Geometries\n\nGeometries can be referred to using the `geometryColumnName`, which is `geom` by default.\nThere are several functions to work with geometries:\n\n- `centroid(geom)`: returns the centroid of the geometry\n- `area(geom)`: returns the area of the geometry\n\nAn example expression to calculate the centroid of a geometry is:\n\n```rust,ignore\ncentroid(geom)\n```\n\n## Errors\n\nThe parsing of the expression can fail if there are, e.g., syntax errors.\n",
         "required": [
           "type",
           "params",
@@ -14964,13 +16538,152 @@
           }
         }
       },
+      "VectorJoin": {
+        "type": "object",
+        "title": "Vector Join",
+        "description": "The `VectorJoin` operator allows combining multiple vector inputs into a single feature collection.\nThere are multiple join variants defined, which are described below.\n\nFor instance, you want to join tabular data to a point collection of buildings.\nThe point collection contains the geolocation of the buildings and their id.\nThe attribute data collection has the building id and the height information.\nCombining the two feature collections leads to a single point collection with geolocation and height information.\n\n## Errors\n\nIf the value in the `left` parameter is not a column of the left feature collection, an error is thrown.\n\nIf the value in the `right` parameter is not a column of the right feature collection, an error is thrown.\n\n### `EquiGeoToData`\n\nIf the left input is not a geo data collection, an error is thrown.\n\nIf the right input is not a (non-geo) data collection, an error is thrown.\n",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "VectorJoin"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/VectorJoinParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/VectorJoinSources"
+          }
+        },
+        "examples": [
+          {
+            "type": "VectorJoin",
+            "params": {
+              "type": "EquiGeoToData",
+              "leftColumn": "id",
+              "rightColumn": "id",
+              "rightColumnSuffix": "_other"
+            },
+            "sources": {
+              "points": {
+                "type": "OgrSource",
+                "params": {
+                  "data": "places",
+                  "attributeProjection": [
+                    "name",
+                    "population"
+                  ]
+                }
+              },
+              "polygons": {
+                "type": "OgrSource",
+                "params": {
+                  "data": "germany_outline"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "VectorJoinParameters": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/VectorJoinType",
+            "description": "### `EquiGeoToData`\n\n| Parameter | Type | Description | Example Value |\n| --------- | ---- | ----------- | ------------- |\n| `leftColumn` | string | The column name of the left input | `\"id\"` |\n| `rightColumn` | string | The column name of the right input | `\"id\"` |\n| `rightColumnSuffix` | (Optional) string | A value to suffix the right join column to avoid name clashes with the columns of the left input. If nothing is specified, the default value is `right`. | `\"right\"` |"
+          }
+        ]
+      },
+      "VectorJoinSources": {
+        "type": "object",
+        "required": [
+          "left",
+          "right"
+        ],
+        "properties": {
+          "left": {
+            "$ref": "#/components/schemas/VectorOperator"
+          },
+          "right": {
+            "$ref": "#/components/schemas/VectorOperator"
+          }
+        }
+      },
+      "VectorJoinType": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/VectorJoinTypeEquiGeoToData"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "equiGeoToData": "#/components/schemas/VectorJoinTypeEquiGeoToData"
+          }
+        }
+      },
+      "VectorJoinTypeEquiGeoToData": {
+        "type": "object",
+        "required": [
+          "type",
+          "leftColumn",
+          "rightColumn"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "equiGeoToData"
+            ]
+          },
+          "leftColumn": {
+            "type": "string",
+            "description": "Column name of the left input used in the join.",
+            "examples": [
+              "id"
+            ]
+          },
+          "rightColumn": {
+            "type": "string",
+            "description": "Column name of the right input used in the join.",
+            "examples": [
+              "id"
+            ]
+          },
+          "rightColumnSuffix": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional suffix added to right-side columns to avoid collisions.",
+            "examples": [
+              "_other",
+              "right"
+            ]
+          }
+        }
+      },
       "VectorOperator": {
         "oneOf": [
+          {
+            "$ref": "#/components/schemas/ColumnRangeFilter"
+          },
+          {
+            "$ref": "#/components/schemas/LineSimplification"
+          },
           {
             "$ref": "#/components/schemas/MockPointSource"
           },
           {
             "$ref": "#/components/schemas/OgrSource"
+          },
+          {
+            "$ref": "#/components/schemas/PointInPolygonFilter"
           },
           {
             "$ref": "#/components/schemas/RasterVectorJoin"
@@ -14979,18 +16692,33 @@
             "$ref": "#/components/schemas/Reprojection"
           },
           {
+            "$ref": "#/components/schemas/TimeProjection"
+          },
+          {
             "$ref": "#/components/schemas/VectorExpression"
+          },
+          {
+            "$ref": "#/components/schemas/VectorJoin"
+          },
+          {
+            "$ref": "#/components/schemas/VisualPointClustering"
           }
         ],
         "description": "An operator that produces vector data.",
         "discriminator": {
           "propertyName": "type",
           "mapping": {
+            "ColumnRangeFilter": "#/components/schemas/ColumnRangeFilter",
+            "LineSimplification": "#/components/schemas/LineSimplification",
             "MockPointSource": "#/components/schemas/MockPointSource",
             "OgrSource": "#/components/schemas/OgrSource",
+            "PointInPolygonFilter": "#/components/schemas/PointInPolygonFilter",
             "RasterVectorJoin": "#/components/schemas/RasterVectorJoin",
             "Reprojection": "#/components/schemas/Reprojection",
-            "VectorExpression": "#/components/schemas/VectorExpression"
+            "TimeProjection": "#/components/schemas/TimeProjection",
+            "VectorExpression": "#/components/schemas/VectorExpression",
+            "VectorJoin": "#/components/schemas/VectorJoin",
+            "VisualPointClustering": "#/components/schemas/VisualPointClustering"
           }
         }
       },
@@ -15036,6 +16764,140 @@
                 "$ref": "#/components/schemas/BoundingBox2D"
               }
             ]
+          }
+        }
+      },
+      "VisualPointClustering": {
+        "type": "object",
+        "title": "Visual Point Clustering",
+        "description": "The `VisualPointClustering` is a clustering operator for point collections that removes clutter and preserves the spatial structure of the input.\nThe output is a point collection with a count and radius attribute.\nThe operator utilizes the input resolution of the query to determine when points, being displayed as circles, would overlap.\nMoreover, it allows aggregating non-geo attributes to preserve the other columns of the input.\nFor more information on the algorithm, cf. the paper [Beilschmidt, C. et al.: A Linear-Time Algorithm for the Aggregation and Visualization of Big Spatial Point Data. SIGSPATIAL/GIS 2017: 73:1-73:4](https://doi.org/10.1145/3139958.3140037).\n\nAn exemplary use case for this operator is the visualization of point data in an online map application.\nThere, you can use this operator as the final step of the workflow to cluster the points and display them as circles.\nThese circles then pose a decluttered view of the data, e.g., via a WFS endpoint.\n\n## Errors\n\nIf the source value `vector` is not a point collection, an error is thrown.\n\nIf multiple columns in `columnAggregates` have the same names, an error is thrown.\n",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "VisualPointClustering"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/VisualPointClusteringParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleVectorSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "VisualPointClustering",
+            "params": {
+              "minRadiusPx": 8.0,
+              "deltaPx": 1.0,
+              "radiusColumn": "__radius",
+              "countColumn": "__count",
+              "columnAggregates": {
+                "mean_population": {
+                  "columnName": "population",
+                  "aggregateType": "MeanNumber",
+                  "measurement": {
+                    "type": "unitless"
+                  }
+                },
+                "sample_names": {
+                  "columnName": "name",
+                  "aggregateType": "StringSample"
+                }
+              }
+            },
+            "sources": {
+              "vector": {
+                "type": "OgrSource",
+                "params": {
+                  "data": "places",
+                  "attributeProjection": [
+                    "name",
+                    "population"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "VisualPointClusteringParameters": {
+        "type": "object",
+        "required": [
+          "minRadiusPx",
+          "deltaPx",
+          "resolution",
+          "radiusColumn",
+          "countColumn",
+          "columnAggregates"
+        ],
+        "properties": {
+          "minRadiusPx": {
+            "type": "number",
+            "format": "double",
+            "description": "Minimum circle radius in pixels.",
+            "examples": [
+              8.0,
+              10.0
+            ]
+          },
+          "deltaPx": {
+            "type": "number",
+            "format": "double",
+            "description": "Minimum circle-to-circle distance in pixels.",
+            "examples": [
+              1.0
+            ]
+          },
+          "resolution": {
+            "type": "number",
+            "format": "double",
+            "description": "Spatial resolution used during clustering.",
+            "examples": [
+              0.5,
+              1.0
+            ]
+          },
+          "radiusColumn": {
+            "type": "string",
+            "description": "Column name used to store the cluster radius.",
+            "examples": [
+              "__radius"
+            ]
+          },
+          "countColumn": {
+            "type": "string",
+            "description": "Column name used to store the number of clustered points.",
+            "examples": [
+              "__count"
+            ]
+          },
+          "columnAggregates": {
+            "type": "object",
+            "description": "Map of source columns to aggregation definitions used for clustered output attributes.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AttributeAggregateDef"
+            },
+            "propertyNames": {
+              "type": "string",
+              "examples": [
+                {
+                  "mean_population": {
+                    "columnName": "population",
+                    "aggregateType": "MeanNumber",
+                    "measurement": {
+                      "type": "unitless"
+                    }
+                  }
+                }
+              ]
+            }
           }
         }
       },

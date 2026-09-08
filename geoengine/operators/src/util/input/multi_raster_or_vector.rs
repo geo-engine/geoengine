@@ -79,7 +79,6 @@ mod tests {
                 "type": "GdalSource",
                 "params": {
                     "data": "foo:bar",
-                    "overviewLevel": null,
                 }
             }])
         );

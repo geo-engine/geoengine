@@ -10,10 +10,6 @@ Tiles are automatically temporally aligned.
 
 All inputs must have the same data type and spatial reference.
 
-## Inputs
-
-The `RasterStacker` operator expects multiple raster inputs.
-
 ## Parameters
 
 | Name        | Type        | Description                                                                                                                                                                                                                              | Examples |

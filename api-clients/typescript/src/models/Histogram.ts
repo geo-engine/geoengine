@@ -12,13 +12,6 @@
  */
 
 import { mapValues } from '../runtime';
-import type { SingleVectorOrRasterSource } from './SingleVectorOrRasterSource';
-import {
-    SingleVectorOrRasterSourceFromJSON,
-    SingleVectorOrRasterSourceFromJSONTyped,
-    SingleVectorOrRasterSourceToJSON,
-    SingleVectorOrRasterSourceToJSONTyped,
-} from './SingleVectorOrRasterSource';
 import type { HistogramParameters } from './HistogramParameters';
 import {
     HistogramParametersFromJSON,
@@ -26,6 +19,13 @@ import {
     HistogramParametersToJSON,
     HistogramParametersToJSONTyped,
 } from './HistogramParameters';
+import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
+import {
+    SingleRasterOrVectorSourceFromJSON,
+    SingleRasterOrVectorSourceFromJSONTyped,
+    SingleRasterOrVectorSourceToJSON,
+    SingleRasterOrVectorSourceToJSONTyped,
+} from './SingleRasterOrVectorSource';
 
 /**
  * The `Histogram` is a _plot operator_ that computes a histogram plot either over attributes of a vector dataset or values of a raster source.
@@ -62,10 +62,10 @@ export interface Histogram {
     params: HistogramParameters;
     /**
      * 
-     * @type {SingleVectorOrRasterSource}
+     * @type {SingleRasterOrVectorSource}
      * @memberof Histogram
      */
-    sources: SingleVectorOrRasterSource;
+    sources: SingleRasterOrVectorSource;
 }
 
 
@@ -100,7 +100,7 @@ export function HistogramFromJSONTyped(json: any, ignoreDiscriminator: boolean):
         
         'type': json['type'],
         'params': HistogramParametersFromJSON(json['params']),
-        'sources': SingleVectorOrRasterSourceFromJSON(json['sources']),
+        'sources': SingleRasterOrVectorSourceFromJSON(json['sources']),
     };
 }
 
@@ -117,7 +117,7 @@ export function HistogramToJSONTyped(value?: Histogram | null, ignoreDiscriminat
         
         'type': value['type'],
         'params': HistogramParametersToJSON(value['params']),
-        'sources': SingleVectorOrRasterSourceToJSON(value['sources']),
+        'sources': SingleRasterOrVectorSourceToJSON(value['sources']),
     };
 }
 

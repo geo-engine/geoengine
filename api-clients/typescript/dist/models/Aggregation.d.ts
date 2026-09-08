@@ -8,14 +8,14 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import type { CountAggregation } from './CountAggregation';
-import type { FirstAggregation } from './FirstAggregation';
-import type { LastAggregation } from './LastAggregation';
-import type { MaxAggregation } from './MaxAggregation';
-import type { MeanAggregation } from './MeanAggregation';
-import type { MinAggregation } from './MinAggregation';
-import type { PercentileEstimateAggregation } from './PercentileEstimateAggregation';
-import type { SumAggregation } from './SumAggregation';
+import type { AggregationCount } from './AggregationCount';
+import type { AggregationFirst } from './AggregationFirst';
+import type { AggregationLast } from './AggregationLast';
+import type { AggregationMax } from './AggregationMax';
+import type { AggregationMean } from './AggregationMean';
+import type { AggregationMin } from './AggregationMin';
+import type { AggregationPercentileEstimate } from './AggregationPercentileEstimate';
+import type { AggregationSum } from './AggregationSum';
 /**
  * @type Aggregation
  * Aggregation methods for `TemporalRasterAggregation`.
@@ -24,7 +24,23 @@ import type { SumAggregation } from './SumAggregation';
  * Encountering NO DATA makes the aggregation result NO DATA unless `ignoreNoData` is `true`.
  * @export
  */
-export type Aggregation = CountAggregation | FirstAggregation | LastAggregation | MaxAggregation | MeanAggregation | MinAggregation | PercentileEstimateAggregation | SumAggregation;
+export type Aggregation = {
+    type: 'count';
+} & AggregationCount | {
+    type: 'first';
+} & AggregationFirst | {
+    type: 'last';
+} & AggregationLast | {
+    type: 'max';
+} & AggregationMax | {
+    type: 'mean';
+} & AggregationMean | {
+    type: 'min';
+} & AggregationMin | {
+    type: 'percentileEstimate';
+} & AggregationPercentileEstimate | {
+    type: 'sum';
+} & AggregationSum;
 export declare function AggregationFromJSON(json: any): Aggregation;
 export declare function AggregationFromJSONTyped(json: any, ignoreDiscriminator: boolean): Aggregation;
 export declare function AggregationToJSON(json: any): any;

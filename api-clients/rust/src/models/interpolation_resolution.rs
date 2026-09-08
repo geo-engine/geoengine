@@ -11,10 +11,12 @@ use crate::models;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "type")]
 pub enum InterpolationResolution {
-    Resolution(Box<models::Resolution>),
-    Fraction(Box<models::Fraction>),
+    #[serde(rename="resolution")]
+    Resolution(Box<models::InterpolationResolutionResolution>),
+    #[serde(rename="fraction")]
+    Fraction(Box<models::InterpolationResolutionFraction>),
 }
 
 impl Default for InterpolationResolution {
@@ -22,18 +24,5 @@ impl Default for InterpolationResolution {
         Self::Resolution(Default::default())
     }
 }
-/// 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum Type {
-    #[serde(rename = "resolution")]
-    Resolution,
-    #[serde(rename = "fraction")]
-    Fraction,
-}
 
-impl Default for Type {
-    fn default() -> Type {
-        Self::Resolution
-    }
-}
 

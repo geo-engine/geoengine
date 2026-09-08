@@ -21,14 +21,6 @@ The operator returns an error if one of the selected attributes is not numeric.
 
 For raster data, the operator generates one statistic for each input raster.
 
-## Inputs
-
-The operator consumes exactly one _vector_ or multiple _raster_ operators.
-
-| Parameter | Type                                 |
-| --------- | ------------------------------------ |
-| `source`  | `MultipleRasterOrSingleVectorSource` |
-
 ## Errors
 
 The operator returns an error in the following cases.

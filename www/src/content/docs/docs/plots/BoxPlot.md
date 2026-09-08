@@ -12,14 +12,6 @@ Thereby, the operator considers all data in the given query rectangle.
 The boxes of the plot span the 1st and 3rd quartile and highlight the median.
 The whiskers indicate the minimum and maximum values of the corresponding attribute or raster.
 
-## Inputs
-
-The operator consumes exactly one _vector_ or multiple _raster_ operators.
-
-| Parameter | Type                                 |
-| --------- | ------------------------------------ |
-| `source`  | `MultipleRasterOrSingleVectorSource` |
-
 ## Errors
 
 The operator returns an error in the following cases.

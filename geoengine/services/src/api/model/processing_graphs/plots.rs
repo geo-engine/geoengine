@@ -1,6 +1,6 @@
 use crate::api::model::processing_graphs::source_parameters::{
     MultipleRasterOrSingleVectorSource, SingleRasterOrVectorSource, SingleRasterSource,
-    SingleVectorOrRasterSource, SingleVectorSource,
+    SingleVectorSource,
 };
 use geoengine_macros::{api_operator, type_tag};
 use ordered_float::NotNan;
@@ -48,7 +48,7 @@ use utoipa::ToSchema;
 })))]
 pub struct Histogram {
     pub params: HistogramParameters,
-    pub sources: SingleVectorOrRasterSource,
+    pub sources: SingleRasterOrVectorSource,
 }
 
 /// The parameter spec for `Histogram`
@@ -173,14 +173,6 @@ impl TryFrom<Histogram> for geoengine_operators::plot::Histogram {
 ///
 /// For raster data, the operator generates one statistic for each input raster.
 ///
-/// ## Inputs
-///
-/// The operator consumes exactly one _vector_ or multiple _raster_ operators.
-///
-/// | Parameter | Type                                 |
-/// | --------- | ------------------------------------ |
-/// | `source`  | `MultipleRasterOrSingleVectorSource` |
-///
 /// ## Errors
 ///
 /// The operator returns an error in the following cases.
@@ -280,14 +272,6 @@ impl TryFrom<Statistics> for geoengine_operators::plot::Statistics {
 ///
 /// The boxes of the plot span the 1st and 3rd quartile and highlight the median.
 /// The whiskers indicate the minimum and maximum values of the corresponding attribute or raster.
-///
-/// ## Inputs
-///
-/// The operator consumes exactly one _vector_ or multiple _raster_ operators.
-///
-/// | Parameter | Type                                 |
-/// | --------- | ------------------------------------ |
-/// | `source`  | `MultipleRasterOrSingleVectorSource` |
 ///
 /// ## Errors
 ///
@@ -728,16 +712,19 @@ impl TryFrom<ScatterPlot> for geoengine_operators::plot::ScatterPlot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::processing_graphs::{
-        GdalSource, GdalSourceParameters, PlotOperator, RasterOperator, VectorOperator,
-        source::{MockPointSource, MockPointSourceParameters, OgrSource, OgrSourceParameters},
-        source_parameters::{
-            MultipleRasterOrSingleVectorOperator, MultipleRasterOrSingleVectorSource,
-            SingleRasterOrVectorOperator, SingleVectorOrRasterSource,
-        },
-    };
     use crate::api::model::{
         datatypes::Coordinate2D, processing_graphs::parameters::SpatialBoundsDerive,
+    };
+    use crate::api::model::{
+        datatypes::NamedData,
+        processing_graphs::{
+            GdalSource, GdalSourceParameters, PlotOperator, RasterOperator, VectorOperator,
+            source::{MockPointSource, MockPointSourceParameters, OgrSource, OgrSourceParameters},
+            source_parameters::{
+                MultipleRasterOrSingleVectorOperator, MultipleRasterOrSingleVectorSource,
+                SingleRasterOrVectorOperator, SingleRasterOrVectorSource,
+            },
+        },
     };
     use geoengine_operators::engine::PlotOperator as OperatorsPlotOperatorTrait;
     use ordered_float::NotNan;
@@ -821,13 +808,14 @@ mod tests {
                 }),
                 interactive: false,
             },
-            sources: SingleVectorOrRasterSource {
-                vector: SingleRasterOrVectorOperator::Vector(VectorOperator::OgrSource(
+            sources: SingleRasterOrVectorSource {
+                source: SingleRasterOrVectorOperator::Vector(VectorOperator::OgrSource(
                     OgrSource {
                         r#type: Default::default(),
                         params: OgrSourceParameters {
-                            data: "ndvi".to_string(),
+                            data: NamedData::with_system_name("ndvi"),
                             attribute_projection: None,
+                            attribute_filters: None,
                         },
                     },
                 )),
@@ -865,13 +853,14 @@ mod tests {
                 }),
                 interactive: false,
             },
-            sources: SingleVectorOrRasterSource {
-                vector: SingleRasterOrVectorOperator::Vector(VectorOperator::OgrSource(
+            sources: SingleRasterOrVectorSource {
+                source: SingleRasterOrVectorOperator::Vector(VectorOperator::OgrSource(
                     OgrSource {
                         r#type: Default::default(),
                         params: OgrSourceParameters {
-                            data: "ndvi".to_string(),
+                            data: NamedData::with_system_name("ndvi"),
                             attribute_projection: None,
+                            attribute_filters: None,
                         },
                     },
                 )),
@@ -909,13 +898,14 @@ mod tests {
                 }),
                 interactive: false,
             },
-            sources: SingleVectorOrRasterSource {
-                vector: SingleRasterOrVectorOperator::Vector(VectorOperator::OgrSource(
+            sources: SingleRasterOrVectorSource {
+                source: SingleRasterOrVectorOperator::Vector(VectorOperator::OgrSource(
                     OgrSource {
                         r#type: Default::default(),
                         params: OgrSourceParameters {
-                            data: "ndvi".to_string(),
+                            data: NamedData::with_system_name("ndvi"),
                             attribute_projection: None,
+                            attribute_filters: None,
                         },
                     },
                 )),
@@ -941,8 +931,8 @@ mod tests {
                 }),
                 interactive: false,
             },
-            sources: SingleVectorOrRasterSource {
-                vector: SingleRasterOrVectorOperator::Vector(VectorOperator::MockPointSource(
+            sources: SingleRasterOrVectorSource {
+                source: SingleRasterOrVectorOperator::Vector(VectorOperator::MockPointSource(
                     MockPointSource {
                         r#type: Default::default(),
                         params: MockPointSourceParameters {
@@ -1013,7 +1003,7 @@ mod tests {
                     RasterOperator::GdalSource(GdalSource {
                         r#type: Default::default(),
                         params: GdalSourceParameters {
-                            data: "ndvi".to_string(),
+                            data: NamedData::with_system_name("ndvi"),
                             overview_level: None,
                         },
                     }),
@@ -1097,8 +1087,9 @@ mod tests {
                     OgrSource {
                         r#type: Default::default(),
                         params: OgrSourceParameters {
-                            data: "landcover".to_string(),
+                            data: NamedData::with_system_name("landcover"),
                             attribute_projection: None,
+                            attribute_filters: None,
                         },
                     },
                 )),
@@ -1148,7 +1139,7 @@ mod tests {
                 raster: RasterOperator::GdalSource(GdalSource {
                     r#type: Default::default(),
                     params: GdalSourceParameters {
-                        data: "temperature".to_string(),
+                        data: NamedData::with_system_name("temperature"),
                         overview_level: None,
                     },
                 }),
@@ -1174,8 +1165,9 @@ mod tests {
                 vector: VectorOperator::OgrSource(OgrSource {
                     r#type: Default::default(),
                     params: OgrSourceParameters {
-                        data: "classes".to_string(),
+                        data: NamedData::with_system_name("classes"),
                         attribute_projection: None,
+                        attribute_filters: None,
                     },
                 }),
             },

@@ -707,26 +707,38 @@ fn default_time_from_config() -> TimeInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::responses::ErrorResponse;
-    use crate::contexts::PostgresContext;
-    use crate::contexts::Session;
-    use crate::datasets::DatasetIdAndName;
-    use crate::ge_context;
-    use crate::users::UserAuth;
-    use crate::util::tests::{
-        add_pro_file_definition_to_datasets_as_admin, check_allowed_http_methods, read_body_string,
-        send_test_request,
+    use crate::{
+        api::model::{
+            processing_graphs::{
+                MockPointSource, MockPointSourceParameters, SpatialBoundsDerive, TypedOperator,
+                VectorOperator,
+            },
+            responses::ErrorResponse,
+        },
+        contexts::{PostgresContext, Session},
+        datasets::DatasetIdAndName,
+        ge_context,
+        users::UserAuth,
+        util::tests::{
+            add_pro_file_definition_to_datasets_as_admin, check_allowed_http_methods,
+            read_body_string, send_test_request,
+        },
+        workflows::workflow::Workflow,
     };
-    use crate::workflows::workflow::Workflow;
-    use actix_web::dev::ServiceResponse;
-    use actix_web::http::header;
-    use actix_web::{http::Method, test};
+    use actix_web::{
+        dev::ServiceResponse,
+        http::{Method, header},
+        test,
+    };
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
-    use geoengine_datatypes::test_data;
-    use geoengine_operators::engine::TypedOperator;
-    use geoengine_operators::source::CsvSourceParameters;
-    use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
+    use geoengine_datatypes::{
+        raster::{GridShape2D, TilingSpecification},
+        test_data,
+    };
+    use geoengine_operators::{
+        engine::{TypedOperator as OperatorsTypedOperator, VectorOperator as _},
+        source::{CsvGeometrySpecification, CsvSource, CsvSourceParameters, CsvTimeSpecification},
+    };
     use serde_json::json;
     use std::io::{Seek, SeekFrom, Write};
     use tokio_postgres::NoTls;
@@ -829,34 +841,17 @@ mod tests {
         app_ctx: PostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
-        let mut temp_file = tempfile::NamedTempFile::new().unwrap();
-        write!(
-            temp_file,
-            "
-x;y
-0;1
-2;3
-4;5
-"
-        )
-        .unwrap();
-        temp_file.seek(SeekFrom::Start(0)).unwrap();
-
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
         let session_id = session.id();
 
-        let workflow = Workflow::Legacy {
-            operator: TypedOperator::Vector(Box::new(CsvSource {
-                params: CsvSourceParameters {
-                    file_path: temp_file.path().into(),
-                    field_separator: ';',
-                    geometry: CsvGeometrySpecification::XY {
-                        x: "x".into(),
-                        y: "y".into(),
-                    },
-                    time: CsvTimeSpecification::None,
+        let workflow = Workflow::Typed {
+            operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
+                r#type: Default::default(),
+                params: MockPointSourceParameters {
+                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+                    spatial_bounds: SpatialBoundsDerive::None(Default::default()),
                 },
             })),
         };
@@ -918,17 +913,20 @@ x;y
         let session_id = session.id();
 
         let workflow = Workflow::Legacy {
-            operator: TypedOperator::Vector(Box::new(CsvSource {
-                params: CsvSourceParameters {
-                    file_path: temp_file.path().into(),
-                    field_separator: ';',
-                    geometry: CsvGeometrySpecification::XY {
-                        x: "x".into(),
-                        y: "y".into(),
+            operator: OperatorsTypedOperator::Vector(
+                CsvSource {
+                    params: CsvSourceParameters {
+                        file_path: temp_file.path().into(),
+                        field_separator: ';',
+                        geometry: CsvGeometrySpecification::XY {
+                            x: "x".to_string(),
+                            y: "y".to_string(),
+                        },
+                        time: CsvTimeSpecification::None,
                     },
-                    time: CsvTimeSpecification::None,
-                },
-            })),
+                }
+                .boxed(),
+            ),
         };
 
         let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
@@ -1040,17 +1038,20 @@ x;y
         let session_id = session.id();
 
         let workflow = Workflow::Legacy {
-            operator: TypedOperator::Vector(Box::new(CsvSource {
-                params: CsvSourceParameters {
-                    file_path: temp_file.path().into(),
-                    field_separator: ';',
-                    geometry: CsvGeometrySpecification::XY {
-                        x: "x".into(),
-                        y: "y".into(),
+            operator: OperatorsTypedOperator::Vector(
+                CsvSource {
+                    params: CsvSourceParameters {
+                        file_path: temp_file.path().into(),
+                        field_separator: ';',
+                        geometry: CsvGeometrySpecification::XY {
+                            x: "x".to_string(),
+                            y: "y".to_string(),
+                        },
+                        time: CsvTimeSpecification::None,
                     },
-                    time: CsvTimeSpecification::None,
-                },
-            })),
+                }
+                .boxed(),
+            ),
         };
 
         let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();

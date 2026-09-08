@@ -40,9 +40,9 @@ impl OperatorName for Rasterization {
 pub struct DensityParams {
     /// Defines the cutoff (as percentage of maximum density) down to which a point is taken
     /// into account for an output pixel density value
-    cutoff: f64,
+    pub cutoff: f64,
     /// The standard deviation parameter for the gaussian function
-    stddev: f64,
+    pub stddev: f64,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]

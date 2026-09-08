@@ -1324,7 +1324,13 @@ mod tests {
 
     use super::*;
     use crate::{
-        api::model::responses::ErrorResponse,
+        api::model::{
+            processing_graphs::{
+                GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
+                SpatialBoundsDerive, TypedOperator, VectorOperator,
+            },
+            responses::ErrorResponse,
+        },
         contexts::{PostgresContext, Session, SessionId},
         datasets::{
             RasterDatasetFromWorkflowResult,
@@ -1361,13 +1367,13 @@ mod tests {
     };
     use geoengine_operators::{
         engine::{
-            RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
-            SingleRasterOrVectorSource, SpatialGridDescriptor, TimeDescriptor, TypedOperator,
-            VectorOperator,
+            RasterBandDescriptors, RasterOperator as _, RasterResultDescriptor,
+            SingleRasterOrVectorSource as OperatorsSingleRasterOrVectorSource,
+            SpatialGridDescriptor, TimeDescriptor, TypedOperator as OperatorsTypedOperator,
         },
-        mock::{MockPointSource, MockPointSourceParams, MockRasterSource, MockRasterSourceParams},
+        mock::{MockRasterSource, MockRasterSourceParams},
         processing::{TimeShift, TimeShiftParams},
-        source::{GdalSource, GdalSourceParameters},
+        source::GdalSource as OperatorsGdalSource,
         util::test::assert_eq_two_raster_operator_res_u8,
     };
 
@@ -1441,15 +1447,16 @@ mod tests {
                 AddLayer {
                     name: "Layer Name".to_string(),
                     description: "Layer Description".to_string(),
-                    workflow: Workflow::Legacy {
-                        operator: MockPointSource {
-                            params: MockPointSourceParams::new(vec![
-                                (0.0, 0.1).into(),
-                                (1.0, 1.1).into(),
-                            ]),
-                        }
-                        .boxed()
-                        .into(),
+                    workflow: Workflow::Typed {
+                        operator: TypedOperator::Vector(VectorOperator::MockPointSource(
+                            MockPointSource {
+                                r#type: Default::default(),
+                                params: MockPointSourceParameters {
+                                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+                                    spatial_bounds: SpatialBoundsDerive::None(Default::default()),
+                                },
+                            },
+                        )),
                     },
                     symbology: None,
                     metadata: Default::default(),
@@ -1570,16 +1577,14 @@ mod tests {
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
-            workflow: Workflow::Legacy {
-                operator: TypedOperator::Vector(
-                    MockPointSource {
-                        params: MockPointSourceParams {
-                            points: vec![Coordinate2D::new(1., 2.); 3],
-                            spatial_bounds: geoengine_operators::mock::SpatialBoundsDerive::Derive,
-                        },
-                    }
-                    .boxed(),
-                ),
+            workflow: Workflow::Typed {
+                operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
+                    r#type: Default::default(),
+                    params: MockPointSourceParameters {
+                        points: vec![(1., 2.).into(); 3],
+                        spatial_bounds: SpatialBoundsDerive::Derive(Default::default()),
+                    },
+                })),
             },
             symbology: None,
             metadata: Default::default(),
@@ -1597,16 +1602,14 @@ mod tests {
         let update_layer = UpdateLayer {
             name: "Foo new".to_string(),
             description: "Bar new".to_string(),
-            workflow: Workflow::Legacy {
-                operator: TypedOperator::Vector(
-                    MockPointSource {
-                        params: MockPointSourceParams {
-                            points: vec![Coordinate2D::new(4., 5.); 3],
-                            spatial_bounds: geoengine_operators::mock::SpatialBoundsDerive::Derive,
-                        },
-                    }
-                    .boxed(),
-                ),
+            workflow: Workflow::Typed {
+                operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
+                    r#type: Default::default(),
+                    params: MockPointSourceParameters {
+                        points: vec![(4., 5.).into(); 3],
+                        spatial_bounds: SpatialBoundsDerive::Derive(Default::default()),
+                    },
+                })),
             },
             symbology: None,
             metadata: Default::default(),
@@ -1672,16 +1675,14 @@ mod tests {
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
-            workflow: Workflow::Legacy {
-                operator: TypedOperator::Vector(
-                    MockPointSource {
-                        params: MockPointSourceParams {
-                            points: vec![Coordinate2D::new(1., 2.); 3],
-                            spatial_bounds: geoengine_operators::mock::SpatialBoundsDerive::Derive,
-                        },
-                    }
-                    .boxed(),
-                ),
+            workflow: Workflow::Typed {
+                operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
+                    r#type: Default::default(),
+                    params: MockPointSourceParameters {
+                        points: vec![(1., 2.).into(); 3],
+                        spatial_bounds: SpatialBoundsDerive::Derive(Default::default()),
+                    },
+                })),
             },
             symbology: None,
             metadata: Default::default(),
@@ -1722,16 +1723,14 @@ mod tests {
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
-            workflow: Workflow::Legacy {
-                operator: TypedOperator::Vector(
-                    MockPointSource {
-                        params: MockPointSourceParams {
-                            points: vec![Coordinate2D::new(1., 2.); 3],
-                            spatial_bounds: geoengine_operators::mock::SpatialBoundsDerive::Derive,
-                        },
-                    }
-                    .boxed(),
-                ),
+            workflow: Workflow::Typed {
+                operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
+                    r#type: Default::default(),
+                    params: MockPointSourceParameters {
+                        points: vec![Coordinate2D::new(1., 2.).into(); 3],
+                        spatial_bounds: SpatialBoundsDerive::Derive(Default::default()),
+                    },
+                })),
             },
             symbology: None,
             metadata: Default::default(),
@@ -1840,15 +1839,16 @@ mod tests {
                 AddLayer {
                     name: "Layer Name".to_string(),
                     description: "Layer Description".to_string(),
-                    workflow: Workflow::Legacy {
-                        operator: MockPointSource {
-                            params: MockPointSourceParams::new(vec![
-                                (0.0, 0.1).into(),
-                                (1.0, 1.1).into(),
-                            ]),
-                        }
-                        .boxed()
-                        .into(),
+                    workflow: Workflow::Typed {
+                        operator: TypedOperator::Vector(VectorOperator::MockPointSource(
+                            MockPointSource {
+                                r#type: Default::default(),
+                                params: MockPointSourceParameters {
+                                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+                                    spatial_bounds: SpatialBoundsDerive::None(Default::default()),
+                                },
+                            },
+                        )),
                     },
                     symbology: None,
                     metadata: Default::default(),
@@ -2623,12 +2623,12 @@ mod tests {
                 }
             } else {
                 Workflow::Legacy {
-                    operator: TypedOperator::Raster(Box::new(TimeShift {
+                    operator: OperatorsTypedOperator::Raster(Box::new(TimeShift {
                         params: TimeShiftParams::Relative {
                             granularity: TimeGranularity::Millis,
                             value: time_shift_millis,
                         },
-                        sources: SingleRasterOrVectorSource {
+                        sources: OperatorsSingleRasterOrVectorSource {
                             source: raster_source.into(),
                         },
                     })),
@@ -2770,16 +2770,21 @@ mod tests {
 
         // query the newly created dataset
         let dataset_operator = GdalSource {
-            params: GdalSourceParameters::new(response.dataset.into()),
-        }
-        .boxed();
+            r#type: Default::default(),
+            params: GdalSourceParameters {
+                data: response.dataset.into(),
+                overview_level: None,
+            },
+        };
 
         assert_eq_two_raster_operator_res_u8(
             &ctx.execution_context().unwrap(),
             &ctx.query_context(WorkflowId::new(), ComputationId::new())
                 .unwrap(),
             workflow_operator,
-            dataset_operator,
+            OperatorsGdalSource::try_from(dataset_operator)
+                .unwrap()
+                .boxed(),
             mock_source.query_rectangle,
             false,
         )

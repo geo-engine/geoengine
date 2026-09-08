@@ -34,14 +34,14 @@ impl OperatorName for VectorJoin {
 #[serde(rename_all = "camelCase")]
 pub struct VectorJoinParams {
     #[serde(flatten)]
-    join_type: VectorJoinType,
+    pub join_type: VectorJoinType,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VectorJoinSources {
-    left: Box<dyn VectorOperator>,
-    right: Box<dyn VectorOperator>,
+    pub left: Box<dyn VectorOperator>,
+    pub right: Box<dyn VectorOperator>,
 }
 
 impl OperatorData for VectorJoinSources {

@@ -10,8 +10,8 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import { instanceOfFraction, FractionFromJSONTyped, FractionToJSON, } from './Fraction';
-import { instanceOfResolution, ResolutionFromJSONTyped, ResolutionToJSON, } from './Resolution';
+import { DownsamplingResolutionFractionFromJSONTyped, DownsamplingResolutionFractionToJSON, } from './DownsamplingResolutionFraction';
+import { DownsamplingResolutionResolutionFromJSONTyped, DownsamplingResolutionResolutionToJSON, } from './DownsamplingResolutionResolution';
 export function DownsamplingResolutionFromJSON(json) {
     return DownsamplingResolutionFromJSONTyped(json, false);
 }
@@ -19,16 +19,14 @@ export function DownsamplingResolutionFromJSONTyped(json, ignoreDiscriminator) {
     if (json == null) {
         return json;
     }
-    if (typeof json !== 'object') {
-        return json;
+    switch (json['type']) {
+        case 'fraction':
+            return Object.assign({}, DownsamplingResolutionFractionFromJSONTyped(json, true), { type: 'fraction' });
+        case 'resolution':
+            return Object.assign({}, DownsamplingResolutionResolutionFromJSONTyped(json, true), { type: 'resolution' });
+        default:
+            return json;
     }
-    if (instanceOfFraction(json)) {
-        return FractionFromJSONTyped(json, true);
-    }
-    if (instanceOfResolution(json)) {
-        return ResolutionFromJSONTyped(json, true);
-    }
-    return {};
 }
 export function DownsamplingResolutionToJSON(json) {
     return DownsamplingResolutionToJSONTyped(json, false);
@@ -37,14 +35,12 @@ export function DownsamplingResolutionToJSONTyped(value, ignoreDiscriminator = f
     if (value == null) {
         return value;
     }
-    if (typeof value !== 'object') {
-        return value;
+    switch (value['type']) {
+        case 'fraction':
+            return Object.assign({}, DownsamplingResolutionFractionToJSON(value), { type: 'fraction' });
+        case 'resolution':
+            return Object.assign({}, DownsamplingResolutionResolutionToJSON(value), { type: 'resolution' });
+        default:
+            return value;
     }
-    if (instanceOfFraction(value)) {
-        return FractionToJSON(value);
-    }
-    if (instanceOfResolution(value)) {
-        return ResolutionToJSON(value);
-    }
-    return {};
 }
