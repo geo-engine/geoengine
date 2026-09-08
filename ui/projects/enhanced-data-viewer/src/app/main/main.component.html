@@ -215,7 +215,14 @@
                 <mat-icon>show_chart</mat-icon>
             </button> -->
 
-            <button type="button" matMiniFab aria-label="Download" color="secondary" (click)="downloadMapImage()">
+            <button
+                type="button"
+                matMiniFab
+                aria-label="Download"
+                color="secondary"
+                (click)="downloadMapImage()"
+                [disabled]="mapImageLoading()"
+            >
                 <mat-icon>image</mat-icon>
             </button>
         </div>

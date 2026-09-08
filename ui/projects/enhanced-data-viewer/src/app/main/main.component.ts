@@ -80,6 +80,8 @@ export class MainComponent {
     });
     readonly spatialReference = toSignal(this.projectService.getSpatialReferenceStream());
 
+    readonly mapImageLoading = signal(false);
+
     readonly landCover = resource({
         params: () => ({}),
         loader: async ({params: _}) => {
@@ -189,11 +191,17 @@ export class MainComponent {
         const [currentDate] = (this.currentTime()?.toString() ?? new Date().toISOString()).split('T');
         const currentLayer = this.layersReverse().at(-1)?.name ?? 'enhanced-data-viewer-map';
 
-        const mapImage = await this.mapComponent().mapAsImage(); // TODO: show loading animation while generating the map image
-        const link = document.createElement('a');
-        link.href = mapImage;
-        link.download = `${currentDate} ${currentLayer}.png`;
-        link.click();
-        link.remove();
+        this.mapImageLoading.set(true);
+
+        try {
+            const mapImage = await this.mapComponent().mapAsImage();
+            const link = document.createElement('a');
+            link.href = mapImage;
+            link.download = `${currentDate} ${currentLayer}.png`;
+            link.click();
+            link.remove();
+        } finally {
+            this.mapImageLoading.set(false);
+        }
     }
 }
