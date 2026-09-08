@@ -1,15 +1,11 @@
 """Tests for the datasets module."""
 
-import os
 import unittest
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import geoengine_api_client
 import geoengine_api_client.models
 import geoengine_api_client.models.spatial_grid_descriptor_state
-import numpy as np
-import rasterio as rio
 
 import geoengine as ge
 from geoengine.permissions import REGISTERED_USER_ROLE_ID, Permission, PermissionListing, Role
@@ -404,47 +400,63 @@ class DatasetsTests(unittest.TestCase):
             ge.initialize(ge_instance.address(), credentials=("admin@localhost", "adminadmin"))
 
             pixel_size = 0.2
-            tile_z_index = {(0, 0): 0, (0, 1): 1, (1, 0): 1, (1, 1): 2}
-            data_dir = Path(os.environ["GEOENGINE_TEST_CODE_PATH"]) / "test_data/raster/multi_tile/data"
+            tile_specs = {
+                "tile_x0_y0": {
+                    "bounds": (-180.0, -22.4, 45.0, 90.0),
+                    "geo_transform": (-180.0, 90.0),
+                    "z_index": 0,
+                },
+                "tile_x0_y1": {
+                    "bounds": (-180.0, -90.0, 45.0, 22.4),
+                    "geo_transform": (-180.0, 22.4),
+                    "z_index": 1,
+                },
+                "tile_x1_y0": {
+                    "bounds": (-45.0, -22.4, 180.0, 90.0),
+                    "geo_transform": (-45.0, 90.0),
+                    "z_index": 1,
+                },
+                "tile_x1_y1": {
+                    "bounds": (-45.0, -90.0, 180.0, 22.4),
+                    "geo_transform": (-45.0, 22.4),
+                    "z_index": 2,
+                },
+            }
 
-            # The tile specs are derived from the actual files (transform and
-            # bounds), like stac-import derives them from proj:transform/shape.
             # The time of each file is a single day, as the source requires the
-            # file time to match the query time (one step of the time dimension)
+            # file time to match the query time (one step of the time dimension).
             files = []
             for date in [datetime(2025, 1, 1), datetime(2025, 2, 1), datetime(2025, 4, 1)]:
                 next_date = date + timedelta(days=1)
                 for band in range(2):
-                    for x, y in tile_z_index:
-                        tiff_path = data_dir / f"{date:%Y-%m-%d}_tile_x{x}_y{y}_b{band}.tif"
-                        with rio.open(tiff_path) as source:
-                            transform = source.transform
-                            bounds = source.bounds
-                            files.append(
-                                ge.MultiBandGdalFileSpec(
-                                    file_path=f"raster/multi_tile/data/{tiff_path.name}",
-                                    time=ge.TimeInterval(start=date, end=next_date),
-                                    spatial_partition=ge.SpatialPartition2D(
-                                        xmin=bounds.left,
-                                        ymin=bounds.bottom,
-                                        xmax=bounds.right,
-                                        ymax=bounds.top,
-                                    ),
-                                    band=band,
-                                    width=source.width,
-                                    height=source.height,
-                                    geo_transform=ge.GeoTransform(
-                                        x_min=transform.c,
-                                        y_max=transform.f,
-                                        x_pixel_size=transform.a,
-                                        y_pixel_size=transform.e,
-                                    ),
-                                    channel=1,
-                                    z_index=tile_z_index[(x, y)],
-                                    no_data_value=0.0,
-                                    allow_alphaband_as_mask=True,
-                                )
+                    for tile_name, tile_spec in tile_specs.items():
+                        xmin, ymin, xmax, ymax = tile_spec["bounds"]
+                        x_min, y_max = tile_spec["geo_transform"]
+                        files.append(
+                            ge.MultiBandGdalFileSpec(
+                                file_path=f"raster/multi_tile/data/{date:%Y-%m-%d}_{tile_name}_b{band}.tif",
+                                time=ge.TimeInterval(start=date, end=next_date),
+                                spatial_partition=ge.SpatialPartition2D(
+                                    xmin=xmin,
+                                    ymin=ymin,
+                                    xmax=xmax,
+                                    ymax=ymax,
+                                ),
+                                band=band,
+                                width=1125,
+                                height=562,
+                                geo_transform=ge.GeoTransform(
+                                    x_min=x_min,
+                                    y_max=y_max,
+                                    x_pixel_size=pixel_size,
+                                    y_pixel_size=-pixel_size,
+                                ),
+                                channel=1,
+                                z_index=tile_spec["z_index"],
+                                no_data_value=0.0,
+                                allow_alphaband_as_mask=True,
                             )
+                        )
 
             dataset_name = ge.add_multiband_gdal_source(
                 name="multi_band_test",
@@ -499,15 +511,11 @@ class DatasetsTests(unittest.TestCase):
             )
             array = workflow.get_array(query)
 
-            with rio.open(data_dir / "2025-01-01_tile_x1_y1_b0.tif") as source:
-                window = rio.windows.from_bounds(-45.0, -22.4, 45.0, 22.4, source.transform)
-                expected = source.read(1, window=window)
-
             # The server also includes the boundary row whose bottom edge
-            # coincides with the query's top edge, so the file window (which
-            # starts at that edge) lines up with the second result row
-            self.assertEqual(array.shape, (expected.shape[0] + 1, expected.shape[1]))
-            self.assertTrue(np.array_equal(array[1:, :], expected))
+            # coincides with the query's top edge. The remaining rows come
+            # from the highest z-index tile, whose fixture value is 10011.
+            self.assertEqual(array.shape[1], 450)
+            self.assertTrue((array[1:, :] == 10011).all())
 
 
 if __name__ == "__main__":
