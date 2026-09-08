@@ -18,7 +18,11 @@ docs/BandFilter.md
 docs/BandFilterParameters.md
 docs/BandsByNameOrIndex.md
 docs/BoundingBox2D.md
+docs/BoxPlot.md
+docs/BoxPlotParameters.md
 docs/Breakpoint.md
+docs/ClassHistogram.md
+docs/ClassHistogramParameters.md
 docs/ClassificationMeasurement.md
 docs/Collection.md
 docs/CollectionItem.md
@@ -72,6 +76,8 @@ docs/ExpressionParameters.md
 docs/Extent.md
 docs/ExternalDataId.md
 docs/FeatureAggregationMethod.md
+docs/FeatureAttributeValuesOverTime.md
+docs/FeatureAttributeValuesOverTimeParameters.md
 docs/FeatureDataType.md
 docs/FileNotFoundHandling.md
 docs/FirstAggregation.md
@@ -137,6 +143,9 @@ docs/Link.md
 docs/LogarithmicGradient.md
 docs/MaxAggregation.md
 docs/MeanAggregation.md
+docs/MeanRasterPixelValuesOverTime.md
+docs/MeanRasterPixelValuesOverTimeParameters.md
+docs/MeanRasterPixelValuesOverTimePosition.md
 docs/Measurement.md
 docs/MetaDataDefinition.md
 docs/MetaDataSuggestion.md
@@ -200,6 +209,9 @@ docs/Permission.md
 docs/PermissionListing.md
 docs/PermissionRequest.md
 docs/PermissionsApi.md
+docs/PieChart.md
+docs/PieChartCountType.md
+docs/PieChartParameters.md
 docs/Plot.md
 docs/PlotOperator.md
 docs/PlotOutputFormat.md
@@ -248,6 +260,8 @@ docs/Resolution.md
 docs/Resource.md
 docs/Role.md
 docs/RoleDescription.md
+docs/ScatterPlot.md
+docs/ScatterPlotParameters.md
 docs/SearchCapabilities.md
 docs/SearchType.md
 docs/SearchTypes.md
@@ -416,7 +430,11 @@ src/models/band_filter.rs
 src/models/band_filter_parameters.rs
 src/models/bands_by_name_or_index.rs
 src/models/bounding_box2_d.rs
+src/models/box_plot.rs
+src/models/box_plot_parameters.rs
 src/models/breakpoint.rs
+src/models/class_histogram.rs
+src/models/class_histogram_parameters.rs
 src/models/classification_measurement.rs
 src/models/collection.rs
 src/models/collection_item.rs
@@ -469,6 +487,8 @@ src/models/expression_parameters.rs
 src/models/extent.rs
 src/models/external_data_id.rs
 src/models/feature_aggregation_method.rs
+src/models/feature_attribute_values_over_time.rs
+src/models/feature_attribute_values_over_time_parameters.rs
 src/models/feature_data_type.rs
 src/models/file_not_found_handling.rs
 src/models/first_aggregation.rs
@@ -532,6 +552,9 @@ src/models/link.rs
 src/models/logarithmic_gradient.rs
 src/models/max_aggregation.rs
 src/models/mean_aggregation.rs
+src/models/mean_raster_pixel_values_over_time.rs
+src/models/mean_raster_pixel_values_over_time_parameters.rs
+src/models/mean_raster_pixel_values_over_time_position.rs
 src/models/measurement.rs
 src/models/meta_data_definition.rs
 src/models/meta_data_suggestion.rs
@@ -590,6 +613,9 @@ src/models/percentile_estimate_aggregation.rs
 src/models/permission.rs
 src/models/permission_listing.rs
 src/models/permission_request.rs
+src/models/pie_chart.rs
+src/models/pie_chart_count_type.rs
+src/models/pie_chart_parameters.rs
 src/models/plot.rs
 src/models/plot_operator.rs
 src/models/plot_output_format.rs
@@ -636,6 +662,8 @@ src/models/resolution.rs
 src/models/resource.rs
 src/models/role.rs
 src/models/role_description.rs
+src/models/scatter_plot.rs
+src/models/scatter_plot_parameters.rs
 src/models/search_capabilities.rs
 src/models/search_type.rs
 src/models/search_types.rs

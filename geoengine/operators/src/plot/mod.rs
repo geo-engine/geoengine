@@ -7,6 +7,7 @@ mod statistics;
 mod temporal_raster_mean_plot;
 mod temporal_vector_line_plot;
 
+pub use self::box_plot::{BoxPlot, BoxPlotParams};
 pub use self::class_histogram::{
     ClassHistogram, ClassHistogramParams, ClassHistogramRasterQueryProcessor,
     ClassHistogramVectorQueryProcessor, InitializedClassHistogram,
@@ -19,6 +20,7 @@ pub use self::pie_chart::{
     CountPieChartVectorQueryProcessor, InitializedCountPieChart, PieChart, PieChartError,
     PieChartParams,
 };
+pub use self::scatter_plot::{InitializedScatterPlot, ScatterPlot, ScatterPlotParams};
 pub use self::statistics::{
     InitializedStatistics, Statistics, StatisticsParams, StatisticsRasterQueryProcessor,
     StatisticsVectorQueryProcessor,
@@ -27,4 +29,7 @@ pub use self::temporal_raster_mean_plot::{
     InitializedMeanRasterPixelValuesOverTime, MeanRasterPixelValuesOverTime,
     MeanRasterPixelValuesOverTimeParams, MeanRasterPixelValuesOverTimePosition,
     MeanRasterPixelValuesOverTimeQueryProcessor,
+};
+pub use self::temporal_vector_line_plot::{
+    FeatureAttributeValuesOverTime, FeatureAttributeValuesOverTimeParams,
 };

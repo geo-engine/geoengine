@@ -65,9 +65,18 @@ export default function openApiOperatorsPlugin(options: OpenApiOperatorsOptions)
                     ];
 
                     for (const group of operatorGroups) {
-                        const {schema, dest, label} = group as {schema: OpenAPI.SchemaObject; dest: OperatorMd[]; label: string};
-                        for (const operatorPosition in schema.oneOf) {
-                            const operatorSchema: OpenAPI.SchemaObject = schema.oneOf[operatorPosition];
+                        const {schema, dest, label} = group as {schema?: OpenAPI.SchemaObject; dest: OperatorMd[]; label: string};
+                        if (!schema) {
+                            continue;
+                        }
+
+                        const oneOf = schema.oneOf ?? [];
+                        for (const operatorPosition in oneOf) {
+                            const operatorSchema = oneOf[operatorPosition] as OpenAPI.SchemaObject | undefined;
+                            if (!operatorSchema) {
+                                continue;
+                            }
+
                             const operatorName = operatorSchema['x-reference-id'];
                             if (!operatorName) {
                                 throw new Error(`No operator name found for position ${operatorPosition} in ${label}`);
@@ -110,19 +119,28 @@ interface OperatorMd {
  * @returns An object containing the filename, title, and markdown content for the operator.
  */
 function generateMarkdownForOperator(operatorId: string, operatorSchema: OpenAPI.SchemaObject): OperatorMd {
-    const parametersTable = parametersToMarkdownTable(parseParameters(Object.entries(operatorSchema.properties?.params?.properties)), true);
-    const hasSources = !!operatorSchema.properties.sources;
-    const sourcesTable = !hasSources
-        ? ''
-        : parametersToMarkdownTable(parseParameters(Object.entries(operatorSchema.properties?.sources?.properties)), false);
-    const examples: string[] = operatorSchema.examples.map((example: JSON) => JSON.stringify(example, null, 2));
+    const paramsProperties = operatorSchema.properties?.params?.properties ?? {};
+    const sourceProperties = operatorSchema.properties?.sources?.properties ?? {};
+
+    const parametersTable = parametersToMarkdownTable(parseParameters(Object.entries(paramsProperties)), true);
+    const hasSources = !!operatorSchema.properties?.sources;
+    const sourcesTable = !hasSources ? '' : parametersToMarkdownTable(parseParameters(Object.entries(sourceProperties)), false);
+
+    const rawExamples = Array.isArray(operatorSchema.examples)
+        ? operatorSchema.examples
+        : operatorSchema.examples && typeof operatorSchema.examples === 'object'
+          ? Object.values(operatorSchema.examples as Record<string, unknown>)
+          : [];
+    const singleExample = operatorSchema.example !== undefined ? [operatorSchema.example] : [];
+    const examples: string[] = [...rawExamples, ...singleExample].map((example: unknown) => JSON.stringify(example, null, 2));
     const hasExamples = examples.length > 0;
+    const description = normalizeMarkdownLinks(operatorSchema.description ?? '');
 
     return {
         filename: `${operatorId}.md`,
         title: operatorSchema.title ?? operatorId,
         content: `\
-${operatorSchema.description}
+${description}
 
 ## Parameters
 
@@ -135,6 +153,18 @@ ${!hasSources ? '' : `## Sources\n\n${sourcesTable}`}
 ${!hasExamples ? '' : '```json\n' + examples.join('\n```\n\n```json\n') + '\n```'}
 `,
     };
+}
+
+function normalizeMarkdownLinks(markdown: string): string {
+    return markdown
+        .replace(/\]\((?:\.{0,2}\/)?datatypes\/([^)#]+)(?:\.md)?(?:#([^)]+))?\)/g, (_, name: string, hash?: string) => {
+            const target = `/docs/datatypes/${name}`;
+            return `](${target}${hash ? `#${hash}` : ''})`;
+        })
+        .replace(/\]\((?:\/)?datatypes\/([^)#]+)\.html(?:#([^)]+))?\)/g, (_, name: string, hash?: string) => {
+            const target = `/docs/datatypes/${name}`;
+            return `](${target}${hash ? `#${hash}` : ''})`;
+        });
 }
 
 /**
@@ -167,11 +197,18 @@ ${operatorMd.content}`;
  */
 function parseParameters(parameters: [string, OpenAPI.SchemaObject][]): ParameterTableEntry[] {
     return parameters.map(([name, param]) => {
+        const exampleValues = Array.isArray(param.examples)
+            ? param.examples
+            : param.examples && typeof param.examples === 'object'
+              ? Object.values(param.examples as Record<string, unknown>)
+              : [];
+        const singleExample = param.example !== undefined ? [param.example] : [];
+
         const entry = {
             name,
             type: param['x-reference-id'] ?? param.type ?? 'unknown',
             description: param.description ?? '',
-            examples: param.examples ? Object.values(param.examples).map((ex) => JSON.stringify(ex, null, 2)) : [],
+            examples: [...exampleValues, ...singleExample].map((ex) => JSON.stringify(ex, null, 2)),
         };
         if (entry.type === 'unknown' && param.oneOf) {
             entry.type = param.oneOf

@@ -14,15 +14,27 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum PlotOperator {
+    #[serde(rename="BoxPlot")]
+    BoxPlot(Box<models::BoxPlot>),
+    #[serde(rename="ClassHistogram")]
+    ClassHistogram(Box<models::ClassHistogram>),
+    #[serde(rename="FeatureAttributeValuesOverTime")]
+    FeatureAttributeValuesOverTime(Box<models::FeatureAttributeValuesOverTime>),
     #[serde(rename="Histogram")]
     Histogram(Box<models::Histogram>),
+    #[serde(rename="MeanRasterPixelValuesOverTime")]
+    MeanRasterPixelValuesOverTime(Box<models::MeanRasterPixelValuesOverTime>),
+    #[serde(rename="PieChart")]
+    PieChart(Box<models::PieChart>),
+    #[serde(rename="ScatterPlot")]
+    ScatterPlot(Box<models::ScatterPlot>),
     #[serde(rename="Statistics")]
     Statistics(Box<models::Statistics>),
 }
 
 impl Default for PlotOperator {
     fn default() -> Self {
-        Self::Histogram(Default::default())
+        Self::BoxPlot(Default::default())
     }
 }
 

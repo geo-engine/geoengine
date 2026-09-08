@@ -29,7 +29,11 @@ from geoengine_api_client.models.band_filter import BandFilter
 from geoengine_api_client.models.band_filter_parameters import BandFilterParameters
 from geoengine_api_client.models.bands_by_name_or_index import BandsByNameOrIndex
 from geoengine_api_client.models.bounding_box2_d import BoundingBox2D
+from geoengine_api_client.models.box_plot import BoxPlot
+from geoengine_api_client.models.box_plot_parameters import BoxPlotParameters
 from geoengine_api_client.models.breakpoint import Breakpoint
+from geoengine_api_client.models.class_histogram import ClassHistogram
+from geoengine_api_client.models.class_histogram_parameters import ClassHistogramParameters
 from geoengine_api_client.models.classification_measurement import ClassificationMeasurement
 from geoengine_api_client.models.collection import Collection
 from geoengine_api_client.models.collection_item import CollectionItem
@@ -82,6 +86,8 @@ from geoengine_api_client.models.expression_parameters import ExpressionParamete
 from geoengine_api_client.models.extent import Extent
 from geoengine_api_client.models.external_data_id import ExternalDataId
 from geoengine_api_client.models.feature_aggregation_method import FeatureAggregationMethod
+from geoengine_api_client.models.feature_attribute_values_over_time import FeatureAttributeValuesOverTime
+from geoengine_api_client.models.feature_attribute_values_over_time_parameters import FeatureAttributeValuesOverTimeParameters
 from geoengine_api_client.models.feature_data_type import FeatureDataType
 from geoengine_api_client.models.file_not_found_handling import FileNotFoundHandling
 from geoengine_api_client.models.first_aggregation import FirstAggregation
@@ -145,6 +151,9 @@ from geoengine_api_client.models.link import Link
 from geoengine_api_client.models.logarithmic_gradient import LogarithmicGradient
 from geoengine_api_client.models.max_aggregation import MaxAggregation
 from geoengine_api_client.models.mean_aggregation import MeanAggregation
+from geoengine_api_client.models.mean_raster_pixel_values_over_time import MeanRasterPixelValuesOverTime
+from geoengine_api_client.models.mean_raster_pixel_values_over_time_parameters import MeanRasterPixelValuesOverTimeParameters
+from geoengine_api_client.models.mean_raster_pixel_values_over_time_position import MeanRasterPixelValuesOverTimePosition
 from geoengine_api_client.models.measurement import Measurement
 from geoengine_api_client.models.meta_data_definition import MetaDataDefinition
 from geoengine_api_client.models.meta_data_suggestion import MetaDataSuggestion
@@ -202,6 +211,9 @@ from geoengine_api_client.models.percentile_estimate_aggregation import Percenti
 from geoengine_api_client.models.permission import Permission
 from geoengine_api_client.models.permission_listing import PermissionListing
 from geoengine_api_client.models.permission_request import PermissionRequest
+from geoengine_api_client.models.pie_chart import PieChart
+from geoengine_api_client.models.pie_chart_count_type import PieChartCountType
+from geoengine_api_client.models.pie_chart_parameters import PieChartParameters
 from geoengine_api_client.models.plot import Plot
 from geoengine_api_client.models.plot_operator import PlotOperator
 from geoengine_api_client.models.plot_output_format import PlotOutputFormat
@@ -249,6 +261,8 @@ from geoengine_api_client.models.resource import Resource
 from geoengine_api_client.models.role import Role
 from geoengine_api_client.models.role_description import RoleDescription
 from geoengine_api_client.models.st_rectangle import STRectangle
+from geoengine_api_client.models.scatter_plot import ScatterPlot
+from geoengine_api_client.models.scatter_plot_parameters import ScatterPlotParameters
 from geoengine_api_client.models.search_capabilities import SearchCapabilities
 from geoengine_api_client.models.search_type import SearchType
 from geoengine_api_client.models.search_types import SearchTypes

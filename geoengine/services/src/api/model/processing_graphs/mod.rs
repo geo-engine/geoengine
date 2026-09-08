@@ -1,14 +1,17 @@
-// use crate::api::model::processing_graphs::{
-//     processing::{Expression, ExpressionParameters, RasterVectorJoin, RasterVectorJoinParameters},
-//     source::{GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters},
-// };
 use geoengine_operators::{
     engine::{
         PlotOperator as OperatorsPlotOperator, RasterOperator as OperatorsRasterOperator,
         TypedOperator as OperatorsTypedOperator, VectorOperator as OperatorsVectorOperator,
     },
     mock::MockPointSource as OperatorsMockPointSource,
-    plot::{Histogram as OperatorsHistogram, Statistics as OperatorsStatistics},
+    plot::{
+        BoxPlot as OperatorsBoxPlot, ClassHistogram as OperatorsClassHistogram,
+        FeatureAttributeValuesOverTime as OperatorsFeatureAttributeValuesOverTime,
+        Histogram as OperatorsHistogram,
+        MeanRasterPixelValuesOverTime as OperatorsMeanRasterPixelValuesOverTime,
+        PieChart as OperatorsPieChart, ScatterPlot as OperatorsScatterPlot,
+        Statistics as OperatorsStatistics,
+    },
     processing::{
         BandFilter as OperatorsBandFilter, Downsampling as OperatorsDownsampling,
         Expression as OperatorsExpression, Interpolation as OperatorsInterpolation,
@@ -37,7 +40,13 @@ mod source_parameters;
 #[cfg(test)]
 pub(crate) use crate::api::model::processing_graphs::parameters::SpatialBoundsDerive;
 pub(crate) use crate::api::model::processing_graphs::{
-    plots::{Histogram, HistogramParameters, Statistics, StatisticsParameters},
+    plots::{
+        BoxPlot, BoxPlotParameters, ClassHistogram, ClassHistogramParameters,
+        FeatureAttributeValuesOverTime, FeatureAttributeValuesOverTimeParameters, Histogram,
+        HistogramParameters, MeanRasterPixelValuesOverTime,
+        MeanRasterPixelValuesOverTimeParameters, MeanRasterPixelValuesOverTimePosition, PieChart,
+        PieChartParameters, ScatterPlot, ScatterPlotParameters, Statistics, StatisticsParameters,
+    },
     processing::{
         Aggregation, BandFilter, BandFilterParameters, BandsByNameOrIndex,
         DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParameters,
@@ -106,7 +115,13 @@ pub enum VectorOperator {
 #[serde(rename_all = "camelCase", untagged)]
 #[schema(discriminator = "type")]
 pub enum PlotOperator {
+    BoxPlot(BoxPlot),
+    ClassHistogram(ClassHistogram),
+    FeatureAttributeValuesOverTime(FeatureAttributeValuesOverTime),
     Histogram(Histogram),
+    MeanRasterPixelValuesOverTime(MeanRasterPixelValuesOverTime),
+    PieChart(PieChart),
+    ScatterPlot(ScatterPlot),
     Statistics(Statistics),
 }
 
@@ -200,16 +215,31 @@ impl TryFrom<VectorOperator> for Box<dyn OperatorsVectorOperator> {
 impl TryFrom<PlotOperator> for Box<dyn OperatorsPlotOperator> {
     type Error = anyhow::Error;
     fn try_from(operator: PlotOperator) -> Result<Self, Self::Error> {
-        // TODO: Missing plot operator mappings (operators crate -> OpenAPI model):
-        // [ ] BoxPlot
-        // [ ] ClassHistogram
-        // [ ] FeatureAttributeValuesOverTime
-        // [ ] MeanRasterPixelValuesOverTime
-        // [ ] PieChart
-        // [ ] ScatterPlot
         match operator {
+            PlotOperator::BoxPlot(box_plot) => {
+                OperatorsBoxPlot::try_from(box_plot).map(OperatorsPlotOperator::boxed)
+            }
+            PlotOperator::ClassHistogram(class_histogram) => {
+                OperatorsClassHistogram::try_from(class_histogram).map(OperatorsPlotOperator::boxed)
+            }
+            PlotOperator::FeatureAttributeValuesOverTime(feature_attribute_values_over_time) => {
+                OperatorsFeatureAttributeValuesOverTime::try_from(
+                    feature_attribute_values_over_time,
+                )
+                .map(OperatorsPlotOperator::boxed)
+            }
             PlotOperator::Histogram(histogram) => {
                 OperatorsHistogram::try_from(histogram).map(OperatorsPlotOperator::boxed)
+            }
+            PlotOperator::MeanRasterPixelValuesOverTime(mean_raster_pixel_values_over_time) => {
+                OperatorsMeanRasterPixelValuesOverTime::try_from(mean_raster_pixel_values_over_time)
+                    .map(OperatorsPlotOperator::boxed)
+            }
+            PlotOperator::PieChart(pie_chart) => {
+                OperatorsPieChart::try_from(pie_chart).map(OperatorsPlotOperator::boxed)
+            }
+            PlotOperator::ScatterPlot(scatter_plot) => {
+                OperatorsScatterPlot::try_from(scatter_plot).map(OperatorsPlotOperator::boxed)
             }
             PlotOperator::Statistics(statistics) => {
                 OperatorsStatistics::try_from(statistics).map(OperatorsPlotOperator::boxed)
@@ -274,8 +304,21 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     VectorExpression,
     VectorExpressionParameters,
     // Plots
+    BoxPlot,
+    BoxPlotParameters,
+    ClassHistogram,
+    ClassHistogramParameters,
+    FeatureAttributeValuesOverTime,
+    FeatureAttributeValuesOverTimeParameters,
     Histogram,
     HistogramParameters,
+    MeanRasterPixelValuesOverTime,
+    MeanRasterPixelValuesOverTimeParameters,
+    MeanRasterPixelValuesOverTimePosition,
+    PieChart,
+    PieChartParameters,
+    ScatterPlot,
+    ScatterPlotParameters,
     Statistics,
     StatisticsParameters,
     // Source Parameters
