@@ -1154,6 +1154,7 @@ mod tests {
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use std::str::FromStr;
+    use tokio::time::sleep;
 
     fn make_cache_key(band: u32, idx: isize) -> CacheKey {
         (
@@ -1604,7 +1605,7 @@ mod tests {
             .await
             .unwrap();
         let cached_op = RasterCacheOperator::wrap_operator(initialized_source);
-        let _expected_key = (
+        let cache_key = (
             cached_op.canonic_name(),
             0u32,
             TimeInterval::default(),
@@ -1636,6 +1637,28 @@ mod tests {
             .unwrap();
 
         assert_eq!(tiles, vec![expected_tile.clone()]);
+
+        // Wait a bit for tile insert
+        sleep(tokio::time::Duration::from_secs(1)).await;
+
+        // Verify the tile is actually in the cache after the miss
+        let tile_cache = query_ctx
+            .new_raster_cache()
+            .expect("cache should be available in query context");
+        let cached_compressed = tile_cache
+            .get(&cache_key)
+            .await
+            .expect("cache lookup should succeed")
+            .expect("tile should be cached after query");
+
+        let cached_tile_typed = cached_compressed.value.load()
+            .expect("decompression should succeed");
+        match cached_tile_typed {
+            TypedRasterTile2D::U8(cached_u8_tile) => {
+                assert_eq!(cached_u8_tile, expected_tile, "cached tile must match source tile");
+            }
+            _ => panic!("expected U8 tile type in cache"),
+        }
     }
 
     #[tokio::test]
