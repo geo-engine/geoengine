@@ -18,6 +18,7 @@ import {MatSelectModule} from '@angular/material/select';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {
     BoundingBox2D,
+    ClassHistogramDict,
     HistogramDict,
     LayersService,
     NotificationService,
@@ -25,12 +26,13 @@ import {
     RasterLayerMetadata,
     UserService,
     VegaChartData,
+    WorkflowDict,
 } from '@geoengine/common';
 import {firstValueFrom} from 'rxjs';
 import OlPolygon from 'ol/geom/Polygon';
 import {ProviderLayerId} from '@geoengine/api-client/dist/models/ProviderLayerId';
 import {LayerIdPair} from '../main/main.component';
-import {PlotOutputFormat, WrappedPlotOutput} from '@geoengine/api-client';
+import {PlotOutputFormat, RasterBandDescriptor, WrappedPlotOutput} from '@geoengine/api-client';
 
 @Component({
     selector: 'geoengine-compute',
@@ -229,30 +231,39 @@ export class ComputeComponent {
         try {
             const sessionToken = await this.userService.getSessionToken();
             const sourceProcessingGraph = await firstValueFrom(this.backendService.getWorkflow(processingGraphId, sessionToken));
-            const plotWorkflowId = (
-                await firstValueFrom(
-                    this.backendService.registerWorkflow(
-                        {
-                            type: 'Plot',
-                            operator: {
-                                type: 'Histogram',
-                                params: {
-                                    attributeName: band,
-                                    bounds: 'data',
-                                    buckets: {
-                                        type: 'squareRootChoiceRule',
-                                        maxNumberOfBuckets: 20,
-                                    },
-                                },
-                                sources: {
-                                    source: sourceProcessingGraph.operator,
-                                },
-                            } as HistogramDict,
+            const measurementType = bandMeasurementType(metadata.bands, band);
+            let processingGraph: WorkflowDict;
+            if (measurementType === 'classification') {
+                processingGraph = {
+                    type: 'Plot',
+                    operator: {
+                        type: 'ClassHistogram',
+                        params: {},
+                        sources: {
+                            source: sourceProcessingGraph.operator,
                         },
-                        sessionToken,
-                    ),
-                )
-            ).id;
+                    } as ClassHistogramDict,
+                };
+            } else {
+                processingGraph = {
+                    type: 'Plot',
+                    operator: {
+                        type: 'Histogram',
+                        params: {
+                            attributeName: band,
+                            bounds: 'data',
+                            buckets: {
+                                type: 'squareRootChoiceRule',
+                                maxNumberOfBuckets: 20,
+                            },
+                        },
+                        sources: {
+                            source: sourceProcessingGraph.operator,
+                        },
+                    } as HistogramDict,
+                };
+            }
+            const plotWorkflowId = (await firstValueFrom(this.backendService.registerWorkflow(processingGraph, sessionToken))).id;
 
             const plotData = await this.plotsService.getPlot(
                 plotWorkflowId,
@@ -288,4 +299,21 @@ function getContentWidth(element: HTMLElement): number {
     const borderRight = parseFloat(style.borderRightWidth) || 0;
 
     return totalWidth - paddingLeft - paddingRight - borderLeft - borderRight;
+}
+
+/**
+ * Determines the measurement type of a specific band from the provided bands metadata.
+ *
+ * @param bandsMetadata - Array of raster band descriptors.
+ * @param band - The name of the band to check.
+ * @returns The measurement type of the band ('classification', 'continuous', or 'unitless').
+ */
+function bandMeasurementType(bandsMetadata: RasterBandDescriptor[], band: string): 'classification' | 'continuous' | 'unitless' {
+    for (const bandMetadata of bandsMetadata) {
+        if (bandMetadata.name !== band) continue;
+
+        return bandMetadata.measurement.type;
+    }
+
+    return 'unitless'; // fallback if the band is not found
 }
