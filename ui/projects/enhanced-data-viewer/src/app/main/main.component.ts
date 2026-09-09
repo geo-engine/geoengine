@@ -188,6 +188,8 @@ export class MainComponent {
      * Downloads the current map view as an image.
      */
     async downloadMapImage(): Promise<void> {
+        if (this.mapImageLoading()) return;
+
         const [currentDate] = (this.currentTime()?.toString() ?? new Date().toISOString()).split('T');
         const currentLayer = this.layersReverse().at(-1)?.name ?? 'enhanced-data-viewer-map';
 
