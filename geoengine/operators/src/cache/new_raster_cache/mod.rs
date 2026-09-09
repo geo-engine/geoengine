@@ -47,7 +47,7 @@ impl TestDefault for NewRasterCacheEnum {
         Self::InMemoryCompressedRasterTile2DFifo(NewRasterCache {
             store: InMemoryCacheStore {
                 cache: RwLock::new(HashMap::new()),
-                eviction_strategy: RwLock::new(FifoEvictionStrategy::new(8_589_934_592)),
+                eviction_strategy: Arc::new(RwLock::new(FifoEvictionStrategy::new(8_589_934_592))),
                 total_size: Arc::new(AtomicUsize::new(0)),
             },
         })
@@ -59,7 +59,7 @@ impl NewRasterCacheEnum {
         Self::InMemoryCompressedRasterTile2DFifo(NewRasterCache {
             store: InMemoryCacheStore {
                 cache: RwLock::new(HashMap::new()),
-                eviction_strategy: RwLock::new(FifoEvictionStrategy::new(capacity_bytes)),
+                eviction_strategy: Arc::new(RwLock::new(FifoEvictionStrategy::new(capacity_bytes))),
                 total_size: Arc::new(AtomicUsize::new(0)),
             },
         })
@@ -69,7 +69,7 @@ impl NewRasterCacheEnum {
         Self::InMemoryCompressedRasterTile2DLru(NewRasterCache {
             store: InMemoryCacheStore {
                 cache: RwLock::new(HashMap::new()),
-                eviction_strategy: RwLock::new(LruEvictionStrategy::new(capacity_bytes)),
+                eviction_strategy: Arc::new(RwLock::new(LruEvictionStrategy::new(capacity_bytes))),
                 total_size: Arc::new(AtomicUsize::new(0)),
             },
         })
@@ -124,12 +124,9 @@ trait CacheStore: Send + Sync + 'static {
 
 trait EvictionStrategy: Send + Sync + 'static {
     fn record_access(&mut self, key: &CacheKey, size: usize, cache_hint: CacheHint);
-    fn record_hit(&mut self, key: &CacheKey);
     fn record_removal(&mut self, key: &CacheKey);
 
-    fn record_hit_needs_exclusive_access(&self) -> bool {
-        true
-    }
+    fn record_hit(strategy: Arc<RwLock<Self>>, key: &CacheKey) -> impl std::future::Future<Output = ()> + Send;
 
     fn capacity(&self) -> usize;
 
@@ -177,12 +174,6 @@ impl EvictionStrategy for FifoEvictionStrategy {
         });
     }
 
-    fn record_hit(&mut self, _key: &CacheKey) {}
-
-    fn record_hit_needs_exclusive_access(&self) -> bool {
-        false
-    }
-
     fn record_removal(&mut self, key: &CacheKey) {
         self.queue.remove(
             self.queue
@@ -190,6 +181,10 @@ impl EvictionStrategy for FifoEvictionStrategy {
                 .position(|item| item.key.eq(key))
                 .expect("Key must exist in eviction strategy"),
         );
+    }
+
+    async fn record_hit(_strategy: Arc<RwLock<Self>>, _key: &CacheKey) {
+        // FIFO doesn't track hits
     }
 
     fn capacity(&self) -> usize {
@@ -344,13 +339,6 @@ impl EvictionStrategy for LruEvictionStrategy {
         self.attach_front(idx);
     }
 
-    fn record_hit(&mut self, key: &CacheKey) {
-        if let Some(&idx) = self.index.get(key) {
-            self.detach(idx);
-            self.attach_front(idx);
-        }
-    }
-
     fn record_removal(&mut self, key: &CacheKey) {
         let idx = self
             .index
@@ -360,6 +348,14 @@ impl EvictionStrategy for LruEvictionStrategy {
         self.detach(idx);
         self.slab[idx] = None;
         self.free.push(idx);
+    }
+
+    async fn record_hit(strategy: Arc<RwLock<Self>>, key: &CacheKey) {
+        let mut s = strategy.write().await;
+        if let Some(&idx) = s.index.get(key) {
+            s.detach(idx);
+            s.attach_front(idx);
+        }
     }
 
     fn capacity(&self) -> usize {
@@ -434,6 +430,8 @@ impl EvictionStrategy for LruEvictionStrategy {
 mod eviction_strategy_tests {
     use super::{CacheKey, EvictionStrategy, FifoEvictionStrategy, LruEvictionStrategy, TileIndex};
     use geoengine_datatypes::primitives::{CacheExpiration, CacheHint, TimeInterval};
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
 
     fn expired_hint() -> CacheHint {
         CacheHint::with_created_and_expires(
@@ -483,8 +481,8 @@ mod eviction_strategy_tests {
         assert_eq!(plan.freed_bytes, 40);
     }
 
-    #[test]
-    fn lru_evicts_expired_pinned_key_without_counting_its_bytes_as_freed() {
+    #[tokio::test]
+    async fn lru_evicts_expired_pinned_key_without_counting_its_bytes_as_freed() {
         let mut strategy = LruEvictionStrategy::new(100);
         let key_a = key("a");
         let key_b = key("b");
@@ -493,22 +491,15 @@ mod eviction_strategy_tests {
         strategy.record_access(&key_a, 40, expired_hint());
         strategy.record_access(&key_b, 30, CacheHint::max_duration());
         strategy.record_access(&key_c, 30, CacheHint::max_duration());
-        strategy.record_hit(&key_c);
 
+        let strategy_arc = Arc::new(RwLock::new(strategy));
+        LruEvictionStrategy::record_hit(strategy_arc.clone(), &key_c).await;
+
+        let strategy = strategy_arc.read().await;
         let plan = strategy.plan_eviction(100, 20, |k| k == &key_a).unwrap();
 
         assert_eq!(plan.keys_to_remove, vec![key_a, key_b]);
         assert_eq!(plan.freed_bytes, 30);
-    }
-
-    #[test]
-    fn fifo_record_hit_does_not_need_exclusive_access() {
-        assert!(!FifoEvictionStrategy::new(100).record_hit_needs_exclusive_access());
-    }
-
-    #[test]
-    fn lru_record_hit_needs_exclusive_access() {
-        assert!(LruEvictionStrategy::new(100).record_hit_needs_exclusive_access());
     }
 
     #[test]
@@ -526,8 +517,8 @@ mod eviction_strategy_tests {
         assert_eq!(plan.freed_bytes, 60);
     }
 
-    #[test]
-    fn lru_correct_eviction_target_with_partial_cache() {
+    #[tokio::test]
+    async fn lru_correct_eviction_target_with_partial_cache() {
         let mut strategy = LruEvictionStrategy::new(100);
         let key_a = key("a");
         let key_b = key("b");
@@ -536,8 +527,11 @@ mod eviction_strategy_tests {
         strategy.record_access(&key_a, 60, CacheHint::max_duration());
         strategy.record_access(&key_b, 20, CacheHint::max_duration());
         strategy.record_access(&key_c, 10, CacheHint::max_duration());
-        strategy.record_hit(&key_c);
 
+        let strategy_arc = Arc::new(RwLock::new(strategy));
+        LruEvictionStrategy::record_hit(strategy_arc.clone(), &key_c).await;
+
+        let strategy = strategy_arc.read().await;
         let plan = strategy.plan_eviction(60, 70, |_| false).unwrap();
 
         assert_eq!(plan.keys_to_remove, vec![key_a]);
@@ -578,7 +572,7 @@ impl<SF> Drop for SizeTrackedEntry<SF> {
 
 pub struct InMemoryCacheStore<SF, ES> {
     cache: RwLock<HashMap<CacheKey, Arc<SizeTrackedEntry<SF>>>>,
-    eviction_strategy: RwLock<ES>,
+    eviction_strategy: Arc<RwLock<ES>>,
     total_size: Arc<AtomicUsize>,
 }
 
@@ -770,15 +764,7 @@ where
                 return Ok(None);
             }
 
-            let needs_exclusive_access = self
-                .eviction_strategy
-                .read()
-                .await
-                .record_hit_needs_exclusive_access();
-
-            if needs_exclusive_access {
-                self.eviction_strategy.write().await.record_hit(key);
-            }
+            ES::record_hit(self.eviction_strategy.clone(), key).await;
         }
 
         Ok(hit)
@@ -788,6 +774,7 @@ where
         {
             let cache = self.cache.read().await;
             if cache.contains_key(&key) {
+                ES::record_hit(self.eviction_strategy.clone(), &key).await;
                 return Ok(());
             }
         }
