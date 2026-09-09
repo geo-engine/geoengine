@@ -978,22 +978,25 @@ export class ProjectService implements OnDestroy {
      * Create a stream that signals whether a running query should be aborted because the results are no longer needed.
      * It takes the layerId, current zoomLevel and extent of a tile at the time of querying as a parameter in order to
      * determine whether a change in the layer list or on the map view makes the results obsolete.
+     *
+     * If the layer is not registered with the project service (e.g. in the enhanced data viewer), the stream does not
+     * emit when the layer is removed, only on the viewing conditions below.
      */
     createQueryAbortStream(layerId: number, tileZoomLevel: number, tileExtent: Extent): Observable<void> {
         const tileResolution = this.mapService.getView().getResolutionForZoom(tileZoomLevel);
 
         // create an observable that emits when the layer is removed
         const layerStream = this.layers.get(layerId);
-        if (!layerStream) {
-            throw Error(`No layer stream found for layer id ${layerId}`);
-        }
         const layerRemovedSubject = new BehaviorSubject<boolean>(false);
-        const layerStreamSub = layerStream.subscribe({
-            complete: () => {
-                layerRemovedSubject.next(true);
-                layerRemovedSubject.complete();
-            },
-        });
+        let layerStreamSub: Subscription | undefined;
+        if (layerStream) {
+            layerStreamSub = layerStream.subscribe({
+                complete: () => {
+                    layerRemovedSubject.next(true);
+                    layerRemovedSubject.complete();
+                },
+            });
+        }
 
         const observables: [
             Observable<Time>,
@@ -1031,7 +1034,7 @@ export class ProjectService implements OnDestroy {
                     sref !== initialSref ||
                     layerRemoved,
             ),
-            tap((_) => layerStreamSub.unsubscribe()),
+            tap((_) => layerStreamSub?.unsubscribe()),
             take(1),
             map(() => undefined),
         );
