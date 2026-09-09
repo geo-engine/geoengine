@@ -54,7 +54,15 @@ export class MeasureDirective {
     /** Whether the measure tool is currently active. */
     readonly isActive = computed(() => this.state() !== State.None);
     /** Exposes the pressed state for the host button. */
-    readonly ariaPressed = computed(() => (this.state() === State.Drawing ? 'true' : 'false'));
+    readonly ariaPressed = computed(() => {
+        switch (this.state()) {
+            case State.Drawing:
+            case State.Done:
+                return true;
+            default:
+                return false;
+        }
+    });
 
     private readonly state = signal(State.None);
 

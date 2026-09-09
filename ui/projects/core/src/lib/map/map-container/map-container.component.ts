@@ -63,6 +63,7 @@ import {applyBackground, stylefunction} from 'ol-mapbox-style';
 import {olExtentToTuple, SpatialReference, Symbology, VectorSymbology} from '@geoengine/common';
 import {allowedBasemapProjections, BasemapService} from '../../layers/basemap.service';
 import {AsyncSequencer} from '../../util/sequencer';
+import {setMapsDoubleClickZoom} from './map-utils';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MapLayer = MapLayerComponent<OlLayer<OlSource, any>, OlSource, Symbology>;
@@ -369,6 +370,8 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
                 });
             });
         }
+
+        setMapsDoubleClickZoom(this.maps, !this.isDrawInteractionAttached());
     }
 
     private calculateGrid(): void {
