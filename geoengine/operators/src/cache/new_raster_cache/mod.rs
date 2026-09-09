@@ -785,19 +785,24 @@ where
     }
 
     async fn insert(&self, key: CacheKey, tile: TypedRasterTile2D) -> Result<()> {
+        {
+            let cache = self.cache.read().await;
+            if cache.contains_key(&key) {
+                return Ok(());
+            }
+        }
+
         let cache_hint = tile.cache_hint();
         let value = SF::store(tile)?;
         let required_space = value.byte_size()?;
 
         let mut cache = self.cache.write().await;
-        let mut eviction_strategy = self.eviction_strategy.write().await;
-
-        let mut current_size = self.total_size.load(Ordering::SeqCst);
-        let existing_size = cache.get(&key).map(|e| e.size);
-
-        if let Some(size) = existing_size {
-            current_size = current_size.saturating_sub(size);
+        if cache.contains_key(&key) {
+            return Ok(());
         }
+
+        let mut eviction_strategy = self.eviction_strategy.write().await;
+        let current_size = self.total_size.load(Ordering::SeqCst);
 
         let eviction_plan =
             eviction_strategy.plan_eviction(current_size, required_space, |key| {
@@ -807,11 +812,6 @@ where
         let needed = (current_size + required_space).saturating_sub(eviction_strategy.capacity());
         if eviction_plan.freed_bytes < needed {
             return Err(CacheError::NotEnoughSpaceInCache.into());
-        }
-
-        if existing_size.is_some() {
-            cache.remove(&key);
-            eviction_strategy.record_removal(&key);
         }
 
         for evict_key in eviction_plan.keys_to_remove {
