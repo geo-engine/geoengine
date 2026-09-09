@@ -10,18 +10,27 @@ import {
     resource,
     signal,
 } from '@angular/core';
-import {CoreModule, Extent, LoadingState, MapService, ProjectService, UUID} from '@geoengine/core';
+import {BackendService, CoreModule, Extent, LoadingState, MapService, ProjectService, UUID} from '@geoengine/core';
 import {A11yModule} from '@angular/cdk/a11y';
 import {MatButtonModule} from '@angular/material/button';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatSelectModule} from '@angular/material/select';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
-import {HistogramDict, isNullOrUndefined, LayersService, NotificationService, Plot, RasterLayerMetadata} from '@geoengine/common';
-import {firstValueFrom, of} from 'rxjs';
+import {
+    BoundingBox2D,
+    HistogramDict,
+    LayersService,
+    NotificationService,
+    PlotsService,
+    RasterLayerMetadata,
+    UserService,
+    VegaChartData,
+} from '@geoengine/common';
+import {firstValueFrom} from 'rxjs';
 import OlPolygon from 'ol/geom/Polygon';
 import {ProviderLayerId} from '@geoengine/api-client/dist/models/ProviderLayerId';
 import {LayerIdPair} from '../main/main.component';
-import {rxResource} from '@angular/core/rxjs-interop';
+import {PlotOutputFormat, WrappedPlotOutput} from '@geoengine/api-client';
 
 @Component({
     selector: 'geoengine-compute',
@@ -51,8 +60,12 @@ import {rxResource} from '@angular/core/rxjs-interop';
                 <mat-progress-spinner></mat-progress-spinner>
             }
 
-            @if (plotData.value(); as plotData) {
-                <geoengine-vega-viewer [chartData]="plotData.data" [width]="plotWidthPx()" [height]="plotWidthPx()"></geoengine-vega-viewer>
+            @if (plotData(); as plotData) {
+                <geoengine-vega-viewer
+                    [chartData]="vegaPlotData(plotData)"
+                    [width]="plotWidthPx()"
+                    [height]="plotWidthPx()"
+                ></geoengine-vega-viewer>
             }
         </div>
     `,
@@ -89,11 +102,14 @@ import {rxResource} from '@angular/core/rxjs-interop';
     imports: [A11yModule, CoreModule, MatButtonModule, MatFormFieldModule, MatSelectModule, MatProgressSpinnerModule],
 })
 export class ComputeComponent {
-    readonly projectService = inject(ProjectService);
+    private readonly backendService = inject(BackendService);
+    private readonly destroyRef = inject(DestroyRef);
+    private readonly layerService = inject(LayersService);
     private readonly mapService = inject(MapService);
     private readonly notificationService = inject(NotificationService);
-    private readonly layerService = inject(LayersService);
-    private readonly destroyRef = inject(DestroyRef);
+    private readonly plotsService = inject(PlotsService);
+    private readonly projectService = inject(ProjectService);
+    private readonly userService = inject(UserService);
 
     readonly plotWidthPx = signal(0);
     readonly hostElement = inject(ElementRef).nativeElement as HTMLElement;
@@ -158,25 +174,19 @@ export class ComputeComponent {
 
         return [minx, miny, maxx, maxy];
     });
-    readonly cannotComputeHistogram = computed(
-        () =>
-            isNullOrUndefined(this.computationBbox()) ||
-            isNullOrUndefined(this.selectedRasterLayer.value()) ||
-            isNullOrUndefined(this.selectedBand()),
-    );
+    readonly cannotComputeHistogram = computed(() => {
+        return !this.computationBbox() || !this.selectedRasterLayer.value() || !this.selectedBand();
+    });
 
     readonly isLoadingMetadata = computed(
         () => this.selectedRasterLayer.isLoading() || this.selectedProcessingGraphId.isLoading() || this.selecterLayerMetadata.isLoading(),
     );
     readonly isComputingHistogram = signal(false);
-    readonly isLoading = computed(() => this.isComputingHistogram() || this.plotData.isLoading() || this.isLoadingMetadata());
+    readonly isLoading = computed(() => this.isComputingHistogram() || this.isLoadingMetadata());
 
-    readonly plot = signal<Plot | undefined>(undefined);
-    readonly plotData = rxResource({
-        params: () => ({
-            plot: this.plot(),
-        }),
-        stream: ({params}) => (params.plot ? this.projectService.getPlotDataStream(params.plot) : of(undefined)),
+    readonly plotData = linkedSignal<WrappedPlotOutput | undefined>(() => {
+        this.computationBbox(); // reset the computation when the bounding box changes
+        return undefined;
     });
     readonly defaultLoadingState = LoadingState.LOADING;
 
@@ -199,6 +209,11 @@ export class ComputeComponent {
         });
     }
 
+    vegaPlotData(plotData: WrappedPlotOutput): VegaChartData {
+        if (plotData.outputFormat !== PlotOutputFormat.JsonVega) throw new Error('Invalid plot data format');
+        return plotData.data as VegaChartData;
+    }
+
     async computeHistogram(): Promise<void> {
         const bbox = this.computationBbox();
         const layer = this.selectedRasterLayer.value();
@@ -209,38 +224,45 @@ export class ComputeComponent {
         if (!bbox || !layer || !band || !processingGraphId || !metadata) return;
 
         this.isComputingHistogram.set(true);
+        this.plotData.set(undefined);
 
         try {
-            const sourceProcessingGraph = await firstValueFrom(this.projectService.getWorkflow(processingGraphId));
-            const plotWorkflowId = await firstValueFrom(
-                this.projectService.registerWorkflow({
-                    type: 'Plot',
-                    operator: {
-                        type: 'Histogram',
-                        params: {
-                            attributeName: band,
-                            bounds: 'data',
-                            buckets: {
-                                type: 'squareRootChoiceRule',
-                                maxNumberOfBuckets: 20,
-                            },
+            const sessionToken = await this.userService.getSessionToken();
+            const sourceProcessingGraph = await firstValueFrom(this.backendService.getWorkflow(processingGraphId, sessionToken));
+            const plotWorkflowId = (
+                await firstValueFrom(
+                    this.backendService.registerWorkflow(
+                        {
+                            type: 'Plot',
+                            operator: {
+                                type: 'Histogram',
+                                params: {
+                                    attributeName: band,
+                                    bounds: 'data',
+                                    buckets: {
+                                        type: 'squareRootChoiceRule',
+                                        maxNumberOfBuckets: 20,
+                                    },
+                                },
+                                sources: {
+                                    source: sourceProcessingGraph.operator,
+                                },
+                            } as HistogramDict,
                         },
-                        sources: {
-                            source: sourceProcessingGraph.operator,
-                        },
-                    } as HistogramDict,
-                }),
+                        sessionToken,
+                    ),
+                )
+            ).id;
+
+            const plotData = await this.plotsService.getPlot(
+                plotWorkflowId,
+                new BoundingBox2D(bbox),
+                await this.projectService.getTimeOnce(),
+                {x: Math.abs(metadata.pixelSizeX), y: Math.abs(metadata.pixelSizeY)},
+                metadata.spatialReference,
             );
 
-            const plot = new Plot({
-                workflowId: plotWorkflowId,
-                name: `Histogram`, // TODO: incorporate name of layer
-            });
-            await this.projectService.addPlot(plot);
-
-            // const plotData = await firstValueFrom(this.projectService.getPlotDataStream(plot));
-
-            this.plot.set(plot);
+            this.plotData.set(plotData);
         } catch (error) {
             this.notificationService.error(error instanceof Error ? error.message : String(error));
         } finally {

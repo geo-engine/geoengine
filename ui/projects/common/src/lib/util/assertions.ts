@@ -6,4 +6,4 @@ export function assertNever(x: never): never {
     throw new Error(`Unexpected value: ${JSON.stringify(x)}`);
 }
 
-export const isNullOrUndefined = <T>(value: T | null | undefined): boolean => value === null || value === undefined;
+export const isNullOrUndefined = <T>(value: T | null | undefined): value is null | undefined => value === null || value === undefined;

@@ -87,7 +87,7 @@ export class MapService {
         this.mapComponent = mapComponent;
     }
 
-    public getLayerOverlay(): Signal<OlLayerVector<OlSourceVector<OlFeature>> | undefined> {
+    public getLayerOverlay(): Signal<OlLayerVector<OlSourceVector<OlFeature<OlGeometry>>> | undefined> {
         const mapComponent = this.mapComponent;
         if (!mapComponent) return signal(undefined);
         return mapComponent.overlayLayer.asReadonly();
