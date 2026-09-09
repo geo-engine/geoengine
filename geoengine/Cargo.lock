@@ -2750,11 +2750,11 @@ dependencies = [
  "serde_json",
  "serial_test",
  "snafu",
- "stream-cancel",
  "strum",
  "tempfile",
  "tokio",
  "tokio-postgres",
+ "tokio-util",
  "tracing",
  "tracing-appender",
  "tracing-opentelemetry",
@@ -7054,17 +7054,6 @@ checksum = "2a3fe7c28c6512e766b0874335db33c94ad7b8f9054228ae1c2abd47ce7d335e"
 dependencies = [
  "approx",
  "num-traits",
-]
-
-[[package]]
-name = "stream-cancel"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f9fbf9bd71e4cf18d68a8a0951c0e5b7255920c0cd992c4ff51cddd6ef514a3"
-dependencies = [
- "futures-core",
- "pin-project",
- "tokio",
 ]
 
 [[package]]

@@ -185,7 +185,6 @@ sha2 = "0.11"
 snafu = "0.9"
 stac = "0.17"
 stac-extensions = "0.1.12"
-stream-cancel = "0.8"
 strum = { version = "0.28", features = ["derive"] }
 strum_macros = "0.28"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
@@ -199,6 +198,7 @@ tokio = { version = "1.53", features = [
     "rt-multi-thread",
     "time",
 ] }
+tokio-util = "0.7"
 tokio-postgres = "0.7"
 toml = { version = "1.1", features = ["parse"] }
 tonic = { version = "=0.11.0", features = [

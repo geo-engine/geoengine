@@ -17,7 +17,7 @@ use geoengine_datatypes::{raster::TilingSpecification, util::test::TestDefault};
 use pin_project::pin_project;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
-use stream_cancel::{Trigger, Valve, Valved};
+use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 
 /// Defines the size in bytes of a vector data chunk
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
@@ -76,51 +76,88 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
 /// This type allow wrapping multiple streams with `QueryAbortWrapper`s that
 /// can all be aborted at the same time using the corresponding `QueryAbortTrigger`.
 pub struct QueryAbortRegistration {
-    valve: Valve,
+    token: CancellationToken,
 }
 
 impl QueryAbortRegistration {
     pub fn new() -> (Self, QueryAbortTrigger) {
-        let (trigger, valve) = Valve::new();
+        let token = CancellationToken::new();
 
-        (Self { valve }, QueryAbortTrigger { trigger })
+        (
+            Self {
+                token: token.clone(),
+            },
+            QueryAbortTrigger { token },
+        )
     }
 
-    pub fn wrap<S: Stream>(&self, stream: S) -> QueryAbortWrapper<S> {
+    /// Wraps a query result stream so that it yields `Error::QueryCanceled` when the query is
+    /// aborted, instead of ending silently. This way the cancellation propagates through stream
+    /// combinators like `try_fold` and the query tree stops producing output.
+    pub fn wrap<S, T>(&self, stream: S) -> QueryAbortWrapper<S>
+    where
+        S: Stream<Item = Result<T>>,
+    {
         QueryAbortWrapper {
-            valved: self.valve.wrap(stream),
+            cancelled: self.token.clone().cancelled_owned(),
+            inner: stream,
+            ended: false,
         }
     }
 }
 
-/// This type wraps a stream and allows aborting it using the corresponding `QueryAbortTrigger`
-/// from its `QueryAbortRegistration`.
-#[pin_project(project = AbortWrapperProjection)]
+/// This type wraps a stream and yields `Error::QueryCanceled` when the query is aborted using
+/// the corresponding `QueryAbortTrigger` from its `QueryAbortRegistration`. After the error, the
+/// stream ends.
+#[pin_project]
 pub struct QueryAbortWrapper<S> {
     #[pin]
-    valved: Valved<S>,
+    cancelled: WaitForCancellationFutureOwned,
+    #[pin]
+    inner: S,
+    ended: bool,
 }
 
-impl<S> Stream for QueryAbortWrapper<S>
+impl<S, T> Stream for QueryAbortWrapper<S>
 where
-    S: Stream,
+    S: Stream<Item = Result<T>>,
 {
-    type Item = S::Item;
+    type Item = Result<T>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        self.project().valved.poll_next(cx)
+        let this = self.project();
+
+        if *this.ended {
+            return Poll::Ready(None);
+        }
+
+        // Check the cancellation token before polling the inner stream so that no further items
+        // are requested after an abort. Polling also registers a waker, so `cancel()` will
+        // re-invoke this future.
+        if this.cancelled.poll(cx).is_ready() {
+            *this.ended = true;
+            return Poll::Ready(Some(Err(error::Error::QueryCanceled)));
+        }
+
+        match this.inner.poll_next(cx) {
+            Poll::Ready(None) => {
+                *this.ended = true;
+                Poll::Ready(None)
+            }
+            other => other,
+        }
     }
 }
 
 /// This type allows aborting all streams that were wrapped using the corresponding
 /// `QueryAbortRegistration`.
 pub struct QueryAbortTrigger {
-    trigger: Trigger,
+    token: CancellationToken,
 }
 
 impl QueryAbortTrigger {
     pub fn abort(self) {
-        self.trigger.cancel();
+        self.token.cancel();
     }
 }
 
@@ -241,5 +278,52 @@ impl QueryContext for MockQueryContext {
 impl GdalProcessPoolAccess for MockQueryContext {
     fn get_gdal_pool(&self) -> &Arc<GdalProcessPool> {
         &self.gdal_process_pool
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::stream::{self, StreamExt};
+
+    #[tokio::test]
+    async fn it_yields_query_canceled_error_when_aborted() {
+        let (registration, trigger) = QueryAbortRegistration::new();
+        let mut stream = Box::pin(registration.wrap(stream::iter(vec![Ok(1), Ok(2)])));
+
+        assert!(matches!(stream.next().await, Some(Ok(1))));
+
+        trigger.abort();
+
+        assert!(matches!(
+            stream.next().await,
+            Some(Err(error::Error::QueryCanceled))
+        ));
+        assert!(stream.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn it_errors_before_polling_inner_when_already_aborted() {
+        let (registration, trigger) = QueryAbortRegistration::new();
+        trigger.abort();
+
+        let mut stream = Box::pin(registration.wrap(stream::pending::<Result<i32>>()));
+
+        assert!(matches!(
+            stream.next().await,
+            Some(Err(error::Error::QueryCanceled))
+        ));
+        assert!(stream.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn it_completes_normally_when_trigger_is_dropped_unfired() {
+        let (registration, trigger) = QueryAbortRegistration::new();
+        drop(trigger);
+
+        let stream = registration.wrap(stream::iter(vec![Ok(1), Ok(2)]));
+        let items = stream.collect::<Vec<_>>().await;
+
+        assert!(matches!(items[..], [Ok(1), Ok(2)]));
     }
 }

@@ -552,7 +552,7 @@ mod tests {
     use super::*;
     use crate::{
         engine::{
-            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors,
+            MockExecutionContext, MultipleRasterSources, QueryContext, RasterBandDescriptors,
             SpatialGridDescriptor, TimeDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
@@ -3221,5 +3221,83 @@ mod tests {
             result[0].grid_array,
             GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 6, 6, 6, 6, 6]).unwrap())
         );
+    }
+
+    #[tokio::test]
+    async fn it_propagates_query_cancellation_as_error() {
+        let data = make_raster();
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
+        let operator = TemporalRasterAggregation {
+            params: TemporalRasterAggregationParameters {
+                aggregation: Aggregation::Sum {
+                    ignore_no_data: false,
+                },
+                window: TimeStep {
+                    granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
+                    step: 20,
+                },
+                window_reference: Some(TimeInstance::from_millis(0).unwrap()),
+                output_type: None,
+            },
+            sources: SingleRasterSource {
+                raster: MockRasterSource {
+                    params: MockRasterSourceParams {
+                        data,
+                        result_descriptor,
+                    },
+                }
+                .boxed(),
+            },
+        }
+        .boxed();
+
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 30),
+            BandSelection::first(),
+        );
+        let mut query_ctx = exe_ctx.mock_query_context_test_default();
+        let trigger = query_ctx.abort_trigger().unwrap();
+
+        let query_processor = operator
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let mut result = Box::pin(
+            query_processor
+                .raster_query(query_rect, &query_ctx)
+                .await
+                .unwrap(),
+        );
+
+        assert!(matches!(result.next().await, Some(Ok(_))));
+
+        trigger.abort();
+
+        match result.next().await {
+            Some(Err(e)) => assert!(matches!(e, error::Error::QueryCanceled)),
+            other => panic!("expected QueryCanceled error after abort, got {other:?}"),
+        }
+        assert!(result.next().await.is_none());
     }
 }
