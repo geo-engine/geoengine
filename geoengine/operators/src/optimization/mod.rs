@@ -392,6 +392,7 @@ mod tests {
 
         let workflow = RasterStacker {
             params: RasterStackerParams {
+                output_origin: None,
                 rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {
@@ -452,6 +453,10 @@ mod tests {
                 "params": {
                     "renameBands": {
                         "type": "default"
+                    },
+                    "outputOrigin": {
+                        "x": -180.0,
+                        "y": 90.0
                     }
                 },
                 "sources": {
@@ -514,6 +519,7 @@ mod tests {
 
         let workflow = RasterStacker {
             params: RasterStackerParams {
+                output_origin: None,
                 rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {
@@ -574,6 +580,10 @@ mod tests {
                 "params": {
                     "renameBands": {
                         "type": "default"
+                    },
+                    "outputOrigin": {
+                        "x": -180.0,
+                        "y": 90.0
                     }
                 },
                 "sources": {
@@ -636,6 +646,7 @@ mod tests {
 
         let workflow = RasterStacker {
             params: RasterStackerParams {
+                output_origin: None,
                 rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {
@@ -696,6 +707,10 @@ mod tests {
                 "params": {
                     "renameBands": {
                         "type": "default"
+                    },
+                    "outputOrigin": {
+                        "x": -180.0,
+                        "y": 90.0
                     }
                 },
                 "sources": {
@@ -1471,6 +1486,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
+                        output_origin: None,
                         rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
@@ -1601,6 +1617,10 @@ mod tests {
                         "params": {
                             "renameBands": {
                                 "type": "default"
+                            },
+                            "outputOrigin": {
+                                "x": -180.0,
+                                "y": 90.0
                             }
                         },
                         "sources": {

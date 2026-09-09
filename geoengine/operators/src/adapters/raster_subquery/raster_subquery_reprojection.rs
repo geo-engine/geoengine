@@ -360,11 +360,12 @@ impl<T: Pixel> FoldTileAccuMut for TileWithProjectionCoordinates<T> {
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::raster::TileIdx;
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::{
         primitives::{BandSelection, TimeStep},
         raster::{
-            BoundedGrid, GeoTransform, Grid, GridBoundingBox2D, GridShape, RasterDataType,
-            SpatialGridDefinition, TileSize, TilingSpecification,
+            GeoTransform, Grid, GridBoundingBox2D, RasterDataType, SpatialGridDefinition,
+            TilingSpecification,
         },
         util::test::{TestDefault, assert_eq_two_list_of_tiles_u8},
     };
@@ -434,17 +435,20 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5).unwrap()),
-            spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
-                GeoTransform::new(Coordinate2D::new(0., 2.), 1., -1.),
-                GridShape::new_2d(2, 4).bounding_box(),
-            )),
+            spatial_grid: SpatialGridDescriptor::new_source(
+                SpatialGridDefinition::new(
+                    GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                ),
+                TileSize::new_y_x(2, 2),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_spec = TilingSpecification::new(TileSize::from([2, 2]));
+        let tiling_spec = TilingSpecification::with_zero_origin(TileSize::new_y_x(2, 2));
 
-        let tiling_grid = result_descriptor.tiling_grid_definition(tiling_spec);
-        let tiling_strat = tiling_grid.generate_data_tiling_strategy();
+        let tiling_grid = result_descriptor.tiling_grid_definition();
+        let tiling_strat = tiling_grid.tiling_strategy();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_spec);
 
@@ -477,8 +481,8 @@ mod tests {
             out_srs: projection,
             fold_fn: fold_by_coordinate_lookup_future,
             state: TileReprojectionSubqueryGridInfo {
-                in_spatial_grid: tiling_grid.tiling_spatial_grid_definition(),
-                out_spatial_grid: tiling_grid.tiling_spatial_grid_definition(),
+                in_spatial_grid: tiling_grid.to_spatial_grid(),
+                out_spatial_grid: tiling_grid.to_spatial_grid(),
             },
             _phantom_data: PhantomData,
         };

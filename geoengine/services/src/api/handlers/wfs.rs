@@ -1165,9 +1165,7 @@ x;y
 
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn raster_vector_join_tiling_spec() -> TilingSpecification {
-        TilingSpecification {
-            tile_size: TileSize::new_y_x(600, 600),
-        }
+        TilingSpecification::with_zero_origin(TileSize::new_y_x(600, 600))
     }
 
     #[ge_context::test(tiling_spec = "raster_vector_join_tiling_spec")]
