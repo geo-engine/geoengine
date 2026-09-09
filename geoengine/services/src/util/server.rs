@@ -332,6 +332,24 @@ pub async fn not_implemented_handler() -> HttpResponse {
 #[cfg(target_os = "linux")]
 pub struct SocketFd(pub std::os::unix::prelude::RawFd);
 
+/// Global registry of socket fds that are currently monitored for connection close,
+/// indexed by the application process. See [`connection_closed`] for the rationale.
+///
+/// `value = Some(false)` never occurs for an entry that is still in the map; a monitor
+/// observes a close when its flag has been removed from the map and flipped to `false`
+/// by [`connection_init`] (i.e. a *new* connection claimed the recycled fd number).
+/// All monitors of the same fd share one flag, since HTTP/1.1 keep-alive multiplexes
+/// many requests over a single connection.
+#[cfg(target_os = "linux")]
+static MONITORED_FDS: std::sync::LazyLock<
+    std::sync::Mutex<
+        std::collections::HashMap<
+            std::os::unix::prelude::RawFd,
+            std::sync::Arc<std::sync::atomic::AtomicBool>,
+        >,
+    >,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
 /// attach the connection's socket file descriptor to the connection data
 #[cfg(target_os = "linux")]
 pub fn connection_init(connection: &dyn Any, data: &mut Extensions) {
@@ -343,6 +361,19 @@ pub fn connection_init(connection: &dyn Any, data: &mut Extensions) {
         let fd = sock.as_raw_fd();
         if let Ok(fd) = NonZeroI32::try_from(fd) {
             let fd = RawFd::from(fd);
+
+            // If a previous, now-closed connection is still being monitored under this fd
+            // number, the kernel re-used it for the new connection. Invalidate the old
+            // monitors so they report the close immediately instead of polling the fd of
+            // an unrelated, live connection forever (which would delay cancellation).
+            let mut monitored = MONITORED_FDS
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some(still_open) = monitored.remove(&fd) {
+                // the fd is re-used: the old connection is definitely gone
+                still_open.store(false, std::sync::atomic::Ordering::SeqCst);
+            }
+
             data.insert(SocketFd(fd));
         }
     }
@@ -350,31 +381,62 @@ pub fn connection_init(connection: &dyn Any, data: &mut Extensions) {
 
 /// start a new task that monitors the request's socket file descriptor and tries to detect when the connection is closed.
 /// The returned join handle can be awaited to get notified when the connection is closed (or, if given, when the timeout is reached).
-// TODO: the socket file descriptor might be re-used by a subsequent connection before we notice that
-//       the connections was closed. We maybe need a global list of all open connections and their socket file descriptors
-//       or some other way to invalidate the socket file descriptor in the old connection when a new one arrives.
-//       idea: have a global map of sockets being monitored for connection close. When a new connection arrives: get its fd and
-//       check whether this fd is currently being monitored. If so: notify the monitor channel of the new connection via a channel.
+///
+/// The socket fd number may be re-used by a subsequent connection before we notice that the
+/// old connection was closed. To detect this, every monitor registers its fd (and a shared
+/// `still_open` flag) in [`MONITORED_FDS`]. [`connection_init`] removes the entry as soon as
+/// a *new* connection claims the fd, so the monitor observes the close even though the kernel
+/// would happily report the recycled fd as "still valid".
 #[cfg(target_os = "linux")]
 pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> BoxFuture<'_, ()> {
     use futures::TryFutureExt;
     use nix::errno::Errno;
     use nix::sys::socket::MsgFlags;
+    use std::sync::Arc;
     use std::time::Instant;
 
     const CONNECTION_MONITOR_INTERVAL_SECONDS: u64 = 1;
 
     if let Some(fd) = req.conn_data::<SocketFd>() {
         let fd = fd.0;
+
+        // 1-byte peek buffer: `recv` fills one byte if the connection is alive, returns
+        // `Ok(0)` only on a closed connection, and `EAGAIN` on an idle-but-open socket.
+        let mut data = [0u8; 1];
+
+        // share one flag per fd across all concurrent monitors of the same connection
+        let still_open = {
+            let mut monitored = MONITORED_FDS
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            monitored
+                .entry(fd)
+                .or_insert_with(|| Arc::new(std::sync::atomic::AtomicBool::new(true)))
+                .clone()
+        };
+
         let handle = crate::util::spawn(async move {
-            let mut data = vec![];
             let start = Instant::now();
 
-            while timeout.is_none_or(|t| start.elapsed() >= t) {
-                let r = nix::sys::socket::recv(fd, data.as_mut_slice(), MsgFlags::MSG_PEEK);
+            // NOTE: loop while the timeout has NOT elapsed yet; exits once the timeout
+            //       is reached so the caller learns about it (see function doc).
+            while timeout.is_none_or(|t| start.elapsed() < t) {
+                // the fd was handed back to the kernel and re-used by a new connection
+                if !still_open.load(std::sync::atomic::Ordering::SeqCst) {
+                    return;
+                }
+
+                let r = nix::sys::socket::recv(fd, &mut data, MsgFlags::MSG_PEEK);
 
                 match r {
-                    Ok(0) | Err(Errno::EBADF) => {
+                    Ok(0)
+                    | Err(
+                        Errno::EBADF
+                        | Errno::ENOTCONN
+                        | Errno::ECONNRESET
+                        | Errno::ECONNABORTED
+                        | Errno::EPIPE,
+                    ) => {
                         // the connection seems to be closed
                         return;
                     }
