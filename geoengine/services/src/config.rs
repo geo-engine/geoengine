@@ -291,6 +291,7 @@ pub struct TimeStartEnd {
 pub struct Ogc {
     pub default_time: Option<OgcDefaultTime>,
     pub tiles: Option<OgcApiTilesConfig>,
+    pub cors: Option<CorsConfig>,
 }
 
 impl ConfigElement for Ogc {
@@ -300,6 +301,17 @@ impl ConfigElement for Ogc {
 #[derive(Debug, Deserialize)]
 pub struct OgcApiTilesConfig {
     pub request_timeout_seconds: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(
+    clippy::struct_field_names,
+    reason = "field names match the CORS nomenclature"
+)]
+pub struct CorsConfig {
+    pub allow_origin: Option<String>,
+    pub allow_headers: Vec<String>,
+    pub allow_methods: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]

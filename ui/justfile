@@ -30,9 +30,9 @@ lint only-errors="" fix="" project="": common::_clear (format (if fix == "--fix"
 build project="gis": common::_clear
     npm run build-prod:{{ project }}
 
-[arg("nightly", long="nightly", value="true", help="Whether to run the app against a foreign nightly instance of the backend.")]
-run project="gis" nightly="false": common::_clear
-    npm run serve:{{ project }}:{{ if nightly == "true" { "nightly" } else { "local" } }}
+[arg("type", long="type", help="Run type, e.g., `local` or `nightly`.")]
+run project="gis" type="local": common::_clear
+    npm run serve:{{ project }}:{{ type }}
 
 [arg("include", long="include", help="Whether to include only specific test files, e.g. `--include=`.")]
 [arg("ci", long="ci", value="true", help="Whether to run tests in CI mode.")]
