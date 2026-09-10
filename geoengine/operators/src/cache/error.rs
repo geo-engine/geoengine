@@ -24,6 +24,10 @@ pub enum CacheError {
         source: lz4_flex::block::DecompressError,
     },
     BlockingElementConversion,
+    #[snafu(display("Could not run compression task"))]
+    CouldNotRunCompressionTask {
+        source: tokio::task::JoinError,
+    },
     #[snafu(display("Could not run decompression task"))]
     CouldNotRunDecompressionTask {
         source: tokio::task::JoinError,
