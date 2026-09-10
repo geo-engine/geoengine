@@ -164,7 +164,7 @@ where
 
         let new_raster_cache = if cache_config.enabled && cache_config.enable_new_raster_cache {
             Some(Arc::new(NewRasterCacheEnum::new_lru(
-                cache_config.new_raster_cache_size(),
+                cache_config.new_raster_cache_size_in_bytes(),
             )))
         } else {
             None
@@ -181,7 +181,7 @@ where
             volumes: Default::default(),
             tile_cache: Arc::new(
                 SharedCache::new(
-                    cache_config.shared_cache_size(),
+                    cache_config.shared_cache_size_in_mb(),
                     cache_config.landing_zone_ratio,
                 )
                 .expect("tile cache creation should work because the config is valid"),
@@ -237,7 +237,7 @@ where
 
         let new_raster_cache = if cache_config.enabled && cache_config.enable_new_raster_cache {
             Some(Arc::new(NewRasterCacheEnum::new_lru(
-                cache_config.new_raster_cache_size(),
+                cache_config.new_raster_cache_size_in_bytes(),
             )))
         } else {
             None
@@ -254,7 +254,7 @@ where
             volumes: Default::default(),
             tile_cache: Arc::new(
                 SharedCache::new(
-                    cache_config.shared_cache_size(),
+                    cache_config.shared_cache_size_in_mb(),
                     cache_config.landing_zone_ratio,
                 )
                 .expect("tile cache creation should work because the config is valid"),

@@ -574,11 +574,11 @@ pub struct Cache {
 }
 
 impl Cache {
-    pub fn shared_cache_size(&self) -> usize {
+    pub fn shared_cache_size_in_mb(&self) -> usize {
         self.size_in_mb - self.new_raster_cache_size_in_mb()
     }
 
-    pub fn new_raster_cache_size(&self) -> usize {
+    pub fn new_raster_cache_size_in_bytes(&self) -> usize {
         self.new_raster_cache_size_in_mb() * 1024 * 1024
     }
 
