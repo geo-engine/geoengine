@@ -589,6 +589,18 @@ impl Cache {
             0
         }
     }
+
+    pub fn validate(&self) -> Result<()> {
+        if !(0.0..=1.0).contains(&self.raster_cache_size_ratio) {
+            return Err(crate::error::Error::InvalidConfig {
+                reason: format!(
+                    "raster_cache_size_ratio must be between 0 and 1, got {}",
+                    self.raster_cache_size_ratio
+                ),
+            });
+        }
+        Ok(())
+    }
 }
 
 impl TestDefault for Cache {

@@ -80,6 +80,10 @@ pub enum Error {
 
     ServerStartup,
 
+    #[snafu(display("Invalid config: {}", reason))]
+    InvalidConfig {
+        reason: String,
+    },
     #[snafu(display("Registration failed: {}", reason))]
     RegistrationFailed {
         reason: String,
