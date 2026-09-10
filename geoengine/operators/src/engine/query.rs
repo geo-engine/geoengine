@@ -159,7 +159,7 @@ impl MockQueryContext {
             quota_checker: None,
             quota_tracking: None,
             new_raster_cache: Some(Arc::new(
-                crate::cache::new_raster_cache::NewRasterCacheEnum::new_lru(usize::MAX / 2),
+                crate::cache::new_raster_cache::NewRasterCacheEnum::new_fifo(1_073_741_824),
             )),
             abort_registration,
             abort_trigger: Some(abort_trigger),
@@ -184,7 +184,7 @@ impl MockQueryContext {
             quota_checker,
             quota_tracking,
             new_raster_cache: Some(Arc::new(
-                crate::cache::new_raster_cache::NewRasterCacheEnum::new_lru(usize::MAX / 2),
+                crate::cache::new_raster_cache::NewRasterCacheEnum::new_fifo(1_073_741_824),
             )),
             abort_registration,
             abort_trigger: Some(abort_trigger),
@@ -208,7 +208,7 @@ impl MockQueryContext {
             quota_checker: None,
             quota_tracking: None,
             new_raster_cache: Some(Arc::new(
-                crate::cache::new_raster_cache::NewRasterCacheEnum::new_lru(usize::MAX / 2),
+                crate::cache::new_raster_cache::NewRasterCacheEnum::new_fifo(1_073_741_824),
             )),
             abort_registration,
             abort_trigger: Some(abort_trigger),
