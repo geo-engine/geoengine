@@ -10,7 +10,7 @@ import {
     resource,
     signal,
 } from '@angular/core';
-import {BackendService, CoreModule, Extent, LoadingState, MapService, ProjectService, UUID} from '@geoengine/core';
+import {BackendService, CoreModule, LoadingState, MapService, ProjectService, UUID} from '@geoengine/core';
 import {A11yModule} from '@angular/cdk/a11y';
 import {MatButtonModule} from '@angular/material/button';
 import {MatFormFieldModule} from '@angular/material/form-field';
@@ -24,6 +24,7 @@ import {
     NotificationService,
     PlotsService,
     RasterLayerMetadata,
+    SpatialReference,
     UserService,
     VegaChartData,
     WorkflowDict,
@@ -162,7 +163,7 @@ export class ComputeComponent {
         return bands[0];
     });
     readonly layerOverlay = this.mapService.getLayerOverlay();
-    readonly computationBbox = computed<Extent | undefined>(() => {
+    readonly computationBbox = computed<BboxAndSpatialReference | undefined>(() => {
         const layerOverlay = this.layerOverlay();
         if (!layerOverlay) return undefined;
 
@@ -174,7 +175,10 @@ export class ComputeComponent {
 
         const [minx, miny, maxx, maxy] = geometry.getExtent();
 
-        return [minx, miny, maxx, maxy];
+        return {
+            bbox: new BoundingBox2D([minx, miny, maxx, maxy]),
+            spatialReference: SpatialReference.fromSrsString(this.mapService.getView().getProjection().getCode()),
+        };
     });
     readonly cannotComputeHistogram = computed(() => {
         return !this.computationBbox() || !this.selectedRasterLayer.value() || !this.selectedBand();
@@ -217,13 +221,13 @@ export class ComputeComponent {
     }
 
     async computeHistogram(): Promise<void> {
-        const bbox = this.computationBbox();
+        const bboxAndSpatialReference = this.computationBbox();
         const layer = this.selectedRasterLayer.value();
         const metadata = this.selecterLayerMetadata.value();
         const processingGraphId = this.selectedProcessingGraphId.value();
         const band = this.selectedBand();
 
-        if (!bbox || !layer || !band || !processingGraphId || !metadata) return;
+        if (!bboxAndSpatialReference || !layer || !band || !processingGraphId || !metadata) return;
 
         this.isComputingHistogram.set(true);
         this.plotData.set(undefined);
@@ -267,10 +271,10 @@ export class ComputeComponent {
 
             const plotData = await this.plotsService.getPlot(
                 plotWorkflowId,
-                new BoundingBox2D(bbox),
+                bboxAndSpatialReference.bbox,
                 await this.projectService.getTimeOnce(),
                 {x: Math.abs(metadata.pixelSizeX), y: Math.abs(metadata.pixelSizeY)},
-                metadata.spatialReference,
+                bboxAndSpatialReference.spatialReference,
             );
 
             this.plotData.set(plotData);
@@ -316,4 +320,9 @@ function bandMeasurementType(bandsMetadata: RasterBandDescriptor[], band: string
     }
 
     return 'unitless'; // fallback if the band is not found
+}
+
+interface BboxAndSpatialReference {
+    bbox: BoundingBox2D;
+    spatialReference: SpatialReference;
 }
