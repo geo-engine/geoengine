@@ -170,7 +170,6 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
         effect(() => {
             this.overlayLayer();
             this.projection$.pipe(first()).subscribe((projection) => {
-                this.backgroundLayerSource = undefined; // reset source to force recreation
                 this.redrawLayers(projection);
             });
         });
@@ -371,7 +370,9 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
             });
         }
 
-        setMapsDoubleClickZoom(this.maps, !this.isDrawInteractionAttached());
+        setTimeout(() => {
+            setMapsDoubleClickZoom(this.maps, !this.isDrawInteractionAttached());
+        }, this.config.DELAYS.DEBOUNCE /* wait a short time to prevent double-clicks at the end of the draw interaction */);
     }
 
     private calculateGrid(): void {
