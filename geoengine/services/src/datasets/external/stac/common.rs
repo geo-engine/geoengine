@@ -24,7 +24,7 @@ use super::StacProviderS3Config;
 /// `assets.*.proj:code`) and the STAC 1.0.0 metadata (`assets.*.raster:bands`,
 /// item-level projection fields, and `assets.*.proj:epsg`) so that items of either version
 /// survive the field filter.
-pub const STAC_ITEM_FIELDS: &str = "stac_version,properties.datetime,properties.updated,properties.proj:code,properties.proj:epsg,assets.*.title,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.raster:bands,assets.*.proj:code,assets.*.proj:epsg,assets.*.proj:shape,assets.*.proj:transform";
+pub const STAC_ITEM_FIELDS: &str = "stac_version,properties.datetime,properties.updated,properties.gsd,properties.proj:code,properties.proj:epsg,assets.*.title,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.raster:bands,assets.*.proj:code,assets.*.proj:epsg,assets.*.proj:shape,assets.*.proj:transform";
 
 // ---------------------------------------------------------------------------
 // STAC extension version types

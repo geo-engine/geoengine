@@ -311,7 +311,7 @@ async fn fetch_sample_items(
     if params.filter_item_fields {
         query_params.push((
             "fields".to_string(),
-            "stac_version,stac_extensions,properties.datetime,properties.updated,properties.proj:epsg,properties.proj:code,assets.*.title,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.eo:bands,assets.*.raster:bands,assets.*.proj:epsg,assets.*.proj:code,assets.*.proj:transform,assets.*.proj:shape,assets.*.gsd,assets.*.type".to_string(),
+            "stac_version,stac_extensions,properties.datetime,properties.updated,properties.gsd,properties.proj:epsg,properties.proj:code,assets.*.title,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.eo:bands,assets.*.raster:bands,assets.*.proj:epsg,assets.*.proj:code,assets.*.proj:transform,assets.*.proj:shape,assets.*.gsd,assets.*.type".to_string(),
         ));
     }
     if let Some(bbox) = &params.bbox
@@ -382,10 +382,7 @@ fn process_sample_assets(
                 continue;
             }
 
-            let Some(geo_transform) = common::geo_transform_from_fields(&asset.additional_fields)
-            else {
-                continue;
-            };
+            let geo_transform = common::geo_transform_from_fields(&asset.additional_fields);
 
             let data_type = common::data_type_from_asset_v1_1_0(asset)
                 .or_else(|| common::data_type_from_asset_v1_0_0_fallback(asset));
@@ -406,7 +403,24 @@ fn process_sample_assets(
                 continue;
             }
 
-            let resolution: OrderedFloat<f64> = geo_transform.x_pixel_size().abs().into();
+            let resolution = geo_transform
+                .map(|gt| gt.x_pixel_size().abs())
+                .or_else(|| {
+                    asset
+                        .additional_fields
+                        .get("gsd")
+                        .and_then(serde_json::Value::as_f64)
+                })
+                .or_else(|| {
+                    item.properties
+                        .additional_fields
+                        .get("gsd")
+                        .and_then(serde_json::Value::as_f64)
+                });
+            let Some(resolution) = resolution else {
+                continue;
+            };
+            let resolution: OrderedFloat<f64> = resolution.into();
 
             let dataset_key = DatasetKey {
                 epsg,
@@ -436,12 +450,18 @@ fn process_sample_assets(
                 discovered_datasets
                     .entry(dataset_key)
                     .or_insert(DiscoveredDatasetInfo {
-                        geo_transform: Some(geo_transform),
+                        geo_transform,
                         proj_shape: common::proj_shape_from_fields(&asset.additional_fields),
                         srs: SpatialReference::new(SpatialReferenceAuthority::Epsg, epsg),
                         asset_count: 0,
                     });
             info_entry.asset_count += 1;
+            // Prefer an asset that provides the grid metadata if an earlier
+            // sampled asset of the same dataset did not provide it.
+            if info_entry.geo_transform.is_none() {
+                info_entry.geo_transform = geo_transform;
+                info_entry.proj_shape = common::proj_shape_from_fields(&asset.additional_fields);
+            }
         }
     }
 
@@ -554,7 +574,11 @@ fn build_dataset_spatial_grid(
     dataset_key: &DatasetKey,
     full_projection_grid: bool,
 ) -> GeoOpSpatialGridDescriptor {
-    let default_grid = || {
+    let fallback_grid = || {
+        warn!(
+            "Could not determine the spatial grid origin for dataset {:?}; using (0, 0) as fallback. The generated mapping may need to be adjusted manually",
+            dataset_key
+        );
         GeoOpSpatialGridDescriptor::source_from_parts(
             GeoTransform::new(
                 (0.0, 0.0).into(),
@@ -571,13 +595,16 @@ fn build_dataset_spatial_grid(
                 .unwrap_or_else(|| fallback_grid_bounds(info));
             GeoOpSpatialGridDescriptor::source_from_parts(gt, grid_bounds)
         } else {
-            default_grid()
+            fallback_grid()
         }
-    } else if let (Some(gt), Some((height, width))) = (info.geo_transform, info.proj_shape) {
-        let grid_bounds = asset_shape_bounds(height, width).unwrap_or_else(|()| zero_size_grid());
+    } else if let Some(gt) = info.geo_transform {
+        let grid_bounds = info
+            .proj_shape
+            .and_then(|(height, width)| asset_shape_bounds(height, width).ok())
+            .unwrap_or_else(zero_size_grid);
         GeoOpSpatialGridDescriptor::source_from_parts(gt, grid_bounds)
     } else {
-        default_grid()
+        fallback_grid()
     }
 }
 
@@ -1295,6 +1322,58 @@ mod tests {
             asset_title: asset_title.to_string(),
             band_name: Some(band_name.to_string()),
         })
+    }
+
+    #[test]
+    fn test_missing_transform_produces_fallback_spatial_grid() {
+        let mut items_json = stac_items_json();
+        for item in items_json["features"].as_array_mut().unwrap() {
+            for asset in item["assets"].as_object_mut().unwrap().values_mut() {
+                asset.as_object_mut().unwrap().remove("proj:transform");
+            }
+        }
+        let items: stac::ItemCollection = serde_json::from_value(items_json).unwrap();
+
+        let (discovered_datasets, sample_band_info) =
+            process_sample_assets(&items, &[ImportFileType::Jp2], &[]);
+        assert!(!discovered_datasets.is_empty());
+        assert!(
+            discovered_datasets
+                .values()
+                .all(|info| info.geo_transform.is_none())
+        );
+
+        let datasets = build_datasets(
+            &discovered_datasets,
+            &HashMap::new(),
+            &sample_band_info,
+            false,
+            "sentinel-2-l2a",
+        );
+        assert!(!datasets.is_empty());
+        assert!(datasets.iter().all(|dataset| {
+            dataset.spatial_grid.geo_transform().origin_coordinate == (0.0, 0.0).into()
+        }));
+    }
+
+    #[test]
+    fn test_missing_shape_preserves_known_grid_origin() {
+        let geo_transform = GeoTransform::new((123.0, 456.0).into(), 10.0, -10.0);
+        let info = DiscoveredDatasetInfo {
+            geo_transform: Some(geo_transform),
+            proj_shape: None,
+            srs: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32_632),
+            asset_count: 1,
+        };
+        let dataset_key = DatasetKey {
+            epsg: 32_632,
+            data_type: RasterDataType::U8,
+            resolution: OrderedFloat(10.0),
+        };
+
+        let spatial_grid = build_dataset_spatial_grid(&info, &dataset_key, false);
+
+        assert_eq!(spatial_grid.geo_transform(), geo_transform);
     }
 
     #[test]
