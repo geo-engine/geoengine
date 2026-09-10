@@ -1,7 +1,7 @@
 use crate::config;
 use actix_web::{
     Error, HttpResponse,
-    body::MessageBody,
+    body::{EitherBody, MessageBody, None as NoneBody},
     dev::{ServiceRequest, ServiceResponse},
     http::{
         Method,
@@ -10,6 +10,7 @@ use actix_web::{
             ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue, VARY,
         },
     },
+    middleware::Next,
 };
 
 fn ogc_config() -> Result<config::Ogc, Error> {
@@ -22,14 +23,13 @@ fn ogc_config() -> Result<config::Ogc, Error> {
 ///
 /// Returns an `Error` if the OGC configuration cannot be retrieved or if any of the header values are invalid.
 ///
-fn apply_cors_headers<B>(response: &mut ServiceResponse<B>) -> Result<(), Error>
+fn apply_cors_headers<B>(
+    response: &mut ServiceResponse<B>,
+    config: &config::CorsConfig,
+) -> Result<(), Error>
 where
     B: MessageBody + 'static,
 {
-    let Some(config) = ogc_config()?.cors else {
-        return Ok(());
-    };
-
     let headers = response.headers_mut();
     if let Some(allowed_origin) = &config.allow_origin {
         headers.insert(
@@ -63,21 +63,48 @@ where
 ///
 /// Returns an `Error` if the OGC configuration cannot be retrieved or if any of the header values are invalid.
 ///
-pub async fn cors_middleware(
+pub async fn cors_middleware<B>(
     req: ServiceRequest,
-    next: actix_web::middleware::Next<impl MessageBody + 'static>,
-) -> Result<ServiceResponse<actix_web::body::BoxBody>, Error> {
-    if req.method() == Method::OPTIONS {
+    next: Next<B>,
+) -> Result<ServiceResponse<EitherBody<B, NoneBody>>, Error>
+where
+    B: MessageBody + 'static,
+{
+    let Some(cors_config) = ogc_config()?.cors else {
+        // CORS is disabled: pass through downstream response
+        return Ok(next.call(req).await?.map_into_left_body());
+    };
+
+    if is_preflight_request(&req) {
         let (request, _) = req.into_parts();
-        let mut res = ServiceResponse::new(request, HttpResponse::NoContent().finish());
-        apply_cors_headers(&mut res)?;
-        return Ok(res.map_into_boxed_body());
+        let mut res = ServiceResponse::new(
+            request,
+            HttpResponse::NoContent().message_body(NoneBody::new())?,
+        );
+        apply_cors_headers(&mut res, &cors_config)?;
+
+        // Short-circuit preflight: custom 204 response
+        return Ok(res.map_into_right_body());
     }
 
+    // CORS-enabled request: pass through downstream response with CORS headers
     let mut res = next.call(req).await?;
-    apply_cors_headers(&mut res)?;
+    apply_cors_headers(&mut res, &cors_config)?;
 
-    Ok(res.map_into_boxed_body())
+    Ok(res.map_into_left_body())
+}
+
+/// Checks if the incoming request is a CORS preflight request.
+///
+/// A CORS preflight request is an HTTP OPTIONS request that includes the `Origin` header
+/// and the `Access-Control-Request-Method` header, indicating that the browser is checking
+/// if the actual request is allowed by the server's CORS policy.
+fn is_preflight_request(req: &ServiceRequest) -> bool {
+    req.method() == Method::OPTIONS
+        && req.headers().contains_key(actix_web::http::header::ORIGIN)
+        && req
+            .headers()
+            .contains_key(actix_web::http::header::ACCESS_CONTROL_REQUEST_METHOD)
 }
 
 #[cfg(test)]
