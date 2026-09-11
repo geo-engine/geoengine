@@ -119,7 +119,7 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private backgroundLayers: Array<OlLayer<OlSource, any>> = [];
 
-    readonly overlayLayer = signal<OlLayerVector<OlSourceVector<OlFeature>> | undefined>(undefined);
+    readonly overlayLayer = signal<OlLayerVector<OlSourceVector<OlFeature<OlGeometry>>> | undefined>(undefined);
 
     private userSelect?: OlInteractionSelect;
 
