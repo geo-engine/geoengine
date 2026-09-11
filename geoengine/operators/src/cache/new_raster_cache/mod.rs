@@ -90,6 +90,7 @@ impl NewRasterCacheEnum {
     }
 
     async fn insert(&self, key: CacheKey, tile: TypedRasterTile2D) -> Result<()> {
+        let key = Arc::new(key);
         match self {
             NewRasterCacheEnum::InMemoryCompressedRasterTile2DFifo(cache) => {
                 cache.store.insert(key, tile).await
@@ -119,12 +120,12 @@ trait CacheStore: Send + Sync + 'static {
 
     async fn get(&self, key: &CacheKey) -> Result<Option<Arc<Self::SF>>>;
 
-    async fn insert(&self, key: CacheKey, tile: TypedRasterTile2D) -> Result<()>;
+    async fn insert(&self, key: Arc<CacheKey>, tile: TypedRasterTile2D) -> Result<()>;
 }
 
 trait EvictionStrategy: Send + Sync + 'static {
-    fn record_access(&mut self, key: &CacheKey, size: usize, cache_hint: CacheHint);
-    fn record_removal(&mut self, key: &CacheKey);
+    fn record_access(&mut self, key: &Arc<CacheKey>, size: usize, cache_hint: CacheHint);
+    fn record_removal(&mut self, key: &Arc<CacheKey>);
 
     fn record_hit(strategy: Arc<RwLock<Self>>, key: &CacheKey) -> impl std::future::Future<Output = ()> + Send;
 
@@ -137,11 +138,11 @@ trait EvictionStrategy: Send + Sync + 'static {
         is_pinned: F,
     ) -> Result<EvictionPlan>
     where
-        F: FnMut(&CacheKey) -> bool;
+        F: FnMut(&Arc<CacheKey>) -> bool;
 }
 
 struct EvictionPlan {
-    keys_to_remove: Vec<CacheKey>,
+    keys_to_remove: Vec<Arc<CacheKey>>,
     freed_bytes: usize,
 }
 
@@ -151,7 +152,7 @@ pub struct FifoEvictionStrategy {
 }
 
 struct EvictionStrategyItem {
-    key: CacheKey,
+    key: Arc<CacheKey>,
     size: usize,
     cache_hint: CacheHint,
 }
@@ -166,7 +167,7 @@ impl FifoEvictionStrategy {
 }
 
 impl EvictionStrategy for FifoEvictionStrategy {
-    fn record_access(&mut self, key: &CacheKey, size: usize, cache_hint: CacheHint) {
+    fn record_access(&mut self, key: &Arc<CacheKey>, size: usize, cache_hint: CacheHint) {
         self.queue.push(EvictionStrategyItem {
             key: key.clone(),
             size,
@@ -174,7 +175,7 @@ impl EvictionStrategy for FifoEvictionStrategy {
         });
     }
 
-    fn record_removal(&mut self, key: &CacheKey) {
+    fn record_removal(&mut self, key: &Arc<CacheKey>) {
         self.queue.remove(
             self.queue
                 .iter()
@@ -198,7 +199,7 @@ impl EvictionStrategy for FifoEvictionStrategy {
         mut is_pinned: F,
     ) -> Result<EvictionPlan>
     where
-        F: FnMut(&CacheKey) -> bool,
+        F: FnMut(&Arc<CacheKey>) -> bool,
     {
         let needed = (current_size + required_space).saturating_sub(self.capacity);
 
@@ -257,7 +258,7 @@ pub struct LruEvictionStrategy {
 }
 
 struct LruNode {
-    key: CacheKey,
+    key: Arc<CacheKey>,
     size: usize,
     cache_hint: CacheHint,
     prev: Option<usize>,
@@ -319,7 +320,7 @@ impl LruEvictionStrategy {
 }
 
 impl EvictionStrategy for LruEvictionStrategy {
-    fn record_access(&mut self, key: &CacheKey, size: usize, cache_hint: CacheHint) {
+    fn record_access(&mut self, key: &Arc<CacheKey>, size: usize, cache_hint: CacheHint) {
         let idx = match self.free.pop() {
             Some(idx) => idx,
             None => {
@@ -335,11 +336,11 @@ impl EvictionStrategy for LruEvictionStrategy {
             prev: None,
             next: None,
         });
-        self.index.insert(key.clone(), idx);
+        self.index.insert(key.as_ref().clone(), idx);
         self.attach_front(idx);
     }
 
-    fn record_removal(&mut self, key: &CacheKey) {
+    fn record_removal(&mut self, key: &Arc<CacheKey>) {
         let idx = self
             .index
             .remove(key)
@@ -369,7 +370,7 @@ impl EvictionStrategy for LruEvictionStrategy {
         mut is_pinned: F,
     ) -> Result<EvictionPlan>
     where
-        F: FnMut(&CacheKey) -> bool,
+        F: FnMut(&Arc<CacheKey>) -> bool,
     {
         let needed = (current_size + required_space).saturating_sub(self.capacity);
 
@@ -457,12 +458,14 @@ mod eviction_strategy_tests {
         let key_a = key("a");
         let key_b = key("b");
 
-        strategy.record_access(&key_a, 40, expired_hint());
-        strategy.record_access(&key_b, 60, CacheHint::max_duration());
+        let key_a_arc = Arc::new(key_a.clone());
+        let key_b_arc = Arc::new(key_b.clone());
+        strategy.record_access(&key_a_arc, 40, expired_hint());
+        strategy.record_access(&key_b_arc, 60, CacheHint::max_duration());
 
-        let plan = strategy.plan_eviction(100, 50, |k| k == &key_a).unwrap();
+        let plan = strategy.plan_eviction(100, 50, |k| k.as_ref() == &key_a).unwrap();
 
-        assert_eq!(plan.keys_to_remove, vec![key_a, key_b]);
+        assert_eq!(plan.keys_to_remove, vec![key_a_arc, key_b_arc]);
         assert_eq!(plan.freed_bytes, 60);
     }
 
@@ -472,12 +475,14 @@ mod eviction_strategy_tests {
         let key_a = key("a");
         let key_b = key("b");
 
-        strategy.record_access(&key_a, 40, expired_hint());
-        strategy.record_access(&key_b, 60, CacheHint::max_duration());
+        let key_a_arc = Arc::new(key_a.clone());
+        let key_b_arc = Arc::new(key_b.clone());
+        strategy.record_access(&key_a_arc, 40, expired_hint());
+        strategy.record_access(&key_b_arc, 60, CacheHint::max_duration());
 
         let plan = strategy.plan_eviction(100, 30, |_| false).unwrap();
 
-        assert_eq!(plan.keys_to_remove, vec![key_a]);
+        assert_eq!(plan.keys_to_remove, vec![key_a_arc]);
         assert_eq!(plan.freed_bytes, 40);
     }
 
@@ -488,17 +493,20 @@ mod eviction_strategy_tests {
         let key_b = key("b");
         let key_c = key("c");
 
-        strategy.record_access(&key_a, 40, expired_hint());
-        strategy.record_access(&key_b, 30, CacheHint::max_duration());
-        strategy.record_access(&key_c, 30, CacheHint::max_duration());
+        let key_a_arc = Arc::new(key_a.clone());
+        let key_b_arc = Arc::new(key_b.clone());
+        let key_c_arc = Arc::new(key_c.clone());
+        strategy.record_access(&key_a_arc, 40, expired_hint());
+        strategy.record_access(&key_b_arc, 30, CacheHint::max_duration());
+        strategy.record_access(&key_c_arc, 30, CacheHint::max_duration());
 
         let strategy_arc = Arc::new(RwLock::new(strategy));
         LruEvictionStrategy::record_hit(strategy_arc.clone(), &key_c).await;
 
         let strategy = strategy_arc.read().await;
-        let plan = strategy.plan_eviction(100, 20, |k| k == &key_a).unwrap();
+        let plan = strategy.plan_eviction(100, 20, |k| k.as_ref() == &key_a).unwrap();
 
-        assert_eq!(plan.keys_to_remove, vec![key_a, key_b]);
+        assert_eq!(plan.keys_to_remove, vec![key_a_arc, key_b_arc]);
         assert_eq!(plan.freed_bytes, 30);
     }
 
@@ -508,12 +516,14 @@ mod eviction_strategy_tests {
         let key_a = key("a");
         let key_b = key("b");
 
-        strategy.record_access(&key_a, 60, CacheHint::max_duration());
-        strategy.record_access(&key_b, 20, CacheHint::max_duration());
+        let key_a_arc = Arc::new(key_a.clone());
+        let key_b_arc = Arc::new(key_b.clone());
+        strategy.record_access(&key_a_arc, 60, CacheHint::max_duration());
+        strategy.record_access(&key_b_arc, 20, CacheHint::max_duration());
 
         let plan = strategy.plan_eviction(60, 70, |_| false).unwrap();
 
-        assert_eq!(plan.keys_to_remove, vec![key_a]);
+        assert_eq!(plan.keys_to_remove, vec![key_a_arc]);
         assert_eq!(plan.freed_bytes, 60);
     }
 
@@ -524,9 +534,12 @@ mod eviction_strategy_tests {
         let key_b = key("b");
         let key_c = key("c");
 
-        strategy.record_access(&key_a, 60, CacheHint::max_duration());
-        strategy.record_access(&key_b, 20, CacheHint::max_duration());
-        strategy.record_access(&key_c, 10, CacheHint::max_duration());
+        let key_a_arc = Arc::new(key_a.clone());
+        let key_b_arc = Arc::new(key_b.clone());
+        let key_c_arc = Arc::new(key_c.clone());
+        strategy.record_access(&key_a_arc, 60, CacheHint::max_duration());
+        strategy.record_access(&key_b_arc, 20, CacheHint::max_duration());
+        strategy.record_access(&key_c_arc, 10, CacheHint::max_duration());
 
         let strategy_arc = Arc::new(RwLock::new(strategy));
         LruEvictionStrategy::record_hit(strategy_arc.clone(), &key_c).await;
@@ -534,7 +547,7 @@ mod eviction_strategy_tests {
         let strategy = strategy_arc.read().await;
         let plan = strategy.plan_eviction(60, 70, |_| false).unwrap();
 
-        assert_eq!(plan.keys_to_remove, vec![key_a]);
+        assert_eq!(plan.keys_to_remove, vec![key_a_arc]);
         assert_eq!(plan.freed_bytes, 60);
     }
 }
@@ -571,7 +584,7 @@ impl<SF> Drop for SizeTrackedEntry<SF> {
 }
 
 pub struct InMemoryCacheStore<SF, ES> {
-    cache: RwLock<HashMap<CacheKey, Arc<SizeTrackedEntry<SF>>>>,
+    cache: RwLock<HashMap<Arc<CacheKey>, Arc<SizeTrackedEntry<SF>>>>,
     eviction_strategy: Arc<RwLock<ES>>,
     total_size: Arc<AtomicUsize>,
 }
@@ -769,8 +782,9 @@ where
                 let mut eviction_strategy = self.eviction_strategy.write().await;
 
                 if cache.contains_key(key) {
+                    let arc_key = Arc::new(key.clone());
                     cache.remove(key);
-                    eviction_strategy.record_removal(key);
+                    eviction_strategy.record_removal(&arc_key);
                 }
 
                 return Ok(None);
@@ -782,7 +796,7 @@ where
         Ok(hit)
     }
 
-    async fn insert(&self, key: CacheKey, tile: TypedRasterTile2D) -> Result<()> {
+    async fn insert(&self, key: Arc<CacheKey>, tile: TypedRasterTile2D) -> Result<()> {
         {
             let cache = self.cache.read().await;
             if cache.contains_key(&key) {
@@ -793,7 +807,11 @@ where
 
         let cache_hint = tile.cache_hint();
         let value = SF::store(tile).await?;
-        let required_space = value.byte_size().await?;
+        let value_size = value.byte_size().await?;
+
+        // Calculate key size: (operator_name, band: u32, time_interval, grid_idx: 2x i32)
+        let key_size = std::mem::size_of_val(key.as_ref());
+        let required_space = value_size + key_size;
 
         let mut cache = self.cache.write().await;
         if cache.contains_key(&key) {
