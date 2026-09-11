@@ -60,6 +60,7 @@ import {containsCoordinate, getCenter} from 'ol/extent';
 import {applyBackground, stylefunction} from 'ol-mapbox-style';
 import {olExtentToTuple, SpatialReference, Symbology, VectorSymbology} from '@geoengine/common';
 import {allowedBasemapProjections, BasemapService} from '../../layers/basemap.service';
+import {AsyncSequencer} from '../../util/sequencer';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MapLayer = MapLayerComponent<OlLayer<OlSource, any>, OlSource, Symbology>;
@@ -135,6 +136,9 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
     });
 
     private readonly basemapService = inject(BasemapService);
+
+    /** Ensures that asynchronous operations that modify the map execute sequentially */
+    private mapSequencer = new AsyncSequencer();
 
     /**
      * Create the component and inject several dependencies via DI.
@@ -774,5 +778,45 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
                 });
             }
         }
+    }
+
+    /**
+     * Returns the current map view as an image.
+     * @returns A data URL representing the map image.
+     */
+    async mapAsImage(): Promise<string> {
+        return this.mapSequencer.enqueue(() => this.exportMapAsImage());
+    }
+
+    /**
+     * Returns the current map view as an image.
+     * @returns A data URL representing the map image.
+     */
+    private async exportMapAsImage(): Promise<string> {
+        const map = this.maps[0];
+
+        const mapCanvas = document.createElement('canvas');
+        const size = map.getSize();
+
+        if (!size) {
+            throw new Error('Map size is not available');
+        }
+
+        mapCanvas.width = size[0];
+        mapCanvas.height = size[1];
+
+        const currentTarget = map.getTargetElement();
+        map.setTarget(mapCanvas);
+
+        // Listen once for the render completion pass
+        await new Promise<void>((resolve) => {
+            map.once('rendercomplete', () => resolve());
+        });
+
+        // Swap the map target back & render the map
+        map.setTarget(currentTarget);
+        map.render();
+
+        return mapCanvas.toDataURL('image/png');
     }
 }

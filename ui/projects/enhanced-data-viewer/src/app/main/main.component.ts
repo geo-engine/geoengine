@@ -80,6 +80,8 @@ export class MainComponent {
     });
     readonly spatialReference = toSignal(this.projectService.getSpatialReferenceStream());
 
+    readonly mapImageLoading = signal(false);
+
     readonly landCover = resource({
         params: () => ({}),
         loader: async ({params: _}) => {
@@ -180,5 +182,28 @@ export class MainComponent {
         const utcDate = new Date(Date.UTC(event.value.getFullYear(), event.value.getMonth(), event.value.getDate()));
         const time = new Time(utcDate);
         await this.projectService.setTime(time);
+    }
+
+    /**
+     * Downloads the current map view as an image.
+     */
+    async downloadMapImage(): Promise<void> {
+        if (this.mapImageLoading()) return;
+
+        const [currentDate] = (this.currentTime()?.toString() ?? new Date().toISOString()).split('T');
+        const currentLayer = this.layersReverse().at(-1)?.name ?? 'enhanced-data-viewer-map';
+
+        this.mapImageLoading.set(true);
+
+        try {
+            const mapImage = await this.mapComponent().mapAsImage();
+            const link = document.createElement('a');
+            link.href = mapImage;
+            link.download = `${currentDate} ${currentLayer}.png`;
+            link.click();
+            link.remove();
+        } finally {
+            this.mapImageLoading.set(false);
+        }
     }
 }
