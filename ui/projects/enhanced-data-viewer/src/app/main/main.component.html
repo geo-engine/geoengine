@@ -9,9 +9,19 @@
         <mat-icon>help</mat-icon>
     </button>
 
-    <button type="button" matIconButton aria-label="Login">
-        <mat-icon>person</mat-icon>
+    <button
+        type="button"
+        matIconButton
+        [matMenuTriggerFor]="userMenu"
+        [attr.aria-label]="isGuestUser() ? 'Login' : 'User account'"
+        [matTooltip]="isGuestUser() ? 'Login' : 'User account'"
+    >
+        <mat-icon>{{ isGuestUser() ? 'person_outline' : 'person' }}</mat-icon>
     </button>
+
+    <mat-menu #userMenu="matMenu" class="user-menu">
+        <geoengine-oidc [showSession]="false" [showQuota]="false" [showRoles]="false" [directLogin]="true"></geoengine-oidc>
+    </mat-menu>
 
     <button type="button" matIconButton aria-label="Settings">
         <mat-icon>settings</mat-icon>

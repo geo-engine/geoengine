@@ -68,6 +68,7 @@ export class MainComponent {
     readonly middleContainerHeight = computed(() => this.totalHeight() - this.topToolbarHeight());
 
     readonly sessionToken = toSignal(this.userService.getSessionTokenStream());
+    readonly isGuestUser = toSignal(this.userService.isGuestUserStream(), {initialValue: true});
 
     readonly spatialReference = toSignal(this.projectService.getSpatialReferenceStream());
     readonly currentTime = toSignal(this.projectService.getTimeStream());
