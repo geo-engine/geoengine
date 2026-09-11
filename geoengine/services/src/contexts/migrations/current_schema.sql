@@ -882,9 +882,14 @@ CREATE TYPE "StacProviderS3Config" AS (
     secret_key text
 );
 
-CREATE TYPE "StacProviderDatasetBand" AS (
+CREATE TYPE "StacAssetBand" AS (
     asset_title text,
     band_name text
+);
+
+CREATE TYPE "StacProviderDatasetBand" AS (
+    asset_band "StacAssetBand",
+    band_descriptor "RasterBandDescriptor"
 );
 
 CREATE TYPE "StacProviderDataset" AS (
@@ -907,7 +912,8 @@ CREATE TYPE "StacDataProviderDefinition" AS (
     s3_config "StacProviderS3Config",
     time_dimension "TimeDimension",
     datasets "StacProviderDataset" [],
-    query_timeout_secs bigint
+    query_timeout_secs bigint,
+    page_limit bigint
 );
 
 CREATE TYPE "DataProviderDefinition" AS (

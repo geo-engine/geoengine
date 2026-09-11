@@ -76,6 +76,13 @@
             </mat-nav-list>
 
             <div class="drawer-main">
+                <!-- Keep datasource state and the active map layer when switching tabs. -->
+                <div [hidden]="!isLayersActive()">
+                    <geoengine-layers [debug]="debug()"></geoengine-layers>
+                </div>
+                @if (isComputeActive()) {
+                    <geoengine-compute [selectedRasterLayer]="mapTileLayer()"></geoengine-compute>
+                }
                 <ng-template [cdkPortalOutlet]="tabComponent()"></ng-template>
             </div>
         </div>
@@ -84,56 +91,29 @@
     <mat-drawer-content>
         <geoengine-map-container #map [grid]="false">
             @if (sessionToken()) {
-                @for (layer of layersReverse(); track idFromLayer($index, layer)) {
-                    @if (layer.layerType === 'vector') {
-                        <geoengine-ol-vector-layer
-                            [layerId]="layer.id"
-                            [workflow]="layer.workflowId"
-                            [symbology]="$any(layer.symbology)"
-                            [isVisible]="layer.isVisible"
-                            (mapRedraw)="map.layerForcesRedraw()"
-                        ></geoengine-ol-vector-layer>
-                    }
-                    @if (layer.layerType === 'raster') {
-                        <geoengine-ol-raster-layer
-                            [layerId]="layer.id"
-                            [workflow]="layer.workflowId"
-                            [symbology]="$any(layer.symbology)"
-                            [isVisible]="layer.isVisible"
-                            [sessionToken]="sessionToken()"
-                            (mapRedraw)="map.layerForcesRedraw()"
-                        ></geoengine-ol-raster-layer>
-                    }
-                }
-                @let mapTileLayer = landCover.value();
+                @let activeLayer = mapTileLayer();
                 @let currentSessionToken = sessionToken();
                 @let currentSpatialReference = spatialReference();
                 @let mapTileDate = currentTime();
-                @if (mapTileLayer && currentSessionToken && currentSpatialReference && mapTileDate) {
+                @if (activeLayer && currentSessionToken && currentSpatialReference && mapTileDate) {
                     <geoengine-ol-ogc-api-map-tile-layer
                         [layerId]="0"
-                        [dataConnectorId]="mapTileLayer.dataConnectorId"
-                        [dataLayerId]="mapTileLayer.layerId"
+                        [dataConnectorId]="activeLayer.dataConnectorId"
+                        [dataLayerId]="activeLayer.layerId"
                         [sessionToken]="currentSessionToken"
                         [spatialReference]="currentSpatialReference"
                         [time]="mapTileDate"
                         [tmsId]="'CustomWebMercator'"
                         [isVisible]="testIsVisible()"
-                    ></geoengine-ol-ogc-api-map-tile-layer>
-                    <geoengine-ol-ogc-api-map-tile-layer
-                        [layerId]="0"
-                        [dataConnectorId]="mapTileLayer.dataConnectorId"
-                        [dataLayerId]="mapTileLayer.layerId"
-                        [sessionToken]="currentSessionToken"
-                        [spatialReference]="currentSpatialReference"
-                        [time]="mapTileDate"
-                        [tmsId]="'CustomWebMercator'"
-                        [isVisible]="testIsVisible()"
-                        [debug]="true"
+                        (loading)="onTileLoading($event)"
                     ></geoengine-ol-ogc-api-map-tile-layer>
                 }
             }
         </geoengine-map-container>
+
+        @if (isLoading()) {
+            <mat-progress-bar class="loading-indicator" mode="query"></mat-progress-bar>
+        }
 
         <div class="side-buttons">
             <mat-button-toggle-group

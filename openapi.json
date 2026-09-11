@@ -12263,6 +12263,23 @@
           }
         }
       },
+      "StacAssetBand": {
+        "type": "object",
+        "required": [
+          "assetTitle"
+        ],
+        "properties": {
+          "assetTitle": {
+            "type": "string"
+          },
+          "bandName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "StacDataProviderDefinition": {
         "type": "object",
         "required": [
@@ -12327,6 +12344,10 @@
             "type": "integer",
             "format": "int64",
             "description": "Timeout in seconds for outgoing STAC API HTTP requests."
+          },
+          "pageLimit": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -12371,17 +12392,17 @@
       "StacProviderDatasetBand": {
         "type": "object",
         "required": [
-          "assetTitle"
+          "assetBand",
+          "bandDescriptor"
         ],
         "properties": {
-          "assetTitle": {
-            "type": "string"
+          "assetBand": {
+            "$ref": "#/components/schemas/StacAssetBand",
+            "description": "The band inside the STAC asset that this dataset band reads from\n(addressing: which asset file + which raster channel within it)."
           },
-          "bandName": {
-            "type": [
-              "string",
-              "null"
-            ]
+          "bandDescriptor": {
+            "$ref": "#/components/schemas/RasterBandDescriptor",
+            "description": "The band descriptor of the resulting geo engine dataset layer."
           }
         }
       },

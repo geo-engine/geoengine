@@ -5,15 +5,15 @@ import {
     afterNextRender,
     computed,
     inject,
-    linkedSignal,
-    resource,
+    booleanAttribute,
+    input,
     signal,
     viewChild,
 } from '@angular/core';
 import {MatSidenavModule} from '@angular/material/sidenav';
-import {ProjectService, MapService, MapContainerComponent, CoreModule} from '@geoengine/core';
+import {ProjectService, MapService, MapContainerComponent, CoreModule, SpatialReferenceService, WGS_84} from '@geoengine/core';
 import {AppConfig} from '../app-config.service';
-import {assertNever, Layer, LayersService, UserService} from '@geoengine/common';
+import {assertNever, Layer, UserService} from '@geoengine/common';
 import {MatToolbar, MatToolbarModule} from '@angular/material/toolbar';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
@@ -21,7 +21,6 @@ import {MatTooltipModule} from '@angular/material/tooltip';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {MatRadioModule} from '@angular/material/radio';
-import {ProviderLayerId} from '@geoengine/api-client/dist/models/ProviderLayerId';
 import {A11yModule} from '@angular/cdk/a11y';
 import {MeasureDirective, MeasurementType} from './measure.directive';
 import {ComponentPortal} from '@angular/cdk/portal';
@@ -45,6 +44,8 @@ import {ComputeComponent} from '../compute/compute.component';
         MatToolbarModule,
         MatTooltipModule,
         MeasureDirective,
+        LayersComponent,
+        ComputeComponent,
     ],
     host: {
         // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -55,8 +56,13 @@ export class MainComponent {
     readonly config = inject(AppConfig);
     readonly projectService = inject(ProjectService);
     readonly userService = inject(UserService);
-    private readonly layerService = inject(LayersService);
     private readonly mapService = inject(MapService);
+
+    private readonly spatialReferenceService = inject(SpatialReferenceService);
+
+    // Bound from the debug query parameter and passed to the layers controls.
+    readonly debug = input(false, {transform: booleanAttribute});
+    readonly layersComponent = viewChild(LayersComponent);
 
     readonly topToolbar = viewChild.required<MatToolbar, ElementRef<HTMLElement>>('topToolbar', {read: ElementRef});
     readonly mapComponent = viewChild.required(MapContainerComponent);
@@ -72,7 +78,9 @@ export class MainComponent {
     readonly spatialReference = toSignal(this.projectService.getSpatialReferenceStream());
     readonly currentTime = toSignal(this.projectService.getTimeStream());
 
-    readonly selectedLayer = linkedSignal(() => this.landCover.value());
+    readonly mapTileLayer = computed(() => this.layersComponent()?.mapTileLayer());
+    readonly tileLoading = signal(false);
+    readonly isLoading = computed(() => (this.layersComponent()?.mapTileLayerResource.isLoading() ?? false) || this.tileLoading());
 
     private readonly openTab = signal<Tab>(Tab.Layers);
     readonly tabComponent = computed<ComponentPortal<unknown>>(() => {
@@ -80,9 +88,9 @@ export class MainComponent {
 
         switch (tab) {
             case Tab.Layers:
-                return new ComponentPortal(LayersComponent);
+                return new ComponentPortal(EmptyComponent);
             case Tab.Compute:
-                return new ComponentPortal(ComputeComponent);
+                return new ComponentPortal(EmptyComponent);
             case Tab.Search:
                 // TODO: create component
                 return new ComponentPortal(EmptyComponent);
@@ -102,47 +110,6 @@ export class MainComponent {
 
     readonly mapImageLoading = signal(false);
 
-    readonly landCover = resource({
-        params: () => ({}),
-        loader: async ({params: _}) => {
-            const connectorId = 'cbb21ee3-d15d-45c5-a175-66964adf4e85';
-
-            const items = await this.layerService.getLayerCollectionItems(connectorId, 'tags:*');
-
-            const landCover = items.items.find((item) => item.name === 'Land Cover');
-
-            if (!landCover) return;
-
-            const id = landCover.id as ProviderLayerId;
-
-            return {
-                dataConnectorId: id.providerId,
-                layerId: id.layerId,
-            };
-        },
-    });
-    readonly modisNdvi = resource({
-        params: () => ({}),
-        loader: async ({params: _}) => {
-            const connectorId = 'cbb21ee3-d15d-45c5-a175-66964adf4e85';
-
-            const items = await this.layerService.getLayerCollectionItems(connectorId, 'tags:*');
-
-            const modisNdvi = items.items.find((item) => item.name === 'NDVI');
-
-            if (!modisNdvi) {
-                console.error('Could not find MODIS NDVI layer in collection');
-                return;
-            }
-
-            const id = modisNdvi.id as ProviderLayerId;
-
-            return {
-                dataConnectorId: id.providerId,
-                layerId: id.layerId,
-            };
-        },
-    });
     readonly testIsVisible = signal(true);
 
     constructor() {
@@ -150,18 +117,33 @@ export class MainComponent {
             read: () => {
                 this.mapService.registerMapComponent(this.mapComponent());
 
+                this.zoomToGermany();
+
                 this.onToolbarResize();
                 const topToolbarObserver = new ResizeObserver(() => this.onToolbarResize());
                 topToolbarObserver.observe(this.topToolbar().nativeElement);
             },
         });
+    }
 
-        // setTimeout(() => {
-        //     this.testIsVisible.set(false);
-        //     setTimeout(() => {
-        //         this.testIsVisible.set(true);
-        //     }, 5000);
-        // }, 5000);
+    /**
+     * Zoom the map to the configured focus extent (Germany) once the project's
+     * spatial reference is known. The extent is defined in WGS 84 and is
+     * reprojected into the map's projection before fitting the view.
+     */
+    private zoomToGermany(): void {
+        this.projectService.getSpatialReferenceOnce().subscribe((projection) => {
+            const extent = this.spatialReferenceService.reprojectExtent(
+                this.config.DEFAULTS.FOCUS_EXTENT,
+                WGS_84.spatialReference,
+                projection,
+            );
+            this.mapService.zoomTo(extent);
+        });
+    }
+
+    onTileLoading(loading: boolean): void {
+        this.tileLoading.set(loading);
     }
 
     onResize(): void {

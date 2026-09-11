@@ -15,6 +15,14 @@ mat-toolbar {
     border-bottom: 1px solid var(--geoengine-divider-color);
 }
 
+.loading-indicator {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+}
+
 mat-drawer {
     width: 360px;
 
