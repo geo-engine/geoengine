@@ -1004,7 +1004,7 @@ where
                     match cache_store.get(&key).await {
                         Err(err) => Some((Err(err), (work, idx + 1))),
                         Ok(Some(stored_tile)) => {
-                            tracing::debug!("Cache HIT for tile {:?}", key);
+                            tracing::trace!("Cache HIT for tile {:?}", key);
                             let tile = stored_tile.load().await;
 
                             let tile: Result<RasterTile2D<T>> = match tile {
@@ -1018,7 +1018,7 @@ where
                             ))
                         }
                         Ok(None) => {
-                            tracing::debug!("Cache MISS for tile {:?}", key);
+                            tracing::trace!("Cache MISS for tile {:?}", key);
 
                             let source_query = self.source.query(
                                 RasterQueryRectangle::new(
