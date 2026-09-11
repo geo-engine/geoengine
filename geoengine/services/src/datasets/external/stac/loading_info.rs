@@ -778,7 +778,7 @@ mod tests {
                     contains(("grant_type", "password")),
                     contains(("username", "test-user")),
                     contains(("password", "test-password")),
-                    contains(("client_id", "code-de3-public")),
+                    contains(("client_id", "my-client-id")),
                 ])),
             ])
             .times(1)
@@ -796,7 +796,7 @@ mod tests {
                 request::body(url_decoded(all_of![
                     contains(("grant_type", "refresh_token")),
                     contains(("refresh_token", "refresh-token-1")),
-                    contains(("client_id", "code-de3-public")),
+                    contains(("client_id", "my-client-id")),
                 ])),
             ])
             .times(1)
@@ -814,7 +814,7 @@ mod tests {
                 request::body(url_decoded(all_of![
                     contains(("grant_type", "refresh_token")),
                     contains(("refresh_token", "refresh-token-2")),
-                    contains(("client_id", "code-de3-public")),
+                    contains(("client_id", "my-client-id")),
                 ])),
             ])
             .times(1)
@@ -858,6 +858,7 @@ mod tests {
             client.clone(),
             crate::datasets::external::stac::StacProviderAuthentication {
                 endpoint: server.url_str("/token"),
+                client_id: "my-client-id".to_owned(),
                 username: "test-user".to_owned(),
                 password: "test-password".to_owned(),
             },

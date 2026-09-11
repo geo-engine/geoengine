@@ -8,7 +8,6 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{error, warn};
 
-const CLIENT_ID: &str = "code-de3-public";
 const TOKEN_REFRESH_FACTOR: f64 = 0.8;
 const TOKEN_REFRESH_RETRY_DELAY: Duration = Duration::from_secs(1);
 
@@ -34,14 +33,14 @@ struct PasswordGrant<'a> {
     grant_type: &'static str,
     username: &'a str,
     password: &'a str,
-    client_id: &'static str,
+    client_id: &'a str,
 }
 
 #[derive(Serialize)]
 struct RefreshTokenGrant<'a> {
     grant_type: &'static str,
     refresh_token: &'a str,
-    client_id: &'static str,
+    client_id: &'a str,
 }
 
 /// Authentication state shared by the provider and all metadata instances it creates.
@@ -91,7 +90,7 @@ async fn request_password_tokens(
             grant_type: "password",
             username: &config.username,
             password: &config.password,
-            client_id: CLIENT_ID,
+            client_id: &config.client_id,
         })
         .send()
         .await?
@@ -110,7 +109,7 @@ async fn request_refreshed_tokens(
         .form(&RefreshTokenGrant {
             grant_type: "refresh_token",
             refresh_token,
-            client_id: CLIENT_ID,
+            client_id: &config.client_id,
         })
         .send()
         .await?

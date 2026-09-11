@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
 pub struct StacProviderAuthentication {
     #[serde(rename = "endpoint")]
     pub endpoint: String,
+    #[serde(rename = "clientId")]
+    pub client_id: String,
     #[serde(rename = "username")]
     pub username: String,
     /// A wrapper type that serializes to \"*****\" and can be deserialized from any string. If the inner value is \"*****\", it is considered unknown and `as_option` returns `None`. This is useful for secrets that should not be exposed in API responses, but can be set in API requests.
@@ -22,9 +24,10 @@ pub struct StacProviderAuthentication {
 }
 
 impl StacProviderAuthentication {
-    pub fn new(endpoint: String, username: String, password: String) -> StacProviderAuthentication {
+    pub fn new(endpoint: String, client_id: String, username: String, password: String) -> StacProviderAuthentication {
         StacProviderAuthentication {
             endpoint,
+            client_id,
             username,
             password,
         }

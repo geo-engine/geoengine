@@ -884,6 +884,7 @@ CREATE TYPE "StacProviderS3Config" AS (
 
 CREATE TYPE "StacProviderAuthentication" AS (
     endpoint text,
+    client_id text,
     username text,
     password text
 );

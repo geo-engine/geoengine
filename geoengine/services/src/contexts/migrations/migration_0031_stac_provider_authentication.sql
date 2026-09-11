@@ -1,5 +1,6 @@
 CREATE TYPE "StacProviderAuthentication" AS (
     endpoint text,
+    client_id text,
     username text,
     password text
 );

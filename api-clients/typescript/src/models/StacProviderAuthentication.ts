@@ -29,6 +29,12 @@ export interface StacProviderAuthentication {
      * @type {string}
      * @memberof StacProviderAuthentication
      */
+    clientId: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof StacProviderAuthentication
+     */
     username: string;
     /**
      * A wrapper type that serializes to "*****" and can be deserialized from any string.
@@ -45,6 +51,7 @@ export interface StacProviderAuthentication {
  */
 export function instanceOfStacProviderAuthentication(value: object): value is StacProviderAuthentication {
     if (!('endpoint' in value) || value['endpoint'] === undefined) return false;
+    if (!('clientId' in value) || value['clientId'] === undefined) return false;
     if (!('username' in value) || value['username'] === undefined) return false;
     if (!('password' in value) || value['password'] === undefined) return false;
     return true;
@@ -61,6 +68,7 @@ export function StacProviderAuthenticationFromJSONTyped(json: any, ignoreDiscrim
     return {
         
         'endpoint': json['endpoint'],
+        'clientId': json['clientId'],
         'username': json['username'],
         'password': json['password'],
     };
@@ -78,6 +86,7 @@ export function StacProviderAuthenticationToJSONTyped(value?: StacProviderAuthen
     return {
         
         'endpoint': value['endpoint'],
+        'clientId': value['clientId'],
         'username': value['username'],
         'password': value['password'],
     };

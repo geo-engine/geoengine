@@ -27,9 +27,10 @@ class StacProviderAuthentication(BaseModel):
     StacProviderAuthentication
     """ # noqa: E501
     endpoint: StrictStr
+    client_id: StrictStr = Field(alias="clientId")
     username: StrictStr
     password: StrictStr = Field(description="A wrapper type that serializes to \"*****\" and can be deserialized from any string. If the inner value is \"*****\", it is considered unknown and `as_option` returns `None`. This is useful for secrets that should not be exposed in API responses, but can be set in API requests.")
-    __properties: ClassVar[List[str]] = ["endpoint", "username", "password"]
+    __properties: ClassVar[List[str]] = ["endpoint", "clientId", "username", "password"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -83,6 +84,7 @@ class StacProviderAuthentication(BaseModel):
 
         _obj = cls.model_validate({
             "endpoint": obj.get("endpoint"),
+            "clientId": obj.get("clientId"),
             "username": obj.get("username"),
             "password": obj.get("password")
         })

@@ -36,12 +36,14 @@ class TestStacProviderAuthentication(unittest.TestCase):
         if include_optional:
             return StacProviderAuthentication(
                 endpoint = '',
+                client_id = '',
                 username = '',
                 password = ''
             )
         else:
             return StacProviderAuthentication(
                 endpoint = '',
+                client_id = '',
                 username = '',
                 password = '',
         )

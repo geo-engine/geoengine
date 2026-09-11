@@ -12365,11 +12365,15 @@
         "type": "object",
         "required": [
           "endpoint",
+          "clientId",
           "username",
           "password"
         ],
         "properties": {
           "endpoint": {
+            "type": "string"
+          },
+          "clientId": {
             "type": "string"
           },
           "username": {

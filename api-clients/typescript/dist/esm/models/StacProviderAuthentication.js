@@ -16,6 +16,8 @@
 export function instanceOfStacProviderAuthentication(value) {
     if (!('endpoint' in value) || value['endpoint'] === undefined)
         return false;
+    if (!('clientId' in value) || value['clientId'] === undefined)
+        return false;
     if (!('username' in value) || value['username'] === undefined)
         return false;
     if (!('password' in value) || value['password'] === undefined)
@@ -31,6 +33,7 @@ export function StacProviderAuthenticationFromJSONTyped(json, ignoreDiscriminato
     }
     return {
         'endpoint': json['endpoint'],
+        'clientId': json['clientId'],
         'username': json['username'],
         'password': json['password'],
     };
@@ -44,6 +47,7 @@ export function StacProviderAuthenticationToJSONTyped(value, ignoreDiscriminator
     }
     return {
         'endpoint': value['endpoint'],
+        'clientId': value['clientId'],
         'username': value['username'],
         'password': value['password'],
     };

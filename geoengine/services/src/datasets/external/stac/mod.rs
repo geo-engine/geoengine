@@ -63,6 +63,7 @@ pub struct StacProviderS3Config {
 #[postgres(name = "StacProviderAuthentication")]
 pub struct StacProviderAuthentication {
     pub endpoint: String,
+    pub client_id: String,
     pub username: String,
     pub password: String,
 }

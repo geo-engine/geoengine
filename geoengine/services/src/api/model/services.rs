@@ -992,6 +992,7 @@ impl From<crate::datasets::external::stac::StacProviderS3Config> for StacProvide
 #[serde(rename_all = "camelCase")]
 pub struct StacProviderAuthentication {
     pub endpoint: String,
+    pub client_id: String,
     pub username: String,
     pub password: Secret<String>,
 }
@@ -1002,6 +1003,7 @@ impl From<StacProviderAuthentication>
     fn from(value: StacProviderAuthentication) -> Self {
         Self {
             endpoint: value.endpoint,
+            client_id: value.client_id,
             username: value.username,
             password: value.password.0,
         }
@@ -1014,6 +1016,7 @@ impl From<crate::datasets::external::stac::StacProviderAuthentication>
     fn from(value: crate::datasets::external::stac::StacProviderAuthentication) -> Self {
         Self {
             endpoint: value.endpoint,
+            client_id: value.client_id,
             username: value.username,
             password: Secret(value.password),
         }
@@ -1580,6 +1583,7 @@ mod tests {
     fn stac_authentication_password_is_redacted_in_api_conversion() {
         let internal = crate::datasets::external::stac::StacProviderAuthentication {
             endpoint: "https://identity.example/token".to_owned(),
+            client_id: "code-de3-public".to_owned(),
             username: "test-user".to_owned(),
             password: "test-password".to_owned(),
         };
@@ -1591,6 +1595,7 @@ mod tests {
             api_json,
             serde_json::json!({
                 "endpoint": "https://identity.example/token",
+                "clientId": "code-de3-public",
                 "username": "test-user",
                 "password": SECRET_REPLACEMENT,
             })

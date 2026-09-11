@@ -25,6 +25,12 @@ export interface StacProviderAuthentication {
      * @type {string}
      * @memberof StacProviderAuthentication
      */
+    clientId: string;
+    /**
+     *
+     * @type {string}
+     * @memberof StacProviderAuthentication
+     */
     username: string;
     /**
      * A wrapper type that serializes to "*****" and can be deserialized from any string.

@@ -7,6 +7,7 @@
 Name | Type
 ------------ | -------------
 `endpoint` | string
+`clientId` | string
 `username` | string
 `password` | string
 
@@ -18,6 +19,7 @@ import type { StacProviderAuthentication } from '@geoengine/api-client'
 // TODO: Update the object below with actual values
 const example = {
   "endpoint": null,
+  "clientId": null,
   "username": null,
   "password": null,
 } satisfies StacProviderAuthentication

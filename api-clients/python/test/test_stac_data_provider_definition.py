@@ -48,6 +48,7 @@ class TestStacDataProviderDefinition(unittest.TestCase):
                     secret_key = null, ),
                 authentication = geoengine_api_client.models.stac_provider_authentication.StacProviderAuthentication(
                     endpoint = '', 
+                    client_id = '', 
                     username = '', 
                     password = '', ),
                 time_dimension = None,
