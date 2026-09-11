@@ -8,27 +8,45 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import type { ColumnRangeFilter } from './ColumnRangeFilter';
+import type { LineSimplification } from './LineSimplification';
 import type { MockPointSource } from './MockPointSource';
 import type { OgrSource } from './OgrSource';
+import type { PointInPolygonFilter } from './PointInPolygonFilter';
 import type { RasterVectorJoin } from './RasterVectorJoin';
 import type { Reprojection } from './Reprojection';
+import type { TimeProjection } from './TimeProjection';
 import type { VectorExpression } from './VectorExpression';
+import type { VectorJoin } from './VectorJoin';
+import type { VisualPointClustering } from './VisualPointClustering';
 /**
  * @type VectorOperator
  * An operator that produces vector data.
  * @export
  */
 export type VectorOperator = {
+    type: 'ColumnRangeFilter';
+} & ColumnRangeFilter | {
+    type: 'LineSimplification';
+} & LineSimplification | {
     type: 'MockPointSource';
 } & MockPointSource | {
     type: 'OgrSource';
 } & OgrSource | {
+    type: 'PointInPolygonFilter';
+} & PointInPolygonFilter | {
     type: 'RasterVectorJoin';
 } & RasterVectorJoin | {
     type: 'Reprojection';
 } & Reprojection | {
+    type: 'TimeProjection';
+} & TimeProjection | {
     type: 'VectorExpression';
-} & VectorExpression;
+} & VectorExpression | {
+    type: 'VectorJoin';
+} & VectorJoin | {
+    type: 'VisualPointClustering';
+} & VisualPointClustering;
 export declare function VectorOperatorFromJSON(json: any): VectorOperator;
 export declare function VectorOperatorFromJSONTyped(json: any, ignoreDiscriminator: boolean): VectorOperator;
 export declare function VectorOperatorToJSON(json: any): any;

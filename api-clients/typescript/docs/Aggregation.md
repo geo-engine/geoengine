@@ -7,8 +7,8 @@ Aggregation methods for `TemporalRasterAggregation`.  Available variants are `mi
 
 Name | Type
 ------------ | -------------
-`ignoreNoData` | boolean
 `type` | string
+`ignoreNoData` | boolean
 `percentile` | number
 
 ## Example
@@ -18,8 +18,8 @@ import type { Aggregation } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "ignoreNoData": null,
   "type": null,
+  "ignoreNoData": null,
   "percentile": null,
 } satisfies Aggregation
 

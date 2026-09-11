@@ -31,7 +31,7 @@ If the `buckets` parameter is set to `squareRootChoiceRule`, the operator estima
 
 | Name   | Type                         | Description                                                         |
 | ------ | ---------------------------- | ------------------------------------------------------------------- |
-| vector | SingleRasterOrVectorOperator | It is either a set of `RasterOperator` or a single `VectorOperator` |
+| source | SingleRasterOrVectorOperator | It is either a set of `RasterOperator` or a single `VectorOperator` |
 
 ## Examples
 

@@ -18,12 +18,12 @@ pub struct Histogram {
     #[serde(rename = "params")]
     pub params: Box<models::HistogramParameters>,
     #[serde(rename = "sources")]
-    pub sources: Box<models::SingleVectorOrRasterSource>,
+    pub sources: Box<models::SingleRasterOrVectorSource>,
 }
 
 impl Histogram {
     /// The `Histogram` is a _plot operator_ that computes a histogram plot either over attributes of a vector dataset or values of a raster source. The output is a plot in [Vega-Lite](https://vega.github.io/vega-lite/) specification.  For instance, you want to plot the data distribution of numeric attributes of a feature collection. Then you can use a histogram with a suitable number of buckets to visualize and assess this.  ## Errors  The operator returns an error if the selected column (`columnName`) does not exist or is not numeric.  ## Notes  If `bounds` or `buckets` are not defined, the operator will determine these values by itself which requires processing the data twice.  If the `buckets` parameter is set to `squareRootChoiceRule`, the operator estimates it using the square root of the number of elements in the data. 
-    pub fn new(r#type: Type, params: models::HistogramParameters, sources: models::SingleVectorOrRasterSource) -> Histogram {
+    pub fn new(r#type: Type, params: models::HistogramParameters, sources: models::SingleRasterOrVectorSource) -> Histogram {
         Histogram {
             r#type,
             params: Box::new(params),

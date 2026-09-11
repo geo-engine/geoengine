@@ -65,11 +65,13 @@ impl TryFrom<MultipleRasterSources> for geoengine_operators::engine::MultipleRas
 #[schema(no_recursion)]
 #[serde(rename_all = "camelCase")]
 pub struct SingleRasterOrVectorSource {
+    #[serde(alias = "vector", alias = "raster")]
     pub source: SingleRasterOrVectorOperator,
 }
 
 /// It is either a set of `RasterOperator` or a single `VectorOperator`
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[schema(no_recursion)]
 #[serde(untagged)]
 pub enum SingleRasterOrVectorOperator {
     Raster(RasterOperator),
@@ -84,33 +86,6 @@ impl TryFrom<SingleRasterOrVectorSource>
     fn try_from(value: SingleRasterOrVectorSource) -> Result<Self, Self::Error> {
         use geoengine_operators::util::input::RasterOrVectorOperator as OperatorsRasterOrVectorOperator;
         let source = match value.source {
-            SingleRasterOrVectorOperator::Raster(raster) => {
-                OperatorsRasterOrVectorOperator::Raster(raster.try_into()?)
-            }
-            SingleRasterOrVectorOperator::Vector(vector) => {
-                OperatorsRasterOrVectorOperator::Vector(vector.try_into()?)
-            }
-        };
-        Ok(Self { source })
-    }
-}
-
-/// A single vector or raster operator as source for this operator, keyed as "vector" in JSON.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[schema(no_recursion)]
-#[serde(rename_all = "camelCase")]
-pub struct SingleVectorOrRasterSource {
-    pub vector: SingleRasterOrVectorOperator,
-}
-
-impl TryFrom<SingleVectorOrRasterSource>
-    for geoengine_operators::engine::SingleRasterOrVectorSource
-{
-    type Error = anyhow::Error;
-
-    fn try_from(value: SingleVectorOrRasterSource) -> Result<Self, Self::Error> {
-        use geoengine_operators::util::input::RasterOrVectorOperator as OperatorsRasterOrVectorOperator;
-        let source = match value.vector {
             SingleRasterOrVectorOperator::Raster(raster) => {
                 OperatorsRasterOrVectorOperator::Raster(raster.try_into()?)
             }
@@ -150,13 +125,16 @@ impl TryFrom<SingleVectorMultipleRasterSources>
 
 /// Either one or more raster operators or a single vector operator as source for this operator.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[schema(no_recursion)]
 #[serde(rename_all = "camelCase")]
 pub struct MultipleRasterOrSingleVectorSource {
+    #[serde(alias = "vector", alias = "raster")]
     pub source: MultipleRasterOrSingleVectorOperator,
 }
 
 /// It is either a set of `RasterOperator` or a single `VectorOperator`
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[schema(no_recursion)]
 #[serde(untagged)]
 pub enum MultipleRasterOrSingleVectorOperator {
     Raster(Vec<RasterOperator>),
@@ -190,11 +168,80 @@ impl TryFrom<MultipleRasterOrSingleVectorSource>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::processing_graphs::parameters::SpatialBoundsDerive;
-    use crate::api::model::processing_graphs::source::{
-        GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
+    use crate::api::model::{
+        datatypes::NamedData,
+        processing_graphs::{
+            RasterOperator, VectorOperator,
+            parameters::SpatialBoundsDerive,
+            source::{
+                GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
+            },
+        },
     };
-    use crate::api::model::processing_graphs::{RasterOperator, VectorOperator};
+
+    #[test]
+    fn it_deserializes_single_raster_or_vector_source_aliases() {
+        let vector: SingleRasterOrVectorSource = serde_json::from_value(serde_json::json!({
+            "vector": {
+                "type": "OgrSource",
+                "params": {
+                    "data": "example_data"
+                }
+            }
+        }))
+        .expect("vector alias must deserialize");
+        assert!(matches!(
+            vector.source,
+            SingleRasterOrVectorOperator::Vector(_)
+        ));
+
+        let raster: SingleRasterOrVectorSource = serde_json::from_value(serde_json::json!({
+            "raster": {
+                "type": "GdalSource",
+                "params": {
+                    "data": "example_data"
+                }
+            }
+        }))
+        .expect("raster alias must deserialize");
+        assert!(matches!(
+            raster.source,
+            SingleRasterOrVectorOperator::Raster(_)
+        ));
+    }
+
+    #[test]
+    fn it_deserializes_multiple_raster_or_single_vector_source_aliases() {
+        let vector: MultipleRasterOrSingleVectorSource =
+            serde_json::from_value(serde_json::json!({
+                "vector": {
+                    "type": "OgrSource",
+                    "params": {
+                        "data": "example_data"
+                    }
+                }
+            }))
+            .expect("vector alias must deserialize");
+        assert!(matches!(
+            vector.source,
+            MultipleRasterOrSingleVectorOperator::Vector(_)
+        ));
+
+        let raster: MultipleRasterOrSingleVectorSource =
+            serde_json::from_value(serde_json::json!({
+                "raster": [{
+                    "type": "GdalSource",
+                    "params": {
+                        "data": "example_data"
+                    }
+                }]
+            }))
+            .expect("raster alias must deserialize");
+        assert!(matches!(
+            raster.source,
+            MultipleRasterOrSingleVectorOperator::Raster(_)
+        ));
+    }
 
     #[test]
     fn it_converts_single_raster_source() {
@@ -202,7 +249,7 @@ mod tests {
             raster: RasterOperator::GdalSource(GdalSource {
                 r#type: Default::default(),
                 params: GdalSourceParameters {
-                    data: "example_data".to_string(),
+                    data: NamedData::with_system_name("example_data"),
                     overview_level: None,
                 },
             }),
@@ -218,7 +265,7 @@ mod tests {
             rasters: vec![RasterOperator::GdalSource(GdalSource {
                 r#type: Default::default(),
                 params: GdalSourceParameters {
-                    data: "example_data".to_string(),
+                    data: NamedData::with_system_name("example_data"),
                     overview_level: None,
                 },
             })],
@@ -236,7 +283,7 @@ mod tests {
             source: SingleRasterOrVectorOperator::Raster(RasterOperator::GdalSource(GdalSource {
                 r#type: Default::default(),
                 params: GdalSourceParameters {
-                    data: "example_data".to_string(),
+                    data: NamedData::with_system_name("example_data"),
                     overview_level: None,
                 },
             })),
@@ -261,7 +308,7 @@ mod tests {
             rasters: vec![RasterOperator::GdalSource(GdalSource {
                 r#type: Default::default(),
                 params: GdalSourceParameters {
-                    data: "example_data".to_string(),
+                    data: NamedData::with_system_name("example_data"),
                     overview_level: None,
                 },
             })],
@@ -280,7 +327,7 @@ mod tests {
                 GdalSource {
                     r#type: Default::default(),
                     params: GdalSourceParameters {
-                        data: "example_data".to_string(),
+                        data: NamedData::with_system_name("example_data"),
                         overview_level: None,
                     },
                 },

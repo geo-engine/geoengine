@@ -57,7 +57,8 @@ _build-typescript-preprocess:
         typescript/src \
         typescript/dist \
         typescript/node_modules \
-        typescript/diffs
+        typescript/diffs \
+        typescript/docs
 
 _build-typescript-postprocess:
     .generation/post-process/typescript.py
@@ -83,7 +84,9 @@ build-rust: common::_clear _build-rust-preprocess (_build_call "rust") _build-ru
 
 _build-rust-preprocess:
     rm -rf \
-        rust/diffs
+        rust/diffs \
+        rust/docs \
+        rust/src
 
 _build-rust-postprocess:
     .generation/post-process/rust.py

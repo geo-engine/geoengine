@@ -40,6 +40,9 @@ use crate::{
                 RasterResultDescriptor, RegularTimeDimension, SpatialGridDescriptor,
                 SpatialGridDescriptorState, TimeDescriptor, TimeDimension,
             },
+            processing_graphs::{
+                GdalSourceParameters, MultiBandGdalSource, RasterOperator, TypedOperator,
+            },
             responses::{ErrorResponse, IdResponse},
             services::{
                 AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
@@ -56,10 +59,6 @@ use crate::{
     workflows::workflow::Workflow,
 };
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_operators::{
-    engine::{RasterOperator, TypedOperator},
-    source::{MultiBandGdalSource, MultiBandGdalSourceParameters},
-};
 
 const MAX_RETRIES: u32 = 10;
 const INITIAL_RETRY_DELAY_MS: u64 = 1000;
@@ -1203,20 +1202,21 @@ impl StacImporter {
         let add_layer = AddLayer {
             name: layer_name.clone(),
             description: format!("Dataset: {dataset_name}"),
-            workflow: Workflow::Legacy {
-                operator: TypedOperator::Raster(
+            workflow: Workflow::Typed {
+                operator: TypedOperator::Raster(RasterOperator::MultiBandGdalSource(
                     MultiBandGdalSource {
-                        params: MultiBandGdalSourceParameters {
+                        r#type: Default::default(),
+                        params: GdalSourceParameters {
                             data: NamedData {
                                 namespace: None,
                                 provider: None,
                                 name: dataset_name.clone(),
-                            },
+                            }
+                            .into(),
                             overview_level: None,
                         },
-                    }
-                    .boxed(),
-                ),
+                    },
+                )),
             },
             symbology: None,
             properties: vec![],

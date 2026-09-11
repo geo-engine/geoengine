@@ -17,30 +17,33 @@ import json
 import pprint
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, field_validator
 from typing import Any, List, Optional
-from geoengine_api_client.models.fraction import Fraction
-from geoengine_api_client.models.resolution import Resolution
+from geoengine_api_client.models.downsampling_resolution_fraction import DownsamplingResolutionFraction
+from geoengine_api_client.models.downsampling_resolution_resolution import DownsamplingResolutionResolution
 from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-DOWNSAMPLINGRESOLUTION_ONE_OF_SCHEMAS = ["Fraction", "Resolution"]
+DOWNSAMPLINGRESOLUTION_ONE_OF_SCHEMAS = ["DownsamplingResolutionFraction", "DownsamplingResolutionResolution"]
 
 class DownsamplingResolution(BaseModel):
     """
     DownsamplingResolution
     """
-    # data type: Resolution
-    oneof_schema_1_validator: Optional[Resolution] = None
-    # data type: Fraction
-    oneof_schema_2_validator: Optional[Fraction] = None
-    actual_instance: Optional[Union[Fraction, Resolution]] = None
-    one_of_schemas: Set[str] = { "Fraction", "Resolution" }
+    # data type: DownsamplingResolutionResolution
+    oneof_schema_1_validator: Optional[DownsamplingResolutionResolution] = None
+    # data type: DownsamplingResolutionFraction
+    oneof_schema_2_validator: Optional[DownsamplingResolutionFraction] = None
+    actual_instance: Optional[Union[DownsamplingResolutionFraction, DownsamplingResolutionResolution]] = None
+    one_of_schemas: Set[str] = { "DownsamplingResolutionFraction", "DownsamplingResolutionResolution" }
 
     model_config = ConfigDict(
         validate_assignment=True,
         protected_namespaces=(),
     )
 
+
+    discriminator_value_class_map: Dict[str, str] = {
+    }
 
     def __init__(self, *args, **kwargs) -> None:
         if args:
@@ -57,22 +60,22 @@ class DownsamplingResolution(BaseModel):
         instance = DownsamplingResolution.model_construct()
         error_messages = []
         match = 0
-        # validate data type: Resolution
-        if not isinstance(v, Resolution):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `Resolution`")
+        # validate data type: DownsamplingResolutionResolution
+        if not isinstance(v, DownsamplingResolutionResolution):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `DownsamplingResolutionResolution`")
         else:
             match += 1
-        # validate data type: Fraction
-        if not isinstance(v, Fraction):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `Fraction`")
+        # validate data type: DownsamplingResolutionFraction
+        if not isinstance(v, DownsamplingResolutionFraction):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `DownsamplingResolutionFraction`")
         else:
             match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in DownsamplingResolution with oneOf schemas: Fraction, Resolution. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in DownsamplingResolution with oneOf schemas: DownsamplingResolutionFraction, DownsamplingResolutionResolution. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in DownsamplingResolution with oneOf schemas: Fraction, Resolution. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in DownsamplingResolution with oneOf schemas: DownsamplingResolutionFraction, DownsamplingResolutionResolution. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -87,25 +90,40 @@ class DownsamplingResolution(BaseModel):
         error_messages = []
         match = 0
 
-        # deserialize data into Resolution
+        # use oneOf discriminator to lookup the data type
+        _data_type = json.loads(json_str).get("type")
+        if not _data_type:
+            raise ValueError("Failed to lookup data type from the field `type` in the input.")
+
+        # check if data type is `DownsamplingResolutionFraction`
+        if _data_type == "fraction":
+            instance.actual_instance = DownsamplingResolutionFraction.from_json(json_str)
+            return instance
+
+        # check if data type is `DownsamplingResolutionResolution`
+        if _data_type == "resolution":
+            instance.actual_instance = DownsamplingResolutionResolution.from_json(json_str)
+            return instance
+
+        # deserialize data into DownsamplingResolutionResolution
         try:
-            instance.actual_instance = Resolution.from_json(json_str)
+            instance.actual_instance = DownsamplingResolutionResolution.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # deserialize data into Fraction
+        # deserialize data into DownsamplingResolutionFraction
         try:
-            instance.actual_instance = Fraction.from_json(json_str)
+            instance.actual_instance = DownsamplingResolutionFraction.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into DownsamplingResolution with oneOf schemas: Fraction, Resolution. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into DownsamplingResolution with oneOf schemas: DownsamplingResolutionFraction, DownsamplingResolutionResolution. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into DownsamplingResolution with oneOf schemas: Fraction, Resolution. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into DownsamplingResolution with oneOf schemas: DownsamplingResolutionFraction, DownsamplingResolutionResolution. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -119,7 +137,7 @@ class DownsamplingResolution(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], Fraction, Resolution]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], DownsamplingResolutionFraction, DownsamplingResolutionResolution]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None

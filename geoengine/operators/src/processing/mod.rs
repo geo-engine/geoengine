@@ -22,12 +22,15 @@ mod time_projection;
 mod time_shift;
 mod vector_join;
 
-pub use band_filter::{BandFilter, BandFilterError, BandFilterParams};
+pub use band_filter::{BandFilter, BandFilterError, BandFilterParams, BandsByNameOrIndex};
 pub use band_neighborhood_aggregate::{
-    BandNeighborhoodAggregate, BandNeighborhoodAggregateError, BandNeighborhoodAggregateParams,
+    BandDistance, BandNeighborhoodAggregate, BandNeighborhoodAggregateError,
+    BandNeighborhoodAggregateParams, NeighborhoodAggregate as BandNeighborhoodAggregateMethod,
 };
+pub use bandwise_expression::{BandwiseExpression, BandwiseExpressionParams};
 pub use circle_merging_quadtree::{
-    InitializedVisualPointClustering, VisualPointClustering, VisualPointClusteringParams,
+    AttributeAggregateDef, AttributeAggregateType, InitializedVisualPointClustering,
+    VisualPointClustering, VisualPointClusteringParams,
 };
 pub use column_range_filter::{ColumnRangeFilter, ColumnRangeFilterParams};
 pub use downsample::{
@@ -35,15 +38,19 @@ pub use downsample::{
     DownsamplingResolution, Fraction, InitializedDownsampling,
 };
 pub use expression::{
-    Expression, ExpressionParams, RasterExpressionError, VectorExpression, VectorExpressionError,
-    VectorExpressionParams, initialize_expression_dependencies,
+    Expression, ExpressionParams, OutputColumn, RasterExpressionError, VectorExpression,
+    VectorExpressionError, VectorExpressionParams, initialize_expression_dependencies,
 };
 pub use interpolation::{
     InitializedInterpolation, Interpolation, InterpolationError, InterpolationMethod,
     InterpolationParams, InterpolationResolution,
 };
 pub use line_simplification::{
-    LineSimplification, LineSimplificationError, LineSimplificationParams,
+    LineSimplification, LineSimplificationAlgorithm, LineSimplificationError,
+    LineSimplificationParams,
+};
+pub use meteosat::{
+    Radiance, RadianceParams, Reflectance, ReflectanceParams, Temperature, TemperatureParams,
 };
 pub use neighborhood_aggregate::{
     AggregateFunctionParams, NeighborhoodAggregate, NeighborhoodAggregateError,
@@ -53,6 +60,7 @@ pub use point_in_polygon::{
     PointInPolygonFilter, PointInPolygonFilterParams, PointInPolygonFilterSource,
     PointInPolygonTester,
 };
+pub use raster_scaling::{RasterScaling, RasterScalingParams, ScalingMode, SlopeOffsetSelection};
 pub use raster_stacker::{RasterStacker, RasterStackerParams};
 pub use raster_type_conversion::{
     RasterTypeConversion, RasterTypeConversionParams, RasterTypeConversionQueryProcessor,
@@ -61,7 +69,7 @@ pub use raster_vector_join::{
     ColumnNames, FeatureAggregationMethod, RasterVectorJoin, RasterVectorJoinParams,
     TemporalAggregationMethod,
 };
-pub use rasterization::{Rasterization, RasterizationParams};
+pub use rasterization::{DensityParams, Rasterization, RasterizationParams};
 pub use reprojection::{
     DeriveOutRasterSpecsSource, InitializedRasterReprojection, InitializedVectorReprojection,
     Reprojection, ReprojectionParams,
@@ -71,3 +79,4 @@ pub use temporal_raster_aggregation::{
 };
 pub use time_projection::{TimeProjection, TimeProjectionError, TimeProjectionParams};
 pub use time_shift::{TimeShift, TimeShiftError, TimeShiftParams};
+pub use vector_join::{VectorJoin, VectorJoinParams, VectorJoinSources, VectorJoinType};

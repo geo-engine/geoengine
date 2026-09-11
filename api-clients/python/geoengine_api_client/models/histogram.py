@@ -20,7 +20,7 @@ import json
 from pydantic import BaseModel, ConfigDict, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List
 from geoengine_api_client.models.histogram_parameters import HistogramParameters
-from geoengine_api_client.models.single_vector_or_raster_source import SingleVectorOrRasterSource
+from geoengine_api_client.models.single_raster_or_vector_source import SingleRasterOrVectorSource
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -30,7 +30,7 @@ class Histogram(BaseModel):
     """ # noqa: E501
     type: StrictStr
     params: HistogramParameters
-    sources: SingleVectorOrRasterSource
+    sources: SingleRasterOrVectorSource
     __properties: ClassVar[List[str]] = ["type", "params", "sources"]
 
     @field_validator('type')
@@ -99,7 +99,7 @@ class Histogram(BaseModel):
         _obj = cls.model_validate({
             "type": obj.get("type"),
             "params": HistogramParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
-            "sources": SingleVectorOrRasterSource.from_dict(obj["sources"]) if obj.get("sources") is not None else None
+            "sources": SingleRasterOrVectorSource.from_dict(obj["sources"]) if obj.get("sources") is not None else None
         })
         return _obj
 

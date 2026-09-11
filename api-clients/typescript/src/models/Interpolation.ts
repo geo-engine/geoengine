@@ -33,10 +33,6 @@ import {
  * If queried with a resolution that is coarser than the input resolution,
  * interpolation is not applicable and an error is returned.
  * 
- * ## Inputs
- * 
- * The `Interpolation` operator expects exactly one _raster_ input.
- * 
  * ## Resolution
  * 
  * The target resolution can be specified either as an explicit `Resolution` (in pixel units)

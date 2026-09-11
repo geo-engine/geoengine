@@ -30,7 +30,7 @@ export interface MockPointSourceParameters {
      * @type {SpatialBoundsDerive}
      * @memberof MockPointSourceParameters
      */
-    spatialBounds: SpatialBoundsDerive;
+    spatialBounds?: SpatialBoundsDerive;
 }
 /**
  * Check if a given object implements the MockPointSourceParameters interface.

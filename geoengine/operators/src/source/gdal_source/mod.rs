@@ -54,7 +54,7 @@ mod reader;
 #[serde(rename_all = "camelCase")]
 pub struct GdalSourceParameters {
     pub data: NamedData,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub overview_level: Option<u32>, // TODO: should also allow a resolution? Add resample method?
 }
 

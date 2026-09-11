@@ -11,49 +11,31 @@ use crate::models;
 use serde::{Deserialize, Serialize};
 
 /// Aggregation : Aggregation methods for `TemporalRasterAggregation`.  Available variants are `min`, `max`, `first`, `last`, `mean`, `sum`, `count`, and `percentileEstimate`. Encountering NO DATA makes the aggregation result NO DATA unless `ignoreNoData` is `true`.
-/// Aggregation methods for `TemporalRasterAggregation`.  Available variants are `min`, `max`, `first`, `last`, `mean`, `sum`, `count`, and `percentileEstimate`. Encountering NO DATA makes the aggregation result NO DATA unless `ignoreNoData` is `true`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "type")]
 pub enum Aggregation {
-    MinAggregation(Box<models::MinAggregation>),
-    MaxAggregation(Box<models::MaxAggregation>),
-    FirstAggregation(Box<models::FirstAggregation>),
-    LastAggregation(Box<models::LastAggregation>),
-    MeanAggregation(Box<models::MeanAggregation>),
-    SumAggregation(Box<models::SumAggregation>),
-    CountAggregation(Box<models::CountAggregation>),
-    PercentileEstimateAggregation(Box<models::PercentileEstimateAggregation>),
+    #[serde(rename="min")]
+    Min(Box<models::AggregationMin>),
+    #[serde(rename="max")]
+    Max(Box<models::AggregationMax>),
+    #[serde(rename="first")]
+    First(Box<models::AggregationFirst>),
+    #[serde(rename="last")]
+    Last(Box<models::AggregationLast>),
+    #[serde(rename="mean")]
+    Mean(Box<models::AggregationMean>),
+    #[serde(rename="sum")]
+    Sum(Box<models::AggregationSum>),
+    #[serde(rename="count")]
+    Count(Box<models::AggregationCount>),
+    #[serde(rename="percentileEstimate")]
+    PercentileEstimate(Box<models::AggregationPercentileEstimate>),
 }
 
 impl Default for Aggregation {
     fn default() -> Self {
-        Self::MinAggregation(Default::default())
+        Self::Min(Default::default())
     }
-}
-/// 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum Type {
-    #[serde(rename = "min")]
-    Min,
-    #[serde(rename = "max")]
-    Max,
-    #[serde(rename = "first")]
-    First,
-    #[serde(rename = "last")]
-    Last,
-    #[serde(rename = "mean")]
-    Mean,
-    #[serde(rename = "sum")]
-    Sum,
-    #[serde(rename = "count")]
-    Count,
-    #[serde(rename = "percentileEstimate")]
-    PercentileEstimate,
 }
 
-impl Default for Type {
-    fn default() -> Type {
-        Self::Min
-    }
-}
 

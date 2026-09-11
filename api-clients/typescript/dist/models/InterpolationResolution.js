@@ -16,8 +16,8 @@ exports.InterpolationResolutionFromJSON = InterpolationResolutionFromJSON;
 exports.InterpolationResolutionFromJSONTyped = InterpolationResolutionFromJSONTyped;
 exports.InterpolationResolutionToJSON = InterpolationResolutionToJSON;
 exports.InterpolationResolutionToJSONTyped = InterpolationResolutionToJSONTyped;
-const Fraction_1 = require("./Fraction");
-const Resolution_1 = require("./Resolution");
+const InterpolationResolutionFraction_1 = require("./InterpolationResolutionFraction");
+const InterpolationResolutionResolution_1 = require("./InterpolationResolutionResolution");
 function InterpolationResolutionFromJSON(json) {
     return InterpolationResolutionFromJSONTyped(json, false);
 }
@@ -25,16 +25,14 @@ function InterpolationResolutionFromJSONTyped(json, ignoreDiscriminator) {
     if (json == null) {
         return json;
     }
-    if (typeof json !== 'object') {
-        return json;
+    switch (json['type']) {
+        case 'fraction':
+            return Object.assign({}, (0, InterpolationResolutionFraction_1.InterpolationResolutionFractionFromJSONTyped)(json, true), { type: 'fraction' });
+        case 'resolution':
+            return Object.assign({}, (0, InterpolationResolutionResolution_1.InterpolationResolutionResolutionFromJSONTyped)(json, true), { type: 'resolution' });
+        default:
+            return json;
     }
-    if ((0, Fraction_1.instanceOfFraction)(json)) {
-        return (0, Fraction_1.FractionFromJSONTyped)(json, true);
-    }
-    if ((0, Resolution_1.instanceOfResolution)(json)) {
-        return (0, Resolution_1.ResolutionFromJSONTyped)(json, true);
-    }
-    return {};
 }
 function InterpolationResolutionToJSON(json) {
     return InterpolationResolutionToJSONTyped(json, false);
@@ -43,14 +41,12 @@ function InterpolationResolutionToJSONTyped(value, ignoreDiscriminator = false) 
     if (value == null) {
         return value;
     }
-    if (typeof value !== 'object') {
-        return value;
+    switch (value['type']) {
+        case 'fraction':
+            return Object.assign({}, (0, InterpolationResolutionFraction_1.InterpolationResolutionFractionToJSON)(value), { type: 'fraction' });
+        case 'resolution':
+            return Object.assign({}, (0, InterpolationResolutionResolution_1.InterpolationResolutionResolutionToJSON)(value), { type: 'resolution' });
+        default:
+            return value;
     }
-    if ((0, Fraction_1.instanceOfFraction)(value)) {
-        return (0, Fraction_1.FractionToJSON)(value);
-    }
-    if ((0, Resolution_1.instanceOfResolution)(value)) {
-        return (0, Resolution_1.ResolutionToJSON)(value);
-    }
-    return {};
 }

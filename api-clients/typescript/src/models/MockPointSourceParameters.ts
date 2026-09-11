@@ -47,7 +47,7 @@ export interface MockPointSourceParameters {
      * @type {SpatialBoundsDerive}
      * @memberof MockPointSourceParameters
      */
-    spatialBounds: SpatialBoundsDerive;
+    spatialBounds?: SpatialBoundsDerive;
 }
 
 /**
@@ -55,7 +55,6 @@ export interface MockPointSourceParameters {
  */
 export function instanceOfMockPointSourceParameters(value: object): value is MockPointSourceParameters {
     if (!('points' in value) || value['points'] === undefined) return false;
-    if (!('spatialBounds' in value) || value['spatialBounds'] === undefined) return false;
     return true;
 }
 
@@ -70,7 +69,7 @@ export function MockPointSourceParametersFromJSONTyped(json: any, ignoreDiscrimi
     return {
         
         'points': ((json['points'] as Array<any>).map(Coordinate2DFromJSON)),
-        'spatialBounds': SpatialBoundsDeriveFromJSON(json['spatialBounds']),
+        'spatialBounds': json['spatialBounds'] == null ? undefined : SpatialBoundsDeriveFromJSON(json['spatialBounds']),
     };
 }
 

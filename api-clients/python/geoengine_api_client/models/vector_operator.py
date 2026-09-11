@@ -23,24 +23,36 @@ from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-VECTOROPERATOR_ONE_OF_SCHEMAS = ["MockPointSource", "OgrSource", "RasterVectorJoin", "Reprojection", "VectorExpression"]
+VECTOROPERATOR_ONE_OF_SCHEMAS = ["ColumnRangeFilter", "LineSimplification", "MockPointSource", "OgrSource", "PointInPolygonFilter", "RasterVectorJoin", "Reprojection", "TimeProjection", "VectorExpression", "VectorJoin", "VisualPointClustering"]
 
 class VectorOperator(BaseModel):
     """
     An operator that produces vector data.
     """
+    # data type: ColumnRangeFilter
+    oneof_schema_1_validator: Optional[ColumnRangeFilter] = None
+    # data type: LineSimplification
+    oneof_schema_2_validator: Optional[LineSimplification] = None
     # data type: MockPointSource
-    oneof_schema_1_validator: Optional[MockPointSource] = None
+    oneof_schema_3_validator: Optional[MockPointSource] = None
     # data type: OgrSource
-    oneof_schema_2_validator: Optional[OgrSource] = None
+    oneof_schema_4_validator: Optional[OgrSource] = None
+    # data type: PointInPolygonFilter
+    oneof_schema_5_validator: Optional[PointInPolygonFilter] = None
     # data type: RasterVectorJoin
-    oneof_schema_3_validator: Optional[RasterVectorJoin] = None
+    oneof_schema_6_validator: Optional[RasterVectorJoin] = None
     # data type: Reprojection
-    oneof_schema_4_validator: Optional[Reprojection] = None
+    oneof_schema_7_validator: Optional[Reprojection] = None
+    # data type: TimeProjection
+    oneof_schema_8_validator: Optional[TimeProjection] = None
     # data type: VectorExpression
-    oneof_schema_5_validator: Optional[VectorExpression] = None
-    actual_instance: Optional[Union[MockPointSource, OgrSource, RasterVectorJoin, Reprojection, VectorExpression]] = None
-    one_of_schemas: Set[str] = { "MockPointSource", "OgrSource", "RasterVectorJoin", "Reprojection", "VectorExpression" }
+    oneof_schema_9_validator: Optional[VectorExpression] = None
+    # data type: VectorJoin
+    oneof_schema_10_validator: Optional[VectorJoin] = None
+    # data type: VisualPointClustering
+    oneof_schema_11_validator: Optional[VisualPointClustering] = None
+    actual_instance: Optional[Union[ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, VectorExpression, VectorJoin, VisualPointClustering]] = None
+    one_of_schemas: Set[str] = { "ColumnRangeFilter", "LineSimplification", "MockPointSource", "OgrSource", "PointInPolygonFilter", "RasterVectorJoin", "Reprojection", "TimeProjection", "VectorExpression", "VectorJoin", "VisualPointClustering" }
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -66,6 +78,16 @@ class VectorOperator(BaseModel):
         instance = VectorOperator.model_construct()
         error_messages = []
         match = 0
+        # validate data type: ColumnRangeFilter
+        if not isinstance(v, ColumnRangeFilter):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `ColumnRangeFilter`")
+        else:
+            match += 1
+        # validate data type: LineSimplification
+        if not isinstance(v, LineSimplification):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `LineSimplification`")
+        else:
+            match += 1
         # validate data type: MockPointSource
         if not isinstance(v, MockPointSource):
             error_messages.append(f"Error! Input type `{type(v)}` is not `MockPointSource`")
@@ -74,6 +96,11 @@ class VectorOperator(BaseModel):
         # validate data type: OgrSource
         if not isinstance(v, OgrSource):
             error_messages.append(f"Error! Input type `{type(v)}` is not `OgrSource`")
+        else:
+            match += 1
+        # validate data type: PointInPolygonFilter
+        if not isinstance(v, PointInPolygonFilter):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `PointInPolygonFilter`")
         else:
             match += 1
         # validate data type: RasterVectorJoin
@@ -86,17 +113,32 @@ class VectorOperator(BaseModel):
             error_messages.append(f"Error! Input type `{type(v)}` is not `Reprojection`")
         else:
             match += 1
+        # validate data type: TimeProjection
+        if not isinstance(v, TimeProjection):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `TimeProjection`")
+        else:
+            match += 1
         # validate data type: VectorExpression
         if not isinstance(v, VectorExpression):
             error_messages.append(f"Error! Input type `{type(v)}` is not `VectorExpression`")
         else:
             match += 1
+        # validate data type: VectorJoin
+        if not isinstance(v, VectorJoin):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `VectorJoin`")
+        else:
+            match += 1
+        # validate data type: VisualPointClustering
+        if not isinstance(v, VisualPointClustering):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `VisualPointClustering`")
+        else:
+            match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in VectorOperator with oneOf schemas: MockPointSource, OgrSource, RasterVectorJoin, Reprojection, VectorExpression. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in VectorOperator with oneOf schemas: MockPointSource, OgrSource, RasterVectorJoin, Reprojection, VectorExpression. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -116,6 +158,16 @@ class VectorOperator(BaseModel):
         if not _data_type:
             raise ValueError("Failed to lookup data type from the field `type` in the input.")
 
+        # check if data type is `ColumnRangeFilter`
+        if _data_type == "ColumnRangeFilter":
+            instance.actual_instance = ColumnRangeFilter.from_json(json_str)
+            return instance
+
+        # check if data type is `LineSimplification`
+        if _data_type == "LineSimplification":
+            instance.actual_instance = LineSimplification.from_json(json_str)
+            return instance
+
         # check if data type is `MockPointSource`
         if _data_type == "MockPointSource":
             instance.actual_instance = MockPointSource.from_json(json_str)
@@ -124,6 +176,11 @@ class VectorOperator(BaseModel):
         # check if data type is `OgrSource`
         if _data_type == "OgrSource":
             instance.actual_instance = OgrSource.from_json(json_str)
+            return instance
+
+        # check if data type is `PointInPolygonFilter`
+        if _data_type == "PointInPolygonFilter":
+            instance.actual_instance = PointInPolygonFilter.from_json(json_str)
             return instance
 
         # check if data type is `RasterVectorJoin`
@@ -136,11 +193,38 @@ class VectorOperator(BaseModel):
             instance.actual_instance = Reprojection.from_json(json_str)
             return instance
 
+        # check if data type is `TimeProjection`
+        if _data_type == "TimeProjection":
+            instance.actual_instance = TimeProjection.from_json(json_str)
+            return instance
+
         # check if data type is `VectorExpression`
         if _data_type == "VectorExpression":
             instance.actual_instance = VectorExpression.from_json(json_str)
             return instance
 
+        # check if data type is `VectorJoin`
+        if _data_type == "VectorJoin":
+            instance.actual_instance = VectorJoin.from_json(json_str)
+            return instance
+
+        # check if data type is `VisualPointClustering`
+        if _data_type == "VisualPointClustering":
+            instance.actual_instance = VisualPointClustering.from_json(json_str)
+            return instance
+
+        # deserialize data into ColumnRangeFilter
+        try:
+            instance.actual_instance = ColumnRangeFilter.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into LineSimplification
+        try:
+            instance.actual_instance = LineSimplification.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
         # deserialize data into MockPointSource
         try:
             instance.actual_instance = MockPointSource.from_json(json_str)
@@ -150,6 +234,12 @@ class VectorOperator(BaseModel):
         # deserialize data into OgrSource
         try:
             instance.actual_instance = OgrSource.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into PointInPolygonFilter
+        try:
+            instance.actual_instance = PointInPolygonFilter.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
@@ -165,19 +255,37 @@ class VectorOperator(BaseModel):
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
+        # deserialize data into TimeProjection
+        try:
+            instance.actual_instance = TimeProjection.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
         # deserialize data into VectorExpression
         try:
             instance.actual_instance = VectorExpression.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
+        # deserialize data into VectorJoin
+        try:
+            instance.actual_instance = VectorJoin.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into VisualPointClustering
+        try:
+            instance.actual_instance = VisualPointClustering.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into VectorOperator with oneOf schemas: MockPointSource, OgrSource, RasterVectorJoin, Reprojection, VectorExpression. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into VectorOperator with oneOf schemas: MockPointSource, OgrSource, RasterVectorJoin, Reprojection, VectorExpression. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -191,7 +299,7 @@ class VectorOperator(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], MockPointSource, OgrSource, RasterVectorJoin, Reprojection, VectorExpression]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, VectorExpression, VectorJoin, VisualPointClustering]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None
@@ -206,9 +314,15 @@ class VectorOperator(BaseModel):
         """Returns the string representation of the actual instance"""
         return pprint.pformat(self.model_dump())
 
+from geoengine_api_client.models.column_range_filter import ColumnRangeFilter
+from geoengine_api_client.models.line_simplification import LineSimplification
+from geoengine_api_client.models.point_in_polygon_filter import PointInPolygonFilter
 from geoengine_api_client.models.raster_vector_join import RasterVectorJoin
 from geoengine_api_client.models.reprojection import Reprojection
+from geoengine_api_client.models.time_projection import TimeProjection
 from geoengine_api_client.models.vector_expression import VectorExpression
+from geoengine_api_client.models.vector_join import VectorJoin
+from geoengine_api_client.models.visual_point_clustering import VisualPointClustering
 # TODO: Rewrite to not use raise_errors
 VectorOperator.model_rebuild(raise_errors=False)
 

@@ -8,7 +8,7 @@ An operator that produces vector data.
 Name | Type
 ------------ | -------------
 `type` | string
-`params` | [VectorExpressionParameters](VectorExpressionParameters.md)
+`params` | [VisualPointClusteringParameters](VisualPointClusteringParameters.md)
 `sources` | [SingleVectorSource](SingleVectorSource.md)
 
 ## Example

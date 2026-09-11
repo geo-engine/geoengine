@@ -11,62 +11,62 @@
  * Do not edit the class manually.
  */
 
-import type { CountAggregation } from './CountAggregation';
+import type { AggregationCount } from './AggregationCount';
 import {
-    instanceOfCountAggregation,
-    CountAggregationFromJSON,
-    CountAggregationFromJSONTyped,
-    CountAggregationToJSON,
-} from './CountAggregation';
-import type { FirstAggregation } from './FirstAggregation';
+    instanceOfAggregationCount,
+    AggregationCountFromJSON,
+    AggregationCountFromJSONTyped,
+    AggregationCountToJSON,
+} from './AggregationCount';
+import type { AggregationFirst } from './AggregationFirst';
 import {
-    instanceOfFirstAggregation,
-    FirstAggregationFromJSON,
-    FirstAggregationFromJSONTyped,
-    FirstAggregationToJSON,
-} from './FirstAggregation';
-import type { LastAggregation } from './LastAggregation';
+    instanceOfAggregationFirst,
+    AggregationFirstFromJSON,
+    AggregationFirstFromJSONTyped,
+    AggregationFirstToJSON,
+} from './AggregationFirst';
+import type { AggregationLast } from './AggregationLast';
 import {
-    instanceOfLastAggregation,
-    LastAggregationFromJSON,
-    LastAggregationFromJSONTyped,
-    LastAggregationToJSON,
-} from './LastAggregation';
-import type { MaxAggregation } from './MaxAggregation';
+    instanceOfAggregationLast,
+    AggregationLastFromJSON,
+    AggregationLastFromJSONTyped,
+    AggregationLastToJSON,
+} from './AggregationLast';
+import type { AggregationMax } from './AggregationMax';
 import {
-    instanceOfMaxAggregation,
-    MaxAggregationFromJSON,
-    MaxAggregationFromJSONTyped,
-    MaxAggregationToJSON,
-} from './MaxAggregation';
-import type { MeanAggregation } from './MeanAggregation';
+    instanceOfAggregationMax,
+    AggregationMaxFromJSON,
+    AggregationMaxFromJSONTyped,
+    AggregationMaxToJSON,
+} from './AggregationMax';
+import type { AggregationMean } from './AggregationMean';
 import {
-    instanceOfMeanAggregation,
-    MeanAggregationFromJSON,
-    MeanAggregationFromJSONTyped,
-    MeanAggregationToJSON,
-} from './MeanAggregation';
-import type { MinAggregation } from './MinAggregation';
+    instanceOfAggregationMean,
+    AggregationMeanFromJSON,
+    AggregationMeanFromJSONTyped,
+    AggregationMeanToJSON,
+} from './AggregationMean';
+import type { AggregationMin } from './AggregationMin';
 import {
-    instanceOfMinAggregation,
-    MinAggregationFromJSON,
-    MinAggregationFromJSONTyped,
-    MinAggregationToJSON,
-} from './MinAggregation';
-import type { PercentileEstimateAggregation } from './PercentileEstimateAggregation';
+    instanceOfAggregationMin,
+    AggregationMinFromJSON,
+    AggregationMinFromJSONTyped,
+    AggregationMinToJSON,
+} from './AggregationMin';
+import type { AggregationPercentileEstimate } from './AggregationPercentileEstimate';
 import {
-    instanceOfPercentileEstimateAggregation,
-    PercentileEstimateAggregationFromJSON,
-    PercentileEstimateAggregationFromJSONTyped,
-    PercentileEstimateAggregationToJSON,
-} from './PercentileEstimateAggregation';
-import type { SumAggregation } from './SumAggregation';
+    instanceOfAggregationPercentileEstimate,
+    AggregationPercentileEstimateFromJSON,
+    AggregationPercentileEstimateFromJSONTyped,
+    AggregationPercentileEstimateToJSON,
+} from './AggregationPercentileEstimate';
+import type { AggregationSum } from './AggregationSum';
 import {
-    instanceOfSumAggregation,
-    SumAggregationFromJSON,
-    SumAggregationFromJSONTyped,
-    SumAggregationToJSON,
-} from './SumAggregation';
+    instanceOfAggregationSum,
+    AggregationSumFromJSON,
+    AggregationSumFromJSONTyped,
+    AggregationSumToJSON,
+} from './AggregationSum';
 
 /**
  * @type Aggregation
@@ -76,7 +76,7 @@ import {
  * Encountering NO DATA makes the aggregation result NO DATA unless `ignoreNoData` is `true`.
  * @export
  */
-export type Aggregation = CountAggregation | FirstAggregation | LastAggregation | MaxAggregation | MeanAggregation | MinAggregation | PercentileEstimateAggregation | SumAggregation;
+export type Aggregation = { type: 'count' } & AggregationCount | { type: 'first' } & AggregationFirst | { type: 'last' } & AggregationLast | { type: 'max' } & AggregationMax | { type: 'mean' } & AggregationMean | { type: 'min' } & AggregationMin | { type: 'percentileEstimate' } & AggregationPercentileEstimate | { type: 'sum' } & AggregationSum;
 
 export function AggregationFromJSON(json: any): Aggregation {
     return AggregationFromJSONTyped(json, false);
@@ -86,34 +86,26 @@ export function AggregationFromJSONTyped(json: any, ignoreDiscriminator: boolean
     if (json == null) {
         return json;
     }
-    if (typeof json !== 'object') {
-        return json;
+    switch (json['type']) {
+        case 'count':
+            return Object.assign({}, AggregationCountFromJSONTyped(json, true), { type: 'count' } as const);
+        case 'first':
+            return Object.assign({}, AggregationFirstFromJSONTyped(json, true), { type: 'first' } as const);
+        case 'last':
+            return Object.assign({}, AggregationLastFromJSONTyped(json, true), { type: 'last' } as const);
+        case 'max':
+            return Object.assign({}, AggregationMaxFromJSONTyped(json, true), { type: 'max' } as const);
+        case 'mean':
+            return Object.assign({}, AggregationMeanFromJSONTyped(json, true), { type: 'mean' } as const);
+        case 'min':
+            return Object.assign({}, AggregationMinFromJSONTyped(json, true), { type: 'min' } as const);
+        case 'percentileEstimate':
+            return Object.assign({}, AggregationPercentileEstimateFromJSONTyped(json, true), { type: 'percentileEstimate' } as const);
+        case 'sum':
+            return Object.assign({}, AggregationSumFromJSONTyped(json, true), { type: 'sum' } as const);
+        default:
+            return json;
     }
-    if (instanceOfCountAggregation(json)) {
-        return CountAggregationFromJSONTyped(json, true);
-    }
-    if (instanceOfFirstAggregation(json)) {
-        return FirstAggregationFromJSONTyped(json, true);
-    }
-    if (instanceOfLastAggregation(json)) {
-        return LastAggregationFromJSONTyped(json, true);
-    }
-    if (instanceOfMaxAggregation(json)) {
-        return MaxAggregationFromJSONTyped(json, true);
-    }
-    if (instanceOfMeanAggregation(json)) {
-        return MeanAggregationFromJSONTyped(json, true);
-    }
-    if (instanceOfMinAggregation(json)) {
-        return MinAggregationFromJSONTyped(json, true);
-    }
-    if (instanceOfPercentileEstimateAggregation(json)) {
-        return PercentileEstimateAggregationFromJSONTyped(json, true);
-    }
-    if (instanceOfSumAggregation(json)) {
-        return SumAggregationFromJSONTyped(json, true);
-    }
-    return {} as any;
 }
 
 export function AggregationToJSON(json: any): any {
@@ -124,33 +116,25 @@ export function AggregationToJSONTyped(value?: Aggregation | null, ignoreDiscrim
     if (value == null) {
         return value;
     }
-    if (typeof value !== 'object') {
-        return value;
+    switch (value['type']) {
+        case 'count':
+            return Object.assign({}, AggregationCountToJSON(value), { type: 'count' } as const);
+        case 'first':
+            return Object.assign({}, AggregationFirstToJSON(value), { type: 'first' } as const);
+        case 'last':
+            return Object.assign({}, AggregationLastToJSON(value), { type: 'last' } as const);
+        case 'max':
+            return Object.assign({}, AggregationMaxToJSON(value), { type: 'max' } as const);
+        case 'mean':
+            return Object.assign({}, AggregationMeanToJSON(value), { type: 'mean' } as const);
+        case 'min':
+            return Object.assign({}, AggregationMinToJSON(value), { type: 'min' } as const);
+        case 'percentileEstimate':
+            return Object.assign({}, AggregationPercentileEstimateToJSON(value), { type: 'percentileEstimate' } as const);
+        case 'sum':
+            return Object.assign({}, AggregationSumToJSON(value), { type: 'sum' } as const);
+        default:
+            return value;
     }
-    if (instanceOfCountAggregation(value)) {
-        return CountAggregationToJSON(value as CountAggregation);
-    }
-    if (instanceOfFirstAggregation(value)) {
-        return FirstAggregationToJSON(value as FirstAggregation);
-    }
-    if (instanceOfLastAggregation(value)) {
-        return LastAggregationToJSON(value as LastAggregation);
-    }
-    if (instanceOfMaxAggregation(value)) {
-        return MaxAggregationToJSON(value as MaxAggregation);
-    }
-    if (instanceOfMeanAggregation(value)) {
-        return MeanAggregationToJSON(value as MeanAggregation);
-    }
-    if (instanceOfMinAggregation(value)) {
-        return MinAggregationToJSON(value as MinAggregation);
-    }
-    if (instanceOfPercentileEstimateAggregation(value)) {
-        return PercentileEstimateAggregationToJSON(value as PercentileEstimateAggregation);
-    }
-    if (instanceOfSumAggregation(value)) {
-        return SumAggregationToJSON(value as SumAggregation);
-    }
-    return {};
 }
 

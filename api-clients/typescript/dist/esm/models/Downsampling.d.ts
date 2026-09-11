@@ -16,10 +16,6 @@ import type { DownsamplingParameters } from './DownsamplingParameters';
  * If queried with a resolution that is finer than the input resolution,
  * downsampling is not applicable and an error is returned.
  *
- * ## Inputs
- *
- * The `Downsampling` operator expects exactly one _raster_ input.
- *
  * ## Resolution
  *
  * The target resolution can be specified either as an explicit `Resolution` (in pixel units)

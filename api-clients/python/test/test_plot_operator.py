@@ -35,7 +35,7 @@ class TestPlotOperator(unittest.TestCase):
         model = PlotOperator()
         if include_optional:
             return PlotOperator(
-                type = 'Histogram',
+                type = 'BoxPlot',
                 params = geoengine_api_client.models.statistics_parameters.StatisticsParameters(
                     column_names = [
                         ''
@@ -48,7 +48,7 @@ class TestPlotOperator(unittest.TestCase):
             )
         else:
             return PlotOperator(
-                type = 'Histogram',
+                type = 'BoxPlot',
                 params = geoengine_api_client.models.statistics_parameters.StatisticsParameters(
                     column_names = [
                         ''

@@ -7,5 +7,5 @@
 -#[serde(tag = "type")]
 +#[serde(untagged)]
  pub enum VectorOperator {
-     #[serde(rename="MockPointSource")]
-     MockPointSource(Box<models::MockPointSource>),
+     #[serde(rename="ColumnRangeFilter")]
+     ColumnRangeFilter(Box<models::ColumnRangeFilter>),

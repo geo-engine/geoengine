@@ -51,16 +51,39 @@ __all__ = [
     "AddLayerCollection",
     "AddRole",
     "Aggregation",
+    "AggregationCount",
+    "AggregationFirst",
+    "AggregationLast",
+    "AggregationMax",
+    "AggregationMean",
+    "AggregationMin",
+    "AggregationPercentileEstimate",
+    "AggregationSum",
     "ArunaDataProviderDefinition",
+    "AttributeAggregateDef",
+    "AttributeAggregateType",
+    "AttributeFilter",
     "AuthCodeRequestURL",
     "AuthCodeResponse",
     "AutoCreateDataset",
     "AxisOrder",
+    "BandDistanceEquallySpaced",
     "BandFilter",
     "BandFilterParameters",
+    "BandNeighborhoodAggregate",
+    "BandNeighborhoodAggregateMethod",
+    "BandNeighborhoodAggregateMethodAverage",
+    "BandNeighborhoodAggregateMethodFirstDerivative",
+    "BandNeighborhoodAggregateParameters",
     "BandsByNameOrIndex",
+    "BandwiseExpression",
+    "BandwiseExpressionParameters",
     "BoundingBox2D",
+    "BoxPlot",
+    "BoxPlotParameters",
     "Breakpoint",
+    "ClassHistogram",
+    "ClassHistogramParameters",
     "ClassificationMeasurement",
     "Collection",
     "CollectionItem",
@@ -70,13 +93,14 @@ __all__ = [
     "ColorParam",
     "Colorizer",
     "ColumnNames",
+    "ColumnRangeFilter",
+    "ColumnRangeFilterParameters",
     "ComputationQuota",
     "Conformance",
     "ContinuousMeasurement",
     "Coordinate2D",
     "CopernicusDataspaceDataProviderDefinition",
     "CornerOfOrigin",
-    "CountAggregation",
     "CreateDataset",
     "CreateProject",
     "CsvHeader",
@@ -97,6 +121,7 @@ __all__ = [
     "DatasetNameResponse",
     "DatasetResource",
     "Default",
+    "DensityParams",
     "DeriveOutRasterSpecsSource",
     "DerivedColor",
     "DerivedNumber",
@@ -104,6 +129,8 @@ __all__ = [
     "DownsamplingMethod",
     "DownsamplingParameters",
     "DownsamplingResolution",
+    "DownsamplingResolutionFraction",
+    "DownsamplingResolutionResolution",
     "EbvPortalDataProviderDefinition",
     "EdrDataProviderDefinition",
     "EdrVectorSpec",
@@ -113,12 +140,12 @@ __all__ = [
     "Extent",
     "ExternalDataId",
     "FeatureAggregationMethod",
+    "FeatureAttributeValuesOverTime",
+    "FeatureAttributeValuesOverTimeParameters",
     "FeatureDataType",
     "FileNotFoundHandling",
-    "FirstAggregation",
     "FormatSpecifics",
     "FormatSpecificsCsv",
-    "Fraction",
     "GbifDataProviderDefinition",
     "GdalDatasetParameters",
     "GdalLoadingInfoTemporalSlice",
@@ -157,9 +184,10 @@ __all__ = [
     "InterpolationMethod",
     "InterpolationParameters",
     "InterpolationResolution",
+    "InterpolationResolutionFraction",
+    "InterpolationResolutionResolution",
     "Irregular",
     "LandingPage",
-    "LastAggregation",
     "Layer",
     "LayerCollection",
     "LayerCollectionListing",
@@ -170,16 +198,19 @@ __all__ = [
     "LayerVisibility",
     "LegacyTypedOperator",
     "LegacyTypedOperatorOperator",
+    "LineSimplification",
+    "LineSimplificationAlgorithm",
+    "LineSimplificationParameters",
     "LineSymbology",
     "LinearGradient",
     "Link",
     "LogarithmicGradient",
-    "MaxAggregation",
-    "MeanAggregation",
+    "MeanRasterPixelValuesOverTime",
+    "MeanRasterPixelValuesOverTimeParameters",
+    "MeanRasterPixelValuesOverTimePosition",
     "Measurement",
     "MetaDataDefinition",
     "MetaDataSuggestion",
-    "MinAggregation",
     "MlModel",
     "MlModelInputNoDataHandling",
     "MlModelInputNoDataHandlingVariant",
@@ -202,6 +233,14 @@ __all__ = [
     "MultipleRasterOrSingleVectorSource",
     "MultipleRasterSources",
     "Names",
+    "NeighborhoodAggregate",
+    "NeighborhoodAggregateMethod",
+    "NeighborhoodAggregateMethodStandardDeviation",
+    "NeighborhoodAggregateMethodSum",
+    "NeighborhoodAggregateParameters",
+    "NeighborhoodKernel",
+    "NeighborhoodKernelRectangle",
+    "NeighborhoodKernelWeightsMatrix",
     "NetCdfCfDataProviderDefinition",
     "NewOutputColumn",
     "NumberParam",
@@ -224,19 +263,25 @@ __all__ = [
     "OgrSourceTimeFormatAuto",
     "OgrSourceTimeFormatCustom",
     "OgrSourceTimeFormatUnixTimeStamp",
+    "Onnx",
+    "OnnxParameters",
     "OperatorQuota",
     "OrderBy",
     "OutputColumn",
     "PaletteColorizer",
     "PangaeaDataProviderDefinition",
-    "PercentileEstimateAggregation",
     "Permission",
     "PermissionListing",
     "PermissionRequest",
+    "PieChart",
+    "PieChartCountType",
+    "PieChartParameters",
     "Plot",
     "PlotOperator",
     "PlotOutputFormat",
     "PlotResultDescriptor",
+    "PointInPolygonFilter",
+    "PointInPolygonFilterSource",
     "PointSymbology",
     "PolygonSymbology",
     "Project",
@@ -252,6 +297,7 @@ __all__ = [
     "ProviderLayerCollectionId",
     "ProviderLayerId",
     "Quota",
+    "Radiance",
     "RasterBandDescriptor",
     "RasterColorizer",
     "RasterDataType",
@@ -260,6 +306,8 @@ __all__ = [
     "RasterPropertiesEntryType",
     "RasterPropertiesKey",
     "RasterResultDescriptor",
+    "RasterScaling",
+    "RasterScalingParameters",
     "RasterStacker",
     "RasterStackerParameters",
     "RasterStreamWebsocketResultType",
@@ -269,17 +317,25 @@ __all__ = [
     "RasterTypeConversionParameters",
     "RasterVectorJoin",
     "RasterVectorJoinParameters",
+    "Rasterization",
+    "RasterizationParameters",
+    "Reflectance",
+    "ReflectanceParameters",
     "Regular",
     "RegularTimeDimension",
     "Rename",
     "RenameBands",
     "Reprojection",
     "ReprojectionParameters",
-    "Resolution",
     "Resource",
     "Role",
     "RoleDescription",
     "STRectangle",
+    "ScalingMode",
+    "ScalingModeMulSlopeAddOffset",
+    "ScalingModeSubOffsetDivSlope",
+    "ScatterPlot",
+    "ScatterPlotParameters",
     "SearchCapabilities",
     "SearchType",
     "SearchTypes",
@@ -290,8 +346,11 @@ __all__ = [
     "SingleRasterOrVectorSource",
     "SingleRasterSource",
     "SingleVectorMultipleRasterSources",
-    "SingleVectorOrRasterSource",
     "SingleVectorSource",
+    "SlopeOffsetSelection",
+    "SlopeOffsetSelectionAuto",
+    "SlopeOffsetSelectionConstant",
+    "SlopeOffsetSelectionMetadataKey",
     "SpatialBoundsDerive",
     "SpatialBoundsDeriveBounds",
     "SpatialBoundsDeriveDerive",
@@ -313,11 +372,11 @@ __all__ = [
     "StaticNumber",
     "Statistics",
     "StatisticsParameters",
+    "StringOrNumberRange",
     "StrokeParam",
     "Style",
     "Suffix",
     "SuggestMetaData",
-    "SumAggregation",
     "Symbology",
     "TaskFilter",
     "TaskResponse",
@@ -327,6 +386,8 @@ __all__ = [
     "TaskStatusFailed",
     "TaskStatusRunning",
     "TaskStatusWithId",
+    "Temperature",
+    "TemperatureParameters",
     "TemporalAggregationMethod",
     "TemporalExtent",
     "TemporalRasterAggregation",
@@ -351,7 +412,13 @@ __all__ = [
     "TimeDimension",
     "TimeGranularity",
     "TimeInterval",
+    "TimeProjection",
+    "TimeProjectionParameters",
     "TimeReference",
+    "TimeShift",
+    "TimeShiftParameters",
+    "TimeShiftParametersAbsolute",
+    "TimeShiftParametersRelative",
     "TimeStep",
     "TypedDataProviderDefinition",
     "TypedGeometry",
@@ -387,8 +454,14 @@ __all__ = [
     "VectorDataType",
     "VectorExpression",
     "VectorExpressionParameters",
+    "VectorJoin",
+    "VectorJoinParameters",
+    "VectorJoinSources",
+    "VectorJoinTypeEquiGeoToData",
     "VectorOperator",
     "VectorResultDescriptor",
+    "VisualPointClustering",
+    "VisualPointClusteringParameters",
     "Volume",
     "VolumeFileLayersResponse",
     "WcsRequest",
@@ -444,16 +517,39 @@ from geoengine_api_client.models.add_layer import AddLayer as AddLayer
 from geoengine_api_client.models.add_layer_collection import AddLayerCollection as AddLayerCollection
 from geoengine_api_client.models.add_role import AddRole as AddRole
 from geoengine_api_client.models.aggregation import Aggregation as Aggregation
+from geoengine_api_client.models.aggregation_count import AggregationCount as AggregationCount
+from geoengine_api_client.models.aggregation_first import AggregationFirst as AggregationFirst
+from geoengine_api_client.models.aggregation_last import AggregationLast as AggregationLast
+from geoengine_api_client.models.aggregation_max import AggregationMax as AggregationMax
+from geoengine_api_client.models.aggregation_mean import AggregationMean as AggregationMean
+from geoengine_api_client.models.aggregation_min import AggregationMin as AggregationMin
+from geoengine_api_client.models.aggregation_percentile_estimate import AggregationPercentileEstimate as AggregationPercentileEstimate
+from geoengine_api_client.models.aggregation_sum import AggregationSum as AggregationSum
 from geoengine_api_client.models.aruna_data_provider_definition import ArunaDataProviderDefinition as ArunaDataProviderDefinition
+from geoengine_api_client.models.attribute_aggregate_def import AttributeAggregateDef as AttributeAggregateDef
+from geoengine_api_client.models.attribute_aggregate_type import AttributeAggregateType as AttributeAggregateType
+from geoengine_api_client.models.attribute_filter import AttributeFilter as AttributeFilter
 from geoengine_api_client.models.auth_code_request_url import AuthCodeRequestURL as AuthCodeRequestURL
 from geoengine_api_client.models.auth_code_response import AuthCodeResponse as AuthCodeResponse
 from geoengine_api_client.models.auto_create_dataset import AutoCreateDataset as AutoCreateDataset
 from geoengine_api_client.models.axis_order import AxisOrder as AxisOrder
+from geoengine_api_client.models.band_distance_equally_spaced import BandDistanceEquallySpaced as BandDistanceEquallySpaced
 from geoengine_api_client.models.band_filter import BandFilter as BandFilter
 from geoengine_api_client.models.band_filter_parameters import BandFilterParameters as BandFilterParameters
+from geoengine_api_client.models.band_neighborhood_aggregate import BandNeighborhoodAggregate as BandNeighborhoodAggregate
+from geoengine_api_client.models.band_neighborhood_aggregate_method import BandNeighborhoodAggregateMethod as BandNeighborhoodAggregateMethod
+from geoengine_api_client.models.band_neighborhood_aggregate_method_average import BandNeighborhoodAggregateMethodAverage as BandNeighborhoodAggregateMethodAverage
+from geoengine_api_client.models.band_neighborhood_aggregate_method_first_derivative import BandNeighborhoodAggregateMethodFirstDerivative as BandNeighborhoodAggregateMethodFirstDerivative
+from geoengine_api_client.models.band_neighborhood_aggregate_parameters import BandNeighborhoodAggregateParameters as BandNeighborhoodAggregateParameters
 from geoengine_api_client.models.bands_by_name_or_index import BandsByNameOrIndex as BandsByNameOrIndex
+from geoengine_api_client.models.bandwise_expression import BandwiseExpression as BandwiseExpression
+from geoengine_api_client.models.bandwise_expression_parameters import BandwiseExpressionParameters as BandwiseExpressionParameters
 from geoengine_api_client.models.bounding_box2_d import BoundingBox2D as BoundingBox2D
+from geoengine_api_client.models.box_plot import BoxPlot as BoxPlot
+from geoengine_api_client.models.box_plot_parameters import BoxPlotParameters as BoxPlotParameters
 from geoengine_api_client.models.breakpoint import Breakpoint as Breakpoint
+from geoengine_api_client.models.class_histogram import ClassHistogram as ClassHistogram
+from geoengine_api_client.models.class_histogram_parameters import ClassHistogramParameters as ClassHistogramParameters
 from geoengine_api_client.models.classification_measurement import ClassificationMeasurement as ClassificationMeasurement
 from geoengine_api_client.models.collection import Collection as Collection
 from geoengine_api_client.models.collection_item import CollectionItem as CollectionItem
@@ -463,13 +559,14 @@ from geoengine_api_client.models.collections_response_format import CollectionsR
 from geoengine_api_client.models.color_param import ColorParam as ColorParam
 from geoengine_api_client.models.colorizer import Colorizer as Colorizer
 from geoengine_api_client.models.column_names import ColumnNames as ColumnNames
+from geoengine_api_client.models.column_range_filter import ColumnRangeFilter as ColumnRangeFilter
+from geoengine_api_client.models.column_range_filter_parameters import ColumnRangeFilterParameters as ColumnRangeFilterParameters
 from geoengine_api_client.models.computation_quota import ComputationQuota as ComputationQuota
 from geoengine_api_client.models.conformance import Conformance as Conformance
 from geoengine_api_client.models.continuous_measurement import ContinuousMeasurement as ContinuousMeasurement
 from geoengine_api_client.models.coordinate2_d import Coordinate2D as Coordinate2D
 from geoengine_api_client.models.copernicus_dataspace_data_provider_definition import CopernicusDataspaceDataProviderDefinition as CopernicusDataspaceDataProviderDefinition
 from geoengine_api_client.models.corner_of_origin import CornerOfOrigin as CornerOfOrigin
-from geoengine_api_client.models.count_aggregation import CountAggregation as CountAggregation
 from geoengine_api_client.models.create_dataset import CreateDataset as CreateDataset
 from geoengine_api_client.models.create_project import CreateProject as CreateProject
 from geoengine_api_client.models.csv_header import CsvHeader as CsvHeader
@@ -490,6 +587,7 @@ from geoengine_api_client.models.dataset_listing import DatasetListing as Datase
 from geoengine_api_client.models.dataset_name_response import DatasetNameResponse as DatasetNameResponse
 from geoengine_api_client.models.dataset_resource import DatasetResource as DatasetResource
 from geoengine_api_client.models.default import Default as Default
+from geoengine_api_client.models.density_params import DensityParams as DensityParams
 from geoengine_api_client.models.derive_out_raster_specs_source import DeriveOutRasterSpecsSource as DeriveOutRasterSpecsSource
 from geoengine_api_client.models.derived_color import DerivedColor as DerivedColor
 from geoengine_api_client.models.derived_number import DerivedNumber as DerivedNumber
@@ -497,6 +595,8 @@ from geoengine_api_client.models.downsampling import Downsampling as Downsamplin
 from geoengine_api_client.models.downsampling_method import DownsamplingMethod as DownsamplingMethod
 from geoengine_api_client.models.downsampling_parameters import DownsamplingParameters as DownsamplingParameters
 from geoengine_api_client.models.downsampling_resolution import DownsamplingResolution as DownsamplingResolution
+from geoengine_api_client.models.downsampling_resolution_fraction import DownsamplingResolutionFraction as DownsamplingResolutionFraction
+from geoengine_api_client.models.downsampling_resolution_resolution import DownsamplingResolutionResolution as DownsamplingResolutionResolution
 from geoengine_api_client.models.ebv_portal_data_provider_definition import EbvPortalDataProviderDefinition as EbvPortalDataProviderDefinition
 from geoengine_api_client.models.edr_data_provider_definition import EdrDataProviderDefinition as EdrDataProviderDefinition
 from geoengine_api_client.models.edr_vector_spec import EdrVectorSpec as EdrVectorSpec
@@ -506,12 +606,12 @@ from geoengine_api_client.models.expression_parameters import ExpressionParamete
 from geoengine_api_client.models.extent import Extent as Extent
 from geoengine_api_client.models.external_data_id import ExternalDataId as ExternalDataId
 from geoengine_api_client.models.feature_aggregation_method import FeatureAggregationMethod as FeatureAggregationMethod
+from geoengine_api_client.models.feature_attribute_values_over_time import FeatureAttributeValuesOverTime as FeatureAttributeValuesOverTime
+from geoengine_api_client.models.feature_attribute_values_over_time_parameters import FeatureAttributeValuesOverTimeParameters as FeatureAttributeValuesOverTimeParameters
 from geoengine_api_client.models.feature_data_type import FeatureDataType as FeatureDataType
 from geoengine_api_client.models.file_not_found_handling import FileNotFoundHandling as FileNotFoundHandling
-from geoengine_api_client.models.first_aggregation import FirstAggregation as FirstAggregation
 from geoengine_api_client.models.format_specifics import FormatSpecifics as FormatSpecifics
 from geoengine_api_client.models.format_specifics_csv import FormatSpecificsCsv as FormatSpecificsCsv
-from geoengine_api_client.models.fraction import Fraction as Fraction
 from geoengine_api_client.models.gbif_data_provider_definition import GbifDataProviderDefinition as GbifDataProviderDefinition
 from geoengine_api_client.models.gdal_dataset_parameters import GdalDatasetParameters as GdalDatasetParameters
 from geoengine_api_client.models.gdal_loading_info_temporal_slice import GdalLoadingInfoTemporalSlice as GdalLoadingInfoTemporalSlice
@@ -550,9 +650,10 @@ from geoengine_api_client.models.interpolation import Interpolation as Interpola
 from geoengine_api_client.models.interpolation_method import InterpolationMethod as InterpolationMethod
 from geoengine_api_client.models.interpolation_parameters import InterpolationParameters as InterpolationParameters
 from geoengine_api_client.models.interpolation_resolution import InterpolationResolution as InterpolationResolution
+from geoengine_api_client.models.interpolation_resolution_fraction import InterpolationResolutionFraction as InterpolationResolutionFraction
+from geoengine_api_client.models.interpolation_resolution_resolution import InterpolationResolutionResolution as InterpolationResolutionResolution
 from geoengine_api_client.models.irregular import Irregular as Irregular
 from geoengine_api_client.models.landing_page import LandingPage as LandingPage
-from geoengine_api_client.models.last_aggregation import LastAggregation as LastAggregation
 from geoengine_api_client.models.layer import Layer as Layer
 from geoengine_api_client.models.layer_collection import LayerCollection as LayerCollection
 from geoengine_api_client.models.layer_collection_listing import LayerCollectionListing as LayerCollectionListing
@@ -563,16 +664,19 @@ from geoengine_api_client.models.layer_resource import LayerResource as LayerRes
 from geoengine_api_client.models.layer_visibility import LayerVisibility as LayerVisibility
 from geoengine_api_client.models.legacy_typed_operator import LegacyTypedOperator as LegacyTypedOperator
 from geoengine_api_client.models.legacy_typed_operator_operator import LegacyTypedOperatorOperator as LegacyTypedOperatorOperator
+from geoengine_api_client.models.line_simplification import LineSimplification as LineSimplification
+from geoengine_api_client.models.line_simplification_algorithm import LineSimplificationAlgorithm as LineSimplificationAlgorithm
+from geoengine_api_client.models.line_simplification_parameters import LineSimplificationParameters as LineSimplificationParameters
 from geoengine_api_client.models.line_symbology import LineSymbology as LineSymbology
 from geoengine_api_client.models.linear_gradient import LinearGradient as LinearGradient
 from geoengine_api_client.models.link import Link as Link
 from geoengine_api_client.models.logarithmic_gradient import LogarithmicGradient as LogarithmicGradient
-from geoengine_api_client.models.max_aggregation import MaxAggregation as MaxAggregation
-from geoengine_api_client.models.mean_aggregation import MeanAggregation as MeanAggregation
+from geoengine_api_client.models.mean_raster_pixel_values_over_time import MeanRasterPixelValuesOverTime as MeanRasterPixelValuesOverTime
+from geoengine_api_client.models.mean_raster_pixel_values_over_time_parameters import MeanRasterPixelValuesOverTimeParameters as MeanRasterPixelValuesOverTimeParameters
+from geoengine_api_client.models.mean_raster_pixel_values_over_time_position import MeanRasterPixelValuesOverTimePosition as MeanRasterPixelValuesOverTimePosition
 from geoengine_api_client.models.measurement import Measurement as Measurement
 from geoengine_api_client.models.meta_data_definition import MetaDataDefinition as MetaDataDefinition
 from geoengine_api_client.models.meta_data_suggestion import MetaDataSuggestion as MetaDataSuggestion
-from geoengine_api_client.models.min_aggregation import MinAggregation as MinAggregation
 from geoengine_api_client.models.ml_model import MlModel as MlModel
 from geoengine_api_client.models.ml_model_input_no_data_handling import MlModelInputNoDataHandling as MlModelInputNoDataHandling
 from geoengine_api_client.models.ml_model_input_no_data_handling_variant import MlModelInputNoDataHandlingVariant as MlModelInputNoDataHandlingVariant
@@ -595,6 +699,14 @@ from geoengine_api_client.models.multiple_raster_or_single_vector_operator impor
 from geoengine_api_client.models.multiple_raster_or_single_vector_source import MultipleRasterOrSingleVectorSource as MultipleRasterOrSingleVectorSource
 from geoengine_api_client.models.multiple_raster_sources import MultipleRasterSources as MultipleRasterSources
 from geoengine_api_client.models.names import Names as Names
+from geoengine_api_client.models.neighborhood_aggregate import NeighborhoodAggregate as NeighborhoodAggregate
+from geoengine_api_client.models.neighborhood_aggregate_method import NeighborhoodAggregateMethod as NeighborhoodAggregateMethod
+from geoengine_api_client.models.neighborhood_aggregate_method_standard_deviation import NeighborhoodAggregateMethodStandardDeviation as NeighborhoodAggregateMethodStandardDeviation
+from geoengine_api_client.models.neighborhood_aggregate_method_sum import NeighborhoodAggregateMethodSum as NeighborhoodAggregateMethodSum
+from geoengine_api_client.models.neighborhood_aggregate_parameters import NeighborhoodAggregateParameters as NeighborhoodAggregateParameters
+from geoengine_api_client.models.neighborhood_kernel import NeighborhoodKernel as NeighborhoodKernel
+from geoengine_api_client.models.neighborhood_kernel_rectangle import NeighborhoodKernelRectangle as NeighborhoodKernelRectangle
+from geoengine_api_client.models.neighborhood_kernel_weights_matrix import NeighborhoodKernelWeightsMatrix as NeighborhoodKernelWeightsMatrix
 from geoengine_api_client.models.net_cdf_cf_data_provider_definition import NetCdfCfDataProviderDefinition as NetCdfCfDataProviderDefinition
 from geoengine_api_client.models.new_output_column import NewOutputColumn as NewOutputColumn
 from geoengine_api_client.models.number_param import NumberParam as NumberParam
@@ -617,19 +729,25 @@ from geoengine_api_client.models.ogr_source_time_format import OgrSourceTimeForm
 from geoengine_api_client.models.ogr_source_time_format_auto import OgrSourceTimeFormatAuto as OgrSourceTimeFormatAuto
 from geoengine_api_client.models.ogr_source_time_format_custom import OgrSourceTimeFormatCustom as OgrSourceTimeFormatCustom
 from geoengine_api_client.models.ogr_source_time_format_unix_time_stamp import OgrSourceTimeFormatUnixTimeStamp as OgrSourceTimeFormatUnixTimeStamp
+from geoengine_api_client.models.onnx import Onnx as Onnx
+from geoengine_api_client.models.onnx_parameters import OnnxParameters as OnnxParameters
 from geoengine_api_client.models.operator_quota import OperatorQuota as OperatorQuota
 from geoengine_api_client.models.order_by import OrderBy as OrderBy
 from geoengine_api_client.models.output_column import OutputColumn as OutputColumn
 from geoengine_api_client.models.palette_colorizer import PaletteColorizer as PaletteColorizer
 from geoengine_api_client.models.pangaea_data_provider_definition import PangaeaDataProviderDefinition as PangaeaDataProviderDefinition
-from geoengine_api_client.models.percentile_estimate_aggregation import PercentileEstimateAggregation as PercentileEstimateAggregation
 from geoengine_api_client.models.permission import Permission as Permission
 from geoengine_api_client.models.permission_listing import PermissionListing as PermissionListing
 from geoengine_api_client.models.permission_request import PermissionRequest as PermissionRequest
+from geoengine_api_client.models.pie_chart import PieChart as PieChart
+from geoengine_api_client.models.pie_chart_count_type import PieChartCountType as PieChartCountType
+from geoengine_api_client.models.pie_chart_parameters import PieChartParameters as PieChartParameters
 from geoengine_api_client.models.plot import Plot as Plot
 from geoengine_api_client.models.plot_operator import PlotOperator as PlotOperator
 from geoengine_api_client.models.plot_output_format import PlotOutputFormat as PlotOutputFormat
 from geoengine_api_client.models.plot_result_descriptor import PlotResultDescriptor as PlotResultDescriptor
+from geoengine_api_client.models.point_in_polygon_filter import PointInPolygonFilter as PointInPolygonFilter
+from geoengine_api_client.models.point_in_polygon_filter_source import PointInPolygonFilterSource as PointInPolygonFilterSource
 from geoengine_api_client.models.point_symbology import PointSymbology as PointSymbology
 from geoengine_api_client.models.polygon_symbology import PolygonSymbology as PolygonSymbology
 from geoengine_api_client.models.project import Project as Project
@@ -645,6 +763,7 @@ from geoengine_api_client.models.provider_capabilities import ProviderCapabiliti
 from geoengine_api_client.models.provider_layer_collection_id import ProviderLayerCollectionId as ProviderLayerCollectionId
 from geoengine_api_client.models.provider_layer_id import ProviderLayerId as ProviderLayerId
 from geoengine_api_client.models.quota import Quota as Quota
+from geoengine_api_client.models.radiance import Radiance as Radiance
 from geoengine_api_client.models.raster_band_descriptor import RasterBandDescriptor as RasterBandDescriptor
 from geoengine_api_client.models.raster_colorizer import RasterColorizer as RasterColorizer
 from geoengine_api_client.models.raster_data_type import RasterDataType as RasterDataType
@@ -653,6 +772,8 @@ from geoengine_api_client.models.raster_operator import RasterOperator as Raster
 from geoengine_api_client.models.raster_properties_entry_type import RasterPropertiesEntryType as RasterPropertiesEntryType
 from geoengine_api_client.models.raster_properties_key import RasterPropertiesKey as RasterPropertiesKey
 from geoengine_api_client.models.raster_result_descriptor import RasterResultDescriptor as RasterResultDescriptor
+from geoengine_api_client.models.raster_scaling import RasterScaling as RasterScaling
+from geoengine_api_client.models.raster_scaling_parameters import RasterScalingParameters as RasterScalingParameters
 from geoengine_api_client.models.raster_stacker import RasterStacker as RasterStacker
 from geoengine_api_client.models.raster_stacker_parameters import RasterStackerParameters as RasterStackerParameters
 from geoengine_api_client.models.raster_stream_websocket_result_type import RasterStreamWebsocketResultType as RasterStreamWebsocketResultType
@@ -662,17 +783,25 @@ from geoengine_api_client.models.raster_type_conversion import RasterTypeConvers
 from geoengine_api_client.models.raster_type_conversion_parameters import RasterTypeConversionParameters as RasterTypeConversionParameters
 from geoengine_api_client.models.raster_vector_join import RasterVectorJoin as RasterVectorJoin
 from geoengine_api_client.models.raster_vector_join_parameters import RasterVectorJoinParameters as RasterVectorJoinParameters
+from geoengine_api_client.models.rasterization import Rasterization as Rasterization
+from geoengine_api_client.models.rasterization_parameters import RasterizationParameters as RasterizationParameters
+from geoengine_api_client.models.reflectance import Reflectance as Reflectance
+from geoengine_api_client.models.reflectance_parameters import ReflectanceParameters as ReflectanceParameters
 from geoengine_api_client.models.regular import Regular as Regular
 from geoengine_api_client.models.regular_time_dimension import RegularTimeDimension as RegularTimeDimension
 from geoengine_api_client.models.rename import Rename as Rename
 from geoengine_api_client.models.rename_bands import RenameBands as RenameBands
 from geoengine_api_client.models.reprojection import Reprojection as Reprojection
 from geoengine_api_client.models.reprojection_parameters import ReprojectionParameters as ReprojectionParameters
-from geoengine_api_client.models.resolution import Resolution as Resolution
 from geoengine_api_client.models.resource import Resource as Resource
 from geoengine_api_client.models.role import Role as Role
 from geoengine_api_client.models.role_description import RoleDescription as RoleDescription
 from geoengine_api_client.models.st_rectangle import STRectangle as STRectangle
+from geoengine_api_client.models.scaling_mode import ScalingMode as ScalingMode
+from geoengine_api_client.models.scaling_mode_mul_slope_add_offset import ScalingModeMulSlopeAddOffset as ScalingModeMulSlopeAddOffset
+from geoengine_api_client.models.scaling_mode_sub_offset_div_slope import ScalingModeSubOffsetDivSlope as ScalingModeSubOffsetDivSlope
+from geoengine_api_client.models.scatter_plot import ScatterPlot as ScatterPlot
+from geoengine_api_client.models.scatter_plot_parameters import ScatterPlotParameters as ScatterPlotParameters
 from geoengine_api_client.models.search_capabilities import SearchCapabilities as SearchCapabilities
 from geoengine_api_client.models.search_type import SearchType as SearchType
 from geoengine_api_client.models.search_types import SearchTypes as SearchTypes
@@ -683,8 +812,11 @@ from geoengine_api_client.models.single_raster_or_vector_operator import SingleR
 from geoengine_api_client.models.single_raster_or_vector_source import SingleRasterOrVectorSource as SingleRasterOrVectorSource
 from geoengine_api_client.models.single_raster_source import SingleRasterSource as SingleRasterSource
 from geoengine_api_client.models.single_vector_multiple_raster_sources import SingleVectorMultipleRasterSources as SingleVectorMultipleRasterSources
-from geoengine_api_client.models.single_vector_or_raster_source import SingleVectorOrRasterSource as SingleVectorOrRasterSource
 from geoengine_api_client.models.single_vector_source import SingleVectorSource as SingleVectorSource
+from geoengine_api_client.models.slope_offset_selection import SlopeOffsetSelection as SlopeOffsetSelection
+from geoengine_api_client.models.slope_offset_selection_auto import SlopeOffsetSelectionAuto as SlopeOffsetSelectionAuto
+from geoengine_api_client.models.slope_offset_selection_constant import SlopeOffsetSelectionConstant as SlopeOffsetSelectionConstant
+from geoengine_api_client.models.slope_offset_selection_metadata_key import SlopeOffsetSelectionMetadataKey as SlopeOffsetSelectionMetadataKey
 from geoengine_api_client.models.spatial_bounds_derive import SpatialBoundsDerive as SpatialBoundsDerive
 from geoengine_api_client.models.spatial_bounds_derive_bounds import SpatialBoundsDeriveBounds as SpatialBoundsDeriveBounds
 from geoengine_api_client.models.spatial_bounds_derive_derive import SpatialBoundsDeriveDerive as SpatialBoundsDeriveDerive
@@ -706,11 +838,11 @@ from geoengine_api_client.models.static_color import StaticColor as StaticColor
 from geoengine_api_client.models.static_number import StaticNumber as StaticNumber
 from geoengine_api_client.models.statistics import Statistics as Statistics
 from geoengine_api_client.models.statistics_parameters import StatisticsParameters as StatisticsParameters
+from geoengine_api_client.models.string_or_number_range import StringOrNumberRange as StringOrNumberRange
 from geoengine_api_client.models.stroke_param import StrokeParam as StrokeParam
 from geoengine_api_client.models.style import Style as Style
 from geoengine_api_client.models.suffix import Suffix as Suffix
 from geoengine_api_client.models.suggest_meta_data import SuggestMetaData as SuggestMetaData
-from geoengine_api_client.models.sum_aggregation import SumAggregation as SumAggregation
 from geoengine_api_client.models.symbology import Symbology as Symbology
 from geoengine_api_client.models.task_filter import TaskFilter as TaskFilter
 from geoengine_api_client.models.task_response import TaskResponse as TaskResponse
@@ -720,6 +852,8 @@ from geoengine_api_client.models.task_status_completed import TaskStatusComplete
 from geoengine_api_client.models.task_status_failed import TaskStatusFailed as TaskStatusFailed
 from geoengine_api_client.models.task_status_running import TaskStatusRunning as TaskStatusRunning
 from geoengine_api_client.models.task_status_with_id import TaskStatusWithId as TaskStatusWithId
+from geoengine_api_client.models.temperature import Temperature as Temperature
+from geoengine_api_client.models.temperature_parameters import TemperatureParameters as TemperatureParameters
 from geoengine_api_client.models.temporal_aggregation_method import TemporalAggregationMethod as TemporalAggregationMethod
 from geoengine_api_client.models.temporal_extent import TemporalExtent as TemporalExtent
 from geoengine_api_client.models.temporal_raster_aggregation import TemporalRasterAggregation as TemporalRasterAggregation
@@ -744,7 +878,13 @@ from geoengine_api_client.models.time_descriptor import TimeDescriptor as TimeDe
 from geoengine_api_client.models.time_dimension import TimeDimension as TimeDimension
 from geoengine_api_client.models.time_granularity import TimeGranularity as TimeGranularity
 from geoengine_api_client.models.time_interval import TimeInterval as TimeInterval
+from geoengine_api_client.models.time_projection import TimeProjection as TimeProjection
+from geoengine_api_client.models.time_projection_parameters import TimeProjectionParameters as TimeProjectionParameters
 from geoengine_api_client.models.time_reference import TimeReference as TimeReference
+from geoengine_api_client.models.time_shift import TimeShift as TimeShift
+from geoengine_api_client.models.time_shift_parameters import TimeShiftParameters as TimeShiftParameters
+from geoengine_api_client.models.time_shift_parameters_absolute import TimeShiftParametersAbsolute as TimeShiftParametersAbsolute
+from geoengine_api_client.models.time_shift_parameters_relative import TimeShiftParametersRelative as TimeShiftParametersRelative
 from geoengine_api_client.models.time_step import TimeStep as TimeStep
 from geoengine_api_client.models.typed_data_provider_definition import TypedDataProviderDefinition as TypedDataProviderDefinition
 from geoengine_api_client.models.typed_geometry import TypedGeometry as TypedGeometry
@@ -780,8 +920,14 @@ from geoengine_api_client.models.vector_column_info import VectorColumnInfo as V
 from geoengine_api_client.models.vector_data_type import VectorDataType as VectorDataType
 from geoengine_api_client.models.vector_expression import VectorExpression as VectorExpression
 from geoengine_api_client.models.vector_expression_parameters import VectorExpressionParameters as VectorExpressionParameters
+from geoengine_api_client.models.vector_join import VectorJoin as VectorJoin
+from geoengine_api_client.models.vector_join_parameters import VectorJoinParameters as VectorJoinParameters
+from geoengine_api_client.models.vector_join_sources import VectorJoinSources as VectorJoinSources
+from geoengine_api_client.models.vector_join_type_equi_geo_to_data import VectorJoinTypeEquiGeoToData as VectorJoinTypeEquiGeoToData
 from geoengine_api_client.models.vector_operator import VectorOperator as VectorOperator
 from geoengine_api_client.models.vector_result_descriptor import VectorResultDescriptor as VectorResultDescriptor
+from geoengine_api_client.models.visual_point_clustering import VisualPointClustering as VisualPointClustering
+from geoengine_api_client.models.visual_point_clustering_parameters import VisualPointClusteringParameters as VisualPointClusteringParameters
 from geoengine_api_client.models.volume import Volume as Volume
 from geoengine_api_client.models.volume_file_layers_response import VolumeFileLayersResponse as VolumeFileLayersResponse
 from geoengine_api_client.models.wcs_request import WcsRequest as WcsRequest

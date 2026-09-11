@@ -116,6 +116,7 @@ pub struct UnitlessMeasurement {}
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 pub struct ContinuousMeasurement {
     pub measurement: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub unit: Option<String>,
 }
 
@@ -370,6 +371,12 @@ pub enum SpatialBoundsDerive {
     Derive(SpatialBoundsDeriveDerive),
     Bounds(SpatialBoundsDeriveBounds),
     None(SpatialBoundsDeriveNone),
+}
+
+impl SpatialBoundsDerive {
+    pub fn is_none(&self) -> bool {
+        matches!(self, SpatialBoundsDerive::None(_))
+    }
 }
 
 impl Default for SpatialBoundsDerive {

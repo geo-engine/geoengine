@@ -35,14 +35,14 @@ class TestAggregation(unittest.TestCase):
         model = Aggregation()
         if include_optional:
             return Aggregation(
-                ignore_no_data = True,
                 type = 'min',
+                ignore_no_data = True,
                 percentile = 1.337
             )
         else:
             return Aggregation(
-                ignore_no_data = True,
                 type = 'min',
+                ignore_no_data = True,
                 percentile = 1.337,
         )
         """

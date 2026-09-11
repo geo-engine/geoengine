@@ -23,7 +23,7 @@ from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-RASTEROPERATOR_ONE_OF_SCHEMAS = ["BandFilter", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "RasterStacker", "RasterTypeConversion", "Reprojection", "TemporalRasterAggregation"]
+RASTEROPERATOR_ONE_OF_SCHEMAS = ["BandFilter", "BandNeighborhoodAggregate", "BandwiseExpression", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "NeighborhoodAggregate", "Onnx", "Radiance", "RasterScaling", "RasterStacker", "RasterTypeConversion", "Rasterization", "Reflectance", "Reprojection", "Temperature", "TemporalRasterAggregation", "TimeShift"]
 
 class RasterOperator(BaseModel):
     """
@@ -31,26 +31,46 @@ class RasterOperator(BaseModel):
     """
     # data type: BandFilter
     oneof_schema_1_validator: Optional[BandFilter] = None
+    # data type: BandNeighborhoodAggregate
+    oneof_schema_2_validator: Optional[BandNeighborhoodAggregate] = None
+    # data type: BandwiseExpression
+    oneof_schema_3_validator: Optional[BandwiseExpression] = None
     # data type: Downsampling
-    oneof_schema_2_validator: Optional[Downsampling] = None
+    oneof_schema_4_validator: Optional[Downsampling] = None
     # data type: Expression
-    oneof_schema_3_validator: Optional[Expression] = None
+    oneof_schema_5_validator: Optional[Expression] = None
     # data type: GdalSource
-    oneof_schema_4_validator: Optional[GdalSource] = None
+    oneof_schema_6_validator: Optional[GdalSource] = None
     # data type: Interpolation
-    oneof_schema_5_validator: Optional[Interpolation] = None
+    oneof_schema_7_validator: Optional[Interpolation] = None
     # data type: MultiBandGdalSource
-    oneof_schema_6_validator: Optional[MultiBandGdalSource] = None
+    oneof_schema_8_validator: Optional[MultiBandGdalSource] = None
+    # data type: NeighborhoodAggregate
+    oneof_schema_9_validator: Optional[NeighborhoodAggregate] = None
+    # data type: Onnx
+    oneof_schema_10_validator: Optional[Onnx] = None
+    # data type: RasterScaling
+    oneof_schema_11_validator: Optional[RasterScaling] = None
     # data type: RasterStacker
-    oneof_schema_7_validator: Optional[RasterStacker] = None
+    oneof_schema_12_validator: Optional[RasterStacker] = None
     # data type: RasterTypeConversion
-    oneof_schema_8_validator: Optional[RasterTypeConversion] = None
+    oneof_schema_13_validator: Optional[RasterTypeConversion] = None
+    # data type: Rasterization
+    oneof_schema_14_validator: Optional[Rasterization] = None
     # data type: Reprojection
-    oneof_schema_9_validator: Optional[Reprojection] = None
+    oneof_schema_15_validator: Optional[Reprojection] = None
+    # data type: Reflectance
+    oneof_schema_16_validator: Optional[Reflectance] = None
+    # data type: Radiance
+    oneof_schema_17_validator: Optional[Radiance] = None
     # data type: TemporalRasterAggregation
-    oneof_schema_10_validator: Optional[TemporalRasterAggregation] = None
-    actual_instance: Optional[Union[BandFilter, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation]] = None
-    one_of_schemas: Set[str] = { "BandFilter", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "RasterStacker", "RasterTypeConversion", "Reprojection", "TemporalRasterAggregation" }
+    oneof_schema_18_validator: Optional[TemporalRasterAggregation] = None
+    # data type: Temperature
+    oneof_schema_19_validator: Optional[Temperature] = None
+    # data type: TimeShift
+    oneof_schema_20_validator: Optional[TimeShift] = None
+    actual_instance: Optional[Union[BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift]] = None
+    one_of_schemas: Set[str] = { "BandFilter", "BandNeighborhoodAggregate", "BandwiseExpression", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "NeighborhoodAggregate", "Onnx", "Radiance", "RasterScaling", "RasterStacker", "RasterTypeConversion", "Rasterization", "Reflectance", "Reprojection", "Temperature", "TemporalRasterAggregation", "TimeShift" }
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -81,6 +101,16 @@ class RasterOperator(BaseModel):
             error_messages.append(f"Error! Input type `{type(v)}` is not `BandFilter`")
         else:
             match += 1
+        # validate data type: BandNeighborhoodAggregate
+        if not isinstance(v, BandNeighborhoodAggregate):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `BandNeighborhoodAggregate`")
+        else:
+            match += 1
+        # validate data type: BandwiseExpression
+        if not isinstance(v, BandwiseExpression):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `BandwiseExpression`")
+        else:
+            match += 1
         # validate data type: Downsampling
         if not isinstance(v, Downsampling):
             error_messages.append(f"Error! Input type `{type(v)}` is not `Downsampling`")
@@ -106,6 +136,21 @@ class RasterOperator(BaseModel):
             error_messages.append(f"Error! Input type `{type(v)}` is not `MultiBandGdalSource`")
         else:
             match += 1
+        # validate data type: NeighborhoodAggregate
+        if not isinstance(v, NeighborhoodAggregate):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `NeighborhoodAggregate`")
+        else:
+            match += 1
+        # validate data type: Onnx
+        if not isinstance(v, Onnx):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `Onnx`")
+        else:
+            match += 1
+        # validate data type: RasterScaling
+        if not isinstance(v, RasterScaling):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `RasterScaling`")
+        else:
+            match += 1
         # validate data type: RasterStacker
         if not isinstance(v, RasterStacker):
             error_messages.append(f"Error! Input type `{type(v)}` is not `RasterStacker`")
@@ -116,9 +161,24 @@ class RasterOperator(BaseModel):
             error_messages.append(f"Error! Input type `{type(v)}` is not `RasterTypeConversion`")
         else:
             match += 1
+        # validate data type: Rasterization
+        if not isinstance(v, Rasterization):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `Rasterization`")
+        else:
+            match += 1
         # validate data type: Reprojection
         if not isinstance(v, Reprojection):
             error_messages.append(f"Error! Input type `{type(v)}` is not `Reprojection`")
+        else:
+            match += 1
+        # validate data type: Reflectance
+        if not isinstance(v, Reflectance):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `Reflectance`")
+        else:
+            match += 1
+        # validate data type: Radiance
+        if not isinstance(v, Radiance):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `Radiance`")
         else:
             match += 1
         # validate data type: TemporalRasterAggregation
@@ -126,12 +186,22 @@ class RasterOperator(BaseModel):
             error_messages.append(f"Error! Input type `{type(v)}` is not `TemporalRasterAggregation`")
         else:
             match += 1
+        # validate data type: Temperature
+        if not isinstance(v, Temperature):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `Temperature`")
+        else:
+            match += 1
+        # validate data type: TimeShift
+        if not isinstance(v, TimeShift):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `TimeShift`")
+        else:
+            match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in RasterOperator with oneOf schemas: BandFilter, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in RasterOperator with oneOf schemas: BandFilter, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -154,6 +224,16 @@ class RasterOperator(BaseModel):
         # check if data type is `BandFilter`
         if _data_type == "BandFilter":
             instance.actual_instance = BandFilter.from_json(json_str)
+            return instance
+
+        # check if data type is `BandNeighborhoodAggregate`
+        if _data_type == "BandNeighborhoodAggregate":
+            instance.actual_instance = BandNeighborhoodAggregate.from_json(json_str)
+            return instance
+
+        # check if data type is `BandwiseExpression`
+        if _data_type == "BandwiseExpression":
+            instance.actual_instance = BandwiseExpression.from_json(json_str)
             return instance
 
         # check if data type is `Downsampling`
@@ -181,6 +261,26 @@ class RasterOperator(BaseModel):
             instance.actual_instance = MultiBandGdalSource.from_json(json_str)
             return instance
 
+        # check if data type is `NeighborhoodAggregate`
+        if _data_type == "NeighborhoodAggregate":
+            instance.actual_instance = NeighborhoodAggregate.from_json(json_str)
+            return instance
+
+        # check if data type is `Onnx`
+        if _data_type == "Onnx":
+            instance.actual_instance = Onnx.from_json(json_str)
+            return instance
+
+        # check if data type is `Radiance`
+        if _data_type == "Radiance":
+            instance.actual_instance = Radiance.from_json(json_str)
+            return instance
+
+        # check if data type is `RasterScaling`
+        if _data_type == "RasterScaling":
+            instance.actual_instance = RasterScaling.from_json(json_str)
+            return instance
+
         # check if data type is `RasterStacker`
         if _data_type == "RasterStacker":
             instance.actual_instance = RasterStacker.from_json(json_str)
@@ -191,9 +291,24 @@ class RasterOperator(BaseModel):
             instance.actual_instance = RasterTypeConversion.from_json(json_str)
             return instance
 
+        # check if data type is `Rasterization`
+        if _data_type == "Rasterization":
+            instance.actual_instance = Rasterization.from_json(json_str)
+            return instance
+
+        # check if data type is `Reflectance`
+        if _data_type == "Reflectance":
+            instance.actual_instance = Reflectance.from_json(json_str)
+            return instance
+
         # check if data type is `Reprojection`
         if _data_type == "Reprojection":
             instance.actual_instance = Reprojection.from_json(json_str)
+            return instance
+
+        # check if data type is `Temperature`
+        if _data_type == "Temperature":
+            instance.actual_instance = Temperature.from_json(json_str)
             return instance
 
         # check if data type is `TemporalRasterAggregation`
@@ -201,9 +316,26 @@ class RasterOperator(BaseModel):
             instance.actual_instance = TemporalRasterAggregation.from_json(json_str)
             return instance
 
+        # check if data type is `TimeShift`
+        if _data_type == "TimeShift":
+            instance.actual_instance = TimeShift.from_json(json_str)
+            return instance
+
         # deserialize data into BandFilter
         try:
             instance.actual_instance = BandFilter.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into BandNeighborhoodAggregate
+        try:
+            instance.actual_instance = BandNeighborhoodAggregate.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into BandwiseExpression
+        try:
+            instance.actual_instance = BandwiseExpression.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
@@ -237,6 +369,24 @@ class RasterOperator(BaseModel):
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
+        # deserialize data into NeighborhoodAggregate
+        try:
+            instance.actual_instance = NeighborhoodAggregate.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into Onnx
+        try:
+            instance.actual_instance = Onnx.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into RasterScaling
+        try:
+            instance.actual_instance = RasterScaling.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
         # deserialize data into RasterStacker
         try:
             instance.actual_instance = RasterStacker.from_json(json_str)
@@ -249,9 +399,27 @@ class RasterOperator(BaseModel):
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
+        # deserialize data into Rasterization
+        try:
+            instance.actual_instance = Rasterization.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
         # deserialize data into Reprojection
         try:
             instance.actual_instance = Reprojection.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into Reflectance
+        try:
+            instance.actual_instance = Reflectance.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into Radiance
+        try:
+            instance.actual_instance = Radiance.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
@@ -261,13 +429,25 @@ class RasterOperator(BaseModel):
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
+        # deserialize data into Temperature
+        try:
+            instance.actual_instance = Temperature.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into TimeShift
+        try:
+            instance.actual_instance = TimeShift.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into RasterOperator with oneOf schemas: BandFilter, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into RasterOperator with oneOf schemas: BandFilter, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -281,7 +461,7 @@ class RasterOperator(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], BandFilter, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, RasterStacker, RasterTypeConversion, Reprojection, TemporalRasterAggregation]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None
@@ -297,13 +477,23 @@ class RasterOperator(BaseModel):
         return pprint.pformat(self.model_dump())
 
 from geoengine_api_client.models.band_filter import BandFilter
+from geoengine_api_client.models.band_neighborhood_aggregate import BandNeighborhoodAggregate
+from geoengine_api_client.models.bandwise_expression import BandwiseExpression
 from geoengine_api_client.models.downsampling import Downsampling
 from geoengine_api_client.models.expression import Expression
 from geoengine_api_client.models.interpolation import Interpolation
+from geoengine_api_client.models.neighborhood_aggregate import NeighborhoodAggregate
+from geoengine_api_client.models.onnx import Onnx
+from geoengine_api_client.models.radiance import Radiance
+from geoengine_api_client.models.raster_scaling import RasterScaling
 from geoengine_api_client.models.raster_stacker import RasterStacker
 from geoengine_api_client.models.raster_type_conversion import RasterTypeConversion
+from geoengine_api_client.models.rasterization import Rasterization
+from geoengine_api_client.models.reflectance import Reflectance
 from geoengine_api_client.models.reprojection import Reprojection
+from geoengine_api_client.models.temperature import Temperature
 from geoengine_api_client.models.temporal_raster_aggregation import TemporalRasterAggregation
+from geoengine_api_client.models.time_shift import TimeShift
 # TODO: Rewrite to not use raise_errors
 RasterOperator.model_rebuild(raise_errors=False)
 
