@@ -605,9 +605,8 @@ class GdalMultiBandMetaData:
         bands: list[RasterBandDescriptor],
         data_type: RasterDataType,
         spatial_reference: str,
+        grid_or_geo_transform: SpatialGridDescriptor | GeoTransform,
         time: TimeDescriptor | None = None,
-        spatial_grid: SpatialGridDescriptor | None = None,
-        geo_transform: GeoTransform | None = None,
     ) -> None:
         """
         Create a `GdalMultiBandMetaData` object.
@@ -623,12 +622,14 @@ class GdalMultiBandMetaData:
             time = TimeDescriptor(
                 RegularTimeDimension(step=TimeStep(1, TimeStepGranularity.DAYS)),
             )
-        if spatial_grid is None:
-            if geo_transform is None:
-                geo_transform = GeoTransform(x_min=0, y_max=0, x_pixel_size=1, y_pixel_size=-1)
+        if isinstance(grid_or_geo_transform, SpatialGridDescriptor):
+            self.spatial_grid = grid_or_geo_transform
+        else:
+            if not isinstance(grid_or_geo_transform, GeoTransform):
+                raise TypeError("grid_or_geo_transform must be a SpatialGridDescriptor or GeoTransform")
             spatial_grid = SpatialGridDescriptor(
                 SpatialGridDefinition(
-                    geo_transform=geo_transform,
+                    geo_transform=grid_or_geo_transform,
                     grid_bounds=GridBoundingBox2D(
                         top_left_idx=GridIdx2D(x_idx=0, y_idx=0),
                         bottom_right_idx=GridIdx2D(x_idx=1, y_idx=1),
@@ -636,11 +637,11 @@ class GdalMultiBandMetaData:
                 ),
                 descriptor=geoengine_api_client.SpatialGridDescriptorState.SOURCE,
             )
+            self.spatial_grid = spatial_grid
         self.bands = bands
         self.data_type = data_type
         self.spatial_reference = spatial_reference
         self.time = time
-        self.spatial_grid = spatial_grid
 
     def to_api_dict(self) -> geoengine_api_client.MetaDataDefinition:
         """Converts the metadata to a `MetaDataDefinition` for the API"""
@@ -764,13 +765,20 @@ def add_multiband_gdal_source(
         name=name,
     )
 
+    grid_or_geo_transform: SpatialGridDescriptor | GeoTransform
+    if spatial_grid is not None:
+        grid_or_geo_transform = spatial_grid
+    elif files:
+        grid_or_geo_transform = files[0].geo_transform
+    else:
+        raise ValueError("Either spatial_grid or files must be provided")
+
     meta_data = GdalMultiBandMetaData(
         bands=bands,
         data_type=data_type,
         spatial_reference=spatial_reference,
         time=time,
-        spatial_grid=spatial_grid,
-        geo_transform=files[0].geo_transform if files else None,
+        grid_or_geo_transform=grid_or_geo_transform,
     ).to_api_dict()
 
     dataset_name = add_dataset(
