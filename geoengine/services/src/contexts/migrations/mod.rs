@@ -13,7 +13,8 @@ pub use crate::contexts::migrations::{
     migration_0025_time_descriptor::Migration0025TimeDescriptor,
     migration_0027_tile_z_index::Migration0027TileZIndex,
     migration_0028_stac_provider::Migration0028StacProvider,
-    migration_0029_stac_provider_band_name::Migration0029StacProviderBandName,
+    migration_0029_wildlive_optional_fields::Migration0029WildliveOptionalFields,
+    migration_0030_stac_provider_band_name::Migration0030StacProviderBandName,
 };
 pub use database_migration::{
     DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
@@ -34,7 +35,8 @@ mod migration_0025_time_descriptor;
 mod migration_0026_gdal_tiles;
 mod migration_0027_tile_z_index;
 mod migration_0028_stac_provider;
-mod migration_0029_stac_provider_band_name;
+mod migration_0029_wildlive_optional_fields;
+mod migration_0030_stac_provider_band_name;
 
 #[cfg(test)]
 mod schema_info;
@@ -69,7 +71,8 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0026GdalTiles),
         Box::new(Migration0027TileZIndex),
         Box::new(Migration0028StacProvider),
-        Box::new(Migration0029StacProviderBandName),
+        Box::new(Migration0029WildliveOptionalFields),
+        Box::new(Migration0030StacProviderBandName),
     ]
 }
 
