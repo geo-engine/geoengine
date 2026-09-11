@@ -1,4 +1,4 @@
-import {Component, inject, resource, ChangeDetectionStrategy} from '@angular/core';
+import {ChangeDetectionStrategy, Component, inject, input, resource} from '@angular/core';
 import {User} from '../user.model';
 import {Router} from '@angular/router';
 import {UserService} from '@geoengine/common';
@@ -35,6 +35,13 @@ export class OidcComponent {
     private readonly userService = inject(UserService);
     private readonly router = inject(Router);
 
+    /** Whether the additional account information cards are shown. */
+    readonly showSession = input(true);
+    readonly showQuota = input(true);
+    readonly showRoles = input(true);
+    /** Whether login should redirect directly to the OIDC provider. */
+    readonly directLogin = input(false);
+
     readonly user = resource({
         defaultValue: undefined,
         loader: async (): Promise<User | undefined> => {
@@ -47,6 +54,12 @@ export class OidcComponent {
     });
 
     async login(): Promise<void> {
+        if (this.directLogin()) {
+            const oidcRequest = await this.userService.oidcInit(this.router.url);
+            window.location.href = oidcRequest.url;
+            return;
+        }
+
         // Redirect to /signin with returnUrl pointing back here
         // LoginComponent will handle OIDC init and callback
         await this.router.navigate(['/signin'], {

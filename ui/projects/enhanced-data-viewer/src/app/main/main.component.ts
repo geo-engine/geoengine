@@ -63,6 +63,7 @@ export class MainComponent {
     readonly topToolbarHeight = signal(64);
 
     readonly sessionToken = toSignal(this.userService.getSessionTokenStream());
+    readonly isGuestUser = toSignal(this.userService.isGuestUserStream(), {initialValue: true});
 
     readonly middleContainerHeight = computed(() => this.totalHeight() - this.topToolbarHeight());
 
