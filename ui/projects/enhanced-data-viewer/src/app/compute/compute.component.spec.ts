@@ -68,6 +68,11 @@ describe('ComputeComponent', () => {
                     provide: MapService,
                     useValue: {
                         getLayerOverlay: (): Signal<OlLayerVector<OlSourceVector<OlFeature<OlGeometry>>> | undefined> => overlayLayer,
+                        getView: (): {getProjection: () => {getCode: () => string}} => ({
+                            getProjection: (): {getCode: () => string} => ({
+                                getCode: (): string => 'EPSG:4326',
+                            }),
+                        }),
                     },
                 },
                 {provide: NotificationService, useValue: {error: vi.fn()}},
@@ -91,7 +96,10 @@ describe('ComputeComponent', () => {
 
         expect(component.selectedRasterLayer.value()).toEqual({dataConnectorId: 'provider-id', layerId: 'layer-id'});
         expect(component.selectedBand()).toBe('red');
-        expect(component.computationBbox()).toEqual([0, 0, 1, 1]);
+        expect(component.computationBbox()).toEqual({
+            bbox: expect.objectContaining({xmin: 0, ymin: 0, xmax: 1, ymax: 1}),
+            spatialReference: expect.objectContaining({srsString: 'EPSG:4326'}),
+        });
         expect(component.cannotComputeHistogram()).toBe(false);
 
         const host = fixture.nativeElement as HTMLElement;

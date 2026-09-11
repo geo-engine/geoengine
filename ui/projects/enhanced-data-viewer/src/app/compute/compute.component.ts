@@ -10,7 +10,7 @@ import {
     resource,
     signal,
 } from '@angular/core';
-import {BackendService, CoreModule, LoadingState, MapService, ProjectService, UUID} from '@geoengine/core';
+import {BackendService, CoreModule, MapService, ProjectService, UUID} from '@geoengine/core';
 import {A11yModule} from '@angular/cdk/a11y';
 import {MatButtonModule} from '@angular/material/button';
 import {MatFormFieldModule} from '@angular/material/form-field';
@@ -194,7 +194,6 @@ export class ComputeComponent {
         this.computationBbox(); // reset the computation when the bounding box changes
         return undefined;
     });
-    readonly defaultLoadingState = LoadingState.LOADING;
 
     constructor() {
         let resizeObserver: ResizeObserver | undefined;
