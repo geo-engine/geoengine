@@ -127,7 +127,10 @@ trait EvictionStrategy: Send + Sync + 'static {
     fn record_access(&mut self, key: &Arc<CacheKey>, size: usize, cache_hint: CacheHint);
     fn record_removal(&mut self, key: &Arc<CacheKey>);
 
-    fn record_hit(strategy: Arc<RwLock<Self>>, key: &CacheKey) -> impl std::future::Future<Output = ()> + Send;
+    fn record_hit(
+        strategy: Arc<RwLock<Self>>,
+        key: &CacheKey,
+    ) -> impl std::future::Future<Output = ()> + Send;
 
     fn capacity(&self) -> usize;
 
@@ -463,7 +466,9 @@ mod eviction_strategy_tests {
         strategy.record_access(&key_a_arc, 40, expired_hint());
         strategy.record_access(&key_b_arc, 60, CacheHint::max_duration());
 
-        let plan = strategy.plan_eviction(100, 50, |k| k.as_ref() == &key_a).unwrap();
+        let plan = strategy
+            .plan_eviction(100, 50, |k| k.as_ref() == &key_a)
+            .unwrap();
 
         assert_eq!(plan.keys_to_remove, vec![key_a_arc, key_b_arc]);
         assert_eq!(plan.freed_bytes, 60);
@@ -504,7 +509,9 @@ mod eviction_strategy_tests {
         LruEvictionStrategy::record_hit(strategy_arc.clone(), &key_c).await;
 
         let strategy = strategy_arc.read().await;
-        let plan = strategy.plan_eviction(100, 20, |k| k.as_ref() == &key_a).unwrap();
+        let plan = strategy
+            .plan_eviction(100, 20, |k| k.as_ref() == &key_a)
+            .unwrap();
 
         assert_eq!(plan.keys_to_remove, vec![key_a_arc, key_b_arc]);
         assert_eq!(plan.freed_bytes, 30);
@@ -650,80 +657,75 @@ pub enum TypedCompressedRasterTile2D {
 
 impl StorageFormat for TypedCompressedRasterTile2D {
     async fn store(tile: TypedRasterTile2D) -> Result<Self> {
-        tokio::task::spawn_blocking(move || {
-            match tile {
-                TypedRasterTile2D::I8(tile) => Ok(TypedCompressedRasterTile2D::I8(
-                    CompressedRasterTile2D::compress_tile(tile),
-                )),
-                TypedRasterTile2D::I16(tile) => Ok(TypedCompressedRasterTile2D::I16(
-                    CompressedRasterTile2D::compress_tile(tile),
-                )),
-                TypedRasterTile2D::I32(tile) => Ok(TypedCompressedRasterTile2D::I32(
-                    CompressedRasterTile2D::compress_tile(tile),
-                )),
-                TypedRasterTile2D::I64(tile) => Ok(TypedCompressedRasterTile2D::I64(
-                    CompressedRasterTile2D::compress_tile(tile),
-                )),
-                TypedRasterTile2D::U8(tile) => Ok(TypedCompressedRasterTile2D::U8(
-                    CompressedRasterTile2D::compress_tile(tile),
-                )),
-                TypedRasterTile2D::U16(tile) => Ok(TypedCompressedRasterTile2D::U16(
-                    CompressedRasterTile2D::compress_tile(tile),
-                )),
-                TypedRasterTile2D::U32(tile) => Ok(TypedCompressedRasterTile2D::U32(
-                    CompressedRasterTile2D::compress_tile(tile),
-                )),
-                TypedRasterTile2D::U64(tile) => Ok(TypedCompressedRasterTile2D::U64(
-                    CompressedRasterTile2D::compress_tile(tile),
-                )),
-                TypedRasterTile2D::F32(tile) => Ok(TypedCompressedRasterTile2D::F32(
-                    CompressedRasterTile2D::compress_tile(tile),
-                )),
-                TypedRasterTile2D::F64(tile) => Ok(TypedCompressedRasterTile2D::F64(
-                    CompressedRasterTile2D::compress_tile(tile),
-                )),
-            }
+        tokio::task::spawn_blocking(move || match tile {
+            TypedRasterTile2D::I8(tile) => Ok(TypedCompressedRasterTile2D::I8(
+                CompressedRasterTile2D::compress_tile(tile),
+            )),
+            TypedRasterTile2D::I16(tile) => Ok(TypedCompressedRasterTile2D::I16(
+                CompressedRasterTile2D::compress_tile(tile),
+            )),
+            TypedRasterTile2D::I32(tile) => Ok(TypedCompressedRasterTile2D::I32(
+                CompressedRasterTile2D::compress_tile(tile),
+            )),
+            TypedRasterTile2D::I64(tile) => Ok(TypedCompressedRasterTile2D::I64(
+                CompressedRasterTile2D::compress_tile(tile),
+            )),
+            TypedRasterTile2D::U8(tile) => Ok(TypedCompressedRasterTile2D::U8(
+                CompressedRasterTile2D::compress_tile(tile),
+            )),
+            TypedRasterTile2D::U16(tile) => Ok(TypedCompressedRasterTile2D::U16(
+                CompressedRasterTile2D::compress_tile(tile),
+            )),
+            TypedRasterTile2D::U32(tile) => Ok(TypedCompressedRasterTile2D::U32(
+                CompressedRasterTile2D::compress_tile(tile),
+            )),
+            TypedRasterTile2D::U64(tile) => Ok(TypedCompressedRasterTile2D::U64(
+                CompressedRasterTile2D::compress_tile(tile),
+            )),
+            TypedRasterTile2D::F32(tile) => Ok(TypedCompressedRasterTile2D::F32(
+                CompressedRasterTile2D::compress_tile(tile),
+            )),
+            TypedRasterTile2D::F64(tile) => Ok(TypedCompressedRasterTile2D::F64(
+                CompressedRasterTile2D::compress_tile(tile),
+            )),
         })
         .await
         .map_err(|source| CacheError::CouldNotRunCompressionTask { source })?
     }
 
-
     async fn load(&self) -> Result<TypedRasterTile2D> {
         let compressed = self.clone();
-        tokio::task::spawn_blocking(move || {
-            match compressed {
-                TypedCompressedRasterTile2D::I8(compressed) => Ok(TypedRasterTile2D::I8(
-                    CompressedRasterTile2D::decompress_tile(&compressed)?,
-                )),
-                TypedCompressedRasterTile2D::I16(compressed) => Ok(TypedRasterTile2D::I16(
-                    CompressedRasterTile2D::decompress_tile(&compressed)?,
-                )),
-                TypedCompressedRasterTile2D::I32(compressed) => Ok(TypedRasterTile2D::I32(
-                    CompressedRasterTile2D::decompress_tile(&compressed)?,
-                )),
-                TypedCompressedRasterTile2D::I64(compressed) => Ok(TypedRasterTile2D::I64(
-                    CompressedRasterTile2D::decompress_tile(&compressed)?,
-                )),
-                TypedCompressedRasterTile2D::U8(compressed) => Ok(TypedRasterTile2D::U8(
-                    CompressedRasterTile2D::decompress_tile(&compressed)?,
-                )),
-                TypedCompressedRasterTile2D::U16(compressed) => Ok(TypedRasterTile2D::U16(
-                    CompressedRasterTile2D::decompress_tile(&compressed)?,
-                )),
-                TypedCompressedRasterTile2D::U32(compressed) => Ok(TypedRasterTile2D::U32(
-                    CompressedRasterTile2D::decompress_tile(&compressed)?,
-                )),
-                TypedCompressedRasterTile2D::U64(compressed) => Ok(TypedRasterTile2D::U64(
-                    CompressedRasterTile2D::decompress_tile(&compressed)?,
-                )),
-                TypedCompressedRasterTile2D::F32(compressed) => Ok(TypedRasterTile2D::F32(
-                    CompressedRasterTile2D::decompress_tile(&compressed)?,
-                )),
-                TypedCompressedRasterTile2D::F64(compressed) => Ok(TypedRasterTile2D::F64(
-                    CompressedRasterTile2D::decompress_tile(&compressed)?,
-                )),
-            }
+        tokio::task::spawn_blocking(move || match compressed {
+            TypedCompressedRasterTile2D::I8(compressed) => Ok(TypedRasterTile2D::I8(
+                CompressedRasterTile2D::decompress_tile(&compressed)?,
+            )),
+            TypedCompressedRasterTile2D::I16(compressed) => Ok(TypedRasterTile2D::I16(
+                CompressedRasterTile2D::decompress_tile(&compressed)?,
+            )),
+            TypedCompressedRasterTile2D::I32(compressed) => Ok(TypedRasterTile2D::I32(
+                CompressedRasterTile2D::decompress_tile(&compressed)?,
+            )),
+            TypedCompressedRasterTile2D::I64(compressed) => Ok(TypedRasterTile2D::I64(
+                CompressedRasterTile2D::decompress_tile(&compressed)?,
+            )),
+            TypedCompressedRasterTile2D::U8(compressed) => Ok(TypedRasterTile2D::U8(
+                CompressedRasterTile2D::decompress_tile(&compressed)?,
+            )),
+            TypedCompressedRasterTile2D::U16(compressed) => Ok(TypedRasterTile2D::U16(
+                CompressedRasterTile2D::decompress_tile(&compressed)?,
+            )),
+            TypedCompressedRasterTile2D::U32(compressed) => Ok(TypedRasterTile2D::U32(
+                CompressedRasterTile2D::decompress_tile(&compressed)?,
+            )),
+            TypedCompressedRasterTile2D::U64(compressed) => Ok(TypedRasterTile2D::U64(
+                CompressedRasterTile2D::decompress_tile(&compressed)?,
+            )),
+            TypedCompressedRasterTile2D::F32(compressed) => Ok(TypedRasterTile2D::F32(
+                CompressedRasterTile2D::decompress_tile(&compressed)?,
+            )),
+            TypedCompressedRasterTile2D::F64(compressed) => Ok(TypedRasterTile2D::F64(
+                CompressedRasterTile2D::decompress_tile(&compressed)?,
+            )),
         })
         .await
         .map_err(|source| CacheError::CouldNotRunDecompressionTask { source })?
@@ -1668,11 +1670,17 @@ mod tests {
             .expect("cache lookup should succeed")
             .expect("tile should be cached after query");
 
-        let cached_tile_typed = cached_compressed.value.load().await
+        let cached_tile_typed = cached_compressed
+            .value
+            .load()
+            .await
             .expect("decompression should succeed");
         match cached_tile_typed {
             TypedRasterTile2D::U8(cached_u8_tile) => {
-                assert_eq!(cached_u8_tile, expected_tile, "cached tile must match source tile");
+                assert_eq!(
+                    cached_u8_tile, expected_tile,
+                    "cached tile must match source tile"
+                );
             }
             _ => panic!("expected U8 tile type in cache"),
         }
