@@ -29,11 +29,26 @@ export interface ConfigDefaults {
     readonly FOCUS_EXTENT: [number, number, number, number];
 }
 
+export interface DrawSettings {
+    readonly DRAW_STYLE: DrawSettingsStyle;
+    readonly AFTER_DRAW_STYLE: DrawSettingsStyle;
+}
+
+export interface DrawSettingsStyle {
+    readonly STROKE_COLOR: string;
+    readonly STROKE_CONTRAST_COLOR: string;
+    readonly FILL_COLOR: string;
+    readonly WIDTH: number;
+    readonly IMAGE_WIDTH: number;
+    readonly DASH_PATTERN: number[] | undefined;
+}
+
 export interface ConfigMap {
     readonly BASEMAPS: Basemaps;
     readonly DEFAULT_BASEMAP: keyof Basemaps;
     readonly REFRESH_LAYERS_ON_CHANGE: boolean;
     readonly VALID_CRS: Array<string>;
+    readonly DRAWING: DrawSettings;
 }
 
 export type Basemaps = Record<string, Basemap>;
@@ -149,6 +164,24 @@ export const DEFAULT_CORE_CONFIG: CoreConfigStructure = {
         },
         REFRESH_LAYERS_ON_CHANGE: false,
         VALID_CRS: ['EPSG:4326', 'EPSG:3857'],
+        DRAWING: {
+            DRAW_STYLE: {
+                FILL_COLOR: 'rgba(25, 118, 210, 0.3)',
+                STROKE_COLOR: '#1976d2',
+                STROKE_CONTRAST_COLOR: '#FFFFFF',
+                WIDTH: 4,
+                IMAGE_WIDTH: 5,
+                DASH_PATTERN: [8, 8],
+            },
+            AFTER_DRAW_STYLE: {
+                FILL_COLOR: 'rgba(25, 118, 210, 0.3)',
+                STROKE_COLOR: '#1976d2',
+                STROKE_CONTRAST_COLOR: '#FFFFFF',
+                WIDTH: 4,
+                IMAGE_WIDTH: 5,
+                DASH_PATTERN: [8, 8],
+            },
+        },
     },
     API_URL: '/api',
     TIME: {

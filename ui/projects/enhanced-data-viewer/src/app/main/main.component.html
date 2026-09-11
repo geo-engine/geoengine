@@ -48,26 +48,26 @@
     <mat-drawer position="start" mode="side" opened="true">
         <div class="drawer-container">
             <mat-nav-list>
-                <mat-list-item [activated]="true">
+                <mat-list-item [activated]="isLayersActive()" (click)="openLayersTab()">
                     <span matListItemTitle>
                         <mat-icon>layers</mat-icon>
                     </span>
                     <span matListItemLine>Layers</span>
                 </mat-list-item>
-                <mat-list-item [activated]="false">
+                <mat-list-item [activated]="isComputeActive()" (click)="openComputeTab()">
                     <span matListItemTitle>
                         <mat-icon svgIcon="cogs"></mat-icon>
                     </span>
                     <span matListItemLine>Compute</span>
                 </mat-list-item>
-                <mat-list-item [activated]="false">
+                <mat-list-item [activated]="isSearchActive()" (click)="openSearchTab()">
                     <span matListItemTitle>
                         <mat-icon>search</mat-icon>
                     </span>
                     <span matListItemLine>Search</span>
                 </mat-list-item>
                 <div class="spacer"></div>
-                <mat-list-item [activated]="false">
+                <mat-list-item [activated]="isAboutActive()" (click)="openAboutTab()">
                     <span matListItemTitle>
                         <img src="assets/geoengine.png" alt="Geo Engine" class="geoengine-logo" />
                     </span>
@@ -76,62 +76,11 @@
             </mat-nav-list>
 
             <div class="drawer-main">
-                <div>
-                    <h4>Data Source</h4>
-                    <mat-radio-group class="data-sources" [value]="selectedDataSource()" (change)="setSelectedDataSource($event.value)">
-                        @for (ds of dataSources; track ds.key) {
-                            <mat-radio-button [value]="ds.key">{{ ds.name }}</mat-radio-button>
-                        }
-                    </mat-radio-group>
+                <!-- Keep datasource state and the active map layer when switching tabs. -->
+                <div [hidden]="!isLayersActive()">
+                    <geoengine-layers [debug]="debug()"></geoengine-layers>
                 </div>
-                <mat-divider></mat-divider>
-
-                <div class="time-selection">
-                    <h4>Time Selection</h4>
-                    <mat-checkbox [checked]="autoSelectTime()" (change)="autoSelectTime.set($event.checked)">Auto select time</mat-checkbox>
-                    <div>
-                        <button
-                            mat-icon-button
-                            (click)="timeBackwards()"
-                            matTooltip="Backwards {{ timeStepDuration()?.durationAmount }} {{ timeStepDuration()?.durationUnit }}"
-                        >
-                            <mat-icon>navigate_before</mat-icon>
-                        </button>
-                        <input matInput [matDatepicker]="picker" size="0" [value]="currentDate()" (dateChange)="setDate($event)" />
-                        <button matButton (click)="picker.open()" class="calendar-open">{{ formattedTime() }}</button>
-                        <mat-datepicker #picker></mat-datepicker>
-                        <button
-                            mat-icon-button
-                            (click)="timeForward()"
-                            matTooltip="Forward {{ timeStepDuration()?.durationAmount }} {{ timeStepDuration()?.durationUnit }}"
-                        >
-                            <mat-icon>navigate_next</mat-icon>
-                        </button>
-                    </div>
-                </div>
-                <mat-divider></mat-divider>
-
-                <div>
-                    <h4>Vizualization Presets</h4>
-                    <mat-nav-list class="visualization-presets">
-                        @for (group of presetGroups(); track group.category) {
-                            @if (debug()) {
-                                <span class="preset-group-label">{{ group.label }}</span>
-                            }
-                            @for (preset of group.presets; track $index) {
-                                <mat-list-item
-                                    [activated]="currentPresets().indexOf(preset) === selectedPresetIndex()"
-                                    [class.preset-active]="currentPresets().indexOf(preset) === selectedPresetIndex()"
-                                    (click)="selectPreset(currentPresets().indexOf(preset))"
-                                >
-                                    <img matListItemTitle [src]="preset.backgroundImage" [alt]="preset.displayName" class="preset-icon" />
-                                    <span matListItemTitle>{{ preset.displayName }}</span>
-                                </mat-list-item>
-                            }
-                        }
-                    </mat-nav-list>
-                </div>
-                <mat-divider></mat-divider>
+                <ng-template [cdkPortalOutlet]="tabComponent()"></ng-template>
             </div>
         </div>
     </mat-drawer>
@@ -179,16 +128,41 @@
                 </mat-button-toggle>
             </mat-button-toggle-group>
 
-            <button type="button" matMiniFab aria-label="Measure" color="secondary">
+            <button
+                #measureButton="geoengineMeasure"
+                type="button"
+                matMiniFab
+                aria-label="Measure"
+                [disabled]="boxButton.isActive()"
+                [color]="measureButton.isActive() ? 'primary' : null"
+                [geoengineMeasure]="map"
+                [measurementType]="MeasurementType.Line"
+            >
                 <mat-icon>straighten</mat-icon>
             </button>
 
-            <button type="button" matMiniFab aria-label="Plot" color="secondary">
-                <mat-icon>show_chart</mat-icon>
+            <button
+                #boxButton="geoengineMeasure"
+                type="button"
+                matMiniFab
+                aria-label="Box"
+                [disabled]="measureButton.isActive()"
+                [color]="boxButton.isActive() ? 'primary' : null"
+                [geoengineMeasure]="map"
+                [measurementType]="MeasurementType.Box"
+            >
+                <mat-icon>crop_square</mat-icon>
             </button>
 
-            <button type="button" matMiniFab aria-label="Download" color="secondary">
-                <mat-icon>file_download</mat-icon>
+            <button
+                type="button"
+                matMiniFab
+                aria-label="Download"
+                color="secondary"
+                (click)="downloadMapImage()"
+                [disabled]="mapImageLoading()"
+            >
+                <mat-icon>image</mat-icon>
             </button>
         </div>
     </mat-drawer-content>
