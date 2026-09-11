@@ -20,6 +20,7 @@ import json
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from uuid import UUID
+from geoengine_api_client.models.stac_provider_authentication import StacProviderAuthentication
 from geoengine_api_client.models.stac_provider_dataset import StacProviderDataset
 from geoengine_api_client.models.stac_provider_s3_config import StacProviderS3Config
 from geoengine_api_client.models.time_dimension import TimeDimension
@@ -38,10 +39,12 @@ class StacDataProviderDefinition(BaseModel):
     api_url: StrictStr = Field(alias="apiUrl")
     collection_name: StrictStr = Field(alias="collectionName")
     s3_config: Optional[StacProviderS3Config] = Field(default=None, alias="s3Config")
+    authentication: Optional[StacProviderAuthentication] = None
     time_dimension: TimeDimension = Field(alias="timeDimension")
     datasets: List[StacProviderDataset]
     query_timeout_secs: Optional[StrictInt] = Field(default=None, description="Timeout in seconds for outgoing STAC API HTTP requests.", alias="queryTimeoutSecs")
-    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "collectionName", "s3Config", "timeDimension", "datasets", "queryTimeoutSecs"]
+    page_limit: Optional[StrictInt] = Field(default=None, alias="pageLimit")
+    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "collectionName", "s3Config", "authentication", "timeDimension", "datasets", "queryTimeoutSecs", "pageLimit"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -92,6 +95,9 @@ class StacDataProviderDefinition(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of s3_config
         if self.s3_config:
             _dict['s3Config'] = self.s3_config.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of authentication
+        if self.authentication:
+            _dict['authentication'] = self.authentication.to_dict()
         # override the default output from pydantic by calling `to_dict()` of time_dimension
         if self.time_dimension:
             _dict['timeDimension'] = self.time_dimension.to_dict()
@@ -111,6 +117,11 @@ class StacDataProviderDefinition(BaseModel):
         # and model_fields_set contains the field
         if self.s3_config is None and "s3_config" in self.model_fields_set:
             _dict['s3Config'] = None
+
+        # set to None if authentication (nullable) is None
+        # and model_fields_set contains the field
+        if self.authentication is None and "authentication" in self.model_fields_set:
+            _dict['authentication'] = None
 
         return _dict
 
@@ -132,9 +143,11 @@ class StacDataProviderDefinition(BaseModel):
             "apiUrl": obj.get("apiUrl"),
             "collectionName": obj.get("collectionName"),
             "s3Config": StacProviderS3Config.from_dict(obj["s3Config"]) if obj.get("s3Config") is not None else None,
+            "authentication": StacProviderAuthentication.from_dict(obj["authentication"]) if obj.get("authentication") is not None else None,
             "timeDimension": TimeDimension.from_dict(obj["timeDimension"]) if obj.get("timeDimension") is not None else None,
             "datasets": [StacProviderDataset.from_dict(_item) for _item in obj["datasets"]] if obj.get("datasets") is not None else None,
-            "queryTimeoutSecs": obj.get("queryTimeoutSecs")
+            "queryTimeoutSecs": obj.get("queryTimeoutSecs"),
+            "pageLimit": obj.get("pageLimit")
         })
         return _obj
 

@@ -17,11 +17,15 @@ exports.StacProviderDatasetBandFromJSON = StacProviderDatasetBandFromJSON;
 exports.StacProviderDatasetBandFromJSONTyped = StacProviderDatasetBandFromJSONTyped;
 exports.StacProviderDatasetBandToJSON = StacProviderDatasetBandToJSON;
 exports.StacProviderDatasetBandToJSONTyped = StacProviderDatasetBandToJSONTyped;
+const StacAssetBand_1 = require("./StacAssetBand");
+const RasterBandDescriptor_1 = require("./RasterBandDescriptor");
 /**
  * Check if a given object implements the StacProviderDatasetBand interface.
  */
 function instanceOfStacProviderDatasetBand(value) {
-    if (!('assetTitle' in value) || value['assetTitle'] === undefined)
+    if (!('assetBand' in value) || value['assetBand'] === undefined)
+        return false;
+    if (!('bandDescriptor' in value) || value['bandDescriptor'] === undefined)
         return false;
     return true;
 }
@@ -33,8 +37,8 @@ function StacProviderDatasetBandFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'assetTitle': json['assetTitle'],
-        'bandName': json['bandName'] == null ? undefined : json['bandName'],
+        'assetBand': (0, StacAssetBand_1.StacAssetBandFromJSON)(json['assetBand']),
+        'bandDescriptor': (0, RasterBandDescriptor_1.RasterBandDescriptorFromJSON)(json['bandDescriptor']),
     };
 }
 function StacProviderDatasetBandToJSON(json) {
@@ -45,7 +49,7 @@ function StacProviderDatasetBandToJSONTyped(value, ignoreDiscriminator = false) 
         return value;
     }
     return {
-        'assetTitle': value['assetTitle'],
-        'bandName': value['bandName'],
+        'assetBand': (0, StacAssetBand_1.StacAssetBandToJSON)(value['assetBand']),
+        'bandDescriptor': (0, RasterBandDescriptor_1.RasterBandDescriptorToJSON)(value['bandDescriptor']),
     };
 }

@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`assetTitle` | string
-`bandName` | string
+`assetBand` | [StacAssetBand](StacAssetBand.md)
+`bandDescriptor` | [RasterBandDescriptor](RasterBandDescriptor.md)
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { StacProviderDatasetBand } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "assetTitle": null,
-  "bandName": null,
+  "assetBand": null,
+  "bandDescriptor": null,
 } satisfies StacProviderDatasetBand
 
 console.log(example)
