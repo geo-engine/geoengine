@@ -40,6 +40,7 @@ tile_shape_pixels_y = 512
 
 [query_context]
 chunk_byte_size = 1048576 # TODO: find reasonable default
+tile_parallelism = 4
 
 [upload]
 path = "upload"

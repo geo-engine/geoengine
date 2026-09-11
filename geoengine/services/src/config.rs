@@ -191,6 +191,12 @@ impl ConfigElement for TilingSpecification {
 #[derive(Debug, Deserialize)]
 pub struct QueryContext {
     pub chunk_byte_size: usize,
+    #[serde(default = "default_tile_parallelism")]
+    pub tile_parallelism: usize,
+}
+
+fn default_tile_parallelism() -> usize {
+    4
 }
 
 impl ConfigElement for QueryContext {
