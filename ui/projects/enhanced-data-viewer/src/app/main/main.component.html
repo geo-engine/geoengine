@@ -80,6 +80,9 @@
                 <div [hidden]="!isLayersActive()">
                     <geoengine-layers [debug]="debug()"></geoengine-layers>
                 </div>
+                @if (isComputeActive()) {
+                    <geoengine-compute [selectedRasterLayer]="mapTileLayer()"></geoengine-compute>
+                }
                 <ng-template [cdkPortalOutlet]="tabComponent()"></ng-template>
             </div>
         </div>

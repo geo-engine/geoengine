@@ -45,6 +45,7 @@ import {ComputeComponent} from '../compute/compute.component';
         MatTooltipModule,
         MeasureDirective,
         LayersComponent,
+        ComputeComponent,
     ],
     host: {
         // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -89,7 +90,7 @@ export class MainComponent {
             case Tab.Layers:
                 return new ComponentPortal(EmptyComponent);
             case Tab.Compute:
-                return new ComponentPortal(ComputeComponent);
+                return new ComponentPortal(EmptyComponent);
             case Tab.Search:
                 // TODO: create component
                 return new ComponentPortal(EmptyComponent);
