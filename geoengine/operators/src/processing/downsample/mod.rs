@@ -610,7 +610,7 @@ mod tests {
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
     use geoengine_datatypes::primitives::TimeStep;
-    use geoengine_datatypes::raster::{Grid, GridShape2D, RasterDataType};
+    use geoengine_datatypes::raster::{Grid, GridShape2D, RasterDataType, TileIdx, TileSize};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
@@ -644,23 +644,23 @@ mod tests {
 
         let in_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 1.0, -1.0);
         let out_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 2.0, -2.0);
-        let tile_size_in_pixels = GridShape2D {
+        let tile_size = GridShape2D {
             shape_array: [4, 4],
         };
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(
-            TilingSpecification::new(tile_size_in_pixels),
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x())),
             8,
         );
 
         let data: Vec<RasterTile2D<u8>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [0, 0].into(),
+                tile_position: TileIdx::new_y_x(0, 0),
                 band: 0,
                 global_geo_transform: in_geo_transform,
                 grid_array: Grid::new(
-                    tile_size_in_pixels,
+                    tile_size,
                     vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
                 )
                 .unwrap()
@@ -670,11 +670,11 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [0, 1].into(),
+                tile_position: TileIdx::new_y_x(0, 1),
                 band: 0,
                 global_geo_transform: in_geo_transform,
                 grid_array: Grid::new(
-                    tile_size_in_pixels,
+                    tile_size,
                     vec![
                         21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
                     ],
@@ -686,11 +686,11 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [1, 0].into(),
+                tile_position: TileIdx::new_y_x(1, 0),
                 band: 0,
                 global_geo_transform: in_geo_transform,
                 grid_array: Grid::new(
-                    tile_size_in_pixels,
+                    tile_size,
                     vec![
                         41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56,
                     ],
@@ -702,11 +702,11 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [1, 1].into(),
+                tile_position: TileIdx::new_y_x(1, 1),
                 band: 0,
                 global_geo_transform: in_geo_transform,
                 grid_array: Grid::new(
-                    tile_size_in_pixels,
+                    tile_size,
                     vec![
                         61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76,
                     ],
@@ -825,22 +825,22 @@ mod tests {
 
         let in_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 1.0, -1.0);
         let out_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 3.0, -3.0);
-        let tile_size_in_pixels = GridShape2D {
+        let tile_size = GridShape2D {
             shape_array: [3, 3],
         };
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(
-            TilingSpecification::new(tile_size_in_pixels),
+            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x())),
             8,
         );
 
         let data: Vec<RasterTile2D<u8>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [0, 0].into(),
+                tile_position: TileIdx::new_y_x(0, 0),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(tile_size_in_pixels, vec![0, 1, 2, 3, 4, 5, 6, 7, 8])
+                grid_array: Grid::new(tile_size, vec![0, 1, 2, 3, 4, 5, 6, 7, 8])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -848,113 +848,89 @@ mod tests {
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [0, 1].into(),
+                tile_position: TileIdx::new_y_x(0, 1),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(
-                    tile_size_in_pixels,
-                    vec![10, 11, 12, 13, 14, 15, 16, 17, 18],
-                )
-                .unwrap()
-                .into(),
+                grid_array: Grid::new(tile_size, vec![10, 11, 12, 13, 14, 15, 16, 17, 18])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [0, 2].into(),
+                tile_position: TileIdx::new_y_x(0, 2),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(
-                    tile_size_in_pixels,
-                    vec![20, 21, 22, 23, 24, 25, 26, 27, 28],
-                )
-                .unwrap()
-                .into(),
+                grid_array: Grid::new(tile_size, vec![20, 21, 22, 23, 24, 25, 26, 27, 28])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [1, 0].into(),
+                tile_position: TileIdx::new_y_x(1, 0),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(
-                    tile_size_in_pixels,
-                    vec![30, 31, 32, 33, 34, 35, 36, 37, 38],
-                )
-                .unwrap()
-                .into(),
+                grid_array: Grid::new(tile_size, vec![30, 31, 32, 33, 34, 35, 36, 37, 38])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [1, 1].into(),
+                tile_position: TileIdx::new_y_x(1, 1),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(
-                    tile_size_in_pixels,
-                    vec![40, 41, 42, 43, 44, 45, 46, 47, 48],
-                )
-                .unwrap()
-                .into(),
+                grid_array: Grid::new(tile_size, vec![40, 41, 42, 43, 44, 45, 46, 47, 48])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [1, 2].into(),
+                tile_position: TileIdx::new_y_x(1, 2),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(
-                    tile_size_in_pixels,
-                    vec![50, 51, 52, 53, 54, 55, 56, 57, 58],
-                )
-                .unwrap()
-                .into(),
+                grid_array: Grid::new(tile_size, vec![50, 51, 52, 53, 54, 55, 56, 57, 58])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [2, 0].into(),
+                tile_position: TileIdx::new_y_x(2, 0),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(
-                    tile_size_in_pixels,
-                    vec![60, 61, 62, 63, 64, 65, 66, 67, 68],
-                )
-                .unwrap()
-                .into(),
+                grid_array: Grid::new(tile_size, vec![60, 61, 62, 63, 64, 65, 66, 67, 68])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [2, 1].into(),
+                tile_position: TileIdx::new_y_x(2, 1),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(
-                    tile_size_in_pixels,
-                    vec![70, 71, 72, 73, 74, 75, 76, 77, 78],
-                )
-                .unwrap()
-                .into(),
+                grid_array: Grid::new(tile_size, vec![70, 71, 72, 73, 74, 75, 76, 77, 78])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [2, 2].into(),
+                tile_position: TileIdx::new_y_x(2, 2),
                 band: 0,
                 global_geo_transform: in_geo_transform,
-                grid_array: Grid::new(
-                    tile_size_in_pixels,
-                    vec![80, 81, 82, 83, 84, 85, 86, 87, 88],
-                )
-                .unwrap()
-                .into(),
+                grid_array: Grid::new(tile_size, vec![80, 81, 82, 83, 84, 85, 86, 87, 88])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },

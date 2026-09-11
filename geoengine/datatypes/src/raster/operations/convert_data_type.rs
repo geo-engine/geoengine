@@ -153,7 +153,7 @@ where
 mod tests {
     use crate::{
         primitives::{CacheHint, TimeInterval},
-        raster::{EmptyGrid2D, GeoTransform, Grid2D, GridOrEmpty2D, RasterTile2D},
+        raster::{EmptyGrid2D, GeoTransform, Grid2D, GridOrEmpty2D, RasterTile2D, TileIdx},
     };
 
     use super::*;
@@ -236,7 +236,7 @@ mod tests {
         let g_u8: GridOrEmpty2D<u8> = Grid2D::new_filled([32, 32].into(), 8).into();
         let tile_u8 = RasterTile2D::new(
             TimeInterval::default(),
-            [0, 0].into(),
+            TileIdx::new_y_x(0, 0),
             0,
             GeoTransform::new((0., 0.).into(), 1., -1.),
             g_u8,
@@ -245,7 +245,7 @@ mod tests {
         let tile_f64: RasterTile2D<f32> = tile_u8.convert_data_type();
 
         assert_eq!(tile_f64.time, TimeInterval::default());
-        assert_eq!(tile_f64.tile_position, [0, 0].into());
+        assert_eq!(tile_f64.tile_position, TileIdx::new_y_x(0, 0));
         assert_eq!(
             tile_f64.global_geo_transform,
             GeoTransform::new((0., 0.).into(), 1., -1.)
@@ -264,7 +264,7 @@ mod tests {
         let g_u8: GridOrEmpty2D<u8> = Grid2D::new_filled([32, 32].into(), 8).into();
         let tile_u8 = RasterTile2D::new(
             TimeInterval::default(),
-            [0, 0].into(),
+            TileIdx::new_y_x(0, 0),
             0,
             GeoTransform::new((0., 0.).into(), 1., -1.),
             g_u8,
@@ -273,7 +273,7 @@ mod tests {
         let tile_f64: RasterTile2D<f32> = tile_u8.convert_data_type_parallel();
 
         assert_eq!(tile_f64.time, TimeInterval::default());
-        assert_eq!(tile_f64.tile_position, [0, 0].into());
+        assert_eq!(tile_f64.tile_position, TileIdx::new_y_x(0, 0));
         assert_eq!(
             tile_f64.global_geo_transform,
             GeoTransform::new((0., 0.).into(), 1., -1.)

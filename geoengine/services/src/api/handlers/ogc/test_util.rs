@@ -121,7 +121,7 @@ pub fn calculate_number_of_tiles(
     let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
     let tile_bounds = tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
 
-    GridShape2D::new(tile_bounds.axis_size())
+    GridShape2D::new(tile_bounds.grid_bounds().axis_size())
 }
 
 /// Returns a session id, data connector id and layer id for an NDVI dataset loaded via [`MultiBandGdalSource`].
