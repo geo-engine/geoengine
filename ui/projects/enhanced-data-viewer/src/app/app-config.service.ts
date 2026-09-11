@@ -7,9 +7,9 @@ interface AppConfigStructure extends CoreConfigStructure {}
 
 const APP_CONFIG_DEFAULTS = mergeDeepOverrideLists(DEFAULT_CORE_CONFIG, {
     BRANDING: {
-        LOGO_URL: 'assets/logo_code_copernicus_blue.png',
-        LOGO_ICON_URL: 'assets/geoengine-favicon-white.svg',
-        LOGO_ALT_URL: 'assets/geoengine-white.svg',
+        LOGO_URL: 'assets/CODE-DE-Lab_RGB.svg',
+        LOGO_ICON_URL: 'favicon.ico',
+        LOGO_ALT_URL: 'assets/CODE-DE-Lab_white_RGB.svg',
         PAGE_TITLE: 'Enhanced Data Viewer | CODE-DE Lab',
     },
     DEFAULTS: {
@@ -20,6 +20,26 @@ const APP_CONFIG_DEFAULTS = mergeDeepOverrideLists(DEFAULT_CORE_CONFIG, {
             PROJECTION: 'EPSG:3857',
         },
         FOCUS_EXTENT: [6.98865807458, 47.3024876979, 15.0169958839, 54.983104153],
+    },
+    MAP: {
+        DRAWING: {
+            DRAW_STYLE: {
+                STROKE_COLOR: 'rgba(62, 163, 220, 0.8)',
+                STROKE_CONTRAST_COLOR: '#FFFFFF',
+                FILL_COLOR: 'rgba(62, 163, 220, 0.1)',
+                WIDTH: 2,
+                IMAGE_WIDTH: 4,
+                DASH_PATTERN: [8, 8],
+            },
+            AFTER_DRAW_STYLE: {
+                STROKE_COLOR: 'rgba(62, 163, 220, 1)',
+                STROKE_CONTRAST_COLOR: '#FFFFFF',
+                FILL_COLOR: 'rgba(62, 163, 220, 0.2)',
+                WIDTH: 2,
+                IMAGE_WIDTH: 4,
+                DASH_PATTERN: [8, 8],
+            },
+        },
     },
 });
 

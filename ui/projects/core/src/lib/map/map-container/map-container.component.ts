@@ -17,6 +17,7 @@ import {
     input,
     viewChild,
     viewChildren,
+    signal,
 } from '@angular/core';
 
 import OlMap from 'ol/Map';
@@ -42,6 +43,7 @@ import {ol as flatgeobuf} from 'flatgeobuf';
 import OlStyleFill from 'ol/style/Fill';
 import OlStyleStroke from 'ol/style/Stroke';
 import OlStyleStyle, {StyleLike as OlStyleLike} from 'ol/style/Style';
+import OlCircleStyle from 'ol/style/Circle';
 
 import OlInteractionDraw, {GeometryFunction} from 'ol/interaction/Draw';
 import OlInteractionSelect from 'ol/interaction/Select';
@@ -53,13 +55,15 @@ import {MapLayerComponent} from '../map-layer.component';
 
 import {FeatureSelection, ProjectService} from '../../project/project.service';
 import {Extent, MapService} from '../map.service';
-import {Basemap, CoreConfig, VectorTiles, Wms} from '../../config.service';
+import {Basemap, CoreConfig, DrawSettingsStyle, VectorTiles, Wms} from '../../config.service';
 import {MatGridList, MatGridListModule, MatGridTile} from '@angular/material/grid-list';
 import {SpatialReferenceService, WGS_84} from '../../spatial-references/spatial-reference.service';
 import {containsCoordinate, getCenter} from 'ol/extent';
 import {applyBackground, stylefunction} from 'ol-mapbox-style';
 import {olExtentToTuple, SpatialReference, Symbology, VectorSymbology} from '@geoengine/common';
 import {allowedBasemapProjections, BasemapService} from '../../layers/basemap.service';
+import {AsyncSequencer} from '../../util/sequencer';
+import {setMapsDoubleClickZoom} from './map-utils';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MapLayer = MapLayerComponent<OlLayer<OlSource, any>, OlSource, Symbology>;
@@ -115,6 +119,8 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private backgroundLayers: Array<OlLayer<OlSource, any>> = [];
 
+    readonly overlayLayer = signal<OlLayerVector<OlSourceVector<OlFeature<OlGeometry>>> | undefined>(undefined);
+
     private userSelect?: OlInteractionSelect;
 
     private selectedFeature?: OlFeature<OlGeometry> = undefined;
@@ -136,6 +142,9 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
 
     private readonly basemapService = inject(BasemapService);
 
+    /** Ensures that asynchronous operations that modify the map execute sequentially */
+    private mapSequencer = new AsyncSequencer();
+
     /**
      * Create the component and inject several dependencies via DI.
      */
@@ -154,6 +163,13 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
             this.basemapService.basemap();
             this.projection$.pipe(first()).subscribe((projection) => {
                 this.backgroundLayerSource = undefined; // reset source to force recreation
+                this.redrawLayers(projection);
+            });
+        });
+
+        effect(() => {
+            this.overlayLayer();
+            this.projection$.pipe(first()).subscribe((projection) => {
                 this.redrawLayers(projection);
             });
         });
@@ -293,10 +309,17 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
         this.projection$.pipe(first()).subscribe((projection) => this.redrawLayers(projection));
     }
 
+    public getMap(index = 0): OlMap {
+        return this.maps[index];
+    }
+
     private createDrawInteractionLayer(): OlLayerVector<OlSourceVector<OlFeature>> {
-        return new OlLayerVector({
+        const layer = new OlLayerVector({
             source: this.drawInteractionSource,
+            style: [drawContrastStrokeStyle(this.config.MAP.DRAWING.AFTER_DRAW_STYLE), drawStyle(this.config.MAP.DRAWING.AFTER_DRAW_STYLE)],
         });
+
+        return layer;
     }
 
     private createDrawInteraction(): OlInteractionDraw {
@@ -304,6 +327,8 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
             source: this.drawInteractionSource,
             type: this.drawType,
             geometryFunction: this.drawGeometryFunction,
+            maxPoints: this.drawSingleFeature ? 2 : undefined,
+            style: [drawContrastStrokeStyle(this.config.MAP.DRAWING.DRAW_STYLE), drawStyle(this.config.MAP.DRAWING.DRAW_STYLE)],
         });
     }
 
@@ -344,6 +369,10 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
                 });
             });
         }
+
+        setTimeout(() => {
+            setMapsDoubleClickZoom(this.maps, !this.isDrawInteractionAttached());
+        }, this.config.DELAYS.DEBOUNCE /* wait a short time to prevent double-clicks at the end of the draw interaction */);
     }
 
     private calculateGrid(): void {
@@ -526,6 +555,11 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
                 }
             } else {
                 this.mapLayers.forEach((layerComponent) => map.addLayer(layerComponent.mapLayer));
+            }
+
+            const overlayLayer = this.overlayLayer();
+            if (overlayLayer) {
+                map.getLayers().push(overlayLayer);
             }
         });
 
@@ -775,4 +809,84 @@ export class MapContainerComponent implements AfterViewInit, OnChanges, OnDestro
             }
         }
     }
+
+    /**
+     * Returns the current map view as an image.
+     * @returns A data URL representing the map image.
+     */
+    async mapAsImage(): Promise<string> {
+        return this.mapSequencer.enqueue(() => this.exportMapAsImage());
+    }
+
+    /**
+     * Returns the current map view as an image.
+     * @returns A data URL representing the map image.
+     */
+    private async exportMapAsImage(): Promise<string> {
+        const map = this.maps[0];
+
+        const mapCanvas = document.createElement('canvas');
+        const size = map.getSize();
+
+        if (!size) {
+            throw new Error('Map size is not available');
+        }
+
+        mapCanvas.width = size[0];
+        mapCanvas.height = size[1];
+
+        const currentTarget = map.getTargetElement();
+        map.setTarget(mapCanvas);
+
+        // Listen once for the render completion pass
+        await new Promise<void>((resolve) => {
+            map.once('rendercomplete', () => resolve());
+        });
+
+        // Swap the map target back & render the map
+        map.setTarget(currentTarget);
+        map.render();
+
+        return mapCanvas.toDataURL('image/png');
+    }
+}
+
+/**
+ * Returns an OpenLayers style for drawing features based on the provided draw settings.
+ */
+export function drawStyle(style: DrawSettingsStyle): OlStyleStyle {
+    const {STROKE_COLOR, WIDTH, DASH_PATTERN, FILL_COLOR, IMAGE_WIDTH} = style;
+    return new OlStyleStyle({
+        fill: new OlStyleFill({
+            color: FILL_COLOR,
+        }),
+        stroke: new OlStyleStroke({
+            color: STROKE_COLOR,
+            width: WIDTH + 2,
+            lineDash: DASH_PATTERN,
+        }),
+        image: new OlCircleStyle({
+            radius: IMAGE_WIDTH,
+            fill: new OlStyleFill({
+                color: FILL_COLOR,
+            }),
+            stroke: new OlStyleStroke({
+                color: STROKE_COLOR,
+            }),
+        }),
+    });
+}
+
+/**
+ * Returns an OpenLayers style for drawing features with a contrasting stroke based on the provided draw settings.
+ */
+export function drawContrastStrokeStyle(style: DrawSettingsStyle): OlStyleStyle {
+    const {WIDTH, DASH_PATTERN, STROKE_CONTRAST_COLOR: STROKE_CONSTRAST_COLOR} = style;
+    return new OlStyleStyle({
+        stroke: new OlStyleStroke({
+            color: STROKE_CONSTRAST_COLOR,
+            width: WIDTH + 2,
+            lineDash: DASH_PATTERN,
+        }),
+    });
 }
