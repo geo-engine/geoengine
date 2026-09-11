@@ -12,7 +12,7 @@ use geoengine_operators::{
     processing::{
         BandFilter as OperatorsBandFilter, Downsampling as OperatorsDownsampling,
         Expression as OperatorsExpression, Interpolation as OperatorsInterpolation,
-        RasterStacker as OperatorsRasterStacker,
+        RasterScaling as OperatorsRasterScaling, RasterStacker as OperatorsRasterStacker,
         RasterTypeConversion as OperatorsRasterTypeConversion,
         RasterVectorJoin as OperatorsRasterVectorJoin, Reprojection as OperatorsReprojection,
         TemporalRasterAggregation as OperatorsTemporalRasterAggregation,
@@ -42,11 +42,11 @@ pub(crate) use crate::api::model::processing_graphs::{
         Aggregation, BandFilter, BandFilterParameters, BandsByNameOrIndex,
         DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParameters,
         DownsamplingResolution, Expression, ExpressionParameters, Interpolation,
-        InterpolationMethod, InterpolationParameters, InterpolationResolution, RasterStacker,
-        RasterStackerParameters, RasterTypeConversion, RasterTypeConversionParameters,
-        RasterVectorJoin, RasterVectorJoinParameters, RenameBands, Reprojection,
-        ReprojectionParameters, TemporalRasterAggregation, TemporalRasterAggregationParameters,
-        VectorExpression, VectorExpressionParameters,
+        InterpolationMethod, InterpolationParameters, InterpolationResolution, RasterScaling,
+        RasterStacker, RasterStackerParameters, RasterTypeConversion,
+        RasterTypeConversionParameters, RasterVectorJoin, RasterVectorJoinParameters, RenameBands,
+        Reprojection, ReprojectionParameters, TemporalRasterAggregation,
+        TemporalRasterAggregationParameters, VectorExpression, VectorExpressionParameters,
     },
     source::{
         GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
@@ -83,6 +83,7 @@ pub enum RasterOperator {
     GdalSource(GdalSource),
     Interpolation(Interpolation),
     MultiBandGdalSource(MultiBandGdalSource),
+    RasterScaling(RasterScaling),
     RasterStacker(RasterStacker),
     RasterTypeConversion(RasterTypeConversion),
     Reprojection(Reprojection),
@@ -118,7 +119,6 @@ impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
         // [ ] BandwiseExpression
         // [ ] NeighborhoodAggregate
         // [ ] Onnx
-        // [ ] RasterScaling
         // [ ] Rasterization
         // [ ] Reflectance
         // [ ] Radiance
@@ -143,6 +143,9 @@ impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
             RasterOperator::MultiBandGdalSource(gdal_source) => {
                 OperatorsMultiBandGdalSource::try_from(gdal_source)
                     .map(OperatorsRasterOperator::boxed)
+            }
+            RasterOperator::RasterScaling(raster_scaling) => {
+                OperatorsRasterScaling::try_from(raster_scaling).map(OperatorsRasterOperator::boxed)
             }
             RasterOperator::RasterStacker(raster_stacker) => {
                 OperatorsRasterStacker::try_from(raster_stacker).map(OperatorsRasterOperator::boxed)

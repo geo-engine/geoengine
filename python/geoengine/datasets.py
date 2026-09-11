@@ -26,8 +26,19 @@ from geoengine.permissions import Permission, RoleId, add_permission
 from geoengine.resource_identifier import DatasetName, Resource, UploadId
 from geoengine.types import (
     FeatureDataType,
+    GeoTransform,
+    GridBoundingBox2D,
+    GridIdx2D,
     Provenance,
+    RasterBandDescriptor,
+    RasterDataType,
     RasterSymbology,
+    RegularTimeDimension,
+    SpatialGridDefinition,
+    SpatialGridDescriptor,
+    SpatialPartition2D,
+    TimeDescriptor,
+    TimeInterval,
     TimeStep,
     TimeStepGranularity,
     UnitlessMeasurement,
@@ -286,7 +297,7 @@ class AddDatasetProperties:
     display_name: str
     description: str
     # TODO: add more operators
-    source_operator: Literal["GdalSource", "OgrSource"]
+    source_operator: Literal["GdalSource", "OgrSource", "MultiBandGdalSource"]
     symbology: RasterSymbology | None  # TODO: add vector symbology if needed
     provenance: list[Provenance] | None
 
@@ -295,7 +306,7 @@ class AddDatasetProperties:
         self,
         display_name: str,
         description: str,
-        source_operator: Literal["GdalSource", "OgrSource"] = "GdalSource",
+        source_operator: Literal["GdalSource", "OgrSource", "MultiBandGdalSource"] = "GdalSource",
         symbology: RasterSymbology | None = None,
         provenance: list[Provenance] | None = None,
         name: str | None = None,
@@ -578,6 +589,211 @@ def add_dataset(
         response = datasets_api.create_dataset_handler(create, _request_timeout=timeout)
 
     return DatasetName.from_response(response)
+
+
+class GdalMultiBandMetaData:
+    """The metadata (result descriptor) of a `MultiBandGdalSource` dataset"""
+
+    bands: list[RasterBandDescriptor]
+    data_type: RasterDataType
+    spatial_reference: str
+    time: TimeDescriptor
+    spatial_grid: SpatialGridDescriptor
+
+    def __init__(
+        self,
+        bands: list[RasterBandDescriptor],
+        data_type: RasterDataType,
+        spatial_reference: str,
+        grid_or_geo_transform: SpatialGridDescriptor | GeoTransform,
+        time: TimeDescriptor | None = None,
+    ) -> None:
+        """
+        Create a `GdalMultiBandMetaData` object.
+
+        When `time` is not given, a regular time dimension with an epoch origin
+        and a step of one day is used. When `spatial_grid` is not given, a
+        placeholder source grid is used; the Geo Engine derives the final grid
+        when tiles are added to the dataset. The placeholder grid uses the
+        given `geo_transform` (or a 1 by 1 unit grid), as the tile files' geo
+        transforms must be compatible with the dataset grid's geo transform.
+        """
+        if time is None:
+            time = TimeDescriptor(
+                RegularTimeDimension(step=TimeStep(1, TimeStepGranularity.DAYS)),
+            )
+        if isinstance(grid_or_geo_transform, SpatialGridDescriptor):
+            self.spatial_grid = grid_or_geo_transform
+        else:
+            if not isinstance(grid_or_geo_transform, GeoTransform):
+                raise TypeError("grid_or_geo_transform must be a SpatialGridDescriptor or GeoTransform")
+            spatial_grid = SpatialGridDescriptor(
+                SpatialGridDefinition(
+                    geo_transform=grid_or_geo_transform,
+                    grid_bounds=GridBoundingBox2D(
+                        top_left_idx=GridIdx2D(x_idx=0, y_idx=0),
+                        bottom_right_idx=GridIdx2D(x_idx=1, y_idx=1),
+                    ),
+                ),
+                descriptor=geoengine_api_client.SpatialGridDescriptorState.SOURCE,
+            )
+            self.spatial_grid = spatial_grid
+        self.bands = bands
+        self.data_type = data_type
+        self.spatial_reference = spatial_reference
+        self.time = time
+
+    def to_api_dict(self) -> geoengine_api_client.MetaDataDefinition:
+        """Converts the metadata to a `MetaDataDefinition` for the API"""
+        return geoengine_api_client.MetaDataDefinition(
+            geoengine_api_client.GdalMultiBand(
+                type="GdalMultiBand",
+                result_descriptor=geoengine_api_client.RasterResultDescriptor(
+                    data_type=geoengine_api_client.RasterDataType(self.data_type.value),
+                    spatial_reference=self.spatial_reference,
+                    time=self.time.to_api_dict(),
+                    spatial_grid=self.spatial_grid.to_api_dict(),
+                    bands=[band.to_api_dict() for band in self.bands],
+                ),
+            )
+        )
+
+
+@dataclass
+class MultiBandGdalFileSpec:
+    """A single file that is added as a tile to a `MultiBandGdalSource` dataset"""
+
+    file_path: str
+    time: TimeInterval
+    spatial_partition: SpatialPartition2D
+    band: int
+    width: int
+    height: int
+    geo_transform: GeoTransform
+    channel: int = 1
+    z_index: int = 0
+    no_data_value: float | None = None
+    gdal_open_options: list[str] | None = None
+    gdal_config_options: list[tuple[str, str]] | None = None
+    allow_alphaband_as_mask: bool = False
+    file_not_found_handling: Literal["NoData", "Error"] = "Error"
+
+    def to_api_dict(self) -> geoengine_api_client.AddDatasetTile:
+        """Converts the file spec to an `AddDatasetTile` for the API"""
+        return geoengine_api_client.AddDatasetTile(
+            time=self.time.to_api_dict(),
+            spatial_partition=self.spatial_partition.to_api_dict(),
+            band=self.band,
+            z_index=self.z_index,
+            params=geoengine_api_client.GdalDatasetParameters(
+                file_path=self.file_path,
+                rasterband_channel=self.channel,
+                geo_transform=self.geo_transform.to_api_dict(),
+                width=self.width,
+                height=self.height,
+                file_not_found_handling=geoengine_api_client.FileNotFoundHandling(self.file_not_found_handling),
+                no_data_value=self.no_data_value,
+                gdal_open_options=self.gdal_open_options,
+                gdal_config_options=(
+                    [list(option) for option in self.gdal_config_options]
+                    if self.gdal_config_options is not None
+                    else None
+                ),
+                allow_alphaband_as_mask=self.allow_alphaband_as_mask,
+            ),
+        )
+
+
+def add_dataset_tiles(dataset: DatasetName | str, tiles: list[MultiBandGdalFileSpec], timeout: int = 60) -> None:
+    """Add files (tiles) to an existing `MultiBandGdalSource` dataset"""
+
+    if not isinstance(dataset, DatasetName):
+        dataset = DatasetName(dataset)
+
+    session = get_session()
+
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        datasets_api = geoengine_api_client.DatasetsApi(api_client)
+        datasets_api.add_dataset_tiles_handler(
+            str(dataset),
+            [tile.to_api_dict() for tile in tiles],
+            _request_timeout=timeout,
+        )
+
+
+def add_multiband_gdal_source(
+    name: str,
+    bands: list[RasterBandDescriptor],
+    data_type: RasterDataType,
+    spatial_reference: str,
+    files: list[MultiBandGdalFileSpec],
+    data_store: Volume | str = "external",
+    spatial_grid: SpatialGridDescriptor | None = None,
+    time: TimeDescriptor | None = None,
+    display_name: str | None = None,
+    description: str = "",
+    share_with: list[RoleId] | None = None,
+    permission: Permission = Permission.READ,
+    timeout: int = 60,
+) -> DatasetName:
+    """
+    Create a `MultiBandGdalSource` dataset, grant optional permissions and add the given files as tiles.
+
+    By default the dataset is created as external data, so GDAL resolves the
+    files (e.g. https or s3 links) when they are queried. A volume name or a
+    `Volume` can be given to store the files in a Geo Engine volume. No
+    permissions are granted unless `share_with` is given.
+    """
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
+
+    resolved_data_store: Volume | UploadId | Literal["external"]
+    if isinstance(data_store, str):
+        if data_store == "external":
+            resolved_data_store = "external"
+        else:
+            volume = volume_by_name(data_store, timeout=timeout)
+            if volume is None:
+                raise ValueError(f"Volume '{data_store}' not found")
+            resolved_data_store = volume
+    else:
+        resolved_data_store = data_store
+
+    properties = AddDatasetProperties(
+        display_name=display_name if display_name is not None else name,
+        description=description,
+        source_operator="MultiBandGdalSource",
+        name=name,
+    )
+
+    grid_or_geo_transform: SpatialGridDescriptor | GeoTransform
+    if spatial_grid is not None:
+        grid_or_geo_transform = spatial_grid
+    elif files:
+        grid_or_geo_transform = files[0].geo_transform
+    else:
+        raise ValueError("Either spatial_grid or files must be provided")
+
+    meta_data = GdalMultiBandMetaData(
+        bands=bands,
+        data_type=data_type,
+        spatial_reference=spatial_reference,
+        time=time,
+        grid_or_geo_transform=grid_or_geo_transform,
+    ).to_api_dict()
+
+    dataset_name = add_dataset(
+        data_store=resolved_data_store, properties=properties, meta_data=meta_data, timeout=timeout
+    )
+
+    if share_with is not None:
+        dataset_resource = Resource.from_dataset_name(dataset_name)
+        for role in share_with:
+            add_permission(role, dataset_resource, permission, timeout=timeout)
+
+    if files:
+        add_dataset_tiles(dataset_name, files, timeout=timeout)
+
+    return dataset_name
 
 
 def add_or_replace_dataset_with_permissions(

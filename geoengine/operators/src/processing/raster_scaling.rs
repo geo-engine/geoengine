@@ -28,10 +28,10 @@ use std::sync::Arc;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterScalingParams {
-    slope: SlopeOffsetSelection,
-    offset: SlopeOffsetSelection,
-    output_measurement: Option<Measurement>,
-    scaling_mode: ScalingMode,
+    pub slope: SlopeOffsetSelection,
+    pub offset: SlopeOffsetSelection,
+    pub output_measurement: Option<Measurement>,
+    pub scaling_mode: ScalingMode,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -43,7 +43,7 @@ pub enum ScalingMode {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase", tag = "type")]
-enum SlopeOffsetSelection {
+pub enum SlopeOffsetSelection {
     #[default]
     Auto,
     MetadataKey(RasterPropertiesKey),

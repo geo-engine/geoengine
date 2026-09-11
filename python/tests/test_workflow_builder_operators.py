@@ -151,6 +151,34 @@ class OperatorsTests(unittest.TestCase):
             wb.operators.RasterScaling.from_operator_dict(workflow.to_dict()).to_dict(), workflow.to_dict()
         )
 
+    def test_raster_scaling_metadata_key(self):
+        source_operator = wb.operators.GdalSource("ndvi")
+
+        workflow = wb.operators.RasterScaling(
+            source=source_operator,
+            slope="msg.calibration_slope",
+            offset="msg.calibration_offset",
+            scaling_mode="subOffsetDivSlope",
+            output_measurement=None,
+        )
+
+        self.assertEqual(
+            workflow.to_dict(),
+            {
+                "type": "RasterScaling",
+                "params": {
+                    "offset": {"type": "metadataKey", "value": {"key": "msg.calibration_offset"}},
+                    "slope": {"type": "metadataKey", "value": {"key": "msg.calibration_slope"}},
+                    "scalingMode": "subOffsetDivSlope",
+                },
+                "sources": {"raster": {"type": "GdalSource", "params": {"data": "ndvi"}}},
+            },
+        )
+
+        self.assertEqual(
+            wb.operators.RasterScaling.from_operator_dict(workflow.to_dict()).to_dict(), workflow.to_dict()
+        )
+
     def test_raster_type_conversion(self):
         source_operator = wb.operators.GdalSource("ndvi")
 
@@ -395,6 +423,80 @@ class OperatorsTests(unittest.TestCase):
         self.assertEqual(
             wb.operators.RasterStacker.from_operator_dict(workflow.to_dict()).to_dict(), workflow.to_dict()
         )
+
+    def test_multiband_gdal_source(self):
+        workflow = wb.operators.MultiBandGdalSource("multi_tile")
+
+        self.assertEqual(
+            workflow.to_dict(),
+            {"type": "MultiBandGdalSource", "params": {"data": "multi_tile"}},
+        )
+
+        self.assertEqual(
+            wb.operators.MultiBandGdalSource.from_operator_dict(workflow.to_dict()).to_dict(), workflow.to_dict()
+        )
+
+    def test_multiband_gdal_source_from_dataset_name(self):
+        from geoengine.datasets import DatasetName
+
+        workflow = wb.operators.MultiBandGdalSource(DatasetName("multi_tile"))
+
+        self.assertEqual(
+            workflow.to_dict(),
+            {"type": "MultiBandGdalSource", "params": {"data": "multi_tile"}},
+        )
+
+    def test_band_filter_by_names(self):
+        source_operator = wb.operators.MultiBandGdalSource("multi_tile")
+
+        workflow = wb.operators.BandFilter(source=source_operator, bands=["band_1", "band_2"])
+
+        self.assertEqual(
+            workflow.to_dict(),
+            {
+                "type": "BandFilter",
+                "params": {"bands": ["band_1", "band_2"]},
+                "sources": {"raster": {"type": "MultiBandGdalSource", "params": {"data": "multi_tile"}}},
+            },
+        )
+
+        self.assertEqual(wb.operators.BandFilter.from_operator_dict(workflow.to_dict()).to_dict(), workflow.to_dict())
+
+    def test_band_filter_by_indices(self):
+        source_operator = wb.operators.GdalSource("ndvi")
+
+        workflow = wb.operators.BandFilter(source=source_operator, bands=[0, 1])
+
+        self.assertEqual(
+            workflow.to_dict(),
+            {
+                "type": "BandFilter",
+                "params": {"bands": [0, 1]},
+                "sources": {"raster": {"type": "GdalSource", "params": {"data": "ndvi"}}},
+            },
+        )
+
+        self.assertEqual(wb.operators.BandFilter.from_operator_dict(workflow.to_dict()).to_dict(), workflow.to_dict())
+
+    def test_band_filter_rejects_empty_bands(self):
+        source_operator = wb.operators.GdalSource("ndvi")
+
+        with self.assertRaises(ValueError):
+            wb.operators.BandFilter(source=source_operator, bands=[])
+
+    def test_raster_onnx_via_dispatcher(self):
+        source_operator = wb.operators.GdalSource("ndvi")
+
+        parsed = wb.operators.RasterOperator.from_operator_dict(
+            {
+                "type": "Onnx",
+                "params": {"model": "cat_by_shadow.onnx"},
+                "sources": {"raster": source_operator.to_dict()},
+            }
+        )
+
+        self.assertEqual(parsed.name(), "Onnx")
+        self.assertEqual(parsed.to_dict()["type"], "Onnx")
 
 
 if __name__ == "__main__":
