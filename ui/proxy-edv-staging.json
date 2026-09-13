@@ -1,0 +1,8 @@
+{
+    "/api/**": {
+        "target": "https://edv.apps.gen-01.code-de-internal.cloudferro.com/",
+        "changeOrigin": true,
+        "secure": false,
+        "logLevel": "debug"
+    }
+}

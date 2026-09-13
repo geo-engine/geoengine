@@ -1347,13 +1347,15 @@ mod tests {
         test::{self, TestRequest, read_body_json},
     };
     use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::raster::TileIdx;
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::{
         primitives::{
             BandSelection, CacheHint, CacheTtlSeconds, Coordinate2D, RasterQueryRectangle,
             TimeGranularity, TimeInterval,
         },
         raster::{
-            GeoTransform, Grid, GridBoundingBox2D, RasterDataType, RasterTile2D, TileIdx, TileSize,
+            GeoTransform, Grid, GridBoundingBox2D, RasterDataType, RasterTile2D,
             TilingSpecification,
         },
         spatial_reference::SpatialReference,

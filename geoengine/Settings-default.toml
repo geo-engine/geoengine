@@ -76,6 +76,11 @@ type = "Value"
 start = "2014-01-01T00:00:00Z"
 end = "2014-01-01T00:00:00Z"
 
+[ogc.cors]
+allow_origin = "*"
+allow_headers = ["Authorization", "Content-Type"]
+allow_methods = ["GET", "OPTIONS", "HEAD"]
+
 [wcs]
 # max number of tiles to be produced for generating output tiff
 tile_limit = 4

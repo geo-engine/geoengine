@@ -1702,6 +1702,7 @@ mod tests {
     use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
     use futures::TryStreamExt;
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::{
         collections::{GeometryCollection, MultiPointCollection, VectorDataType},
         operations::image::{RasterColorizer, RgbaColor},
@@ -1709,7 +1710,7 @@ mod tests {
             BandSelection, BoundingBox2D, ColumnSelection, DateTimeParseFormat,
             RasterQueryRectangle, SpatialPartition2D,
         },
-        raster::{TileSize, TilingGrid, TilingSpecification},
+        raster::{TilingGrid, TilingSpecification},
         spatial_reference::SpatialReferenceOption,
         util::{Identifier, assert_image_equals, test::assert_eq_two_list_of_tiles},
     };
@@ -5360,13 +5361,7 @@ mod tests {
                         )
                         .into(),
                         time: TimeDescriptor {
-                            bounds: Some(
-                                TimeInterval::new_unchecked(
-                                    TimeInstance::from_str("2014-01-01T00:00:00Z").unwrap(),
-                                    TimeInstance::from_str("2014-01-02T00:00:00Z").unwrap(),
-                                )
-                                .into(),
-                            ),
+                            bounds: None,
                             dimension: TimeDimension::Irregular,
                         },
                         spatial_grid: SpatialGridDescriptor {
@@ -5417,8 +5412,8 @@ mod tests {
             )
             .into(),
             spatial_partition: SpatialPartition2D::new_unchecked(
-                (50., -50.).into(),
-                (150., -150.).into(),
+                (0., 0.).into(),
+                (100., -100.).into(),
             )
             .into(),
             band: 0,
@@ -5508,8 +5503,8 @@ mod tests {
             )
             .into(),
             spatial_partition: SpatialPartition2D::new_unchecked(
-                (50., -50.).into(),
-                (150., -150.).into(),
+                (-50., 50.).into(),
+                (0., 0.).into(),
             )
             .into(),
             band: 0,
