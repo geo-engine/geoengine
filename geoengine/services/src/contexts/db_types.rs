@@ -381,6 +381,7 @@ pub struct MetaDataDefinitionDbType {
     gdal_metadata_net_cdf_cf: Option<GdalMetadataNetCdfCf>,
     gdal_meta_data_list: Option<GdalMetaDataList>,
     gdal_multi_band: Option<GdalMultiBand>,
+    md_gdal_meta_data: Option<serde_json::Value>,
 }
 
 impl From<&MetaDataDefinition> for MetaDataDefinitionDbType {
@@ -394,6 +395,7 @@ impl From<&MetaDataDefinition> for MetaDataDefinitionDbType {
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: None,
                 gdal_multi_band: None,
+                md_gdal_meta_data: None,
             },
             MetaDataDefinition::OgrMetaData(meta_data) => Self {
                 mock_meta_data: None,
@@ -403,6 +405,7 @@ impl From<&MetaDataDefinition> for MetaDataDefinitionDbType {
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: None,
                 gdal_multi_band: None,
+                md_gdal_meta_data: None,
             },
             MetaDataDefinition::GdalMetaDataRegular(meta_data) => Self {
                 mock_meta_data: None,
@@ -412,6 +415,7 @@ impl From<&MetaDataDefinition> for MetaDataDefinitionDbType {
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: None,
                 gdal_multi_band: None,
+                md_gdal_meta_data: None,
             },
             MetaDataDefinition::GdalStatic(meta_data) => Self {
                 mock_meta_data: None,
@@ -421,6 +425,7 @@ impl From<&MetaDataDefinition> for MetaDataDefinitionDbType {
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: None,
                 gdal_multi_band: None,
+                md_gdal_meta_data: None,
             },
             MetaDataDefinition::GdalMetadataNetCdfCf(meta_data) => Self {
                 mock_meta_data: None,
@@ -430,6 +435,7 @@ impl From<&MetaDataDefinition> for MetaDataDefinitionDbType {
                 gdal_metadata_net_cdf_cf: Some(meta_data.clone()),
                 gdal_meta_data_list: None,
                 gdal_multi_band: None,
+                md_gdal_meta_data: None,
             },
             MetaDataDefinition::GdalMetaDataList(meta_data) => Self {
                 mock_meta_data: None,
@@ -439,6 +445,7 @@ impl From<&MetaDataDefinition> for MetaDataDefinitionDbType {
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: Some(meta_data.clone()),
                 gdal_multi_band: None,
+                md_gdal_meta_data: None,
             },
             MetaDataDefinition::GdalMultiBand(gdal_multi_band) => Self {
                 mock_meta_data: None,
@@ -448,6 +455,17 @@ impl From<&MetaDataDefinition> for MetaDataDefinitionDbType {
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: None,
                 gdal_multi_band: Some(gdal_multi_band.clone()),
+                md_gdal_meta_data: None,
+            },
+            MetaDataDefinition::MdGdalMetaData(meta_data) => Self {
+                mock_meta_data: None,
+                ogr_meta_data: None,
+                gdal_meta_data_regular: None,
+                gdal_static: None,
+                gdal_metadata_net_cdf_cf: None,
+                gdal_meta_data_list: None,
+                gdal_multi_band: None,
+                md_gdal_meta_data: serde_json::to_value(meta_data).ok(),
             },
         }
     }
@@ -466,6 +484,7 @@ impl TryFrom<MetaDataDefinitionDbType> for MetaDataDefinition {
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: None,
                 gdal_multi_band: None,
+                md_gdal_meta_data: None,
             } => Ok(MetaDataDefinition::MockMetaData(meta_data)),
             MetaDataDefinitionDbType {
                 mock_meta_data: None,
@@ -475,6 +494,7 @@ impl TryFrom<MetaDataDefinitionDbType> for MetaDataDefinition {
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: None,
                 gdal_multi_band: None,
+                md_gdal_meta_data: None,
             } => Ok(MetaDataDefinition::OgrMetaData(meta_data)),
             MetaDataDefinitionDbType {
                 mock_meta_data: None,
@@ -484,6 +504,7 @@ impl TryFrom<MetaDataDefinitionDbType> for MetaDataDefinition {
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: None,
                 gdal_multi_band: None,
+                md_gdal_meta_data: None,
             } => Ok(MetaDataDefinition::GdalMetaDataRegular(meta_data)),
             MetaDataDefinitionDbType {
                 mock_meta_data: None,
@@ -493,6 +514,7 @@ impl TryFrom<MetaDataDefinitionDbType> for MetaDataDefinition {
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: None,
                 gdal_multi_band: None,
+                md_gdal_meta_data: None,
             } => Ok(MetaDataDefinition::GdalStatic(meta_data)),
             MetaDataDefinitionDbType {
                 mock_meta_data: None,
@@ -502,6 +524,7 @@ impl TryFrom<MetaDataDefinitionDbType> for MetaDataDefinition {
                 gdal_metadata_net_cdf_cf: Some(meta_data),
                 gdal_meta_data_list: None,
                 gdal_multi_band: None,
+                md_gdal_meta_data: None,
             } => Ok(MetaDataDefinition::GdalMetadataNetCdfCf(meta_data)),
             MetaDataDefinitionDbType {
                 mock_meta_data: None,
@@ -511,6 +534,7 @@ impl TryFrom<MetaDataDefinitionDbType> for MetaDataDefinition {
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: Some(meta_data),
                 gdal_multi_band: None,
+                md_gdal_meta_data: None,
             } => Ok(MetaDataDefinition::GdalMetaDataList(meta_data)),
             MetaDataDefinitionDbType {
                 mock_meta_data: None,
@@ -520,7 +544,20 @@ impl TryFrom<MetaDataDefinitionDbType> for MetaDataDefinition {
                 gdal_metadata_net_cdf_cf: None,
                 gdal_meta_data_list: None,
                 gdal_multi_band: Some(meta_data),
+                md_gdal_meta_data: None,
             } => Ok(MetaDataDefinition::GdalMultiBand(meta_data)),
+            MetaDataDefinitionDbType {
+                mock_meta_data: None,
+                ogr_meta_data: None,
+                gdal_meta_data_regular: None,
+                gdal_static: None,
+                gdal_metadata_net_cdf_cf: None,
+                gdal_meta_data_list: None,
+                gdal_multi_band: None,
+                md_gdal_meta_data: Some(meta_data),
+            } => serde_json::from_value(meta_data)
+                .map(MetaDataDefinition::MdGdalMetaData)
+                .map_err(|_| Error::UnexpectedInvalidDbTypeConversion),
             _ => Err(Error::UnexpectedInvalidDbTypeConversion),
         }
     }

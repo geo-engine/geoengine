@@ -10,9 +10,11 @@ use crate::error::Result;
 use crate::projects::Symbology;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
-use geoengine_datatypes::primitives::VectorQueryRectangle;
-use geoengine_operators::engine::{MetaData, TypedResultDescriptor};
-use geoengine_operators::source::{GdalMetaDataList, GdalMetadataNetCdfCf, GdalMultiBand};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
+use geoengine_operators::engine::{MetaData, RasterResultDescriptor, TypedResultDescriptor};
+use geoengine_operators::source::{
+    GdalMetaDataList, GdalMetadataNetCdfCf, GdalMultiBand, MdLoadingInfo,
+};
 use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
 use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRegular};
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
@@ -148,6 +150,7 @@ pub enum MetaDataDefinition {
     GdalMetadataNetCdfCf(GdalMetadataNetCdfCf),
     GdalMetaDataList(GdalMetaDataList),
     GdalMultiBand(GdalMultiBand),
+    MdGdalMetaData(StaticMetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>),
 }
 
 impl From<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>
@@ -190,6 +193,16 @@ impl From<GdalMultiBand> for MetaDataDefinition {
     }
 }
 
+impl From<StaticMetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>
+    for MetaDataDefinition
+{
+    fn from(
+        meta_data: StaticMetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
+    ) -> Self {
+        MetaDataDefinition::MdGdalMetaData(meta_data)
+    }
+}
+
 impl MetaDataDefinition {
     pub fn source_operator_type(&self) -> &str {
         match self {
@@ -200,6 +213,7 @@ impl MetaDataDefinition {
             | MetaDataDefinition::GdalMetadataNetCdfCf(_)
             | MetaDataDefinition::GdalMetaDataList(_) => "GdalSource",
             MetaDataDefinition::GdalMultiBand(_) => "MultiBandGdalSource",
+            MetaDataDefinition::MdGdalMetaData(_) => "MdGdalSource",
         }
     }
 
@@ -212,6 +226,7 @@ impl MetaDataDefinition {
             MetaDataDefinition::GdalMetadataNetCdfCf(_) => "GdalMetadataNetCdfCf",
             MetaDataDefinition::GdalMetaDataList(_) => "GdalMetaDataList",
             MetaDataDefinition::GdalMultiBand(_) => "GdalMultiBand",
+            MetaDataDefinition::MdGdalMetaData(_) => "MdGdalMetaData",
         }
     }
 
@@ -248,6 +263,11 @@ impl MetaDataDefinition {
                 .map(Into::into)
                 .map_err(Into::into),
             MetaDataDefinition::GdalMultiBand(m) => Ok(m.result_descriptor.clone().into()),
+            MetaDataDefinition::MdGdalMetaData(m) => m
+                .result_descriptor()
+                .await
+                .map(Into::into)
+                .map_err(Into::into),
         }
     }
 
@@ -278,6 +298,10 @@ impl MetaDataDefinition {
                 result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
             },
             MetaDataDefinition::GdalMultiBand(d) => DatasetMetaData {
+                meta_data: self,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
+            },
+            MetaDataDefinition::MdGdalMetaData(d) => DatasetMetaData {
                 meta_data: self,
                 result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
             },

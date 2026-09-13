@@ -17,7 +17,7 @@ pub use gdal_dataset_params::{
 pub use grid_and_properties::GridAndProperties;
 pub use process_impl::{OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig};
 pub use process_pool::{GdalPoolDispatcher, GdalProcessPool, GdalProcessPoolError};
-pub use reader::{GdalPoolReader, GdalProcessReadResult};
+pub use reader::{GdalPoolReader, GdalProcessMdReadResult, GdalProcessReadResult};
 pub use reader_mode::{GdalReaderMode, OverviewReaderState, ReaderState};
 
 /// Computes a reduced-resolution spatial grid for a given overview level.

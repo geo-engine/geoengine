@@ -37,7 +37,7 @@ use url::Url;
 use utoipa::ToSchema;
 use validator::{Validate, ValidationErrors};
 
-use super::operators::GdalMultiBand;
+use super::operators::{GdalMultiBand, MdGdalMetaData};
 pub const SECRET_REPLACEMENT: &str = "*****";
 
 #[allow(clippy::large_enum_variant)]
@@ -52,6 +52,7 @@ pub enum MetaDataDefinition {
     GdalMetadataNetCdfCf(GdalMetadataNetCdfCf),
     GdalMetaDataList(GdalMetaDataList),
     GdalMultiBand(GdalMultiBand),
+    MdGdalMetaData(MdGdalMetaData),
 }
 
 impl From<crate::datasets::storage::MetaDataDefinition> for MetaDataDefinition {
@@ -86,6 +87,9 @@ impl From<crate::datasets::storage::MetaDataDefinition> for MetaDataDefinition {
             crate::datasets::storage::MetaDataDefinition::GdalMultiBand(x) => {
                 Self::GdalMultiBand(x.into())
             }
+            crate::datasets::storage::MetaDataDefinition::MdGdalMetaData(x) => {
+                Self::MdGdalMetaData(x.into())
+            }
         }
     }
 }
@@ -100,6 +104,7 @@ impl From<MetaDataDefinition> for crate::datasets::storage::MetaDataDefinition {
             MetaDataDefinition::GdalMetadataNetCdfCf(x) => Self::GdalMetadataNetCdfCf(x.into()),
             MetaDataDefinition::GdalMetaDataList(x) => Self::GdalMetaDataList(x.into()),
             MetaDataDefinition::GdalMultiBand(x) => Self::GdalMultiBand(x.into()),
+            MetaDataDefinition::MdGdalMetaData(x) => Self::MdGdalMetaData(x.into()),
         }
     }
 }

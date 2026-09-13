@@ -574,7 +574,8 @@ CREATE TYPE "MetaDataDefinition" AS (
     gdal_static "GdalMetaDataStatic",
     gdal_metadata_net_cdf_cf "GdalMetadataNetCdfCf",
     gdal_meta_data_list "GdalMetaDataList",
-    gdal_multi_band "GdalMultiBand"
+    gdal_multi_band "GdalMultiBand",
+    md_gdal_meta_data jsonb
 );
 
 -- seperate table for projects used in foreign key constraints

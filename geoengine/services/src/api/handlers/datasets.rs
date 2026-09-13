@@ -751,6 +751,12 @@ pub fn adjust_meta_data_path<A: AdjustFilePath>(
         MetaDataDefinition::GdalMultiBand(_gdal_multi_band) => {
             // do nothing, the file paths are not inside the meta data defintion but inside the dataset's tiles
         }
+        MetaDataDefinition::MdGdalMetaData(md_gdal_meta_data) => {
+            // adjust the absolute file paths inside the loading info
+            for file in md_gdal_meta_data.loading_info.files_mut() {
+                file.params.file_path = adjust.adjust_file_path(&file.params.file_path)?;
+            }
+        }
     }
     Ok(())
 }
