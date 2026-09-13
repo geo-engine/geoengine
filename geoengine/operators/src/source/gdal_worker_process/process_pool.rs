@@ -10,11 +10,12 @@ use geoengine_datatypes::raster::{GridBoundingBox2D, GridBounds, Pixel};
 use ipc_channel::ipc::{IpcReceiver, IpcSender};
 use rustc_hash::FxHasher;
 
-use crate::source::gdal_worker_process::process_common::GdalIpcBytePayload;
-
 use super::{
     GdalProcessPoolAccess,
-    process_common::{GdalIpcPayload, IpcChannelMessage, IpcProcessError, IpcProcessRasterResult},
+    process_common::{
+        GdalIpcPayload, IpcChannelMessage, IpcChannelResult, IpcProcessError,
+        IpcProcessRasterResult,
+    },
     process_impl::{ChildProcessGuard, WorkerConfig, spawn_ipc_server_process},
 };
 
@@ -236,8 +237,8 @@ enum BrokerCommand {
 }
 
 type SharedResult = Option<
-    Arc<(
-        Result<GdalIpcBytePayload, GdalProcessPoolError>,
+    std::sync::Arc<(
+        Result<IpcChannelResult, GdalProcessPoolError>,
         Option<tracing::Span>,
     )>,
 >;
@@ -853,13 +854,96 @@ impl GdalPoolDispatcher {
         &self,
         request: IpcChannelMessage,
     ) -> Result<GdalIpcPayload<P>, GdalProcessPoolError> {
-        self.read_data_dedup(request).await
+        let shared_res = self.dispatch_dedup(request).await?;
+
+        let result_ref =
+            shared_res
+                .0
+                .as_ref()
+                .map_err(|e| GdalProcessPoolError::IpcProcessError {
+                    source: IpcProcessError::IpcOther { msg: e.to_string() },
+                })?;
+
+        let IpcChannelResult::Raster(byte_payload) = result_ref else {
+            return Err(GdalProcessPoolError::IpcProcessError {
+                source: IpcProcessError::IpcOther {
+                    msg: "expected a classic raster result but got an MD batch".to_string(),
+                },
+            });
+        };
+
+        let payload: GdalIpcPayload<P> =
+            byte_payload
+                .try_into()
+                .map_err(|e: bytemuck::PodCastError| {
+                    tracing::error!("DEBUG: Failed to cast payload: {:?}", e);
+                    GdalProcessPoolError::IpcProcessError {
+                        source: IpcProcessError::PocCastError {
+                            error: e.to_string(),
+                        },
+                    }
+                })?;
+
+        Ok(payload)
     }
 
-    async fn read_data_dedup<P: Pixel>(
+    /// Read a batch of z-slices from a GDAL multidimensional array (one request,
+    /// one response containing one payload per z-slice). Uses the same
+    /// leader/follower deduplication as [`Self::read_data`].
+    ///
+    /// # Panics
+    /// This function will panic if a required channel is dropped unexpectedly.
+    pub async fn read_md_batch_data<P: Pixel>(
         &self,
         request: IpcChannelMessage,
-    ) -> Result<GdalIpcPayload<P>, GdalProcessPoolError> {
+    ) -> Result<Vec<GdalIpcPayload<P>>, GdalProcessPoolError> {
+        let shared_res = self.dispatch_dedup(request).await?;
+
+        let result_ref =
+            shared_res
+                .0
+                .as_ref()
+                .map_err(|e| GdalProcessPoolError::IpcProcessError {
+                    source: IpcProcessError::IpcOther { msg: e.to_string() },
+                })?;
+
+        let IpcChannelResult::MdBatch(byte_payloads) = result_ref else {
+            return Err(GdalProcessPoolError::IpcProcessError {
+                source: IpcProcessError::IpcOther {
+                    msg: "expected an MD batch result but got a classic raster result".to_string(),
+                },
+            });
+        };
+
+        byte_payloads
+            .iter()
+            .map(|byte_payload| {
+                byte_payload
+                    .try_into()
+                    .map_err(|e: bytemuck::PodCastError| {
+                        tracing::error!("DEBUG: Failed to cast MD payload: {:?}", e);
+                        GdalProcessPoolError::IpcProcessError {
+                            source: IpcProcessError::PocCastError {
+                                error: e.to_string(),
+                            },
+                        }
+                    })
+            })
+            .collect()
+    }
+
+    /// Shared leader/follower dispatch: hashes the request, coalesces identical
+    /// concurrent requests, submits to the broker and waits for the result.
+    async fn dispatch_dedup(
+        &self,
+        request: IpcChannelMessage,
+    ) -> Result<
+        std::sync::Arc<(
+            Result<IpcChannelResult, GdalProcessPoolError>,
+            Option<tracing::Span>,
+        )>,
+        GdalProcessPoolError,
+    > {
         let mut s = rustc_hash::FxHasher::default();
         request.full_hash(&mut s);
         let tile_key = s.finish();
@@ -957,27 +1041,7 @@ impl GdalPoolDispatcher {
             tracing::Span::current().follows_from(span.id());
         }
 
-        let byte_payload_ref =
-            shared_res
-                .0
-                .as_ref()
-                .map_err(|e| GdalProcessPoolError::IpcProcessError {
-                    source: IpcProcessError::IpcOther { msg: e.to_string() },
-                })?;
-
-        let payload: GdalIpcPayload<P> =
-            byte_payload_ref
-                .try_into()
-                .map_err(|e: bytemuck::PodCastError| {
-                    tracing::error!("DEBUG: Failed to cast payload: {:?}", e);
-                    GdalProcessPoolError::IpcProcessError {
-                        source: IpcProcessError::PocCastError {
-                            error: e.to_string(),
-                        },
-                    }
-                })?;
-
-        Ok(payload)
+        Ok(shared_res)
     }
 }
 
@@ -1099,8 +1163,9 @@ mod tests {
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
     };
     use crate::source::gdal_worker_process::process_common::{
-        GdalDataGridByteVariant, GdalIpcRasterProperties, GdalReadAdvise, GdalReadWindow,
-        IpcChannelMessage, IpcChannelMessagePayload,
+        GdalDataGridByteVariant, GdalIpcBytePayload, GdalIpcRasterProperties, GdalReadAdvise,
+        GdalReadKind, GdalReadWindow, IpcChannelMessage, IpcChannelMessagePayload,
+        IpcChannelResult,
     };
     use geoengine_datatypes::primitives::Coordinate2D;
     use geoengine_datatypes::raster::{GridShape2D, RasterDataType};
@@ -1161,6 +1226,7 @@ mod tests {
             },
             data_type: RasterDataType::U8,
             read_id: None,
+            read_kind: GdalReadKind::Raster,
         });
         let req = Box::new(QueuedRequest {
             dataset_hash,
@@ -1278,7 +1344,7 @@ mod tests {
                 if let BrokerCommand::Read(req) = cmd {
                     read_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     let _ = req.respond_to.send(ReadResult {
-                        result: Ok(Ok(GdalIpcBytePayload {
+                        result: Ok(Ok(IpcChannelResult::Raster(GdalIpcBytePayload {
                             dimensions: window([0, 0], [7, 7]),
                             properties: GdalIpcRasterProperties {
                                 offset: None,
@@ -1287,7 +1353,7 @@ mod tests {
                                 properties_map: vec![],
                             },
                             data_variant: GdalDataGridByteVariant::Empty,
-                        })),
+                        }))),
                         companion_span: None,
                     });
                 }

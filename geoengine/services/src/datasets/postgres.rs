@@ -35,7 +35,7 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo,
+    GdalDatasetParameters, GdalLoadingInfo, MdLoadingInfo, MultiBandGdalLoadingInfo,
     MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
 };
 use postgres_types::{FromSql, ToSql};
@@ -664,6 +664,81 @@ where
             MetaDataDefinition::GdalMetadataNetCdfCf(m) => Box::new(m),
             _ => return Err(geoengine_operators::error::Error::DataIdTypeMissMatch),
         })
+    }
+}
+
+#[async_trait]
+impl<Tls> MetaDataProvider<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for PostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn meta_data(
+        &self,
+        data_id: &DataId,
+    ) -> geoengine_operators::util::Result<
+        Box<dyn MetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+    > {
+        let id = data_id
+            .internal()
+            .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
+
+        let mut conn = self.conn_pool.get().await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
+        let tx = conn.build_transaction().start().await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
+
+        if !self
+            .has_permission_in_tx(id, Permission::Read, &tx)
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?
+        {
+            return Err(geoengine_operators::error::Error::PermissionDenied);
+        }
+
+        let stmt = tx
+            .prepare(
+                "
+            SELECT
+                d.meta_data
+            FROM
+                user_permitted_datasets p JOIN datasets d
+                    ON (p.dataset_id = d.id)
+            WHERE
+                d.id = $1 AND p.user_id = $2
+            LIMIT 
+                1",
+            )
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+
+        let row = tx
+            .query_one(&stmt, &[&id, &self.session.user.id])
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+
+        let meta_data: MetaDataDefinition = try_get_dataset_by_index_operators(&row, 0, &id)?;
+
+        let MetaDataDefinition::MdGdalMetaData(m) = meta_data else {
+            return Err(geoengine_operators::error::Error::DataIdTypeMissMatch);
+        };
+
+        Ok(Box::new(m))
     }
 }
 

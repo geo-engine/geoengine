@@ -1511,6 +1511,59 @@ impl From<GdalMultiBand> for geoengine_operators::source::GdalMultiBand {
     }
 }
 
+use geoengine_datatypes::primitives::RasterQueryRectangle;
+use geoengine_operators::engine::StaticMetaData;
+use geoengine_operators::source::MdLoadingInfo;
+
+#[type_tag(value = "MdGdalMetaData")]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MdGdalMetaData {
+    #[schema(value_type = serde_json::Value)]
+    pub loading_info: MdLoadingInfo,
+    pub result_descriptor: RasterResultDescriptor,
+}
+
+impl
+    From<
+        StaticMetaData<
+            MdLoadingInfo,
+            geoengine_operators::engine::RasterResultDescriptor,
+            RasterQueryRectangle,
+        >,
+    > for MdGdalMetaData
+{
+    fn from(
+        value: StaticMetaData<
+            MdLoadingInfo,
+            geoengine_operators::engine::RasterResultDescriptor,
+            RasterQueryRectangle,
+        >,
+    ) -> Self {
+        Self {
+            r#type: Default::default(),
+            loading_info: value.loading_info,
+            result_descriptor: value.result_descriptor.into(),
+        }
+    }
+}
+
+impl From<MdGdalMetaData>
+    for StaticMetaData<
+        MdLoadingInfo,
+        geoengine_operators::engine::RasterResultDescriptor,
+        RasterQueryRectangle,
+    >
+{
+    fn from(value: MdGdalMetaData) -> Self {
+        Self {
+            loading_info: value.loading_info,
+            result_descriptor: value.result_descriptor.into(),
+            phantom: Default::default(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum CsvHeader {
