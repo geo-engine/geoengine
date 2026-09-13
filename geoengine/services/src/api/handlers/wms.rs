@@ -717,7 +717,7 @@ mod tests {
         let (image_bytes, _) = raster_stream_to_png_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle::new(
-                GridBoundingBox2D::new_min_max(-900, 899, -1800, 1799).unwrap(),
+                GridBoundingBox2D::new_min_max(0, 1799, 0, 3599).unwrap(),
                 geoengine_datatypes::primitives::TimeInterval::new(
                     1_388_534_400_000,
                     1_388_534_400_000 + 1000,
