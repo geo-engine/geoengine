@@ -617,8 +617,7 @@ mod tests {
         CacheHint, Measurement, SpatialPartition2D, TimeInstance,
     };
     use geoengine_datatypes::raster::{
-        GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridSize,
-        RasterDataType,
+        GeoTransform, GridBoundingBox2D, GridIdx2D, GridSize, RasterDataType, TileIdx, TileSize,
     };
     use geoengine_datatypes::raster::{RasterPropertiesEntryType, RasterPropertiesKey};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
@@ -648,7 +647,7 @@ mod tests {
 
     #[test]
     fn tiling_strategy_origin() {
-        let tile_size_in_pixels = [600, 600];
+        let tile_size = TileSize::new_y_x(600, 600);
         let dataset_upper_right_coord = (-180.0, 90.0).into();
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
@@ -661,7 +660,7 @@ mod tests {
         let partition = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
-            tile_size_in_pixels: tile_size_in_pixels.into(),
+            tile_size,
             geo_transform: dataset_geo_transform,
         };
 
@@ -679,14 +678,14 @@ mod tests {
         );
 
         let tile_grid = origin_split_tileing_strategy.tile_grid_box(partition);
-        assert_eq!(tile_grid.axis_size(), [3, 6]);
+        assert_eq!(tile_grid.grid_bounds().axis_size(), [3, 6]);
         assert_eq!(tile_grid.min_index(), [0, 0].into());
         assert_eq!(tile_grid.max_index(), [2, 5].into());
     }
 
     #[test]
     fn tiling_strategy_zero() {
-        let tile_size_in_pixels = [600, 600];
+        let tile_size = TileSize::new_y_x(600, 600);
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
         let central_geo_transform = GeoTransform::new_with_coordinate_x_y(
@@ -699,7 +698,7 @@ mod tests {
         let partition = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
-            tile_size_in_pixels: tile_size_in_pixels.into(),
+            tile_size,
             geo_transform: central_geo_transform,
         };
 
@@ -717,14 +716,14 @@ mod tests {
         );
 
         let tile_grid = origin_split_tileing_strategy.tile_grid_box(partition);
-        assert_eq!(tile_grid.axis_size(), [4, 6]);
+        assert_eq!(tile_grid.grid_bounds().axis_size(), [4, 6]);
         assert_eq!(tile_grid.min_index(), [-2, -3].into());
         assert_eq!(tile_grid.max_index(), [1, 2].into());
     }
 
     #[test]
     fn tile_idx_iterator() {
-        let tile_size_in_pixels = [600, 600];
+        let tile_size = TileSize::new_y_x(600, 600);
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
         let central_geo_transform = GeoTransform::new_with_coordinate_x_y(
@@ -737,12 +736,13 @@ mod tests {
         let grid_bounds = GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
-            tile_size_in_pixels: tile_size_in_pixels.into(),
+            tile_size,
             geo_transform: central_geo_transform,
         };
 
         let vres: Vec<GridIdx2D> = origin_split_tileing_strategy
             .tile_idx_iterator_from_grid_bounds(grid_bounds)
+            .map(GridIdx2D::from)
             .collect();
         assert_eq!(vres.len(), 4 * 6);
         assert_eq!(vres[0], [-2, -3].into());
@@ -753,7 +753,7 @@ mod tests {
 
     #[test]
     fn tile_information_iterator() {
-        let tile_size_in_pixels = [600, 600];
+        let tile_size = TileSize::new_y_x(600, 600);
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
 
@@ -767,7 +767,7 @@ mod tests {
         let grid_bounds = GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
-            tile_size_in_pixels: tile_size_in_pixels.into(),
+            tile_size,
             geo_transform: central_geo_transform,
         };
 
@@ -777,35 +777,19 @@ mod tests {
         assert_eq!(vres.len(), 4 * 6);
         assert_eq!(
             vres[0],
-            TileInformation::new(
-                [-2, -3].into(),
-                tile_size_in_pixels.into(),
-                central_geo_transform,
-            )
+            TileInformation::new(TileIdx::new_y_x(-2, -3), tile_size, central_geo_transform,)
         );
         assert_eq!(
             vres[1],
-            TileInformation::new(
-                [-2, -2].into(),
-                tile_size_in_pixels.into(),
-                central_geo_transform,
-            )
+            TileInformation::new(TileIdx::new_y_x(-2, -2), tile_size, central_geo_transform,)
         );
         assert_eq!(
             vres[12],
-            TileInformation::new(
-                [0, -3].into(),
-                tile_size_in_pixels.into(),
-                central_geo_transform,
-            )
+            TileInformation::new(TileIdx::new_y_x(0, -3), tile_size, central_geo_transform,)
         );
         assert_eq!(
             vres[23],
-            TileInformation::new(
-                [1, 2].into(),
-                tile_size_in_pixels.into(),
-                central_geo_transform,
-            )
+            TileInformation::new(TileIdx::new_y_x(1, 2), tile_size, central_geo_transform,)
         );
     }
 
@@ -1992,7 +1976,7 @@ mod tests {
 
         let tile_info = TileInformation::new(
             [0, 0].into(),
-            GridShape2D::new([height, width]),
+            TileSize::new_y_x(height, width),
             GeoTransform::new((0.0, 4.0).into(), 1.0, -1.0),
         );
 
@@ -2012,7 +1996,7 @@ mod tests {
 
         let grid = tile.grid_array.as_masked_grid().expect("should be a grid");
 
-        let tiling_spec = TilingSpecification::new(GridShape2D::new([height, width]));
+        let tiling_spec = TilingSpecification::new(TileSize::new_y_x(height, width));
         let tiling_grid = TilingSpatialGridDefinition::new(data_grid, tiling_spec);
 
         let expected_tile = raster_tile_from_file::<u16>(

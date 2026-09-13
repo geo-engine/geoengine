@@ -277,8 +277,8 @@ mod tests {
                 (HashSet::<isize>::new(), HashSet::<isize>::new()),
                 |acc, tile_idx| {
                     let (mut x_indices, mut y_indices) = acc;
-                    x_indices.insert(tile_idx.x());
-                    y_indices.insert(tile_idx.y());
+                    x_indices.insert(tile_idx.grid_idx().x());
+                    y_indices.insert(tile_idx.grid_idx().y());
                     (x_indices, y_indices)
                 },
             );

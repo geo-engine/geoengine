@@ -1347,13 +1347,15 @@ mod tests {
         test::{self, TestRequest, read_body_json},
     };
     use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::raster::TileIdx;
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::{
         primitives::{
             BandSelection, CacheHint, CacheTtlSeconds, Coordinate2D, RasterQueryRectangle,
             TimeGranularity, TimeInterval,
         },
         raster::{
-            GeoTransform, Grid, GridBoundingBox2D, GridShape, RasterDataType, RasterTile2D,
+            GeoTransform, Grid, GridBoundingBox2D, RasterDataType, RasterTile2D,
             TilingSpecification,
         },
         spatial_reference::SpatialReference,
@@ -2573,7 +2575,7 @@ mod tests {
             let data: Vec<RasterTile2D<u8>> = vec![
                 RasterTile2D {
                     time: TimeInterval::new_unchecked(1_671_868_800_000, 1_671_955_200_000),
-                    tile_position: [-1, 0].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
                     band: 0,
                     global_geo_transform: TestDefault::test_default(),
                     grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
@@ -2582,7 +2584,7 @@ mod tests {
                 },
                 RasterTile2D {
                     time: TimeInterval::new_unchecked(1_671_955_200_000, 1_672_041_600_000),
-                    tile_position: [-1, 0].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
                     band: 0,
                     global_geo_transform: TestDefault::test_default(),
                     grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
@@ -2636,7 +2638,7 @@ mod tests {
             };
 
             let tiling_specification = TilingSpecification {
-                tile_size_in_pixels: GridShape::new([2, 2]),
+                tile_size: TileSize::new_y_x(2, 2),
             };
 
             let query_rectangle = RasterQueryRectangle::new(
