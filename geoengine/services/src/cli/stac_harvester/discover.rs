@@ -5,7 +5,7 @@ use clap::{Parser, ValueEnum};
 use geoengine_datatypes::{
     dataset::DataProviderId,
     primitives::{AxisAlignedRectangle, BoundingBox2D, SpatialResolution},
-    raster::{GeoTransform, GridBoundingBox2D, GridIdx2D, RasterDataType},
+    raster::{GeoTransform, GridBoundingBox2D, GridIdx2D, RasterDataType, TileSize},
     spatial_reference::{SpatialReference, SpatialReferenceAuthority},
     util::Identifier,
 };
@@ -586,6 +586,7 @@ fn build_dataset_spatial_grid(
                 -dataset_key.resolution.into_inner(),
             ),
             zero_size_grid(),
+            TileSize::default_512(),
         )
     };
 
@@ -593,7 +594,7 @@ fn build_dataset_spatial_grid(
         if let Some(gt) = info.geo_transform {
             let grid_bounds = projection_grid_bounds(gt, dataset_key.epsg)
                 .unwrap_or_else(|| fallback_grid_bounds(info));
-            GeoOpSpatialGridDescriptor::source_from_parts(gt, grid_bounds)
+            GeoOpSpatialGridDescriptor::source_from_parts(gt, grid_bounds, TileSize::default_512())
         } else {
             fallback_grid()
         }
@@ -602,7 +603,7 @@ fn build_dataset_spatial_grid(
             .proj_shape
             .and_then(|(height, width)| asset_shape_bounds(height, width).ok())
             .unwrap_or_else(zero_size_grid);
-        GeoOpSpatialGridDescriptor::source_from_parts(gt, grid_bounds)
+        GeoOpSpatialGridDescriptor::source_from_parts(gt, grid_bounds, TileSize::default_512())
     } else {
         fallback_grid()
     }

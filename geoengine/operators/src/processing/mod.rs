@@ -17,6 +17,7 @@ mod raster_type_conversion;
 mod raster_vector_join;
 mod rasterization;
 mod reprojection;
+mod retile;
 mod temporal_raster_aggregation;
 mod time_projection;
 mod time_shift;
@@ -66,6 +67,7 @@ pub use reprojection::{
     DeriveOutRasterSpecsSource, InitializedRasterReprojection, InitializedVectorReprojection,
     Reprojection, ReprojectionParams,
 };
+pub use retile::{ReTile, ReTileParams, ReTileProcessor};
 pub use temporal_raster_aggregation::{
     Aggregation, TemporalRasterAggregation, TemporalRasterAggregationParameters,
 };

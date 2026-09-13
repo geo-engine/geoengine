@@ -302,8 +302,8 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{CacheHint, Coordinate2D, TimeInterval},
         raster::{
-            BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, GridShape2D, MaskedGrid2D,
-            RasterDataType, TileInformation, TilesEqualIgnoringCacheHint,
+            BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, MaskedGrid2D, RasterDataType,
+            TileInformation, TilesEqualIgnoringCacheHint,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -312,7 +312,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn it_filters_bands() {
-        let tile_size = GridShape2D::new_2d(2, 2);
+        let tile_size = TileSize::new_y_x(2, 2);
         let time_interval = TimeInterval::default();
 
         let result_descriptor = RasterResultDescriptor {
@@ -321,7 +321,8 @@ mod tests {
             time: TimeDescriptor::new_irregular(Some(time_interval)),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size.bounding_box(),
+                tile_size.grid_shape().bounding_box(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new(vec![
                 RasterBandDescriptor::new_unitless("red".into()),
@@ -334,12 +335,16 @@ mod tests {
         let tile_info = TileInformation {
             global_geo_transform: TestDefault::test_default(),
             tile_position: TileIdx::new_y_x(0, 0),
-            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
+            tile_size,
         };
 
-        let band_0: MaskedGrid2D<u8> = Grid2D::new(tile_size, vec![1_u8, 2, 3, 4]).unwrap().into();
-        let band_1: MaskedGrid2D<u8> = Grid2D::new(tile_size, vec![5_u8, 6, 7, 8]).unwrap().into();
-        let band_2: MaskedGrid2D<u8> = Grid2D::new(tile_size, vec![9_u8, 10, 11, 12])
+        let band_0: MaskedGrid2D<u8> = Grid2D::new(tile_size.into(), vec![1_u8, 2, 3, 4])
+            .unwrap()
+            .into();
+        let band_1: MaskedGrid2D<u8> = Grid2D::new(tile_size.into(), vec![5_u8, 6, 7, 8])
+            .unwrap()
+            .into();
+        let band_2: MaskedGrid2D<u8> = Grid2D::new(tile_size.into(), vec![9_u8, 10, 11, 12])
             .unwrap()
             .into();
 
@@ -386,10 +391,7 @@ mod tests {
         .boxed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            geoengine_datatypes::raster::TilingSpecification::new(TileSize::new_y_x(
-                tile_size.y(),
-                tile_size.x(),
-            )),
+            geoengine_datatypes::raster::TilingSpecification::with_zero_origin(tile_size),
         );
         let query_context = execution_context.mock_query_context_test_default();
 
@@ -437,7 +439,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn it_filters_bands_by_index() {
-        let tile_size = GridShape2D::new_2d(2, 2);
+        let tile_size = TileSize::new_y_x(2, 2);
         let time_interval = TimeInterval::default();
 
         let result_descriptor = RasterResultDescriptor {
@@ -446,7 +448,8 @@ mod tests {
             time: TimeDescriptor::new_irregular(Some(time_interval)),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size.bounding_box(),
+                tile_size.grid_shape().bounding_box(),
+                TileSize::new_y_x(256, 256),
             ),
             bands: RasterBandDescriptors::new(vec![
                 RasterBandDescriptor::new_unitless("band0".into()),
@@ -459,12 +462,16 @@ mod tests {
         let tile_info = TileInformation {
             global_geo_transform: TestDefault::test_default(),
             tile_position: TileIdx::new_y_x(0, 0),
-            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
+            tile_size,
         };
 
-        let band_0: MaskedGrid2D<u8> = Grid2D::new(tile_size, vec![1_u8, 2, 3, 4]).unwrap().into();
-        let band_1: MaskedGrid2D<u8> = Grid2D::new(tile_size, vec![5_u8, 6, 7, 8]).unwrap().into();
-        let band_2: MaskedGrid2D<u8> = Grid2D::new(tile_size, vec![9_u8, 10, 11, 12])
+        let band_0: MaskedGrid2D<u8> = Grid2D::new(tile_size.into(), vec![1_u8, 2, 3, 4])
+            .unwrap()
+            .into();
+        let band_1: MaskedGrid2D<u8> = Grid2D::new(tile_size.into(), vec![5_u8, 6, 7, 8])
+            .unwrap()
+            .into();
+        let band_2: MaskedGrid2D<u8> = Grid2D::new(tile_size.into(), vec![9_u8, 10, 11, 12])
             .unwrap()
             .into();
 
@@ -511,10 +518,7 @@ mod tests {
         .boxed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            geoengine_datatypes::raster::TilingSpecification::new(TileSize::new_y_x(
-                tile_size.y(),
-                tile_size.x(),
-            )),
+            geoengine_datatypes::raster::TilingSpecification::with_zero_origin(tile_size),
         );
         let query_context = execution_context.mock_query_context_test_default();
 

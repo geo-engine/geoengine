@@ -186,7 +186,7 @@ mod tests {
     };
     use actix_web::{http::header, test::TestRequest};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::raster::GridShape2D;
+    use geoengine_datatypes::raster::{GridShape2D, TilingGrid};
     use geoengine_operators::engine::RasterResultDescriptor;
     use ogcapi_types::{
         common::Crs,
@@ -266,13 +266,15 @@ mod tests {
         execution_context: &ExecutionContextImpl<PostgresDb<NoTls>>,
         descriptor: &RasterResultDescriptor,
     ) -> GridShape2D {
-        let tiling_grid_definition =
-            descriptor.tiling_grid_definition(execution_context.tiling_specification());
+        let tiling_grid = TilingGrid::from_spatial_grid(
+            descriptor.spatial_grid_descriptor().spatial_grid,
+            execution_context.tiling_specification().tile_size,
+        );
 
-        let tiling_strategy = tiling_grid_definition.generate_data_tiling_strategy();
+        let tiling_strategy = tiling_grid.tiling_strategy();
 
         let (x_indices, y_indices) = tiling_strategy
-            .tile_idx_iterator_from_grid_bounds(tiling_grid_definition.tiling_grid_bounds())
+            .tile_idx_iterator_from_grid_bounds(tiling_grid.pixel_bounds)
             .fold(
                 (HashSet::<isize>::new(), HashSet::<isize>::new()),
                 |acc, tile_idx| {
@@ -342,11 +344,11 @@ mod tests {
                         scale_denominator: 159_027_844.000_000_03,
                         cell_size: 0.4,
                         corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-204.8, 204.8],
+                        point_of_origin: [-180., 90.],
                         tile_width: 512.try_into().unwrap(),
                         tile_height: 512.try_into().unwrap(),
                         matrix_width: 2.try_into().unwrap(),
-                        matrix_height: 2.try_into().unwrap(),
+                        matrix_height: 1.try_into().unwrap(),
                         variable_matrix_widths: vec![],
                     },
                     TileMatrix {
@@ -357,7 +359,7 @@ mod tests {
                         scale_denominator: 79_513_922.000_000_01,
                         cell_size: 0.2,
                         corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-204.8, 102.4],
+                        point_of_origin: [-180., 90.],
                         tile_width: 512.try_into().unwrap(),
                         tile_height: 512.try_into().unwrap(),
                         matrix_width: 4.try_into().unwrap(),
@@ -372,7 +374,7 @@ mod tests {
                         scale_denominator: 39_756_961.000_000_01,
                         cell_size: 0.1,
                         corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-204.8, 102.4],
+                        point_of_origin: [-180., 90.],
                         tile_width: 512.try_into().unwrap(),
                         tile_height: 512.try_into().unwrap(),
                         matrix_width: 8.try_into().unwrap(),
@@ -471,11 +473,11 @@ mod tests {
                         scale_denominator: 407_286_157.394_767_2,
                         cell_size: 114_040.124_070_534_8,
                         corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-58_354_990.030_488_94, 58_418_366.631_411_66],
+                        point_of_origin: [-20_037_508.342_789_244, 20_100_884.943_711_97],
                         tile_width: 512.try_into().unwrap(),
                         tile_height: 512.try_into().unwrap(),
-                        matrix_width: 2.try_into().unwrap(),
-                        matrix_height: 2.try_into().unwrap(),
+                        matrix_width: 1.try_into().unwrap(),
+                        matrix_height: 1.try_into().unwrap(),
                         variable_matrix_widths: vec![],
                     },
                     TileMatrix {
@@ -486,7 +488,7 @@ mod tests {
                         scale_denominator: 203_643_078.697_383_6,
                         cell_size: 57_020.062_035_267_394,
                         corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-29_217_738.330_467_295, 29_167_074.807_319_485],
+                        point_of_origin: [-20_037_508.342_789_244, 20_100_884.943_711_97],
                         tile_width: 512.try_into().unwrap(),
                         tile_height: 512.try_into().unwrap(),
                         matrix_width: 2.try_into().unwrap(),
@@ -501,11 +503,11 @@ mod tests {
                         scale_denominator: 101_821_539.348_691_8,
                         cell_size: 28_510.031_017_633_697,
                         corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-29_189_228.299_449_66, 29_195_584.838_337_12],
+                        point_of_origin: [-20_037_508.342_789_244, 20_100_884.943_711_97],
                         tile_width: 512.try_into().unwrap(),
                         tile_height: 512.try_into().unwrap(),
-                        matrix_width: 4.try_into().unwrap(),
-                        matrix_height: 4.try_into().unwrap(),
+                        matrix_width: 3.try_into().unwrap(),
+                        matrix_height: 3.try_into().unwrap(),
                         variable_matrix_widths: vec![],
                     },
                     TileMatrix {
@@ -516,7 +518,7 @@ mod tests {
                         scale_denominator: 50_910_769.674_345_896,
                         cell_size: 14_255.015_508_816_849,
                         corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-21_890_660.358_935_43, 21_897_016.897_822_894],
+                        point_of_origin: [-20_037_508.342_789_244, 20_100_884.943_711_97],
                         tile_width: 512.try_into().unwrap(),
                         tile_height: 512.try_into().unwrap(),
                         matrix_width: 6.try_into().unwrap(),

@@ -37,7 +37,7 @@ use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::{BoundedGrid, GeoTransform, GridShape2D};
+use geoengine_datatypes::raster::{BoundedGrid, GeoTransform, GridShape2D, TileSize};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
@@ -536,7 +536,11 @@ impl ArunaDataProvider {
             data_type: info.data_type,
             spatial_reference: crs,
             time: TimeDescriptor::new_irregular(Some(info.time_interval)),
-            spatial_grid: SpatialGridDescriptor::source_from_parts(geo_transform, shape),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                geo_transform,
+                shape,
+                TileSize::default_512(),
+            ),
             bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 "band".into(),
                 info.measurement
@@ -658,6 +662,7 @@ impl ArunaDataProvider {
                 gdal_config_options: None,
                 allow_alphaband_as_mask: true,
                 retry: None,
+                tile_size: None,
             }),
             cache_ttl,
         };

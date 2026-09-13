@@ -15,6 +15,7 @@ use crate::{
 };
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::{BandSelection, TimeInterval};
+use geoengine_datatypes::raster::TilingGrid;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
@@ -127,14 +128,13 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await?;
 
-        let tiling_spec = exe_ctx.tiling_specification();
         let result_descriptor = initialized_operator.result_descriptor();
 
         let query_rect = if let Some(sq) = self.info.query {
             let grid_bounds = result_descriptor
                 .spatial_grid_descriptor()
-                .tiling_grid_definition(tiling_spec)
-                .tiling_geo_transform()
+                .spatial_grid
+                .geo_transform
                 .spatial_to_grid_bounds(&sq.spatial_bounds.into());
 
             geoengine_datatypes::primitives::RasterQueryRectangle::new(
@@ -144,8 +144,9 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
             )
         } else {
             let grid_bounds = result_descriptor
-                .tiling_grid_definition(tiling_spec)
-                .tiling_grid_bounds();
+                .spatial_grid_descriptor()
+                .spatial_grid
+                .grid_bounds;
 
             let qt = result_descriptor.time.bounds.ok_or(
                 crate::error::Error::LayerResultDescriptorMissingFields {
@@ -322,20 +323,28 @@ async fn create_dataset<C: SessionContext>(
 
     let exe_ctx = ctx.execution_context()?;
 
-    let source_tiling_spatial_grid =
-        origin_result_descriptor.tiling_grid_definition(exe_ctx.tiling_specification());
-    let query_tiling_spatial_grid =
-        source_tiling_spatial_grid.with_other_bounds(query_rectangle.spatial_bounds());
+    let source_tiling_grid = TilingGrid::from_spatial_grid(
+        origin_result_descriptor
+            .spatial_grid_descriptor()
+            .spatial_grid,
+        exe_ctx.tiling_specification().tile_size,
+    );
+    let query_tiling_grid = TilingGrid {
+        pixel_bounds: query_rectangle.spatial_bounds(),
+        ..source_tiling_grid
+    };
     let result_descriptor_bounds = origin_result_descriptor
         .spatial_grid_descriptor()
-        .intersection_with_tiling_grid(&query_tiling_spatial_grid)
+        .intersection_with_tiling_grid(&query_tiling_grid)
         .ok_or(error::Error::EmptyDatasetCannotBeImported)?; // TODO: maybe allow empty datasets?
 
     // TODO: this is not how it is intended to work with the spatial grid descriptor. The source should propably not need that defined in its params since it can be derived from the dataset!
-    let (_state, dataset_source_descriptor_spatial_grid) = result_descriptor_bounds.as_parts();
+    let (_state, dataset_source_descriptor_spatial_grid, tile_size) =
+        result_descriptor_bounds.as_parts();
 
     let dataset_spatial_grid = geoengine_operators::engine::SpatialGridDescriptor::new_source(
         dataset_source_descriptor_spatial_grid,
+        tile_size,
     );
 
     let result_descriptor = RasterResultDescriptor {

@@ -2607,6 +2607,7 @@ mod tests {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::test_default(),
                     GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
+                    TileSize::default_512(),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             };
@@ -2637,9 +2638,8 @@ mod tests {
                 }
             };
 
-            let tiling_specification = TilingSpecification {
-                tile_size: TileSize::new_y_x(2, 2),
-            };
+            let tiling_specification =
+                TilingSpecification::with_zero_origin(TileSize::new_y_x(2, 2));
 
             let query_rectangle = RasterQueryRectangle::new(
                 GridBoundingBox2D::new_min_max(-2, -1, 0, 1).unwrap(),

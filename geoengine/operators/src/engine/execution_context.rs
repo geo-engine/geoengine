@@ -21,7 +21,7 @@ use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::machine_learning::MlModelName;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
-use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_datatypes::raster::{TileSize, TilingSpecification};
 use geoengine_datatypes::util::test::TestDefault;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -89,6 +89,10 @@ where
 {
     async fn loading_info(&self, query: Q) -> Result<L>;
     async fn result_descriptor(&self) -> Result<R>;
+
+    fn tile_size(&self) -> Option<TileSize> {
+        None
+    }
 
     fn box_clone(&self) -> Box<dyn MetaData<L, R, Q>>;
 }

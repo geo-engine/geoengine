@@ -387,6 +387,7 @@ impl TileQuery {
 		("session_token" = [])
 	)
 )]
+#[allow(clippy::too_many_lines)]
 pub async fn tile<C: ApplicationContext>(
     req: HttpRequest,
     session: C::Session,
@@ -433,10 +434,6 @@ pub async fn tile<C: ApplicationContext>(
         tiling_specification,
     )?;
 
-    let (expected_number_of_tiles_at_zoom_level, _) =
-        tms_spec.grid_shape_and_origin(query.tile_matrix);
-    query.check_inside_bounds(expected_number_of_tiles_at_zoom_level)?;
-
     #[cfg(debug_assertions)]
     let original_result_descriptor = initialized_operator.result_descriptor().clone();
 
@@ -453,23 +450,27 @@ pub async fn tile<C: ApplicationContext>(
             .boxed_context(error::InitializingProcessingGraph)?;
     }
 
+    let (expected_number_of_tiles_at_zoom_level, _) =
+        tms_spec.grid_shape_and_origin(query.tile_matrix);
+    query.check_inside_bounds(expected_number_of_tiles_at_zoom_level)?;
+
     #[cfg(debug_assertions)]
     assert_multiple_of_original_resolution(
         &original_result_descriptor,
         initialized_operator.result_descriptor(),
     );
 
-    let tile_size_in_pixels = tms_spec.tile_size_in_pixels(query.tile_matrix);
+    let tile_size = tms_spec.tile_size(query.tile_matrix);
     let (tile_width, tile_height) = (
-        u32::try_from(tile_size_in_pixels.x()).unwrap_or(u32::MAX),
-        u32::try_from(tile_size_in_pixels.y()).unwrap_or(u32::MAX),
+        u32::try_from(tile_size.axis_size_x()).expect("tile size must fit in u32"),
+        u32::try_from(tile_size.axis_size_y()).expect("tile size must fit in u32"),
     );
 
     let query_rect = RasterQueryRectangle::new(
         tms_spec.tile_grid_bbox(
             &initialized_operator
                 .result_descriptor()
-                .tiling_grid_definition(tiling_specification),
+                .tiling_grid_definition(),
             query.tile_matrix,
             query.tile_row,
             query.tile_col,
@@ -923,7 +924,6 @@ mod tests {
             .and_then(|v| v.to_str().ok())
             .map(ToOwned::to_owned);
         let image_bytes = actix_web::test::read_body(res).await;
-
         assert_eq!(
             status,
             200,

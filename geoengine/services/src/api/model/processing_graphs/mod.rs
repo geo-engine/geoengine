@@ -14,7 +14,8 @@ use geoengine_operators::{
         Expression as OperatorsExpression, Interpolation as OperatorsInterpolation,
         RasterStacker as OperatorsRasterStacker,
         RasterTypeConversion as OperatorsRasterTypeConversion,
-        RasterVectorJoin as OperatorsRasterVectorJoin, Reprojection as OperatorsReprojection,
+        RasterVectorJoin as OperatorsRasterVectorJoin, ReTile as OperatorsReTile,
+        Reprojection as OperatorsReprojection,
         TemporalRasterAggregation as OperatorsTemporalRasterAggregation,
         VectorExpression as OperatorsVectorExpression,
     },
@@ -44,9 +45,9 @@ pub(crate) use crate::api::model::processing_graphs::{
         DownsamplingResolution, Expression, ExpressionParameters, Interpolation,
         InterpolationMethod, InterpolationParameters, InterpolationResolution, RasterStacker,
         RasterStackerParameters, RasterTypeConversion, RasterTypeConversionParameters,
-        RasterVectorJoin, RasterVectorJoinParameters, RenameBands, Reprojection,
-        ReprojectionParameters, TemporalRasterAggregation, TemporalRasterAggregationParameters,
-        VectorExpression, VectorExpressionParameters,
+        RasterVectorJoin, RasterVectorJoinParameters, ReTile, ReTileParameters, RenameBands,
+        Reprojection, ReprojectionParameters, TemporalRasterAggregation,
+        TemporalRasterAggregationParameters, VectorExpression, VectorExpressionParameters,
     },
     source::{
         GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
@@ -85,6 +86,7 @@ pub enum RasterOperator {
     MultiBandGdalSource(MultiBandGdalSource),
     RasterStacker(RasterStacker),
     RasterTypeConversion(RasterTypeConversion),
+    ReTile(ReTile),
     Reprojection(Reprojection),
     TemporalRasterAggregation(TemporalRasterAggregation),
 }
@@ -146,6 +148,9 @@ impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
             }
             RasterOperator::RasterStacker(raster_stacker) => {
                 OperatorsRasterStacker::try_from(raster_stacker).map(OperatorsRasterOperator::boxed)
+            }
+            RasterOperator::ReTile(re_tile) => {
+                OperatorsReTile::try_from(re_tile).map(OperatorsRasterOperator::boxed)
             }
             RasterOperator::RasterTypeConversion(type_conversion) => {
                 OperatorsRasterTypeConversion::try_from(type_conversion)
@@ -266,6 +271,8 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     RasterTypeConversionParameters,
     RasterVectorJoin,
     RasterVectorJoinParameters,
+    ReTile,
+    ReTileParameters,
     RenameBands,
     Reprojection,
     ReprojectionParameters,

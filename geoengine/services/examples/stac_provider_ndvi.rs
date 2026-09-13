@@ -5,7 +5,7 @@ use futures::StreamExt;
 use geoengine_datatypes::{
     dataset::DataProviderId,
     primitives::{BandSelection, DateTime, RasterQueryRectangle, SpatialPartition2D, TimeInterval},
-    raster::{GridBoundingBox2D, GridBounds, SpatialGridDefinition},
+    raster::{GridBoundingBox2D, GridBounds, SpatialGridDefinition, TilingGrid},
     util::Identifier,
 };
 use geoengine_operators::engine::{ExecutionContext, WorkflowOperatorPath};
@@ -139,12 +139,15 @@ async fn run_profile_query(
     )
     .context("creating query bounds")?;
 
-    let full_query_grid = initialized
-        .result_descriptor()
-        .spatial_grid_descriptor()
-        .tiling_grid_definition(execution_ctx.tiling_specification())
-        .tiling_spatial_grid_definition()
-        .spatial_bounds_to_compatible_spatial_grid(query_bounds);
+    let full_query_grid = TilingGrid::from_spatial_grid(
+        initialized
+            .result_descriptor()
+            .spatial_grid_descriptor()
+            .spatial_grid,
+        execution_ctx.tiling_specification().tile_size,
+    )
+    .to_spatial_grid()
+    .spatial_bounds_to_compatible_spatial_grid(query_bounds);
 
     // Clamp to a single tile: use only the top-left tile index from the computed grid
     let single_tile_idx = full_query_grid.grid_bounds().min_index();

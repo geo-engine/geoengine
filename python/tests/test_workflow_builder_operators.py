@@ -396,6 +396,25 @@ class OperatorsTests(unittest.TestCase):
             wb.operators.RasterStacker.from_operator_dict(workflow.to_dict()).to_dict(), workflow.to_dict()
         )
 
+    def test_retile(self):
+        source_operator = wb.operators.GdalSource("ndvi")
+
+        workflow = wb.operators.ReTile(
+            source_operator=source_operator,
+            tile_size=(640, 640),
+            output_origin=(100.0, -200.0),
+        )
+
+        self.assertEqual(
+            workflow.to_dict(),
+            {
+                "type": "ReTile",
+                "params": {"tileSize": [640, 640], "origin": {"x": 100.0, "y": -200.0}},
+                "sources": {"raster": {"type": "GdalSource", "params": {"data": "ndvi"}}},
+            },
+        )
+        self.assertEqual(wb.operators.ReTile.from_operator_dict(workflow.to_dict()).to_dict(), workflow.to_dict())
+
 
 if __name__ == "__main__":
     unittest.main()

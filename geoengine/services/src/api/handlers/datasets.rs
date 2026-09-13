@@ -1710,7 +1710,7 @@ mod tests {
             BandSelection, BoundingBox2D, ColumnSelection, DateTimeParseFormat,
             RasterQueryRectangle, SpatialPartition2D,
         },
-        raster::TilingSpecification,
+        raster::{TilingGrid, TilingSpecification},
         spatial_reference::SpatialReferenceOption,
         util::{Identifier, assert_image_equals, test::assert_eq_two_list_of_tiles},
     };
@@ -2026,9 +2026,7 @@ mod tests {
     }
 
     fn ctx_tiling_spec_600x600() -> TilingSpecification {
-        TilingSpecification {
-            tile_size: TileSize::new_y_x(600, 600),
-        }
+        TilingSpecification::with_zero_origin(TileSize::new_y_x(600, 600))
     }
 
     #[ge_context::test(tiling_spec = "ctx_tiling_spec_600x600")]
@@ -3350,9 +3348,7 @@ mod tests {
 
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn create_dataset_tiling_specification() -> TilingSpecification {
-        TilingSpecification {
-            tile_size: TileSize::new_y_x(600, 600),
-        }
+        TilingSpecification::with_zero_origin(TileSize::new_y_x(600, 600))
     }
 
     #[ge_context::test(tiling_spec = "create_dataset_tiling_specification")]
@@ -3993,6 +3989,7 @@ mod tests {
                     gdal_open_options: None,
                     gdal_config_options: None,
                     allow_alphaband_as_mask: true,
+                    tile_size: None,
                 },
             });
 
@@ -4025,6 +4022,7 @@ mod tests {
                     gdal_open_options: None,
                     gdal_config_options: None,
                     allow_alphaband_as_mask: true,
+                    tile_size: None,
                 },
             });
         }
@@ -4118,13 +4116,16 @@ mod tests {
 
         let tiling_spec = execution_context.tiling_specification();
 
-        let tiling_spatial_grid_definition = processor
-            .result_descriptor()
-            .spatial_grid_descriptor()
-            .tiling_grid_definition(tiling_spec);
+        let tiling_grid = TilingGrid::from_spatial_grid(
+            processor
+                .result_descriptor()
+                .spatial_grid_descriptor()
+                .spatial_grid,
+            tiling_spec.tile_size,
+        );
 
-        let query_tiling_pixel_grid = tiling_spatial_grid_definition
-            .tiling_spatial_grid_definition()
+        let query_tiling_pixel_grid = tiling_grid
+            .to_spatial_grid()
             .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
                 (-180., 90.).into(),
                 (180.0, -90.).into(),
@@ -4173,7 +4174,7 @@ mod tests {
             .map(|f| {
                 raster_tile_from_file::<u16>(
                     test_data!(format!("raster/multi_tile/results/z_index/tiles/{f}")),
-                    tiling_spatial_grid_definition,
+                    tiling_grid,
                     expected_time,
                     0,
                 )
@@ -4212,13 +4213,16 @@ mod tests {
 
         let tiling_spec = execution_context.tiling_specification();
 
-        let tiling_spatial_grid_definition = processor
-            .result_descriptor()
-            .spatial_grid_descriptor()
-            .tiling_grid_definition(tiling_spec);
+        let tiling_grid = TilingGrid::from_spatial_grid(
+            processor
+                .result_descriptor()
+                .spatial_grid_descriptor()
+                .spatial_grid,
+            tiling_spec.tile_size,
+        );
 
-        let query_tiling_pixel_grid = tiling_spatial_grid_definition
-            .tiling_spatial_grid_definition()
+        let query_tiling_pixel_grid = tiling_grid
+            .to_spatial_grid()
             .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
                 (-180., 90.).into(),
                 (180.0, -90.).into(),
@@ -4275,7 +4279,7 @@ mod tests {
             .map(|(f, b)| {
                 raster_tile_from_file::<u16>(
                     test_data!(format!("raster/multi_tile/results/z_index/tiles/{f}")),
-                    tiling_spatial_grid_definition,
+                    tiling_grid,
                     expected_time,
                     *b,
                 )
@@ -4315,13 +4319,16 @@ mod tests {
 
         let tiling_spec = execution_context.tiling_specification();
 
-        let tiling_spatial_grid_definition = processor
-            .result_descriptor()
-            .spatial_grid_descriptor()
-            .tiling_grid_definition(tiling_spec);
+        let tiling_grid = TilingGrid::from_spatial_grid(
+            processor
+                .result_descriptor()
+                .spatial_grid_descriptor()
+                .spatial_grid,
+            tiling_spec.tile_size,
+        );
 
-        let query_tiling_pixel_grid = tiling_spatial_grid_definition
-            .tiling_spatial_grid_definition()
+        let query_tiling_pixel_grid = tiling_grid
+            .to_spatial_grid()
             .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
                 (-180., 90.).into(),
                 (180.0, -90.).into(),
@@ -4404,7 +4411,7 @@ mod tests {
             .map(|(f, b, t)| {
                 raster_tile_from_file::<u16>(
                     test_data!(format!("raster/multi_tile/results/z_index/tiles/{f}")),
-                    tiling_spatial_grid_definition,
+                    tiling_grid,
                     *t,
                     *b,
                 )
@@ -4444,13 +4451,16 @@ mod tests {
 
         let tiling_spec = execution_context.tiling_specification();
 
-        let tiling_spatial_grid_definition = processor
-            .result_descriptor()
-            .spatial_grid_descriptor()
-            .tiling_grid_definition(tiling_spec);
+        let tiling_grid = TilingGrid::from_spatial_grid(
+            processor
+                .result_descriptor()
+                .spatial_grid_descriptor()
+                .spatial_grid,
+            tiling_spec.tile_size,
+        );
 
-        let query_tiling_pixel_grid = tiling_spatial_grid_definition
-            .tiling_spatial_grid_definition()
+        let query_tiling_pixel_grid = tiling_grid
+            .to_spatial_grid()
             .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
                 (-180., 90.).into(),
                 (180.0, -90.).into(),
@@ -4550,7 +4560,7 @@ mod tests {
             .map(|(f, b, t)| {
                 raster_tile_from_file::<u16>(
                     test_data!(format!("raster/multi_tile/results/z_index/tiles/{f}")),
-                    tiling_spatial_grid_definition,
+                    tiling_grid,
                     *t,
                     *b,
                 )
@@ -4612,7 +4622,7 @@ mod tests {
             .map(|(f, b, t)| {
                 raster_tile_from_file::<u16>(
                     test_data!(format!("raster/multi_tile/results/z_index/tiles/{f}")),
-                    tiling_spatial_grid_definition,
+                    tiling_grid,
                     *t,
                     *b,
                 )
@@ -4671,13 +4681,16 @@ mod tests {
 
         let tiling_spec = execution_context.tiling_specification();
 
-        let tiling_spatial_grid_definition = processor
-            .result_descriptor()
-            .spatial_grid_descriptor()
-            .tiling_grid_definition(tiling_spec);
+        let tiling_grid = TilingGrid::from_spatial_grid(
+            processor
+                .result_descriptor()
+                .spatial_grid_descriptor()
+                .spatial_grid,
+            tiling_spec.tile_size,
+        );
 
-        let query_tiling_pixel_grid = tiling_spatial_grid_definition
-            .tiling_spatial_grid_definition()
+        let query_tiling_pixel_grid = tiling_grid
+            .to_spatial_grid()
             .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
                 (-180., 90.).into(),
                 (180.0, -90.).into(),
@@ -4776,7 +4789,7 @@ mod tests {
             .map(|(f, b, t)| {
                 raster_tile_from_file::<u16>(
                     test_data!(format!("raster/multi_tile/results/z_index/tiles/{f}")),
-                    tiling_spatial_grid_definition,
+                    tiling_grid,
                     *t,
                     *b,
                 )
@@ -4838,7 +4851,7 @@ mod tests {
             .map(|(f, b, t)| {
                 raster_tile_from_file::<u16>(
                     test_data!(format!("raster/multi_tile/results/z_index/tiles/{f}")),
-                    tiling_spatial_grid_definition,
+                    tiling_grid,
                     *t,
                     *b,
                 )
@@ -4895,13 +4908,16 @@ mod tests {
 
         let tiling_spec = execution_context.tiling_specification();
 
-        let tiling_spatial_grid_definition = processor
-            .result_descriptor()
-            .spatial_grid_descriptor()
-            .tiling_grid_definition(tiling_spec);
+        let tiling_grid = TilingGrid::from_spatial_grid(
+            processor
+                .result_descriptor()
+                .spatial_grid_descriptor()
+                .spatial_grid,
+            tiling_spec.tile_size,
+        );
 
-        let query_tiling_pixel_grid = tiling_spatial_grid_definition
-            .tiling_spatial_grid_definition()
+        let query_tiling_pixel_grid = tiling_grid
+            .to_spatial_grid()
             .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
                 (-180., 90.).into(),
                 (180.0, -90.).into(),
@@ -4952,7 +4968,7 @@ mod tests {
                     test_data!(format!(
                         "raster/multi_tile/results/z_index_reversed/tiles/{f}"
                     )),
-                    tiling_spatial_grid_definition,
+                    tiling_grid,
                     expected_time,
                     0,
                 )
@@ -4989,13 +5005,16 @@ mod tests {
 
         let tiling_spec = execution_context.tiling_specification();
 
-        let tiling_spatial_grid_definition = processor
-            .result_descriptor()
-            .spatial_grid_descriptor()
-            .tiling_grid_definition(tiling_spec);
+        let tiling_grid = TilingGrid::from_spatial_grid(
+            processor
+                .result_descriptor()
+                .spatial_grid_descriptor()
+                .spatial_grid,
+            tiling_spec.tile_size,
+        );
 
-        let query_tiling_pixel_grid = tiling_spatial_grid_definition
-            .tiling_spatial_grid_definition()
+        let query_tiling_pixel_grid = tiling_grid
+            .to_spatial_grid()
             .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
                 (-180., 90.).into(),
                 (180.0, -90.).into(),
@@ -5415,6 +5434,7 @@ mod tests {
                 gdal_open_options: None,
                 gdal_config_options: None,
                 allow_alphaband_as_mask: false,
+                tile_size: None,
             },
         };
 
@@ -5505,6 +5525,7 @@ mod tests {
                 gdal_open_options: None,
                 gdal_config_options: None,
                 allow_alphaband_as_mask: false,
+                tile_size: None,
             },
         };
 
