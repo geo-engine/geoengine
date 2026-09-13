@@ -1,0 +1,55 @@
+{
+  "id": "landsat-c2-l1",
+  "description": "Landsat Collection 2 Level-1",
+  "stac_version": "1.1.0",
+  "stac_extensions": [
+    "https://stac-extensions.github.io/eo/v2.0.0/schema.json",
+    "https://stac-extensions.github.io/projection/v2.0.0/schema.json",
+    "https://stac-extensions.github.io/raster/v2.0.0/schema.json"
+  ],
+  "links": [
+    {
+      "rel": "items",
+      "type": "application/geo+json",
+      "href": "https://stac.code-de.org/v1/collections/landsat-c2-l1/items"
+    }
+  ],
+  "summaries": {
+    "gsd": [30],
+    "platform": ["landsat-8", "landsat-9"]
+  },
+  "item_assets": {
+    "B4_30m": {
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "title": "Red (band 4) - 30m",
+      "bands": [{ "name": "B4", "eo:common_name": "red" }],
+      "data_type": "uint16",
+      "gsd": 30,
+      "proj:shape": [8000, 8000]
+    },
+    "B5_30m": {
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "title": "NIR (band 5) - 30m",
+      "bands": [{ "name": "B5", "eo:common_name": "nir" }],
+      "data_type": "uint16",
+      "gsd": 30,
+      "proj:shape": [8000, 8000]
+    },
+    "B2_30m": {
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "title": "Blue (band 2) - 30m",
+      "bands": [{ "name": "B2", "eo:common_name": "blue" }],
+      "data_type": "uint16",
+      "gsd": 30,
+      "proj:shape": [8000, 8000]
+    },
+    "B3_30m": {
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "title": "Green (band 3) - 30m",
+      "bands": [{ "name": "B3", "eo:common_name": "green" }],
+      "data_type": "uint16",
+      "gsd": 30,
+      "proj:shape": [8000, 8000]
+    }
+  }
+}
