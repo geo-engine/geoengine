@@ -164,12 +164,10 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
             self.query_timeout_secs,
         );
 
-        if let Some(authentication) = self.authentication {
-            provider.authentication = Some(
-                auth::StacAuthentication::initialize(provider.client.clone(), authentication)
-                    .await?,
-            );
-        }
+        provider.client = provider
+            .client
+            .with_authentication(self.authentication)
+            .await?;
 
         Ok(Box::new(provider))
     }
@@ -237,8 +235,7 @@ pub struct StacDataProvider {
     datasets: Vec<StacProviderDataset>,
     page_limit: i64,
     /// Shared HTTP client, reused across all requests for this provider.
-    client: reqwest::Client,
-    authentication: Option<auth::StacAuthentication>,
+    client: StacClient,
     /// In-memory cache for STAC query results (tile files), keyed by dataset
     /// name and spatial/temporal query bounds.
     query_cache: Arc<StacQueryCache>,
@@ -272,8 +269,7 @@ impl StacDataProvider {
             time_dimension,
             datasets,
             page_limit,
-            client,
-            authentication: None,
+            client: StacClient::new(client),
             query_cache: Arc::new(StacQueryCache::default()),
         }
     }
@@ -288,5 +284,43 @@ impl DataProvider for StacDataProvider {
         Err(crate::error::Error::NotImplemented {
             message: "STAC provenance is not yet implemented".to_owned(),
         })
+    }
+}
+
+/// Shared STAC HTTP client. Clones share token renewal state, and each request
+/// reads the current token so pagination and retries use refreshed credentials.
+#[derive(Clone, Debug)]
+pub(crate) struct StacClient {
+    client: reqwest::Client,
+    authentication: Option<auth::StacAuthentication>,
+}
+
+impl StacClient {
+    pub(crate) fn new(client: reqwest::Client) -> Self {
+        Self {
+            client,
+            authentication: None,
+        }
+    }
+
+    pub(crate) async fn with_authentication(
+        mut self,
+        config: Option<StacProviderAuthentication>,
+    ) -> crate::error::Result<Self> {
+        self.authentication = match config {
+            Some(config) => {
+                Some(auth::StacAuthentication::initialize(self.client.clone(), config).await?)
+            }
+            None => None,
+        };
+        Ok(self)
+    }
+
+    pub(crate) async fn get(&self, url: impl reqwest::IntoUrl) -> reqwest::RequestBuilder {
+        let request = self.client.get(url);
+        match &self.authentication {
+            Some(authentication) => authentication.authorize(request).await,
+            None => request,
+        }
     }
 }

@@ -1,7 +1,6 @@
 use super::common;
 use super::{
-    StacDataProvider, StacProviderDataset, StacProviderS3Config, auth::StacAuthentication,
-    cache::StacQueryCache,
+    StacClient, StacDataProvider, StacProviderDataset, StacProviderS3Config, cache::StacQueryCache,
 };
 use crate::error::Result;
 use crate::util::join_base_url_and_path;
@@ -43,8 +42,7 @@ struct StacMultiBandMetaData {
     time_dimension: TimeDimension,
     dataset: StacProviderDataset,
     page_limit: i64,
-    client: reqwest::Client,
-    authentication: Option<StacAuthentication>,
+    client: StacClient,
     /// Shared query-result cache from the provider.
     query_cache: Arc<StacQueryCache>,
 }
@@ -62,8 +60,7 @@ enum StacQueryState {
 }
 
 async fn query_stac_item_collection(
-    client: &reqwest::Client,
-    authentication: Option<&StacAuthentication>,
+    client: &StacClient,
     query_state: &StacQueryState,
 ) -> geoengine_operators::util::Result<(stac::ItemCollection, StacQueryState)> {
     let request_policy = RetryPolicy::new().stop_on_status(&[400, 404]);
@@ -79,11 +76,7 @@ async fn query_stac_item_collection(
 
             let item_collection: stac::ItemCollection = retry_http(
                 || async {
-                    let request = client.get(query_url.clone()).query(query_params);
-                    let request = match authentication {
-                        Some(authentication) => authentication.authorize(request).await,
-                        None => request,
-                    };
+                    let request = client.get(query_url.clone()).await.query(query_params);
 
                     request.send().await?.error_for_status()?.json().await
                 },
@@ -121,11 +114,7 @@ async fn query_stac_item_collection(
 
             let item_collection: stac::ItemCollection = retry_http(
                 || async {
-                    let request = client.get(next_url.clone());
-                    let request = match authentication {
-                        Some(authentication) => authentication.authorize(request).await,
-                        None => request,
-                    };
+                    let request = client.get(next_url.clone()).await;
 
                     request.send().await?.error_for_status()?.json().await
                 },
@@ -217,12 +206,8 @@ impl
         let mut time_steps = Vec::new();
 
         while !matches!(query_state, StacQueryState::Finished) {
-            let (item_collection, next_state) = query_stac_item_collection(
-                &self.client,
-                self.authentication.as_ref(),
-                &query_state,
-            )
-            .await?;
+            let (item_collection, next_state) =
+                query_stac_item_collection(&self.client, &query_state).await?;
 
             for item in item_collection.items {
                 self.process_stac_item(&item, &mut time_steps, &mut files)
@@ -651,7 +636,6 @@ impl
             dataset: dataset.clone(),
             page_limit: self.page_limit,
             client: self.client.clone(),
-            authentication: self.authentication.clone(),
             query_cache: self.query_cache.clone(),
         }))
     }
@@ -853,37 +837,37 @@ mod tests {
             .respond_with(responders::json_encoded(stac_items_response())),
         );
 
-        let client = reqwest::Client::new();
-        let authentication = StacAuthentication::initialize(
-            client.clone(),
-            crate::datasets::external::stac::StacProviderAuthentication {
-                endpoint: server.url_str("/token"),
-                client_id: "my-client-id".to_owned(),
-                username: "test-user".to_owned(),
-                password: "test-password".to_owned(),
-            },
-        )
-        .await
-        .expect("initial password grant should succeed");
+        let client = StacClient::new(reqwest::Client::new())
+            .with_authentication(Some(
+                crate::datasets::external::stac::StacProviderAuthentication {
+                    endpoint: server.url_str("/token"),
+                    client_id: "my-client-id".to_owned(),
+                    username: "test-user".to_owned(),
+                    password: "test-password".to_owned(),
+                },
+            ))
+            .await
+            .expect("initial password grant should succeed");
 
         let initial_query = StacQueryState::FirstPage {
             query_url: Url::parse(&server.url_str("/initial-items")).unwrap(),
             query_params: vec![],
         };
-        query_stac_item_collection(&client, Some(&authentication), &initial_query)
+        query_stac_item_collection(&client, &initial_query)
             .await
             .expect("initial authenticated STAC request should succeed");
 
         let next_page_query = StacQueryState::NextPage {
             next_url: Url::parse(&server.url_str("/next-items")).unwrap(),
         };
-        query_stac_item_collection(&client, Some(&authentication), &next_page_query)
+        query_stac_item_collection(&client, &next_page_query)
             .await
             .expect("authenticated STAC pagination request should succeed");
 
         tokio::time::timeout(Duration::from_secs(4), async {
             loop {
-                if authentication.access_token().await == "access-token-3" {
+                if client.authentication.as_ref().unwrap().access_token().await == "access-token-3"
+                {
                     break;
                 }
                 tokio::time::sleep(Duration::from_millis(25)).await;
@@ -896,7 +880,7 @@ mod tests {
             query_url: Url::parse(&server.url_str("/refreshed-items")).unwrap(),
             query_params: vec![],
         };
-        query_stac_item_collection(&client, Some(&authentication), &refreshed_query)
+        query_stac_item_collection(&client, &refreshed_query)
             .await
             .expect("refreshed authenticated STAC request should succeed");
     }
