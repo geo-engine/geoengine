@@ -5341,13 +5341,7 @@ mod tests {
                         )
                         .into(),
                         time: TimeDescriptor {
-                            bounds: Some(
-                                TimeInterval::new_unchecked(
-                                    TimeInstance::from_str("2014-01-01T00:00:00Z").unwrap(),
-                                    TimeInstance::from_str("2014-01-02T00:00:00Z").unwrap(),
-                                )
-                                .into(),
-                            ),
+                            bounds: None,
                             dimension: TimeDimension::Irregular,
                         },
                         spatial_grid: SpatialGridDescriptor {
@@ -5398,8 +5392,8 @@ mod tests {
             )
             .into(),
             spatial_partition: SpatialPartition2D::new_unchecked(
-                (50., -50.).into(),
-                (150., -150.).into(),
+                (0., 0.).into(),
+                (100., -100.).into(),
             )
             .into(),
             band: 0,
@@ -5488,8 +5482,8 @@ mod tests {
             )
             .into(),
             spatial_partition: SpatialPartition2D::new_unchecked(
-                (50., -50.).into(),
-                (150., -150.).into(),
+                (-50., 50.).into(),
+                (0., 0.).into(),
             )
             .into(),
             band: 0,

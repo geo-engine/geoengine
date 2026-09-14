@@ -226,7 +226,6 @@ export class RasterizationComponent implements OnDestroy {
         let rasterization;
 
         if (this.selected.value === 0) {
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- needed for TS to narrow the union type
             rasterization = this.form.controls.rasterization as FormGroup<GridForm>;
 
             params = {
@@ -242,7 +241,6 @@ export class RasterizationComponent implements OnDestroy {
                 },
             };
         } else if (this.selected.value === 1) {
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- needed for TS to narrow the union type
             rasterization = this.form.controls.rasterization as FormGroup<DensityForm>;
 
             params = {

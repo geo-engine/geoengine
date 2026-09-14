@@ -207,6 +207,10 @@ export class UserService {
         return this.getSessionTokenStream().pipe(first());
     }
 
+    getSessionToken(): Promise<UUID> {
+        return firstValueFrom(this.getSessionTokenForRequest());
+    }
+
     /**
      * Returns a stream that notifies about the current session quota.
      * May be undefined if there is no current session or the backend does not use quotas.

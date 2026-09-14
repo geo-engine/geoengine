@@ -548,7 +548,7 @@ export class ProjectService implements OnDestroy {
     /**
      * Add a plot to the project.
      */
-    addPlot(plot: Plot, notify = true): Observable<void> {
+    addPlot(plot: Plot, notify = true): Promise<void> {
         this.createPlotDataStreams(plot);
 
         const result = this.getProjectOnce().pipe(
@@ -564,7 +564,7 @@ export class ProjectService implements OnDestroy {
             }),
         );
 
-        return subscribeAndProvide(result);
+        return firstValueFrom(subscribeAndProvide(result));
     }
 
     /**
