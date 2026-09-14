@@ -976,15 +976,13 @@ export class ProjectService implements OnDestroy {
 
     /**
      * Create a stream that signals whether a running query should be aborted because the results are no longer needed.
-     * It takes the layerId, current zoomLevel and extent of a tile at the time of querying as a parameter in order to
-     * determine whether a change in the layer list or on the map view makes the results obsolete.
+     * It takes the layerId, the resolution of the queried tile and its extent at the time of querying as a parameter in
+     * order to determine whether a change in the layer list or on the map view makes the results obsolete.
      *
      * If the layer is not registered with the project service (e.g. in the enhanced data viewer), the stream does not
      * emit when the layer is removed, only on the viewing conditions below.
      */
-    createQueryAbortStream(layerId: number, tileZoomLevel: number, tileExtent: Extent): Observable<void> {
-        const tileResolution = this.mapService.getView().getResolutionForZoom(tileZoomLevel);
-
+    createQueryAbortStream(layerId: number, tileResolution: number, tileExtent: Extent): Observable<void> {
         // create an observable that emits when the layer is removed
         const layerStream = this.layers.get(layerId);
         const layerRemovedSubject = new BehaviorSubject<boolean>(false);

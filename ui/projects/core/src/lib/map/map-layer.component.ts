@@ -17,7 +17,15 @@ import {Subject, Subscription} from 'rxjs';
 
 import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol/layer';
 import {ImageTile as OlImageTile} from 'ol';
-import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
+import {
+    Source as OlSource,
+    Tile as OlTileSource,
+    TileWMS as OlTileWmsSource,
+    Vector as OlVectorSource,
+    OGCMapTile,
+    TileDebug,
+    ImageTile,
+} from 'ol/source';
 import {get as olGetProj} from 'ol/proj';
 import {getCacheKey} from 'ol/tilecoord';
 import {CoreConfig} from '../config.service';
@@ -89,15 +97,20 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
     /**
      * Remove a tile from the renderer cache so OpenLayers re-creates and re-fetches it (as an IDLE tile)
      * when it is requested again.
+     *
+     * The cache key is built from the source that created the tile, since the layer's current source may
+     * have been replaced in the meantime (then the key would not exist in the cache).
      */
-    protected evictTileFromRendererCache(tile: OlImageTile): void {
+    protected evictTileFromRendererCache(tile: OlImageTile, source: OlTileSource): void {
         // Tile layers only, so narrow the (generic) base layer to a tile layer once.
         const tileLayer = this._mapLayer as unknown as OlLayerTile;
         const tileCache = tileLayer.getRenderer()?.getTileCache();
-        const renderSource = tileLayer.getSource();
-        if (tileCache && renderSource) {
+        if (tileCache) {
             const [z, x, y] = tile.getTileCoord();
-            tileCache.remove(getCacheKey(renderSource, renderSource.getKey(), z, x, y));
+            const cacheKey = getCacheKey(source, source.getKey(), z, x, y);
+            if (tileCache.containsKey(cacheKey)) {
+                tileCache.remove(cacheKey);
+            }
         }
     }
 
@@ -351,19 +364,21 @@ export class OlRasterLayerComponent
         });
 
         const proj = olGetProj(this.spatialReference.srsString)!;
-        const tileGrid = this.source.getTileGridForProjection(proj);
+        const source = this.source;
+        const tileGrid = source.getTileGridForProjection(proj);
 
-        this.source.setTileLoadFunction((olTile, src) => {
+        source.setTileLoadFunction((olTile, src) => {
             const tile = olTile as OlImageTile;
             const tileCoord = tile.getTileCoord();
             const tileZoomLevel = tileCoord[0];
+            const tileResolution = tileGrid.getResolution(tileZoomLevel);
             const tileExtent = tileGrid.getTileCoordExtent(tileCoord) as Extent;
 
             const client = new XMLHttpRequest();
 
             let aborted = false;
 
-            const cancelSub = this.projectService.createQueryAbortStream(this.layerId(), tileZoomLevel, tileExtent).subscribe(() => {
+            const cancelSub = this.projectService.createQueryAbortStream(this.layerId(), tileResolution, tileExtent).subscribe(() => {
                 aborted = true;
                 client.abort();
             });
@@ -383,7 +398,7 @@ export class OlRasterLayerComponent
                         // re-fetched when it is requested again (e.g. after panning away
                         // and back). Otherwise the ERROR tile stays cached forever and is
                         // never reloaded, because OpenLayers only requests IDLE tiles.
-                        this.evictTileFromRendererCache(tile);
+                        this.evictTileFromRendererCache(tile, source);
                     }
                 } else {
                     if (data.type === 'image/png') {
@@ -506,10 +521,11 @@ export class OlOgcApiMapTileLayerComponent
                             const tileCoord = tile.getTileCoord();
                             const tileZoomLevel = tileCoord[0];
                             const tileGrid = source.getTileGridForProjection(olGetProj(this.spatialReference().srsString)!);
+                            const tileResolution = tileGrid.getResolution(tileZoomLevel);
                             const tileExtent = tileGrid.getTileCoordExtent(tileCoord) as Extent;
 
                             cancelSub = this.projectService
-                                .createQueryAbortStream(this.layerId(), tileZoomLevel, tileExtent)
+                                .createQueryAbortStream(this.layerId(), tileResolution, tileExtent)
                                 .subscribe(() => controller.abort());
 
                             // Successfully assign the object URL to the image element
@@ -534,7 +550,7 @@ export class OlOgcApiMapTileLayerComponent
                                 // re-fetched when it is requested again (e.g. after panning away
                                 // and back). Otherwise the ERROR tile stays cached forever and is
                                 // never reloaded, because OpenLayers only requests IDLE tiles.
-                                this.evictTileFromRendererCache(olTile as OlImageTile);
+                                this.evictTileFromRendererCache(olTile as OlImageTile, source);
                             }
                         } finally {
                             cancelSub?.unsubscribe();
