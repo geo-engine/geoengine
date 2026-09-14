@@ -8,16 +8,18 @@ use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::primitives::{SpatialResolution, TimeDimension};
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_operators::engine::SpatialGridDescriptor;
+use geoengine_operators::engine::{RasterBandDescriptor, SpatialGridDescriptor};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 mod cache;
+pub(crate) mod common;
 mod listing;
 mod loading_info;
 
 const DEFAULT_QUERY_TIMEOUT_SECS: i64 = 60;
+const DEFAULT_PAGE_LIMIT: i64 = 100;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
 #[postgres(name = "StacDataProviderDefinition")]
@@ -32,14 +34,19 @@ pub struct StacDataProviderDefinition {
     pub s3_config: Option<StacProviderS3Config>,
     pub time_dimension: TimeDimension, // TODO: should this be on dataset level?
     pub datasets: Vec<StacProviderDataset>,
-    // TODO: page limit(?)
     /// Timeout in seconds for outgoing STAC API HTTP requests.
     #[serde(default = "default_query_timeout")]
     pub query_timeout_secs: i64,
+    #[serde(default = "default_page_limit")]
+    pub page_limit: i64,
 }
 
 fn default_query_timeout() -> i64 {
     DEFAULT_QUERY_TIMEOUT_SECS
+}
+
+fn default_page_limit() -> i64 {
+    DEFAULT_PAGE_LIMIT
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
@@ -71,11 +78,60 @@ pub struct StacProviderDataset {
     pub bands: Vec<StacProviderDatasetBand>,
 }
 
+/// A band inside a STAC asset.
+///
+/// *Addresses* the band in the asset files of a STAC collection:
+/// [`asset_title`](StacAssetBand::asset_title) selects the asset file,
+/// [`band_name`](StacAssetBand::band_name) selects the raster channel within
+/// it.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
+#[postgres(name = "StacAssetBand")]
+pub struct StacAssetBand {
+    /// The title of the STAC asset in the collection. Used to *address* the
+    /// asset file that contains this band (matched against the STAC asset
+    /// `title`).
+    pub asset_title: String,
+    /// The name of the band *within* the asset file.
+    ///
+    /// Matches the STAC `bands[].name` metadata (e.g. `B04`) to select the
+    /// raster channel inside the asset. `None` for single-band assets.
+    pub band_name: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
 #[postgres(name = "StacProviderDatasetBand")]
 pub struct StacProviderDatasetBand {
-    pub asset_title: String,
-    pub band_name: Option<String>,
+    /// The band inside the STAC asset that this dataset band reads from.
+    ///
+    /// This is the *addressing* information: which asset file
+    /// ([`StacAssetBand::asset_title`]) and which raster channel within it
+    /// ([`StacAssetBand::band_name`]).
+    pub asset_band: StacAssetBand,
+    /// The band descriptor of the resulting geo engine dataset layer.
+    ///
+    /// This is independent of [`Self::asset_band`], which *addresses* the band
+    /// inside the asset files. During discovery it is populated with the same
+    /// naming fallback (`asset_band.band_name`, then
+    /// `asset_band.asset_title`) and a unitless measurement.
+    pub band_descriptor: RasterBandDescriptor,
+}
+
+impl StacProviderDatasetBand {
+    /// Create a dataset band whose resulting result-descriptor band is
+    /// unitless and named after the asset band using the discovery fallback
+    /// ([`StacAssetBand::band_name`], else [`StacAssetBand::asset_title`]).
+    pub fn new_unitless(asset_band: StacAssetBand) -> Self {
+        let band_descriptor = RasterBandDescriptor::new_unitless(
+            asset_band
+                .band_name
+                .clone()
+                .unwrap_or_else(|| asset_band.asset_title.clone()),
+        );
+        Self {
+            asset_band,
+            band_descriptor,
+        }
+    }
 }
 
 #[async_trait]
@@ -93,6 +149,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
             self.s3_config,
             self.time_dimension,
             self.datasets,
+            self.page_limit,
             self.query_timeout_secs,
         )))
     }
@@ -149,6 +206,7 @@ pub struct StacDataProvider {
     s3_config: Option<StacProviderS3Config>,
     time_dimension: TimeDimension,
     datasets: Vec<StacProviderDataset>,
+    page_limit: i64,
     /// Shared HTTP client, reused across all requests for this provider.
     client: reqwest::Client,
     /// In-memory cache for STAC query results (tile files), keyed by dataset
@@ -167,6 +225,7 @@ impl StacDataProvider {
         s3_config: Option<StacProviderS3Config>,
         time_dimension: TimeDimension,
         datasets: Vec<StacProviderDataset>,
+        page_limit: i64,
         query_timeout_secs: i64,
     ) -> Self {
         let client = reqwest::Client::builder()
@@ -182,6 +241,7 @@ impl StacDataProvider {
             s3_config,
             time_dimension,
             datasets,
+            page_limit,
             client,
             query_cache: Arc::new(StacQueryCache::default()),
         }

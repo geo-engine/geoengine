@@ -46,9 +46,6 @@ describe('ComputeComponent', () => {
         };
 
         const layersService = {
-            getLayerCollectionItems: vi.fn().mockResolvedValue({
-                items: [{name: 'Land Cover', id: {providerId: 'provider-id', layerId: 'layer-id'}}],
-            }),
             registerAndGetLayerWorkflowId: vi.fn().mockResolvedValue('workflow-id'),
             getWorkflowIdMetadata: vi.fn().mockResolvedValue({
                 layerType: 'raster',
@@ -85,6 +82,7 @@ describe('ComputeComponent', () => {
 
         fixture = TestBed.createComponent(ComputeComponent);
         component = fixture.componentInstance;
+        fixture.componentRef.setInput('selectedRasterLayer', {dataConnectorId: 'provider-id', layerId: 'layer-id'});
         fixture.detectChanges();
         await fixture.whenStable();
     });
@@ -94,7 +92,7 @@ describe('ComputeComponent', () => {
         fixture.detectChanges();
         await fixture.whenStable();
 
-        expect(component.selectedRasterLayer.value()).toEqual({dataConnectorId: 'provider-id', layerId: 'layer-id'});
+        expect(component.selectedRasterLayer()).toEqual({dataConnectorId: 'provider-id', layerId: 'layer-id'});
         expect(component.selectedBand()).toBe('red');
         expect(component.computationBbox()).toEqual({
             bbox: expect.objectContaining({xmin: 0, ymin: 0, xmax: 1, ymax: 1}),
@@ -107,6 +105,40 @@ describe('ComputeComponent', () => {
 
         expect(button).toBeTruthy();
         expect(button?.disabled).toBe(false);
+    });
+
+    it('updates band names and the workflow when the selected layer changes', async () => {
+        const layersService = TestBed.inject(LayersService);
+        const registerWorkflow = vi.spyOn(layersService, 'registerAndGetLayerWorkflowId').mockResolvedValue('ndvi-workflow');
+        const getMetadata = vi.spyOn(layersService, 'getWorkflowIdMetadata').mockResolvedValue({
+            layerType: 'raster',
+            bands: [{name: 'NDVI', measurement: {type: 'unitless'}}],
+            pixelSizeX: 1,
+            pixelSizeY: 1,
+        } as never);
+        component.plotData.set({outputFormat: 'json-vega', data: {vega: 'plot'}} as never);
+
+        fixture.componentRef.setInput('selectedRasterLayer', {dataConnectorId: 'other-provider', layerId: 'ndvi-layer'});
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(registerWorkflow).toHaveBeenLastCalledWith('other-provider', 'ndvi-layer');
+        expect(getMetadata).toHaveBeenLastCalledWith('ndvi-workflow');
+        expect(component.bands()).toEqual(['NDVI']);
+        expect(component.selectedBand()).toBe('NDVI');
+        expect(component.plotData()).toBeUndefined();
+        expect((fixture.nativeElement as HTMLElement).querySelector('mat-select')?.textContent).toContain('NDVI');
+    });
+
+    it('clears the bands and disables computation when no layer is selected', async () => {
+        overlayLayer.set(createBoxOverlay());
+        fixture.componentRef.setInput('selectedRasterLayer', undefined);
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.bands()).toBeUndefined();
+        expect(component.selectedBand()).toBeUndefined();
+        expect(component.cannotComputeHistogram()).toBe(true);
     });
 
     it('blocks histogram computation until a bounding box has been drawn', async () => {

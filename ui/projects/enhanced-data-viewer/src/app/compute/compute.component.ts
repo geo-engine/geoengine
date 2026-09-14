@@ -6,6 +6,7 @@ import {
     DestroyRef,
     ElementRef,
     inject,
+    input,
     linkedSignal,
     resource,
     signal,
@@ -31,7 +32,6 @@ import {
 } from '@geoengine/common';
 import {firstValueFrom} from 'rxjs';
 import OlPolygon from 'ol/geom/Polygon';
-import {ProviderLayerId} from '@geoengine/api-client/dist/models/ProviderLayerId';
 import {LayerIdPair} from '../main/main.component';
 import {PlotOutputFormat, RasterBandDescriptor, WrappedPlotOutput} from '@geoengine/api-client';
 
@@ -117,34 +117,16 @@ export class ComputeComponent {
     readonly plotWidthPx = signal(0);
     readonly hostElement = inject(ElementRef).nativeElement as HTMLElement;
 
-    readonly selectedRasterLayer = resource({
-        params: () => ({}),
-        loader: async ({params: _}): Promise<LayerIdPair | undefined> => {
-            const connectorId = 'cbb21ee3-d15d-45c5-a175-66964adf4e85';
-
-            const items = await this.layerService.getLayerCollectionItems(connectorId, 'tags:*');
-
-            const landCover = items.items.find((item) => item.name === 'Land Cover');
-
-            if (!landCover) return;
-
-            const id = landCover.id as ProviderLayerId;
-
-            return {
-                dataConnectorId: id.providerId,
-                layerId: id.layerId,
-            };
-        },
-    });
+    readonly selectedRasterLayer = input<LayerIdPair>();
     readonly selectedProcessingGraphId = resource<string | undefined, LayerIdPair | undefined>({
-        params: () => this.selectedRasterLayer.value(),
+        params: () => this.selectedRasterLayer(),
         loader: async ({params: rasterLayer}): Promise<string | undefined> => {
             if (!rasterLayer) return undefined;
 
             return await this.layerService.registerAndGetLayerWorkflowId(rasterLayer.dataConnectorId, rasterLayer.layerId);
         },
     });
-    readonly selecterLayerMetadata = resource<RasterLayerMetadata | undefined, UUID | undefined>({
+    readonly selectedLayerMetadata = resource<RasterLayerMetadata | undefined, UUID | undefined>({
         params: () => this.selectedProcessingGraphId.value(),
         loader: async ({params: processingGraphId}): Promise<RasterLayerMetadata | undefined> => {
             if (!processingGraphId) return undefined;
@@ -156,7 +138,7 @@ export class ComputeComponent {
             return workflowIdMetadata;
         },
     });
-    readonly bands = computed(() => this.selecterLayerMetadata.value()?.bands.map((band) => band.name));
+    readonly bands = computed(() => this.selectedLayerMetadata.value()?.bands.map((band) => band.name));
     readonly selectedBand = linkedSignal<string | undefined>(() => {
         const bands = this.bands();
         if (!bands || bands.length === 0) return undefined;
@@ -181,17 +163,17 @@ export class ComputeComponent {
         };
     });
     readonly cannotComputeHistogram = computed(() => {
-        return !this.computationBbox() || !this.selectedRasterLayer.value() || !this.selectedBand();
+        return !this.computationBbox() || !this.selectedRasterLayer() || !this.selectedBand();
     });
 
-    readonly isLoadingMetadata = computed(
-        () => this.selectedRasterLayer.isLoading() || this.selectedProcessingGraphId.isLoading() || this.selecterLayerMetadata.isLoading(),
-    );
+    readonly isLoadingMetadata = computed(() => this.selectedProcessingGraphId.isLoading() || this.selectedLayerMetadata.isLoading());
     readonly isComputingHistogram = signal(false);
     readonly isLoading = computed(() => this.isComputingHistogram() || this.isLoadingMetadata());
 
     readonly plotData = linkedSignal<WrappedPlotOutput | undefined>(() => {
-        this.computationBbox(); // reset the computation when the bounding box changes
+        this.computationBbox();
+        this.selectedRasterLayer();
+        this.selectedBand(); // reset the computation when its inputs change
         return undefined;
     });
 
@@ -221,8 +203,8 @@ export class ComputeComponent {
 
     async computeHistogram(): Promise<void> {
         const bboxAndSpatialReference = this.computationBbox();
-        const layer = this.selectedRasterLayer.value();
-        const metadata = this.selecterLayerMetadata.value();
+        const layer = this.selectedRasterLayer();
+        const metadata = this.selectedLayerMetadata.value();
         const processingGraphId = this.selectedProcessingGraphId.value();
         const band = this.selectedBand();
 

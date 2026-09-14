@@ -1,0 +1,71 @@
+{
+  "id": "sentinel-2-l2a",
+  "description": "Sentinel-2 Level-2A",
+  "stac_version": "1.1.0",
+  "stac_extensions": [
+    "https://stac-extensions.github.io/eo/v2.0.0/schema.json",
+    "https://stac-extensions.github.io/projection/v2.0.0/schema.json",
+    "https://stac-extensions.github.io/raster/v2.0.0/schema.json"
+  ],
+  "links": [
+    {
+      "rel": "items",
+      "type": "application/geo+json",
+      "href": "https://stac.code-de.org/v1/collections/sentinel-2-l2a/items"
+    }
+  ],
+  "summaries": {
+    "gsd": [10, 20],
+    "platform": ["sentinel-2a", "sentinel-2b"]
+  },
+  "item_assets": {
+    "B02_10m": {
+      "type": "image/jp2",
+      "title": "Blue (band 2) - 10m",
+      "bands": [{ "name": "B02", "eo:common_name": "blue" }],
+      "data_type": "uint16",
+      "gsd": 10,
+      "proj:shape": [10980, 10980]
+    },
+    "B03_10m": {
+      "type": "image/jp2",
+      "title": "Green (band 3) - 10m",
+      "bands": [{ "name": "B03", "eo:common_name": "green" }],
+      "data_type": "uint16",
+      "gsd": 10,
+      "proj:shape": [10980, 10980]
+    },
+    "B04_10m": {
+      "type": "image/jp2",
+      "title": "Red (band 4) - 10m",
+      "bands": [{ "name": "B04", "eo:common_name": "red" }],
+      "data_type": "uint16",
+      "gsd": 10,
+      "proj:shape": [10980, 10980]
+    },
+    "B08_10m": {
+      "type": "image/jp2",
+      "title": "NIR 1 (band 8) - 10m",
+      "bands": [{ "name": "B08", "eo:common_name": "nir" }],
+      "data_type": "uint16",
+      "gsd": 10,
+      "proj:shape": [10980, 10980]
+    },
+    "B11_20m": {
+      "type": "image/jp2",
+      "title": "SWIR 1 (band 11) - 20m",
+      "bands": [{ "name": "B11", "eo:common_name": "swir16" }],
+      "data_type": "uint16",
+      "gsd": 20,
+      "proj:shape": [5490, 5490]
+    },
+    "B12_20m": {
+      "type": "image/jp2",
+      "title": "SWIR 2 (band 12) - 20m",
+      "bands": [{ "name": "B12", "eo:common_name": "swir22" }],
+      "data_type": "uint16",
+      "gsd": 20,
+      "proj:shape": [5490, 5490]
+    }
+  }
+}

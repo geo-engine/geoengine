@@ -6,8 +6,7 @@ use super::operators::TypedResultDescriptor;
 use crate::api::model::datatypes::MlModelName;
 use crate::api::model::operators::{
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
-    MlModelMetadata, MockMetaData, OgrMetaData, RegularTimeDimension, SpatialGridDescriptor,
-    TimeDimension,
+    MlModelMetadata, MockMetaData, OgrMetaData, SpatialGridDescriptor, TimeDimension,
 };
 use crate::datasets::DatasetName;
 use crate::datasets::external::{GdalRetries, WildliveDataConnectorAuth};
@@ -991,13 +990,23 @@ impl From<crate::datasets::external::stac::StacProviderS3Config> for StacProvide
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct StacProviderDatasetBand {
+pub struct StacAssetBand {
     pub asset_title: String,
     pub band_name: Option<String>,
 }
 
-impl From<StacProviderDatasetBand> for crate::datasets::external::stac::StacProviderDatasetBand {
-    fn from(value: StacProviderDatasetBand) -> Self {
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StacProviderDatasetBand {
+    /// The band inside the STAC asset that this dataset band reads from
+    /// (addressing: which asset file + which raster channel within it).
+    pub asset_band: StacAssetBand,
+    /// The band descriptor of the resulting geo engine dataset layer.
+    pub band_descriptor: crate::api::model::operators::RasterBandDescriptor,
+}
+
+impl From<StacAssetBand> for crate::datasets::external::stac::StacAssetBand {
+    fn from(value: StacAssetBand) -> Self {
         Self {
             asset_title: value.asset_title,
             band_name: value.band_name,
@@ -1005,11 +1014,29 @@ impl From<StacProviderDatasetBand> for crate::datasets::external::stac::StacProv
     }
 }
 
-impl From<crate::datasets::external::stac::StacProviderDatasetBand> for StacProviderDatasetBand {
-    fn from(value: crate::datasets::external::stac::StacProviderDatasetBand) -> Self {
+impl From<crate::datasets::external::stac::StacAssetBand> for StacAssetBand {
+    fn from(value: crate::datasets::external::stac::StacAssetBand) -> Self {
         Self {
             asset_title: value.asset_title,
             band_name: value.band_name,
+        }
+    }
+}
+
+impl From<StacProviderDatasetBand> for crate::datasets::external::stac::StacProviderDatasetBand {
+    fn from(value: StacProviderDatasetBand) -> Self {
+        Self {
+            asset_band: value.asset_band.into(),
+            band_descriptor: value.band_descriptor.into(),
+        }
+    }
+}
+
+impl From<crate::datasets::external::stac::StacProviderDatasetBand> for StacProviderDatasetBand {
+    fn from(value: crate::datasets::external::stac::StacProviderDatasetBand) -> Self {
+        Self {
+            asset_band: value.asset_band.into(),
+            band_descriptor: value.band_descriptor.into(),
         }
     }
 }
@@ -1055,37 +1082,6 @@ impl From<crate::datasets::external::stac::StacProviderDataset> for StacProvider
     }
 }
 
-#[allow(clippy::needless_pass_by_value)]
-fn api_time_dimension_to_datatypes(
-    value: TimeDimension,
-) -> geoengine_datatypes::primitives::TimeDimension {
-    match value {
-        TimeDimension::Regular(RegularTimeDimension { origin, step }) => {
-            geoengine_datatypes::primitives::TimeDimension::Regular(
-                geoengine_datatypes::primitives::RegularTimeDimension {
-                    origin: origin.into(),
-                    step: step.into(),
-                },
-            )
-        }
-        TimeDimension::Irregular => geoengine_datatypes::primitives::TimeDimension::Irregular,
-    }
-}
-
-fn datatypes_time_dimension_to_api(
-    value: geoengine_datatypes::primitives::TimeDimension,
-) -> TimeDimension {
-    match value {
-        geoengine_datatypes::primitives::TimeDimension::Regular(
-            geoengine_datatypes::primitives::RegularTimeDimension { origin, step },
-        ) => TimeDimension::Regular(RegularTimeDimension {
-            origin: origin.into(),
-            step: step.into(),
-        }),
-        geoengine_datatypes::primitives::TimeDimension::Irregular => TimeDimension::Irregular,
-    }
-}
-
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct StacTimeStep {
@@ -1127,10 +1123,16 @@ pub struct StacDataProviderDefinition {
     /// Timeout in seconds for outgoing STAC API HTTP requests.
     #[serde(default = "default_query_timeout")]
     pub query_timeout_secs: i64,
+    #[serde(default = "default_page_limit")]
+    pub page_limit: i64,
 }
 
 fn default_query_timeout() -> i64 {
     60
+}
+
+fn default_page_limit() -> i64 {
+    100
 }
 
 impl From<StacDataProviderDefinition>
@@ -1145,8 +1147,9 @@ impl From<StacDataProviderDefinition>
             api_url: value.api_url,
             collection_name: value.collection_name,
             s3_config: value.s3_config.map(Into::into),
-            time_dimension: api_time_dimension_to_datatypes(value.time_dimension),
+            time_dimension: value.time_dimension.into(),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
+            page_limit: value.page_limit,
             query_timeout_secs: value.query_timeout_secs,
         }
     }
@@ -1165,8 +1168,9 @@ impl From<crate::datasets::external::stac::StacDataProviderDefinition>
             api_url: value.api_url,
             collection_name: value.collection_name,
             s3_config: value.s3_config.map(Into::into),
-            time_dimension: datatypes_time_dimension_to_api(value.time_dimension),
+            time_dimension: value.time_dimension.into(),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
+            page_limit: value.page_limit,
             query_timeout_secs: value.query_timeout_secs,
         }
     }

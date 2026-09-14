@@ -48,9 +48,10 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             valid.end()
         };
 
-        let known_time_after = if query.time_interval().end() <= valid.start() {
+        let query_time = query.time_interval();
+        let known_time_after = if query_time.end() <= valid.start() && !query_time.is_instant() {
             valid.start()
-        } else if query.time_interval().end() <= valid.end() {
+        } else if query_time.end() <= valid.end() {
             valid.end()
         } else {
             TimeInstance::MAX
@@ -719,6 +720,36 @@ mod tests {
             step: TimeStep::millis(11).unwrap(),
             cache_ttl: CacheTtlSeconds::default(),
         }
+    }
+
+    #[tokio::test]
+    async fn test_static_metadata_instant_at_validity_start() {
+        let regular_metadata = create_regular_metadata();
+        let valid = TimeInterval::new_unchecked(
+            TimeInstance::from_millis_unchecked(0),
+            TimeInstance::from_millis_unchecked(33),
+        );
+        let metadata = GdalMetaDataStatic {
+            time: Some(valid),
+            params: regular_metadata.params,
+            result_descriptor: regular_metadata.result_descriptor,
+            cache_ttl: CacheTtlSeconds::default(),
+        };
+
+        let loading_info = metadata
+            .loading_info(RasterQueryRectangle::new(
+                GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
+                TimeInterval::new_instant(TimeInstance::from_millis_unchecked(0)).unwrap(),
+                BandSelection::first(),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            loading_info.start_time_of_output_stream,
+            Some(valid.start())
+        );
+        assert_eq!(loading_info.end_time_of_output_stream, Some(valid.end()));
     }
 
     #[tokio::test]
