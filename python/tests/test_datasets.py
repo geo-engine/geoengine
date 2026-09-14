@@ -1,6 +1,7 @@
 """Tests for the datasets module."""
 
 import unittest
+from datetime import datetime, timedelta
 
 import geoengine_api_client
 import geoengine_api_client.models
@@ -10,6 +11,7 @@ import geoengine as ge
 from geoengine.permissions import REGISTERED_USER_ROLE_ID, Permission, PermissionListing, Role
 from geoengine.resource_identifier import Resource
 from geoengine.types import RasterBandDescriptor
+from geoengine.workflow_builder import operators as wb
 from tests.ge_test import GeoEngineTestInstance
 
 
@@ -388,6 +390,132 @@ class DatasetsTests(unittest.TestCase):
                 dataset_info.description,
                 "Land Cover 3",  # Now the third value, replaced with new dataset
             )
+
+    def test_add_multiband_gdal_source(self):
+        """Test creating a MultiBandGdalSource dataset, adding tiles and querying it."""
+
+        with GeoEngineTestInstance() as ge_instance:
+            ge_instance.wait_for_ready()
+
+            ge.initialize(ge_instance.address(), credentials=("admin@localhost", "adminadmin"))
+
+            pixel_size = 0.2
+            tile_specs = {
+                "tile_x0_y0": {
+                    "bounds": (-180.0, -22.4, 45.0, 90.0),
+                    "geo_transform": (-180.0, 90.0),
+                    "z_index": 0,
+                },
+                "tile_x0_y1": {
+                    "bounds": (-180.0, -90.0, 45.0, 22.4),
+                    "geo_transform": (-180.0, 22.4),
+                    "z_index": 1,
+                },
+                "tile_x1_y0": {
+                    "bounds": (-45.0, -22.4, 180.0, 90.0),
+                    "geo_transform": (-45.0, 90.0),
+                    "z_index": 1,
+                },
+                "tile_x1_y1": {
+                    "bounds": (-45.0, -90.0, 180.0, 22.4),
+                    "geo_transform": (-45.0, 22.4),
+                    "z_index": 2,
+                },
+            }
+
+            # The time of each file is a single day, as the source requires the
+            # file time to match the query time (one step of the time dimension).
+            files = []
+            for date in [datetime(2025, 1, 1), datetime(2025, 2, 1), datetime(2025, 4, 1)]:
+                next_date = date + timedelta(days=1)
+                for band in range(2):
+                    for tile_name, tile_spec in tile_specs.items():
+                        xmin, ymin, xmax, ymax = tile_spec["bounds"]
+                        x_min, y_max = tile_spec["geo_transform"]
+                        files.append(
+                            ge.MultiBandGdalFileSpec(
+                                file_path=f"raster/multi_tile/data/{date:%Y-%m-%d}_{tile_name}_b{band}.tif",
+                                time=ge.TimeInterval(start=date, end=next_date),
+                                spatial_partition=ge.SpatialPartition2D(
+                                    xmin=xmin,
+                                    ymin=ymin,
+                                    xmax=xmax,
+                                    ymax=ymax,
+                                ),
+                                band=band,
+                                width=1125,
+                                height=562,
+                                geo_transform=ge.GeoTransform(
+                                    x_min=x_min,
+                                    y_max=y_max,
+                                    x_pixel_size=pixel_size,
+                                    y_pixel_size=-pixel_size,
+                                ),
+                                channel=1,
+                                z_index=tile_spec["z_index"],
+                                no_data_value=0.0,
+                                allow_alphaband_as_mask=True,
+                            )
+                        )
+
+            dataset_name = ge.add_multiband_gdal_source(
+                name="multi_band_test",
+                display_name="Multi Band Test",
+                bands=[
+                    RasterBandDescriptor("band 0", ge.UnitlessMeasurement()),
+                    RasterBandDescriptor("band 1", ge.UnitlessMeasurement()),
+                ],
+                data_type=ge.RasterDataType.U16,
+                spatial_reference="EPSG:4326",
+                files=files,
+                data_store="test_data",
+                share_with=[REGISTERED_USER_ROLE_ID],
+                permission=Permission.READ,
+            )
+
+            self.assertEqual(dataset_name, ge.DatasetName("multi_band_test"))
+
+            metadata = ge.dataset_metadata_by_name(dataset_name)
+            self.assertIsInstance(metadata.actual_instance, geoengine_api_client.GdalMultiBand)
+            result_descriptor = metadata.actual_instance.result_descriptor
+            self.assertEqual(result_descriptor.data_type.value, "U16")
+            self.assertEqual(result_descriptor.spatial_reference, "EPSG:4326")
+            self.assertEqual([band.name for band in result_descriptor.bands], ["band 0", "band 1"])
+
+            grid = ge.SpatialGridDefinition.from_response(result_descriptor.spatial_grid.spatial_grid)
+            self.assertEqual(grid.geo_transform.x_min, -180.0)
+            self.assertEqual(grid.geo_transform.y_max, 90.0)
+            self.assertEqual(grid.geo_transform.x_pixel_size, 0.2)
+            self.assertEqual(grid.geo_transform.y_pixel_size, -0.2)
+
+            # The server derives the spatial grid from the tiles; the union of
+            # all tiles covers lon -180..180 and lat 90..-90 (within a pixel)
+            spatial = grid.spatial_bounds()
+            self.assertAlmostEqual(spatial.xmin, -180.0, delta=1.5 * pixel_size)
+            self.assertAlmostEqual(spatial.xmax, 180.0, delta=1.5 * pixel_size)
+            self.assertAlmostEqual(spatial.ymin, -90.0, delta=1.5 * pixel_size)
+            self.assertAlmostEqual(spatial.ymax, 90.0, delta=1.5 * pixel_size)
+
+            permissions = ge.list_permissions(Resource.from_dataset_name(dataset_name))
+            user_permissions = [p for p in permissions if p.role.id == REGISTERED_USER_ROLE_ID]
+            self.assertEqual(len(user_permissions), 1)
+            self.assertEqual(user_permissions[0].permission, Permission.READ)
+
+            # In the central region all four tiles overlap; the tile with the
+            # highest z-index (x1y1) must win. Query a single day so the query
+            # time matches the file time (as required by the source)
+            workflow = ge.register_workflow(wb.MultiBandGdalSource(dataset_name).to_workflow_dict())
+            query = ge.QueryRectangle(
+                ge.BoundingBox2D(-45.0, -22.4, 45.0, 22.4),
+                ge.TimeInterval(start=datetime(2025, 1, 1), end=datetime(2025, 1, 2)),
+            )
+            array = workflow.get_array(query)
+
+            # The server also includes the boundary row whose bottom edge
+            # coincides with the query's top edge. The remaining rows come
+            # from the highest z-index tile, whose fixture value is 10011.
+            self.assertEqual(array.shape[1], 450)
+            self.assertTrue((array[1:, :] == 10011).all())
 
 
 if __name__ == "__main__":

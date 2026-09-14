@@ -11234,6 +11234,9 @@
             "$ref": "#/components/schemas/MultiBandGdalSource"
           },
           {
+            "$ref": "#/components/schemas/RasterScaling"
+          },
+          {
             "$ref": "#/components/schemas/RasterStacker"
           },
           {
@@ -11256,6 +11259,7 @@
             "GdalSource": "#/components/schemas/GdalSource",
             "Interpolation": "#/components/schemas/Interpolation",
             "MultiBandGdalSource": "#/components/schemas/MultiBandGdalSource",
+            "RasterScaling": "#/components/schemas/RasterScaling",
             "RasterStacker": "#/components/schemas/RasterStacker",
             "RasterTypeConversion": "#/components/schemas/RasterTypeConversion",
             "Reprojection": "#/components/schemas/Reprojection",
@@ -11312,6 +11316,91 @@
           },
           "bands": {
             "$ref": "#/components/schemas/RasterBandDescriptors"
+          }
+        }
+      },
+      "RasterScaling": {
+        "type": "object",
+        "title": "Raster Scaling",
+        "description": "The `RasterScaling` operator scales the pixel values of a raster by a `slope` factor and an\n`offset`.\n\nDepending on the `scalingMode`, one of the following formulas is applied to every pixel:\n\n- `mulSlopeAddOffset`: `p_new = p_old * slope + offset`\n- `subOffsetDivSlope`: `p_new = (p_old - offset) / slope`\n\nThe `slope` and `offset` values can each either be a constant, read from a raster property\n(e.g. the `msg.calibration_slope` / `msg.calibration_offset` properties of METEOSAT second\ngeneration data), or `auto`, which uses a value from the source's band measurement metadata\nwhere available.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "RasterScaling"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/RasterScalingParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "RasterScaling",
+            "params": {
+              "slope": {
+                "type": "constant",
+                "value": 0.004
+              },
+              "offset": {
+                "type": "constant",
+                "value": 0.0
+              },
+              "scalingMode": "mulSlopeAddOffset",
+              "outputMeasurement": {
+                "type": "unitless"
+              }
+            },
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "example"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "RasterScalingParameters": {
+        "type": "object",
+        "description": "Parameters for the `RasterScaling` operator.",
+        "required": [
+          "slope",
+          "offset",
+          "scalingMode"
+        ],
+        "properties": {
+          "slope": {
+            "$ref": "#/components/schemas/SlopeOffsetSelection",
+            "description": "The slope (multiplication factor) applied to each pixel value."
+          },
+          "offset": {
+            "$ref": "#/components/schemas/SlopeOffsetSelection",
+            "description": "The offset (addition) applied to each pixel value."
+          },
+          "outputMeasurement": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Measurement",
+                "description": "The measurement unit of the scaled pixel values."
+              }
+            ]
+          },
+          "scalingMode": {
+            "$ref": "#/components/schemas/ScalingMode",
+            "description": "The formula applied to each pixel."
           }
         }
       },
@@ -11808,6 +11897,14 @@
           }
         }
       },
+      "ScalingMode": {
+        "type": "string",
+        "description": "The formula the `RasterScaling` operator applies to each pixel.",
+        "enum": [
+          "mulSlopeAddOffset",
+          "subOffsetDivSlope"
+        ]
+      },
       "SearchCapabilities": {
         "type": "object",
         "required": [
@@ -12036,6 +12133,73 @@
             "$ref": "#/components/schemas/VectorOperator"
           }
         }
+      },
+      "SlopeOffsetSelection": {
+        "oneOf": [
+          {
+            "type": "object",
+            "title": "Auto",
+            "description": "Use a value from the source's band measurement metadata, where available.",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "auto"
+                ]
+              }
+            }
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RasterPropertiesKey",
+                "description": "Read the value from the raster property with the given key (and optional domain)."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "metadataKey"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "MetadataKey",
+            "description": "Read the value from the raster property with the given key (and optional domain)."
+          },
+          {
+            "type": "object",
+            "title": "Constant",
+            "description": "Use a constant value.",
+            "required": [
+              "value",
+              "type"
+            ],
+            "properties": {
+              "value": {
+                "type": "number",
+                "format": "double",
+                "description": "The constant slope or offset value."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "constant"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "The way a slope or offset value of the `RasterScaling` operator is determined."
       },
       "SpatialBoundsDerive": {
         "oneOf": [
