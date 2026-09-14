@@ -1,4 +1,5 @@
 import {ChangeDetectionStrategy, Component, inject, input, resource} from '@angular/core';
+import {NgTemplateOutlet} from '@angular/common';
 import {User} from '../user.model';
 import {Router} from '@angular/router';
 import {UserService} from '@geoengine/common';
@@ -18,6 +19,7 @@ import {firstValueFrom} from 'rxjs';
     styleUrls: ['./oidc.component.scss'],
     changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
+        NgTemplateOutlet,
         SidenavHeaderComponent,
         MatCard,
         MatCardHeader,
@@ -35,10 +37,8 @@ export class OidcComponent {
     private readonly userService = inject(UserService);
     private readonly router = inject(Router);
 
-    /** Whether the additional account information cards are shown. */
-    readonly showSession = input(true);
-    readonly showQuota = input(true);
-    readonly showRoles = input(true);
+    /** Show only login content without a card instead of all account information cards. */
+    readonly loginOnly = input(false);
     /** Whether login should redirect directly to the OIDC provider. */
     readonly directLogin = input(false);
 
