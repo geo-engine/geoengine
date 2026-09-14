@@ -1,5 +1,5 @@
 use crate::api::model::{
-    datatypes::{SpatialReference, TimeInstance, TimeStep},
+    datatypes::{RasterPropertiesKey, SpatialReference, TimeInstance, TimeStep},
     processing_graphs::{
         parameters::{
             ColumnNames, FeatureAggregationMethod, Measurement, OutputColumn, RasterBandDescriptor,
@@ -23,6 +23,8 @@ use geoengine_operators::processing::{
     Interpolation as OperatorsInterpolation, InterpolationMethod as OperatorsInterpolationMethod,
     InterpolationParams as OperatorsInterpolationParameters,
     InterpolationResolution as OperatorsInterpolationResolution,
+    RasterScaling as OperatorsRasterScaling,
+    RasterScalingParams as OperatorsRasterScalingParameters,
     RasterStacker as OperatorsRasterStacker,
     RasterStackerParams as OperatorsRasterStackerParameters,
     RasterTypeConversion as OperatorsRasterTypeConversion,
@@ -30,6 +32,7 @@ use geoengine_operators::processing::{
     RasterVectorJoin as OperatorsRasterVectorJoin,
     RasterVectorJoinParams as OperatorsRasterVectorJoinParameters,
     Reprojection as OperatorsReprojection, ReprojectionParams as OperatorsReprojectionParameters,
+    ScalingMode as OperatorsScalingMode, SlopeOffsetSelection as OperatorsSlopeOffsetSelection,
     TemporalRasterAggregation as OperatorsTemporalRasterAggregation,
     TemporalRasterAggregationParameters as OperatorsTemporalRasterAggregationParameters,
     VectorExpression as OperatorsVectorExpression,
@@ -559,6 +562,133 @@ impl TryFrom<RasterStacker> for OperatorsRasterStacker {
         Ok(OperatorsRasterStacker {
             params: OperatorsRasterStackerParameters {
                 rename_bands: value.params.rename_bands.into(),
+            },
+            sources: (*value.sources).try_into()?,
+        })
+    }
+}
+
+/// The `RasterScaling` operator scales the pixel values of a raster by a `slope` factor and an
+/// `offset`.
+///
+/// Depending on the `scalingMode`, one of the following formulas is applied to every pixel:
+///
+/// - `mulSlopeAddOffset`: `p_new = p_old * slope + offset`
+/// - `subOffsetDivSlope`: `p_new = (p_old - offset) / slope`
+///
+/// The `slope` and `offset` values can each either be a constant, read from a raster property
+/// (e.g. the `msg.calibration_slope` / `msg.calibration_offset` properties of METEOSAT second
+/// generation data), or `auto`, which uses a value from the source's band measurement metadata
+/// where available.
+#[api_operator(
+    title = "Raster Scaling",
+    examples(json!({
+        "type": "RasterScaling",
+        "params": {
+            "slope": { "type": "constant", "value": 0.004 },
+            "offset": { "type": "constant", "value": 0.0 },
+            "scalingMode": "mulSlopeAddOffset",
+            "outputMeasurement": { "type": "unitless" }
+        },
+        "sources": {
+            "raster": {
+                "type": "GdalSource",
+                "params": { "data": "example" }
+            }
+        }
+    }))
+)]
+pub struct RasterScaling {
+    pub params: RasterScalingParameters,
+    pub sources: Box<SingleRasterSource>,
+}
+
+/// Parameters for the `RasterScaling` operator.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RasterScalingParameters {
+    /// The slope (multiplication factor) applied to each pixel value.
+    #[schema(
+        examples(
+            json!({ "type": "constant", "value": 0.004 }),
+            json!({ "type": "auto" }),
+            json!({ "type": "metadataKey", "value": { "key": "msg.calibration_slope" } })
+        )
+    )]
+    pub slope: SlopeOffsetSelection,
+    /// The offset (addition) applied to each pixel value.
+    #[schema(
+        examples(
+            json!({ "type": "constant", "value": 0.0 }),
+            json!({ "type": "auto" }),
+            json!({ "type": "metadataKey", "value": { "key": "msg.calibration_offset" } })
+        )
+    )]
+    pub offset: SlopeOffsetSelection,
+    /// The measurement unit of the scaled pixel values.
+    pub output_measurement: Option<Measurement>,
+    /// The formula applied to each pixel.
+    #[schema(examples("mulSlopeAddOffset"))]
+    pub scaling_mode: ScalingMode,
+}
+
+/// The way a slope or offset value of the `RasterScaling` operator is determined.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum SlopeOffsetSelection {
+    /// Use a value from the source's band measurement metadata, where available.
+    #[schema(title = "Auto")]
+    Auto,
+    /// Read the value from the raster property with the given key (and optional domain).
+    #[schema(title = "MetadataKey")]
+    MetadataKey(RasterPropertiesKey),
+    /// Use a constant value.
+    #[schema(title = "Constant")]
+    Constant {
+        /// The constant slope or offset value.
+        value: f64,
+    },
+}
+
+/// The formula the `RasterScaling` operator applies to each pixel.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ScalingMode {
+    /// `p_new = p_old * slope + offset`
+    MulSlopeAddOffset,
+    /// `p_new = (p_old - offset) / slope`
+    SubOffsetDivSlope,
+}
+
+impl From<SlopeOffsetSelection> for OperatorsSlopeOffsetSelection {
+    fn from(value: SlopeOffsetSelection) -> Self {
+        match value {
+            SlopeOffsetSelection::Auto => Self::Auto,
+            SlopeOffsetSelection::MetadataKey(key) => Self::MetadataKey(key.into()),
+            SlopeOffsetSelection::Constant { value } => Self::Constant { value },
+        }
+    }
+}
+
+impl From<ScalingMode> for OperatorsScalingMode {
+    fn from(value: ScalingMode) -> Self {
+        match value {
+            ScalingMode::MulSlopeAddOffset => Self::MulSlopeAddOffset,
+            ScalingMode::SubOffsetDivSlope => Self::SubOffsetDivSlope,
+        }
+    }
+}
+
+impl TryFrom<RasterScaling> for OperatorsRasterScaling {
+    type Error = anyhow::Error;
+
+    fn try_from(value: RasterScaling) -> Result<Self, Self::Error> {
+        Ok(OperatorsRasterScaling {
+            params: OperatorsRasterScalingParameters {
+                slope: value.params.slope.into(),
+                offset: value.params.offset.into(),
+                output_measurement: value.params.output_measurement.map(Into::into),
+                scaling_mode: value.params.scaling_mode.into(),
             },
             sources: (*value.sources).try_into()?,
         })
