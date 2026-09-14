@@ -210,6 +210,7 @@ where
         quota_config: Quota,
         gdal_process_pool_config: crate::config::GdalProcessPool,
     ) -> Result<Self> {
+        cache_config.validate()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;

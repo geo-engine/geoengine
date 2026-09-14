@@ -254,7 +254,7 @@ impl EvictionStrategy for FifoEvictionStrategy {
 pub struct LruEvictionStrategy {
     slab: Vec<Option<LruNode>>,
     free: Vec<usize>,
-    index: HashMap<CacheKey, usize>,
+    index: HashMap<Arc<CacheKey>, usize>,
     head: Option<usize>, // most recently used
     tail: Option<usize>, // least recently used
     capacity: usize,
@@ -339,7 +339,7 @@ impl EvictionStrategy for LruEvictionStrategy {
             prev: None,
             next: None,
         });
-        self.index.insert(key.as_ref().clone(), idx);
+        self.index.insert(key.clone(), idx);
         self.attach_front(idx);
     }
 
@@ -600,6 +600,10 @@ type CacheKey = (CanonicOperatorName, Band, TimeInterval, TileIndex);
 type Band = u32;
 type TileIndex = GridIdx2D;
 
+fn cache_key_byte_size(key: &CacheKey) -> usize {
+    std::mem::size_of_val(key) + key.0.heap_byte_size()
+}
+
 trait StorageFormat: Send + Sync + Sized + 'static {
     fn store(tile: TypedRasterTile2D) -> impl std::future::Future<Output = Result<Self>> + Send;
 
@@ -811,8 +815,7 @@ where
         let value = SF::store(tile).await?;
         let value_size = value.byte_size().await?;
 
-        // Calculate key size: (operator_name, band: u32, time_interval, grid_idx: 2x i32)
-        let key_size = std::mem::size_of_val(key.as_ref());
+        let key_size = cache_key_byte_size(&key);
         let required_space = value_size + key_size;
 
         let mut cache = self.cache.write().await;
@@ -1039,17 +1042,9 @@ where
                             match stream.next().await {
                                 Some(Ok(tile)) => {
                                     let tile_to_cache = T::map_tile_to_enum(tile.clone());
-                                    let cache_clone = cache_store.clone();
-                                    let key_for_cache = key.clone();
-                                    tokio::spawn(async move {
-                                        if let Err(err) =
-                                            cache_clone.insert(key_for_cache, tile_to_cache).await
-                                        {
-                                            tracing::warn!(
-                                                "Failed to populate raster cache in the background: {err}"
-                                            );
-                                        }
-                                    });
+                                    if let Err(err) = cache_store.insert(key, tile_to_cache).await {
+                                        tracing::warn!("Failed to populate raster cache: {err}");
+                                    }
                                     Some((Ok(tile), (work, idx + 1)))
                                 }
                                 Some(Err(err)) => Some((Err(err), (work, idx + 1))),
@@ -1173,7 +1168,6 @@ mod tests {
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use std::str::FromStr;
-    use tokio::time::sleep;
 
     fn make_cache_key(band: u32, idx: isize) -> CacheKey {
         (
@@ -1191,6 +1185,17 @@ mod tests {
     fn test_cache_enum_variants() {
         let _fifo = NewRasterCacheEnum::new_fifo(1_000_000);
         let _lru = NewRasterCacheEnum::new_lru(1_000_000);
+    }
+
+    #[test]
+    fn test_cache_key_byte_size_includes_operator_name_heap_size() {
+        let key = make_cache_key(0, 0);
+
+        assert_eq!(
+            cache_key_byte_size(&key),
+            std::mem::size_of_val(&key) + key.0.heap_byte_size()
+        );
+        assert!(cache_key_byte_size(&key) > std::mem::size_of_val(&key));
     }
 
     #[tokio::test]
@@ -1656,9 +1661,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(tiles, vec![expected_tile.clone()]);
-
-        // Wait a bit for tile insert
-        sleep(tokio::time::Duration::from_secs(1)).await;
 
         // Verify the tile is actually in the cache after the miss
         let tile_cache = query_ctx
