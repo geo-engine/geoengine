@@ -164,7 +164,7 @@ mod tests {
             BandSelection, BoundingBox2D, CacheHint, ColumnSelection, FeatureData, MultiPoint,
             RasterQueryRectangle, TimeInterval, VectorQueryRectangle,
         },
-        raster::{GeoTransform, Grid2D, GridIdx2D, RasterTile2D},
+        raster::{GeoTransform, Grid2D, RasterTile2D, TileIdx},
     };
 
     use crate::cache::{
@@ -179,7 +179,7 @@ mod tests {
         for i in 0..10 {
             let tile = RasterTile2D::<u8>::new(
                 TimeInterval::new_unchecked(0, 10),
-                GridIdx2D::new([i, i]),
+                TileIdx::new_y_x(i, i),
                 0,
                 GeoTransform::new([0., 0.].into(), 0.5, -0.5),
                 geoengine_datatypes::raster::GridOrEmpty::from(

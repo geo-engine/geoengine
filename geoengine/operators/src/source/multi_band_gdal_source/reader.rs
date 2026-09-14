@@ -69,7 +69,7 @@ impl GdalPoolReader {
         else {
             trace!(
                 "no read advise returned for tile {:?}, skipping file.",
-                tile_information.global_tile_position,
+                tile_information.tile_position,
             );
             return Ok(None);
         };
@@ -91,7 +91,7 @@ impl GdalPoolReader {
     ) -> Result<RasterTile2D<T>, MultiBandGdalSourceError> {
         debug!(
             "loading tile {:?} for time: {}, band: {band}",
-            tile_information.global_tile_position.inner(),
+            tile_information.tile_position.grid_idx(),
             time.to_string()
         );
         let tile_files = loading_info.tile_files(time, tile_information, band);
@@ -125,7 +125,7 @@ impl GdalPoolReader {
 
         Ok(RasterTile2D::new_with_properties(
             time,
-            tile_information.global_tile_position,
+            tile_information.tile_position,
             band,
             tile_information.global_geo_transform,
             tile_raster.unbounded(),

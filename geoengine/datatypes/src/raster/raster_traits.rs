@@ -60,7 +60,7 @@ where
 mod tests {
     use crate::{
         primitives::{CacheHint, TimeInterval},
-        raster::{Grid2D, RasterTile2D, TileInformation},
+        raster::{Grid2D, RasterTile2D, TileIdx, TileInformation, TileSize},
         util::test::TestDefault,
     };
 
@@ -92,8 +92,8 @@ mod tests {
             TimeInterval::default(),
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
-                global_tile_position: [0, 0].into(),
-                tile_size_in_pixels: [3, 2].into(),
+                tile_position: TileIdx::new_y_x(0, 0),
+                tile_size: TileSize::new_y_x(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -118,8 +118,8 @@ mod tests {
             TimeInterval::default(),
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
-                global_tile_position: [1, 1].into(),
-                tile_size_in_pixels: [3, 2].into(),
+                tile_position: TileIdx::new_y_x(1, 1),
+                tile_size: TileSize::new_y_x(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])

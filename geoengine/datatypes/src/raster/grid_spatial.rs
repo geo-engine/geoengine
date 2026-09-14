@@ -335,7 +335,7 @@ impl TilingSpatialGridDefinition {
     pub fn generate_data_tiling_strategy(&self) -> TilingStrategy {
         TilingStrategy {
             geo_transform: self.tiling_geo_transform(),
-            tile_size_in_pixels: self.tiling_specification.tile_size_in_pixels,
+            tile_size: self.tiling_specification.tile_size,
         }
     }
 
