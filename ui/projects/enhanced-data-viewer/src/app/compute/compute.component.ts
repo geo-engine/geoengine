@@ -14,7 +14,9 @@ import {
 import {BackendService, CoreModule, MapService, ProjectService, UUID} from '@geoengine/core';
 import {A11yModule} from '@angular/cdk/a11y';
 import {MatButtonModule} from '@angular/material/button';
+import {MatDialog} from '@angular/material/dialog';
 import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatIconModule} from '@angular/material/icon';
 import {MatSelectModule} from '@angular/material/select';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {
@@ -28,12 +30,14 @@ import {
     SpatialReference,
     UserService,
     VegaChartData,
+    VegaViewerComponent,
     WorkflowDict,
 } from '@geoengine/common';
 import {firstValueFrom} from 'rxjs';
 import OlPolygon from 'ol/geom/Polygon';
 import {LayerIdPair} from '../main/main.component';
 import {PlotOutputFormat, RasterBandDescriptor, WrappedPlotOutput} from '@geoengine/api-client';
+import {PlotDialogComponent} from './plot-dialog.component';
 
 @Component({
     selector: 'geoengine-compute',
@@ -69,6 +73,18 @@ import {PlotOutputFormat, RasterBandDescriptor, WrappedPlotOutput} from '@geoeng
                     [width]="plotWidthPx()"
                     [height]="plotWidthPx()"
                 ></geoengine-vega-viewer>
+                <div class="histogram-buttons">
+                    <button
+                        type="button"
+                        class="histogram-button"
+                        mat-icon-button
+                        matTooltip="Maximize histogram"
+                        aria-label="Maximize histogram"
+                        (click)="openHistogramDialog(plotData)"
+                    >
+                        <mat-icon>fullscreen</mat-icon>
+                    </button>
+                </div>
             }
         </div>
     `,
@@ -95,6 +111,13 @@ import {PlotOutputFormat, RasterBandDescriptor, WrappedPlotOutput} from '@geoeng
                 width: 100%;
             }
 
+            .histogram-buttons {
+                background: var(--geoengine-background-color);
+                display: flex;
+                justify-content: flex-end;
+                margin-top: -1rem;
+            }
+
             mat-progress-spinner {
                 display: block;
                 margin: 0 auto;
@@ -102,11 +125,21 @@ import {PlotOutputFormat, RasterBandDescriptor, WrappedPlotOutput} from '@geoeng
         `,
     ],
     changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [A11yModule, CoreModule, MatButtonModule, MatFormFieldModule, MatSelectModule, MatProgressSpinnerModule],
+    imports: [
+        A11yModule,
+        CoreModule,
+        MatButtonModule,
+        MatFormFieldModule,
+        MatIconModule,
+        MatSelectModule,
+        MatProgressSpinnerModule,
+        VegaViewerComponent,
+    ],
 })
 export class ComputeComponent {
     private readonly backendService = inject(BackendService);
     private readonly destroyRef = inject(DestroyRef);
+    private readonly dialog = inject(MatDialog);
     private readonly layerService = inject(LayersService);
     private readonly mapService = inject(MapService);
     private readonly notificationService = inject(NotificationService);
@@ -199,6 +232,19 @@ export class ComputeComponent {
     vegaPlotData(plotData: WrappedPlotOutput): VegaChartData {
         if (plotData.outputFormat !== PlotOutputFormat.JsonVega) throw new Error('Invalid plot data format');
         return plotData.data as VegaChartData;
+    }
+
+    openHistogramDialog(plotData: WrappedPlotOutput): void {
+        if (plotData.outputFormat !== PlotOutputFormat.JsonVega) {
+            return;
+        }
+
+        this.dialog.open(PlotDialogComponent, {
+            data: this.vegaPlotData(plotData),
+            maxWidth: '100vw',
+            maxHeight: '100vh',
+            panelClass: 'plot-dialog',
+        });
     }
 
     async computeHistogram(): Promise<void> {
