@@ -23,6 +23,32 @@ use stream_cancel::{Trigger, Valve, Valved};
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct ChunkByteSize(usize);
 
+/// Query-wide fanout factor for sub-query adapters.
+pub struct TileScheduler {
+    parallelism: usize,
+}
+
+impl TileScheduler {
+    // fixed per-query fanout for the POC; replace with shared scheduling later.
+    pub const POC_PARALLELISM: usize = 4;
+
+    pub fn fixed(parallelism: usize) -> Self {
+        Self {
+            parallelism: parallelism.max(1),
+        }
+    }
+
+    pub fn parallelism(&self) -> usize {
+        self.parallelism
+    }
+}
+
+impl Default for TileScheduler {
+    fn default() -> Self {
+        Self::fixed(Self::POC_PARALLELISM)
+    }
+}
+
 impl ChunkByteSize {
     pub const MIN: ChunkByteSize = ChunkByteSize(usize::MIN);
     pub const MAX: ChunkByteSize = ChunkByteSize(usize::MAX);
@@ -58,6 +84,7 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
     fn chunk_byte_size(&self) -> ChunkByteSize;
     fn tiling_specification(&self) -> TilingSpecification;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
+    fn tile_scheduler(&self) -> &TileScheduler;
 
     fn quota_tracking(&self) -> Option<&QuotaTracking>;
 
@@ -128,6 +155,7 @@ pub struct MockQueryContext {
     pub chunk_byte_size: ChunkByteSize,
     pub tiling_specification: TilingSpecification,
     pub thread_pool: Arc<ThreadPool>,
+    pub tile_scheduler: TileScheduler,
 
     pub cache: Option<Arc<SharedCache>>,
     pub quota_tracking: Option<QuotaTracking>,
@@ -150,6 +178,7 @@ impl MockQueryContext {
             chunk_byte_size,
             tiling_specification,
             thread_pool: create_rayon_thread_pool(0),
+            tile_scheduler: TileScheduler::default(),
             cache: None,
             quota_checker: None,
             quota_tracking: None,
@@ -172,6 +201,7 @@ impl MockQueryContext {
             chunk_byte_size,
             tiling_specification,
             thread_pool: create_rayon_thread_pool(0),
+            tile_scheduler: TileScheduler::default(),
             cache,
             quota_checker,
             quota_tracking,
@@ -192,6 +222,7 @@ impl MockQueryContext {
             chunk_byte_size,
             tiling_specification,
             thread_pool: create_rayon_thread_pool(num_threads),
+            tile_scheduler: TileScheduler::default(),
             gdal_process_pool,
             cache: None,
             quota_checker: None,
@@ -209,6 +240,10 @@ impl QueryContext for MockQueryContext {
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
+    }
+
+    fn tile_scheduler(&self) -> &TileScheduler {
+        &self.tile_scheduler
     }
 
     fn abort_registration(&self) -> &QueryAbortRegistration {
@@ -241,5 +276,16 @@ impl QueryContext for MockQueryContext {
 impl GdalProcessPoolAccess for MockQueryContext {
     fn get_gdal_pool(&self) -> &Arc<GdalProcessPool> {
         &self.gdal_process_pool
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TileScheduler;
+
+    #[tokio::test]
+    async fn tile_scheduler_never_has_zero_parallelism() {
+        assert_eq!(TileScheduler::fixed(0).parallelism(), 1);
+        assert_eq!(TileScheduler::fixed(4).parallelism(), 4);
     }
 }
