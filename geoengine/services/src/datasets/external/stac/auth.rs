@@ -14,14 +14,17 @@ const TOKEN_REFRESH_RETRY_DELAY: Duration = Duration::from_secs(1);
 #[derive(Clone, Deserialize)]
 struct TokenResponse {
     access_token: String,
-    refresh_token: String,
+    refresh_token: Option<String>,
     expires_in: u64,
-    refresh_expires_in: u64,
+    refresh_expires_in: Option<u64>,
 }
 
 impl TokenResponse {
     fn refresh_delay(&self) -> Duration {
-        let lifetime = self.expires_in.min(self.refresh_expires_in);
+        let lifetime = self
+            .refresh_expires_in
+            .filter(|&lifetime| lifetime > 0)
+            .map_or(self.expires_in, |lifetime| self.expires_in.min(lifetime));
         Duration::from_secs(lifetime)
             .mul_f64(TOKEN_REFRESH_FACTOR)
             .max(Duration::from_millis(100))
@@ -104,7 +107,7 @@ async fn request_refreshed_tokens(
     config: &StacProviderAuthentication,
     refresh_token: &str,
 ) -> Result<TokenResponse> {
-    Ok(client
+    let mut tokens: TokenResponse = client
         .post(&config.endpoint)
         .form(&RefreshTokenGrant {
             grant_type: "refresh_token",
@@ -115,7 +118,11 @@ async fn request_refreshed_tokens(
         .await?
         .error_for_status()?
         .json()
-        .await?)
+        .await?;
+    if tokens.refresh_token.is_none() {
+        tokens.refresh_token = Some(refresh_token.to_owned());
+    }
+    Ok(tokens)
 }
 
 async fn refresh_tokens(
@@ -139,33 +146,111 @@ async fn refresh_tokens(
         let refresh_token = current_tokens.read().await.refresh_token.clone();
         drop(current_tokens);
 
-        let refreshed_tokens =
-            match request_refreshed_tokens(&client, &config, &refresh_token).await {
-                Ok(tokens) => tokens,
-                Err(refresh_error) => {
-                    warn!(
-                        error = %refresh_error,
-                        "refreshing STAC authentication tokens failed; trying password grant"
-                    );
-
-                    match request_password_tokens(&client, &config).await {
-                        Ok(tokens) => tokens,
-                        Err(password_error) => {
-                            error!(
-                                error = %password_error,
-                                "renewing STAC authentication tokens failed"
-                            );
-                            refresh_delay = TOKEN_REFRESH_RETRY_DELAY;
-                            continue;
-                        }
-                    }
-                }
-            };
+        let refreshed_tokens = match renew_tokens(&client, &config, refresh_token.as_deref()).await
+        {
+            Ok(tokens) => tokens,
+            Err(error) => {
+                error!(%error, "renewing STAC authentication tokens failed");
+                refresh_delay = TOKEN_REFRESH_RETRY_DELAY;
+                continue;
+            }
+        };
 
         let Some(current_tokens) = tokens.upgrade() else {
             return;
         };
         refresh_delay = refreshed_tokens.refresh_delay();
         *current_tokens.write().await = refreshed_tokens;
+    }
+}
+
+async fn renew_tokens(
+    client: &reqwest::Client,
+    config: &StacProviderAuthentication,
+    refresh_token: Option<&str>,
+) -> Result<TokenResponse> {
+    if let Some(refresh_token) = refresh_token {
+        match request_refreshed_tokens(client, config, refresh_token).await {
+            Ok(tokens) => return Ok(tokens),
+            Err(error) => {
+                warn!(%error, "refreshing STAC authentication tokens failed; trying password grant");
+            }
+        }
+    }
+    request_password_tokens(client, config).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use httptest::{
+        Expectation, Server, all_of,
+        matchers::{contains, request, url_decoded},
+        responders,
+    };
+
+    #[test]
+    fn optional_refresh_metadata() {
+        for extra in [
+            serde_json::json!({}),
+            serde_json::json!({"refresh_expires_in": 0}),
+        ] {
+            let mut response = serde_json::json!({"access_token": "access", "expires_in": 100});
+            response
+                .as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
+            let tokens: TokenResponse = serde_json::from_value(response).unwrap();
+            assert!(tokens.refresh_token.is_none());
+            assert_eq!(tokens.refresh_delay(), Duration::from_secs(80));
+        }
+    }
+
+    #[tokio::test]
+    async fn renew_with_optional_refresh_metadata() {
+        let server = Server::run();
+        let config = StacProviderAuthentication {
+            endpoint: server.url_str("/token"),
+            client_id: "client".into(),
+            username: "user".into(),
+            password: "password".into(),
+        };
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("POST", "/token"),
+                request::body(url_decoded(contains(("grant_type", "password")))),
+            ])
+            .times(2)
+            .respond_with(responders::json_encoded(serde_json::json!({
+                "access_token": "password-access", "expires_in": 100
+            }))),
+        );
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("POST", "/token"),
+                request::body(url_decoded(all_of![
+                    contains(("grant_type", "refresh_token")),
+                    contains(("refresh_token", "refresh"))
+                ])),
+            ])
+            .times(2)
+            .respond_with(responders::json_encoded(serde_json::json!({
+                "access_token": "refreshed-access", "expires_in": 100
+            }))),
+        );
+        let client = reqwest::Client::new();
+        let initial = request_password_tokens(&client, &config).await.unwrap();
+        let renewed = renew_tokens(&client, &config, initial.refresh_token.as_deref())
+            .await
+            .unwrap();
+        assert_eq!(renewed.access_token, "password-access");
+        let refreshed = renew_tokens(&client, &config, Some("refresh"))
+            .await
+            .unwrap();
+        let refreshed = renew_tokens(&client, &config, refreshed.refresh_token.as_deref())
+            .await
+            .unwrap();
+        assert_eq!(refreshed.access_token, "refreshed-access");
+        assert_eq!(refreshed.refresh_token.as_deref(), Some("refresh"));
     }
 }
