@@ -5,7 +5,7 @@ mod vector_operator;
 
 pub use error::{RasterExpressionError, VectorExpressionError};
 pub use raster_operator::{Expression, ExpressionParams}; // TODO: rename to `RasterExpression`
-pub use vector_operator::{VectorExpression, VectorExpressionParams};
+pub use vector_operator::{OutputColumn, VectorExpression, VectorExpressionParams};
 
 use self::error::ExpressionDependenciesInitializationError;
 use crate::util::Result;

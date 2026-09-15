@@ -15,6 +15,7 @@ If the given dataset does not exist or is not readable, an error is thrown.
 | ------------------- | ---------- | ------------------------------------------------------------------------------------ | -------- |
 | data                | string     | Dataset name or identifier to be loaded.                                             | `"ndvi"` |
 | attributeProjection | array,null | _Optional_: list of attributes to include. When `None`, all attributes are included. |          |
+| attributeFilters    | array,null | _Optional_: list of attribute filters to apply. When `None`, no filters are applied. |          |
 
 ## Examples
 

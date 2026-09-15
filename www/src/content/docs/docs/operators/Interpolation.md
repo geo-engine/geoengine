@@ -7,10 +7,6 @@ The `Interpolation` operator increases raster resolution by interpolating values
 If queried with a resolution that is coarser than the input resolution,
 interpolation is not applicable and an error is returned.
 
-## Inputs
-
-The `Interpolation` operator expects exactly one _raster_ input.
-
 ## Resolution
 
 The target resolution can be specified either as an explicit `Resolution` (in pixel units)
@@ -28,11 +24,11 @@ InterpolationResolution::Resolution(SpatialResolution { x: 50.0, y: 50.0 })
 
 ## Parameters
 
-| Name                  | Type                    | Description               | Examples |
-| --------------------- | ----------------------- | ------------------------- | -------- |
-| interpolation         | InterpolationMethod     | Interpolation method.     |          |
-| outputResolution      | InterpolationResolution | Target output resolution. |          |
-| outputOriginReference | null or Coordinate2D    |                           |          |
+| Name                  | Type                    | Description               | Examples                          |
+| --------------------- | ----------------------- | ------------------------- | --------------------------------- |
+| interpolation         | InterpolationMethod     | Interpolation method.     | `"nearestNeighbor"`               |
+| outputResolution      | InterpolationResolution | Target output resolution. | `{"type":"fraction","x":2,"y":2}` |
+| outputOriginReference | null or Coordinate2D    |                           |                                   |
 
 ## Sources
 

@@ -406,7 +406,6 @@ mod tests {
                         "type": "GdalSource",
                         "params": {
                             "data": "matrix-input",
-                            "overviewLevel": null
                         }
                     }
                 }
@@ -450,7 +449,6 @@ mod tests {
                         "type": "GdalSource",
                         "params": {
                             "data": "matrix-input",
-                            "overviewLevel": null
                         }
                     }
                 }

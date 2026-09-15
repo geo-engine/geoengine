@@ -17,16 +17,16 @@ pub struct MockPointSourceParameters {
     #[serde(rename = "points")]
     pub points: Vec<models::Coordinate2D>,
     /// Defines how the spatial bounds of the source are derived.  Defaults to `None`.
-    #[serde(rename = "spatialBounds")]
-    pub spatial_bounds: Box<models::SpatialBoundsDerive>,
+    #[serde(rename = "spatialBounds", skip_serializing_if = "Option::is_none")]
+    pub spatial_bounds: Option<Box<models::SpatialBoundsDerive>>,
 }
 
 impl MockPointSourceParameters {
     /// Parameters for the [`MockPointSource`] operator.
-    pub fn new(points: Vec<models::Coordinate2D>, spatial_bounds: models::SpatialBoundsDerive) -> MockPointSourceParameters {
+    pub fn new(points: Vec<models::Coordinate2D>) -> MockPointSourceParameters {
         MockPointSourceParameters {
             points,
-            spatial_bounds: Box::new(spatial_bounds),
+            spatial_bounds: None,
         }
     }
 }

@@ -32,10 +32,6 @@ import {
  * 
  * It removes all non-selected bands while preserving the original order of remaining bands.
  * 
- * ## Inputs
- * 
- * The `BandFilter` operator expects exactly one _raster_ input.
- * 
  * ## Errors
  * 
  * The operator returns an error if no bands are selected or if selected band names/indices

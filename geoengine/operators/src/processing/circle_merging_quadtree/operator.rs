@@ -39,9 +39,9 @@ pub struct VisualPointClusteringParams {
     pub min_radius_px: f64,
     pub delta_px: f64,
     pub resolution: f64,
-    radius_column: String,
-    count_column: String,
-    column_aggregates: HashMap<String, AttributeAggregateDef>,
+    pub radius_column: String,
+    pub count_column: String,
+    pub column_aggregates: HashMap<String, AttributeAggregateDef>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

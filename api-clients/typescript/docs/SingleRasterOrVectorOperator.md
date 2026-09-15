@@ -8,7 +8,7 @@ It is either a set of `RasterOperator` or a single `VectorOperator`
 Name | Type
 ------------ | -------------
 `type` | string
-`params` | [VectorExpressionParameters](VectorExpressionParameters.md)
+`params` | [VisualPointClusteringParameters](VisualPointClusteringParameters.md)
 `sources` | [SingleVectorSource](SingleVectorSource.md)
 
 ## Example

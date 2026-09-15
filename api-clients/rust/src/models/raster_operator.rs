@@ -16,6 +16,10 @@ use serde::{Deserialize, Serialize};
 pub enum RasterOperator {
     #[serde(rename="BandFilter")]
     BandFilter(Box<models::BandFilter>),
+    #[serde(rename="BandNeighborhoodAggregate")]
+    BandNeighborhoodAggregate(Box<models::BandNeighborhoodAggregate>),
+    #[serde(rename="BandwiseExpression")]
+    BandwiseExpression(Box<models::BandwiseExpression>),
     #[serde(rename="Downsampling")]
     Downsampling(Box<models::Downsampling>),
     #[serde(rename="Expression")]
@@ -26,14 +30,30 @@ pub enum RasterOperator {
     Interpolation(Box<models::Interpolation>),
     #[serde(rename="MultiBandGdalSource")]
     MultiBandGdalSource(Box<models::MultiBandGdalSource>),
+    #[serde(rename="NeighborhoodAggregate")]
+    NeighborhoodAggregate(Box<models::NeighborhoodAggregate>),
+    #[serde(rename="Onnx")]
+    Onnx(Box<models::Onnx>),
+    #[serde(rename="RasterScaling")]
+    RasterScaling(Box<models::RasterScaling>),
     #[serde(rename="RasterStacker")]
     RasterStacker(Box<models::RasterStacker>),
     #[serde(rename="RasterTypeConversion")]
     RasterTypeConversion(Box<models::RasterTypeConversion>),
+    #[serde(rename="Rasterization")]
+    Rasterization(Box<models::Rasterization>),
     #[serde(rename="Reprojection")]
     Reprojection(Box<models::Reprojection>),
+    #[serde(rename="Reflectance")]
+    Reflectance(Box<models::Reflectance>),
+    #[serde(rename="Radiance")]
+    Radiance(Box<models::Radiance>),
     #[serde(rename="TemporalRasterAggregation")]
     TemporalRasterAggregation(Box<models::TemporalRasterAggregation>),
+    #[serde(rename="Temperature")]
+    Temperature(Box<models::Temperature>),
+    #[serde(rename="TimeShift")]
+    TimeShift(Box<models::TimeShift>),
 }
 
 impl Default for RasterOperator {

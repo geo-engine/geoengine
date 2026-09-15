@@ -12,6 +12,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { AttributeFilter } from './AttributeFilter';
+import {
+    AttributeFilterFromJSON,
+    AttributeFilterFromJSONTyped,
+    AttributeFilterToJSON,
+    AttributeFilterToJSONTyped,
+} from './AttributeFilter';
+
 /**
  * Parameters for the [`OgrSource`] operator.
  * @export
@@ -30,6 +38,12 @@ export interface OgrSourceParameters {
      * @memberof OgrSourceParameters
      */
     attributeProjection?: Array<string> | null;
+    /**
+     * *Optional*: list of attribute filters to apply. When `None`, no filters are applied.
+     * @type {Array<AttributeFilter>}
+     * @memberof OgrSourceParameters
+     */
+    attributeFilters?: Array<AttributeFilter> | null;
 }
 
 /**
@@ -52,6 +66,7 @@ export function OgrSourceParametersFromJSONTyped(json: any, ignoreDiscriminator:
         
         'data': json['data'],
         'attributeProjection': json['attributeProjection'] == null ? undefined : json['attributeProjection'],
+        'attributeFilters': json['attributeFilters'] == null ? undefined : ((json['attributeFilters'] as Array<any>).map(AttributeFilterFromJSON)),
     };
 }
 
@@ -68,6 +83,7 @@ export function OgrSourceParametersToJSONTyped(value?: OgrSourceParameters | nul
         
         'data': value['data'],
         'attributeProjection': value['attributeProjection'],
+        'attributeFilters': value['attributeFilters'] == null ? undefined : ((value['attributeFilters'] as Array<any>).map(AttributeFilterToJSON)),
     };
 }
 

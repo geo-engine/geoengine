@@ -31,10 +31,6 @@ import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
  *
  * If parts of a tile are outside of the source extent after projection, the operator produces NO DATA values.
  *
- * ## Inputs
- *
- * The `Reprojection` operator expects exactly one _raster_ or _vector_ input.
- *
  * ## Errors
  *
  * The operator returns an error if the target projection is unknown or if input data cannot be reprojected.

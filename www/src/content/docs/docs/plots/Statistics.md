@@ -21,14 +21,6 @@ The operator returns an error if one of the selected attributes is not numeric.
 
 For raster data, the operator generates one statistic for each input raster.
 
-## Inputs
-
-The operator consumes exactly one _vector_ or multiple _raster_ operators.
-
-| Parameter | Type                                 |
-| --------- | ------------------------------------ |
-| `source`  | `MultipleRasterOrSingleVectorSource` |
-
 ## Errors
 
 The operator returns an error in the following cases.
@@ -68,10 +60,10 @@ The operator returns an error in the following cases.
 
 ## Parameters
 
-| Name        | Type  | Description                                                                                                                                                                                                                                                                                                                                                                      | Examples |
-| ----------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| columnNames | array | # Vector data<br>The names of the attributes to generate statistics for.<br><br># Raster data<br>_Optional_: An alias for each input source.<br>The operator will automatically name the rasters `Raster-1`, `Raster-2`, … if this parameter is empty.<br>If aliases are given, the number of aliases must match the number of input rasters.<br>Otherwise an error is returned. |          |
-| percentiles | array | The percentiles to compute for each attribute.                                                                                                                                                                                                                                                                                                                                   |          |
+| Name        | Type  | Description                                                                                                                                                                                                                                                                                                                                                                      | Examples               |
+| ----------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| columnNames | array | # Vector data<br>The names of the attributes to generate statistics for.<br><br># Raster data<br>_Optional_: An alias for each input source.<br>The operator will automatically name the rasters `Raster-1`, `Raster-2`, … if this parameter is empty.<br>If aliases are given, the number of aliases must match the number of input rasters.<br>Otherwise an error is returned. | `["x","y"]`<br>`["A"]` |
+| percentiles | array | The percentiles to compute for each attribute.                                                                                                                                                                                                                                                                                                                                   | `[0.25,0.5,0.75]`      |
 
 ## Sources
 

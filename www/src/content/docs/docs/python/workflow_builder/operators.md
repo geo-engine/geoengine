@@ -116,6 +116,32 @@ def from_operator_dict(cls, operator_dict: dict[str, Any]) -> GdalSource
 
 Returns an operator from a dictionary.
 
+## MultiBandGdalSource Objects
+
+```python
+class MultiBandGdalSource(RasterOperator)
+```
+
+A multi-band GDAL source operator referencing a named dataset with all its bands.
+
+#### \_\_init\_\_
+
+```python
+def __init__(dataset: str | DatasetName)
+```
+
+Creates a new multi-band GDAL source operator.
+
+#### from\_operator\_dict
+
+```python
+@classmethod
+def from_operator_dict(cls, operator_dict: dict[str,
+                                                Any]) -> MultiBandGdalSource
+```
+
+Returns an operator from a dictionary.
+
 ## OgrSource Objects
 
 ```python
@@ -589,6 +615,35 @@ def __init__(sources: list[RasterOperator], rename: RenameBands | None = None)
 ```
 
 Creates a new RasterStacker operator.
+
+## BandFilter Objects
+
+```python
+class BandFilter(RasterOperator)
+```
+
+The BandFilter operator.
+
+Selects a subset of the source&#x27;s bands, either by band names or by band
+indices. The order of the remaining bands is preserved and the output
+bands are renumbered to 0..n.
+
+#### \_\_init\_\_
+
+```python
+def __init__(source: RasterOperator, bands: list[str] | list[int])
+```
+
+Creates a new BandFilter operator.
+
+#### from\_operator\_dict
+
+```python
+@classmethod
+def from_operator_dict(cls, operator_dict: dict[str, Any]) -> BandFilter
+```
+
+Returns an operator from a dictionary.
 
 ## BandNeighborhoodAggregate Objects
 

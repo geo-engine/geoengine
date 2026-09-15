@@ -41,7 +41,8 @@ class StacDataProviderDefinition(BaseModel):
     time_dimension: TimeDimension = Field(alias="timeDimension")
     datasets: List[StacProviderDataset]
     query_timeout_secs: Optional[StrictInt] = Field(default=None, description="Timeout in seconds for outgoing STAC API HTTP requests.", alias="queryTimeoutSecs")
-    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "collectionName", "s3Config", "timeDimension", "datasets", "queryTimeoutSecs"]
+    page_limit: Optional[StrictInt] = Field(default=None, alias="pageLimit")
+    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "collectionName", "s3Config", "timeDimension", "datasets", "queryTimeoutSecs", "pageLimit"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -134,7 +135,8 @@ class StacDataProviderDefinition(BaseModel):
             "s3Config": StacProviderS3Config.from_dict(obj["s3Config"]) if obj.get("s3Config") is not None else None,
             "timeDimension": TimeDimension.from_dict(obj["timeDimension"]) if obj.get("timeDimension") is not None else None,
             "datasets": [StacProviderDataset.from_dict(_item) for _item in obj["datasets"]] if obj.get("datasets") is not None else None,
-            "queryTimeoutSecs": obj.get("queryTimeoutSecs")
+            "queryTimeoutSecs": obj.get("queryTimeoutSecs"),
+            "pageLimit": obj.get("pageLimit")
         })
         return _obj
 

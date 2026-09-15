@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from geoengine_api_client.models.attribute_filter import AttributeFilter
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -28,7 +29,8 @@ class OgrSourceParameters(BaseModel):
     """ # noqa: E501
     data: StrictStr = Field(description="Dataset name or identifier to be loaded.")
     attribute_projection: Optional[List[StrictStr]] = Field(default=None, description="*Optional*: list of attributes to include. When `None`, all attributes are included.", alias="attributeProjection")
-    __properties: ClassVar[List[str]] = ["data", "attributeProjection"]
+    attribute_filters: Optional[List[AttributeFilter]] = Field(default=None, description="*Optional*: list of attribute filters to apply. When `None`, no filters are applied.", alias="attributeFilters")
+    __properties: ClassVar[List[str]] = ["data", "attributeProjection", "attributeFilters"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -69,10 +71,22 @@ class OgrSourceParameters(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of each item in attribute_filters (list)
+        _items = []
+        if self.attribute_filters:
+            for _item_attribute_filters in self.attribute_filters:
+                if _item_attribute_filters:
+                    _items.append(_item_attribute_filters.to_dict())
+            _dict['attributeFilters'] = _items
         # set to None if attribute_projection (nullable) is None
         # and model_fields_set contains the field
         if self.attribute_projection is None and "attribute_projection" in self.model_fields_set:
             _dict['attributeProjection'] = None
+
+        # set to None if attribute_filters (nullable) is None
+        # and model_fields_set contains the field
+        if self.attribute_filters is None and "attribute_filters" in self.model_fields_set:
+            _dict['attributeFilters'] = None
 
         return _dict
 
@@ -87,7 +101,8 @@ class OgrSourceParameters(BaseModel):
 
         _obj = cls.model_validate({
             "data": obj.get("data"),
-            "attributeProjection": obj.get("attributeProjection")
+            "attributeProjection": obj.get("attributeProjection"),
+            "attributeFilters": [AttributeFilter.from_dict(_item) for _item in obj["attributeFilters"]] if obj.get("attributeFilters") is not None else None
         })
         return _obj
 

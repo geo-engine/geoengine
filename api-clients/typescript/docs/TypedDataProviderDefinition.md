@@ -43,6 +43,7 @@ Name | Type
 `timeDimension` | [TimeDimension](TimeDimension.md)
 `datasets` | [Array&lt;StacProviderDataset&gt;](StacProviderDataset.md)
 `queryTimeoutSecs` | number
+`pageLimit` | number
 `user` | string
 `refreshToken` | string
 `expiryDate` | Date
@@ -91,6 +92,7 @@ const example = {
   "timeDimension": null,
   "datasets": null,
   "queryTimeoutSecs": null,
+  "pageLimit": null,
   "user": null,
   "refreshToken": null,
   "expiryDate": null,

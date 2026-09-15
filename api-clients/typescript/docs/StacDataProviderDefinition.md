@@ -17,6 +17,7 @@ Name | Type
 `timeDimension` | [TimeDimension](TimeDimension.md)
 `datasets` | [Array&lt;StacProviderDataset&gt;](StacProviderDataset.md)
 `queryTimeoutSecs` | number
+`pageLimit` | number
 
 ## Example
 
@@ -36,6 +37,7 @@ const example = {
   "timeDimension": null,
   "datasets": null,
   "queryTimeoutSecs": null,
+  "pageLimit": null,
 } satisfies StacDataProviderDefinition
 
 console.log(example)

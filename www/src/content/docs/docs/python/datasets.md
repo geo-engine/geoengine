@@ -195,8 +195,8 @@ TODO: add vector symbology if needed
 ```python
 def __init__(display_name: str,
              description: str,
-             source_operator: Literal["GdalSource",
-                                      "OgrSource"] = "GdalSource",
+             source_operator: Literal["GdalSource", "OgrSource",
+                                      "MultiBandGdalSource"] = "GdalSource",
              symbology: RasterSymbology | None = None,
              provenance: list[Provenance] | None = None,
              name: str | None = None)
@@ -338,6 +338,94 @@ def add_dataset(data_store: Volume | UploadId | Literal["external"],
 ```
 
 Adds a dataset to the Geo Engine
+
+## GdalMultiBandMetaData Objects
+
+```python
+class GdalMultiBandMetaData()
+```
+
+The metadata (result descriptor) of a `MultiBandGdalSource` dataset
+
+#### \_\_init\_\_
+
+```python
+def __init__(bands: list[RasterBandDescriptor],
+             data_type: RasterDataType,
+             spatial_reference: str,
+             grid_or_geo_transform: SpatialGridDescriptor | GeoTransform,
+             time: TimeDescriptor | None = None) -> None
+```
+
+Create a `GdalMultiBandMetaData` object.
+
+When `time` is not given, a regular time dimension with an epoch origin
+and a step of one day is used. When `spatial_grid` is not given, a
+placeholder source grid is used; the Geo Engine derives the final grid
+when tiles are added to the dataset. The placeholder grid uses the
+given `geo_transform` (or a 1 by 1 unit grid), as the tile files&#x27; geo
+transforms must be compatible with the dataset grid&#x27;s geo transform.
+
+#### to\_api\_dict
+
+```python
+def to_api_dict() -> geoengine_api_client.MetaDataDefinition
+```
+
+Converts the metadata to a `MetaDataDefinition` for the API
+
+## MultiBandGdalFileSpec Objects
+
+```python
+@dataclass
+class MultiBandGdalFileSpec()
+```
+
+A single file that is added as a tile to a `MultiBandGdalSource` dataset
+
+#### to\_api\_dict
+
+```python
+def to_api_dict() -> geoengine_api_client.AddDatasetTile
+```
+
+Converts the file spec to an `AddDatasetTile` for the API
+
+#### add\_dataset\_tiles
+
+```python
+def add_dataset_tiles(dataset: DatasetName | str,
+                      tiles: list[MultiBandGdalFileSpec],
+                      timeout: int = 60) -> None
+```
+
+Add files (tiles) to an existing `MultiBandGdalSource` dataset
+
+#### add\_multiband\_gdal\_source
+
+```python
+def add_multiband_gdal_source(name: str,
+                              bands: list[RasterBandDescriptor],
+                              data_type: RasterDataType,
+                              spatial_reference: str,
+                              files: list[MultiBandGdalFileSpec],
+                              data_store: Volume | str = "external",
+                              spatial_grid: SpatialGridDescriptor
+                              | None = None,
+                              time: TimeDescriptor | None = None,
+                              display_name: str | None = None,
+                              description: str = "",
+                              share_with: list[RoleId] | None = None,
+                              permission: Permission = Permission.READ,
+                              timeout: int = 60) -> DatasetName
+```
+
+Create a `MultiBandGdalSource` dataset, grant optional permissions and add the given files as tiles.
+
+By default the dataset is created as external data, so GDAL resolves the
+files (e.g. https or s3 links) when they are queried. A volume name or a
+`Volume` can be given to store the files in a Geo Engine volume. No
+permissions are granted unless `share_with` is given.
 
 #### add\_or\_replace\_dataset\_with\_permissions
 

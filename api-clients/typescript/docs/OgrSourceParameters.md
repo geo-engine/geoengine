@@ -9,6 +9,7 @@ Name | Type
 ------------ | -------------
 `data` | string
 `attributeProjection` | Array&lt;string&gt;
+`attributeFilters` | [Array&lt;AttributeFilter&gt;](AttributeFilter.md)
 
 ## Example
 
@@ -19,6 +20,7 @@ import type { OgrSourceParameters } from '@geoengine/api-client'
 const example = {
   "data": null,
   "attributeProjection": null,
+  "attributeFilters": null,
 } satisfies OgrSourceParameters
 
 console.log(example)
