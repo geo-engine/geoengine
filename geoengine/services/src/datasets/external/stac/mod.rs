@@ -18,6 +18,7 @@ mod cache;
 pub(crate) mod common;
 mod listing;
 mod loading_info;
+mod storage;
 
 const DEFAULT_QUERY_TIMEOUT_SECS: i64 = 60;
 const DEFAULT_PAGE_LIMIT: i64 = 100;
@@ -59,8 +60,7 @@ pub struct StacProviderS3Config {
     pub secret_key: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
-#[postgres(name = "StacProviderAuthentication")]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct StacProviderAuthentication {
     pub endpoint: String,
     pub client_id: String,

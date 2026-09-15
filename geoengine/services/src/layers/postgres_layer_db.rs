@@ -989,7 +989,7 @@ where
 
         let row = conn.query_one(&stmt, &[&id, &self.session.user.id]).await?;
 
-        Ok(row.get(0))
+        Ok(row.try_get(0)?)
     }
 
     async fn update_layer_provider_definition(

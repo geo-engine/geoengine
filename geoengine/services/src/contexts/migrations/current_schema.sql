@@ -886,7 +886,8 @@ CREATE TYPE "StacProviderAuthentication" AS (
     endpoint text,
     client_id text,
     username text,
-    password text
+    password bytea,
+    password_encryption_nonce bytea
 );
 
 CREATE TYPE "StacAssetBand" AS (
