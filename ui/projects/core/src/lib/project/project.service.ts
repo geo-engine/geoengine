@@ -976,13 +976,13 @@ export class ProjectService implements OnDestroy {
 
     /**
      * Create a stream that signals whether a running query should be aborted because the results are no longer needed.
-     * It takes the layerId, the resolution of the queried tile and its extent at the time of querying as a parameter in
-     * order to determine whether a change in the layer list or on the map view makes the results obsolete.
+     * It takes the layerId and the extent of the queried tile at the time of querying as a parameter in order to
+     * determine whether a change in the layer list or on the map view makes the results obsolete.
      *
      * If the layer is not registered with the project service (e.g. in the enhanced data viewer), the stream does not
      * emit when the layer is removed, only on the viewing conditions below.
      */
-    createQueryAbortStream(layerId: number, tileResolution: number, tileExtent: Extent): Observable<void> {
+    createQueryAbortStream(layerId: number, tileExtent: Extent): Observable<void> {
         // create an observable that emits when the layer is removed
         const layerStream = this.layers.get(layerId);
         const layerRemovedSubject = new BehaviorSubject<boolean>(false);
@@ -1013,20 +1013,22 @@ export class ProjectService implements OnDestroy {
         let initialTime: Time | undefined;
         let initialSref: SpatialReference | undefined;
         let initialSession: string | undefined;
+        let initialResolution: number | undefined;
 
         return combineLatest(observables).pipe(
-            tap(([time, _viewportSize, session, sref, _layerRemoved]) => {
+            tap(([time, viewportSize, session, sref, _layerRemoved]) => {
                 // capture the initial values at the start of the query
                 // s.t. we can detect a change later
                 initialTime ??= time;
                 initialSref ??= sref;
                 initialSession ??= session;
+                initialResolution ??= viewportSize.resolution;
             }),
             skip(1),
             filter(
                 ([time, viewportSize, session, sref, layerRemoved]) =>
                     !time.isSame(initialTime!) ||
-                    viewportSize.resolution !== tileResolution ||
+                    viewportSize.resolution !== initialResolution ||
                     !olIntersects(tileExtent, viewportSize.extent) ||
                     session !== initialSession ||
                     sref !== initialSref ||

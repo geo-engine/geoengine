@@ -370,15 +370,13 @@ export class OlRasterLayerComponent
         source.setTileLoadFunction((olTile, src) => {
             const tile = olTile as OlImageTile;
             const tileCoord = tile.getTileCoord();
-            const tileZoomLevel = tileCoord[0];
-            const tileResolution = tileGrid.getResolution(tileZoomLevel);
             const tileExtent = tileGrid.getTileCoordExtent(tileCoord) as Extent;
 
             const client = new XMLHttpRequest();
 
             let aborted = false;
 
-            const cancelSub = this.projectService.createQueryAbortStream(this.layerId(), tileResolution, tileExtent).subscribe(() => {
+            const cancelSub = this.projectService.createQueryAbortStream(this.layerId(), tileExtent).subscribe(() => {
                 aborted = true;
                 client.abort();
             });
@@ -519,13 +517,11 @@ export class OlOgcApiMapTileLayerComponent
                         try {
                             const tile = olTile as OlImageTile;
                             const tileCoord = tile.getTileCoord();
-                            const tileZoomLevel = tileCoord[0];
                             const tileGrid = source.getTileGridForProjection(olGetProj(this.spatialReference().srsString)!);
-                            const tileResolution = tileGrid.getResolution(tileZoomLevel);
                             const tileExtent = tileGrid.getTileCoordExtent(tileCoord) as Extent;
 
                             cancelSub = this.projectService
-                                .createQueryAbortStream(this.layerId(), tileResolution, tileExtent)
+                                .createQueryAbortStream(this.layerId(), tileExtent)
                                 .subscribe(() => controller.abort());
 
                             // Successfully assign the object URL to the image element
