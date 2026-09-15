@@ -11,7 +11,7 @@ use geoengine_datatypes::{
 use tracing::{debug, error, info, warn};
 
 use crate::datasets::external::stac::{
-    StacDataProviderDefinition, StacProviderDataset, StacProviderDatasetBand, common,
+    StacClient, StacDataProviderDefinition, StacProviderDataset, StacProviderDatasetBand, common,
 };
 use crate::util::retry::{RetryPolicy, retry_http};
 use crate::{
@@ -159,7 +159,10 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
     .await?;
 
     // Separate reqwest client for STAC API calls (not Geo Engine)
-    let stac_client = reqwest::Client::new();
+    let stac_client = StacClient::new(reqwest::Client::new())
+        .with_authentication(provider_def.authentication.clone())
+        .await
+        .context("Cannot authenticate with STAC API")?;
 
     let created_datasets = setup_datasets(&api_config, &params, provider_def).await?;
 
@@ -878,7 +881,7 @@ enum QueryState {
 
 fn create_page_stream(
     initial_query_state: QueryState,
-    client: reqwest::Client,
+    client: StacClient,
     _verbose: bool,
     prefetch_buffer: usize,
 ) -> impl futures::Stream<Item = Result<stac::ItemCollection, anyhow::Error>> {
@@ -914,7 +917,7 @@ fn create_page_stream(
 }
 
 async fn query_item_collection_internal(
-    client: &reqwest::Client,
+    client: &StacClient,
     query_state: &QueryState,
 ) -> Result<(stac::ItemCollection, QueryState), anyhow::Error> {
     match query_state {
@@ -926,9 +929,11 @@ async fn query_item_collection_internal(
                 || async {
                     client
                         .get(query_url)
+                        .await
                         .query(&query_params)
                         .send()
                         .await?
+                        .error_for_status()?
                         .json()
                         .await
                 },
@@ -950,7 +955,16 @@ async fn query_item_collection_internal(
         }
         QueryState::NextPage { next_url } => {
             let item_collection: stac::ItemCollection = retry_http(
-                || async { client.get(next_url).send().await?.json().await },
+                || async {
+                    client
+                        .get(next_url)
+                        .await
+                        .send()
+                        .await?
+                        .error_for_status()?
+                        .json()
+                        .await
+                },
                 "Query STAC next page",
                 &RetryPolicy::new(),
                 |e| e.status().map(|s| s.as_u16()),
@@ -1090,7 +1104,7 @@ fn build_stac_query_params(params: &StacHarvest, page_limit: usize) -> Vec<(Stri
 
 /// Fetch pages of STAC items, process them, and collect tiles grouped by dataset.
 async fn process_item_stream(
-    client: &reqwest::Client,
+    client: &StacClient,
     items_url: &str,
     query_params: &[(String, String)],
     provider_def: &StacDataProviderDefinition,
@@ -1384,6 +1398,71 @@ mod tests {
         items.items[0].clone()
     }
 
+    #[tokio::test]
+    async fn harvest_pages_use_shared_stac_authentication() {
+        use crate::datasets::external::stac::StacProviderAuthentication;
+        use httptest::{
+            Expectation, Server, all_of,
+            matchers::{contains, request},
+            responders,
+        };
+
+        for authenticated in [false, true] {
+            let server = Server::run();
+            let authentication = authenticated.then(|| StacProviderAuthentication {
+                endpoint: server.url_str("/token"),
+                client_id: "client".into(),
+                username: "user".into(),
+                password: "password".into(),
+            });
+            if authenticated {
+                server.expect(
+                    Expectation::matching(request::method_path("POST", "/token")).respond_with(
+                        responders::json_encoded(serde_json::json!({
+                            "access_token": "access", "expires_in": 3600
+                        })),
+                    ),
+                );
+            }
+            let mut first_page: serde_json::Value = serde_json::from_str(include_str!(
+                "../../../../test_data/stac_responses/items/code-de-harvest-test.json"
+            ))
+            .unwrap();
+            first_page["links"] = serde_json::json!([{
+                "rel": "next", "href": server.url_str("/next")
+            }]);
+            let last_page =
+                serde_json::json!({"type": "FeatureCollection", "features": [], "links": []});
+            for (path, page) in [("/items", first_page), ("/next", last_page)] {
+                let expectation = if authenticated {
+                    Expectation::matching(all_of![
+                        request::method_path("GET", path),
+                        request::headers(contains(("authorization", "Bearer access"))),
+                    ])
+                } else {
+                    Expectation::matching(request::method_path("GET", path))
+                };
+                server.expect(expectation.respond_with(responders::json_encoded(page)));
+            }
+            let client = StacClient::new(reqwest::Client::new())
+                .with_authentication(authentication)
+                .await
+                .unwrap();
+            let pages = create_page_stream(
+                QueryState::FirstPage {
+                    query_url: server.url_str("/items"),
+                    query_params: vec![],
+                },
+                client,
+                false,
+                1,
+            );
+            futures::pin_mut!(pages);
+            assert!(!pages.next().await.unwrap().unwrap().items.is_empty());
+            assert!(pages.next().await.is_none());
+        }
+    }
+
     #[test]
     fn test_z_index_uses_configured_timestamp_property() {
         let mut item = code_de_test_item();
@@ -1634,6 +1713,7 @@ mod tests {
             api_url: "https://earth-search.aws.element84.com/v0".to_string(),
             collection_name: "sentinel-2-l2a".to_string(),
             s3_config: None,
+            authentication: None,
             time_dimension: geoengine_datatypes::primitives::TimeDimension::Regular(
                 geoengine_datatypes::primitives::RegularTimeDimension::new_with_epoch_origin(
                     geoengine_datatypes::primitives::TimeStep {

@@ -12,6 +12,7 @@
  */
 import { StacProviderS3ConfigFromJSON, StacProviderS3ConfigToJSON, } from './StacProviderS3Config';
 import { StacProviderDatasetFromJSON, StacProviderDatasetToJSON, } from './StacProviderDataset';
+import { StacProviderAuthenticationFromJSON, StacProviderAuthenticationToJSON, } from './StacProviderAuthentication';
 import { TimeDimensionFromJSON, TimeDimensionToJSON, } from './TimeDimension';
 /**
  * @export
@@ -57,6 +58,7 @@ export function StacDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminato
         'apiUrl': json['apiUrl'],
         'collectionName': json['collectionName'],
         's3Config': json['s3Config'] == null ? undefined : StacProviderS3ConfigFromJSON(json['s3Config']),
+        'authentication': json['authentication'] == null ? undefined : StacProviderAuthenticationFromJSON(json['authentication']),
         'timeDimension': TimeDimensionFromJSON(json['timeDimension']),
         'datasets': (json['datasets'].map(StacProviderDatasetFromJSON)),
         'queryTimeoutSecs': json['queryTimeoutSecs'] == null ? undefined : json['queryTimeoutSecs'],
@@ -79,6 +81,7 @@ export function StacDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator
         'apiUrl': value['apiUrl'],
         'collectionName': value['collectionName'],
         's3Config': StacProviderS3ConfigToJSON(value['s3Config']),
+        'authentication': StacProviderAuthenticationToJSON(value['authentication']),
         'timeDimension': TimeDimensionToJSON(value['timeDimension']),
         'datasets': (value['datasets'].map(StacProviderDatasetToJSON)),
         'queryTimeoutSecs': value['queryTimeoutSecs'],

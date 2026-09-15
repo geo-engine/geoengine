@@ -52,3 +52,7 @@ raster_cache_size_ratio = 0.5
 number_of_processes = 2
 max_active_processes = 2
 max_dataset_processes = 2
+
+[dataprovider]
+# Test-only encryption key; never use this key in a deployment.
+password_encryption_key = "stac-password-encryption-test-key"

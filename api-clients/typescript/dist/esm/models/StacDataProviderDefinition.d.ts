@@ -10,6 +10,7 @@
  */
 import type { StacProviderS3Config } from './StacProviderS3Config';
 import type { StacProviderDataset } from './StacProviderDataset';
+import type { StacProviderAuthentication } from './StacProviderAuthentication';
 import type { TimeDimension } from './TimeDimension';
 /**
  *
@@ -65,6 +66,12 @@ export interface StacDataProviderDefinition {
      * @memberof StacDataProviderDefinition
      */
     s3Config?: StacProviderS3Config | null;
+    /**
+     *
+     * @type {StacProviderAuthentication}
+     * @memberof StacDataProviderDefinition
+     */
+    authentication?: StacProviderAuthentication | null;
     /**
      *
      * @type {TimeDimension}

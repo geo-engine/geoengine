@@ -13,10 +13,12 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+mod auth;
 mod cache;
 pub(crate) mod common;
 mod listing;
 mod loading_info;
+mod storage;
 
 const DEFAULT_QUERY_TIMEOUT_SECS: i64 = 60;
 const DEFAULT_PAGE_LIMIT: i64 = 100;
@@ -32,6 +34,7 @@ pub struct StacDataProviderDefinition {
     pub api_url: String,
     pub collection_name: String,
     pub s3_config: Option<StacProviderS3Config>,
+    pub authentication: Option<StacProviderAuthentication>,
     pub time_dimension: TimeDimension, // TODO: should this be on dataset level?
     pub datasets: Vec<StacProviderDataset>,
     /// Timeout in seconds for outgoing STAC API HTTP requests.
@@ -55,6 +58,14 @@ pub struct StacProviderS3Config {
     pub endpoint: String,
     pub access_key: Option<String>,
     pub secret_key: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct StacProviderAuthentication {
+    pub endpoint: String,
+    pub client_id: String,
+    pub username: String,
+    pub password: String,
 }
 
 /// A geo engine dataset derived from a STAC collection.
@@ -140,7 +151,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
         if self.time_dimension == TimeDimension::Irregular {
             return Err(crate::error::Error::StacIrregularTimeDimensionNotSupported);
         }
-        Ok(Box::new(StacDataProvider::new(
+        let mut provider = StacDataProvider::new(
             self.id,
             self.name,
             self.description,
@@ -151,7 +162,14 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
             self.datasets,
             self.page_limit,
             self.query_timeout_secs,
-        )))
+        );
+
+        provider.client = provider
+            .client
+            .with_authentication(self.authentication)
+            .await?;
+
+        Ok(Box::new(provider))
     }
 
     fn type_name(&self) -> &'static str {
@@ -189,6 +207,15 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
                     }
                 }
 
+                if let (Some(current_authentication), Some(new_authentication)) =
+                    (&self.authentication, &mut new.authentication)
+                    && new_authentication.password == SECRET_REPLACEMENT
+                {
+                    new_authentication
+                        .password
+                        .clone_from(&current_authentication.password);
+                }
+
                 TypedDataProviderDefinition::StacDataProviderDefinition(new)
             }
             _ => new,
@@ -208,7 +235,7 @@ pub struct StacDataProvider {
     datasets: Vec<StacProviderDataset>,
     page_limit: i64,
     /// Shared HTTP client, reused across all requests for this provider.
-    client: reqwest::Client,
+    client: StacClient,
     /// In-memory cache for STAC query results (tile files), keyed by dataset
     /// name and spatial/temporal query bounds.
     query_cache: Arc<StacQueryCache>,
@@ -242,7 +269,7 @@ impl StacDataProvider {
             time_dimension,
             datasets,
             page_limit,
-            client,
+            client: StacClient::new(client),
             query_cache: Arc::new(StacQueryCache::default()),
         }
     }
@@ -257,5 +284,43 @@ impl DataProvider for StacDataProvider {
         Err(crate::error::Error::NotImplemented {
             message: "STAC provenance is not yet implemented".to_owned(),
         })
+    }
+}
+
+/// Shared STAC HTTP client. Clones share token renewal state, and each request
+/// reads the current token so pagination and retries use refreshed credentials.
+#[derive(Clone, Debug)]
+pub(crate) struct StacClient {
+    client: reqwest::Client,
+    authentication: Option<auth::StacAuthentication>,
+}
+
+impl StacClient {
+    pub(crate) fn new(client: reqwest::Client) -> Self {
+        Self {
+            client,
+            authentication: None,
+        }
+    }
+
+    pub(crate) async fn with_authentication(
+        mut self,
+        config: Option<StacProviderAuthentication>,
+    ) -> crate::error::Result<Self> {
+        self.authentication = match config {
+            Some(config) => {
+                Some(auth::StacAuthentication::initialize(self.client.clone(), config).await?)
+            }
+            None => None,
+        };
+        Ok(self)
+    }
+
+    pub(crate) async fn get(&self, url: impl reqwest::IntoUrl) -> reqwest::RequestBuilder {
+        let request = self.client.get(url);
+        match &self.authentication {
+            Some(authentication) => authentication.authorize(request).await,
+            None => request,
+        }
     }
 }
