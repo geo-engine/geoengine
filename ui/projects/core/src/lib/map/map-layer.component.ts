@@ -17,17 +17,8 @@ import {Subject, Subscription} from 'rxjs';
 
 import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol/layer';
 import {ImageTile as OlImageTile} from 'ol';
-import {
-    Source as OlSource,
-    Tile as OlTileSource,
-    TileWMS as OlTileWmsSource,
-    Vector as OlVectorSource,
-    OGCMapTile,
-    TileDebug,
-    ImageTile,
-} from 'ol/source';
+import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
 import {get as olGetProj} from 'ol/proj';
-import {getCacheKey} from 'ol/tilecoord';
 import {CoreConfig} from '../config.service';
 import {ProjectService} from '../project/project.service';
 import {LoadingState} from '../project/loading-state.model';
@@ -95,23 +86,16 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
     abstract getExtent(): [number, number, number, number];
 
     /**
-     * Remove a tile from the renderer cache so OpenLayers re-creates and re-fetches it (as an IDLE tile)
-     * when it is requested again.
+     * Reset an aborted tile to `IDLE` so OpenLayers re-requests it (e.g. after panning away and
+     * back). OpenLayers only requests IDLE tiles, so an ERROR tile would stay invisible forever.
      *
-     * The cache key is built from the source that created the tile, since the layer's current source may
-     * have been replaced in the meantime (then the key would not exist in the cache).
+     * `setState` must not go from `LOADING` to `IDLE` directly ("Tile load sequence violation"),
+     * so it is routed through `ERROR` first, which also lets the source fire the matching
+     * `tileloaderror` and keep its in-flight tile bookkeeping balanced.
      */
-    protected evictTileFromRendererCache(tile: OlImageTile, source: OlTileSource): void {
-        // Tile layers only, so narrow the (generic) base layer to a tile layer once.
-        const tileLayer = this._mapLayer as unknown as OlLayerTile;
-        const tileCache = tileLayer.getRenderer()?.getTileCache();
-        if (tileCache) {
-            const [z, x, y] = tile.getTileCoord();
-            const cacheKey = getCacheKey(source, source.getKey(), z, x, y);
-            if (tileCache.containsKey(cacheKey)) {
-                tileCache.remove(cacheKey);
-            }
-        }
+    protected resetAbortedTile(tile: OlImageTile): void {
+        tile.setState(TileState.ERROR);
+        tile.setState(TileState.IDLE);
     }
 
     protected extractChange<T>(change: SimpleChange): T | undefined {
@@ -389,14 +373,12 @@ export class OlRasterLayerComponent
                 const data = client.response;
 
                 if (!data) {
-                    tile.setState(TileState.ERROR);
-
                     if (aborted) {
-                        // Evict the tile from the renderer cache so it is re-created and
-                        // re-fetched when it is requested again (e.g. after panning away
-                        // and back). Otherwise the ERROR tile stays cached forever and is
-                        // never reloaded, because OpenLayers only requests IDLE tiles.
-                        this.evictTileFromRendererCache(tile, source);
+                        // The tile may be requested again later, so reset it to IDLE
+                        // instead of leaving it in ERROR (which OpenLayers never re-fetches).
+                        this.resetAbortedTile(tile);
+                    } else {
+                        tile.setState(TileState.ERROR);
                     }
                 } else {
                     if (data.type === 'image/png') {
@@ -539,14 +521,12 @@ export class OlOgcApiMapTileLayerComponent
 
                             // CRITICAL: You must explicitly catch errors and notify OpenLayers,
                             // otherwise the map will wait indefinitely for this tile to resolve.
-                            olTile.setState(TileState.ERROR);
-
                             if (aborted) {
-                                // Evict the tile from the renderer cache so it is re-created and
-                                // re-fetched when it is requested again (e.g. after panning away
-                                // and back). Otherwise the ERROR tile stays cached forever and is
-                                // never reloaded, because OpenLayers only requests IDLE tiles.
-                                this.evictTileFromRendererCache(olTile as OlImageTile, source);
+                                // The tile may be requested again later, so reset it to IDLE
+                                // instead of leaving it in ERROR (which OpenLayers never re-fetches).
+                                this.resetAbortedTile(olTile as OlImageTile);
+                            } else {
+                                olTile.setState(TileState.ERROR);
                             }
                         } finally {
                             cancelSub?.unsubscribe();

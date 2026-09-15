@@ -11,7 +11,7 @@ import {
     Subscription,
     zip,
 } from 'rxjs';
-import {debounceTime, distinctUntilChanged, filter, first, map, mergeMap, skip, switchMap, take, tap} from 'rxjs/operators';
+import {debounceTime, distinctUntilChanged, filter, first, map, mergeMap, switchMap, take, tap} from 'rxjs/operators';
 
 import {Injectable, OnDestroy, inject} from '@angular/core';
 
@@ -986,15 +986,19 @@ export class ProjectService implements OnDestroy {
         // create an observable that emits when the layer is removed
         const layerStream = this.layers.get(layerId);
         const layerRemovedSubject = new BehaviorSubject<boolean>(false);
-        let layerStreamSub: Subscription | undefined;
-        if (layerStream) {
-            layerStreamSub = layerStream.subscribe({
-                complete: () => {
-                    layerRemovedSubject.next(true);
-                    layerRemovedSubject.complete();
-                },
-            });
-        }
+        const layerStreamSub = layerStream?.subscribe({
+            complete: () => {
+                layerRemovedSubject.next(true);
+                layerRemovedSubject.complete();
+            },
+        });
+
+        // Capture the state at the start of the query (all sources emit synchronously on
+        // subscription) so a change can be detected later without relying on emission order.
+        const initialTime = this.captureSync(this.getTimeStream());
+        const initialSref = this.captureSync(this.getSpatialReferenceStream());
+        const initialSession = this.captureSync(this.userService.getSessionTokenForRequest());
+        const initialViewport = this.mapService.getViewportSize();
 
         const observables: [
             Observable<Time>,
@@ -1010,25 +1014,11 @@ export class ProjectService implements OnDestroy {
             layerRemovedSubject,
         ];
 
-        let initialTime: Time | undefined;
-        let initialSref: SpatialReference | undefined;
-        let initialSession: string | undefined;
-        let initialResolution: number | undefined;
-
         return combineLatest(observables).pipe(
-            tap(([time, viewportSize, session, sref, _layerRemoved]) => {
-                // capture the initial values at the start of the query
-                // s.t. we can detect a change later
-                initialTime ??= time;
-                initialSref ??= sref;
-                initialSession ??= session;
-                initialResolution ??= viewportSize.resolution;
-            }),
-            skip(1),
             filter(
                 ([time, viewportSize, session, sref, layerRemoved]) =>
-                    !time.isSame(initialTime!) ||
-                    viewportSize.resolution !== initialResolution ||
+                    !time.isSame(initialTime) ||
+                    viewportSize.resolution !== initialViewport.resolution ||
                     !olIntersects(tileExtent, viewportSize.extent) ||
                     session !== initialSession ||
                     sref !== initialSref ||
@@ -1038,6 +1028,16 @@ export class ProjectService implements OnDestroy {
             take(1),
             map(() => undefined),
         );
+    }
+
+    /**
+     * Read the current value of a stream that emits synchronously on subscription
+     * (e.g. one backed by a `ReplaySubject` or `BehaviorSubject`).
+     */
+    private captureSync<T>(stream: Observable<T>): T {
+        let value: T | undefined;
+        stream.pipe(first()).subscribe((v) => (value = v));
+        return value as T;
     }
 
     /**
