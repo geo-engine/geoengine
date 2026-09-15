@@ -11,7 +11,7 @@ import {
     Subscription,
     zip,
 } from 'rxjs';
-import {debounceTime, distinctUntilChanged, filter, first, map, mergeMap, switchMap, take, tap} from 'rxjs/operators';
+import {debounceTime, distinctUntilChanged, filter, finalize, first, map, mergeMap, switchMap, take, tap} from 'rxjs/operators';
 
 import {Injectable, OnDestroy, inject} from '@angular/core';
 
@@ -1024,7 +1024,7 @@ export class ProjectService implements OnDestroy {
                     sref !== initialSref ||
                     layerRemoved,
             ),
-            tap((_) => layerStreamSub?.unsubscribe()),
+            finalize(() => layerStreamSub?.unsubscribe()),
             take(1),
             map(() => undefined),
         );
