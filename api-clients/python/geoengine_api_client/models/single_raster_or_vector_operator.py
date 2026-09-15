@@ -93,6 +93,16 @@ class SingleRasterOrVectorOperator(BaseModel):
         if not _data_type:
             raise ValueError("Failed to lookup data type from the field `type` in the input.")
 
+        # check if data type is `ColumnRangeFilter`
+        if _data_type == "ColumnRangeFilter":
+            instance.actual_instance = ColumnRangeFilter.from_json(json_str)
+            return instance
+
+        # check if data type is `LineSimplification`
+        if _data_type == "LineSimplification":
+            instance.actual_instance = LineSimplification.from_json(json_str)
+            return instance
+
         # check if data type is `MockPointSource`
         if _data_type == "MockPointSource":
             instance.actual_instance = MockPointSource.from_json(json_str)
@@ -101,6 +111,11 @@ class SingleRasterOrVectorOperator(BaseModel):
         # check if data type is `OgrSource`
         if _data_type == "OgrSource":
             instance.actual_instance = OgrSource.from_json(json_str)
+            return instance
+
+        # check if data type is `PointInPolygonFilter`
+        if _data_type == "PointInPolygonFilter":
+            instance.actual_instance = PointInPolygonFilter.from_json(json_str)
             return instance
 
         # check if data type is `RasterVectorJoin`
@@ -113,9 +128,24 @@ class SingleRasterOrVectorOperator(BaseModel):
             instance.actual_instance = Reprojection.from_json(json_str)
             return instance
 
+        # check if data type is `TimeProjection`
+        if _data_type == "TimeProjection":
+            instance.actual_instance = TimeProjection.from_json(json_str)
+            return instance
+
         # check if data type is `VectorExpression`
         if _data_type == "VectorExpression":
             instance.actual_instance = VectorExpression.from_json(json_str)
+            return instance
+
+        # check if data type is `VectorJoin`
+        if _data_type == "VectorJoin":
+            instance.actual_instance = VectorJoin.from_json(json_str)
+            return instance
+
+        # check if data type is `VisualPointClustering`
+        if _data_type == "VisualPointClustering":
+            instance.actual_instance = VisualPointClustering.from_json(json_str)
             return instance
 
         # check if data type is `RasterOperator`

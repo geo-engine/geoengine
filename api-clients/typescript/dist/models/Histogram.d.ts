@@ -8,8 +8,8 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import type { SingleVectorOrRasterSource } from './SingleVectorOrRasterSource';
 import type { HistogramParameters } from './HistogramParameters';
+import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
 /**
  * The `Histogram` is a _plot operator_ that computes a histogram plot either over attributes of a vector dataset or values of a raster source.
  * The output is a plot in [Vega-Lite](https://vega.github.io/vega-lite/) specification.
@@ -45,10 +45,10 @@ export interface Histogram {
     params: HistogramParameters;
     /**
      *
-     * @type {SingleVectorOrRasterSource}
+     * @type {SingleRasterOrVectorSource}
      * @memberof Histogram
      */
-    sources: SingleVectorOrRasterSource;
+    sources: SingleRasterOrVectorSource;
 }
 /**
  * @export

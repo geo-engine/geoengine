@@ -10,15 +10,11 @@ Tiles are automatically temporally aligned.
 
 All inputs must have the same data type and spatial reference.
 
-## Inputs
-
-The `RasterStacker` operator expects multiple raster inputs.
-
 ## Parameters
 
-| Name        | Type        | Description                                                                                                                                                                                                                              | Examples |
-| ----------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| renameBands | RenameBands | Strategy for deriving output band names.<br><br>- `default`: appends ` (n)` with the smallest `n` that avoids a conflict.<br>- `suffix`: appends one suffix per input.<br>- `rename`: explicitly provides names for all resulting bands. |          |
+| Name        | Type        | Description                                                                                                                                                                                                                              | Examples             |
+| ----------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| renameBands | RenameBands | Strategy for deriving output band names.<br><br>- `default`: appends ` (n)` with the smallest `n` that avoids a conflict.<br>- `suffix`: appends one suffix per input.<br>- `rename`: explicitly provides names for all resulting bands. | `{"type":"default"}` |
 
 ## Sources
 

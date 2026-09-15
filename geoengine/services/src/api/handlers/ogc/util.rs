@@ -9,9 +9,9 @@ use crate::{
             datatypes::{DataProviderId, LayerId},
             processing_graphs::{
                 DeriveOutRasterSpecsSource, Interpolation, InterpolationMethod,
-                InterpolationParameters, InterpolationResolution, RasterOperator, Reprojection,
-                ReprojectionParameters, SingleRasterOrVectorOperator, SingleRasterOrVectorSource,
-                SingleRasterSource, TypedOperator,
+                InterpolationParameters, InterpolationResolution, InterpolationResolutionFraction,
+                RasterOperator, Reprojection, ReprojectionParameters, SingleRasterOrVectorOperator,
+                SingleRasterOrVectorSource, SingleRasterSource, TypedOperator,
             },
         },
     },
@@ -283,10 +283,13 @@ pub fn processing_graph_with_resampling(
                     r#type: Default::default(),
                     params: InterpolationParameters {
                         interpolation: InterpolationMethod::NearestNeighbor,
-                        output_resolution: InterpolationResolution::Fraction {
-                            x: target_resolution.x,
-                            y: target_resolution.y,
-                        },
+                        output_resolution: InterpolationResolution::Fraction(
+                            InterpolationResolutionFraction {
+                                r#type: Default::default(),
+                                x: target_resolution.x,
+                                y: target_resolution.y,
+                            },
+                        ),
                         output_origin_reference: Some(target_origin.into()),
                     },
                     sources: Box::new(SingleRasterSource {

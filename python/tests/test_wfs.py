@@ -221,7 +221,7 @@ class WfsTests(unittest.TestCase):
                 "type": "Vector",
                 "operator": {
                     "type": "RasterVectorJoin",
-                    "params": {"names": ["NDVI"], "aggregation": "none"},
+                    "params": {"names": ["NDVI"], "featureAggregation": "first", "temporalAggregation": "none"},
                     "sources": {
                         "vector": {
                             "type": "OgrSource",

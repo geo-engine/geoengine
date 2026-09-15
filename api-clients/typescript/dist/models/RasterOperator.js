@@ -18,15 +18,25 @@ exports.RasterOperatorToJSON = RasterOperatorToJSON;
 exports.RasterOperatorToJSONTyped = RasterOperatorToJSONTyped;
 exports.instanceOfRasterOperator = instanceOfRasterOperator;
 const BandFilter_1 = require("./BandFilter");
+const BandNeighborhoodAggregate_1 = require("./BandNeighborhoodAggregate");
+const BandwiseExpression_1 = require("./BandwiseExpression");
 const Downsampling_1 = require("./Downsampling");
 const Expression_1 = require("./Expression");
 const GdalSource_1 = require("./GdalSource");
 const Interpolation_1 = require("./Interpolation");
 const MultiBandGdalSource_1 = require("./MultiBandGdalSource");
+const NeighborhoodAggregate_1 = require("./NeighborhoodAggregate");
+const Onnx_1 = require("./Onnx");
+const Radiance_1 = require("./Radiance");
+const RasterScaling_1 = require("./RasterScaling");
 const RasterStacker_1 = require("./RasterStacker");
 const RasterTypeConversion_1 = require("./RasterTypeConversion");
+const Rasterization_1 = require("./Rasterization");
+const Reflectance_1 = require("./Reflectance");
 const Reprojection_1 = require("./Reprojection");
+const Temperature_1 = require("./Temperature");
 const TemporalRasterAggregation_1 = require("./TemporalRasterAggregation");
+const TimeShift_1 = require("./TimeShift");
 function RasterOperatorFromJSON(json) {
     return RasterOperatorFromJSONTyped(json, false);
 }
@@ -37,6 +47,10 @@ function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
     switch (json['type']) {
         case 'BandFilter':
             return Object.assign({}, (0, BandFilter_1.BandFilterFromJSONTyped)(json, true), { type: 'BandFilter' });
+        case 'BandNeighborhoodAggregate':
+            return Object.assign({}, (0, BandNeighborhoodAggregate_1.BandNeighborhoodAggregateFromJSONTyped)(json, true), { type: 'BandNeighborhoodAggregate' });
+        case 'BandwiseExpression':
+            return Object.assign({}, (0, BandwiseExpression_1.BandwiseExpressionFromJSONTyped)(json, true), { type: 'BandwiseExpression' });
         case 'Downsampling':
             return Object.assign({}, (0, Downsampling_1.DownsamplingFromJSONTyped)(json, true), { type: 'Downsampling' });
         case 'Expression':
@@ -47,14 +61,30 @@ function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, (0, Interpolation_1.InterpolationFromJSONTyped)(json, true), { type: 'Interpolation' });
         case 'MultiBandGdalSource':
             return Object.assign({}, (0, MultiBandGdalSource_1.MultiBandGdalSourceFromJSONTyped)(json, true), { type: 'MultiBandGdalSource' });
+        case 'NeighborhoodAggregate':
+            return Object.assign({}, (0, NeighborhoodAggregate_1.NeighborhoodAggregateFromJSONTyped)(json, true), { type: 'NeighborhoodAggregate' });
+        case 'Onnx':
+            return Object.assign({}, (0, Onnx_1.OnnxFromJSONTyped)(json, true), { type: 'Onnx' });
+        case 'Radiance':
+            return Object.assign({}, (0, Radiance_1.RadianceFromJSONTyped)(json, true), { type: 'Radiance' });
+        case 'RasterScaling':
+            return Object.assign({}, (0, RasterScaling_1.RasterScalingFromJSONTyped)(json, true), { type: 'RasterScaling' });
         case 'RasterStacker':
             return Object.assign({}, (0, RasterStacker_1.RasterStackerFromJSONTyped)(json, true), { type: 'RasterStacker' });
         case 'RasterTypeConversion':
             return Object.assign({}, (0, RasterTypeConversion_1.RasterTypeConversionFromJSONTyped)(json, true), { type: 'RasterTypeConversion' });
+        case 'Rasterization':
+            return Object.assign({}, (0, Rasterization_1.RasterizationFromJSONTyped)(json, true), { type: 'Rasterization' });
+        case 'Reflectance':
+            return Object.assign({}, (0, Reflectance_1.ReflectanceFromJSONTyped)(json, true), { type: 'Reflectance' });
         case 'Reprojection':
             return Object.assign({}, (0, Reprojection_1.ReprojectionFromJSONTyped)(json, true), { type: 'Reprojection' });
+        case 'Temperature':
+            return Object.assign({}, (0, Temperature_1.TemperatureFromJSONTyped)(json, true), { type: 'Temperature' });
         case 'TemporalRasterAggregation':
             return Object.assign({}, (0, TemporalRasterAggregation_1.TemporalRasterAggregationFromJSONTyped)(json, true), { type: 'TemporalRasterAggregation' });
+        case 'TimeShift':
+            return Object.assign({}, (0, TimeShift_1.TimeShiftFromJSONTyped)(json, true), { type: 'TimeShift' });
         default:
             return json;
     }
@@ -69,6 +99,10 @@ function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
     switch (value['type']) {
         case 'BandFilter':
             return Object.assign({}, (0, BandFilter_1.BandFilterToJSON)(value), { type: 'BandFilter' });
+        case 'BandNeighborhoodAggregate':
+            return Object.assign({}, (0, BandNeighborhoodAggregate_1.BandNeighborhoodAggregateToJSON)(value), { type: 'BandNeighborhoodAggregate' });
+        case 'BandwiseExpression':
+            return Object.assign({}, (0, BandwiseExpression_1.BandwiseExpressionToJSON)(value), { type: 'BandwiseExpression' });
         case 'Downsampling':
             return Object.assign({}, (0, Downsampling_1.DownsamplingToJSON)(value), { type: 'Downsampling' });
         case 'Expression':
@@ -79,14 +113,30 @@ function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, (0, Interpolation_1.InterpolationToJSON)(value), { type: 'Interpolation' });
         case 'MultiBandGdalSource':
             return Object.assign({}, (0, MultiBandGdalSource_1.MultiBandGdalSourceToJSON)(value), { type: 'MultiBandGdalSource' });
+        case 'NeighborhoodAggregate':
+            return Object.assign({}, (0, NeighborhoodAggregate_1.NeighborhoodAggregateToJSON)(value), { type: 'NeighborhoodAggregate' });
+        case 'Onnx':
+            return Object.assign({}, (0, Onnx_1.OnnxToJSON)(value), { type: 'Onnx' });
+        case 'Radiance':
+            return Object.assign({}, (0, Radiance_1.RadianceToJSON)(value), { type: 'Radiance' });
+        case 'RasterScaling':
+            return Object.assign({}, (0, RasterScaling_1.RasterScalingToJSON)(value), { type: 'RasterScaling' });
         case 'RasterStacker':
             return Object.assign({}, (0, RasterStacker_1.RasterStackerToJSON)(value), { type: 'RasterStacker' });
         case 'RasterTypeConversion':
             return Object.assign({}, (0, RasterTypeConversion_1.RasterTypeConversionToJSON)(value), { type: 'RasterTypeConversion' });
+        case 'Rasterization':
+            return Object.assign({}, (0, Rasterization_1.RasterizationToJSON)(value), { type: 'Rasterization' });
+        case 'Reflectance':
+            return Object.assign({}, (0, Reflectance_1.ReflectanceToJSON)(value), { type: 'Reflectance' });
         case 'Reprojection':
             return Object.assign({}, (0, Reprojection_1.ReprojectionToJSON)(value), { type: 'Reprojection' });
+        case 'Temperature':
+            return Object.assign({}, (0, Temperature_1.TemperatureToJSON)(value), { type: 'Temperature' });
         case 'TemporalRasterAggregation':
             return Object.assign({}, (0, TemporalRasterAggregation_1.TemporalRasterAggregationToJSON)(value), { type: 'TemporalRasterAggregation' });
+        case 'TimeShift':
+            return Object.assign({}, (0, TimeShift_1.TimeShiftToJSON)(value), { type: 'TimeShift' });
         default:
             return value;
     }

@@ -184,6 +184,7 @@ jobs:
             --override-bearer-auth $SESSION_TOKEN \
             --logger dev-null
         background: true
+        continue-on-error: true # Stopping the proxy should not fail the workflow
         env:
           SERVER_URL: "http://127.0.0.1:3030"
           PROXY_PORT: 8123

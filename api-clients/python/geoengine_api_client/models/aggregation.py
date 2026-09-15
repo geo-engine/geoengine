@@ -17,48 +17,51 @@ import json
 import pprint
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, field_validator
 from typing import Any, List, Optional
-from geoengine_api_client.models.count_aggregation import CountAggregation
-from geoengine_api_client.models.first_aggregation import FirstAggregation
-from geoengine_api_client.models.last_aggregation import LastAggregation
-from geoengine_api_client.models.max_aggregation import MaxAggregation
-from geoengine_api_client.models.mean_aggregation import MeanAggregation
-from geoengine_api_client.models.min_aggregation import MinAggregation
-from geoengine_api_client.models.percentile_estimate_aggregation import PercentileEstimateAggregation
-from geoengine_api_client.models.sum_aggregation import SumAggregation
+from geoengine_api_client.models.aggregation_count import AggregationCount
+from geoengine_api_client.models.aggregation_first import AggregationFirst
+from geoengine_api_client.models.aggregation_last import AggregationLast
+from geoengine_api_client.models.aggregation_max import AggregationMax
+from geoengine_api_client.models.aggregation_mean import AggregationMean
+from geoengine_api_client.models.aggregation_min import AggregationMin
+from geoengine_api_client.models.aggregation_percentile_estimate import AggregationPercentileEstimate
+from geoengine_api_client.models.aggregation_sum import AggregationSum
 from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-AGGREGATION_ONE_OF_SCHEMAS = ["CountAggregation", "FirstAggregation", "LastAggregation", "MaxAggregation", "MeanAggregation", "MinAggregation", "PercentileEstimateAggregation", "SumAggregation"]
+AGGREGATION_ONE_OF_SCHEMAS = ["AggregationCount", "AggregationFirst", "AggregationLast", "AggregationMax", "AggregationMean", "AggregationMin", "AggregationPercentileEstimate", "AggregationSum"]
 
 class Aggregation(BaseModel):
     """
     Aggregation methods for `TemporalRasterAggregation`.  Available variants are `min`, `max`, `first`, `last`, `mean`, `sum`, `count`, and `percentileEstimate`. Encountering NO DATA makes the aggregation result NO DATA unless `ignoreNoData` is `true`.
     """
-    # data type: MinAggregation
-    oneof_schema_1_validator: Optional[MinAggregation] = None
-    # data type: MaxAggregation
-    oneof_schema_2_validator: Optional[MaxAggregation] = None
-    # data type: FirstAggregation
-    oneof_schema_3_validator: Optional[FirstAggregation] = None
-    # data type: LastAggregation
-    oneof_schema_4_validator: Optional[LastAggregation] = None
-    # data type: MeanAggregation
-    oneof_schema_5_validator: Optional[MeanAggregation] = None
-    # data type: SumAggregation
-    oneof_schema_6_validator: Optional[SumAggregation] = None
-    # data type: CountAggregation
-    oneof_schema_7_validator: Optional[CountAggregation] = None
-    # data type: PercentileEstimateAggregation
-    oneof_schema_8_validator: Optional[PercentileEstimateAggregation] = None
-    actual_instance: Optional[Union[CountAggregation, FirstAggregation, LastAggregation, MaxAggregation, MeanAggregation, MinAggregation, PercentileEstimateAggregation, SumAggregation]] = None
-    one_of_schemas: Set[str] = { "CountAggregation", "FirstAggregation", "LastAggregation", "MaxAggregation", "MeanAggregation", "MinAggregation", "PercentileEstimateAggregation", "SumAggregation" }
+    # data type: AggregationMin
+    oneof_schema_1_validator: Optional[AggregationMin] = None
+    # data type: AggregationMax
+    oneof_schema_2_validator: Optional[AggregationMax] = None
+    # data type: AggregationFirst
+    oneof_schema_3_validator: Optional[AggregationFirst] = None
+    # data type: AggregationLast
+    oneof_schema_4_validator: Optional[AggregationLast] = None
+    # data type: AggregationMean
+    oneof_schema_5_validator: Optional[AggregationMean] = None
+    # data type: AggregationSum
+    oneof_schema_6_validator: Optional[AggregationSum] = None
+    # data type: AggregationCount
+    oneof_schema_7_validator: Optional[AggregationCount] = None
+    # data type: AggregationPercentileEstimate
+    oneof_schema_8_validator: Optional[AggregationPercentileEstimate] = None
+    actual_instance: Optional[Union[AggregationCount, AggregationFirst, AggregationLast, AggregationMax, AggregationMean, AggregationMin, AggregationPercentileEstimate, AggregationSum]] = None
+    one_of_schemas: Set[str] = { "AggregationCount", "AggregationFirst", "AggregationLast", "AggregationMax", "AggregationMean", "AggregationMin", "AggregationPercentileEstimate", "AggregationSum" }
 
     model_config = ConfigDict(
         validate_assignment=True,
         protected_namespaces=(),
     )
 
+
+    discriminator_value_class_map: Dict[str, str] = {
+    }
 
     def __init__(self, *args, **kwargs) -> None:
         if args:
@@ -75,52 +78,52 @@ class Aggregation(BaseModel):
         instance = Aggregation.model_construct()
         error_messages = []
         match = 0
-        # validate data type: MinAggregation
-        if not isinstance(v, MinAggregation):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `MinAggregation`")
+        # validate data type: AggregationMin
+        if not isinstance(v, AggregationMin):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `AggregationMin`")
         else:
             match += 1
-        # validate data type: MaxAggregation
-        if not isinstance(v, MaxAggregation):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `MaxAggregation`")
+        # validate data type: AggregationMax
+        if not isinstance(v, AggregationMax):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `AggregationMax`")
         else:
             match += 1
-        # validate data type: FirstAggregation
-        if not isinstance(v, FirstAggregation):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `FirstAggregation`")
+        # validate data type: AggregationFirst
+        if not isinstance(v, AggregationFirst):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `AggregationFirst`")
         else:
             match += 1
-        # validate data type: LastAggregation
-        if not isinstance(v, LastAggregation):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `LastAggregation`")
+        # validate data type: AggregationLast
+        if not isinstance(v, AggregationLast):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `AggregationLast`")
         else:
             match += 1
-        # validate data type: MeanAggregation
-        if not isinstance(v, MeanAggregation):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `MeanAggregation`")
+        # validate data type: AggregationMean
+        if not isinstance(v, AggregationMean):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `AggregationMean`")
         else:
             match += 1
-        # validate data type: SumAggregation
-        if not isinstance(v, SumAggregation):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `SumAggregation`")
+        # validate data type: AggregationSum
+        if not isinstance(v, AggregationSum):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `AggregationSum`")
         else:
             match += 1
-        # validate data type: CountAggregation
-        if not isinstance(v, CountAggregation):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `CountAggregation`")
+        # validate data type: AggregationCount
+        if not isinstance(v, AggregationCount):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `AggregationCount`")
         else:
             match += 1
-        # validate data type: PercentileEstimateAggregation
-        if not isinstance(v, PercentileEstimateAggregation):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `PercentileEstimateAggregation`")
+        # validate data type: AggregationPercentileEstimate
+        if not isinstance(v, AggregationPercentileEstimate):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `AggregationPercentileEstimate`")
         else:
             match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in Aggregation with oneOf schemas: CountAggregation, FirstAggregation, LastAggregation, MaxAggregation, MeanAggregation, MinAggregation, PercentileEstimateAggregation, SumAggregation. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in Aggregation with oneOf schemas: AggregationCount, AggregationFirst, AggregationLast, AggregationMax, AggregationMean, AggregationMin, AggregationPercentileEstimate, AggregationSum. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in Aggregation with oneOf schemas: CountAggregation, FirstAggregation, LastAggregation, MaxAggregation, MeanAggregation, MinAggregation, PercentileEstimateAggregation, SumAggregation. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in Aggregation with oneOf schemas: AggregationCount, AggregationFirst, AggregationLast, AggregationMax, AggregationMean, AggregationMin, AggregationPercentileEstimate, AggregationSum. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -135,61 +138,106 @@ class Aggregation(BaseModel):
         error_messages = []
         match = 0
 
-        # deserialize data into MinAggregation
+        # use oneOf discriminator to lookup the data type
+        _data_type = json.loads(json_str).get("type")
+        if not _data_type:
+            raise ValueError("Failed to lookup data type from the field `type` in the input.")
+
+        # check if data type is `AggregationCount`
+        if _data_type == "count":
+            instance.actual_instance = AggregationCount.from_json(json_str)
+            return instance
+
+        # check if data type is `AggregationFirst`
+        if _data_type == "first":
+            instance.actual_instance = AggregationFirst.from_json(json_str)
+            return instance
+
+        # check if data type is `AggregationLast`
+        if _data_type == "last":
+            instance.actual_instance = AggregationLast.from_json(json_str)
+            return instance
+
+        # check if data type is `AggregationMax`
+        if _data_type == "max":
+            instance.actual_instance = AggregationMax.from_json(json_str)
+            return instance
+
+        # check if data type is `AggregationMean`
+        if _data_type == "mean":
+            instance.actual_instance = AggregationMean.from_json(json_str)
+            return instance
+
+        # check if data type is `AggregationMin`
+        if _data_type == "min":
+            instance.actual_instance = AggregationMin.from_json(json_str)
+            return instance
+
+        # check if data type is `AggregationPercentileEstimate`
+        if _data_type == "percentileEstimate":
+            instance.actual_instance = AggregationPercentileEstimate.from_json(json_str)
+            return instance
+
+        # check if data type is `AggregationSum`
+        if _data_type == "sum":
+            instance.actual_instance = AggregationSum.from_json(json_str)
+            return instance
+
+        # deserialize data into AggregationMin
         try:
-            instance.actual_instance = MinAggregation.from_json(json_str)
+            instance.actual_instance = AggregationMin.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # deserialize data into MaxAggregation
+        # deserialize data into AggregationMax
         try:
-            instance.actual_instance = MaxAggregation.from_json(json_str)
+            instance.actual_instance = AggregationMax.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # deserialize data into FirstAggregation
+        # deserialize data into AggregationFirst
         try:
-            instance.actual_instance = FirstAggregation.from_json(json_str)
+            instance.actual_instance = AggregationFirst.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # deserialize data into LastAggregation
+        # deserialize data into AggregationLast
         try:
-            instance.actual_instance = LastAggregation.from_json(json_str)
+            instance.actual_instance = AggregationLast.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # deserialize data into MeanAggregation
+        # deserialize data into AggregationMean
         try:
-            instance.actual_instance = MeanAggregation.from_json(json_str)
+            instance.actual_instance = AggregationMean.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # deserialize data into SumAggregation
+        # deserialize data into AggregationSum
         try:
-            instance.actual_instance = SumAggregation.from_json(json_str)
+            instance.actual_instance = AggregationSum.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # deserialize data into CountAggregation
+        # deserialize data into AggregationCount
         try:
-            instance.actual_instance = CountAggregation.from_json(json_str)
+            instance.actual_instance = AggregationCount.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # deserialize data into PercentileEstimateAggregation
+        # deserialize data into AggregationPercentileEstimate
         try:
-            instance.actual_instance = PercentileEstimateAggregation.from_json(json_str)
+            instance.actual_instance = AggregationPercentileEstimate.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into Aggregation with oneOf schemas: CountAggregation, FirstAggregation, LastAggregation, MaxAggregation, MeanAggregation, MinAggregation, PercentileEstimateAggregation, SumAggregation. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into Aggregation with oneOf schemas: AggregationCount, AggregationFirst, AggregationLast, AggregationMax, AggregationMean, AggregationMin, AggregationPercentileEstimate, AggregationSum. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into Aggregation with oneOf schemas: CountAggregation, FirstAggregation, LastAggregation, MaxAggregation, MeanAggregation, MinAggregation, PercentileEstimateAggregation, SumAggregation. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into Aggregation with oneOf schemas: AggregationCount, AggregationFirst, AggregationLast, AggregationMax, AggregationMean, AggregationMin, AggregationPercentileEstimate, AggregationSum. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -203,7 +251,7 @@ class Aggregation(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], CountAggregation, FirstAggregation, LastAggregation, MaxAggregation, MeanAggregation, MinAggregation, PercentileEstimateAggregation, SumAggregation]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], AggregationCount, AggregationFirst, AggregationLast, AggregationMax, AggregationMean, AggregationMin, AggregationPercentileEstimate, AggregationSum]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None

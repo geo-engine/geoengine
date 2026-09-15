@@ -25,7 +25,7 @@ from typing_extensions import Self
 
 class TemporalRasterAggregation(BaseModel):
     """
-    The `TemporalRasterAggregation` operator aggregates a raster time series into uniform time windows. The output starts with the first window that contains the query start and contains all windows that overlap the query interval.  Pixel values are computed by aggregating all input rasters that contribute to the current window.  ## Inputs  The `TemporalRasterAggregation` operator expects exactly one _raster_ input.  ## Errors  If the aggregation method is `first`, `last`, or `mean` and the input raster has no NO DATA value, an error is returned.
+    The `TemporalRasterAggregation` operator aggregates a raster time series into uniform time windows. The output starts with the first window that contains the query start and contains all windows that overlap the query interval.  Pixel values are computed by aggregating all input rasters that contribute to the current window.  ## Errors  If the aggregation method is `first`, `last`, or `mean` and the input raster has no NO DATA value, an error is returned.
     """ # noqa: E501
     type: StrictStr
     params: TemporalRasterAggregationParameters

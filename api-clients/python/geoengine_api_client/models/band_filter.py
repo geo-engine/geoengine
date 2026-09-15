@@ -25,7 +25,7 @@ from typing_extensions import Self
 
 class BandFilter(BaseModel):
     """
-    The `BandFilter` operator selects bands from a raster source by band names or band indices.  It removes all non-selected bands while preserving the original order of remaining bands.  ## Inputs  The `BandFilter` operator expects exactly one _raster_ input.  ## Errors  The operator returns an error if no bands are selected or if selected band names/indices cannot be mapped to existing input bands.
+    The `BandFilter` operator selects bands from a raster source by band names or band indices.  It removes all non-selected bands while preserving the original order of remaining bands.  ## Errors  The operator returns an error if no bands are selected or if selected band names/indices cannot be mapped to existing input bands.
     """ # noqa: E501
     type: StrictStr
     params: BandFilterParameters

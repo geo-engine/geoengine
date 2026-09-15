@@ -35,29 +35,37 @@ class TestSingleRasterOrVectorOperator(unittest.TestCase):
         model = SingleRasterOrVectorOperator()
         if include_optional:
             return SingleRasterOrVectorOperator(
-                type = 'TemporalRasterAggregation',
-                params = geoengine_api_client.models.vector_expression_parameters.VectorExpressionParameters(
-                    input_columns = [
-                        ''
-                        ], 
-                    expression = '', 
-                    output_column = null, 
-                    geometry_column_name = '', 
-                    output_measurement = null, ),
+                type = 'TimeShift',
+                params = geoengine_api_client.models.visual_point_clustering_parameters.VisualPointClusteringParameters(
+                    min_radius_px = 1.337, 
+                    delta_px = 1.337, 
+                    resolution = 1.337, 
+                    radius_column = '', 
+                    count_column = '', 
+                    column_aggregates = {
+                        'key' : geoengine_api_client.models.attribute_aggregate_def.AttributeAggregateDef(
+                            column_name = '', 
+                            aggregate_type = null, 
+                            measurement = null, )
+                        }, ),
                 sources = geoengine_api_client.models.single_vector_source.SingleVectorSource(
                     vector = null, )
             )
         else:
             return SingleRasterOrVectorOperator(
-                type = 'TemporalRasterAggregation',
-                params = geoengine_api_client.models.vector_expression_parameters.VectorExpressionParameters(
-                    input_columns = [
-                        ''
-                        ], 
-                    expression = '', 
-                    output_column = null, 
-                    geometry_column_name = '', 
-                    output_measurement = null, ),
+                type = 'TimeShift',
+                params = geoengine_api_client.models.visual_point_clustering_parameters.VisualPointClusteringParameters(
+                    min_radius_px = 1.337, 
+                    delta_px = 1.337, 
+                    resolution = 1.337, 
+                    radius_column = '', 
+                    count_column = '', 
+                    column_aggregates = {
+                        'key' : geoengine_api_client.models.attribute_aggregate_def.AttributeAggregateDef(
+                            column_name = '', 
+                            aggregate_type = null, 
+                            measurement = null, )
+                        }, ),
                 sources = geoengine_api_client.models.single_vector_source.SingleVectorSource(
                     vector = null, ),
         )

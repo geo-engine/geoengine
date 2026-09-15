@@ -35,15 +35,15 @@ class TestDownsamplingResolution(unittest.TestCase):
         model = DownsamplingResolution()
         if include_optional:
             return DownsamplingResolution(
+                type = 'resolution',
                 x = 1.337,
-                y = 1.337,
-                type = 'resolution'
+                y = 1.337
             )
         else:
             return DownsamplingResolution(
+                type = 'resolution',
                 x = 1.337,
                 y = 1.337,
-                type = 'resolution',
         )
         """
 

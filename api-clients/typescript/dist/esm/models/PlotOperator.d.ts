@@ -8,7 +8,13 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import type { BoxPlot } from './BoxPlot';
+import type { ClassHistogram } from './ClassHistogram';
+import type { FeatureAttributeValuesOverTime } from './FeatureAttributeValuesOverTime';
 import type { Histogram } from './Histogram';
+import type { MeanRasterPixelValuesOverTime } from './MeanRasterPixelValuesOverTime';
+import type { PieChart } from './PieChart';
+import type { ScatterPlot } from './ScatterPlot';
 import type { Statistics } from './Statistics';
 /**
  * @type PlotOperator
@@ -16,8 +22,20 @@ import type { Statistics } from './Statistics';
  * @export
  */
 export type PlotOperator = {
+    type: 'BoxPlot';
+} & BoxPlot | {
+    type: 'ClassHistogram';
+} & ClassHistogram | {
+    type: 'FeatureAttributeValuesOverTime';
+} & FeatureAttributeValuesOverTime | {
     type: 'Histogram';
 } & Histogram | {
+    type: 'MeanRasterPixelValuesOverTime';
+} & MeanRasterPixelValuesOverTime | {
+    type: 'PieChart';
+} & PieChart | {
+    type: 'ScatterPlot';
+} & ScatterPlot | {
     type: 'Statistics';
 } & Statistics;
 export declare function PlotOperatorFromJSON(json: any): PlotOperator;

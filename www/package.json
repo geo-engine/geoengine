@@ -17,6 +17,8 @@
         "@tailwindcss/vite": "^4.3.3",
         "astro": "^7.2.3",
         "astro-icon": "^1.2.0",
+        "astro-mermaid": "^2.1.0",
+        "mermaid": "^11.17.2",
         "preline": "^4.2.0",
         "sass": "^1.102.0",
         "starlight-links-validator": "^0.25.3",

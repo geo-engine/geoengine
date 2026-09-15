@@ -19,6 +19,9 @@ pub struct OgrSourceParameters {
     /// *Optional*: list of attributes to include. When `None`, all attributes are included.
     #[serde(rename = "attributeProjection", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub attribute_projection: Option<Option<Vec<String>>>,
+    /// *Optional*: list of attribute filters to apply. When `None`, no filters are applied.
+    #[serde(rename = "attributeFilters", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub attribute_filters: Option<Option<Vec<models::AttributeFilter>>>,
 }
 
 impl OgrSourceParameters {
@@ -27,6 +30,7 @@ impl OgrSourceParameters {
         OgrSourceParameters {
             data,
             attribute_projection: None,
+            attribute_filters: None,
         }
     }
 }

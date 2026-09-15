@@ -17,24 +17,42 @@ import json
 import pprint
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, field_validator
 from typing import Any, List, Optional
+from geoengine_api_client.models.box_plot import BoxPlot
+from geoengine_api_client.models.class_histogram import ClassHistogram
+from geoengine_api_client.models.feature_attribute_values_over_time import FeatureAttributeValuesOverTime
 from geoengine_api_client.models.histogram import Histogram
+from geoengine_api_client.models.mean_raster_pixel_values_over_time import MeanRasterPixelValuesOverTime
+from geoengine_api_client.models.pie_chart import PieChart
+from geoengine_api_client.models.scatter_plot import ScatterPlot
 from geoengine_api_client.models.statistics import Statistics
 from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-PLOTOPERATOR_ONE_OF_SCHEMAS = ["Histogram", "Statistics"]
+PLOTOPERATOR_ONE_OF_SCHEMAS = ["BoxPlot", "ClassHistogram", "FeatureAttributeValuesOverTime", "Histogram", "MeanRasterPixelValuesOverTime", "PieChart", "ScatterPlot", "Statistics"]
 
 class PlotOperator(BaseModel):
     """
     An operator that produces plot data.
     """
+    # data type: BoxPlot
+    oneof_schema_1_validator: Optional[BoxPlot] = None
+    # data type: ClassHistogram
+    oneof_schema_2_validator: Optional[ClassHistogram] = None
+    # data type: FeatureAttributeValuesOverTime
+    oneof_schema_3_validator: Optional[FeatureAttributeValuesOverTime] = None
     # data type: Histogram
-    oneof_schema_1_validator: Optional[Histogram] = None
+    oneof_schema_4_validator: Optional[Histogram] = None
+    # data type: MeanRasterPixelValuesOverTime
+    oneof_schema_5_validator: Optional[MeanRasterPixelValuesOverTime] = None
+    # data type: PieChart
+    oneof_schema_6_validator: Optional[PieChart] = None
+    # data type: ScatterPlot
+    oneof_schema_7_validator: Optional[ScatterPlot] = None
     # data type: Statistics
-    oneof_schema_2_validator: Optional[Statistics] = None
-    actual_instance: Optional[Union[Histogram, Statistics]] = None
-    one_of_schemas: Set[str] = { "Histogram", "Statistics" }
+    oneof_schema_8_validator: Optional[Statistics] = None
+    actual_instance: Optional[Union[BoxPlot, ClassHistogram, FeatureAttributeValuesOverTime, Histogram, MeanRasterPixelValuesOverTime, PieChart, ScatterPlot, Statistics]] = None
+    one_of_schemas: Set[str] = { "BoxPlot", "ClassHistogram", "FeatureAttributeValuesOverTime", "Histogram", "MeanRasterPixelValuesOverTime", "PieChart", "ScatterPlot", "Statistics" }
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -60,9 +78,39 @@ class PlotOperator(BaseModel):
         instance = PlotOperator.model_construct()
         error_messages = []
         match = 0
+        # validate data type: BoxPlot
+        if not isinstance(v, BoxPlot):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `BoxPlot`")
+        else:
+            match += 1
+        # validate data type: ClassHistogram
+        if not isinstance(v, ClassHistogram):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `ClassHistogram`")
+        else:
+            match += 1
+        # validate data type: FeatureAttributeValuesOverTime
+        if not isinstance(v, FeatureAttributeValuesOverTime):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `FeatureAttributeValuesOverTime`")
+        else:
+            match += 1
         # validate data type: Histogram
         if not isinstance(v, Histogram):
             error_messages.append(f"Error! Input type `{type(v)}` is not `Histogram`")
+        else:
+            match += 1
+        # validate data type: MeanRasterPixelValuesOverTime
+        if not isinstance(v, MeanRasterPixelValuesOverTime):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `MeanRasterPixelValuesOverTime`")
+        else:
+            match += 1
+        # validate data type: PieChart
+        if not isinstance(v, PieChart):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `PieChart`")
+        else:
+            match += 1
+        # validate data type: ScatterPlot
+        if not isinstance(v, ScatterPlot):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `ScatterPlot`")
         else:
             match += 1
         # validate data type: Statistics
@@ -72,10 +120,10 @@ class PlotOperator(BaseModel):
             match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in PlotOperator with oneOf schemas: Histogram, Statistics. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in PlotOperator with oneOf schemas: BoxPlot, ClassHistogram, FeatureAttributeValuesOverTime, Histogram, MeanRasterPixelValuesOverTime, PieChart, ScatterPlot, Statistics. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in PlotOperator with oneOf schemas: Histogram, Statistics. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in PlotOperator with oneOf schemas: BoxPlot, ClassHistogram, FeatureAttributeValuesOverTime, Histogram, MeanRasterPixelValuesOverTime, PieChart, ScatterPlot, Statistics. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -95,9 +143,39 @@ class PlotOperator(BaseModel):
         if not _data_type:
             raise ValueError("Failed to lookup data type from the field `type` in the input.")
 
+        # check if data type is `BoxPlot`
+        if _data_type == "BoxPlot":
+            instance.actual_instance = BoxPlot.from_json(json_str)
+            return instance
+
+        # check if data type is `ClassHistogram`
+        if _data_type == "ClassHistogram":
+            instance.actual_instance = ClassHistogram.from_json(json_str)
+            return instance
+
+        # check if data type is `FeatureAttributeValuesOverTime`
+        if _data_type == "FeatureAttributeValuesOverTime":
+            instance.actual_instance = FeatureAttributeValuesOverTime.from_json(json_str)
+            return instance
+
         # check if data type is `Histogram`
         if _data_type == "Histogram":
             instance.actual_instance = Histogram.from_json(json_str)
+            return instance
+
+        # check if data type is `MeanRasterPixelValuesOverTime`
+        if _data_type == "MeanRasterPixelValuesOverTime":
+            instance.actual_instance = MeanRasterPixelValuesOverTime.from_json(json_str)
+            return instance
+
+        # check if data type is `PieChart`
+        if _data_type == "PieChart":
+            instance.actual_instance = PieChart.from_json(json_str)
+            return instance
+
+        # check if data type is `ScatterPlot`
+        if _data_type == "ScatterPlot":
+            instance.actual_instance = ScatterPlot.from_json(json_str)
             return instance
 
         # check if data type is `Statistics`
@@ -105,9 +183,45 @@ class PlotOperator(BaseModel):
             instance.actual_instance = Statistics.from_json(json_str)
             return instance
 
+        # deserialize data into BoxPlot
+        try:
+            instance.actual_instance = BoxPlot.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into ClassHistogram
+        try:
+            instance.actual_instance = ClassHistogram.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into FeatureAttributeValuesOverTime
+        try:
+            instance.actual_instance = FeatureAttributeValuesOverTime.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
         # deserialize data into Histogram
         try:
             instance.actual_instance = Histogram.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into MeanRasterPixelValuesOverTime
+        try:
+            instance.actual_instance = MeanRasterPixelValuesOverTime.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into PieChart
+        try:
+            instance.actual_instance = PieChart.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into ScatterPlot
+        try:
+            instance.actual_instance = ScatterPlot.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
@@ -120,10 +234,10 @@ class PlotOperator(BaseModel):
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into PlotOperator with oneOf schemas: Histogram, Statistics. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into PlotOperator with oneOf schemas: BoxPlot, ClassHistogram, FeatureAttributeValuesOverTime, Histogram, MeanRasterPixelValuesOverTime, PieChart, ScatterPlot, Statistics. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into PlotOperator with oneOf schemas: Histogram, Statistics. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into PlotOperator with oneOf schemas: BoxPlot, ClassHistogram, FeatureAttributeValuesOverTime, Histogram, MeanRasterPixelValuesOverTime, PieChart, ScatterPlot, Statistics. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -137,7 +251,7 @@ class PlotOperator(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], Histogram, Statistics]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], BoxPlot, ClassHistogram, FeatureAttributeValuesOverTime, Histogram, MeanRasterPixelValuesOverTime, PieChart, ScatterPlot, Statistics]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None

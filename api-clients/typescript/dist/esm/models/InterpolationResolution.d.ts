@@ -8,14 +8,18 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import type { Fraction } from './Fraction';
-import type { Resolution } from './Resolution';
+import type { InterpolationResolutionFraction } from './InterpolationResolutionFraction';
+import type { InterpolationResolutionResolution } from './InterpolationResolutionResolution';
 /**
  * @type InterpolationResolution
  *
  * @export
  */
-export type InterpolationResolution = Fraction | Resolution;
+export type InterpolationResolution = {
+    type: 'fraction';
+} & InterpolationResolutionFraction | {
+    type: 'resolution';
+} & InterpolationResolutionResolution;
 export declare function InterpolationResolutionFromJSON(json: any): InterpolationResolution;
 export declare function InterpolationResolutionFromJSONTyped(json: any, ignoreDiscriminator: boolean): InterpolationResolution;
 export declare function InterpolationResolutionToJSON(json: any): any;

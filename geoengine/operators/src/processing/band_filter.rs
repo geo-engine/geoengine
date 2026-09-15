@@ -26,7 +26,7 @@ impl OperatorName for BandFilter {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BandFilterParams {
-    bands: BandsByNameOrIndex,
+    pub bands: BandsByNameOrIndex,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

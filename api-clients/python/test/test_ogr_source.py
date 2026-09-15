@@ -40,6 +40,14 @@ class TestOgrSource(unittest.TestCase):
                     data = '', 
                     attribute_projection = [
                         ''
+                        ], 
+                    attribute_filters = [
+                        geoengine_api_client.models.attribute_filter.AttributeFilter(
+                            attribute = '', 
+                            ranges = [
+                                null
+                                ], 
+                            keep_nulls = True, )
                         ], )
             )
         else:
@@ -49,6 +57,14 @@ class TestOgrSource(unittest.TestCase):
                     data = '', 
                     attribute_projection = [
                         ''
+                        ], 
+                    attribute_filters = [
+                        geoengine_api_client.models.attribute_filter.AttributeFilter(
+                            attribute = '', 
+                            ranges = [
+                                null
+                                ], 
+                            keep_nulls = True, )
                         ], ),
         )
         """

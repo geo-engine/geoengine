@@ -341,6 +341,10 @@ mod tests {
 
     use super::*;
     use crate::{
+        api::model::processing_graphs::{
+            MockPointSource, MockPointSourceParameters, SpatialBoundsDerive, TypedOperator,
+            VectorOperator,
+        },
         contexts::PostgresContext,
         datasets::upload::{Upload, UploadDb, UploadId},
         ge_context,
@@ -360,11 +364,10 @@ mod tests {
         util::Identifier,
     };
     use geoengine_operators::{
-        engine::{RasterOperator, TypedOperator, VectorOperator, WorkflowOperatorPath},
+        engine::{RasterOperator as _, VectorOperator as _, WorkflowOperatorPath},
         machine_learning::{
             MlModelInputNoDataHandling, MlModelMetadata, MlModelOutputNoDataHandling,
         },
-        mock::{MockPointSource, MockPointSourceParams},
         source::{GdalSource, GdalSourceParameters, OgrSource, OgrSourceParameters},
     };
     use serde_json::{Value, json};
@@ -671,16 +674,14 @@ mod tests {
         let layer = AddLayer {
             name: "layer".to_string(),
             description: "description".to_string(),
-            workflow: Workflow::Legacy {
-                operator: TypedOperator::Vector(
-                    MockPointSource {
-                        params: MockPointSourceParams {
-                            points: vec![Coordinate2D::new(1., 2.); 3],
-                            spatial_bounds: geoengine_operators::mock::SpatialBoundsDerive::Derive,
-                        },
-                    }
-                    .boxed(),
-                ),
+            workflow: Workflow::Typed {
+                operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
+                    r#type: Default::default(),
+                    params: MockPointSourceParameters {
+                        points: vec![Coordinate2D::new(1., 2.).into(); 3],
+                        spatial_bounds: SpatialBoundsDerive::Derive(Default::default()),
+                    },
+                })),
             },
             symbology: None,
             metadata: Default::default(),

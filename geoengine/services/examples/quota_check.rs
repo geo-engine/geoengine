@@ -6,12 +6,12 @@ use geoengine_datatypes::{
     operations::image::{Colorizer, RgbaColor},
     primitives::{TimeGranularity, TimeStep},
 };
-use geoengine_operators::{
-    engine::{RasterOperator, SingleRasterSource, TypedOperator},
-    processing::{Aggregation, TemporalRasterAggregation, TemporalRasterAggregationParameters},
-    source::{GdalSource, GdalSourceParameters},
-};
 use geoengine_services::{
+    api::model::processing_graphs::{
+        Aggregation, AggregationMin, GdalSource, GdalSourceParameters, RasterOperator,
+        SingleRasterSource, TemporalRasterAggregation, TemporalRasterAggregationParameters,
+        TypedOperator,
+    },
     config::{Quota, QuotaTrackingMode, get_config_element},
     contexts::{ApplicationContext, SessionContext},
     users::{UserAuth, UserDb},
@@ -40,29 +40,34 @@ async fn bench() {
 
         let (_, dataset) = add_ndvi_to_datasets2(&app_ctx, true, true).await;
 
-        let workflow = Workflow::Legacy {
-            operator: TypedOperator::Raster(
+        let workflow = Workflow::Typed {
+            operator: TypedOperator::Raster(RasterOperator::TemporalRasterAggregation(
                 TemporalRasterAggregation {
+                    r#type: Default::default(),
                     params: TemporalRasterAggregationParameters {
-                        aggregation: Aggregation::Min {
+                        aggregation: Aggregation::Min(AggregationMin {
+                            r#type: Default::default(),
                             ignore_no_data: false,
-                        },
+                        }),
                         window: TimeStep {
                             granularity: TimeGranularity::Days,
                             step: 1,
-                        },
+                        }
+                        .into(),
                         window_reference: None,
                         output_type: None,
                     },
-                    sources: SingleRasterSource {
-                        raster: GdalSource {
-                            params: GdalSourceParameters::new(dataset),
-                        }
-                        .boxed(),
-                    },
-                }
-                .boxed(),
-            ),
+                    sources: Box::new(SingleRasterSource {
+                        raster: RasterOperator::GdalSource(GdalSource {
+                            r#type: Default::default(),
+                            params: GdalSourceParameters {
+                                data: dataset.into(),
+                                overview_level: None,
+                            },
+                        }),
+                    }),
+                },
+            )),
         };
 
         let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();

@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 from geoengine_api_client.models.coordinate2_d import Coordinate2D
 from geoengine_api_client.models.spatial_bounds_derive import SpatialBoundsDerive
 from typing import Optional, Set
@@ -29,7 +29,7 @@ class MockPointSourceParameters(BaseModel):
     Parameters for the [`MockPointSource`] operator.
     """ # noqa: E501
     points: List[Coordinate2D] = Field(description="Points to be output by the mock point source. ")
-    spatial_bounds: SpatialBoundsDerive = Field(description="Defines how the spatial bounds of the source are derived.  Defaults to `None`.", alias="spatialBounds")
+    spatial_bounds: Optional[SpatialBoundsDerive] = Field(default=None, description="Defines how the spatial bounds of the source are derived.  Defaults to `None`.", alias="spatialBounds")
     __properties: ClassVar[List[str]] = ["points", "spatialBounds"]
 
     model_config = ConfigDict(

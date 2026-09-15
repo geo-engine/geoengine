@@ -32,7 +32,7 @@ use geoengine_datatypes::{
     machine_learning::MlModelName, raster::TilingSpecification, util::test::TestDefault,
 };
 use geoengine_operators::{
-    cache::shared_cache::SharedCache,
+    cache::{new_raster_cache::NewRasterCacheEnum, shared_cache::SharedCache},
     engine::ChunkByteSize,
     meta::quota::QuotaChecker,
     source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
@@ -64,6 +64,7 @@ where
     pub(crate) pool: Pool<PostgresConnectionManager<Tls>>,
     volumes: Volumes,
     tile_cache: Arc<SharedCache>,
+    new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     provider_registry: Arc<DataConnectorRegistry>,
     gdal_process_pool: Arc<GdalProcessPool>,
 }
@@ -120,6 +121,7 @@ where
             pool,
             volumes: Default::default(),
             tile_cache: Arc::new(SharedCache::test_default()),
+            new_raster_cache: None,
             provider_registry,
             gdal_process_pool,
         })
@@ -134,6 +136,7 @@ where
         quota_config: Quota,
         gdal_process_pool_config: crate::config::GdalProcessPool,
     ) -> Result<Self> {
+        cache_config.validate()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
@@ -160,6 +163,14 @@ where
             gdal_process_pool_config.worker.into(),
         );
 
+        let new_raster_cache = if cache_config.enabled && cache_config.enable_new_raster_cache {
+            Some(Arc::new(NewRasterCacheEnum::new_lru(
+                cache_config.new_raster_cache_size_in_bytes(),
+            )))
+        } else {
+            None
+        };
+
         Ok(PostgresContext {
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
@@ -170,9 +181,13 @@ where
             pool,
             volumes: Default::default(),
             tile_cache: Arc::new(
-                SharedCache::new(cache_config.size_in_mb, cache_config.landing_zone_ratio)
-                    .expect("tile cache creation should work because the config is valid"),
+                SharedCache::new(
+                    cache_config.shared_cache_size_in_mb(),
+                    cache_config.landing_zone_ratio,
+                )
+                .expect("tile cache creation should work because the config is valid"),
             ),
+            new_raster_cache,
             provider_registry,
             gdal_process_pool,
         })
@@ -195,6 +210,7 @@ where
         quota_config: Quota,
         gdal_process_pool_config: crate::config::GdalProcessPool,
     ) -> Result<Self> {
+        cache_config.validate()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
@@ -221,6 +237,14 @@ where
             gdal_process_pool_config.worker.into(),
         );
 
+        let new_raster_cache = if cache_config.enabled && cache_config.enable_new_raster_cache {
+            Some(Arc::new(NewRasterCacheEnum::new_lru(
+                cache_config.new_raster_cache_size_in_bytes(),
+            )))
+        } else {
+            None
+        };
+
         let app_ctx = PostgresContext {
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
@@ -231,9 +255,13 @@ where
             pool,
             volumes: Default::default(),
             tile_cache: Arc::new(
-                SharedCache::new(cache_config.size_in_mb, cache_config.landing_zone_ratio)
-                    .expect("tile cache creation should work because the config is valid"),
+                SharedCache::new(
+                    cache_config.shared_cache_size_in_mb(),
+                    cache_config.landing_zone_ratio,
+                )
+                .expect("tile cache creation should work because the config is valid"),
             ),
+            new_raster_cache,
             provider_registry,
             gdal_process_pool,
         };
@@ -428,6 +456,7 @@ where
             self.context.thread_pool.clone(),
             self.context.gdal_process_pool.clone(),
             Some(self.context.tile_cache.clone()),
+            self.context.new_raster_cache.clone(),
             Some(
                 self.context
                     .quota
@@ -443,6 +472,7 @@ where
             self.context.thread_pool.clone(),
             self.context.exe_ctx_tiling_spec,
             self.context.gdal_process_pool.clone(),
+            self.context.new_raster_cache.clone(),
         ))
     }
 
@@ -1074,10 +1104,22 @@ mod tests {
 
         let workflow = db.load_workflow(&id).await.unwrap();
 
-        let json = serde_json::to_string(&workflow).unwrap();
+        let json = serde_json::to_value(&workflow).unwrap();
         assert_eq!(
             json,
-            r#"{"type":"Vector","operator":{"type":"MockPointSource","params":{"points":[{"x":1.0,"y":2.0},{"x":1.0,"y":2.0},{"x":1.0,"y":2.0}],"spatialBounds":{"type":"none"}}}}"#
+            serde_json::json!({
+                "type":"Vector",
+                "operator": {
+                    "type": "MockPointSource",
+                    "params": {
+                        "points": [
+                            {"x":1.0,"y":2.0},
+                            {"x":1.0,"y":2.0},
+                            {"x":1.0,"y":2.0}
+                        ]
+                    }
+                }
+            })
         );
     }
 
@@ -1838,17 +1880,26 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
     async fn it_collects_layers(app_ctx: PostgresContext<NoTls>) {
+        use crate::api::model::processing_graphs::{
+            MockPointSource as ApiMockPointSource,
+            MockPointSourceParameters as ApiMockPointSourceParameters, SpatialBoundsDerive,
+            TypedOperator as ApiTypedOperator, VectorOperator as ApiVectorOperator,
+        };
+
         let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
 
-        let workflow = Workflow::Legacy {
-            operator: TypedOperator::Vector(
-                MockPointSource {
-                    params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
-                }
-                .boxed(),
-            ),
+        let workflow = Workflow::Typed {
+            operator: ApiTypedOperator::Vector(ApiVectorOperator::MockPointSource(
+                ApiMockPointSource {
+                    r#type: Default::default(),
+                    params: ApiMockPointSourceParameters {
+                        points: vec![(1., 2.).into(); 3],
+                        spatial_bounds: SpatialBoundsDerive::None(Default::default()),
+                    },
+                },
+            )),
         };
 
         let root_collection_id = layer_db.get_root_layer_collection_id().await.unwrap();

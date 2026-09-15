@@ -1,3 +1,4 @@
+use crate::datasets::DatasetName;
 use crate::error::{self, Error, Result};
 use crate::identifier;
 use geoengine_datatypes::operations::image::RgbParams;
@@ -181,6 +182,16 @@ pub struct NamedData {
     pub name: String,
 }
 
+impl NamedData {
+    pub fn with_system_name(name: &str) -> Self {
+        Self {
+            namespace: None,
+            provider: None,
+            name: name.into(),
+        }
+    }
+}
+
 impl From<geoengine_datatypes::dataset::NamedData> for NamedData {
     fn from(
         geoengine_datatypes::dataset::NamedData {
@@ -222,6 +233,12 @@ impl From<NamedData> for geoengine_datatypes::dataset::NamedData {
 impl From<&NamedData> for geoengine_datatypes::dataset::NamedData {
     fn from(named_data: &NamedData) -> Self {
         Self::from(named_data.clone())
+    }
+}
+
+impl From<DatasetName> for NamedData {
+    fn from(name: DatasetName) -> Self {
+        geoengine_datatypes::dataset::NamedData::from(name).into()
     }
 }
 
@@ -715,6 +732,15 @@ impl From<Coordinate2D> for geoengine_datatypes::primitives::Coordinate2D {
         Self {
             x: coordinate.x,
             y: coordinate.y,
+        }
+    }
+}
+
+impl From<(f64, f64)> for Coordinate2D {
+    fn from(value: (f64, f64)) -> Self {
+        Self {
+            x: value.0,
+            y: value.1,
         }
     }
 }

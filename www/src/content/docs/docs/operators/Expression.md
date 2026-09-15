@@ -80,12 +80,12 @@ However, the last expression must be without a semicolon.
 
 ## Parameters
 
-| Name       | Type                 | Description                                                                                                 | Examples              |
-| ---------- | -------------------- | ----------------------------------------------------------------------------------------------------------- | --------------------- |
-| expression | string               | Expression script<br><br>Example: `"(A - B) / (A + B)"`                                                     | `"(A - B) / (A + B)"` |
-| outputType | RasterDataType       | A raster data type for the output                                                                           |                       |
-| outputBand | RasterBandDescriptor | Description about the output                                                                                |                       |
-| mapNoData  | boolean              | Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA. | `true`                |
+| Name       | Type                 | Description                                                                                                 | Examples                                            |
+| ---------- | -------------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| expression | string               | Expression script<br><br>Example: `"(A - B) / (A + B)"`                                                     | `"(A - B) / (A + B)"`                               |
+| outputType | RasterDataType       | A raster data type for the output                                                                           | `"F32"`                                             |
+| outputBand | RasterBandDescriptor | Description about the output                                                                                | `{"name":"NDVI","measurement":{"type":"unitless"}}` |
+| mapNoData  | boolean              | Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA. | `true`                                              |
 
 ## Sources
 

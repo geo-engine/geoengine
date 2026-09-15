@@ -35,15 +35,15 @@ class TestInterpolationResolution(unittest.TestCase):
         model = InterpolationResolution()
         if include_optional:
             return InterpolationResolution(
+                type = 'resolution',
                 x = 1.337,
-                y = 1.337,
-                type = 'resolution'
+                y = 1.337
             )
         else:
             return InterpolationResolution(
+                type = 'resolution',
                 x = 1.337,
                 y = 1.337,
-                type = 'resolution',
         )
         """
 

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {dereference} from '@scalar/openapi-parser';
-import type {OpenAPI} from '@scalar/openapi-types';
+import type {OpenAPIV3_1 as OpenAPI} from '@scalar/openapi-types';
 import type {AstroIntegration, AstroIntegrationLogger} from 'astro';
 import * as prettier from 'prettier';
 
@@ -51,9 +51,10 @@ export default function openApiOperatorsPlugin(options: OpenApiOperatorsOptions)
                     clearDirButKeepIndex(operatorsOutputDir);
                     clearDirButKeepIndex(plotsOutputDir);
 
-                    const rasterOperatorSchema: OpenAPI.SchemaObject = openapi.schema?.components?.schemas?.['RasterOperator'];
-                    const vectorOperatorSchema: OpenAPI.SchemaObject = openapi.schema?.components?.schemas?.['VectorOperator'];
-                    const plotOperatorSchema: OpenAPI.SchemaObject = openapi.schema?.components?.schemas?.['PlotOperator'];
+                    const openapiSchema = openapi.schema as OpenAPI.SchemaObject | undefined;
+                    const rasterOperatorSchema: OpenAPI.SchemaObject = openapiSchema?.components?.schemas?.['RasterOperator'];
+                    const vectorOperatorSchema: OpenAPI.SchemaObject = openapiSchema?.components?.schemas?.['VectorOperator'];
+                    const plotOperatorSchema: OpenAPI.SchemaObject = openapiSchema?.components?.schemas?.['PlotOperator'];
 
                     const operatorMds: OperatorMd[] = [];
                     const plotOperatorMds: OperatorMd[] = [];
@@ -65,9 +66,18 @@ export default function openApiOperatorsPlugin(options: OpenApiOperatorsOptions)
                     ];
 
                     for (const group of operatorGroups) {
-                        const {schema, dest, label} = group as {schema: OpenAPI.SchemaObject; dest: OperatorMd[]; label: string};
-                        for (const operatorPosition in schema.oneOf) {
-                            const operatorSchema: OpenAPI.SchemaObject = schema.oneOf[operatorPosition];
+                        const {schema, dest, label} = group as {schema?: OpenAPI.SchemaObject; dest: OperatorMd[]; label: string};
+                        if (!schema) {
+                            continue;
+                        }
+
+                        const oneOf = schema.oneOf ?? [];
+                        for (const operatorPosition in oneOf) {
+                            const operatorSchema = oneOf[operatorPosition] as OpenAPI.SchemaObject | undefined;
+                            if (!operatorSchema) {
+                                continue;
+                            }
+
                             const operatorName = operatorSchema['x-reference-id'];
                             if (!operatorName) {
                                 throw new Error(`No operator name found for position ${operatorPosition} in ${label}`);
@@ -110,19 +120,29 @@ interface OperatorMd {
  * @returns An object containing the filename, title, and markdown content for the operator.
  */
 function generateMarkdownForOperator(operatorId: string, operatorSchema: OpenAPI.SchemaObject): OperatorMd {
-    const parametersTable = parametersToMarkdownTable(parseParameters(Object.entries(operatorSchema.properties?.params?.properties)), true);
-    const hasSources = !!operatorSchema.properties.sources;
-    const sourcesTable = !hasSources
-        ? ''
-        : parametersToMarkdownTable(parseParameters(Object.entries(operatorSchema.properties?.sources?.properties)), false);
-    const examples: string[] = operatorSchema.examples.map((example: JSON) => JSON.stringify(example, null, 2));
+    const paramsProperties = flattenSchemaProperties(operatorSchema.properties?.params as OpenAPI.SchemaObject | undefined);
+    const sourceProperties = flattenSchemaProperties(operatorSchema.properties?.sources as OpenAPI.SchemaObject | undefined);
+    const operatorExampleParams = getOperatorExampleParams(operatorSchema);
+
+    const parametersTable = parametersToMarkdownTable(parseParameters(paramsProperties, operatorExampleParams), true);
+    const hasSources = !!operatorSchema.properties?.sources;
+    const sourcesTable = !hasSources ? '' : parametersToMarkdownTable(parseParameters(sourceProperties), false);
+
+    const rawExamples = Array.isArray(operatorSchema.examples)
+        ? operatorSchema.examples
+        : operatorSchema.examples && typeof operatorSchema.examples === 'object'
+          ? Object.values(operatorSchema.examples as Record<string, unknown>)
+          : [];
+    const singleExample = operatorSchema.example !== undefined ? [operatorSchema.example] : [];
+    const examples: string[] = [...rawExamples, ...singleExample].map((example: unknown) => JSON.stringify(example, null, 2));
     const hasExamples = examples.length > 0;
+    const description = normalizeMarkdownLinks(operatorSchema.description ?? '');
 
     return {
         filename: `${operatorId}.md`,
         title: operatorSchema.title ?? operatorId,
         content: `\
-${operatorSchema.description}
+${description}
 
 ## Parameters
 
@@ -135,6 +155,18 @@ ${!hasSources ? '' : `## Sources\n\n${sourcesTable}`}
 ${!hasExamples ? '' : '```json\n' + examples.join('\n```\n\n```json\n') + '\n```'}
 `,
     };
+}
+
+function normalizeMarkdownLinks(markdown: string): string {
+    return markdown
+        .replace(/\]\((?:\.{0,2}\/)?datatypes\/([^)#]+)(?:\.md)?(?:#([^)]+))?\)/g, (_, name: string, hash?: string) => {
+            const target = `/docs/datatypes/${name}`;
+            return `](${target}${hash ? `#${hash}` : ''})`;
+        })
+        .replace(/\]\((?:\/)?datatypes\/([^)#]+)\.html(?:#([^)]+))?\)/g, (_, name: string, hash?: string) => {
+            const target = `/docs/datatypes/${name}`;
+            return `](${target}${hash ? `#${hash}` : ''})`;
+        });
 }
 
 /**
@@ -165,13 +197,131 @@ ${operatorMd.content}`;
  * @param parameters An array of parameter entries from the OpenAPI schema.
  * @returns An array of parameter table entries with name, type, description, and examples.
  */
-function parseParameters(parameters: [string, OpenAPI.SchemaObject][]): ParameterTableEntry[] {
+function flattenSchemaProperties(schema?: OpenAPI.SchemaObject, visited = new WeakSet<object>()): [string, OpenAPI.SchemaObject][] {
+    if (!schema || visited.has(schema)) {
+        return [];
+    }
+
+    visited.add(schema);
+
+    if (schema.properties) {
+        return Object.entries(schema.properties);
+    }
+
+    if (schema.oneOf) {
+        return schema.oneOf.flatMap((variant: OpenAPI.SchemaObject) => flattenSchemaProperties(variant, visited));
+    }
+
+    if (schema.allOf) {
+        return schema.allOf.flatMap((variant: OpenAPI.SchemaObject) => flattenSchemaProperties(variant, visited));
+    }
+
+    return [];
+}
+
+function getOperatorExampleParams(operatorSchema: OpenAPI.SchemaObject): Record<string, unknown> {
+    const rawExamples = Array.isArray(operatorSchema.examples)
+        ? operatorSchema.examples
+        : operatorSchema.examples && typeof operatorSchema.examples === 'object'
+          ? Object.values(operatorSchema.examples as Record<string, unknown>)
+          : [];
+    const singleExample = operatorSchema.example !== undefined ? [operatorSchema.example] : [];
+
+    const exampleParams: Record<string, unknown> = {};
+    for (const example of [...rawExamples, ...singleExample]) {
+        if (!example || typeof example !== 'object') {
+            continue;
+        }
+
+        const nestedOperator =
+            'operator' in example && example.operator && typeof example.operator === 'object'
+                ? (example.operator as Record<string, unknown>)
+                : undefined;
+        const directParams =
+            'params' in example && example.params && typeof example.params === 'object'
+                ? (example.params as Record<string, unknown>)
+                : undefined;
+        const params = directParams ?? nestedOperator?.params;
+
+        if (params && typeof params === 'object') {
+            Object.assign(exampleParams, params as Record<string, unknown>);
+        }
+    }
+
+    return exampleParams;
+}
+
+function collectSchemaExamples(schema?: OpenAPI.SchemaObject, visited = new WeakSet<object>()): unknown[] {
+    if (!schema) {
+        return [];
+    }
+
+    if (visited.has(schema)) {
+        return [];
+    }
+    visited.add(schema);
+
+    const examples: unknown[] = [];
+
+    if (Array.isArray(schema.examples)) {
+        examples.push(...schema.examples);
+    } else if (schema.examples && typeof schema.examples === 'object') {
+        examples.push(...Object.values(schema.examples as Record<string, unknown>));
+    }
+
+    if (schema.example !== undefined) {
+        examples.push(schema.example);
+    }
+
+    if (schema.type === 'object' && schema.properties) {
+        const objectExample = Object.fromEntries(
+            Object.entries(schema.properties).flatMap(([name, property]) => {
+                const propertyExamples = collectSchemaExamples(property as OpenAPI.SchemaObject, visited);
+                if (propertyExamples.length === 0) {
+                    return [];
+                }
+                return [[name, propertyExamples[0]]];
+            }),
+        );
+
+        if (Object.keys(objectExample).length > 0) {
+            examples.push(objectExample);
+        }
+        return examples;
+    }
+
+    if (schema.oneOf) {
+        for (const variant of schema.oneOf) {
+            examples.push(...collectSchemaExamples(variant as OpenAPI.SchemaObject, visited));
+        }
+    }
+
+    if (schema.allOf) {
+        for (const variant of schema.allOf) {
+            examples.push(...collectSchemaExamples(variant as OpenAPI.SchemaObject, visited));
+        }
+    }
+
+    if (schema.items) {
+        examples.push(...collectSchemaExamples(schema.items as OpenAPI.SchemaObject, visited));
+    }
+
+    return examples;
+}
+
+function parseParameters(
+    parameters: [string, OpenAPI.SchemaObject][],
+    operatorExampleParams: Record<string, unknown> = {},
+): ParameterTableEntry[] {
     return parameters.map(([name, param]) => {
+        const schemaExamples = collectSchemaExamples(param);
+        const operatorExample = Object.prototype.hasOwnProperty.call(operatorExampleParams, name) ? [operatorExampleParams[name]] : [];
+
         const entry = {
             name,
             type: param['x-reference-id'] ?? param.type ?? 'unknown',
             description: param.description ?? '',
-            examples: param.examples ? Object.values(param.examples).map((ex) => JSON.stringify(ex, null, 2)) : [],
+            examples: [...new Set([...schemaExamples, ...operatorExample].map((ex) => JSON.stringify(ex)))],
         };
         if (entry.type === 'unknown' && param.oneOf) {
             entry.type = param.oneOf
@@ -202,9 +352,10 @@ function parametersToMarkdownTable(parameters: ParameterTableEntry[], withExampl
 
     const rows = parameters
         .map((param) => {
-            let row = `| ${param.name} | ${param.type} | ${param.description.replace(/\n/g, '<br>')} |`;
+            const description = escapeMarkdownTableCell(param.description.replace(/\n/g, '<br>'));
+            let row = `| ${param.name} | ${param.type} | ${description} |`;
             if (withExamples) {
-                const examplesFormatted = param.examples.map((ex) => `\`${ex}\``).join('<br>');
+                const examplesFormatted = param.examples.map((ex) => `\`${escapeMarkdownTableCell(ex)}\``).join('<br>');
                 row += ` ${examplesFormatted} |`;
             }
             return row;
@@ -212,6 +363,15 @@ function parametersToMarkdownTable(parameters: ParameterTableEntry[], withExampl
         .join('\n');
 
     return header + rows;
+}
+
+function escapeMarkdownTableCell(value: string): string {
+    return value
+        .replace(/[\r\n]+/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/\\/g, '\\\\')
+        .replace(/\|/g, '\\|')
+        .trim();
 }
 
 /**

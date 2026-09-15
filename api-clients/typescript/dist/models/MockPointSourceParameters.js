@@ -25,8 +25,6 @@ const Coordinate2D_1 = require("./Coordinate2D");
 function instanceOfMockPointSourceParameters(value) {
     if (!('points' in value) || value['points'] === undefined)
         return false;
-    if (!('spatialBounds' in value) || value['spatialBounds'] === undefined)
-        return false;
     return true;
 }
 function MockPointSourceParametersFromJSON(json) {
@@ -38,7 +36,7 @@ function MockPointSourceParametersFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'points': (json['points'].map(Coordinate2D_1.Coordinate2DFromJSON)),
-        'spatialBounds': (0, SpatialBoundsDerive_1.SpatialBoundsDeriveFromJSON)(json['spatialBounds']),
+        'spatialBounds': json['spatialBounds'] == null ? undefined : (0, SpatialBoundsDerive_1.SpatialBoundsDeriveFromJSON)(json['spatialBounds']),
     };
 }
 function MockPointSourceParametersToJSON(json) {
