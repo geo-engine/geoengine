@@ -13,6 +13,11 @@ mat-toolbar {
     }
 
     border-bottom: 1px solid var(--geoengine-divider-color);
+
+    button[matIconButton],
+    a[matIconButton] {
+        display: inline-flex; /* Icons are vertically centered differently otherwise. */
+    }
 }
 
 .loading-indicator {

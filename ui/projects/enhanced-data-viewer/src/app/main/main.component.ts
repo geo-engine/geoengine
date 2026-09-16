@@ -13,7 +13,7 @@ import {
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {ProjectService, MapService, MapContainerComponent, CoreModule, SpatialReferenceService, WGS_84} from '@geoengine/core';
 import {AppConfig} from '../app-config.service';
-import {assertNever, Layer, UserService} from '@geoengine/common';
+import {Layer, UserService} from '@geoengine/common';
 import {MatToolbar, MatToolbarModule} from '@angular/material/toolbar';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
@@ -23,9 +23,8 @@ import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {MatRadioModule} from '@angular/material/radio';
 import {A11yModule} from '@angular/cdk/a11y';
 import {MeasureDirective, MeasurementType} from './measure.directive';
-import {ComponentPortal} from '@angular/cdk/portal';
+import {isActive, Router, RouterModule} from '@angular/router';
 import {LayersComponent} from '../layers/layers.component';
-import {ComputeComponent} from '../compute/compute.component';
 
 @Component({
     selector: 'geoengine-main',
@@ -44,8 +43,7 @@ import {ComputeComponent} from '../compute/compute.component';
         MatToolbarModule,
         MatTooltipModule,
         MeasureDirective,
-        LayersComponent,
-        ComputeComponent,
+        RouterModule,
     ],
     host: {
         // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -57,6 +55,7 @@ export class MainComponent {
     readonly projectService = inject(ProjectService);
     readonly userService = inject(UserService);
     private readonly mapService = inject(MapService);
+    private readonly router = inject(Router);
 
     private readonly spatialReferenceService = inject(SpatialReferenceService);
 
@@ -83,29 +82,10 @@ export class MainComponent {
     readonly tileLoading = signal(false);
     readonly isLoading = computed(() => (this.layersComponent()?.mapTileLayerResource.isLoading() ?? false) || this.tileLoading());
 
-    private readonly openTab = signal<Tab>(Tab.Layers);
-    readonly tabComponent = computed<ComponentPortal<unknown>>(() => {
-        const tab = this.openTab();
-
-        switch (tab) {
-            case Tab.Layers:
-                return new ComponentPortal(EmptyComponent);
-            case Tab.Compute:
-                return new ComponentPortal(EmptyComponent);
-            case Tab.Search:
-                // TODO: create component
-                return new ComponentPortal(EmptyComponent);
-            case Tab.About:
-                // TODO: create component
-                return new ComponentPortal(EmptyComponent);
-            default:
-                assertNever(tab);
-        }
-    });
-    readonly isLayersActive = computed(() => this.openTab() === Tab.Layers);
-    readonly isComputeActive = computed(() => this.openTab() === Tab.Compute);
-    readonly isSearchActive = computed(() => this.openTab() === Tab.Search);
-    readonly isAboutActive = computed(() => this.openTab() === Tab.About);
+    readonly isLayersActive = isActive('/map/layers', this.router);
+    readonly isComputeActive = isActive('/map/compute', this.router);
+    readonly isDownloadActive = isActive('/map/download', this.router);
+    readonly isAboutActive = isActive('/map/about', this.router);
 
     readonly MeasurementType = MeasurementType;
 
@@ -181,37 +161,7 @@ export class MainComponent {
             this.mapImageLoading.set(false);
         }
     }
-
-    openLayersTab(): void {
-        this.openTab.set(Tab.Layers);
-    }
-
-    openComputeTab(): void {
-        this.openTab.set(Tab.Compute);
-    }
-
-    openSearchTab(): void {
-        this.openTab.set(Tab.Search);
-    }
-
-    openAboutTab(): void {
-        this.openTab.set(Tab.About);
-    }
 }
-
-enum Tab {
-    Layers,
-    Compute,
-    Search,
-    About,
-}
-
-@Component({
-    standalone: true,
-    template: '', // Renders nothing
-})
-export class EmptyComponent {}
-
 export interface LayerIdPair {
     dataConnectorId: string;
     layerId: string;

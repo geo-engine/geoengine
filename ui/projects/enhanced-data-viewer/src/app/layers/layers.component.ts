@@ -3,292 +3,31 @@ import {CoreModule, ProjectService} from '@geoengine/core';
 import {A11yModule} from '@angular/cdk/a11y';
 import {MatDatepickerModule, MatDatepickerInputEvent} from '@angular/material/datepicker';
 import {MatCheckboxModule} from '@angular/material/checkbox';
-import {LayersService, Time, TimeStepDuration} from '@geoengine/common';
+import {MatListModule} from '@angular/material/list';
+import {LayersService, Time} from '@geoengine/common';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {CollectionItem} from '@geoengine/api-client';
 import {ProviderLayerId} from '@geoengine/api-client/dist/models/ProviderLayerId';
-
-type PresetCategory = 'static' | 'harvested' | 'adHoc';
-
-interface VisualizationPreset {
-    displayName: string;
-    backgroundImage: string;
-    connectorId: string;
-    collectionId: string;
-    name: string;
-    category: PresetCategory;
-}
-
-interface DataSourceDefinition {
-    key: string;
-    name: string;
-    presets: VisualizationPreset[];
-    defaultPresetIndex: number;
-    defaultTime: number;
-    defaultTimeStep: TimeStepDuration;
-}
-
-interface DataSourceLayer {
-    dataConnectorId: string;
-    layerId: string;
-}
-
-// Provider/connector IDs:
-//   ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74 – Internal Layer DB (serves layers
-//     registered via the API, including static, harvested, and provider layers)
-//   b274275c-373d-4a3f-8b45-9b48e9614329 – Sentinel-1 Global Mosaics STAC Provider
-//   c385386d-484e-5b40-9c56-0a6ca9f07243 – Sentinel-2 L2A STAC Provider
-//   d496497e-595f-6c51-ad67-1b7dba0a1834 – Landsat C2 L1 OLI/TIRS STAC Provider
-//   e5a7508f-6a60-7d62-be78-2c8ecb1b2945 – OpenGeoHub Landsat Mosaic STAC Provider
-//   cbb21ee3-d15d-45c5-a175-66964adf4e85 – Personal Data Catalog (user datasets)
-
-// Collection ID for the Internal Layer DB root: 05102bb3-a855-4a37-8a8a-30026a91fef1
-// STAC providers use their collection name at the path "root" -> "dataTypes"/"projections" etc.
-
-const LAYER_DB_PROVIDER_ID = 'ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74';
-const LAYER_DB_ROOT_COLLECTION_ID = '05102bb3-a855-4a37-8a8a-30026a91fef1';
-
-const PRESET_CATEGORY_LABELS: Record<PresetCategory, string> = {
-    static: 'Static',
-    harvested: 'Harvested',
-    adHoc: 'Ad-hoc (Data Provider)',
-};
-
-const DATA_SOURCES: DataSourceDefinition[] = [
-    {
-        key: 'sentinel1',
-        name: 'Sentinel-1',
-        defaultPresetIndex: 0,
-        defaultTime: 1775001600000,
-        defaultTimeStep: {durationAmount: 1, durationUnit: 'month'},
-        presets: [
-            // Static
-            {
-                displayName: 'Default',
-                backgroundImage: 'assets/grey.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'Sentinel-1 Static',
-                category: 'static',
-            },
-            // Harvested
-            {
-                displayName: 'Default',
-                backgroundImage: 'assets/grey.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'Sentinel-1 VV Band (Harvested)',
-                category: 'harvested',
-            },
-            {
-                displayName: 'SAR False Color',
-                backgroundImage: 'assets/false-color.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'Sentinel-1 SAR False Color (Harvested)',
-                category: 'harvested',
-            },
-            // Ad-hoc
-            {
-                displayName: 'Default',
-                backgroundImage: 'assets/grey.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'Sentinel-1 Global Mosaics Provider',
-                category: 'adHoc',
-            },
-        ],
-    },
-    {
-        key: 'sentinel2',
-        name: 'Sentinel-2 L2A',
-        defaultPresetIndex: 0,
-        defaultTime: 1775001600000,
-        defaultTimeStep: {durationAmount: 1, durationUnit: 'day'},
-        presets: [
-            // Static
-            {
-                displayName: 'Default',
-                backgroundImage: 'assets/grey.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'Sentinel-2 L2A Static',
-                category: 'static',
-            },
-            // Harvested
-            {
-                displayName: 'True Color',
-                backgroundImage: 'assets/rgb.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'Sentinel-2 L2A True Color (Harvested)',
-                category: 'harvested',
-            },
-            {
-                displayName: 'True Color Image (TCI)',
-                backgroundImage: 'assets/rgb.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'Sentinel-2 L2A True Color Image (Harvested)',
-                category: 'harvested',
-            },
-            {
-                displayName: 'NDVI',
-                backgroundImage: 'assets/ndvi.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'Sentinel-2 L2A NDVI (Harvested)',
-                category: 'harvested',
-            },
-            // Ad-hoc
-            {
-                displayName: 'Default',
-                backgroundImage: 'assets/grey.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'Sentinel-2 L2A Provider',
-                category: 'adHoc',
-            },
-        ],
-    },
-    {
-        key: 'landsat',
-        name: 'Landsat C2 L1 OLI/TIRS',
-        defaultPresetIndex: 0,
-        defaultTime: 1767916800000,
-        defaultTimeStep: {durationAmount: 1, durationUnit: 'day'},
-        presets: [
-            // Static
-            {
-                displayName: 'Default',
-                backgroundImage: 'assets/grey.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'Landsat C2 L1 OLI/TIRS Static',
-                category: 'static',
-            },
-            // Harvested
-            {
-                displayName: 'Red Band',
-                backgroundImage: 'assets/grey.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'Landsat C2 L1 OLI/TIRS Red Band (Harvested)',
-                category: 'harvested',
-            },
-            {
-                displayName: 'True Color',
-                backgroundImage: 'assets/rgb.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'Landsat C2 L1 OLI/TIRS True Color (Harvested)',
-                category: 'harvested',
-            },
-            {
-                displayName: 'NDVI',
-                backgroundImage: 'assets/ndvi.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'Landsat C2 L1 OLI/TIRS NDVI (Harvested)',
-                category: 'harvested',
-            },
-            // Ad-hoc
-            {
-                displayName: 'Default',
-                backgroundImage: 'assets/grey.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'Landsat C2 L1 OLI/TIRS Provider',
-                category: 'adHoc',
-            },
-            {
-                displayName: 'True Color',
-                backgroundImage: 'assets/rgb.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'Landsat C2 L1 OLI/TIRS Provider True Color',
-                category: 'adHoc',
-            },
-        ],
-    },
-    {
-        key: 'opengeohub-landsat',
-        name: 'OpenGeoHub Landsat Mosaic',
-        defaultPresetIndex: 0,
-        defaultTime: 1730419200000,
-        defaultTimeStep: {durationAmount: 2, durationUnit: 'months'},
-        presets: [
-            // Static
-            {
-                displayName: 'Default',
-                backgroundImage: 'assets/grey.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'OpenGeoHub Landsat Bimonthly Mosaic Static',
-                category: 'static',
-            },
-            // Harvested
-            {
-                displayName: 'Red Band',
-                backgroundImage: 'assets/grey.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'OpenGeoHub Landsat Bimonthly Mosaic Red Band (Harvested)',
-                category: 'harvested',
-            },
-            {
-                displayName: 'True Color',
-                backgroundImage: 'assets/rgb.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'OpenGeoHub Landsat Bimonthly Mosaic True Color (Harvested)',
-                category: 'harvested',
-            },
-            {
-                displayName: 'NDVI',
-                backgroundImage: 'assets/ndvi.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'OpenGeoHub Landsat Bimonthly Mosaic NDVI (Harvested)',
-                category: 'harvested',
-            },
-            // Ad-hoc
-            {
-                displayName: 'Default',
-                backgroundImage: 'assets/grey.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'OpenGeoHub Landsat Bimonthly Mosaic Provider',
-                category: 'adHoc',
-            },
-            {
-                displayName: 'True Color',
-                backgroundImage: 'assets/rgb.jpg',
-                connectorId: LAYER_DB_PROVIDER_ID,
-                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
-                name: 'OpenGeoHub Landsat Bimonthly Mosaic Provider True Color',
-                category: 'adHoc',
-            },
-        ],
-    },
-];
+import {DATA_SOURCES, DataSourceLayer, PRESET_CATEGORY_LABELS, PresetCategory, VisualizationPreset} from './data-sources';
 
 @Component({
     selector: 'geoengine-layers',
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div>
-            <h4>Data Source</h4>
-            <mat-radio-group class="data-sources" [value]="selectedDataSource()" (change)="setSelectedDataSource($event.value)">
+            <h2>Data Source</h2>
+            <mat-selection-list [multiple]="false" class="data-sources" (selectionChange)="onDataSourceSelectionChange($event.options)">
                 @for (ds of dataSources; track ds.key) {
-                    <mat-radio-button [value]="ds.key">{{ ds.name }}</mat-radio-button>
+                    <mat-list-option [value]="ds.key" [selected]="selectedDataSource() === ds.key" [matTooltip]="ds.name">
+                        <span matListItemTitle>{{ ds.name }}</span>
+                    </mat-list-option>
                 }
-            </mat-radio-group>
+            </mat-selection-list>
         </div>
         <mat-divider></mat-divider>
 
         <div class="time-selection">
-            <h4>Time Selection</h4>
+            <h2>Time Selection</h2>
             <mat-checkbox [checked]="autoSelectTime()" (change)="autoSelectTime.set($event.checked)">Auto select time</mat-checkbox>
             <div>
                 <button
@@ -313,7 +52,7 @@ const DATA_SOURCES: DataSourceDefinition[] = [
         <mat-divider></mat-divider>
 
         <div>
-            <h4>Visualization Presets</h4>
+            <h2>Visualization Presets</h2>
             <mat-nav-list class="visualization-presets">
                 @for (group of presetGroups(); track group.category) {
                     @if (debug()) {
@@ -321,11 +60,12 @@ const DATA_SOURCES: DataSourceDefinition[] = [
                     }
                     @for (preset of group.presets; track $index) {
                         <mat-list-item
-                            [activated]="currentPresets().indexOf(preset) === selectedPresetIndex()"
-                            [class.preset-active]="currentPresets().indexOf(preset) === selectedPresetIndex()"
-                            (click)="selectPreset(currentPresets().indexOf(preset))"
+                            [activated]="$index === selectedPresetIndex()"
+                            [class.preset-active]="$index === selectedPresetIndex()"
+                            (click)="selectPreset($index)"
+                            [matTooltip]="preset.displayName"
+                            [style.backgroundImage]="'url(' + preset.backgroundImage + ')'"
                         >
-                            <img matListItemTitle [src]="preset.backgroundImage" [alt]="preset.displayName" class="preset-icon" />
                             <span matListItemTitle>{{ preset.displayName }}</span>
                         </mat-list-item>
                     }
@@ -336,27 +76,53 @@ const DATA_SOURCES: DataSourceDefinition[] = [
     `,
     styles: [
         `
+            $text1: 1rem;
+            $text2: 0.85rem;
+            $text3: 0.75rem;
+
+            :host {
+                display: block;
+                padding: 1rem 0.25rem 1rem;
+            }
+
+            h2 {
+                margin: 0 0 0.5rem;
+                font-size: $text1;
+                font-weight: 600;
+                color: var(--mat-sys-on-surface);
+            }
+
+            mat-divider {
+                margin: 1rem 0;
+            }
+
             .data-sources {
-                display: flex;
-                flex-direction: column;
-                gap: 0.25rem;
+                padding: 0;
+                margin: -0.25rem;
 
-                .data-source-group-label {
-                    font-size: 0.75rem;
-                    font-weight: 600;
-                    text-transform: uppercase;
-                    letter-spacing: 0.05em;
-                    color: var(--geoengine-primary-color, #2f6dff);
-                    margin-top: 0.5rem;
-                    margin-bottom: 0.125rem;
+                mat-list-option {
+                    border-radius: 0.5rem;
+                    padding: 0 0.25rem;
 
-                    &:first-child {
-                        margin-top: 0;
+                    --mat-list-list-item-label-text-size: #{$text2};
+
+                    span {
+                        display: -webkit-box !important;
+                        -webkit-line-clamp: 2;
+                        -webkit-box-orient: vertical;
+                        overflow: hidden;
+                        white-space: normal !important;
                     }
-                }
 
-                mat-radio-button {
-                    display: inline-block;
+                    ::ng-deep {
+                        .mdc-list-item__end {
+                            margin: 0;
+                            padding: 0;
+                        }
+                        .mdc-radio {
+                            padding-right: 0;
+                        }
+                    }
                 }
             }
 
@@ -386,10 +152,13 @@ const DATA_SOURCES: DataSourceDefinition[] = [
                 flex-direction: row;
                 flex-wrap: wrap;
                 gap: 0.5rem;
+                width: 100%;
+                border: none;
+                margin-top: 0.5rem;
 
                 .preset-group-label {
                     width: 100%;
-                    font-size: 0.75rem;
+                    font-size: $text3;
                     font-weight: 600;
                     text-transform: uppercase;
                     letter-spacing: 0.05em;
@@ -401,73 +170,54 @@ const DATA_SOURCES: DataSourceDefinition[] = [
                     }
                 }
 
-                width: 100%;
-                border: none;
-
                 mat-list-item {
                     width: calc(50% - 0.25rem);
                     text-align: center;
                     padding: 0;
                     cursor: pointer;
-                    border: 2px solid transparent;
-                    border-radius: 6px;
+                    border: 3px solid transparent;
+                    border-radius: 0.5rem;
                     transition:
                         border-color 120ms ease,
-                        box-shadow 120ms ease;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    gap: 0;
+                        box-shadow 120ms ease,
+                        transform 120ms ease;
                     overflow: hidden;
 
-                    img {
-                        width: 100%;
-                        display: block;
-                        border-radius: 4px;
+                    height: auto;
+                    aspect-ratio: 2 / 1;
+                    background-size: cover;
+                    background-position: center;
+
+                    ::ng-deep .mdc-list-item__content {
+                        align-self: flex-end;
                     }
 
-                    span {
+                    [matListItemTitle] {
+                        display: block;
+                        width: 100%;
                         color: white;
-                        text-shadow: 0 0 5px rgba(0, 0, 0, 0.7);
-                        transform: translateY(-1rem);
-                        margin-bottom: -1rem;
-                        font-size: 0.85rem;
-                        line-height: 1.2;
+                        text-shadow: 0 0 0.5rem rgba(0, 0, 0, 0.7);
+                        font-size: $text2;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
                     }
 
                     &.preset-active {
-                        border-color: var(--geoengine-primary-color, #2f6dff);
-                        box-shadow: 0 0 0 2px rgb(47 109 255 / 25%);
+                        border-color: var(--geoengine-primary-color);
 
-                        span {
+                        [matListItemTitle] {
                             font-weight: 600;
                         }
                     }
                 }
             }
 
-            geoengine-small-time-interaction ::ng-deep {
-                /* TODO: fix this in the component itself */
-
-                button:not(:first-child):not(:last-child) {
-                    font-size: 0.65rem;
-                }
-
-                button:first-child {
-                    width: 1rem;
-                    height: 1rem;
-                    margin-left: -1rem;
-                    margin-right: 1rem;
-                }
-
-                button:last-child {
-                    width: 1rem;
-                    height: 1rem;
-                }
+            .time-selection {
+                --mat-button-text-label-text-size: #{$text2};
             }
         `,
     ],
-    imports: [A11yModule, CoreModule, MatDatepickerModule, MatCheckboxModule],
+    imports: [A11yModule, CoreModule, MatDatepickerModule, MatCheckboxModule, MatListModule],
 })
 export class LayersComponent {
     readonly projectService = inject(ProjectService);
@@ -584,6 +334,12 @@ export class LayersComponent {
         if (ds.defaultTimeStep) {
             this.projectService.setTimeStepDuration(ds.defaultTimeStep);
         }
+    }
+
+    onDataSourceSelectionChange(options: readonly {value: string}[]): void {
+        const selected = options[0]?.value;
+        if (!selected) return;
+        void this.setSelectedDataSource(selected);
     }
 
     async setSelectedDataSource(value: string): Promise<void> {
