@@ -32,7 +32,7 @@ fn bench_area_execution(c: &mut Criterion) {
         ))
         .expect("Failed to initialize StaticEpsgAreaProvider");
         {
-            let mut group = c.benchmark_group(format!("Area of Use (Standard)/{}", srs_label));
+            let mut group = c.benchmark_group(format!("Area of Use (Standard)/{srs_label}"));
 
             group.bench_function("ProjProvider - area_of_use", |b| {
                 b.iter(|| {
@@ -50,7 +50,7 @@ fn bench_area_execution(c: &mut Criterion) {
         }
 
         {
-            let mut group = c.benchmark_group(format!("Area of Use (Projected)/{}", srs_label));
+            let mut group = c.benchmark_group(format!("Area of Use (Projected)/{srs_label}"));
 
             group.bench_function("ProjProvider - area_of_use_projected", |b| {
                 b.iter(|| {
@@ -74,7 +74,7 @@ fn bench_area_execution(c: &mut Criterion) {
 
 fn bench_area_setup(c: &mut Criterion) {
     for (srs_label, code) in get_test_cases() {
-        let mut group = c.benchmark_group(format!("Area Setup/{}", srs_label));
+        let mut group = c.benchmark_group(format!("Area Setup/{srs_label}"));
 
         // Benchmark Proj Provider initialization
         group.bench_function("ProjProvider Setup", |b| {

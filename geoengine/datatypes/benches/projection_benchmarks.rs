@@ -11,8 +11,8 @@ use geoengine_datatypes::spatial_reference::{
 fn generate_dummy_coordinates(count: usize) -> Vec<Coordinate2D> {
     (0..count)
         .map(|i| Coordinate2D {
-            x: 13.404954 + (i as f64 * 0.0001), // Incremental Lon (around Berlin)
-            y: 52.520008 + (i as f64 * 0.0001), // Incremental Lat
+            x: 13.404_954 + (i as f64 * 0.000_1), // Incremental Lon (around Berlin)
+            y: 52.520_008 + (i as f64 * 0.000_1), // Incremental Lat
         })
         .collect()
 }
@@ -29,7 +29,7 @@ fn bench_coordinate_projections(c: &mut Criterion) {
 
     for (srs_label, from_code, to_code) in test_cases {
         // Create a distinct benchmark group for each SRS pair
-        let mut group = c.benchmark_group(format!("Projection/{}", srs_label));
+        let mut group = c.benchmark_group(format!("Projection/{srs_label}"));
 
         for &size in &input_sizes {
             let coords = generate_dummy_coordinates(size);
@@ -84,7 +84,7 @@ fn bench_projection_setup(c: &mut Criterion) {
 
     for (srs_label, from_code, to_code) in test_cases {
         // Grouping benchmarks by the SRS pair to easily compare backends
-        let mut group = c.benchmark_group(format!("Setup Costs/{}", srs_label));
+        let mut group = c.benchmark_group(format!("Setup Costs/{srs_label}"));
 
         // Benchmark ProjCoordinateProjector Instantiation
         group.bench_function("ProjCrate Setup", |b| {
