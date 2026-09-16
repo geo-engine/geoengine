@@ -1804,7 +1804,7 @@ mod tests {
                 (36.0, 84.0).into(),
                 (33.0, 42.0).into(), // upper right of utm36n area of use
             ],
-            epsilon = 0.00000001 // ~ 0.001 m
+            epsilon = 0.000_000_01 // ~ 0.001 m
         );
     }
 
@@ -1904,7 +1904,7 @@ mod tests {
             Coordinate2D,
             out_spatial_grid.geo_transform.origin_coordinate(),
             Coordinate2D::new(0., 0.),
-            epsilon = 0.00000001
+            epsilon = 0.000_000_01
         );
 
         assert_approx_eq!(

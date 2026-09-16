@@ -413,8 +413,7 @@ mod tests {
             BoundingBox2D::new_unchecked(
                 (166_021.443_080_539_64, 0.0).into(),
                 (833_978.556_919_460_4, 9_329_005.182_447_437).into()
-            )
-            .into(),
+            ),
             epsilon = 0.001 // NOTE: changed to match with shortened numbers in static crs-bounds crate.
         );
 

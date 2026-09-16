@@ -17,7 +17,7 @@ use geoengine_datatypes::{
         GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
         TilingSpatialGridDefinition, TilingSpecification,
     },
-    spatial_reference::SpatialReference,
+    spatial_reference::{DefaultCoordinateProjector, SpatialReference},
 };
 use geoengine_operators::engine::{RasterResultDescriptor, ResultDescriptor};
 use ogcapi_types::tiles::{CornerOfOrigin, TileMatrix, TileMatrixSet, TileMatrixSetId, TilesCrs};
@@ -146,7 +146,7 @@ impl TypedTileMatrixSetProvider {
                 let resolution = if spatial_reference == web_mercator {
                     source_resolution
                 } else {
-                    suggest_pixel_size_like_gdal_helper(
+                    suggest_pixel_size_like_gdal_helper::<_, DefaultCoordinateProjector>(
                         result_descriptor.spatial_bounds(),
                         source_resolution,
                         spatial_reference,

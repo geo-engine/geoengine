@@ -9,15 +9,15 @@ use crate::util::retry::{RetryPolicy, retry_http};
 use async_trait::async_trait;
 use chrono::DateTime as ChronoDateTime;
 use geoengine_datatypes::dataset::DataId;
-use geoengine_datatypes::operations::reproject::{
-    CoordinateProjection, CoordinateProjector, ReprojectClipped,
-};
+use geoengine_datatypes::operations::reproject::ReprojectClipped;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, CacheHint, RasterQueryRectangle, TimeDimension, TimeInstance,
     TimeInterval, TryRegularTimeFillIterExt, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
-use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
+use geoengine_datatypes::spatial_reference::{
+    CoordinateProjection, DefaultCoordinateProjector, SpatialReference, SpatialReferenceAuthority,
+};
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterBandDescriptors, RasterResultDescriptor, TimeDescriptor,
     VectorResultDescriptor,
@@ -564,7 +564,7 @@ fn stac_query_bbox(
     spatial_reference: SpatialReference,
 ) -> geoengine_operators::util::Result<geoengine_datatypes::primitives::BoundingBox2D> {
     let projector =
-        CoordinateProjector::from_known_srs(spatial_reference, SpatialReference::epsg_4326())
+        DefaultCoordinateProjector::from_known_srs(spatial_reference, SpatialReference::epsg_4326())
             .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
 
     spatial_bounds
