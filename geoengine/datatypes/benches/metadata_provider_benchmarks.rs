@@ -4,8 +4,8 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use geoengine_datatypes::{
     primitives::BoundingBox2D,
     spatial_reference::{
-        AreaOfUseProvider, ProjAreaOfUseProvider, SpatialReference, SpatialReferenceAuthority,
-        StaticEpsgAreaProvider,
+        CrsMetadataProvider, ProjMetadataProvider, SpatialReference, SpatialReferenceAuthority,
+        StaticEpsgMetadataProvider,
     },
 };
 
@@ -19,18 +19,18 @@ fn get_test_cases() -> Vec<(&'static str, u32)> {
 fn bench_area_execution(c: &mut Criterion) {
     for (srs_label, code) in get_test_cases() {
         // Setup Proj provider outside the loop
-        let proj_provider = ProjAreaOfUseProvider::new_known_crs(SpatialReference::new(
+        let proj_provider = ProjMetadataProvider::new_known_crs(SpatialReference::new(
             SpatialReferenceAuthority::Epsg,
             code,
         ))
-        .expect("Failed to initialize ProjAreaOfUseProvider");
+        .expect("Failed to initialize ProjMetadataProvider");
 
         // Setup Static provider outside the loop
-        let static_provider = StaticEpsgAreaProvider::new_known_crs(SpatialReference::new(
+        let static_provider = StaticEpsgMetadataProvider::new_known_crs(SpatialReference::new(
             SpatialReferenceAuthority::Epsg,
             code,
         ))
-        .expect("Failed to initialize StaticEpsgAreaProvider");
+        .expect("Failed to initialize StaticEpsgMetadataProvider");
         {
             let mut group = c.benchmark_group(format!("Area of Use (Standard)/{srs_label}"));
 
@@ -79,7 +79,7 @@ fn bench_area_setup(c: &mut Criterion) {
         // Benchmark Proj Provider initialization
         group.bench_function("ProjProvider Setup", |b| {
             b.iter(|| {
-                let _provider = criterion::black_box(ProjAreaOfUseProvider::new_known_crs(
+                let _provider = criterion::black_box(ProjMetadataProvider::new_known_crs(
                     SpatialReference::new(SpatialReferenceAuthority::Epsg, code),
                 ));
             });
@@ -88,7 +88,7 @@ fn bench_area_setup(c: &mut Criterion) {
         // Benchmark Static Provider initialization
         group.bench_function("StaticProvider Setup", |b| {
             b.iter(|| {
-                let _provider = criterion::black_box(StaticEpsgAreaProvider::new_known_crs(
+                let _provider = criterion::black_box(StaticEpsgMetadataProvider::new_known_crs(
                     SpatialReference::new(SpatialReferenceAuthority::Epsg, code),
                 ));
             });

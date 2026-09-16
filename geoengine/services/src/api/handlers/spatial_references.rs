@@ -357,7 +357,7 @@ mod tests {
                 (-20_037_508.342_789_244, -20_048_966.104_014_6).into(),
                 (20_037_508.342_789_244, 20_048_966.104_014_594).into()
             ),
-            epsilon = 0.001 // NOTE: changed to match with shortened numbers in static crs-bounds crate.
+            epsilon = 0.001 // NOTE: changed to match with shortened numbers in static crs-constants crate.
         );
         assert_eq!(
             spec.axis_labels,
@@ -414,7 +414,7 @@ mod tests {
                 (166_021.443_080_539_64, 0.0).into(),
                 (833_978.556_919_460_4, 9_329_005.182_447_437).into()
             ),
-            epsilon = 0.001 // NOTE: changed to match with shortened numbers in static crs-bounds crate.
+            epsilon = 0.001 // NOTE: changed to match with shortened numbers in static crs-constants crate.
         );
 
         assert_eq!(
