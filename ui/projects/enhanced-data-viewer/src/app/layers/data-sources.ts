@@ -267,4 +267,48 @@ export const DATA_SOURCES: DataSourceDefinition[] = [
             },
         ],
     },
+    {
+        key: 'clms-burnt-area',
+        name: 'CLMS Burnt Area',
+        defaultPresetIndex: 0,
+        defaultTime: 1782913271000, // 2026-07-01
+        defaultTimeStep: {durationAmount: 1, durationUnit: 'days'},
+        citation:
+            "European Union's Copernicus Land Monitoring Service information; https://doi.org/10.2909/bfd77180-7d7c-4c1c-b193-1489f735d5f1",
+        presets: [
+            // Burnt Fraction
+            {
+                displayName: 'Burnt Fraction',
+                backgroundImage: 'assets/fire_frac.png',
+                connectorId: LAYER_DB_PROVIDER_ID,
+                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
+                name: 'Burnt Area Burnt Fraction',
+                category: 'harvested',
+            }, // Burn Probability
+            {
+                displayName: 'Burn Probability',
+                backgroundImage: 'assets/fire_prob.png',
+                connectorId: LAYER_DB_PROVIDER_ID,
+                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
+                name: 'Burnt Area Burn Probability',
+                category: 'harvested',
+            }, // Day of Burn
+            {
+                displayName: 'Day of Burn',
+                backgroundImage: 'assets/fire_day.png',
+                connectorId: LAYER_DB_PROVIDER_ID,
+                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
+                name: 'Burnt Area Day of Burn',
+                category: 'harvested',
+            }, // Large Fire Probability
+            {
+                displayName: 'Large Fire Probability',
+                backgroundImage: 'assets/fire_prob.png',
+                connectorId: LAYER_DB_PROVIDER_ID,
+                collectionId: LAYER_DB_ROOT_COLLECTION_ID,
+                name: 'Burnt Area Large Fire Probability',
+                category: 'harvested',
+            },
+        ],
+    },
 ];
