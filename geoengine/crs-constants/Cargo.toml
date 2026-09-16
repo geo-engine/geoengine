@@ -1,6 +1,6 @@
 [package]
-name = "crs-bounds"
-description = "A library for static bounding boxes of coordinate reference systems (CRS). Constants are generated from Projs database."
+name = "crs-constants"
+description = "Static metadata for coordinate reference systems (CRS) — bounds, units, and scale factors. Generated from PROJ's EPSG database."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

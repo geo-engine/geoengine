@@ -362,10 +362,7 @@ impl StacMultiBandMetaData {
         let time_end = time_interval.end();
 
         let query_params = vec![
-            (
-                "bbox".to_owned(),
-                format_stac_wgs84_bbox(bbox),
-            ),
+            ("bbox".to_owned(), format_stac_wgs84_bbox(bbox)),
             (
                 "datetime".to_owned(),
                 format!(
@@ -563,9 +560,11 @@ fn stac_query_bbox(
     spatial_bounds: geoengine_datatypes::primitives::SpatialPartition2D,
     spatial_reference: SpatialReference,
 ) -> geoengine_operators::util::Result<geoengine_datatypes::primitives::BoundingBox2D> {
-    let projector =
-        DefaultCoordinateProjector::from_known_srs(spatial_reference, SpatialReference::epsg_4326())
-            .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+    let projector = DefaultCoordinateProjector::from_known_srs(
+        spatial_reference,
+        SpatialReference::epsg_4326(),
+    )
+    .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
 
     spatial_bounds
         .as_bbox()

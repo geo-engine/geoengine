@@ -12,6 +12,8 @@ pub struct EpsgBounds {
     pub name: &'static str,
 
     pub crs_type: CrsType,
+    pub unit: &'static str,
+    pub meters_per_unit: f64,
     pub wgs84_bounds: [f64; 4],
     pub native_bounds: Option<[f64; 4]>,
 }

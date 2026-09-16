@@ -1,14 +1,15 @@
 use crate::error::Error;
 use crate::primitives::{AxisAlignedRectangle, BoundingBox2D, Coordinate2D};
-use crate::spatial_reference::{AreaOfUseProvider, SpatialReference, SpatialReferenceAuthority};
-use crs_bounds::EpsgBounds;
+use crate::spatial_reference::{CrsMetadataProvider, SpatialReference, SpatialReferenceAuthority};
+use crs_constants::EpsgBounds;
 
-pub struct StaticEpsgAreaProvider {
+pub struct StaticEpsgMetadataProvider {
     wgs84_bounds: BoundingBox2D,
     projected_bounds: Option<BoundingBox2D>,
+    meters_per_unit: f64,
 }
 
-impl AreaOfUseProvider for StaticEpsgAreaProvider {
+impl CrsMetadataProvider for StaticEpsgMetadataProvider {
     fn new_known_crs(def: SpatialReference) -> super::Result<Self> {
         if !matches!(def.authority(), SpatialReferenceAuthority::Epsg) {
             return Err(Error::NoAreaOfUseDefined {
@@ -23,6 +24,7 @@ impl AreaOfUseProvider for StaticEpsgAreaProvider {
         let EpsgBounds {
             wgs84_bounds: [x1, y1, x2, y2],
             native_bounds,
+            meters_per_unit,
             ..
         } = EpsgBounds::from_code(code as u16).ok_or_else(|| Error::NoAreaOfUseDefined {
             proj_string: def.srs_string(),
@@ -40,6 +42,7 @@ impl AreaOfUseProvider for StaticEpsgAreaProvider {
                 )
                 .expect("the native bounds from the epsg registry should always be a valid BoundingBox2D")
             }),
+            meters_per_unit: *meters_per_unit,
         })
     }
 
@@ -61,5 +64,15 @@ impl AreaOfUseProvider for StaticEpsgAreaProvider {
                 proj_string: "no native bounds defined for this epsg code".to_string(),
             })
         }
+    }
+
+    fn uses_meters(&self) -> super::Result<bool> {
+        #[allow(clippy::float_cmp)]
+        // stored value is exact (1.0 or a conversion factor from proj.db)
+        Ok(self.meters_per_unit == 1.0)
+    }
+
+    fn meters_per_unit(&self) -> super::Result<f64> {
+        Ok(self.meters_per_unit)
     }
 }

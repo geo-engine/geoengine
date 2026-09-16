@@ -1,5 +1,5 @@
 use crate::{
-    error::{self, BoxedResultExt},
+    error::{self},
     operations::reproject::Reproject,
     primitives::AxisAlignedRectangle,
     util::Result,
@@ -9,43 +9,37 @@ use gdal::spatial_ref::SpatialRef;
 use postgres_types::private::BytesMut;
 
 use postgres_types::{FromSql, IsNull, ToSql, Type};
-use proj::Proj;
-use proj_sys::{
-    proj_context_create, proj_context_destroy, proj_create, proj_destroy,
-    proj_ellipsoid_get_parameters, proj_get_ellipsoid,
-};
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::ffi::CString;
 
 use snafu::Error;
 use snafu::ResultExt;
 use std::str::FromStr;
 use std::{convert::TryFrom, fmt::Formatter};
 
-mod area_of_use_provider;
-pub use area_of_use_provider::AreaOfUseProvider;
+mod crs_metadata_provider;
+pub use crs_metadata_provider::CrsMetadataProvider;
 
 mod proj_projector;
-pub use proj_projector::{ProjAreaOfUseProvider, ProjCoordinateProjector};
+pub use proj_projector::{ProjCoordinateProjector, ProjMetadataProvider};
 
 mod geodesy_projector;
 pub use geodesy_projector::{Error as GeodesyProjectorError, GeodesyCoordinateProjector};
 
-mod static_epsg_area_provider;
-pub use static_epsg_area_provider::StaticEpsgAreaProvider;
+mod static_epsg_metadata_provider;
+pub use static_epsg_metadata_provider::StaticEpsgMetadataProvider;
 
 mod projection_provider;
 pub use projection_provider::CoordinateProjection;
 
-mod mixed_area_of_use_provider;
-pub use mixed_area_of_use_provider::MixedAreaOfUseProvider;
+mod mixed_metadata_provider;
+pub use mixed_metadata_provider::MixedMetadataProvider;
 
 mod mixed_projector;
 use mixed_projector::MixedCoordinateProjector;
 
 pub type DefaultCoordinateProjector = MixedCoordinateProjector;
-pub type DefaultAreaOfUseProvider = MixedAreaOfUseProvider;
+pub type DefaultMetadataProvider = MixedMetadataProvider;
 
 /// A spatial reference authority that is part of a spatial reference definition
 #[derive(
@@ -119,7 +113,7 @@ impl SpatialReference {
 
     /// Return the area of use in EPSG:4326 projection
     pub fn area_of_use<A: AxisAlignedRectangle>(self) -> Result<A> {
-        let provider = DefaultAreaOfUseProvider::new_known_crs(self)?;
+        let provider = DefaultMetadataProvider::new_known_crs(self)?;
         provider.area_of_use()
     }
 
@@ -128,7 +122,7 @@ impl SpatialReference {
         if self == Self::epsg_4326() {
             return self.area_of_use();
         }
-        let provider = DefaultAreaOfUseProvider::new_known_crs(self)?;
+        let provider = DefaultMetadataProvider::new_known_crs(self)?;
         provider.area_of_use_projected()
     }
 
@@ -159,106 +153,17 @@ impl SpatialReference {
             .transpose()
     }
 
-    /// Computes the equatorial radius of the ellipsoid associated with this spatial reference in meters.
-    /// This is a helper function for calculating the meters per unit for projections that use degrees as their unit of measurement.
+    /// Computes the meters per unit for this spatial reference.
+    ///
+    /// Projected CRS: meters per the CRS's linear unit (e.g. 1.0 for meter, 0.3048 for foot).
+    /// Geographic CRS: meters per degree (equatorial arc length).
     pub fn meters_per_unit(self) -> Result<f64> {
-        // hardcode some projections that are commonly
-        match (self.authority, self.code) {
-            (SpatialReferenceAuthority::Epsg, 4326) => return Ok(111_319.490_8), // WGS 84
-            (SpatialReferenceAuthority::Epsg, 3857 /* Web Mercator */ |  25832 /* ETRS89 / UTM zone 32N */)  => {
-                return Ok(1.0);
-            },
-            _ => {}
-        }
-
-        if self.uses_meters()? {
-            return Ok(1.0);
-        }
-
-        let proj_string = CString::new(self.proj_string()?).boxed_context(error::ProjInternal2)?;
-        let mut meters_per_degree = None;
-
-        unsafe {
-            // 1. Initialize the PROJ context and instantiate the CRS
-            let ctx = proj_context_create();
-            let crs = proj_create(ctx, proj_string.as_ptr());
-
-            if crs.is_null() {
-                proj_context_destroy(ctx);
-                return Err(error::Error::ProjStringUnresolvable { spatial_ref: self });
-            }
-
-            // 2. Fetch the underlying ellipsoid object from the CRS
-            let ellipsoid = proj_get_ellipsoid(ctx, crs);
-
-            if ellipsoid.is_null() {
-                proj_destroy(crs);
-                proj_context_destroy(ctx);
-                return Err(error::Error::ProjStringUnresolvable { spatial_ref: self });
-            }
-
-            let mut semi_major: f64 = 0.0;
-            let mut semi_minor: f64 = 0.0;
-            let mut is_semi_minor_computed: i32 = 0;
-            let mut inv_flattening: f64 = 0.0;
-
-            // 3. Extract the semi-major axis (Equatorial Radius)
-            let success = proj_ellipsoid_get_parameters(
-                ctx,
-                ellipsoid,
-                &raw mut semi_major,
-                &raw mut semi_minor,
-                &raw mut is_semi_minor_computed,
-                &raw mut inv_flattening,
-            );
-
-            if success == 1 {
-                // 4. Calculate the Equatorial Perimeter divided by 360 degrees
-                // WGS84 Semi-major axis (semi_major) = 6378137.0 meters
-                let equatorial_perimeter = semi_major * 2.0 * std::f64::consts::PI;
-                meters_per_degree = Some(equatorial_perimeter / 360.0);
-            }
-
-            // Clean up the main context, CRS and ellipsoid structures
-            proj_destroy(ellipsoid);
-            proj_destroy(crs);
-            proj_context_destroy(ctx);
-        }
-
-        if let Some(meters) = meters_per_degree {
-            Ok(meters)
-        } else {
-            Err(error::Error::ProjStringUnresolvable { spatial_ref: self })
-        }
+        DefaultMetadataProvider::new_known_crs(self)?.meters_per_unit()
     }
 
     /// Checks if the spatial reference uses meters as its unit of measurement.
-    /// This is a heuristic check and may not be 100% accurate for all projections.
     pub fn uses_meters(self) -> Result<bool> {
-        let proj_string = self.proj_string()?;
-
-        if proj_string.contains("+units=m") {
-            return Ok(true);
-        }
-
-        let proj = Proj::new_known_crs("EPSG:4326", &proj_string, None).map_err(|_| {
-            error::Error::InvalidProjDefinition {
-                proj_definition: proj_string.clone(),
-            }
-        })?;
-
-        // Using 500,000 Easting (UTM Center) and 100,000 Northing (just North of the Equator/Origin)
-        let (Ok(coord0), Ok(coord1)) = (
-            proj.project((500_000.0, 100_000.0), true),
-            proj.project((500_001.0, 100_000.0), true),
-        ) else {
-            // If the projection cannot handle these coordinates, it's likely not in meters
-            return Ok(false);
-        };
-
-        // If it handles meters, moving 1 meter changes the output degrees by a microscopic amount
-        let delta = f64::abs(coord1.0 - coord0.0);
-        Ok(delta < 0.1)
+        DefaultMetadataProvider::new_known_crs(self)?.uses_meters()
     }
 }
 
