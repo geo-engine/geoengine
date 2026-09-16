@@ -75,15 +75,27 @@ mat-drawer {
     gap: 0.5rem;
     align-items: center;
 
-    mat-button-toggle-group {
-        // width: 40px;
-        mat-button-toggle:first-child {
-            border-top-left-radius: 50%;
-            border-top-right-radius: 50%;
+    .zoom-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+
+        box-shadow: var(--mat-fab-small-pressed-container-elevation-shadow);
+        border-radius: 50%;
+        background: solid 1px var(--mat-button-toggle-divider-color);
+
+        .zoom-in {
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+
+            box-shadow: none;
         }
-        mat-button-toggle:last-child {
-            border-bottom-left-radius: 50%;
-            border-bottom-right-radius: 50%;
+
+        .zoom-out {
+            border-top-left-radius: 0;
+            border-top-right-radius: 0;
+
+            box-shadow: none;
         }
     }
 

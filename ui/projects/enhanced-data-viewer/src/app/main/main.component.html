@@ -99,20 +99,14 @@
         }
 
         <div class="side-buttons">
-            <mat-button-toggle-group
-                #zoomButtons="matButtonToggleGroup"
-                class="zoom"
-                vertical="true"
-                hideSingleSelectionIndicator="true"
-                hideMultipleSelectionIndicator="true"
-            >
-                <mat-button-toggle (click)="map.zoomIn(); zoomButtons.value = null" aria-label="Zoom In">
+            <div class="zoom-buttons">
+                <button type="button" matMiniFab aria-label="Zoom In" color class="zoom-in" (click)="map.zoomIn()">
                     <mat-icon>add</mat-icon>
-                </mat-button-toggle>
-                <mat-button-toggle (click)="map.zoomOut(); zoomButtons.value = null" aria-label="Zoom Out">
+                </button>
+                <button type="button" matMiniFab aria-label="Zoom Out" color class="zoom-out" (click)="map.zoomOut()">
                     <mat-icon>remove</mat-icon>
-                </mat-button-toggle>
-            </mat-button-toggle-group>
+                </button>
+            </div>
 
             <button
                 #measureButton="geoengineMeasure"

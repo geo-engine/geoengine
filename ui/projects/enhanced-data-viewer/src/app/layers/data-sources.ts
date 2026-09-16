@@ -17,6 +17,7 @@ export interface DataSourceDefinition {
     defaultPresetIndex: number;
     defaultTime: number;
     defaultTimeStep: TimeStepDuration;
+    citation: string; // TODO: get from provenance API
 }
 
 export interface DataSourceLayer {
@@ -52,6 +53,7 @@ export const DATA_SOURCES: DataSourceDefinition[] = [
         defaultPresetIndex: 0,
         defaultTime: 1775001600000,
         defaultTimeStep: {durationAmount: 1, durationUnit: 'month'},
+        citation: `Copernicus Sentinel data [Year]`,
         presets: [
             // Static
             {
@@ -96,6 +98,7 @@ export const DATA_SOURCES: DataSourceDefinition[] = [
         defaultPresetIndex: 0,
         defaultTime: 1775001600000,
         defaultTimeStep: {durationAmount: 1, durationUnit: 'day'},
+        citation: `Copernicus Sentinel data [Year]`,
         presets: [
             // Static
             {
@@ -148,6 +151,7 @@ export const DATA_SOURCES: DataSourceDefinition[] = [
         defaultPresetIndex: 0,
         defaultTime: 1767916800000,
         defaultTimeStep: {durationAmount: 1, durationUnit: 'day'},
+        citation: `Landsat imagery courtesy of the U.S. Geological Survey`,
         presets: [
             // Static
             {
@@ -208,6 +212,7 @@ export const DATA_SOURCES: DataSourceDefinition[] = [
         defaultPresetIndex: 0,
         defaultTime: 1730419200000,
         defaultTimeStep: {durationAmount: 2, durationUnit: 'months'},
+        citation: `Landsat imagery courtesy of the U.S. Geological Survey`,
         presets: [
             // Static
             {

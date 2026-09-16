@@ -1,14 +1,13 @@
-import {ChangeDetectionStrategy, Component, ResourceRef, afterNextRender, computed, inject, input, resource, signal} from '@angular/core';
+import {afterNextRender, ChangeDetectionStrategy, Component, computed, inject, signal} from '@angular/core';
 import {CoreModule, ProjectService} from '@geoengine/core';
 import {A11yModule} from '@angular/cdk/a11y';
-import {MatDatepickerModule, MatDatepickerInputEvent} from '@angular/material/datepicker';
+import {EdvLayersService} from './layers.service';
 import {MatCheckboxModule} from '@angular/material/checkbox';
 import {MatListModule} from '@angular/material/list';
-import {LayersService, Time} from '@geoengine/common';
+import {Time} from '@geoengine/common';
 import {toSignal} from '@angular/core/rxjs-interop';
-import {CollectionItem} from '@geoengine/api-client';
-import {ProviderLayerId} from '@geoengine/api-client/dist/models/ProviderLayerId';
-import {DATA_SOURCES, DataSourceLayer, PRESET_CATEGORY_LABELS, PresetCategory, VisualizationPreset} from './data-sources';
+import {DATA_SOURCES} from './data-sources';
+import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
 
 @Component({
     selector: 'geoengine-layers',
@@ -17,9 +16,13 @@ import {DATA_SOURCES, DataSourceLayer, PRESET_CATEGORY_LABELS, PresetCategory, V
         <div>
             <h2>Data Source</h2>
             <mat-selection-list [multiple]="false" class="data-sources" (selectionChange)="onDataSourceSelectionChange($event.options)">
-                @for (ds of dataSources; track ds.key) {
-                    <mat-list-option [value]="ds.key" [selected]="selectedDataSource() === ds.key" [matTooltip]="ds.name">
-                        <span matListItemTitle>{{ ds.name }}</span>
+                @for (dataSource of dataSources; track dataSource.key) {
+                    <mat-list-option
+                        [value]="dataSource.key"
+                        [selected]="selectedDataSource().key === dataSource.key"
+                        [matTooltip]="dataSource.name"
+                    >
+                        <span matListItemTitle>{{ dataSource.name }}</span>
                     </mat-list-option>
                 }
             </mat-selection-list>
@@ -31,7 +34,7 @@ import {DATA_SOURCES, DataSourceLayer, PRESET_CATEGORY_LABELS, PresetCategory, V
             <mat-checkbox [checked]="autoSelectTime()" (change)="autoSelectTime.set($event.checked)">Auto select time</mat-checkbox>
             <div>
                 <button
-                    mat-icon-button
+                    matIconButton
                     (click)="timeBackwards()"
                     matTooltip="Backwards {{ timeStepDuration()?.durationAmount }} {{ timeStepDuration()?.durationUnit }}"
                 >
@@ -41,7 +44,7 @@ import {DATA_SOURCES, DataSourceLayer, PRESET_CATEGORY_LABELS, PresetCategory, V
                 <button matButton (click)="picker.open()" class="calendar-open">{{ formattedTime() }}</button>
                 <mat-datepicker #picker></mat-datepicker>
                 <button
-                    mat-icon-button
+                    matIconButton
                     (click)="timeForward()"
                     matTooltip="Forward {{ timeStepDuration()?.durationAmount }} {{ timeStepDuration()?.durationUnit }}"
                 >
@@ -145,6 +148,11 @@ import {DATA_SOURCES, DataSourceLayer, PRESET_CATEGORY_LABELS, PresetCategory, V
                 .calendar-open {
                     flex: 1;
                 }
+
+                button[matIconButton],
+                a[matIconButton] {
+                    display: inline-flex; /* Icons are vertically centered differently otherwise. */
+                }
             }
 
             .visualization-presets {
@@ -187,6 +195,7 @@ import {DATA_SOURCES, DataSourceLayer, PRESET_CATEGORY_LABELS, PresetCategory, V
                     aspect-ratio: 2 / 1;
                     background-size: cover;
                     background-position: center;
+                    background-origin: border-box;
 
                     ::ng-deep .mdc-list-item__content {
                         align-self: flex-end;
@@ -221,9 +230,9 @@ import {DATA_SOURCES, DataSourceLayer, PRESET_CATEGORY_LABELS, PresetCategory, V
 })
 export class LayersComponent {
     readonly projectService = inject(ProjectService);
-    private readonly layerService = inject(LayersService);
+    readonly edvLayersService = inject(EdvLayersService);
 
-    readonly debug = input(false);
+    readonly debug = this.edvLayersService.debug;
 
     readonly currentTime = toSignal(this.projectService.getTimeStream());
     readonly formattedTime = computed<string>(() => {
@@ -239,81 +248,14 @@ export class LayersComponent {
     });
     readonly dataSources = DATA_SOURCES;
 
-    readonly selectedDataSource = signal<string>(DATA_SOURCES[0].key);
-    readonly selectedPresetIndex = signal<number>(0);
     readonly autoSelectTime = signal<boolean>(true);
 
-    readonly currentPresets = computed(() => {
-        const key = this.selectedDataSource();
-        const ds = DATA_SOURCES.find((d) => d.key === key);
-        const presets = ds?.presets ?? [];
-
-        // The static and ad-hoc presets are not production-ready yet; they are hidden
-        // unless the app is opened with the `debug` query parameter.
-        if (this.debug()) return presets;
-        return presets.filter((preset) => preset.category === 'harvested');
-    });
-
-    readonly presetGroups = computed(() => {
-        const presets = this.currentPresets();
-        const groups = new Map<PresetCategory, VisualizationPreset[]>();
-        for (const preset of presets) {
-            const group = groups.get(preset.category) ?? [];
-            group.push(preset);
-            groups.set(preset.category, group);
-        }
-        return Array.from(groups.entries()).map(([category, items]) => ({
-            category,
-            label: PRESET_CATEGORY_LABELS[category],
-            presets: items,
-        }));
-    });
-
-    readonly activePreset = computed(() => {
-        const presets = this.currentPresets();
-        const index = this.selectedPresetIndex();
-        return presets[index] ?? presets[0];
-    });
-
-    private readonly presetRequestParams = computed(() => {
-        const preset = this.activePreset();
-        if (!preset) return undefined;
-        return {connectorId: preset.connectorId, collectionId: preset.collectionId, name: preset.name};
-    });
-
-    readonly mapTileLayerResource: ResourceRef<DataSourceLayer | undefined> = resource({
-        params: () => this.presetRequestParams(),
-        loader: async ({params}) => {
-            if (!params) return undefined;
-
-            const limit = 20;
-            let offset = 0;
-            let layer: CollectionItem | undefined;
-
-            while (!layer) {
-                const items = await this.layerService.getLayerCollectionItems(params.connectorId, params.collectionId, offset, limit);
-
-                if (items.items.length === 0) break;
-
-                layer = items.items.find((item) => item.name === params.name);
-
-                if (items.items.length < limit) break;
-
-                offset += limit;
-            }
-
-            if (!layer) return undefined;
-
-            const id = layer.id as ProviderLayerId;
-
-            return {
-                dataConnectorId: id.providerId,
-                layerId: id.layerId,
-            };
-        },
-    });
-
-    readonly mapTileLayer = computed(() => this.mapTileLayerResource.value());
+    readonly selectedDataSource = this.edvLayersService.selectedDataSource;
+    readonly selectedDataSourceKey = computed(() => this.selectedDataSource()?.key ?? '');
+    readonly currentPresets = this.edvLayersService.currentPresets;
+    readonly presetGroups = this.edvLayersService.presetGroups;
+    readonly selectedPresetIndex = this.edvLayersService.selectedPresetIndex;
+    readonly mapTileLayer = this.edvLayersService.mapTileLayer;
 
     constructor() {
         afterNextRender(() => {
@@ -324,15 +266,15 @@ export class LayersComponent {
     private async setInitialTime(): Promise<void> {
         if (!this.autoSelectTime()) return;
 
-        const ds = DATA_SOURCES.find((d) => d.key === this.selectedDataSource());
-        if (!ds?.defaultTime) return;
+        const dataSource = this.selectedDataSource();
+        if (!dataSource?.defaultTime) return;
 
-        const utcDate = new Date(ds.defaultTime);
+        const utcDate = new Date(dataSource.defaultTime);
         const time = new Time(utcDate);
         await this.projectService.setTime(time);
 
-        if (ds.defaultTimeStep) {
-            this.projectService.setTimeStepDuration(ds.defaultTimeStep);
+        if (dataSource.defaultTimeStep) {
+            this.projectService.setTimeStepDuration(dataSource.defaultTimeStep);
         }
     }
 
@@ -342,22 +284,22 @@ export class LayersComponent {
         void this.setSelectedDataSource(selected);
     }
 
-    async setSelectedDataSource(value: string): Promise<void> {
-        const ds = DATA_SOURCES.find((d) => d.key === value);
-        if (!ds) return;
+    async setSelectedDataSource(key: string): Promise<void> {
+        const dataSource = DATA_SOURCES.find((d) => d.key === key);
+        if (!dataSource) return;
 
-        if (this.autoSelectTime() && ds.defaultTime) {
-            const utcDate = new Date(ds.defaultTime);
+        if (this.autoSelectTime() && dataSource.defaultTime) {
+            const utcDate = new Date(dataSource.defaultTime);
             const time = new Time(utcDate);
             await this.projectService.setTime(time);
         }
 
-        if (ds.defaultTimeStep) {
-            this.projectService.setTimeStepDuration(ds.defaultTimeStep);
+        if (dataSource.defaultTimeStep) {
+            this.projectService.setTimeStepDuration(dataSource.defaultTimeStep);
         }
 
-        this.selectedDataSource.set(value);
-        this.selectedPresetIndex.set(ds.defaultPresetIndex ?? 0);
+        this.selectedDataSource.set(dataSource);
+        this.selectedPresetIndex.set(dataSource.defaultPresetIndex ?? 0);
     }
 
     selectPreset(index: number): void {

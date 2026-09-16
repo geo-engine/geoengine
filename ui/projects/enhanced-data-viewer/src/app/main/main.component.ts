@@ -9,11 +9,12 @@ import {
     input,
     signal,
     viewChild,
+    effect,
 } from '@angular/core';
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {ProjectService, MapService, MapContainerComponent, CoreModule, SpatialReferenceService, WGS_84} from '@geoengine/core';
 import {AppConfig} from '../app-config.service';
-import {Layer, UserService} from '@geoengine/common';
+import {Layer, Time, UserService} from '@geoengine/common';
 import {MatToolbar, MatToolbarModule} from '@angular/material/toolbar';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
@@ -24,7 +25,8 @@ import {MatRadioModule} from '@angular/material/radio';
 import {A11yModule} from '@angular/cdk/a11y';
 import {MeasureDirective, MeasurementType} from './measure.directive';
 import {isActive, Router, RouterModule} from '@angular/router';
-import {LayersComponent} from '../layers/layers.component';
+import {addCitationToMapImage} from './map-image-export';
+import {EdvLayersService} from '../layers/layers.service';
 
 @Component({
     selector: 'geoengine-main',
@@ -56,12 +58,12 @@ export class MainComponent {
     readonly userService = inject(UserService);
     private readonly mapService = inject(MapService);
     private readonly router = inject(Router);
+    private readonly edvLayersService = inject(EdvLayersService);
 
     private readonly spatialReferenceService = inject(SpatialReferenceService);
 
     // Bound from the debug query parameter and passed to the layers controls.
     readonly debug = input(false, {transform: booleanAttribute});
-    readonly layersComponent = viewChild(LayersComponent);
 
     readonly topToolbar = viewChild.required<MatToolbar, ElementRef<HTMLElement>>('topToolbar', {read: ElementRef});
     readonly mapComponent = viewChild.required(MapContainerComponent);
@@ -78,9 +80,9 @@ export class MainComponent {
     readonly spatialReference = toSignal(this.projectService.getSpatialReferenceStream());
     readonly currentTime = toSignal(this.projectService.getTimeStream());
 
-    readonly mapTileLayer = computed(() => this.layersComponent()?.mapTileLayer());
+    readonly mapTileLayer = computed(() => this.edvLayersService.mapTileLayer());
     readonly tileLoading = signal(false);
-    readonly isLoading = computed(() => (this.layersComponent()?.mapTileLayerResource.isLoading() ?? false) || this.tileLoading());
+    readonly isLoading = computed(() => (this.edvLayersService.mapTileLayerResource.isLoading() ?? false) || this.tileLoading());
 
     readonly isLayersActive = isActive('/map/layers', this.router);
     readonly isComputeActive = isActive('/map/compute', this.router);
@@ -104,6 +106,10 @@ export class MainComponent {
                 const topToolbarObserver = new ResizeObserver(() => this.onToolbarResize());
                 topToolbarObserver.observe(this.topToolbar().nativeElement);
             },
+        });
+
+        effect(() => {
+            this.edvLayersService.debug.set(this.debug());
         });
     }
 
@@ -147,13 +153,18 @@ export class MainComponent {
 
         const [currentDate] = (this.currentTime()?.toString() ?? new Date().toISOString()).split('T');
         const currentLayer = this.layersReverse().at(-1)?.name ?? 'enhanced-data-viewer-map';
+        const citation = replaceCitationPlaceholders(
+            this.edvLayersService.selectedDataSource().citation ?? '',
+            this.currentTime() ?? new Date(),
+        );
 
         this.mapImageLoading.set(true);
 
         try {
             const mapImage = await this.mapComponent().mapAsImage();
+            const mapImageWithCitation = await addCitationToMapImage(mapImage, citation);
             const link = document.createElement('a');
-            link.href = mapImage;
+            link.href = mapImageWithCitation;
             link.download = `${currentDate} ${currentLayer}.png`;
             link.click();
             link.remove();
@@ -165,4 +176,14 @@ export class MainComponent {
 export interface LayerIdPair {
     dataConnectorId: string;
     layerId: string;
+}
+
+function replaceCitationPlaceholders(citation: string, currentTime: Time | Date): string {
+    let year;
+    if (currentTime instanceof Date) {
+        year = currentTime.getFullYear().toString();
+    } else {
+        year = currentTime.toString().substring(0, 4);
+    }
+    return citation.replace('[Year]', year);
 }
