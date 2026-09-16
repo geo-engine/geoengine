@@ -1,6 +1,6 @@
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {provideZonelessChangeDetection, Signal, signal} from '@angular/core';
+import {provideZonelessChangeDetection, Signal, signal, WritableSignal} from '@angular/core';
 import OlFeature from 'ol/Feature';
 import OlGeomPolygon from 'ol/geom/Polygon';
 import OlLayerVector from 'ol/layer/Vector';
@@ -27,11 +27,15 @@ import {
 } from '@geoengine/common';
 import {PlotOutputFormat, WrappedPlotOutput} from '@geoengine/api-client';
 import {ComputeComponent} from './compute.component';
+import {EdvLayersService} from '../layers/layers.service';
+import {DataSourceLayer} from '../layers/data-sources';
 
 describe('ComputeComponent', () => {
     let fixture: ComponentFixture<ComputeComponent>;
     let component: ComputeComponent;
     let overlayLayer: ReturnType<typeof signal<OlLayerVector<OlSourceVector<OlFeature>> | undefined>>;
+    let selectedLayerSignal: WritableSignal<DataSourceLayer | undefined>;
+    let edvLayersService: EdvLayersService;
 
     const createBoxOverlay = (): OlLayerVector<OlSourceVector<OlFeature>> => {
         const geometry = new OlGeomPolygon([
@@ -51,6 +55,10 @@ describe('ComputeComponent', () => {
 
     beforeEach(async () => {
         overlayLayer = signal<OlLayerVector<OlSourceVector<OlFeature>> | undefined>(undefined);
+        selectedLayerSignal = signal<DataSourceLayer | undefined>({
+            dataConnectorId: 'provider-id',
+            layerId: 'layer-id',
+        });
         globalThis.ResizeObserver = class {
             observe(): void {
                 // no-op in tests
@@ -88,6 +96,7 @@ describe('ComputeComponent', () => {
                 provideZonelessChangeDetection(),
                 {provide: BackendService, useValue: {}},
                 {provide: LayersService, useValue: layersService},
+                EdvLayersService,
                 {
                     provide: MapService,
                     useValue: {
@@ -109,9 +118,11 @@ describe('ComputeComponent', () => {
             imports: [ComputeComponent, MatDialogModule],
         }).compileComponents();
 
+        edvLayersService = TestBed.inject(EdvLayersService);
+        vi.spyOn(edvLayersService.mapTileLayerResource, 'value').mockImplementation(() => selectedLayerSignal());
+
         fixture = TestBed.createComponent(ComputeComponent);
         component = fixture.componentInstance;
-        fixture.componentRef.setInput('selectedRasterLayer', {dataConnectorId: 'provider-id', layerId: 'layer-id'});
         fixture.detectChanges();
         await fixture.whenStable();
     });
@@ -166,7 +177,7 @@ describe('ComputeComponent', () => {
         };
         component.plotData.set(plotOutput);
 
-        fixture.componentRef.setInput('selectedRasterLayer', {dataConnectorId: 'other-provider', layerId: 'ndvi-layer'});
+        selectedLayerSignal.set({dataConnectorId: 'other-provider', layerId: 'ndvi-layer'});
         fixture.detectChanges();
         await fixture.whenStable();
 
@@ -180,7 +191,7 @@ describe('ComputeComponent', () => {
 
     it('clears the bands and disables computation when no layer is selected', async () => {
         overlayLayer.set(createBoxOverlay());
-        fixture.componentRef.setInput('selectedRasterLayer', undefined);
+        selectedLayerSignal.set(undefined);
         fixture.detectChanges();
         await fixture.whenStable();
 
