@@ -18,10 +18,9 @@ export class EdvLayersService {
         const dataSource = this.selectedDataSource();
         const presets = dataSource?.presets ?? [];
 
-        // The static and ad-hoc presets are not production-ready yet; they are hidden
-        // unless the app is opened with the `debug` query parameter.
+        // Show ad-hoc presets by default and all categories with the `debug` query parameter.
         if (this.debug()) return presets;
-        return presets.filter((preset) => preset.category === 'harvested');
+        return presets.filter((preset) => preset.category === 'adHoc');
     });
 
     readonly presetGroups = computed(() => {

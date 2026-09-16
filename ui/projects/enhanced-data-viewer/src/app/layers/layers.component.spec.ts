@@ -40,10 +40,10 @@ describe('LayersComponent', () => {
         fixture = TestBed.createComponent(LayersComponent);
     });
 
-    it('shows harvested presets by default and exposes all categories in debug mode', async () => {
+    it('shows ad-hoc presets by default and exposes all categories in debug mode', async () => {
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(fixture.componentInstance.currentPresets().map((preset) => preset.category)).toEqual(['harvested', 'harvested']);
+        expect(fixture.componentInstance.currentPresets().map((preset) => preset.category)).toEqual(['adHoc']);
         expect((fixture.nativeElement as HTMLElement).querySelectorAll('.preset-group-label')).toHaveLength(0);
 
         edvLayersService.debug.set(true);
@@ -55,24 +55,25 @@ describe('LayersComponent', () => {
     });
 
     it('finds a preset beyond the first collection page and updates the selected map layer', async () => {
+        await fixture.componentInstance.setSelectedDataSource('landsat');
         getLayerCollectionItems
             .mockResolvedValueOnce({items: Array.from({length: 20}, (_, index) => ({name: `Other ${index}`}))})
             .mockResolvedValueOnce({
-                items: [{name: 'Sentinel-1 VV Band (Harvested)', id: {providerId: 'provider', layerId: 'vv'}}],
+                items: [{name: 'Landsat C2 L1 OLI/TIRS Provider', id: {providerId: 'provider', layerId: 'default'}}],
             });
         fixture.detectChanges();
         await fixture.whenStable();
         expect(getLayerCollectionItems).toHaveBeenNthCalledWith(2, expect.any(String), expect.any(String), 20, 20);
-        expect(fixture.componentInstance.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
+        expect(fixture.componentInstance.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'default'});
 
         getLayerCollectionItems.mockResolvedValue({
-            items: [{name: 'Sentinel-1 SAR False Color (Harvested)', id: {providerId: 'provider', layerId: 'false-color'}}],
+            items: [{name: 'Landsat C2 L1 OLI/TIRS Provider True Color', id: {providerId: 'provider', layerId: 'true-color'}}],
         });
         const presets = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.visualization-presets mat-list-item');
         presets[1].click();
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(fixture.componentInstance.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'false-color'});
+        expect(fixture.componentInstance.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'true-color'});
     });
 
     it('applies datasource time defaults and preserves the date when auto selection is disabled', async () => {
