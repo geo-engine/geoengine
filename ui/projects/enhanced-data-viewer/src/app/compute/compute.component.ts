@@ -6,7 +6,6 @@ import {
     DestroyRef,
     ElementRef,
     inject,
-    input,
     linkedSignal,
     resource,
     signal,
@@ -36,6 +35,7 @@ import {
 import {firstValueFrom} from 'rxjs';
 import OlPolygon from 'ol/geom/Polygon';
 import {LayerIdPair} from '../main/main.component';
+import {EdvLayersService} from '../layers/layers.service';
 import {PlotOutputFormat, RasterBandDescriptor, WrappedPlotOutput} from '@geoengine/api-client';
 import {PlotDialogComponent} from './plot-dialog.component';
 
@@ -64,7 +64,7 @@ import {PlotDialogComponent} from './plot-dialog.component';
             }
 
             @if (isLoading()) {
-                <mat-progress-spinner></mat-progress-spinner>
+                <mat-progress-spinner mode="indeterminate" [diameter]="spinnerWidthPx()"></mat-progress-spinner>
             }
 
             @if (plotData(); as plotData) {
@@ -146,11 +146,13 @@ export class ComputeComponent {
     private readonly plotsService = inject(PlotsService);
     private readonly projectService = inject(ProjectService);
     private readonly userService = inject(UserService);
+    private readonly edvLayerService = inject(EdvLayersService);
 
     readonly plotWidthPx = signal(0);
+    readonly spinnerWidthPx = computed(() => Math.round(this.plotWidthPx() / 2));
     readonly hostElement = inject(ElementRef).nativeElement as HTMLElement;
 
-    readonly selectedRasterLayer = input<LayerIdPair>();
+    readonly selectedRasterLayer = this.edvLayerService.mapTileLayerResource.value;
     readonly selectedProcessingGraphId = resource<string | undefined, LayerIdPair | undefined>({
         params: () => this.selectedRasterLayer(),
         loader: async ({params: rasterLayer}): Promise<string | undefined> => {

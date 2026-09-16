@@ -37,6 +37,8 @@ npm-debug.log
 yarn-error.log
 testem.log
 /typings
+.vitest-attachments
+__screenshots__
 
 # System Files
 .DS_Store
