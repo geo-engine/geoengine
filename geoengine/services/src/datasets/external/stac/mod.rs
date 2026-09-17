@@ -52,8 +52,7 @@ fn default_page_limit() -> i64 {
     DEFAULT_PAGE_LIMIT
 }
 
-#[derive(Clone, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
-#[postgres(name = "StacProviderS3Config")]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct StacProviderS3Config {
     pub endpoint: String,
     pub access_key: Option<String>,

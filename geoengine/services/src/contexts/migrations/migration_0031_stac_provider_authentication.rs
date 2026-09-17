@@ -6,8 +6,8 @@ use crate::{
 use async_trait::async_trait;
 use tokio_postgres::Transaction;
 
-/// This migration adds optional OAuth password-grant authentication to STAC providers,
-/// storing passwords as authenticated ciphertext with a separate nonce.
+/// This migration adds optional OAuth password-grant authentication and encrypted S3 credentials to STAC providers,
+/// storing credentials as authenticated ciphertext with separate nonces.
 pub struct Migration0031StacProviderAuthentication;
 
 #[async_trait]
