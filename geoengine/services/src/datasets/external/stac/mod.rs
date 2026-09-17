@@ -11,7 +11,7 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{RasterBandDescriptor, SpatialGridDescriptor};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 mod auth;
 mod cache;
@@ -52,7 +52,7 @@ fn default_page_limit() -> i64 {
     DEFAULT_PAGE_LIMIT
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
 #[postgres(name = "StacProviderS3Config")]
 pub struct StacProviderS3Config {
     pub endpoint: String,
@@ -60,12 +60,41 @@ pub struct StacProviderS3Config {
     pub secret_key: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+impl fmt::Debug for StacProviderS3Config {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("StacProviderS3Config")
+            .field("endpoint", &self.endpoint)
+            .field(
+                "access_key",
+                &self.access_key.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field(
+                "secret_key",
+                &self.secret_key.as_ref().map(|_| "[REDACTED]"),
+            )
+            .finish()
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct StacProviderAuthentication {
     pub endpoint: String,
     pub client_id: String,
     pub username: String,
     pub password: String,
+}
+
+impl fmt::Debug for StacProviderAuthentication {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("StacProviderAuthentication")
+            .field("endpoint", &self.endpoint)
+            .field("client_id", &self.client_id)
+            .field("username", &self.username)
+            .field("password", &"[REDACTED]")
+            .finish()
+    }
 }
 
 /// A geo engine dataset derived from a STAC collection.

@@ -8,7 +8,7 @@ use crate::util::encryption::{
 };
 use bytes::BytesMut;
 use postgres_types::{FromSql, IsNull, ToSql, Type, to_sql_checked};
-use std::sync::LazyLock;
+use std::{fmt, sync::LazyLock};
 
 type StorageError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -29,7 +29,7 @@ fn password_encryption() -> Result<&'static OptionalStringEncryption, StorageErr
         .map_err(|error| error.to_string().into())
 }
 
-#[derive(Debug, ToSql, FromSql)]
+#[derive(ToSql, FromSql)]
 #[postgres(name = "StacProviderAuthentication")]
 struct StoredStacProviderAuthentication {
     endpoint: String,
@@ -37,6 +37,22 @@ struct StoredStacProviderAuthentication {
     username: String,
     password: Vec<u8>,
     password_encryption_nonce: Option<U96>,
+}
+
+impl fmt::Debug for StoredStacProviderAuthentication {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("StoredStacProviderAuthentication")
+            .field("endpoint", &self.endpoint)
+            .field("client_id", &self.client_id)
+            .field("username", &self.username)
+            .field("password", &"[REDACTED]")
+            .field(
+                "password_encryption_nonce",
+                &self.password_encryption_nonce.is_some(),
+            )
+            .finish()
+    }
 }
 
 impl StoredStacProviderAuthentication {
