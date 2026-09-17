@@ -23,6 +23,18 @@ mod storage;
 const DEFAULT_QUERY_TIMEOUT_SECS: i64 = 60;
 const DEFAULT_PAGE_LIMIT: i64 = 100;
 
+fn validate_authentication(
+    authentication: Option<&StacProviderAuthentication>,
+) -> crate::error::Result<()> {
+    if authentication.is_some_and(|authentication| authentication.password == SECRET_REPLACEMENT) {
+        return Err(crate::error::Error::InvalidConfig {
+            reason: "STAC authentication password must not be the secret replacement placeholder"
+                .to_owned(),
+        });
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
 #[postgres(name = "StacDataProviderDefinition")]
 #[serde(rename_all = "camelCase")]
@@ -176,6 +188,7 @@ impl StacProviderDatasetBand {
 #[async_trait]
 impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
     async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
+        validate_authentication(self.authentication.as_ref())?;
         if self.time_dimension == TimeDimension::Irregular {
             return Err(crate::error::Error::StacIrregularTimeDimensionNotSupported);
         }
@@ -225,6 +238,10 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
     {
         Ok(match new {
             TypedDataProviderDefinition::StacDataProviderDefinition(mut new) => {
+                if self.authentication.is_none() {
+                    validate_authentication(new.authentication.as_ref())?;
+                }
+
                 if let (Some(current_s3), Some(new_s3)) = (&self.s3_config, &mut new.s3_config) {
                     if new_s3.access_key.as_deref() == Some(SECRET_REPLACEMENT) {
                         new_s3.access_key.clone_from(&current_s3.access_key);
@@ -388,5 +405,16 @@ mod tests {
             &url::Url::parse("https://example.test/api").unwrap(),
             &url::Url::parse("https://other.test/api").unwrap(),
         ));
+    }
+    #[test]
+    fn secret_replacement_is_rejected_without_existing_authentication() {
+        let authentication = StacProviderAuthentication {
+            endpoint: "https://identity.example/token".into(),
+            client_id: "client".into(),
+            username: "user".into(),
+            password: SECRET_REPLACEMENT.into(),
+        };
+        assert!(validate_authentication(Some(&authentication)).is_err());
+        assert!(validate_authentication(None).is_ok());
     }
 }
