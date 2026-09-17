@@ -3,6 +3,7 @@ use crate::error::Result;
 use reqwest::RequestBuilder;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::num::NonZeroU64;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::RwLock;
@@ -15,7 +16,7 @@ const TOKEN_REFRESH_RETRY_DELAY: Duration = Duration::from_secs(1);
 struct TokenResponse {
     access_token: String,
     refresh_token: Option<String>,
-    expires_in: u64,
+    expires_in: NonZeroU64,
     refresh_expires_in: Option<u64>,
 }
 
@@ -24,7 +25,9 @@ impl TokenResponse {
         let lifetime = self
             .refresh_expires_in
             .filter(|&lifetime| lifetime > 0)
-            .map_or(self.expires_in, |lifetime| self.expires_in.min(lifetime));
+            .map_or(self.expires_in.get(), |lifetime| {
+                self.expires_in.get().min(lifetime)
+            });
         Duration::from_secs(lifetime)
             .mul_f64(TOKEN_REFRESH_FACTOR)
             .max(Duration::from_millis(100))
@@ -204,6 +207,16 @@ mod tests {
             assert!(tokens.refresh_token.is_none());
             assert_eq!(tokens.refresh_delay(), Duration::from_secs(80));
         }
+    }
+
+    #[test]
+    fn zero_access_token_lifetime_is_rejected() {
+        let response = serde_json::json!({
+            "access_token": "access",
+            "expires_in": 0
+        });
+
+        assert!(serde_json::from_value::<TokenResponse>(response).is_err());
     }
 
     #[tokio::test]
