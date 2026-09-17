@@ -35,6 +35,8 @@ pub enum EncryptionError {
         some: String,
         none: String,
     },
+    #[snafu(display("An encryption key is required to store STAC credentials"))]
+    MissingEncryptionKey,
 }
 
 impl From<aes_gcm::Error> for EncryptionError {
@@ -142,6 +144,10 @@ impl OptionalStringEncryption {
         string_encryption: Option<AesGcmStringPasswordEncryption>,
     ) -> OptionalStringEncryption {
         OptionalStringEncryption { string_encryption }
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.string_encryption.is_some()
     }
 
     pub fn to_bytes(&self, value: String) -> Result<MaybeEncryptedBytes, EncryptionError> {

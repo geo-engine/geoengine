@@ -4,7 +4,8 @@
 use super::{StacProviderAuthentication, StacProviderS3Config};
 use crate::config::{DataProvider, get_config_element};
 use crate::util::encryption::{
-    AesGcmStringPasswordEncryption, MaybeEncryptedBytes, OptionalStringEncryption, U96,
+    AesGcmStringPasswordEncryption, EncryptionError, MaybeEncryptedBytes, OptionalStringEncryption,
+    U96,
 };
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use bytes::BytesMut;
@@ -28,6 +29,15 @@ fn password_encryption() -> Result<&'static OptionalStringEncryption, StorageErr
     PASSWORD_ENCRYPTION
         .as_ref()
         .map_err(|error| error.to_string().into())
+}
+fn require_credential_encryption(
+    encryption: &OptionalStringEncryption,
+    has_credentials: bool,
+) -> Result<(), StorageError> {
+    if has_credentials && !encryption.is_enabled() {
+        return Err(EncryptionError::MissingEncryptionKey.into());
+    }
+    Ok(())
 }
 
 #[derive(ToSql, FromSql)]
@@ -211,7 +221,9 @@ impl StoredStacProviderAuthentication {
 
 impl ToSql for StacProviderAuthentication {
     fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> Result<IsNull, StorageError> {
-        StoredStacProviderAuthentication::encrypt(self, password_encryption()?)?.to_sql(ty, out)
+        let encryption = password_encryption()?;
+        require_credential_encryption(encryption, true)?;
+        StoredStacProviderAuthentication::encrypt(self, encryption)?.to_sql(ty, out)
     }
 
     fn accepts(ty: &Type) -> bool {
@@ -233,7 +245,12 @@ impl FromSql<'_> for StacProviderAuthentication {
 
 impl ToSql for StacProviderS3Config {
     fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> Result<IsNull, StorageError> {
-        StoredStacProviderS3Config::encrypt(self, password_encryption()?)?.to_sql(ty, out)
+        let encryption = password_encryption()?;
+        require_credential_encryption(
+            encryption,
+            self.access_key.is_some() || self.secret_key.is_some(),
+        )?;
+        StoredStacProviderS3Config::encrypt(self, encryption)?.to_sql(ty, out)
     }
 
     fn accepts(ty: &Type) -> bool {
@@ -277,6 +294,16 @@ mod tests {
             access_key: Some("access-key-must-be-encrypted".into()),
             secret_key: Some("secret-key-must-be-encrypted".into()),
         }
+    }
+
+    #[test]
+    fn credential_writes_require_encryption_key() {
+        let configured = password_encryption().unwrap();
+        let unconfigured = OptionalStringEncryption::new(None);
+
+        assert!(require_credential_encryption(configured, true).is_ok());
+        assert!(require_credential_encryption(&unconfigured, false).is_ok());
+        assert!(require_credential_encryption(&unconfigured, true).is_err());
     }
 
     #[test]

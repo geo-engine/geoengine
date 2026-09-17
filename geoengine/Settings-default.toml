@@ -99,8 +99,8 @@ max_image_height = 4096
 
 [dataprovider]
 # Optional key material for AES-256-GCM encryption of STAC passwords in PostgreSQL.
-# When omitted, passwords are stored as plaintext. Existing plaintext passwords
-# remain readable after enabling encryption and are encrypted on their next update.
+# A key is required when writing credential-bearing STAC providers. Existing plaintext
+# credentials remain readable after enabling encryption and are encrypted on their next update.
 # Keep this key stable and backed up separately from the database. Changing or removing
 # it makes encrypted credentials unreadable. Restart the service after configuring it.
 # Prefer GEOENGINE__DATAPROVIDER__PASSWORD_ENCRYPTION_KEY for deployment secrets.
