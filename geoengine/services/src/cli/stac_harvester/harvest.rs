@@ -160,7 +160,7 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
 
     // Separate reqwest client for STAC API calls (not Geo Engine)
     let stac_client = StacClient::new(reqwest::Client::new())
-        .with_authentication(provider_def.authentication.clone())
+        .with_authentication(provider_def.authentication.clone(), &provider_def.api_url)
         .await
         .context("Cannot authenticate with STAC API")?;
 
@@ -929,7 +929,7 @@ async fn query_item_collection_internal(
                 || async {
                     client
                         .get(query_url)
-                        .await
+                        .await?
                         .query(&query_params)
                         .send()
                         .await?
@@ -958,7 +958,7 @@ async fn query_item_collection_internal(
                 || async {
                     client
                         .get(next_url)
-                        .await
+                        .await?
                         .send()
                         .await?
                         .error_for_status()?
@@ -1445,7 +1445,7 @@ mod tests {
                 server.expect(expectation.respond_with(responders::json_encoded(page)));
             }
             let client = StacClient::new(reqwest::Client::new())
-                .with_authentication(authentication)
+                .with_authentication(authentication, &server.url_str("/"))
                 .await
                 .unwrap();
             let pages = create_page_stream(

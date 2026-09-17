@@ -76,7 +76,7 @@ async fn query_stac_item_collection(
 
             let item_collection: stac::ItemCollection = retry_http(
                 || async {
-                    let request = client.get(query_url.clone()).await.query(query_params);
+                    let request = client.get(query_url.clone()).await?.query(query_params);
 
                     request.send().await?.error_for_status()?.json().await
                 },
@@ -114,7 +114,7 @@ async fn query_stac_item_collection(
 
             let item_collection: stac::ItemCollection = retry_http(
                 || async {
-                    let request = client.get(next_url.clone()).await;
+                    let request = client.get(next_url.clone()).await?;
 
                     request.send().await?.error_for_status()?.json().await
                 },
@@ -838,14 +838,17 @@ mod tests {
         );
 
         let client = StacClient::new(reqwest::Client::new())
-            .with_authentication(Some(
-                crate::datasets::external::stac::StacProviderAuthentication {
-                    endpoint: server.url_str("/token"),
-                    client_id: "my-client-id".to_owned(),
-                    username: "test-user".to_owned(),
-                    password: "test-password".to_owned(),
-                },
-            ))
+            .with_authentication(
+                Some(
+                    crate::datasets::external::stac::StacProviderAuthentication {
+                        endpoint: server.url_str("/token"),
+                        client_id: "my-client-id".to_owned(),
+                        username: "test-user".to_owned(),
+                        password: "test-password".to_owned(),
+                    },
+                ),
+                &server.url_str("/"),
+            )
             .await
             .expect("initial password grant should succeed");
 

@@ -194,7 +194,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
 
         provider.client = provider
             .client
-            .with_authentication(self.authentication)
+            .with_authentication(self.authentication, &provider.api_url)
             .await?;
 
         Ok(Box::new(provider))
@@ -321,6 +321,7 @@ impl DataProvider for StacDataProvider {
 pub(crate) struct StacClient {
     client: reqwest::Client,
     authentication: Option<auth::StacAuthentication>,
+    authentication_origin: Option<url::Url>,
 }
 
 impl StacClient {
@@ -328,13 +329,19 @@ impl StacClient {
         Self {
             client,
             authentication: None,
+            authentication_origin: None,
         }
     }
 
     pub(crate) async fn with_authentication(
         mut self,
         config: Option<StacProviderAuthentication>,
+        stac_api_url: &str,
     ) -> crate::error::Result<Self> {
+        self.authentication_origin = config
+            .as_ref()
+            .map(|_| url::Url::parse(stac_api_url))
+            .transpose()?;
         self.authentication = match config {
             Some(config) => {
                 Some(auth::StacAuthentication::initialize(self.client.clone(), config).await?)
@@ -344,11 +351,42 @@ impl StacClient {
         Ok(self)
     }
 
-    pub(crate) async fn get(&self, url: impl reqwest::IntoUrl) -> reqwest::RequestBuilder {
-        let request = self.client.get(url);
-        match &self.authentication {
-            Some(authentication) => authentication.authorize(request).await,
-            None => request,
+    pub(crate) async fn get(
+        &self,
+        url: impl reqwest::IntoUrl,
+    ) -> reqwest::Result<reqwest::RequestBuilder> {
+        let url = url.into_url()?;
+        let request = self.client.get(url.clone());
+        match (&self.authentication, &self.authentication_origin) {
+            (Some(authentication), Some(authentication_origin))
+                if same_origin(authentication_origin, &url) =>
+            {
+                Ok(authentication.authorize(request).await)
+            }
+            _ => Ok(request),
         }
+    }
+}
+
+fn same_origin(expected: &url::Url, actual: &url::Url) -> bool {
+    expected.scheme() == actual.scheme()
+        && expected.host() == actual.host()
+        && expected.port_or_known_default() == actual.port_or_known_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn same_origin_ignores_path_but_checks_scheme_host_and_port() {
+        assert!(same_origin(
+            &url::Url::parse("https://example.test/api").unwrap(),
+            &url::Url::parse("https://example.test/other").unwrap(),
+        ));
+        assert!(!same_origin(
+            &url::Url::parse("https://example.test/api").unwrap(),
+            &url::Url::parse("https://other.test/api").unwrap(),
+        ));
     }
 }
