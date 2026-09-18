@@ -496,3 +496,80 @@ impl CacheControlHeader for CacheHint {
         (actix_http::header::CACHE_CONTROL, value)
     }
 }
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn it_invalidates_old_fd_flag_on_fd_reuse() {
+        use std::os::unix::io::AsRawFd;
+
+        let listener =
+            std::net::TcpListener::bind("127.0.0.1:0").expect("should bind to a free port");
+        let address = listener
+            .local_addr()
+            .expect("should return the listener's address");
+
+        let client_a =
+            std::net::TcpStream::connect(address).expect("should connect to the listener");
+        let accepted_a = listener.accept().expect("should accept connection a").0;
+        accepted_a
+            .set_nonblocking(true)
+            .expect("should make connection a non-blocking");
+        let connection_a = tokio::net::TcpStream::from_std(accepted_a)
+            .expect("should register connection a with the io driver");
+        let fd_a = connection_a.as_raw_fd();
+
+        let mut data_a = Extensions::default();
+        connection_init(&connection_a, &mut data_a);
+        let socket_fd_a = data_a
+            .remove::<SocketFd>()
+            .expect("connection_init should insert a SocketFd");
+        assert!(
+            socket_fd_a
+                .still_open
+                .load(std::sync::atomic::Ordering::SeqCst)
+        );
+
+        drop(connection_a);
+        drop(client_a);
+
+        let client_b =
+            std::net::TcpStream::connect(address).expect("should connect to the listener");
+        let accepted_b = listener.accept().expect("should accept connection b").0;
+        accepted_b
+            .set_nonblocking(true)
+            .expect("should make connection b non-blocking");
+        let connection_b = tokio::net::TcpStream::from_std(accepted_b)
+            .expect("should register connection b with the io driver");
+
+        // Linux allocates the lowest free fd number, so closing connection_a hands it back and the
+        // new connection reuses it. The test relies on this for determinism.
+        assert_eq!(
+            connection_b.as_raw_fd(),
+            fd_a,
+            "the kernel should have reused the fd of the closed connection"
+        );
+
+        let mut data_b = Extensions::default();
+        connection_init(&connection_b, &mut data_b);
+
+        // the flag of the old connection must be invalidated so its monitor reports the close
+        assert!(
+            !socket_fd_a
+                .still_open
+                .load(std::sync::atomic::Ordering::SeqCst)
+        );
+        let socket_fd_b = data_b
+            .get::<SocketFd>()
+            .expect("connection_init should insert a SocketFd");
+        assert!(
+            socket_fd_b
+                .still_open
+                .load(std::sync::atomic::Ordering::SeqCst)
+        );
+
+        drop(client_b);
+    }
+}
