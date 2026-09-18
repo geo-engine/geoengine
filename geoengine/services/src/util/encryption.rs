@@ -35,6 +35,8 @@ pub enum EncryptionError {
         some: String,
         none: String,
     },
+    #[snafu(display("An encryption key is required to store STAC credentials"))]
+    MissingEncryptionKey,
 }
 
 impl From<aes_gcm::Error> for EncryptionError {
@@ -79,7 +81,8 @@ impl ToSql for U96 {
 
 impl<'a> FromSql<'a> for U96 {
     fn from_sql(_ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
-        Ok(U96(*Array::from_slice(raw)))
+        let nonce: [u8; 12] = raw.try_into()?;
+        Ok(U96(nonce.into()))
     }
 
     accepts!(BYTEA);
@@ -141,6 +144,10 @@ impl OptionalStringEncryption {
         string_encryption: Option<AesGcmStringPasswordEncryption>,
     ) -> OptionalStringEncryption {
         OptionalStringEncryption { string_encryption }
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.string_encryption.is_some()
     }
 
     pub fn to_bytes(&self, value: String) -> Result<MaybeEncryptedBytes, EncryptionError> {

@@ -2,6 +2,7 @@ use crate::error::{Error, Result};
 use bytes::BytesMut;
 use postgres_types::{FromSql, ToSql, to_sql_checked};
 use serde::{Deserialize, Serialize, Serializer};
+use std::fmt;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -148,7 +149,7 @@ pub fn join_base_url_and_path(base_url: &Url, path: &str) -> Result<Url, url::Pa
 /// A wrapper type that serializes to "*****" and can be deserialized from any string.
 /// If the inner value is "*****", it is considered unknown and `as_option` returns `None`.
 /// This is useful for secrets that should not be exposed in API responses, but can be set in API requests.
-#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[derive(Clone, Deserialize, ToSchema)]
 #[serde(transparent)]
 #[schema(value_type = String)]
 pub struct Secret<T>(pub T);
@@ -188,6 +189,12 @@ where
         S: Serializer,
     {
         serializer.serialize_str(SECRET_STR)
+    }
+}
+
+impl<T> fmt::Debug for Secret<T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_tuple("Secret").field(&SECRET_STR).finish()
     }
 }
 
@@ -316,5 +323,14 @@ mod mod_tests {
                 .to_string(),
             "https://example.com/foo/bar/baz"
         );
+    }
+
+    #[test]
+    fn secret_debug_is_redacted() {
+        let secret = Secret::new("do-not-log");
+        let debug = format!("{secret:?}");
+
+        assert!(!debug.contains("do-not-log"));
+        assert!(debug.contains(SECRET_STR));
     }
 }

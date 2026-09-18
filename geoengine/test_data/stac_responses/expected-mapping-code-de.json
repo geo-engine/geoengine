@@ -7,6 +7,7 @@
   "apiUrl": "https://stac.test/v1",
   "collectionName": "sentinel-2-l2a",
   "s3Config": null,
+  "authentication": null,
   "timeDimension": {
     "type": "regular",
     "origin": 0,
