@@ -155,12 +155,23 @@ where
 
 /// This type allows aborting all streams that were wrapped using the corresponding
 /// `QueryAbortRegistration`.
+///
+/// Dropping the trigger cancels the query, just like the `Trigger` of the formerly used
+/// `stream-cancel` crate did. This way, a trigger that is dropped by mistake on some
+/// error path cannot leak a still-running query. Use [`QueryAbortTrigger::abort`] to
+/// make the cancellation explicit.
 pub struct QueryAbortTrigger {
     token: CancellationToken,
 }
 
 impl QueryAbortTrigger {
     pub fn abort(self) {
+        self.token.cancel();
+    }
+}
+
+impl Drop for QueryAbortTrigger {
+    fn drop(&mut self) {
         self.token.cancel();
     }
 }
@@ -335,13 +346,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_completes_normally_when_trigger_is_dropped_unfired() {
+    async fn it_cancels_when_trigger_is_dropped() {
         let (registration, trigger) = QueryAbortRegistration::new();
         drop(trigger);
 
-        let stream = registration.wrap(stream::iter(vec![Ok(1), Ok(2)]));
-        let items = stream.collect::<Vec<_>>().await;
+        let mut stream = Box::pin(registration.wrap(stream::pending::<Result<i32>>()));
 
-        assert!(matches!(items[..], [Ok(1), Ok(2)]));
+        assert!(matches!(
+            stream.next().await,
+            Some(Err(error::Error::QueryCanceled))
+        ));
+        assert!(stream.next().await.is_none());
     }
 }
