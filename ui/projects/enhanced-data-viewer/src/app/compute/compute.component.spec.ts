@@ -1,19 +1,41 @@
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {provideZonelessChangeDetection, Signal, signal} from '@angular/core';
+import {provideZonelessChangeDetection, Signal, signal, WritableSignal} from '@angular/core';
 import OlFeature from 'ol/Feature';
 import OlGeomPolygon from 'ol/geom/Polygon';
 import OlLayerVector from 'ol/layer/Vector';
 import OlSourceVector from 'ol/source/Vector';
 import OlGeometry from 'ol/geom/Geometry';
-import {BackendService, MapService, ProjectService} from '@geoengine/core';
-import {BoundingBox2D, LayersService, NotificationService, PlotsService, SpatialReference, UserService} from '@geoengine/common';
+import {MatDialog, MatDialogModule} from '@angular/material/dialog';
+import {BackendService, CoreConfig, MapService, ProjectService} from '@geoengine/core';
+import {
+    BoundingBox2D,
+    CommonConfig,
+    Coordinate2D,
+    GeoTransform,
+    GridBoundingBox2D,
+    GridIdx2D,
+    LayersService,
+    NotificationService,
+    PlotsService,
+    RasterDataTypes,
+    RasterLayerMetadata,
+    SpatialGridDefinition,
+    SpatialGridDescriptor,
+    SpatialReference,
+    UserService,
+} from '@geoengine/common';
+import {PlotOutputFormat, WrappedPlotOutput} from '@geoengine/api-client';
 import {ComputeComponent} from './compute.component';
+import {EdvLayersService} from '../layers/layers.service';
+import {DataSourceLayer} from '../layers/data-sources';
 
 describe('ComputeComponent', () => {
     let fixture: ComponentFixture<ComputeComponent>;
     let component: ComputeComponent;
     let overlayLayer: ReturnType<typeof signal<OlLayerVector<OlSourceVector<OlFeature>> | undefined>>;
+    let selectedLayerSignal: WritableSignal<DataSourceLayer | undefined>;
+    let edvLayersService: EdvLayersService;
 
     const createBoxOverlay = (): OlLayerVector<OlSourceVector<OlFeature>> => {
         const geometry = new OlGeomPolygon([
@@ -33,6 +55,10 @@ describe('ComputeComponent', () => {
 
     beforeEach(async () => {
         overlayLayer = signal<OlLayerVector<OlSourceVector<OlFeature>> | undefined>(undefined);
+        selectedLayerSignal = signal<DataSourceLayer | undefined>({
+            dataConnectorId: 'provider-id',
+            layerId: 'layer-id',
+        });
         globalThis.ResizeObserver = class {
             observe(): void {
                 // no-op in tests
@@ -47,20 +73,30 @@ describe('ComputeComponent', () => {
 
         const layersService = {
             registerAndGetLayerWorkflowId: vi.fn().mockResolvedValue('workflow-id'),
-            getWorkflowIdMetadata: vi.fn().mockResolvedValue({
-                layerType: 'raster',
-                bands: [{name: 'red'}],
-                pixelSizeX: 1,
-                pixelSizeY: 1,
-                spatialReference: {srid: 4326},
-            }),
-        };
+            getWorkflowIdMetadata: vi
+                .fn()
+                .mockResolvedValue(
+                    new RasterLayerMetadata(
+                        RasterDataTypes.Float32,
+                        new SpatialReference('EPSG:4326'),
+                        [{name: 'red', measurement: {type: 'unitless'}}],
+                        new SpatialGridDescriptor(
+                            new SpatialGridDefinition(
+                                new GeoTransform(new Coordinate2D([0, 0]), 1, 1),
+                                new GridBoundingBox2D(new GridIdx2D(0, 0), new GridIdx2D(1, 1)),
+                            ),
+                            'source',
+                        ),
+                    ),
+                ),
+        } satisfies Pick<LayersService, 'registerAndGetLayerWorkflowId' | 'getWorkflowIdMetadata'>;
 
         await TestBed.configureTestingModule({
             providers: [
                 provideZonelessChangeDetection(),
                 {provide: BackendService, useValue: {}},
                 {provide: LayersService, useValue: layersService},
+                EdvLayersService,
                 {
                     provide: MapService,
                     useValue: {
@@ -75,14 +111,18 @@ describe('ComputeComponent', () => {
                 {provide: NotificationService, useValue: {error: vi.fn()}},
                 {provide: PlotsService, useValue: {}},
                 {provide: ProjectService, useValue: {getTimeOnce: vi.fn()}},
+                {provide: CoreConfig, useValue: {PLOTS: {THEME: 'excel'}}},
+                {provide: CommonConfig, useExisting: CoreConfig},
                 {provide: UserService, useValue: {getSessionToken: vi.fn()}},
             ],
-            imports: [ComputeComponent],
+            imports: [ComputeComponent, MatDialogModule],
         }).compileComponents();
+
+        edvLayersService = TestBed.inject(EdvLayersService);
+        vi.spyOn(edvLayersService.mapTileLayerResource, 'value').mockImplementation(() => selectedLayerSignal());
 
         fixture = TestBed.createComponent(ComputeComponent);
         component = fixture.componentInstance;
-        fixture.componentRef.setInput('selectedRasterLayer', {dataConnectorId: 'provider-id', layerId: 'layer-id'});
         fixture.detectChanges();
         await fixture.whenStable();
     });
@@ -109,16 +149,35 @@ describe('ComputeComponent', () => {
 
     it('updates band names and the workflow when the selected layer changes', async () => {
         const layersService = TestBed.inject(LayersService);
-        const registerWorkflow = vi.spyOn(layersService, 'registerAndGetLayerWorkflowId').mockResolvedValue('ndvi-workflow');
-        const getMetadata = vi.spyOn(layersService, 'getWorkflowIdMetadata').mockResolvedValue({
-            layerType: 'raster',
-            bands: [{name: 'NDVI', measurement: {type: 'unitless'}}],
-            pixelSizeX: 1,
-            pixelSizeY: 1,
-        } as never);
-        component.plotData.set({outputFormat: 'json-vega', data: {vega: 'plot'}} as never);
+        const registerWorkflow = vi
+            .spyOn(layersService, 'registerAndGetLayerWorkflowId')
+            .mockImplementation(() => Promise.resolve('ndvi-workflow'));
+        const getMetadata = vi
+            .spyOn(layersService, 'getWorkflowIdMetadata')
+            .mockImplementation(() =>
+                Promise.resolve(
+                    new RasterLayerMetadata(
+                        RasterDataTypes.Float32,
+                        new SpatialReference('EPSG:4326'),
+                        [{name: 'NDVI', measurement: {type: 'unitless'}}],
+                        new SpatialGridDescriptor(
+                            new SpatialGridDefinition(
+                                new GeoTransform(new Coordinate2D([0, 0]), 1, 1),
+                                new GridBoundingBox2D(new GridIdx2D(0, 0), new GridIdx2D(1, 1)),
+                            ),
+                            'source',
+                        ),
+                    ),
+                ),
+            );
+        const plotOutput: WrappedPlotOutput = {
+            outputFormat: PlotOutputFormat.JsonVega,
+            plotType: 'histogram',
+            data: {vega: 'plot'},
+        };
+        component.plotData.set(plotOutput);
 
-        fixture.componentRef.setInput('selectedRasterLayer', {dataConnectorId: 'other-provider', layerId: 'ndvi-layer'});
+        selectedLayerSignal.set({dataConnectorId: 'other-provider', layerId: 'ndvi-layer'});
         fixture.detectChanges();
         await fixture.whenStable();
 
@@ -132,7 +191,7 @@ describe('ComputeComponent', () => {
 
     it('clears the bands and disables computation when no layer is selected', async () => {
         overlayLayer.set(createBoxOverlay());
-        fixture.componentRef.setInput('selectedRasterLayer', undefined);
+        selectedLayerSignal.set(undefined);
         fixture.detectChanges();
         await fixture.whenStable();
 
@@ -157,15 +216,54 @@ describe('ComputeComponent', () => {
     });
 
     it('clears the computed plot when the map overlay changes', async () => {
-        component.plotData.set({
-            outputFormat: 'json-vega',
+        const plotOutput: WrappedPlotOutput = {
+            outputFormat: PlotOutputFormat.JsonVega,
+            plotType: 'histogram',
             data: {vega: 'plot'},
-        } as never);
+        };
+        component.plotData.set(plotOutput);
 
         overlayLayer.set(createBoxOverlay());
         fixture.detectChanges();
         await fixture.whenStable();
 
         expect(component.plotData()).toBeUndefined();
+    });
+
+    it('opens a fullscreen histogram dialog when plot data exists', async () => {
+        const openSpy = vi.spyOn(MatDialog.prototype, 'open').mockImplementation(
+            (): ReturnType<MatDialog['open']> =>
+                ({
+                    afterClosed: () => ({subscribe: () => undefined}),
+                    componentInstance: undefined,
+                    componentRef: undefined,
+                    close: vi.fn(),
+                    updatePosition: vi.fn(),
+                }) as unknown as ReturnType<MatDialog['open']>,
+        );
+        const plotOutput: WrappedPlotOutput = {
+            outputFormat: PlotOutputFormat.JsonVega,
+            plotType: 'histogram',
+            data: {vegaString: '{"mark":"bar"}', metadata: {selectionName: 'selection'}},
+        };
+
+        component.plotData.set(plotOutput);
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        component.openHistogramDialog(plotOutput);
+
+        expect(openSpy).toHaveBeenCalledTimes(1);
+        const [dialogComponent, dialogConfig] = openSpy.mock.calls[0] ?? [undefined, undefined];
+
+        expect(dialogComponent).toBeDefined();
+        expect(dialogConfig).toMatchObject({
+            maxWidth: '100vw',
+            maxHeight: '100vh',
+        });
+        expect(dialogConfig?.data).toMatchObject({
+            vegaString: '{"mark":"bar"}',
+            metadata: {selectionName: 'selection'},
+        });
     });
 });
