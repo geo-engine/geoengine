@@ -7,7 +7,6 @@ Name | Type | Description | Notes
 **id** | **String** |  | 
 **title** | Option<**String**> |  | [optional]
 **description** | Option<**String**> |  | [optional]
-**keywords** | Option<**Vec<String>**> |  | [optional]
 **attribution** | Option<**String**> | Attribution for the collection. | [optional]
 **extent** | Option<[**models::Extent**](Extent.md)> |  | [optional]
 **item_type** | Option<**String**> | An indicator about the type of the items in the collection. | [optional]

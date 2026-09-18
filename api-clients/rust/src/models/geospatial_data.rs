@@ -56,7 +56,7 @@ pub struct GeospatialData {
     /// Minimum scale denominator for usage of the layer
     #[serde(rename = "minScaleDenominator", skip_serializing_if = "Option::is_none")]
     pub min_scale_denominator: Option<f64>,
-    /// aximum scale denominator for usage of the layer
+    /// Maximum scale denominator for usage of the layer
     #[serde(rename = "maxScaleDenominator", skip_serializing_if = "Option::is_none")]
     pub max_scale_denominator: Option<f64>,
     /// Minimum cell size for usage of the layer
@@ -65,10 +65,10 @@ pub struct GeospatialData {
     /// Maximum cell size for usage of the layer
     #[serde(rename = "maxCellSize", skip_serializing_if = "Option::is_none")]
     pub max_cell_size: Option<f64>,
-    /// TileMatrix identifier associated with the minScaleDenominator
+    /// [`TileMatrix`] identifier associated with the minScaleDenominator
     #[serde(rename = "maxTileMatrix", skip_serializing_if = "Option::is_none")]
     pub max_tile_matrix: Option<String>,
-    /// TileMatrix identifier associated with the maxScaleDenominator
+    /// [`TileMatrix`] identifier associated with the maxScaleDenominator
     #[serde(rename = "minTileMatrix", skip_serializing_if = "Option::is_none")]
     pub min_tile_matrix: Option<String>,
     /// Minimum bounding rectangle surrounding the layer

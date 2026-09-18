@@ -32,8 +32,8 @@ class TileSetItem(BaseModel):
     title: Optional[StrictStr] = Field(default=None, description="A title for this tileset")
     data_type: GeospatialDataDataType = Field(alias="dataType")
     crs: TilesCrs = Field(description="Coordinate Reference System (CRS)")
-    tile_matrix_set_uri: Optional[StrictStr] = Field(default=None, description="Reference to a Tile Matrix Set on an offical source for Tile Matrix Sets such as the OGC NA definition server (http://www.opengis.net/def/tms/). Required if the tile matrix set is registered on an open official source.", alias="tileMatrixSetURI")
-    links: List[Link] = Field(description="Links to related resources. A 'self' link to the tileset as well as a 'http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme' link to a definition of the TileMatrixSet are required.")
+    tile_matrix_set_uri: Optional[StrictStr] = Field(default=None, description="Reference to a Tile Matrix Set on an offical source for Tile Matrix Sets such as the OGC NA definition server (<http://www.opengis.net/def/tms/>). Required if the tile matrix set is registered on an open official source.", alias="tileMatrixSetURI")
+    links: List[Link] = Field(description="Links to related resources. A 'self' link to the tileset as well as a <http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme> link to a definition of the [`TileMatrixSet`] are required.")
     __properties: ClassVar[List[str]] = ["title", "dataType", "crs", "tileMatrixSetURI", "links"]
 
     model_config = ConfigDict(
