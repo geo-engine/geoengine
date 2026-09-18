@@ -35,6 +35,19 @@ fn validate_authentication(
     Ok(())
 }
 
+fn validate_s3_config(s3_config: Option<&StacProviderS3Config>) -> crate::error::Result<()> {
+    if s3_config.is_some_and(|s3_config| {
+        s3_config.access_key.as_deref() == Some(SECRET_REPLACEMENT)
+            || s3_config.secret_key.as_deref() == Some(SECRET_REPLACEMENT)
+    }) {
+        return Err(crate::error::Error::InvalidConfig {
+            reason: "STAC S3 credentials must not use the secret replacement placeholder"
+                .to_owned(),
+        });
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
 #[postgres(name = "StacDataProviderDefinition")]
 #[serde(rename_all = "camelCase")]
@@ -189,6 +202,7 @@ impl StacProviderDatasetBand {
 impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
     async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
         validate_authentication(self.authentication.as_ref())?;
+        validate_s3_config(self.s3_config.as_ref())?;
         if self.time_dimension == TimeDimension::Irregular {
             return Err(crate::error::Error::StacIrregularTimeDimensionNotSupported);
         }
@@ -238,10 +252,6 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
     {
         Ok(match new {
             TypedDataProviderDefinition::StacDataProviderDefinition(mut new) => {
-                if self.authentication.is_none() {
-                    validate_authentication(new.authentication.as_ref())?;
-                }
-
                 if let (Some(current_s3), Some(new_s3)) = (&self.s3_config, &mut new.s3_config) {
                     if new_s3.access_key.as_deref() == Some(SECRET_REPLACEMENT) {
                         new_s3.access_key.clone_from(&current_s3.access_key);
@@ -260,6 +270,12 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
                         .password
                         .clone_from(&current_authentication.password);
                 }
+
+                // Validate after replacing redacted values. This also covers
+                // provider creation, where the generic insert path calls
+                // `update` with the new provider as both `self` and `new`.
+                validate_authentication(new.authentication.as_ref())?;
+                validate_s3_config(new.s3_config.as_ref())?;
 
                 TypedDataProviderDefinition::StacDataProviderDefinition(new)
             }
@@ -416,5 +432,35 @@ mod tests {
         };
         assert!(validate_authentication(Some(&authentication)).is_err());
         assert!(validate_authentication(None).is_ok());
+    }
+
+    #[tokio::test]
+    async fn secret_replacement_is_rejected_during_provider_creation() {
+        let mut provider: StacDataProviderDefinition =
+            serde_json::from_str::<crate::api::model::services::StacDataProviderDefinition>(
+                include_str!("../../../../../test_data/provider_defs_api/stac_sentinel2.json"),
+            )
+            .unwrap()
+            .into();
+        provider.authentication = Some(StacProviderAuthentication {
+            endpoint: "https://identity.example/token".into(),
+            client_id: "client".into(),
+            username: "user".into(),
+            password: SECRET_REPLACEMENT.into(),
+        });
+        provider.s3_config = Some(StacProviderS3Config {
+            endpoint: "https://s3.example".into(),
+            access_key: Some(SECRET_REPLACEMENT.into()),
+            secret_key: Some(SECRET_REPLACEMENT.into()),
+        });
+
+        let result =
+            DataProviderDefinition::<crate::contexts::PostgresDb<tokio_postgres::NoTls>>::update(
+                &provider,
+                TypedDataProviderDefinition::StacDataProviderDefinition(provider.clone()),
+            )
+            .await;
+
+        assert!(result.is_err());
     }
 }
