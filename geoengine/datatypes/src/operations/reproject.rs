@@ -989,13 +989,19 @@ mod tests {
         ));
     }
 
-    /// The OGC API Tiles CI validation serves a NDVI layer defined in EPSG 4326 with
-    /// upper-left corner exactly at latitude 90 (the EPSG:3857 pole singularity) and
-    /// needs a reprojection-based pixel size suggestion for `WebMercatorQuad` tiling.
-    /// This test pins the real numbers for both projectors so a divergence is caught
-    /// here instead of surfacing as an HTTP 500 in CI.
+    /// Pins the pixel size suggestion for source layer bounds that reach regions the
+    /// target projection cannot represent: a corner exactly on the EPSG:3857 pole
+    /// singularity and a corner beyond the source CRS domain (latitude below -90). Such
+    /// bounds are common for simple square world grids, and any projector must produce a
+    /// finite, positive and plausible suggestion for them instead of an astronomic or
+    /// failed value. All available projectors must agree on the result so consumers stay
+    /// independent of the projector choice.
+    ///
+    /// This scenario originally surfaced as an HTTP 500 when serving such a layer
+    /// through OGC API tiles, hence the concrete reprojection from EPSG 4326 to
+    /// EPSG:3857 (`WebMercatorQuad` tiling).
     #[test]
-    fn it_pins_suggested_pixel_size_for_polar_4326_layer_border() {
+    fn it_suggests_representable_pixel_sizes_for_unrepresentable_source_bounds() {
         let src = SpatialReference::epsg_4326();
         let tgt = SpatialReference::web_mercator();
 

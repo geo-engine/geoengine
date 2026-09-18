@@ -1033,11 +1033,15 @@ mod tests {
         assert_image_equals(&file_path, &image_bytes);
     }
 
-    /// The exact configuration that fails the OGC API Tiles CI validation: the polar
-    /// 4326 NDVI layer (upper-left corner at latitude 90, lower bounds beyond latitude
-    /// -90) served through the `WebMercatorQuad` tile matrix set, which requires
-    /// reprojection. Must render itself, never interpolate the data finer than its own
-    /// resolution and must not escalate to an internal server error.
+    /// Serving a layer in a foreign CRS (here EPSG 4326 with bounds reaching latitude 90
+    /// and beyond latitude -90) through the `WebMercatorQuad` tile matrix set requires
+    /// reprojection, so the rendering pipeline depends on the reprojected pixel size
+    /// suggestion. Whatever the suggested resolution is, tiles at every zoom level must
+    /// render as PNG (200), the data must never be interpolated finer than its own
+    /// resolution, and failures must not escalate to an internal server error.
+    ///
+    /// This exact layer and tile matrix combination is also part of the OGC API tiles
+    /// validation, which previously reported HTTP 500s for these requests.
     #[ge_context::test]
     async fn it_renders_ndvi_web_mercator_quad_tiles_at_multiple_zoom_levels(
         app_ctx: PostgresContext<NoTls>,

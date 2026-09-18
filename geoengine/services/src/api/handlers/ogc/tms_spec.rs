@@ -991,10 +991,12 @@ mod tests {
         );
     }
 
-    /// A suggestion coarser than the coarsest `WebMercatorQuad` cell (e.g. a global 4326
-    /// layer at 2.5 degrees resolution suggestive of ~351,600 m/px) must clamp to the
-    /// coarsest cell, not the finest. Clamping to the finest cell produced an invalid
-    /// interpolation fraction (< 1) and aborted tile rendering with HTTP 500.
+    /// WebMercatorQuad covers a fixed range of resolutions: from the coarsest (zoom 0)
+    /// cell to the finest (zoom 24) cell. A suggested pixel size coarser than the
+    /// coarsest cell (e.g. a global 4326 layer at 2.5 degrees resolution, suggestive of
+    /// ~351,600 m/px) must clamp to the coarsest cell, not the finest. Clamping to the
+    /// finest cell produced an invalid interpolation fraction (< 1) and aborted tile
+    /// rendering with an internal server error.
     #[test]
     fn it_clamps_coarser_than_coarsest_resolution_to_the_coarsest_cell() {
         let resolution = WebMercatorQuadTMS::find_next_best_resolution(
