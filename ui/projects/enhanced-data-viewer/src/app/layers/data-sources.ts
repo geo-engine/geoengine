@@ -53,7 +53,7 @@ export const DATA_SOURCES: DataSourceDefinition[] = [
         defaultPresetIndex: 0,
         defaultTime: 1775001600000,
         defaultTimeStep: {durationAmount: 1, durationUnit: 'month'},
-        citation: `Copernicus Sentinel data [Year]`,
+        citation: `Contains modified Copernicus Sentinel data [Year]`,
         presets: [
             // Static
             {
@@ -98,7 +98,7 @@ export const DATA_SOURCES: DataSourceDefinition[] = [
         defaultPresetIndex: 0,
         defaultTime: 1775001600000,
         defaultTimeStep: {durationAmount: 1, durationUnit: 'day'},
-        citation: `Copernicus Sentinel data [Year]`,
+        citation: `Contains modified Copernicus Sentinel data [Year]`,
         presets: [
             // Static
             {

@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {addCitationToMapImage} from './map-image-export';
+import {addCitationToMapImage, goldenRatioSides} from './map-image-export';
 
 describe('MainComponent', () => {
     beforeEach(() => {
@@ -83,5 +83,13 @@ describe('MainComponent', () => {
             expect.any(Number),
             expect.any(Number),
         );
+    });
+
+    it('calculates golden ratio sides', () => {
+        const totalWidth = 1000;
+        const [a, b] = goldenRatioSides(totalWidth);
+        expect(a + b).toBeCloseTo(totalWidth);
+        expect(a).toBeGreaterThan(b);
+        expect(a / b).toBeCloseTo((1 + Math.sqrt(5)) / 2, 5);
     });
 });

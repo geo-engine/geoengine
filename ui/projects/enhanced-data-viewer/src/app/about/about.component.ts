@@ -9,7 +9,7 @@ import {MatDividerModule} from '@angular/material/divider';
             <!-- <span class="eyebrow">About the Enhanced Data Viewer</span> -->
             <h2>What this viewer does</h2>
             <p>
-                The <em>Enhanced Data Viewer</em> brings earth observation and geospatial datasets into a focused workspace for fast, visual
+                The <em>Enhanced Data Viewer</em> brings Earth Observation and geospatial datasets into a focused workspace for fast, visual
                 exploration. Browse and inspect layers, and compare their spatial context without losing track of the map.
             </p>
         </section>
@@ -20,7 +20,7 @@ import {MatDividerModule} from '@angular/material/divider';
             <h2>Key capabilities</h2>
             <ul>
                 <li>Explore data layers from the <a href="https://code-de.org/">CODE-DE Lab</a> ecosystem</li>
-                <li>Get daily aggregated data from multiple scenes</li>
+                <li>View temporal aggregates built from multiple scenes</li>
                 <li>Visualize data with various visualization presets</li>
                 <li>Analyze bands with compute tools</li>
             </ul>
@@ -29,15 +29,14 @@ import {MatDividerModule} from '@angular/material/divider';
         <mat-divider></mat-divider>
 
         <section>
-            <h2>The Geo Engine</h2>
+            <h2>Geo Engine</h2>
             <p>
                 Geo Engine is the underlying geospatial platform that provides data access, processing, and visualization capabilities for
-                this viewer. It brings together raster and vector workflows, cloud-ready processing, and map-based exploration in one shared
-                backend.
+                this viewer. It combines raster and vector workflows, cloud-ready processing, and map-based exploration.
             </p>
             <ul>
                 <li>The technology: <a href="https://geoengine.io" target="_blank" rel="noreferrer">geoengine.io</a></li>
-                <li>Documentation: <a href="https://docs.geoengine.io" target="_blank" rel="noreferrer">Docs</a></li>
+                <li>Documentation: <a href="https://www.geoengine.io/docs/" target="_blank" rel="noreferrer">Docs</a></li>
             </ul>
         </section>
     `,

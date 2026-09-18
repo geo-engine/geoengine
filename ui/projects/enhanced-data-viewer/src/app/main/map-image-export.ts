@@ -37,34 +37,37 @@ export async function addCitationToMapImage(mapImage: string, citation: string):
         img.src = mapImage;
     });
 
-    const canvas = document.createElement('canvas');
     const width = image.naturalWidth || image.width;
     const height = image.naturalHeight || image.height;
-    const context = canvas.getContext('2d');
 
-    if (!context) {
-        return mapImage;
-    }
-
+    const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
 
-    context.drawImage(image, 0, 0, width, height);
+    const context = canvas.getContext('2d');
+    if (!context) return mapImage;
 
-    const fontSize = Math.max(12, Math.round(Math.min(width, height) / 60));
-    const margin = 8;
+    const MIN_FONT_SIZE = 12;
+    const FONT_SCALE_DIVISOR = 60;
+    const FONT_WEIGHT = 600;
+    const FONT_FAMILY = 'sans-serif';
+    const TEXT_IN_IMAGE_MARGIN = 8;
+
+    const fontSize = Math.max(MIN_FONT_SIZE, Math.round(Math.min(width, height) / FONT_SCALE_DIVISOR));
     const lineHeight = fontSize * 1.2;
-    const maxTextWidth = Math.min(width * 0.7, 600);
-    const lines = wrapText(context, citation, maxTextWidth);
+    const [maxTextWidth] = goldenRatioSides(width);
 
-    context.font = `600 ${fontSize}px sans-serif`;
+    context.drawImage(image, 0, 0, width, height);
+    context.font = `${FONT_WEIGHT} ${fontSize}px ${FONT_FAMILY}`;
     context.textBaseline = 'middle';
     context.fillStyle = 'rgba(255, 255, 255, 0.9)';
 
+    const lines = wrapText(context, citation, maxTextWidth);
+
     const lastLineWidth = Math.max(...lines.map((line) => context.measureText(line).width));
     const textHeight = lines.length * lineHeight;
-    const x = width - lastLineWidth - margin;
-    const y = height - textHeight - margin;
+    const x = width - lastLineWidth - TEXT_IN_IMAGE_MARGIN;
+    const y = height - textHeight - TEXT_IN_IMAGE_MARGIN;
 
     lines.forEach((line, index) => {
         const lineY = y + lineHeight * (index + 0.5);
@@ -72,4 +75,11 @@ export async function addCitationToMapImage(mapImage: string, citation: string):
     });
 
     return canvas.toDataURL('image/png');
+}
+
+/** Calculates the `[long side, short side]` of a rectangle based on the golden ratio given the total width. */
+export function goldenRatioSides(totalWidth: number): [number, number] {
+    const b = totalWidth / (1 + (1 + Math.sqrt(5)) / 2);
+    const a = totalWidth - b;
+    return [a, b];
 }
