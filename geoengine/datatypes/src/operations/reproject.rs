@@ -297,22 +297,59 @@ pub fn suggest_pixel_size_like_gdal_helper<B: AxisAlignedRectangle, P: Coordinat
 /// A suggested pixel size is calculated using the approach used by GDAL:
 /// The upper left and the lower right coordinates of the bounding box are projected in the target SRS.
 /// Then, the distance between both points in the target SRS is devided by the distance in pixels of the source.
-pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection, B: AxisAlignedRectangle>(
+///
+/// Layer bounds can span regions that the target projection cannot represent: the poles
+/// blow up to astronomic values in Web Mercator and coordinates outside the CRS domain
+/// (e.g. latitudes below -90 from metadata quirks) are rejected by the projector. To stay
+/// in the GDAL-like regime, the traditional corner math is used when both corners project
+/// into the target's projected area of use; otherwise the suggestion is derived from the
+/// clipped, edge-sampled extent instead of trusting invalid or polar corners.
+pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection, B>(
     bbox: B,
     spatial_resolution: SpatialResolution,
     projector: &P,
-) -> Result<SpatialResolution> {
+) -> Result<SpatialResolution>
+where
+    B: AxisAlignedRectangle + ReprojectClipped<P, Out = B>,
+{
+    // The GDAL-style corner math, only valid when both corners project into the target's
+    // projected area of use.
+    let corners_valid = (|| {
+        let ul = bbox.upper_left().reproject(projector).ok()?;
+        let lr = bbox.lower_right().reproject(projector).ok()?;
+        let target_area = projector
+            .target_srs()
+            .area_of_use_projected::<BoundingBox2D>()
+            .ok()?;
+        let valid = target_area.contains_coordinate(&ul) && target_area.contains_coordinate(&lr);
+        valid.then_some((ul, lr))
+    })();
+
+    if let Some((proj_ul, proj_lr)) = corners_valid {
+        let proj_diag = diag_distance(proj_ul, proj_lr);
+        let diag_pixels = euclidian_pixel_distance(bbox, spatial_resolution)?;
+        let pixel_size = proj_diag / diag_pixels;
+        return Ok(SpatialResolution::new_unchecked(pixel_size, pixel_size));
+    }
+
+    // The corners are invalid or span poles: derive the suggestion from the clipped,
+    // edge-sampled extent instead of trusting the raw corners. Like GDAL, the pixel size
+    // is always related to the diagonal of the *full* source raster, not the clipped part.
+    let Some(clipped_bbox) = bbox.reproject_clipped(projector)? else {
+        // the bbox lies completely outside of what the target projection can represent
+        return Err(crate::error::Error::NoIntersectionWithTargetProjection {
+            srs_in: projector.source_srs(),
+            srs_out: projector.target_srs(),
+            bounds: bbox.as_bbox(),
+        });
+    };
+
+    let clip_diag = diag_distance(clipped_bbox.upper_left(), clipped_bbox.lower_right());
     let diag_pixels = euclidian_pixel_distance(bbox, spatial_resolution)?;
 
-    let proj_ul_lr_distance =
-        projected_diag_distance(bbox.upper_left(), bbox.lower_right(), projector)?;
-
     // derive the pixel size by deviding srs unit distance by pixel distance in the source bbox
-    let proj_ul_lr_pixel_size = proj_ul_lr_distance / diag_pixels;
-    Ok(SpatialResolution::new_unchecked(
-        proj_ul_lr_pixel_size,
-        proj_ul_lr_pixel_size,
-    ))
+    let pixel_size = clip_diag / diag_pixels;
+    Ok(SpatialResolution::new_unchecked(pixel_size, pixel_size))
 }
 
 pub fn suggest_output_spatial_grid_like_gdal_helper<P: CoordinateProjection>(
@@ -638,7 +675,10 @@ pub fn reproject_and_unify_proj_bounds<T: AxisAlignedRectangle, P: CoordinatePro
 mod tests {
 
     use crate::primitives::{BoundingBox2D, SpatialPartition2D};
-    use crate::spatial_reference::{DefaultCoordinateProjector, SpatialReferenceAuthority};
+    use crate::spatial_reference::{
+        DefaultCoordinateProjector, GeodesyCoordinateProjector, ProjCoordinateProjector,
+        SpatialReferenceAuthority,
+    };
     use crate::util::well_known_data::{
         COLOGNE_EPSG_3857, COLOGNE_EPSG_4326, HAMBURG_EPSG_3857, HAMBURG_EPSG_4326,
         MARBURG_EPSG_3857, MARBURG_EPSG_4326,
@@ -947,6 +987,69 @@ mod tests {
             79.088_974_450_690_5, // this is the pixel size GDAL generates when reprojecting the SRTM tile.
             epsilon = 0.000_000_1
         ));
+    }
+
+    /// The OGC API Tiles CI validation serves a NDVI layer defined in EPSG 4326 with
+    /// upper-left corner exactly at latitude 90 (the EPSG:3857 pole singularity) and
+    /// needs a reprojection-based pixel size suggestion for `WebMercatorQuad` tiling.
+    /// This test pins the real numbers for both projectors so a divergence is caught
+    /// here instead of surfacing as an HTTP 500 in CI.
+    #[test]
+    fn it_pins_suggested_pixel_size_for_polar_4326_layer_border() {
+        let src = SpatialReference::epsg_4326();
+        let tgt = SpatialReference::web_mercator();
+
+        // The CI NDVI layer: GeoTransform((-180, 90), 0.1, -0.1), grid 1800x3600.
+        let ul_c = (-180.0, 90.0).into();
+        let lr_c = (0.0, -270.0).into();
+        let bbox = BoundingBox2D::new_upper_left_lower_right(ul_c, lr_c).unwrap();
+        let spatial_resolution = SpatialResolution::new_unchecked(0.1, 0.1);
+
+        let proj_suggestion = {
+            let projector = ProjCoordinateProjector::from_known_srs(src, tgt).unwrap();
+            suggest_pixel_size_like_gdal(bbox, spatial_resolution, &projector).unwrap()
+        };
+        let geodesy_suggestion = {
+            let projector = GeodesyCoordinateProjector::from_known_srs(src, tgt).unwrap();
+            suggest_pixel_size_like_gdal(bbox, spatial_resolution, &projector).unwrap()
+        };
+        let default_suggestion = {
+            let projector = DefaultCoordinateProjector::from_known_srs(src, tgt).unwrap();
+            suggest_pixel_size_like_gdal(bbox, spatial_resolution, &projector).unwrap()
+        };
+
+        // Whatever the projector, the suggestion must be finite and positive and in a
+        // plausible magnitude (~11.1 km/px for this layer). Anything outside this range
+        // means the pole/invalid-corner handling regressed; in particular a suggestion
+        // below ~0.0093 m/px (the finest WebMercatorQuad cell) degrades into an invalid
+        // interpolation fraction in `find_next_best_resolution`.
+        for (label, s) in [
+            ("proj", &proj_suggestion),
+            ("geodesy", &geodesy_suggestion),
+            ("default", &default_suggestion),
+        ] {
+            assert!(
+                s.x.is_finite() && s.y.is_finite(),
+                "{label} suggested pixel size must be finite, got {s:?}"
+            );
+            assert!(
+                s.x > 0.0 && s.y > 0.0,
+                "{label} suggested pixel size must be positive, got {s:?}"
+            );
+            assert!(
+                s.x > 1_000.0 && s.x < 100_000.0,
+                "{label} suggested pixel size out of expected magnitude, got {s:?}"
+            );
+        }
+
+        // The projectors must agree on the suggestion within floating point noise: they
+        // were pinned to 11137.041708704 m/px after clipping the pole-spanning bounds.
+        let reference = proj_suggestion.x;
+        assert!(
+            approx_eq!(f64, geodesy_suggestion.x, reference, epsilon = 0.000_000_1)
+                && approx_eq!(f64, default_suggestion.x, reference, epsilon = 0.000_000_1),
+            "projectors diverge: proj={proj_suggestion:?}, geodesy={geodesy_suggestion:?}, default={default_suggestion:?}"
+        );
     }
 
     #[test]

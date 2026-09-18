@@ -1032,4 +1032,46 @@ mod tests {
 
         assert_image_equals(&file_path, &image_bytes);
     }
+
+    /// The exact configuration that fails the OGC API Tiles CI validation: the polar
+    /// 4326 NDVI layer (upper-left corner at latitude 90, lower bounds beyond latitude
+    /// -90) served through the `WebMercatorQuad` tile matrix set, which requires
+    /// reprojection. Must render itself, never interpolate the data finer than its own
+    /// resolution and must not escalate to an internal server error.
+    #[ge_context::test]
+    async fn it_renders_ndvi_web_mercator_quad_tiles_at_multiple_zoom_levels(
+        app_ctx: PostgresContext<NoTls>,
+    ) {
+        let (session_id, data_connector_id, layer_id) =
+            session_and_ndvi_multi_band_layer_id(&app_ctx).await;
+
+        // zoom 0: very coarse request; zoom 14: ~9.5 m/px, around the native ~11 km
+        // resolution of the reprojected layer; zoom 20: much finer than the native one.
+        for (zoom, row, col) in [
+            (0u8, 0u32, 0u32),
+            (1, 1, 1),
+            (14, 6000, 6000),
+            (20, 300_000, 300_000),
+        ] {
+            let req = actix_web::test::TestRequest::get()
+                .uri(&format!(
+                    "/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/WebMercatorQuad/{zoom}/{row}/{col}?datetime=2014-04-01T00:00:00Z"
+                ))
+                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+            let res = send_test_request(req, app_ctx.clone()).await;
+            let status = res.status();
+            let content_type = res
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .map(ToOwned::to_owned);
+
+            assert_eq!(
+                status, 200,
+                "tile WebMercatorQuad/{zoom}/{row}/{col} must render"
+            );
+            assert_eq!(content_type.as_deref(), Some("image/png"));
+        }
+    }
 }
