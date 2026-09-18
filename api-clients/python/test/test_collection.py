@@ -38,9 +38,6 @@ class TestCollection(unittest.TestCase):
                 id = '',
                 title = '',
                 description = '',
-                keywords = [
-                    ''
-                    ],
                 attribution = '',
                 extent = geoengine_api_client.models.extent.Extent(
                     spatial = null, 

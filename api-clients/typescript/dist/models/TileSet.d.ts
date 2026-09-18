@@ -18,8 +18,8 @@ import type { GeospatialData } from './GeospatialData';
 import type { Link } from './Link';
 import type { TilesCrs } from './TilesCrs';
 /**
- * A resource describing a tileset based on the OGC TileSet Metadata Standard.
- * At least one of the 'TileMatrixSet',  or a link with 'rel' tiling-scheme"
+ * A resource describing a tileset based on the OGC Two Dimensional Tile Matrix Set and Tile Set Metadata.
+ * At least one of the [`TileMatrixSet`], or a link with 'rel' tiling-scheme"
  * @export
  * @interface TileSet
  */
@@ -38,7 +38,7 @@ export interface TileSet {
     description?: string;
     /**
      * Unordered list of one or more commonly used or formalized word(s) or
-     * phrase(s) used to describe a TileSet
+     * phrase(s) used to describe a [`TileSet`]
      * @type {Array<string>}
      * @memberof TileSet
      */
@@ -58,9 +58,9 @@ export interface TileSet {
      */
     tileMatrixSetURI?: string;
     /**
-     * Limits for the TileRow and TileCol values for each TileMatrix in the
-     * TileMatrixSet. If missing, there are no limits other that the ones
-     * imposed by the TileMatrixSet. If present the TileMatrices listed are
+     * Limits for the [`TileRow`] and [`TileCol`] values for each [`TileMatrix`] in the
+     * [`TileMatrixSet`]. If missing, there are no limits other that the ones
+     * imposed by the [`TileMatrixSet`]. If present the tile matrices listed are
      * limited and the rest not available at all
      * @type {Array<TileMatrixLimits>}
      * @memberof TileSet
@@ -82,8 +82,8 @@ export interface TileSet {
      * Links to related resources. Possible link 'rel' values are: 'dataset'
      * for a URL pointing to the dataset, 'tiles' for a URL template to get
      * the tiles; 'alternate' for a URL pointing to another representation of
-     * the TileSetMetadata (e.g a TileJSON file); 'tiling-scheme' for a
-     * definition of the TileMatrixSet
+     * the [`TileSetMetadata`] (e.g a [`TileJSON` file); 'tiling-scheme' for a
+     * definition of the [`TileMatrixSet`]
      * @type {Array<Link>}
      * @memberof TileSet
      */

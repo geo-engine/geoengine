@@ -114,7 +114,7 @@ export interface GeospatialData {
      */
     minScaleDenominator?: number;
     /**
-     * aximum scale denominator for usage of the layer
+     * Maximum scale denominator for usage of the layer
      * @type {number}
      * @memberof GeospatialData
      */
@@ -132,13 +132,13 @@ export interface GeospatialData {
      */
     maxCellSize?: number;
     /**
-     * TileMatrix identifier associated with the minScaleDenominator
+     * [`TileMatrix`] identifier associated with the minScaleDenominator
      * @type {string}
      * @memberof GeospatialData
      */
     maxTileMatrix?: string;
     /**
-     * TileMatrix identifier associated with the maxScaleDenominator
+     * [`TileMatrix`] identifier associated with the maxScaleDenominator
      * @type {string}
      * @memberof GeospatialData
      */

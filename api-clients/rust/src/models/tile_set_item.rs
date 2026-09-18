@@ -21,10 +21,10 @@ pub struct TileSetItem {
     /// Coordinate Reference System (CRS)
     #[serde(rename = "crs")]
     pub crs: Box<models::TilesCrs>,
-    /// Reference to a Tile Matrix Set on an offical source for Tile Matrix Sets such as the OGC NA definition server (http://www.opengis.net/def/tms/). Required if the tile matrix set is registered on an open official source.
+    /// Reference to a Tile Matrix Set on an offical source for Tile Matrix Sets such as the OGC NA definition server (<http://www.opengis.net/def/tms/>). Required if the tile matrix set is registered on an open official source.
     #[serde(rename = "tileMatrixSetURI", skip_serializing_if = "Option::is_none")]
     pub tile_matrix_set_uri: Option<String>,
-    /// Links to related resources. A 'self' link to the tileset as well as a 'http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme' link to a definition of the TileMatrixSet are required.
+    /// Links to related resources. A 'self' link to the tileset as well as a <http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme> link to a definition of the [`TileMatrixSet`] are required.
     #[serde(rename = "links")]
     pub links: Vec<models::Link>,
 }

@@ -31,7 +31,6 @@ class Collection(BaseModel):
     id: StrictStr
     title: Optional[StrictStr] = None
     description: Optional[StrictStr] = None
-    keywords: Optional[List[StrictStr]] = None
     attribution: Optional[StrictStr] = Field(default=None, description="Attribution for the collection.")
     extent: Optional[Extent] = None
     item_type: Optional[StrictStr] = Field(default=None, description="An indicator about the type of the items in the collection.", alias="itemType")
@@ -40,7 +39,7 @@ class Collection(BaseModel):
     storage_crs_coordinate_epoch: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, alias="storageCrsCoordinateEpoch")
     links: Optional[List[Link]] = None
     additional_properties: Dict[str, Any] = {}
-    __properties: ClassVar[List[str]] = ["id", "title", "description", "keywords", "attribution", "extent", "itemType", "crs", "storageCrs", "storageCrsCoordinateEpoch", "links"]
+    __properties: ClassVar[List[str]] = ["id", "title", "description", "attribution", "extent", "itemType", "crs", "storageCrs", "storageCrsCoordinateEpoch", "links"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -138,7 +137,6 @@ class Collection(BaseModel):
             "id": obj.get("id"),
             "title": obj.get("title"),
             "description": obj.get("description"),
-            "keywords": obj.get("keywords"),
             "attribution": obj.get("attribution"),
             "extent": Extent.from_dict(obj["extent"]) if obj.get("extent") is not None else None,
             "itemType": obj.get("itemType"),
