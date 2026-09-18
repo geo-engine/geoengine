@@ -274,7 +274,7 @@ export const DATA_SOURCES: DataSourceDefinition[] = [
         defaultTime: 1782913271000, // 2026-07-01
         defaultTimeStep: {durationAmount: 1, durationUnit: 'days'},
         citation:
-            "European Union's Copernicus Land Monitoring Service information; https://doi.org/10.2909/bfd77180-7d7c-4c1c-b193-1489f735d5f1",
+            'Generated using European Union’s Copernicus Land Monitoring Service information; https://doi.org/10.2909/bfd77180-7d7c-4c1c-b193-1489f735d5f1',
         presets: [
             // Burnt Fraction
             {
