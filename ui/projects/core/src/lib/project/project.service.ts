@@ -11,7 +11,7 @@ import {
     Subscription,
     zip,
 } from 'rxjs';
-import {debounceTime, distinctUntilChanged, filter, finalize, first, map, mergeMap, switchMap, take, tap} from 'rxjs/operators';
+import {debounceTime, distinctUntilChanged, filter, finalize, first, map, mergeMap, pairwise, switchMap, take, tap} from 'rxjs/operators';
 
 import {Injectable, OnDestroy, inject} from '@angular/core';
 
@@ -993,13 +993,8 @@ export class ProjectService implements OnDestroy {
             },
         });
 
-        // Capture the state at the start of the query (all sources emit synchronously on
-        // subscription) so a change can be detected later without relying on emission order.
-        const initialTime = this.captureSync(this.getTimeStream());
-        const initialSref = this.captureSync(this.getSpatialReferenceStream());
-        const initialSession = this.captureSync(this.userService.getSessionTokenForRequest());
-        const initialViewport = this.mapService.getViewportSize();
-
+        // All sources emit synchronously on subscription, so the first combined emission is the
+        // state at subscription time and `pairwise` compares every later emission against it.
         const observables: [
             Observable<Time>,
             Observable<ViewportSize>,
@@ -1009,35 +1004,30 @@ export class ProjectService implements OnDestroy {
         ] = [
             this.getTimeStream(),
             this.mapService.getViewportSizeStream(),
-            this.userService.getSessionTokenForRequest(),
+            this.userService.getSessionTokenStream(),
             this.getSpatialReferenceStream(),
             layerRemovedSubject,
         ];
 
         return combineLatest(observables).pipe(
-            filter(
-                ([time, viewportSize, session, sref, layerRemoved]) =>
+            pairwise(),
+            filter(([initial, current]) => {
+                const [initialTime, initialViewport, initialSession, initialSref] = initial;
+                const [time, viewportSize, session, sref, layerRemoved] = current;
+
+                return (
                     !time.isSame(initialTime) ||
                     viewportSize.resolution !== initialViewport.resolution ||
                     !olIntersects(tileExtent, viewportSize.extent) ||
                     session !== initialSession ||
                     sref !== initialSref ||
-                    layerRemoved,
-            ),
+                    layerRemoved
+                );
+            }),
             finalize(() => layerStreamSub?.unsubscribe()),
             take(1),
             map(() => undefined),
         );
-    }
-
-    /**
-     * Read the current value of a stream that emits synchronously on subscription
-     * (e.g. one backed by a `ReplaySubject` or `BehaviorSubject`).
-     */
-    private captureSync<T>(stream: Observable<T>): T {
-        let value: T | undefined;
-        stream.pipe(first()).subscribe((v) => (value = v));
-        return value as T;
     }
 
     /**

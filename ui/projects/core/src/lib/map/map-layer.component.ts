@@ -18,6 +18,7 @@ import {Subject, Subscription} from 'rxjs';
 import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol/layer';
 import {ImageTile as OlImageTile} from 'ol';
 import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
+import type {TileSourceEvent} from 'ol/source/Tile';
 import {get as olGetProj} from 'ol/proj';
 import {CoreConfig} from '../config.service';
 import {ProjectService} from '../project/project.service';
@@ -94,9 +95,16 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
      * `tileloaderror` and keep its in-flight tile bookkeeping balanced.
      */
     protected resetAbortedTile(tile: OlImageTile): void {
+        this.abortedTiles.add(tile);
         tile.setState(TileState.ERROR);
         tile.setState(TileState.IDLE);
     }
+
+    /**
+     * Tiles that were reset after an abort. Aborts are transient: the tile will be re-requested
+     * instead of being a persisted error, so the layer state must not turn to `ERROR` for them.
+     */
+    protected readonly abortedTiles = new WeakSet<OlImageTile>();
 
     protected extractChange<T>(change: SimpleChange): T | undefined {
         if (!change) {
@@ -392,7 +400,16 @@ export class OlRasterLayerComponent
             client.addEventListener('error', () => {
                 tile.setState(TileState.ERROR);
             });
-            client.send();
+
+            // The abort stream may emit before the request is even sent (e.g. during panning),
+            // in which case the XHR is aborted without firing `loadend` and the request would
+            // still go out otherwise.
+            if (aborted) {
+                cancelSub.unsubscribe();
+                this.resetAbortedTile(tile);
+            } else {
+                client.send();
+            }
         });
 
         this.addStateListenersToOlSource();
@@ -429,8 +446,17 @@ export class OlRasterLayerComponent
                 this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.OK);
             }
         });
-        this.source.on('tileloaderror', () => {
+        this.source.on('tileloaderror', (event: TileSourceEvent) => {
             tilesPending--;
+
+            if (this.abortedTiles.has(event.tile as OlImageTile)) {
+                // the abort is transient, the tile will be re-requested
+                if (tilesPending <= 0) {
+                    this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.OK);
+                }
+                return;
+            }
+
             this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.ERROR);
         });
     }
@@ -679,8 +705,17 @@ export class OlOgcApiMapTileLayerComponent
                 this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.OK);
             }
         });
-        this.source.on('tileloaderror', () => {
+        this.source.on('tileloaderror', (event: TileSourceEvent) => {
             tilesPending--;
+
+            if (this.abortedTiles.has(event.tile as OlImageTile)) {
+                // the abort is transient, the tile will be re-requested
+                if (tilesPending <= 0) {
+                    this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.OK);
+                }
+                return;
+            }
+
             this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.ERROR);
         });
     }
