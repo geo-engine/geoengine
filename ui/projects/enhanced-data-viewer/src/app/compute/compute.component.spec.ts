@@ -7,7 +7,7 @@ import OlLayerVector from 'ol/layer/Vector';
 import OlSourceVector from 'ol/source/Vector';
 import OlGeometry from 'ol/geom/Geometry';
 import {BackendService, MapService, ProjectService} from '@geoengine/core';
-import {LayersService, NotificationService, PlotsService, UserService} from '@geoengine/common';
+import {BoundingBox2D, LayersService, NotificationService, PlotsService, SpatialReference, UserService} from '@geoengine/common';
 import {ComputeComponent} from './compute.component';
 
 describe('ComputeComponent', () => {
@@ -95,8 +95,8 @@ describe('ComputeComponent', () => {
         expect(component.selectedRasterLayer()).toEqual({dataConnectorId: 'provider-id', layerId: 'layer-id'});
         expect(component.selectedBand()).toBe('red');
         expect(component.computationBbox()).toEqual({
-            bbox: expect.objectContaining({xmin: 0, ymin: 0, xmax: 1, ymax: 1}),
-            spatialReference: expect.objectContaining({srsString: 'EPSG:4326'}),
+            bbox: new BoundingBox2D([0, 0, 1, 1]),
+            spatialReference: new SpatialReference('EPSG:4326'),
         });
         expect(component.cannotComputeHistogram()).toBe(false);
 
