@@ -29,6 +29,10 @@ impl EpsgBounds {
     }
 }
 
+// The registry is generated code (see `epsg_registry.rs`), so it is included
+// via `include!` instead of a plain `mod` declaration: this keeps the file's
+// name and content untouched by hand-written code and scopes the clippy
+// allowances for the huge generated literals to just this module.
 pub mod registry {
     #![allow(clippy::unreadable_literal, clippy::approx_constant)]
 

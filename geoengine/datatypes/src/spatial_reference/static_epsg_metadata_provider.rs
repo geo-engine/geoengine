@@ -3,9 +3,18 @@ use crate::primitives::{AxisAlignedRectangle, BoundingBox2D, Coordinate2D};
 use crate::spatial_reference::{CrsMetadataProvider, SpatialReference, SpatialReferenceAuthority};
 use crs_constants::EpsgBounds;
 
+/// A [`CrsMetadataProvider`] backed by the compile-time EPSG metadata of the
+/// `crs-constants` crate (generated from PROJ's EPSG database).
+///
+/// Unlike a library-backed provider it needs neither PROJ nor geodesy at
+/// runtime, but it only knows EPSG-metadata that is present in the generated
+/// registry.
 pub struct StaticEpsgMetadataProvider {
+    /// The area of use in WGS 84 longitude/latitude degrees.
     wgs84_bounds: BoundingBox2D,
+    /// The area of use in the CRS's native units, if it can be represented.
     projected_bounds: Option<BoundingBox2D>,
+    /// How many meters correspond to one unit of the CRS's native unit.
     meters_per_unit: f64,
 }
 

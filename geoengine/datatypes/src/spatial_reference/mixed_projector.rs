@@ -1,5 +1,15 @@
 use crate::spatial_reference::CoordinateProjection;
 
+/// A projector that combines the available projector implementations,
+/// preferring the `geodesy` backend and falling back to PROJ whenever there is
+/// no geodesy projection for the given pair of spatial references (PROJ knows
+/// more CRS pairs, e.g. non-EPSG codes or exotic projections).
+///
+/// Since a well-known EPSG pair is very frequently requested and geodesy
+/// startup is cheaper, the fallback order keeps the common case fast while
+/// never failing where PROJ could succeed.
+///
+/// This is the type `DefaultCoordinateProjector` aliases.
 pub enum MixedCoordinateProjector {
     ProjProjector(super::ProjCoordinateProjector),
     GeodesyProjector(super::GeodesyCoordinateProjector),
