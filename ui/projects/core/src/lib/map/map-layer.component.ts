@@ -47,6 +47,12 @@ import {
 @Directive()
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends OlSource, S extends Symbology> {
+    /**
+     * Tiles that were reset after an abort. Aborts are transient: the tile will be re-requested
+     * instead of being a persisted error, so the layer state must not turn to `ERROR` for them.
+     */
+    protected readonly abortedTiles = new WeakSet<OlImageTile>();
+
     protected projectService = inject(ProjectService);
 
     readonly layerId = input.required<number>();
@@ -99,12 +105,6 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
         tile.setState(TileState.ERROR);
         tile.setState(TileState.IDLE);
     }
-
-    /**
-     * Tiles that were reset after an abort. Aborts are transient: the tile will be re-requested
-     * instead of being a persisted error, so the layer state must not turn to `ERROR` for them.
-     */
-    protected readonly abortedTiles = new WeakSet<OlImageTile>();
 
     protected extractChange<T>(change: SimpleChange): T | undefined {
         if (!change) {
