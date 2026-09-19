@@ -186,49 +186,6 @@ impl<C: geodesy::ctx::Context> GeodesyCoordinateProjector<C> {
 
         transformed_coords
     }
-
-    /*
-    pub async fn transform_coords_parallel(
-        &self,
-        coords: &[Coordinate2D],
-    ) -> Result<Vec<Coordinate2D>, Error>
-    where
-        geodesy::coord::Coor2D: Sized,
-    {
-        const PAR_CHUNK_SIZE: usize = 64;
-
-        let mut geodesy_coords: Vec<(f64, f64)> = coords.iter().map(|c| (c.x, c.y)).collect();
-
-        if self.source_latlon {
-            for c in geodesy_coords.as_mut_slice() {
-                *c = c.to_radians();
-            }
-        }
-
-        geodesy_coords.chunks_mut(PAR_CHUNK_SIZE).for_each(|chunk| {
-            self.ctx
-                .apply(self.source, geodesy::Direction::Inv, chunk)
-                .unwrap();
-
-            self.ctx
-                .apply(self.target, geodesy::Direction::Fwd, chunk)
-                .unwrap();
-        });
-
-        if self.target_latlon {
-            for c in geodesy_coords.as_mut_slice() {
-                *c = c.to_degrees();
-            }
-        }
-
-        let transformed_coords: Result<Vec<Coordinate2D>, Error> = geodesy_coords
-            .iter()
-            .map(|c| Ok(Coordinate2D::new(c.x(), c.y())))
-            .collect();
-
-        Ok(transformed_coords?)
-    }
-    */
 }
 
 pub fn geodesy_ctx() -> geodesy::ctx::Minimal {

@@ -1062,32 +1062,6 @@ mod tests {
     fn it_reprojects_and_unifies_bbox() {
         let bbox = SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
 
-        /* This is not a good test since math outside the bounds is questionable!
-        let (input, output) = reproject_and_unify_bbox_internal::<_, CoordinateProjector>(
-            bbox,
-            SpatialReference::epsg_4326(),
-            SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
-            false,
-        )
-        .unwrap();
-
-
-        assert_approx_eq!(
-            SpatialPartition2D,
-            input.unwrap(),
-            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into())
-        );
-
-        assert_approx_eq!(
-            SpatialPartition2D,
-            output.unwrap(),
-            SpatialPartition2D::new_unchecked(
-                (-20_037_508.342_789_244, 242_528_680.943_742_72).into(),
-                (20_037_508.342_789_244, -242_528_680.943_742_72).into()
-            )
-        );
-         */
-
         let (input, output) = reproject_and_unify_bbox_internal::<_, CoordinateProjector>(
             bbox,
             SpatialReference::epsg_4326(),

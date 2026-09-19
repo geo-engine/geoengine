@@ -663,7 +663,6 @@ impl SentinelS2L2aCogsMetaData {
             SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg_code());
         let epsg_4326_ref = SpatialReference::epsg_4326();
         // Note: this uses the `DefaultCoordinateProjector` which may change.
-        // TODO: use area provider!!!
         let projector =
             DefaultCoordinateProjector::from_known_srs(native_spatial_ref, epsg_4326_ref)?;
         let native_bounds = self.zone.native_extent();
