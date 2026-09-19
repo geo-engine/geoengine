@@ -991,7 +991,7 @@ mod tests {
         );
     }
 
-    /// WebMercatorQuad covers a fixed range of resolutions: from the coarsest (zoom 0)
+    /// `WebMercatorQuad` covers a fixed range of resolutions: from the coarsest (zoom 0)
     /// cell to the finest (zoom 24) cell. A suggested pixel size coarser than the
     /// coarsest cell (e.g. a global 4326 layer at 2.5 degrees resolution, suggestive of
     /// ~351,600 m/px) must clamp to the coarsest cell, not the finest. Clamping to the
