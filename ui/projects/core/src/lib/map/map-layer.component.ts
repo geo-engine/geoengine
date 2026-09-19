@@ -18,6 +18,7 @@ import {Subject, Subscription} from 'rxjs';
 import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol/layer';
 import {ImageTile as OlImageTile} from 'ol';
 import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
+import type {TileSourceEvent} from 'ol/source/Tile';
 import {get as olGetProj} from 'ol/proj';
 import {CoreConfig} from '../config.service';
 import {ProjectService} from '../project/project.service';
@@ -46,6 +47,12 @@ import {
 @Directive()
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends OlSource, S extends Symbology> {
+    /**
+     * Tiles that were reset after an abort. Aborts are transient: the tile will be re-requested
+     * instead of being a persisted error, so the layer state must not turn to `ERROR` for them.
+     */
+    protected readonly abortedTiles = new WeakSet<OlImageTile>();
+
     protected projectService = inject(ProjectService);
 
     readonly layerId = input.required<number>();
@@ -84,6 +91,20 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
      * Return the extent of the layer in map units
      */
     abstract getExtent(): [number, number, number, number];
+
+    /**
+     * Reset an aborted tile to `IDLE` so OpenLayers re-requests it (e.g. after panning away and
+     * back). OpenLayers only requests IDLE tiles, so an ERROR tile would stay invisible forever.
+     *
+     * `setState` must not go from `LOADING` to `IDLE` directly ("Tile load sequence violation"),
+     * so it is routed through `ERROR` first, which also lets the source fire the matching
+     * `tileloaderror` and keep its in-flight tile bookkeeping balanced.
+     */
+    protected resetAbortedTile(tile: OlImageTile): void {
+        this.abortedTiles.add(tile);
+        tile.setState(TileState.ERROR);
+        tile.setState(TileState.IDLE);
+    }
 
     protected extractChange<T>(change: SimpleChange): T | undefined {
         if (!change) {
@@ -335,19 +356,22 @@ export class OlRasterLayerComponent
         });
 
         const proj = olGetProj(this.spatialReference.srsString)!;
-        const tileGrid = this.source.getTileGridForProjection(proj);
+        const source = this.source;
+        const tileGrid = source.getTileGridForProjection(proj);
 
-        this.source.setTileLoadFunction((olTile, src) => {
+        source.setTileLoadFunction((olTile, src) => {
             const tile = olTile as OlImageTile;
             const tileCoord = tile.getTileCoord();
-            const tileZoomLevel = tileCoord[0];
             const tileExtent = tileGrid.getTileCoordExtent(tileCoord) as Extent;
 
             const client = new XMLHttpRequest();
 
-            const cancelSub = this.projectService
-                .createQueryAbortStream(this.layerId(), tileZoomLevel, tileExtent)
-                .subscribe(() => client.abort());
+            let aborted = false;
+
+            const cancelSub = this.projectService.createQueryAbortStream(this.layerId(), tileExtent).subscribe(() => {
+                aborted = true;
+                client.abort();
+            });
 
             client.open('GET', src);
             client.responseType = 'blob';
@@ -357,7 +381,13 @@ export class OlRasterLayerComponent
                 const data = client.response;
 
                 if (!data) {
-                    tile.setState(TileState.ERROR);
+                    if (aborted) {
+                        // The tile may be requested again later, so reset it to IDLE
+                        // instead of leaving it in ERROR (which OpenLayers never re-fetches).
+                        this.resetAbortedTile(tile);
+                    } else {
+                        tile.setState(TileState.ERROR);
+                    }
                 } else {
                     if (data.type === 'image/png') {
                         (tile.getImage() as HTMLImageElement).src = URL.createObjectURL(data);
@@ -370,7 +400,16 @@ export class OlRasterLayerComponent
             client.addEventListener('error', () => {
                 tile.setState(TileState.ERROR);
             });
-            client.send();
+
+            // The abort stream may emit before the request is even sent (e.g. during panning),
+            // in which case the XHR is aborted without firing `loadend` and the request would
+            // still go out otherwise.
+            if (aborted) {
+                cancelSub.unsubscribe();
+                this.resetAbortedTile(tile);
+            } else {
+                client.send();
+            }
         });
 
         this.addStateListenersToOlSource();
@@ -407,8 +446,17 @@ export class OlRasterLayerComponent
                 this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.OK);
             }
         });
-        this.source.on('tileloaderror', () => {
+        this.source.on('tileloaderror', (event: TileSourceEvent) => {
             tilesPending--;
+
+            if (this.abortedTiles.has(event.tile as OlImageTile)) {
+                // the abort is transient, the tile will be re-requested
+                if (tilesPending <= 0) {
+                    this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.OK);
+                }
+                return;
+            }
+
             this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.ERROR);
         });
     }
@@ -428,14 +476,16 @@ export type TMSId = 'Custom' | 'CustomWebMercator' | 'WebMercatorQuad';
     providers: [{provide: MapLayerComponent, useExisting: OlOgcApiMapTileLayerComponent}],
     changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
-    OlLayerTile<OGCMapTile | TileDebug>,
-    OGCMapTile | TileDebug | ImageTile,
-    RasterSymbology
-> {
+export class OlOgcApiMapTileLayerComponent
+    extends MapLayerComponent<OlLayerTile<OGCMapTile | TileDebug>, OGCMapTile | TileDebug | ImageTile, RasterSymbology>
+    implements OnDestroy
+{
     protected readonly backend = inject(BackendService);
     protected readonly config = inject(CoreConfig);
     protected readonly notificationService = inject(NotificationService);
+
+    /** Abort controllers for tile loads that are currently in flight. */
+    private readonly tileAbortControllers = new Set<AbortController>();
 
     readonly dataConnectorId = input.required<UUID>();
     readonly dataLayerId = input.required<string>();
@@ -458,8 +508,8 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
             spatialReference: this.spatialReference(),
             time: this.time(), // no way to just update `context` field in OGCMapTile…
         }),
-        loader: async () =>
-            new OGCMapTile({
+        loader: async (): Promise<OGCMapTile> => {
+            const source = new OGCMapTile({
                 url: await this.tmsBlobUrl(),
                 context: {
                     datetime: this.time().asRequestString(),
@@ -468,22 +518,52 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
                 interpolate: false, // Stops blurry tiles when zooming in.
                 tileLoadFunction: (olTile, src): void => {
                     void (async (): Promise<void> => {
+                        const controller = new AbortController();
+                        this.tileAbortControllers.add(controller);
+
+                        let cancelSub: Subscription | undefined;
                         try {
+                            const tile = olTile as OlImageTile;
+                            const tileCoord = tile.getTileCoord();
+                            const tileGrid = source.getTileGridForProjection(olGetProj(this.spatialReference().srsString)!);
+                            const tileExtent = tileGrid.getTileCoordExtent(tileCoord) as Extent;
+
+                            cancelSub = this.projectService
+                                .createQueryAbortStream(this.layerId(), tileExtent)
+                                .subscribe(() => controller.abort());
+
                             // Successfully assign the object URL to the image element
                             (olTile as unknown as {getImage: () => HTMLImageElement}).getImage().src = await this.urlToBlobUrl(
                                 src,
                                 'IMAGE',
+                                undefined,
+                                controller.signal,
                             );
                         } catch (error) {
-                            console.error('Error loading OGC tile:', error);
+                            const aborted = error instanceof DOMException && error.name === 'AbortError';
+                            if (!aborted) {
+                                console.error('Error loading OGC tile:', error);
+                            }
 
                             // CRITICAL: You must explicitly catch errors and notify OpenLayers,
                             // otherwise the map will wait indefinitely for this tile to resolve.
-                            olTile.setState(TileState.ERROR);
+                            if (aborted) {
+                                // The tile may be requested again later, so reset it to IDLE
+                                // instead of leaving it in ERROR (which OpenLayers never re-fetches).
+                                this.resetAbortedTile(olTile as OlImageTile);
+                            } else {
+                                olTile.setState(TileState.ERROR);
+                            }
+                        } finally {
+                            cancelSub?.unsubscribe();
+                            this.tileAbortControllers.delete(controller);
                         }
                     })();
                 },
-            }),
+            });
+
+            return source;
+        },
     });
 
     constructor() {
@@ -555,13 +635,19 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
         });
     }
 
-    async urlToBlobUrl(url: string, type: 'JSON' | 'IMAGE', interceptor?: (metadata: JSON) => Promise<void>): Promise<string> {
+    async urlToBlobUrl(
+        url: string,
+        type: 'JSON' | 'IMAGE',
+        interceptor?: (metadata: JSON) => Promise<void>,
+        signal?: AbortSignal,
+    ): Promise<string> {
         const sessionToken = this.sessionToken();
 
         const response = await fetch(url, {
             headers: {
                 Authorization: `Bearer ${sessionToken}`,
             },
+            signal,
         });
 
         if (!response.ok) {
@@ -597,6 +683,14 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
         return olExtentToTuple(this._mapLayer.getExtent() ?? [0, 0, 0, 0]);
     }
 
+    ngOnDestroy(): void {
+        // abort all tile requests that are still in flight
+        for (const controller of this.tileAbortControllers) {
+            controller.abort();
+        }
+        this.tileAbortControllers.clear();
+    }
+
     private addStateListenersToOlSource(): void {
         // TILE LOADING STATE
         let tilesPending = 0;
@@ -611,8 +705,17 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
                 this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.OK);
             }
         });
-        this.source.on('tileloaderror', () => {
+        this.source.on('tileloaderror', (event: TileSourceEvent) => {
             tilesPending--;
+
+            if (this.abortedTiles.has(event.tile as OlImageTile)) {
+                // the abort is transient, the tile will be re-requested
+                if (tilesPending <= 0) {
+                    this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.OK);
+                }
+                return;
+            }
+
             this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.ERROR);
         });
     }
