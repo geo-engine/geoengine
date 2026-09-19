@@ -14,6 +14,11 @@ repository.workspace = true
 [lints]
 workspace = true
 
+# Which parts of the generated EPSG registry are compiled in:
+# - "code": the numeric EPSG code of each entry
+# - "name": the human readable name of each CRS
+# - "metadata": everything, including code and name. This is the full registry
+#   as consumed by `StaticEpsgMetadataProvider`.
 [features]
 default = ["metadata"]
 code = []

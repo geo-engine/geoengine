@@ -15,8 +15,14 @@ use crate::{
     util::Result,
 };
 
+/// A coordinate projector backed by the PROJ library (via the `proj` crate),
+/// using its well-known-CRS pipeline for the given pair of spatial references.
+/// This is the most feature-complete backend: it supports every CRS pair that
+/// PROJ's database knows.
 pub struct ProjCoordinateProjector {
+    /// The CRS coordinates are projected from.
     pub from: SpatialReference,
+    /// The CRS coordinates are projected to.
     pub to: SpatialReference,
     p: Proj,
 }

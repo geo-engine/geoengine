@@ -25,13 +25,28 @@ impl From<geodesy::Error> for Error {
 }
 
 #[derive(Debug, Clone)]
+/// A coordinate projector backed by the `geodesy` crate (Karney's geodesic and
+/// projection library, using a PROJ-string based operation context).
+///
+/// The projector holds a geodesy context and the two operation handles for the
+/// source and target CRS. Coordinates given in a latitude/longitude CRS are
+/// converted to radians up front (geodesy operates in radians); whether a CRS
+/// is lat/lon and whether the target needs degrees again is tracked per side
+/// by the `*_latlon` flags.
 pub struct GeodesyCoordinateProjector<C: geodesy::ctx::Context = geodesy::ctx::Minimal> {
+    /// The geodesy context holding the compiled operations.
     ctx: C,
+    /// The EPSG code of the source CRS.
     source_crs: u16,
+    /// The compiled source operation handle in the context.
     source: geodesy::ctx::OpHandle,
+    /// Whether the source CRS is a latitude/longitude CRS.
     source_latlon: bool,
+    /// The EPSG code of the target CRS.
     target_crs: u16,
+    /// The compiled target operation handle in the context.
     target: geodesy::ctx::OpHandle,
+    /// Whether the target CRS is a latitude/longitude CRS (degrees out).
     target_latlon: bool,
 }
 
