@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crs-constants",
     "datatypes",
     "expression",
     "macros",
@@ -122,6 +123,8 @@ gdal-sys = "0.12"
 geo = "0.33.1"
 geo-types = "0.7.19"                                      # important for compatibility when linking expressions
 geojson = { version = "1.0", features = ["geo-types"] }
+geodesy = {version = "0.15"}
+crs-definitions = { version = "0.5.0", features = ["proj4"] }
 httptest = "0.16"
 ipc-channel = "0.22.0"
 image = "0.25"

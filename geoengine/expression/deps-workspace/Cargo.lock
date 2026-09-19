@@ -110,18 +110,23 @@ dependencies = [
 
 [[package]]
 name = "geo-types"
-version = "0.7.19"
+version = "0.7.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94776032c45f950d30a13af6113c2ad5625316c9abfbccee4dd5a6695f8fe0f5"
+checksum = "777d18aa0f12f8b285331cd867133ee14422b3f023f6d388034c47d43e28786a"
 dependencies = [
  "approx",
  "num-traits",
  "rayon",
- "rstar",
+ "rstar 0.10.0",
+ "rstar 0.11.0",
+ "rstar 0.12.2",
+ "rstar 0.13.0",
+ "rstar 0.8.4",
+ "rstar 0.9.3",
  "serde",
  "spade",
+ "thiserror 2.0.20",
 ]
-
 [[package]]
 name = "geoengine-expression-deps"
 version = "0.0.0"

@@ -26,7 +26,7 @@ TILEMATRIXSETID_ONE_OF_SCHEMAS = ["TileMatrixSetIdOneOf", "str"]
 
 class TileMatrixSetId(BaseModel):
     """
-    Identifier for a supported TileMatrixSet
+    Identifier for a supported [`TileMatrixSet`]
     """
     # data type: str
     oneof_schema_1_validator: Optional[StrictStr] = None

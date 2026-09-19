@@ -53,12 +53,6 @@ export interface Collection {
      */
     description?: string | null;
     /**
-     * 
-     * @type {Array<string>}
-     * @memberof Collection
-     */
-    keywords?: Array<string>;
-    /**
      * Attribution for the collection.
      * @type {string}
      * @memberof Collection
@@ -124,7 +118,6 @@ export function CollectionFromJSONTyped(json: any, ignoreDiscriminator: boolean)
         'id': json['id'],
         'title': json['title'] == null ? undefined : json['title'],
         'description': json['description'] == null ? undefined : json['description'],
-        'keywords': json['keywords'] == null ? undefined : json['keywords'],
         'attribution': json['attribution'] == null ? undefined : json['attribution'],
         'extent': json['extent'] == null ? undefined : ExtentFromJSON(json['extent']),
         'itemType': json['itemType'] == null ? undefined : json['itemType'],
@@ -150,7 +143,6 @@ export function CollectionToJSONTyped(value?: Collection | null, ignoreDiscrimin
         'id': value['id'],
         'title': value['title'],
         'description': value['description'],
-        'keywords': value['keywords'],
         'attribution': value['attribution'],
         'extent': ExtentToJSON(value['extent']),
         'itemType': value['itemType'],

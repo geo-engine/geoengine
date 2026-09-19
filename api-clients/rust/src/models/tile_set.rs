@@ -10,7 +10,7 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// TileSet : A resource describing a tileset based on the OGC TileSet Metadata Standard. At least one of the 'TileMatrixSet',  or a link with 'rel' tiling-scheme\"
+/// TileSet : A resource describing a tileset based on the OGC Two Dimensional Tile Matrix Set and Tile Set Metadata. At least one of the [`TileMatrixSet`], or a link with 'rel' tiling-scheme\"
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TileSet {
     /// A title for this tileset
@@ -19,7 +19,7 @@ pub struct TileSet {
     /// Brief narrative description of this tile set
     #[serde(rename = "description", skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// Unordered list of one or more commonly used or formalized word(s) or phrase(s) used to describe a TileSet
+    /// Unordered list of one or more commonly used or formalized word(s) or phrase(s) used to describe a [`TileSet`]
     #[serde(rename = "keywords", skip_serializing_if = "Option::is_none")]
     pub keywords: Option<Vec<String>>,
     #[serde(rename = "dataType")]
@@ -27,7 +27,7 @@ pub struct TileSet {
     /// Reference to a Tile Matrix Set on the OGC NA definition server (<http://www.opengis.net/def/tms/>). Required if the tile matrix set is registered on the definition server.
     #[serde(rename = "tileMatrixSetURI", skip_serializing_if = "Option::is_none")]
     pub tile_matrix_set_uri: Option<String>,
-    /// Limits for the TileRow and TileCol values for each TileMatrix in the TileMatrixSet. If missing, there are no limits other that the ones imposed by the TileMatrixSet. If present the TileMatrices listed are limited and the rest not available at all
+    /// Limits for the [`TileRow`] and [`TileCol`] values for each [`TileMatrix`] in the [`TileMatrixSet`]. If missing, there are no limits other that the ones imposed by the [`TileMatrixSet`]. If present the tile matrices listed are limited and the rest not available at all
     #[serde(rename = "tileMatrixSetLimits", skip_serializing_if = "Option::is_none")]
     pub tile_matrix_set_limits: Option<Vec<models::TileMatrixLimits>>,
     /// Coordinate Reference System (CRS)
@@ -36,7 +36,7 @@ pub struct TileSet {
     /// Epoch of the Coordinate Reference System (CRS)
     #[serde(rename = "epoch", skip_serializing_if = "Option::is_none")]
     pub epoch: Option<f64>,
-    /// Links to related resources. Possible link 'rel' values are: 'dataset' for a URL pointing to the dataset, 'tiles' for a URL template to get the tiles; 'alternate' for a URL pointing to another representation of the TileSetMetadata (e.g a TileJSON file); 'tiling-scheme' for a definition of the TileMatrixSet
+    /// Links to related resources. Possible link 'rel' values are: 'dataset' for a URL pointing to the dataset, 'tiles' for a URL template to get the tiles; 'alternate' for a URL pointing to another representation of the [`TileSetMetadata`] (e.g a [`TileJSON` file); 'tiling-scheme' for a definition of the [`TileMatrixSet`]
     #[serde(rename = "links")]
     pub links: Vec<models::Link>,
     #[serde(rename = "layers", skip_serializing_if = "Option::is_none")]
@@ -77,7 +77,7 @@ pub struct TileSet {
 }
 
 impl TileSet {
-    /// A resource describing a tileset based on the OGC TileSet Metadata Standard. At least one of the 'TileMatrixSet',  or a link with 'rel' tiling-scheme\"
+    /// A resource describing a tileset based on the OGC Two Dimensional Tile Matrix Set and Tile Set Metadata. At least one of the [`TileMatrixSet`], or a link with 'rel' tiling-scheme\"
     pub fn new(data_type: models::GeospatialDataDataType, crs: models::TilesCrs, links: Vec<models::Link>) -> TileSet {
         TileSet {
             title: None,

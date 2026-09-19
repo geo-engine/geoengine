@@ -30,7 +30,7 @@ class TilePoint(BaseModel):
     """ # noqa: E501
     coordinates: Annotated[List[Union[StrictFloat, StrictInt]], Field(min_length=2, max_length=2)]
     crs: Optional[TilesCrs] = None
-    tile_matrix: Optional[StrictStr] = Field(default=None, description="TileMatrix identifier associated with the scaleDenominator", alias="tileMatrix")
+    tile_matrix: Optional[StrictStr] = Field(default=None, description="[`TileMatrix`] identifier associated with the scaleDenominator", alias="tileMatrix")
     scale_denominator: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, description="Scale denominator of the tile matrix selected", alias="scaleDenominator")
     cell_size: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, description="Cell size of the tile matrix selected", alias="cellSize")
     __properties: ClassVar[List[str]] = ["coordinates", "crs", "tileMatrix", "scaleDenominator", "cellSize"]

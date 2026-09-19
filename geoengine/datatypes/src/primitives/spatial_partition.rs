@@ -6,6 +6,7 @@ use crate::raster::GridShape2D;
 use crate::util::Result;
 use crate::util::helpers::snap_next;
 use crate::util::helpers::snap_prev;
+use float_cmp::ApproxEq;
 use postgres_types::FromSql;
 use postgres_types::ToSql;
 use serde::{Deserialize, Serialize};
@@ -339,6 +340,22 @@ pub fn partitions_extent<I: Iterator<Item = SpatialPartition2D>>(
     bboxes: I,
 ) -> Option<SpatialPartition2D> {
     bboxes.reduce(|s, other| s.extended(&other))
+}
+
+impl ApproxEq for SpatialPartition2D {
+    type Margin = float_cmp::F64Margin;
+
+    fn approx_eq<M>(self, other: Self, margin: M) -> bool
+    where
+        M: Into<Self::Margin>,
+    {
+        let m = margin.into();
+        self.upper_left_coordinate
+            .approx_eq(other.upper_left_coordinate, m)
+            && self
+                .lower_right_coordinate
+                .approx_eq(other.lower_right_coordinate, m)
+    }
 }
 
 #[cfg(test)]
