@@ -1,13 +1,12 @@
 //! Keep plaintext credentials in the runtime/API model and encrypt only at the
-//! PostgreSQL boundary, including nested provider definitions and updates.
+//! PostgreSQL boundary when a key is configured, including nested provider
+//! definitions and updates. Without a key, store UTF-8 bytes with no nonce.
 
 use super::{StacProviderAuthentication, StacProviderS3Config};
 use crate::config::{DataProvider, get_config_element};
 use crate::util::encryption::{
-    AesGcmStringPasswordEncryption, EncryptionError, MaybeEncryptedBytes, OptionalStringEncryption,
-    U96,
+    AesGcmStringPasswordEncryption, MaybeEncryptedBytes, OptionalStringEncryption, U96,
 };
-use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use bytes::BytesMut;
 use postgres_types::{FromSql, IsNull, ToSql, Type, to_sql_checked};
 use std::{fmt, sync::LazyLock};
@@ -30,16 +29,6 @@ fn password_encryption() -> Result<&'static OptionalStringEncryption, StorageErr
         .as_ref()
         .map_err(|error| error.to_string().into())
 }
-fn require_credential_encryption(
-    encryption: &OptionalStringEncryption,
-    has_credentials: bool,
-) -> Result<(), StorageError> {
-    if has_credentials && !encryption.is_enabled() {
-        return Err(EncryptionError::MissingEncryptionKey.into());
-    }
-    Ok(())
-}
-
 #[derive(ToSql, FromSql)]
 #[postgres(name = "StacProviderAuthentication")]
 struct StoredStacProviderAuthentication {
@@ -70,8 +59,8 @@ impl fmt::Debug for StoredStacProviderAuthentication {
 #[postgres(name = "StacProviderS3Config")]
 struct StoredStacProviderS3Config {
     endpoint: String,
-    access_key: Option<String>,
-    secret_key: Option<String>,
+    access_key: Option<Vec<u8>>,
+    secret_key: Option<Vec<u8>>,
     access_key_encryption_nonce: Option<U96>,
     secret_key_encryption_nonce: Option<U96>,
 }
@@ -104,20 +93,17 @@ impl fmt::Debug for StoredStacProviderS3Config {
 fn encrypt_s3_credential(
     value: Option<&String>,
     encryption: &OptionalStringEncryption,
-) -> Result<(Option<String>, Option<U96>), StorageError> {
+) -> Result<(Option<Vec<u8>>, Option<U96>), StorageError> {
     let Some(value) = value else {
         return Ok((None, None));
     };
 
     let encrypted = encryption.to_bytes(value.clone())?;
-    match encrypted.nonce {
-        Some(nonce) => Ok((Some(BASE64.encode(encrypted.value)), Some(nonce))),
-        None => Ok((Some(value.clone()), None)),
-    }
+    Ok((Some(encrypted.value), encrypted.nonce))
 }
 
 fn decrypt_s3_credential(
-    value: Option<String>,
+    value: Option<Vec<u8>>,
     nonce: Option<U96>,
     encryption: &OptionalStringEncryption,
 ) -> Result<Option<String>, StorageError> {
@@ -133,11 +119,11 @@ fn decrypt_s3_credential(
     };
 
     let Some(nonce) = nonce else {
-        return Ok(Some(value));
+        return Ok(Some(String::from_utf8(value)?));
     };
 
     Ok(Some(encryption.to_string(MaybeEncryptedBytes {
-        value: BASE64.decode(value)?,
+        value,
         nonce: Some(nonce),
     })?))
 }
@@ -222,7 +208,6 @@ impl StoredStacProviderAuthentication {
 impl ToSql for StacProviderAuthentication {
     fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> Result<IsNull, StorageError> {
         let encryption = password_encryption()?;
-        require_credential_encryption(encryption, true)?;
         StoredStacProviderAuthentication::encrypt(self, encryption)?.to_sql(ty, out)
     }
 
@@ -246,10 +231,6 @@ impl FromSql<'_> for StacProviderAuthentication {
 impl ToSql for StacProviderS3Config {
     fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> Result<IsNull, StorageError> {
         let encryption = password_encryption()?;
-        require_credential_encryption(
-            encryption,
-            self.access_key.is_some() || self.secret_key.is_some(),
-        )?;
         StoredStacProviderS3Config::encrypt(self, encryption)?.to_sql(ty, out)
     }
 
@@ -297,33 +278,39 @@ mod tests {
     }
 
     #[test]
-    fn credential_writes_require_encryption_key() {
-        let configured = password_encryption().unwrap();
-        let unconfigured = OptionalStringEncryption::new(None);
-
-        assert!(require_credential_encryption(configured, true).is_ok());
-        assert!(require_credential_encryption(&unconfigured, false).is_ok());
-        assert!(require_credential_encryption(&unconfigured, true).is_err());
-    }
-
-    #[test]
     fn optional_s3_storage_encryption() {
         let configured = password_encryption().unwrap();
         let unconfigured = OptionalStringEncryption::new(None);
         let value = s3_config();
 
         let encrypted = StoredStacProviderS3Config::encrypt(&value, configured).unwrap();
-        assert_ne!(encrypted.access_key.as_deref(), value.access_key.as_deref());
-        assert_ne!(encrypted.secret_key.as_deref(), value.secret_key.as_deref());
+        assert_ne!(
+            encrypted.access_key.as_deref(),
+            value.access_key.as_deref().map(str::as_bytes)
+        );
+        assert_ne!(
+            encrypted.secret_key.as_deref(),
+            value.secret_key.as_deref().map(str::as_bytes)
+        );
         assert!(encrypted.access_key_encryption_nonce.is_some());
         assert!(encrypted.secret_key_encryption_nonce.is_some());
         assert_eq!(encrypted.decrypt(configured).unwrap(), value);
 
         let plaintext = StoredStacProviderS3Config::encrypt(&value, &unconfigured).unwrap();
-        assert_eq!(plaintext.access_key.as_deref(), value.access_key.as_deref());
-        assert_eq!(plaintext.secret_key.as_deref(), value.secret_key.as_deref());
+        assert_eq!(
+            plaintext.access_key.as_deref(),
+            value.access_key.as_deref().map(str::as_bytes)
+        );
+        assert_eq!(
+            plaintext.secret_key.as_deref(),
+            value.secret_key.as_deref().map(str::as_bytes)
+        );
         assert!(plaintext.access_key_encryption_nonce.is_none());
         assert!(plaintext.secret_key_encryption_nonce.is_none());
+        assert_eq!(plaintext.decrypt(&unconfigured).unwrap(), value);
+
+        // Adding a key must not prevent reading credentials stored without one.
+        let plaintext = StoredStacProviderS3Config::encrypt(&value, &unconfigured).unwrap();
         assert_eq!(plaintext.decrypt(configured).unwrap(), value);
 
         assert!(
@@ -401,14 +388,14 @@ mod tests {
                           (((definition).stac_data_provider_definition).authentication).password_encryption_nonce
                    FROM layer_providers WHERE id = $1";
         let row = conn.query_one(sql, &[&id]).await.unwrap();
-        let access_key: String = row.get(0);
-        let secret_key: String = row.get(1);
+        let access_key: Vec<u8> = row.get(0);
+        let secret_key: Vec<u8> = row.get(1);
         let access_key_nonce: Vec<u8> = row.get(2);
         let secret_key_nonce: Vec<u8> = row.get(3);
         let ciphertext: Vec<u8> = row.get(4);
         let nonce: Vec<u8> = row.get(5);
-        assert_ne!(access_key, s3_config().access_key.unwrap());
-        assert_ne!(secret_key, s3_config().secret_key.unwrap());
+        assert_ne!(access_key, s3_config().access_key.unwrap().as_bytes());
+        assert_ne!(secret_key, s3_config().secret_key.unwrap().as_bytes());
         assert_eq!(access_key_nonce.len(), 12);
         assert_eq!(secret_key_nonce.len(), 12);
         assert_ne!(ciphertext, authentication().password.as_bytes());
@@ -429,8 +416,8 @@ mod tests {
             .await
             .unwrap();
         let row = conn.query_one(sql, &[&id]).await.unwrap();
-        let new_access_key: String = row.get(0);
-        let new_secret_key: String = row.get(1);
+        let new_access_key: Vec<u8> = row.get(0);
+        let new_secret_key: Vec<u8> = row.get(1);
         let new_ciphertext: Vec<u8> = row.get(4);
         assert_ne!(new_access_key, access_key);
         assert_ne!(new_secret_key, secret_key);

@@ -878,8 +878,8 @@ CREATE TYPE "WildliveDataConnectorDefinition" AS (
 
 CREATE TYPE "StacProviderS3Config" AS (
     endpoint text,
-    access_key text,
-    secret_key text
+    access_key bytea,
+    secret_key bytea
 );
 
 ALTER TYPE "StacProviderS3Config"
