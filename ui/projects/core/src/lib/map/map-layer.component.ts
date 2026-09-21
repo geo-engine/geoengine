@@ -222,6 +222,9 @@ export class OlRasterLayerComponent
 
     readonly sessionToken = input<UUID>();
 
+    /** In-flight WMS tile requests that need to be aborted when the layer is destroyed. */
+    private readonly tileAbortClients = new Set<XMLHttpRequest>();
+
     protected dataSubscription?: Subscription;
     protected layerChangesSubscription?: Subscription;
     protected timeSubscription?: Subscription;
@@ -282,6 +285,12 @@ export class OlRasterLayerComponent
         if (this.timeSubscription) {
             this.timeSubscription.unsubscribe();
         }
+
+        // abort all WMS tile requests that are still in flight
+        for (const client of this.tileAbortClients) {
+            client.abort();
+        }
+        this.tileAbortClients.clear();
     }
 
     getExtent(): [number, number, number, number] {
@@ -371,6 +380,7 @@ export class OlRasterLayerComponent
             const tileExtent = tileGrid.getTileCoordExtent(tileCoord) as Extent;
 
             const client = new XMLHttpRequest();
+            this.tileAbortClients.add(client);
 
             let aborted = false;
 
@@ -384,6 +394,7 @@ export class OlRasterLayerComponent
             client.setRequestHeader('Authorization', `Bearer ${this.sessionToken()}`);
             client.addEventListener('loadend', (_event) => {
                 cancelSub.unsubscribe();
+                this.tileAbortClients.delete(client);
                 const data = client.response;
 
                 if (!data) {
@@ -404,6 +415,7 @@ export class OlRasterLayerComponent
                 }
             });
             client.addEventListener('error', () => {
+                this.tileAbortClients.delete(client);
                 tile.setState(TileState.ERROR);
             });
 
@@ -412,6 +424,7 @@ export class OlRasterLayerComponent
             // still go out otherwise.
             if (aborted) {
                 cancelSub.unsubscribe();
+                this.tileAbortClients.delete(client);
                 this.resetAbortedTile(tile);
             } else {
                 client.send();
@@ -600,6 +613,10 @@ export class OlOgcApiMapTileLayerComponent
             };
             const onEnd = (): void => {
                 tilesPending--;
+                if (this.resettingAbortedTile) {
+                    // abort is transient, the retry's tileloadstart will update loading
+                    return;
+                }
                 if (tilesPending <= 0) {
                     this.loading.emit(false);
                 }
