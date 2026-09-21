@@ -18,7 +18,6 @@ import {Subject, Subscription} from 'rxjs';
 import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol/layer';
 import {ImageTile as OlImageTile} from 'ol';
 import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
-import type {TileSourceEvent} from 'ol/source/Tile';
 import {get as olGetProj} from 'ol/proj';
 import {CoreConfig} from '../config.service';
 import {ProjectService} from '../project/project.service';
@@ -47,12 +46,6 @@ import {
 @Directive()
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends OlSource, S extends Symbology> {
-    /**
-     * Tiles that were reset after an abort. Aborts are transient: the tile will be re-requested
-     * instead of being a persisted error, so the layer state must not turn to `ERROR` for them.
-     */
-    protected readonly abortedTiles = new WeakSet<OlImageTile>();
-
     protected projectService = inject(ProjectService);
 
     readonly layerId = input.required<number>();
@@ -93,6 +86,14 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
     abstract getExtent(): [number, number, number, number];
 
     /**
+     * True while an aborted tile is being reset. `resetAbortedTile` is forced through `ERROR`,
+     * which synchronously fires a `tileloaderror`; this flag lets the listeners classify that
+     * event as transient. It only needs to hold during the reset: genuine failures always fire
+     * from an async callback (XHR/fetch), never inside this window.
+     */
+    protected resettingAbortedTile = false;
+
+    /**
      * Reset an aborted tile to `IDLE` so OpenLayers re-requests it (e.g. after panning away and
      * back). OpenLayers only requests IDLE tiles, so an ERROR tile would stay invisible forever.
      *
@@ -101,9 +102,14 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
      * `tileloaderror` and keep its in-flight tile bookkeeping balanced.
      */
     protected resetAbortedTile(tile: OlImageTile): void {
-        this.abortedTiles.add(tile);
-        tile.setState(TileState.ERROR);
-        tile.setState(TileState.IDLE);
+        const previous = this.resettingAbortedTile;
+        this.resettingAbortedTile = true;
+        try {
+            tile.setState(TileState.ERROR);
+            tile.setState(TileState.IDLE);
+        } finally {
+            this.resettingAbortedTile = previous;
+        }
     }
 
     protected extractChange<T>(change: SimpleChange): T | undefined {
@@ -446,10 +452,10 @@ export class OlRasterLayerComponent
                 this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.OK);
             }
         });
-        this.source.on('tileloaderror', (event: TileSourceEvent) => {
+        this.source.on('tileloaderror', () => {
             tilesPending--;
 
-            if (this.abortedTiles.has(event.tile as OlImageTile)) {
+            if (this.resettingAbortedTile) {
                 // the abort is transient, the tile will be re-requested
                 if (tilesPending <= 0) {
                     this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.OK);
@@ -705,10 +711,10 @@ export class OlOgcApiMapTileLayerComponent
                 this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.OK);
             }
         });
-        this.source.on('tileloaderror', (event: TileSourceEvent) => {
+        this.source.on('tileloaderror', () => {
             tilesPending--;
 
-            if (this.abortedTiles.has(event.tile as OlImageTile)) {
+            if (this.resettingAbortedTile) {
                 // the abort is transient, the tile will be re-requested
                 if (tilesPending <= 0) {
                     this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.OK);
