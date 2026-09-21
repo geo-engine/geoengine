@@ -7,6 +7,7 @@
   "apiUrl": "https://stac.test/v1",
   "collectionName": "landsat-c2-l1",
   "s3Config": null,
+  "authentication": null,
   "timeDimension": {
     "type": "regular",
     "origin": 0,

@@ -337,6 +337,7 @@ __exportStar(require("./SpatialResolution"), exports);
 __exportStar(require("./StacApiRetries"), exports);
 __exportStar(require("./StacAssetBand"), exports);
 __exportStar(require("./StacDataProviderDefinition"), exports);
+__exportStar(require("./StacProviderAuthentication"), exports);
 __exportStar(require("./StacProviderDataset"), exports);
 __exportStar(require("./StacProviderDatasetBand"), exports);
 __exportStar(require("./StacProviderS3Config"), exports);

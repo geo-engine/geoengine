@@ -363,6 +363,8 @@ pub struct DataProvider {
     pub provider_defs_path: PathBuf,
     pub layer_defs_path: PathBuf,
     pub layer_collection_defs_path: PathBuf,
+    /// Optional key material used to encrypt STAC passwords at rest.
+    pub password_encryption_key: Option<String>,
 }
 
 impl ConfigElement for DataProvider {
