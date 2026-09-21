@@ -65,6 +65,14 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
     protected _mapLayer: OL;
 
     /**
+     * True while an aborted tile is being reset. `resetAbortedTile` is forced through `ERROR`,
+     * which synchronously fires a `tileloaderror`; this flag lets the listeners classify that
+     * event as transient. It only needs to hold during the reset: genuine failures always fire
+     * from an async callback (XHR/fetch), never inside this window.
+     */
+    protected resettingAbortedTile = false;
+
+    /**
      * Setup of DI
      */
     // eslint-disable-next-line @angular-eslint/prefer-inject
@@ -84,14 +92,6 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
      * Return the extent of the layer in map units
      */
     abstract getExtent(): [number, number, number, number];
-
-    /**
-     * True while an aborted tile is being reset. `resetAbortedTile` is forced through `ERROR`,
-     * which synchronously fires a `tileloaderror`; this flag lets the listeners classify that
-     * event as transient. It only needs to hold during the reset: genuine failures always fire
-     * from an async callback (XHR/fetch), never inside this window.
-     */
-    protected resettingAbortedTile = false;
 
     /**
      * Reset an aborted tile to `IDLE` so OpenLayers re-requests it (e.g. after panning away and
