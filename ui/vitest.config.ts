@@ -14,7 +14,41 @@ const MOCK_CANVAS_PLUGIN: Plugin = {
     load(id) {
         if (id === '\0canvas-mock') {
             // Return simulated browser-safe module contents
-            return 'export default {}; export const createCanvas = () => {};';
+            return `
+                const noop = () => {};
+                const context = {
+                    canvas: { width: 1, height: 1 },
+                    fillStyle: '',
+                    strokeStyle: '',
+                    lineWidth: 1,
+                    font: '',
+                    textAlign: 'left',
+                    textBaseline: 'alphabetic',
+                    beginPath: noop,
+                    arc: noop,
+                    moveTo: noop,
+                    lineTo: noop,
+                    stroke: noop,
+                    fill: noop,
+                    fillRect: noop,
+                    clearRect: noop,
+                    drawImage: noop,
+                    save: noop,
+                    restore: noop,
+                    scale: noop,
+                    translate: noop,
+                    setTransform: noop,
+                    clip: noop,
+                    rect: noop,
+                    closePath: noop,
+                    measureText: () => ({width: 0}),
+                    createLinearGradient: () => ({addColorStop: noop}),
+                    setLineDash: noop,
+                    getImageData: () => ({data: new Uint8ClampedArray(4)}),
+                };
+                export default {getContext: () => context};
+                export const createCanvas = () => ({getContext: () => context});
+            `;
         }
         return undefined;
     },
@@ -22,4 +56,9 @@ const MOCK_CANVAS_PLUGIN: Plugin = {
 
 export default defineConfig({
     plugins: [MOCK_CANVAS_PLUGIN],
+    test: {
+        coverage: {
+            provider: 'v8',
+        },
+    },
 });

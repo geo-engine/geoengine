@@ -106,6 +106,7 @@
                                 "output": "assets"
                             }
                         ],
+                        "inlineStyleLanguage": "scss",
                         "styles": [
                             "projects/enhanced-data-viewer/src/styles.scss",
                             "projects/common/assets/fonts/poppins/poppins.css",

@@ -5,9 +5,11 @@ import {provideNativeDateAdapter} from '@angular/material/core';
 import {ProjectService} from '@geoengine/core';
 import {LayersService, Time, TimeStepDuration} from '@geoengine/common';
 import {LayersComponent} from './layers.component';
+import {EdvLayersService} from './layers.service';
 
 describe('LayersComponent', () => {
     let fixture: ComponentFixture<LayersComponent>;
+    let edvLayersService: EdvLayersService;
     const getLayerCollectionItems = vi.fn();
     const setTime = vi.fn().mockResolvedValue(undefined);
     const setTimeStepDuration = vi.fn();
@@ -15,11 +17,13 @@ describe('LayersComponent', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
         getLayerCollectionItems.mockReset().mockResolvedValue({items: []});
+
         await TestBed.configureTestingModule({
             imports: [LayersComponent],
             providers: [
                 provideNativeDateAdapter(),
                 {provide: LayersService, useValue: {getLayerCollectionItems}},
+                EdvLayersService,
                 {
                     provide: ProjectService,
                     useValue: {
@@ -31,6 +35,8 @@ describe('LayersComponent', () => {
                 },
             ],
         }).compileComponents();
+
+        edvLayersService = TestBed.inject(EdvLayersService);
         fixture = TestBed.createComponent(LayersComponent);
     });
 
@@ -40,7 +46,8 @@ describe('LayersComponent', () => {
         expect(fixture.componentInstance.currentPresets().map((preset) => preset.category)).toEqual(['harvested', 'harvested']);
         expect((fixture.nativeElement as HTMLElement).querySelectorAll('.preset-group-label')).toHaveLength(0);
 
-        fixture.componentRef.setInput('debug', true);
+        edvLayersService.debug.set(true);
+
         fixture.detectChanges();
         await fixture.whenStable();
         expect(fixture.componentInstance.presetGroups().map((group) => group.category)).toEqual(['static', 'harvested', 'adHoc']);
@@ -83,6 +90,6 @@ describe('LayersComponent', () => {
         await component.setSelectedDataSource('opengeohub-landsat');
         expect(setTime).not.toHaveBeenCalled();
         expect(setTimeStepDuration).toHaveBeenLastCalledWith({durationAmount: 2, durationUnit: 'months'});
-        expect(component.selectedDataSource()).toBe('opengeohub-landsat');
+        expect(component.selectedDataSourceKey()).toBe('opengeohub-landsat');
     });
 });
