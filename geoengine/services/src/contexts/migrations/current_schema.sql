@@ -927,7 +927,8 @@ CREATE TYPE "StacDataProviderDefinition" AS (
     datasets "StacProviderDataset" [],
     query_timeout_secs bigint,
     page_limit bigint,
-    authentication "StacProviderAuthentication"
+    authentication "StacProviderAuthentication",
+    cache_ttl int
 );
 
 CREATE TYPE "DataProviderDefinition" AS (

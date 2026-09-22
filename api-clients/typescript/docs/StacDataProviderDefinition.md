@@ -19,6 +19,7 @@ Name | Type
 `datasets` | [Array&lt;StacProviderDataset&gt;](StacProviderDataset.md)
 `queryTimeoutSecs` | number
 `pageLimit` | number
+`cacheTtl` | number
 
 ## Example
 
@@ -40,6 +41,7 @@ const example = {
   "datasets": null,
   "queryTimeoutSecs": null,
   "pageLimit": null,
+  "cacheTtl": null,
 } satisfies StacDataProviderDefinition
 
 console.log(example)

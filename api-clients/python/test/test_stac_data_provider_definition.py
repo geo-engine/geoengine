@@ -84,7 +84,8 @@ class TestStacDataProviderDefinition(unittest.TestCase):
                             ], )
                     ],
                 query_timeout_secs = 56,
-                page_limit = 56
+                page_limit = 56,
+                cache_ttl = 0
             )
         else:
             return StacDataProviderDefinition(

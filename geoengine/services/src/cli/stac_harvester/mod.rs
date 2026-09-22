@@ -43,6 +43,10 @@ pub enum StacHarvesterCommand {
 
 /// Run the STAC harvester
 pub async fn stac_harvester(params: StacHarvester) -> Result<(), anyhow::Error> {
+    // Initialize the merged settings before parsing provider mappings so
+    // omitted TTLs use the configured global default.
+    crate::config::get_config_element::<crate::config::Cache>()?;
+
     match params.command {
         StacHarvesterCommand::DiscoverMapping(discover) => {
             init_stac_harvest_logging(discover.verbose);

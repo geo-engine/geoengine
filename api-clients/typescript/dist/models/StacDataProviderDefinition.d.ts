@@ -96,6 +96,12 @@ export interface StacDataProviderDefinition {
      * @memberof StacDataProviderDefinition
      */
     pageLimit?: number;
+    /**
+     * Optional output cache lifetime; omitted values use the global cache default.
+     * @type {number}
+     * @memberof StacDataProviderDefinition
+     */
+    cacheTtl?: number | null;
 }
 /**
  * @export
