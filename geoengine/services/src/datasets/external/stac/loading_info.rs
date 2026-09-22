@@ -165,13 +165,20 @@ impl
         &self,
         query: MultiBandGdalLoadingInfoQueryRectangle,
     ) -> geoengine_operators::util::Result<MultiBandGdalLoadingInfo> {
-        let base_url = Url::from_str(&self.api_url)
-            .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+        let base_url = Url::from_str(&self.api_url).map_err(|e| {
+            geoengine_operators::error::Error::InvalidDataProviderConfig {
+                reason: format!("invalid STAC API URL: {e}"),
+            }
+        })?;
         let items_url = join_base_url_and_path(
             &base_url,
             &format!("collections/{}/items", self.collection_name),
         )
-        .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+        .map_err(
+            |e| geoengine_operators::error::Error::InvalidDataProviderConfig {
+                reason: format!("could not construct STAC items URL: {e}"),
+            },
+        )?;
 
         let spatial_bounds = query.query_rectangle.spatial_bounds();
         let time_interval =
@@ -195,11 +202,18 @@ impl
             ));
         }
 
-        let query_params = self.create_stac_query_params(&query, time_interval)?;
-
-        let mut query_state = StacQueryState::FirstPage {
-            query_url: items_url,
-            query_params,
+        let bbox = stac_query_bbox(spatial_bounds, self.dataset.projection)?;
+        let mut query_state = match bbox {
+            Some(bbox) => StacQueryState::FirstPage {
+                query_url: items_url,
+                query_params: self.create_stac_query_params(bbox, time_interval)?,
+            },
+            None => {
+                // The query lies entirely outside the CRS area of use, so clipping
+                // leaves no bbox to send to STAC. Skip requests, but continue filling
+                // regular time steps so the source returns empty tiles for the interval.
+                StacQueryState::Finished
+            }
         };
 
         let mut files = Vec::new();
@@ -228,7 +242,11 @@ impl
                 .map(Ok::<_, geoengine_operators::error::Error>)
                 .try_time_regular_range_fill(regular, time_interval)
                 .collect::<Result<Vec<_>, _>>()
-                .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?,
+                .map_err(
+                    |e| geoengine_operators::error::Error::InvalidDataProviderConfig {
+                        reason: format!("could not fill missing regular time steps: {e}"),
+                    },
+                )?,
             TimeDimension::Irregular => {
                 unreachable!("irregular time dimension rejected at provider initialization")
             }
@@ -349,14 +367,9 @@ impl
 impl StacMultiBandMetaData {
     fn create_stac_query_params(
         &self,
-        query: &MultiBandGdalLoadingInfoQueryRectangle,
+        bbox: geoengine_datatypes::primitives::BoundingBox2D,
         time_interval: TimeInterval,
     ) -> geoengine_operators::util::Result<Vec<(String, String)>> {
-        let bbox = stac_query_bbox(
-            query.query_rectangle.spatial_bounds(),
-            self.dataset.projection,
-        )?;
-
         let time_start = time_interval.start();
         let time_end = time_interval.end();
 
@@ -377,11 +390,21 @@ impl StacMultiBandMetaData {
                     "{}/{}",
                     time_start
                         .as_date_time()
-                        .ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?
+                        .ok_or_else(|| {
+                            geoengine_operators::error::Error::InvalidDataProviderConfig {
+                                reason: "query time start is not representable as a datetime"
+                                    .to_owned(),
+                            }
+                        })?
                         .to_datetime_string_with_millis(),
                     time_end
                         .as_date_time()
-                        .ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?
+                        .ok_or_else(|| {
+                            geoengine_operators::error::Error::InvalidDataProviderConfig {
+                                reason: "query time end is not representable as a datetime"
+                                    .to_owned(),
+                            }
+                        })?
                         .to_datetime_string_with_millis(),
                 ),
             ),
@@ -436,12 +459,21 @@ impl StacMultiBandMetaData {
                 |updated| updated.timestamp_millis(),
             );
 
-        let item_time = TimeInstance::from_millis(item_datetime.timestamp_millis())
-            .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+        let item_time =
+            TimeInstance::from_millis(item_datetime.timestamp_millis()).map_err(|e| {
+                geoengine_operators::error::Error::InvalidDataProviderConfig {
+                    reason: format!("could not convert STAC item datetime to Geo Engine time: {e}"),
+                }
+            })?;
 
         // Shared with the STAC harvester so both produce identical intervals.
-        let time = common::snap_time_interval(item_time, &self.time_dimension)
-            .ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+        let time =
+            common::snap_time_interval(item_time, &self.time_dimension).ok_or_else(|| {
+                geoengine_operators::error::Error::InvalidDataProviderConfig {
+                    reason: "could not snap STAC item datetime to configured time dimension"
+                        .to_owned(),
+                }
+            })?;
 
         Ok(Some((time, z_index)))
     }
@@ -503,11 +535,7 @@ impl StacMultiBandMetaData {
             return Ok(());
         };
 
-        let grid_bounds = GridBoundingBox2D::new(
-            GridIdx2D::new([0, 0]),
-            GridIdx2D::new([(height as isize) - 1, (width as isize) - 1]),
-        )
-        .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+        let grid_bounds = stac_asset_grid_bounds(height, width)?;
         let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
 
         let file_path = if asset.href.starts_with("http://")
@@ -516,7 +544,12 @@ impl StacMultiBandMetaData {
         {
             PathBuf::from(&asset.href)
         } else {
-            return Err(geoengine_operators::error::Error::InvalidDataProviderConfig.into());
+            return Err(
+                geoengine_operators::error::Error::InvalidDataProviderConfig {
+                    reason: format!("unsupported STAC asset href scheme in {:?}", asset.href),
+                }
+                .into(),
+            );
         };
 
         let gdal_config_options =
@@ -564,19 +597,41 @@ impl StacMultiBandMetaData {
     }
 }
 
+fn stac_asset_grid_bounds(
+    height: usize,
+    width: usize,
+) -> geoengine_operators::util::Result<GridBoundingBox2D> {
+    GridBoundingBox2D::new(
+        GridIdx2D::new([0, 0]),
+        GridIdx2D::new([(height as isize) - 1, (width as isize) - 1]),
+    )
+    .map_err(
+        |e| geoengine_operators::error::Error::InvalidDataProviderConfig {
+            reason: format!("could not create grid bounds from STAC asset projection shape: {e}"),
+        },
+    )
+}
+
 fn stac_query_bbox(
     spatial_bounds: geoengine_datatypes::primitives::SpatialPartition2D,
     spatial_reference: SpatialReference,
-) -> geoengine_operators::util::Result<geoengine_datatypes::primitives::BoundingBox2D> {
+) -> geoengine_operators::util::Result<Option<geoengine_datatypes::primitives::BoundingBox2D>> {
     let projector =
         CoordinateProjector::from_known_srs(spatial_reference, SpatialReference::epsg_4326())
-            .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+            .map_err(
+                |e| geoengine_operators::error::Error::InvalidDataProviderConfig {
+                    reason: format!("could not create coordinate projector for STAC bbox: {e}"),
+                },
+            )?;
 
     spatial_bounds
         .as_bbox()
         .reproject_clipped(&projector)
-        .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?
-        .ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)
+        .map_err(
+            |e| geoengine_operators::error::Error::InvalidDataProviderConfig {
+                reason: format!("could not reproject query bounds to STAC coordinates: {e}"),
+            },
+        )
 }
 
 fn stac_query_time_interval(
@@ -587,20 +642,36 @@ fn stac_query_time_interval(
         TimeDimension::Regular(regular) => {
             let start = regular
                 .snap_prev(query_time_interval.start())
-                .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
-            let end = regular
-                .snap_next(query_time_interval.end())
-                .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+                .map_err(
+                    |e| geoengine_operators::error::Error::InvalidDataProviderConfig {
+                        reason: format!(
+                            "could not snap query start to previous regular time step: {e}"
+                        ),
+                    },
+                )?;
+            let end = regular.snap_next(query_time_interval.end()).map_err(|e| {
+                geoengine_operators::error::Error::InvalidDataProviderConfig {
+                    reason: format!("could not snap query end to next regular time step: {e}"),
+                }
+            })?;
 
             let end = if end <= start {
-                (start + regular.step)
-                    .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?
+                (start + regular.step).map_err(|e| {
+                    geoengine_operators::error::Error::InvalidDataProviderConfig {
+                        reason: format!(
+                            "could not extend empty snapped query interval by one regular step: {e}"
+                        ),
+                    }
+                })?
             } else {
                 end
             };
 
-            TimeInterval::new(start, end)
-                .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)
+            TimeInterval::new(start, end).map_err(|e| {
+                geoengine_operators::error::Error::InvalidDataProviderConfig {
+                    reason: format!("could not construct snapped query time interval: {e}"),
+                }
+            })
         }
         TimeDimension::Irregular => Ok(query_time_interval),
     }
@@ -722,6 +793,107 @@ mod tests {
             }],
             page_limit: 100,
             query_timeout_secs: 60,
+        }
+    }
+
+    #[test]
+    fn stac_bbox_clips_queries_to_projection_domain() {
+        let srs = SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632);
+        let inside =
+            SpatialPartition2D::new((500_000., 5_800_000.).into(), (510_000., 5_790_000.).into())
+                .unwrap();
+        assert!(stac_query_bbox(inside, srs).unwrap().is_some());
+
+        let outside = SpatialPartition2D::new(
+            (-500_000., 5_800_000.).into(),
+            (-490_000., 5_790_000.).into(),
+        )
+        .unwrap();
+        assert!(stac_query_bbox(outside, srs).unwrap().is_none());
+
+        let overlapping = SpatialPartition2D::new(
+            (-500_000., 5_800_000.).into(),
+            (510_000., 5_790_000.).into(),
+        )
+        .unwrap();
+        let bbox = stac_query_bbox(overlapping, srs).unwrap().unwrap();
+        assert!(bbox.lower_left().x < 9.);
+        assert!(bbox.upper_right().x > 9.);
+    }
+
+    #[test]
+    fn stac_bbox_invalid_projection_is_still_an_error() {
+        let bounds = SpatialPartition2D::new((0., 1.).into(), (1., 0.).into()).unwrap();
+        assert!(
+            stac_query_bbox(
+                bounds,
+                SpatialReference::new(SpatialReferenceAuthority::Epsg, 0),
+            )
+            .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn outside_projection_domain_returns_empty_tiles_without_stac_requests() {
+        // No requests are expected: querying outside the domain must not contact STAC.
+        let server = Server::run();
+        let definition = make_stac_provider_def(DataProviderId::new(), server.url_str("/"));
+        let meta = StacMultiBandMetaData {
+            api_url: definition.api_url,
+            collection_name: definition.collection_name,
+            s3_config: None,
+            time_dimension: definition.time_dimension,
+            dataset: definition.datasets[0].clone(),
+            page_limit: definition.page_limit,
+            client: StacClient::new(reqwest::Client::new()),
+            query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
+        };
+        let bounds = SpatialPartition2D::new(
+            (-500_000., 5_800_000.).into(),
+            (-490_000., 5_790_000.).into(),
+        )
+        .unwrap();
+        let start = DateTime::new_utc(2026, 4, 1, 0, 0, 0);
+        let middle = DateTime::new_utc(2026, 4, 2, 0, 0, 0);
+        let end = DateTime::new_utc(2026, 4, 3, 0, 0, 0);
+        let expected_steps = vec![
+            TimeInterval::new(start, middle).unwrap(),
+            TimeInterval::new(middle, end).unwrap(),
+        ];
+        let tile = TileInformation::new(
+            GridIdx2D::new([0, 0]),
+            GridShape::new([1000, 1000]),
+            GeoTransform::new(bounds.upper_left(), 10., -10.),
+        );
+
+        // Exercise the initial query, its cached result, and an instant query.
+        for (interval, expected) in [
+            (
+                TimeInterval::new(start, end).unwrap(),
+                expected_steps.as_slice(),
+            ),
+            (
+                TimeInterval::new(start, end).unwrap(),
+                expected_steps.as_slice(),
+            ),
+            (
+                TimeInterval::new_instant(start).unwrap(),
+                &expected_steps[..1],
+            ),
+        ] {
+            let info = meta
+                .loading_info(MultiBandGdalLoadingInfoQueryRectangle::new(
+                    bounds,
+                    interval,
+                    BandSelection::first(),
+                    true,
+                ))
+                .await
+                .unwrap();
+            assert_eq!(info.time_steps(), expected);
+            for step in info.time_steps() {
+                assert!(info.tile_files(*step, tile, 0).is_empty());
+            }
         }
     }
 
