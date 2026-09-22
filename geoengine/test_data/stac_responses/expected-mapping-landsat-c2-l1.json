@@ -102,5 +102,6 @@
     }
   ],
   "pageLimit": 100,
-  "queryTimeoutSecs": 60
+  "queryTimeoutSecs": 60,
+  "cacheTtlSecs": null
 }
