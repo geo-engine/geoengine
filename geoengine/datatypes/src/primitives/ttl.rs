@@ -17,7 +17,10 @@ pub fn set_default_cache_ttl_seconds(seconds: u32) {
 }
 
 fn default_cache_ttl_seconds() -> CacheTtlSeconds {
-    DEFAULT_CACHE_TTL_SECONDS.get().copied().unwrap_or_default()
+    DEFAULT_CACHE_TTL_SECONDS
+        .get()
+        .copied()
+        .unwrap_or(CacheTtlSeconds(0))
 }
 
 /// Config parameter to indicate how long a value may be cached (0 = must not be cached)

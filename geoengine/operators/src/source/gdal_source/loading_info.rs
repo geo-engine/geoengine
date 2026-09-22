@@ -645,7 +645,7 @@ impl TimeFilledItem for GdalLoadingInfoTemporalSlice {
         Self {
             time,
             params: None,
-            cache_ttl: CacheTtlSeconds::max(), // TODO: is this ok?
+            cache_ttl: CacheTtlSeconds::default(),
         }
     }
 

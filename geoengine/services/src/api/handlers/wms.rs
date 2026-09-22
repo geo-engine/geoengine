@@ -453,7 +453,7 @@ async fn wms_get_map<C: ApplicationContext>(
                     raster_colorizer.no_data_color(),
                 )?;
 
-            return Ok((empty_image, CacheHint::max_duration(), computation_id));
+            return Ok((empty_image, CacheHint::default(), computation_id));
         }
 
         debug!("WMS re-scale-project: {:?}", query_tiling_pixel_grid);
