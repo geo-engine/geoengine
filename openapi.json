@@ -14110,7 +14110,7 @@
             "type": "integer",
             "format": "int64"
           },
-          "cacheTtl": {
+          "cacheTtlSecs": {
             "oneOf": [
               {
                 "type": "null"

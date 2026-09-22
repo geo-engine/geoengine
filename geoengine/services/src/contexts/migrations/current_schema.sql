@@ -928,7 +928,7 @@ CREATE TYPE "StacDataProviderDefinition" AS (
     query_timeout_secs bigint,
     page_limit bigint,
     authentication "StacProviderAuthentication",
-    cache_ttl int
+    cache_ttl_secs int
 );
 
 CREATE TYPE "DataProviderDefinition" AS (

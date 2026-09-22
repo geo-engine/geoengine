@@ -43,7 +43,7 @@ struct StacMultiBandMetaData {
     dataset: StacProviderDataset,
     page_limit: i64,
     client: StacClient,
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl_secs: CacheTtlSeconds,
     /// Shared query-result cache from the provider.
     query_cache: Arc<StacQueryCache>,
 }
@@ -192,7 +192,7 @@ impl
             return Ok(MultiBandGdalLoadingInfo::new(
                 cached_time_steps,
                 cached_files,
-                self.cache_ttl.into(),
+                self.cache_ttl_secs.into(),
             ));
         }
 
@@ -257,7 +257,7 @@ impl
         Ok(MultiBandGdalLoadingInfo::new(
             time_steps,
             files,
-            self.cache_ttl.into(),
+            self.cache_ttl_secs.into(),
         ))
     }
 
@@ -636,7 +636,7 @@ impl
             time_dimension: self.time_dimension,
             dataset: dataset.clone(),
             page_limit: self.page_limit,
-            cache_ttl: self.cache_ttl,
+            cache_ttl_secs: self.cache_ttl_secs,
             client: self.client.clone(),
             query_cache: self.query_cache.clone(),
         }))
@@ -724,7 +724,7 @@ mod tests {
             }],
             page_limit: 100,
             query_timeout_secs: 60,
-            cache_ttl: None,
+            cache_ttl_secs: None,
         }
     }
 
@@ -1141,7 +1141,7 @@ mod tests {
             ],
             page_limit: 100,
             query_timeout_secs: 60,
-            cache_ttl: None,
+            cache_ttl_secs: None,
         };
 
         admin_ctx

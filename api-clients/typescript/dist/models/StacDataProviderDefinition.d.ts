@@ -101,7 +101,7 @@ export interface StacDataProviderDefinition {
      * @type {number}
      * @memberof StacDataProviderDefinition
      */
-    cacheTtl?: number | null;
+    cacheTtlSecs?: number | null;
 }
 /**
  * @export

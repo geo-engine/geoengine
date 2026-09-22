@@ -1162,7 +1162,7 @@ pub struct StacDataProviderDefinition {
     #[serde(default = "default_page_limit")]
     pub page_limit: i64,
     /// Optional output cache lifetime; omitted values use the global cache default.
-    pub cache_ttl: Option<CacheTtlSeconds>,
+    pub cache_ttl_secs: Option<CacheTtlSeconds>,
 }
 
 fn default_query_timeout() -> i64 {
@@ -1190,7 +1190,7 @@ impl From<StacDataProviderDefinition>
             datasets: value.datasets.into_iter().map(Into::into).collect(),
             page_limit: value.page_limit,
             query_timeout_secs: value.query_timeout_secs,
-            cache_ttl: value.cache_ttl.map(Into::into),
+            cache_ttl_secs: value.cache_ttl_secs.map(Into::into),
         }
     }
 }
@@ -1213,7 +1213,7 @@ impl From<crate::datasets::external::stac::StacDataProviderDefinition>
             datasets: value.datasets.into_iter().map(Into::into).collect(),
             page_limit: value.page_limit,
             query_timeout_secs: value.query_timeout_secs,
-            cache_ttl: value.cache_ttl.map(Into::into),
+            cache_ttl_secs: value.cache_ttl_secs.map(Into::into),
         }
     }
 }

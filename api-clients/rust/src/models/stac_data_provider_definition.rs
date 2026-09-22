@@ -40,8 +40,8 @@ pub struct StacDataProviderDefinition {
     #[serde(rename = "pageLimit", skip_serializing_if = "Option::is_none")]
     pub page_limit: Option<i64>,
     /// Optional output cache lifetime; omitted values use the global cache default.
-    #[serde(rename = "cacheTtl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub cache_ttl: Option<Option<i32>>,
+    #[serde(rename = "cacheTtlSecs", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl_secs: Option<Option<i32>>,
 }
 
 impl StacDataProviderDefinition {
@@ -60,7 +60,7 @@ impl StacDataProviderDefinition {
             datasets,
             query_timeout_secs: None,
             page_limit: None,
-            cache_ttl: None,
+            cache_ttl_secs: None,
         }
     }
 }

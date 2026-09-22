@@ -45,8 +45,8 @@ class StacDataProviderDefinition(BaseModel):
     datasets: List[StacProviderDataset]
     query_timeout_secs: Optional[StrictInt] = Field(default=None, description="Timeout in seconds for outgoing STAC API HTTP requests.", alias="queryTimeoutSecs")
     page_limit: Optional[StrictInt] = Field(default=None, alias="pageLimit")
-    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, description="Optional output cache lifetime; omitted values use the global cache default.", alias="cacheTtl")
-    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "collectionName", "s3Config", "authentication", "timeDimension", "datasets", "queryTimeoutSecs", "pageLimit", "cacheTtl"]
+    cache_ttl_secs: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, description="Optional output cache lifetime; omitted values use the global cache default.", alias="cacheTtlSecs")
+    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "collectionName", "s3Config", "authentication", "timeDimension", "datasets", "queryTimeoutSecs", "pageLimit", "cacheTtlSecs"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -125,10 +125,10 @@ class StacDataProviderDefinition(BaseModel):
         if self.authentication is None and "authentication" in self.model_fields_set:
             _dict['authentication'] = None
 
-        # set to None if cache_ttl (nullable) is None
+        # set to None if cache_ttl_secs (nullable) is None
         # and model_fields_set contains the field
-        if self.cache_ttl is None and "cache_ttl" in self.model_fields_set:
-            _dict['cacheTtl'] = None
+        if self.cache_ttl_secs is None and "cache_ttl_secs" in self.model_fields_set:
+            _dict['cacheTtlSecs'] = None
 
         return _dict
 
@@ -155,7 +155,7 @@ class StacDataProviderDefinition(BaseModel):
             "datasets": [StacProviderDataset.from_dict(_item) for _item in obj["datasets"]] if obj.get("datasets") is not None else None,
             "queryTimeoutSecs": obj.get("queryTimeoutSecs"),
             "pageLimit": obj.get("pageLimit"),
-            "cacheTtl": obj.get("cacheTtl")
+            "cacheTtlSecs": obj.get("cacheTtlSecs")
         })
         return _obj
 

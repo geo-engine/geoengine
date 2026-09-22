@@ -151,6 +151,7 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                     ],
                 query_timeout_secs = 56,
                 page_limit = 56,
+                cache_ttl_secs = 0,
                 user = '',
                 refresh_token = '',
                 expiry_date = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f')
