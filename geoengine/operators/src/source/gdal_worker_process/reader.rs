@@ -155,6 +155,7 @@ impl GdalPoolReader {
         &self,
         dataset_params: GdalDatasetParameters,
         read_advise: GdalReadAdvise,
+        group: Option<&str>,
         array_name: &str,
         z_range: std::ops::Range<usize>,
     ) -> Result<GdalProcessMdReadResult<T>, GdalProcessPoolError> {
@@ -173,6 +174,7 @@ impl GdalPoolReader {
             "gdal_pool_read_md",
             read_id = %read_id,
             dataset = %dataset_params.file_path.display(),
+            group = ?group,
             array = array_name,
             z_start = z_range.start,
             z_end = z_range.end,
@@ -184,6 +186,7 @@ impl GdalPoolReader {
             data_type: T::TYPE,
             read_id: Some(read_id),
             read_kind: GdalReadKind::MdArray {
+                group: group.map(str::to_string),
                 array_name: array_name.to_string(),
                 z_range,
             },

@@ -100,6 +100,8 @@ pub fn probe_md_loading_info(
         files.push(MdDatasetFile {
             params: p.dataset_parameters.clone(),
             array_name: array_name.clone(),
+            // the single-array probe only reads from the root group
+            group: None,
             z_start,
             z_end: z_start + p.z_coordinates.len(),
             time: global_time_steps[z_start],
@@ -689,6 +691,7 @@ fn band_descriptor(probed: &ProbedArray) -> RasterBandDescriptor {
 ///
 /// The `selection` chooses the group (`None` = root) and the variables (explicit list in
 /// band order, or auto-select all qualifying data variables, name-sorted).
+#[allow(clippy::too_many_lines)]
 pub fn probe_md_variables_loading_info(
     paths: &[PathBuf],
     selection: &MdArraySelection,
@@ -762,6 +765,7 @@ pub fn probe_md_variables_loading_info(
             files.push(MdDatasetFile {
                 params: p.dataset_parameters.clone(),
                 array_name: name.clone(),
+                group: selection.group.clone(),
                 z_start,
                 z_end: z_start + p.z_coordinates.len(),
                 time: times[z_start],

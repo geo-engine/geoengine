@@ -76,6 +76,7 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
             .read_md_batch_data::<T>(
                 dataset_params.clone(),
                 advise,
+                file.group.as_deref(),
                 &array_name,
                 z_range.clone(),
             )

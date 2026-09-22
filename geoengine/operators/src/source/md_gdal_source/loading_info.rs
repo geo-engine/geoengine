@@ -26,7 +26,11 @@ pub enum ZRole {
 #[serde(rename_all = "camelCase")]
 pub struct MdDatasetFile {
     pub params: GdalDatasetParameters,
+    /// name of the array within `group` the worker reads
     pub array_name: String,
+    /// "/"-separated path to the MD group below the root group; `None` = root group
+    #[serde(default)]
+    pub group: Option<String>,
     pub z_start: usize,
     pub z_end: usize,
     pub time: TimeInterval,
@@ -145,15 +149,29 @@ impl MdLoadingInfo {
         let mut batches: Vec<MdZBatch> = Vec::new();
         let mut missing = Vec::new();
 
+        // candidate files of the requested band, sorted by z_start (probe keeps them sorted);
+        // binary search per z-index gives O(z log files) instead of O(z * files)
+        let candidates: Vec<usize> = self
+            .files
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| band.is_none_or(|b| f.band == b))
+            .map(|(i, _)| i)
+            .collect();
+
         for &gz in global_z {
-            let Some(file_idx) = self
-                .files
-                .iter()
-                .position(|f| band.is_none_or(|b| f.band == b) && f.z_start <= gz && gz < f.z_end)
+            let Some(&file_idx) = (candidates.partition_point(|&i| self.files[i].z_start <= gz))
+                .checked_sub(1)
+                .map(|i| &candidates[..][i])
             else {
                 missing.push(gz);
                 continue;
             };
+
+            if gz >= self.files[file_idx].z_end {
+                missing.push(gz);
+                continue;
+            }
 
             let local = gz - self.files[file_idx].z_start;
 
@@ -204,6 +222,7 @@ mod tests {
                 retry: None,
             },
             array_name: "a".to_owned(),
+            group: None,
             z_start,
             z_end,
             time: TimeInterval::new_unchecked(0, 1),

@@ -71,9 +71,11 @@ impl GdalReadWindow {
 pub enum GdalReadKind {
     /// Classic 2D rasterband read (`rasterband_channel` selects the band).
     Raster,
-    /// Multidim array read: read the array `array_name` in the dataset's root group,
-    /// z-slice index range `z_range` (file-local, end-exclusive) in one batched request.
+    /// Multidim array read: read the array `array_name` (in the MD group `group`,
+    /// `None` = root group) z-slice index range `z_range` (file-local, end-exclusive)
+    /// in one batched request.
     MdArray {
+        group: Option<String>,
         array_name: String,
         z_range: std::ops::Range<usize>,
     },
