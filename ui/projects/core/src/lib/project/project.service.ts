@@ -1020,7 +1020,7 @@ export class ProjectService implements OnDestroy {
                     viewportSize.resolution !== initialViewport.resolution ||
                     !olIntersects(tileExtent, viewportSize.extent) ||
                     session !== initialSession ||
-                    sref !== initialSref ||
+                    !sref.equals(initialSref) ||
                     layerRemoved
                 );
             }),

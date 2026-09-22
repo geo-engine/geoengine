@@ -148,6 +148,11 @@ where
                 *this.ended = true;
                 Poll::Ready(None)
             }
+            Poll::Ready(Some(Err(error::Error::QueryCanceled))) => {
+                // the stream ends after a cancellation so that no further items are requested
+                *this.ended = true;
+                Poll::Ready(Some(Err(error::Error::QueryCanceled)))
+            }
             other => other,
         }
     }
@@ -352,6 +357,21 @@ mod tests {
 
         let mut stream = Box::pin(registration.wrap(stream::pending::<Result<i32>>()));
 
+        assert!(matches!(
+            stream.next().await,
+            Some(Err(error::Error::QueryCanceled))
+        ));
+        assert!(stream.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn it_ends_when_inner_yields_query_canceled() {
+        let (registration, _trigger) = QueryAbortRegistration::new();
+
+        let inner = stream::iter(vec![Ok(1), Err(error::Error::QueryCanceled), Ok(2)]);
+        let mut stream = Box::pin(registration.wrap(inner));
+
+        assert!(matches!(stream.next().await, Some(Ok(1))));
         assert!(matches!(
             stream.next().await,
             Some(Err(error::Error::QueryCanceled))

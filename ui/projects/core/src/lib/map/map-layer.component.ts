@@ -225,6 +225,12 @@ export class OlRasterLayerComponent
     /** In-flight WMS tile requests that need to be aborted when the layer is destroyed. */
     private readonly tileAbortClients = new Set<XMLHttpRequest>();
 
+    /** True once `ngOnDestroy` ran, so async tile callbacks can stop touching the component. */
+    private destroyed = false;
+
+    /** Removes the state listeners from the source that is currently set. */
+    private sourceStateUnlisten?: () => void;
+
     protected dataSubscription?: Subscription;
     protected layerChangesSubscription?: Subscription;
     protected timeSubscription?: Subscription;
@@ -276,6 +282,9 @@ export class OlRasterLayerComponent
     }
 
     ngOnDestroy(): void {
+        this.destroyed = true;
+        this.sourceStateUnlisten?.();
+
         if (this.dataSubscription) {
             this.dataSubscription.unsubscribe();
         }
@@ -358,6 +367,15 @@ export class OlRasterLayerComponent
             return;
         }
 
+        // detach the old source and abort its in-flight requests so that no stale
+        // tile callbacks keep modifying this layer's state
+        this.sourceStateUnlisten?.();
+        this.sourceStateUnlisten = undefined;
+        for (const client of this.tileAbortClients) {
+            client.abort();
+        }
+        this.tileAbortClients.clear();
+
         this.source = new OlTileWmsSource({
             url: `${this.backend.wmsBaseUrl}/${this.workflow()}`,
             params: {
@@ -392,9 +410,17 @@ export class OlRasterLayerComponent
             client.open('GET', src);
             client.responseType = 'blob';
             client.setRequestHeader('Authorization', `Bearer ${this.sessionToken()}`);
+            client.addEventListener('abort', () => {
+                aborted = true;
+            });
             client.addEventListener('loadend', (_event) => {
                 cancelSub.unsubscribe();
                 this.tileAbortClients.delete(client);
+
+                if (this.destroyed) {
+                    return;
+                }
+
                 const data = client.response;
 
                 if (!data) {
@@ -407,16 +433,36 @@ export class OlRasterLayerComponent
                     }
                 } else {
                     if (data.type === 'image/png') {
-                        (tile.getImage() as HTMLImageElement).src = URL.createObjectURL(data);
+                        const url = URL.createObjectURL(data);
+                        const image = tile.getImage() as HTMLImageElement | null;
+                        if (!image) {
+                            // the tile was evicted while the request was in flight
+                            URL.revokeObjectURL(url);
+                            return;
+                        }
+                        if (image.src.startsWith('blob:')) {
+                            URL.revokeObjectURL(image.src);
+                        }
+                        image.src = url;
+                        // once the tile is decoded the URL is no longer needed (and OpenLayers
+                        // never revokes it itself), so free it to avoid leaking on cache eviction
+                        image.addEventListener('load', () => URL.revokeObjectURL(url), {once: true});
+                        image.addEventListener('error', () => URL.revokeObjectURL(url), {once: true});
                     } else {
                         tile.setState(TileState.ERROR);
-                        data.text().then((m: string) => this.notificationService.error(JSON.parse(m)['message']));
+                        data.text().then((m: string) => {
+                            if (!this.destroyed) {
+                                this.notificationService.error(JSON.parse(m)['message']);
+                            }
+                        });
                     }
                 }
             });
             client.addEventListener('error', () => {
                 this.tileAbortClients.delete(client);
-                tile.setState(TileState.ERROR);
+                if (!this.destroyed) {
+                    tile.setState(TileState.ERROR);
+                }
             });
 
             // The abort stream may emit before the request is even sent (e.g. during panning),
@@ -431,7 +477,7 @@ export class OlRasterLayerComponent
             }
         });
 
-        this.addStateListenersToOlSource();
+        this.sourceStateUnlisten = this.addStateListenersToOlSource(this.source);
         this.initializeOrUpdateOlMapLayer();
     }
 
@@ -451,21 +497,21 @@ export class OlRasterLayerComponent
         }
     }
 
-    private addStateListenersToOlSource(): void {
+    private addStateListenersToOlSource(source: OlTileWmsSource): () => void {
         // TILE LOADING STATE
         let tilesPending = 0;
 
-        this.source.on('tileloadstart', () => {
+        const onStart = (): void => {
             tilesPending++;
             this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.LOADING);
-        });
-        this.source.on('tileloadend', () => {
+        };
+        const onEnd = (): void => {
             tilesPending--;
             if (tilesPending <= 0) {
                 this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.OK);
             }
-        });
-        this.source.on('tileloaderror', () => {
+        };
+        const onError = (): void => {
             tilesPending--;
 
             if (this.resettingAbortedTile) {
@@ -477,7 +523,17 @@ export class OlRasterLayerComponent
             }
 
             this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.ERROR);
-        });
+        };
+
+        source.on('tileloadstart', onStart);
+        source.on('tileloadend', onEnd);
+        source.on('tileloaderror', onError);
+
+        return () => {
+            source.un('tileloadstart', onStart);
+            source.un('tileloadend', onEnd);
+            source.un('tileloaderror', onError);
+        };
     }
 }
 
@@ -506,6 +562,12 @@ export class OlOgcApiMapTileLayerComponent
     /** Abort controllers for tile loads that are currently in flight. */
     private readonly tileAbortControllers = new Set<AbortController>();
 
+    /** object URLs of the current source's JSON metadata, revoked when the source is replaced */
+    private jsonObjectUrls: string[] = [];
+
+    /** True once `ngOnDestroy` ran, so async tile callbacks can stop touching the component. */
+    private destroyed = false;
+
     readonly dataConnectorId = input.required<UUID>();
     readonly dataLayerId = input.required<string>();
     readonly sessionToken = input.required<UUID>();
@@ -527,61 +589,88 @@ export class OlOgcApiMapTileLayerComponent
             spatialReference: this.spatialReference(),
             time: this.time(), // no way to just update `context` field in OGCMapTile…
         }),
-        loader: async (): Promise<OGCMapTile> => {
-            const source = new OGCMapTile({
-                url: await this.tmsBlobUrl(),
-                context: {
-                    datetime: this.time().asRequestString(),
-                },
-                wrapX: false, // wrapping does not work with our implementation
-                interpolate: false, // Stops blurry tiles when zooming in.
-                tileLoadFunction: (olTile, src): void => {
-                    void (async (): Promise<void> => {
-                        const controller = new AbortController();
-                        this.tileAbortControllers.add(controller);
+        loader: async (): Promise<{source: OGCMapTile; objectUrls: string[]}> => {
+            const objectUrls: string[] = [];
+            try {
+                const source = new OGCMapTile({
+                    url: await this.tmsBlobUrl(objectUrls),
+                    context: {
+                        datetime: this.time().asRequestString(),
+                    },
+                    wrapX: false, // wrapping does not work with our implementation
+                    interpolate: false, // Stops blurry tiles when zooming in.
+                    tileLoadFunction: (olTile, src): void => {
+                        void (async (): Promise<void> => {
+                            const controller = new AbortController();
+                            this.tileAbortControllers.add(controller);
 
-                        let cancelSub: Subscription | undefined;
-                        try {
-                            const tile = olTile as OlImageTile;
-                            const tileCoord = tile.getTileCoord();
-                            const tileGrid = source.getTileGridForProjection(olGetProj(this.spatialReference().srsString)!);
-                            const tileExtent = tileGrid.getTileCoordExtent(tileCoord) as Extent;
+                            let cancelSub: Subscription | undefined;
+                            try {
+                                const tile = olTile as OlImageTile;
+                                const tileCoord = tile.getTileCoord();
+                                const tileGrid = source.getTileGridForProjection(olGetProj(this.spatialReference().srsString)!);
+                                const tileExtent = tileGrid.getTileCoordExtent(tileCoord) as Extent;
 
-                            cancelSub = this.projectService
-                                .createQueryAbortStream(this.layerId(), tileExtent)
-                                .subscribe(() => controller.abort());
+                                cancelSub = this.projectService
+                                    .createQueryAbortStream(this.layerId(), tileExtent)
+                                    .subscribe(() => controller.abort());
 
-                            // Successfully assign the object URL to the image element
-                            (olTile as unknown as {getImage: () => HTMLImageElement}).getImage().src = await this.urlToBlobUrl(
-                                src,
-                                'IMAGE',
-                                undefined,
-                                controller.signal,
-                            );
-                        } catch (error) {
-                            const aborted = error instanceof DOMException && error.name === 'AbortError';
-                            if (!aborted) {
-                                console.error('Error loading OGC tile:', error);
+                                const url = await this.urlToBlobUrl(src, 'IMAGE', undefined, controller.signal);
+
+                                if (this.destroyed) {
+                                    URL.revokeObjectURL(url);
+                                    return;
+                                }
+
+                                // Successfully assign the object URL to the image element
+                                const image = (olTile as unknown as {getImage: () => HTMLImageElement | null}).getImage();
+                                if (!image) {
+                                    // the tile was evicted while the request was in flight
+                                    URL.revokeObjectURL(url);
+                                    return;
+                                }
+                                if (image.src.startsWith('blob:')) {
+                                    URL.revokeObjectURL(image.src);
+                                }
+                                image.src = url;
+                                // once the tile is decoded the URL is no longer needed (and OpenLayers
+                                // never revokes it itself), so free it to avoid leaking on cache eviction
+                                image.addEventListener('load', () => URL.revokeObjectURL(url), {once: true});
+                                image.addEventListener('error', () => URL.revokeObjectURL(url), {once: true});
+                            } catch (error) {
+                                if (this.destroyed) {
+                                    return;
+                                }
+
+                                const aborted = error instanceof DOMException && error.name === 'AbortError';
+                                if (!aborted) {
+                                    console.error('Error loading OGC tile:', error);
+                                }
+
+                                // CRITICAL: You must explicitly catch errors and notify OpenLayers,
+                                // otherwise the map will wait indefinitely for this tile to resolve.
+                                if (aborted) {
+                                    // The tile may be requested again later, so reset it to IDLE
+                                    // instead of leaving it in ERROR (which OpenLayers never re-fetches).
+                                    this.resetAbortedTile(olTile as OlImageTile);
+                                } else {
+                                    olTile.setState(TileState.ERROR);
+                                }
+                            } finally {
+                                cancelSub?.unsubscribe();
+                                this.tileAbortControllers.delete(controller);
                             }
+                        })();
+                    },
+                });
 
-                            // CRITICAL: You must explicitly catch errors and notify OpenLayers,
-                            // otherwise the map will wait indefinitely for this tile to resolve.
-                            if (aborted) {
-                                // The tile may be requested again later, so reset it to IDLE
-                                // instead of leaving it in ERROR (which OpenLayers never re-fetches).
-                                this.resetAbortedTile(olTile as OlImageTile);
-                            } else {
-                                olTile.setState(TileState.ERROR);
-                            }
-                        } finally {
-                            cancelSub?.unsubscribe();
-                            this.tileAbortControllers.delete(controller);
-                        }
-                    })();
-                },
-            });
-
-            return source;
+                return {source, objectUrls};
+            } catch (error) {
+                for (const url of objectUrls) {
+                    URL.revokeObjectURL(url);
+                }
+                throw error;
+            }
         },
     });
 
@@ -593,17 +682,21 @@ export class OlOgcApiMapTileLayerComponent
             },
         );
 
-        effect(() => {
-            const source = this.tileSource.value();
-            if (!source) return;
+        effect((onCleanup) => {
+            const value = this.tileSource.value();
+            if (!value) return;
+            const source = value.source;
+            const sourceObjectUrls = value.objectUrls;
+            this.jsonObjectUrls = sourceObjectUrls;
 
             this.source = source;
             if (this.debug()) {
                 this.source = new TileDebug({source: this.source});
             }
+            const tileSource = this.source;
 
-            this.addStateListenersToOlSource();
-            this._mapLayer.setSource(this.source);
+            const unlistenState = this.addStateListenersToOlSource(tileSource);
+            this._mapLayer.setSource(tileSource);
 
             // Track tile loading and emit through the loading output
             let tilesPending = 0;
@@ -621,9 +714,29 @@ export class OlOgcApiMapTileLayerComponent
                     this.loading.emit(false);
                 }
             };
-            this.source.on('tileloadstart', onStart);
-            this.source.on('tileloadend', onEnd);
-            this.source.on('tileloaderror', onEnd);
+            tileSource.on('tileloadstart', onStart);
+            tileSource.on('tileloadend', onEnd);
+            tileSource.on('tileloaderror', onEnd);
+
+            onCleanup(() => {
+                unlistenState();
+                tileSource.un('tileloadstart', onStart);
+                tileSource.un('tileloadend', onEnd);
+                tileSource.un('tileloaderror', onEnd);
+
+                // only when the source generation actually changed (a debug() toggle re-runs
+                // this effect with the same generation): abort tile loads of the replaced
+                // source still in flight and free its metadata object URLs
+                if (this.tileSource.value() !== value) {
+                    for (const controller of this.tileAbortControllers) {
+                        controller.abort();
+                    }
+                    this.tileAbortControllers.clear();
+                    for (const url of sourceObjectUrls) {
+                        URL.revokeObjectURL(url);
+                    }
+                }
+            });
         });
 
         effect(() => /* TODO: define in parent class */ {
@@ -639,23 +752,29 @@ export class OlOgcApiMapTileLayerComponent
         });
     }
 
-    async tmsBlobUrl(): Promise<string> {
+    async tmsBlobUrl(objectUrls: string[]): Promise<string> {
         const dataConnectorId = this.dataConnectorId();
         const layerId = this.dataLayerId();
         const tms = this.tmsId();
 
         const tmsUrl = `${this.backend.ogcApiBaseUrl}/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
 
-        return await this.urlToBlobUrl(tmsUrl, 'JSON', async (metadata) => {
-            if (!('links' in metadata)) {
-                return;
-            }
-            for (const link of metadata.links as Array<{rel: string; href: string; type: string}>) {
-                if (link.rel === 'http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme') {
-                    link.href = await this.urlToBlobUrl(link.href, 'JSON');
+        return await this.urlToBlobUrl(
+            tmsUrl,
+            'JSON',
+            async (metadata) => {
+                if (!('links' in metadata)) {
+                    return;
                 }
-            }
-        });
+                for (const link of metadata.links as Array<{rel: string; href: string; type: string}>) {
+                    if (link.rel === 'http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme') {
+                        link.href = await this.urlToBlobUrl(link.href, 'JSON', undefined, undefined, objectUrls);
+                    }
+                }
+            },
+            undefined,
+            objectUrls,
+        );
     }
 
     async urlToBlobUrl(
@@ -663,6 +782,7 @@ export class OlOgcApiMapTileLayerComponent
         type: 'JSON' | 'IMAGE',
         interceptor?: (metadata: JSON) => Promise<void>,
         signal?: AbortSignal,
+        objectUrls?: string[],
     ): Promise<string> {
         const sessionToken = this.sessionToken();
 
@@ -677,7 +797,6 @@ export class OlOgcApiMapTileLayerComponent
             throw new Error(`Fetch failed with status: ${response.status}`);
         }
 
-        let blob;
         switch (type) {
             case 'JSON': {
                 const metadata = await response.json();
@@ -686,20 +805,19 @@ export class OlOgcApiMapTileLayerComponent
                     await interceptor(metadata);
                 }
 
-                blob = new Blob([JSON.stringify(metadata)], {
-                    type: 'application/json',
-                });
-
-                break;
+                const objectUrl = URL.createObjectURL(
+                    new Blob([JSON.stringify(metadata)], {
+                        type: 'application/json',
+                    }),
+                );
+                objectUrls?.push(objectUrl);
+                return objectUrl;
             }
             case 'IMAGE': {
-                blob = await response.blob();
-
-                break;
+                // the caller is responsible for revoking the returned blob URL
+                return URL.createObjectURL(await response.blob());
             }
         }
-
-        return URL.createObjectURL(blob);
     }
 
     getExtent(): [number, number, number, number] {
@@ -707,28 +825,35 @@ export class OlOgcApiMapTileLayerComponent
     }
 
     ngOnDestroy(): void {
+        this.destroyed = true;
+
         // abort all tile requests that are still in flight
         for (const controller of this.tileAbortControllers) {
             controller.abort();
         }
         this.tileAbortControllers.clear();
+
+        for (const url of this.jsonObjectUrls) {
+            URL.revokeObjectURL(url);
+        }
+        this.jsonObjectUrls = [];
     }
 
-    private addStateListenersToOlSource(): void {
+    private addStateListenersToOlSource(source: OGCMapTile | TileDebug | ImageTile): () => void {
         // TILE LOADING STATE
         let tilesPending = 0;
 
-        this.source.on('tileloadstart', () => {
+        const onStart = (): void => {
             tilesPending++;
             this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.LOADING);
-        });
-        this.source.on('tileloadend', () => {
+        };
+        const onEnd = (): void => {
             tilesPending--;
             if (tilesPending <= 0) {
                 this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.OK);
             }
-        });
-        this.source.on('tileloaderror', () => {
+        };
+        const onError = (): void => {
             tilesPending--;
 
             if (this.resettingAbortedTile) {
@@ -740,6 +865,16 @@ export class OlOgcApiMapTileLayerComponent
             }
 
             this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.ERROR);
-        });
+        };
+
+        source.on('tileloadstart', onStart);
+        source.on('tileloadend', onEnd);
+        source.on('tileloaderror', onError);
+
+        return () => {
+            source.un('tileloadstart', onStart);
+            source.un('tileloadend', onEnd);
+            source.un('tileloaderror', onError);
+        };
     }
 }
