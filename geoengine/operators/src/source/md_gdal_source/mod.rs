@@ -99,6 +99,7 @@ where
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
+    #[allow(clippy::too_many_lines)]
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
@@ -300,14 +301,21 @@ where
             .spatial_grid
             .tiling_grid_definition(tiling_specification);
 
+        let time_query = query;
         let query = RasterQueryRectangle::new(
             produced_tiling_grid.tiling_grid_bounds(),
-            query,
+            time_query,
             BandSelection::first(),
         );
 
         let loading_info = self.meta_data.loading_info(query).await?;
-        let time_steps = loading_info.time_steps().to_vec();
+        let time_steps = loading_info
+            .time_steps()
+            .iter()
+            .copied()
+            // like `GdalSource`, only report the steps the query actually covers
+            .filter(|t| t.intersects(&time_query))
+            .collect::<Vec<_>>();
 
         Ok(stream::iter(time_steps).map(Result::Ok).boxed())
     }
@@ -367,6 +375,7 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
         &self.produced_result_descriptor
     }
 
+    #[allow(clippy::too_many_lines)]
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         Ok(match self.result_descriptor().data_type {
             RasterDataType::U8 => TypedRasterQueryProcessor::U8(
@@ -399,16 +408,26 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                 }
                 .boxed(),
             ),
-            RasterDataType::U64 => {
-                return Err(MdGdalSourceError::UnsupportedRasterType {
-                    raster_type: RasterDataType::U64,
-                })?;
-            }
-            RasterDataType::I8 => {
-                return Err(MdGdalSourceError::UnsupportedRasterType {
-                    raster_type: RasterDataType::I8,
-                })?;
-            }
+            RasterDataType::U64 => TypedRasterQueryProcessor::U64(
+                MdGdalSourceProcessor {
+                    produced_result_descriptor: self.produced_result_descriptor.clone(),
+                    tiling_specification: self.tiling_specification,
+                    meta_data: self.meta_data.clone(),
+                    z_batch_size: self.z_batch_size,
+                    _phantom_data: PhantomData,
+                }
+                .boxed(),
+            ),
+            RasterDataType::I8 => TypedRasterQueryProcessor::I8(
+                MdGdalSourceProcessor {
+                    produced_result_descriptor: self.produced_result_descriptor.clone(),
+                    tiling_specification: self.tiling_specification,
+                    meta_data: self.meta_data.clone(),
+                    z_batch_size: self.z_batch_size,
+                    _phantom_data: PhantomData,
+                }
+                .boxed(),
+            ),
             RasterDataType::I16 => TypedRasterQueryProcessor::I16(
                 MdGdalSourceProcessor {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
@@ -429,11 +448,16 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                 }
                 .boxed(),
             ),
-            RasterDataType::I64 => {
-                return Err(MdGdalSourceError::UnsupportedRasterType {
-                    raster_type: RasterDataType::I64,
-                })?;
-            }
+            RasterDataType::I64 => TypedRasterQueryProcessor::I64(
+                MdGdalSourceProcessor {
+                    produced_result_descriptor: self.produced_result_descriptor.clone(),
+                    tiling_specification: self.tiling_specification,
+                    meta_data: self.meta_data.clone(),
+                    z_batch_size: self.z_batch_size,
+                    _phantom_data: PhantomData,
+                }
+                .boxed(),
+            ),
             RasterDataType::F32 => TypedRasterQueryProcessor::F32(
                 MdGdalSourceProcessor {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
@@ -1003,6 +1027,55 @@ mod tests {
                 "band {b}, slice {t}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn test_query_grouped_variables_bands() {
+        // variables.nc with the data arrays inside the `analysis` subgroup:
+        // auto-selected -> band 0 = cloud_area_fraction (x1), band 1 = precipitation (x2)
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+        let name = add_md_variables_dataset(
+            &mut exe_ctx,
+            "md_grouped",
+            &[test_data!("md/grouped_variables.nc").to_path_buf()],
+            &MdArraySelection {
+                group: Some("analysis".to_string()),
+                arrays: vec![],
+            },
+        );
+
+        let time = TimeInterval::new_unchecked(EPOCH_2000 + DAY, EPOCH_2000 + 2 * DAY);
+        let tiles = query_md_source(
+            &exe_ctx,
+            &query_ctx,
+            name,
+            ts_grid_bounds(),
+            time,
+            BandSelection::first_n(2),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+        // 1 time step x bands [0, 1] x one spatial tile = 2 tiles read from the subgroup
+        assert_eq!(tiles.len(), 2);
+        let mut tiles = tiles;
+        tiles.sort_by_key(|t| t.band);
+        for tile in &tiles {
+            assert_eq!(
+                tile.time,
+                TimeInterval::new_unchecked(EPOCH_2000 + DAY, EPOCH_2000 + 2 * DAY)
+            );
+        }
+        // auto-selected, name-sorted: band 0 = cloud_area_fraction (x3), band 1 = precipitation (x2)
+        assert_eq!(tiles[0].band, 0);
+        assert_eq!(tiles[1].band, 1);
+        assert_eq!(grid_value(&tiles[0], 3, 5), 3.0 * (100 + 35) as f32);
+        assert_eq!(grid_value(&tiles[0], 7, 7), 3.0 * (100 + 77) as f32);
+        assert_eq!(grid_value(&tiles[1], 3, 5), 2.0 * (100 + 35) as f32);
+        assert_eq!(grid_value(&tiles[1], 7, 7), 2.0 * (100 + 77) as f32);
     }
 
     #[test]

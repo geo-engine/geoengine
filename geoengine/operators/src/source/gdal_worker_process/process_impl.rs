@@ -658,6 +658,7 @@ impl GdalHandling {
         cache: &mut GdalDatasetHolder,
         dataset_params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
+        group: Option<&str>,
         array_name: &str,
         z_range: std::ops::Range<usize>,
     ) -> Result<Vec<super::process_common::GdalIpcPayload<T>>, IpcProcessError> {
@@ -686,6 +687,7 @@ impl GdalHandling {
                     ds,
                     dataset_params,
                     read_advise,
+                    group,
                     array_name,
                     z_range.clone(),
                 )
@@ -711,12 +713,14 @@ impl GdalHandling {
         dataset: &mut GdalDataset,
         dataset_params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
+        group: Option<&str>,
         array_name: &str,
         z_range: std::ops::Range<usize>,
     ) -> Result<Vec<super::process_common::GdalIpcPayload<T>>, IpcProcessError> {
         let _span = tracing::debug_span!(
             "gdal_load_md_tile_data",
             data_type = ?T::TYPE,
+            group = ?group,
             array = array_name,
             z_start = z_range.start,
             z_len = z_range.len(),
@@ -726,7 +730,21 @@ impl GdalHandling {
         let start = Instant::now();
 
         let root_group = dataset.root_group()?;
-        let md_array = root_group.open_md_array(array_name, CslStringList::new())?;
+        // descend into the (possibly nested) MD group the array lives in, like the
+        // probe does; `None` keeps the root group
+        let mut group_h = root_group;
+        for segment in group
+            .filter(|g| !g.is_empty())
+            .into_iter()
+            .flat_map(|g| g.split('/'))
+        {
+            group_h = group_h
+                .open_group(segment, CslStringList::new())
+                .map_err(|e| IpcProcessError::IpcOther {
+                    msg: format!("cannot open MD group '{segment}' of array '{array_name}': {e}"),
+                })?;
+        }
+        let md_array = group_h.open_md_array(array_name, CslStringList::new())?;
 
         let num_dimensions = md_array.num_dimensions();
         if num_dimensions < 3 {

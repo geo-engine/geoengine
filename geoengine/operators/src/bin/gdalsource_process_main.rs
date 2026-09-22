@@ -409,6 +409,7 @@ fn read_and_send_md<T: GdalType + Pixel + FromPrimitive>(
     sender: &IpcSender<IpcProcessRasterResult>,
 ) -> Result<(), IpcProcessError> {
     let GdalReadKind::MdArray {
+        group,
         array_name,
         z_range,
     } = read_kind
@@ -422,6 +423,7 @@ fn read_and_send_md<T: GdalType + Pixel + FromPrimitive>(
         dataset_cache,
         &dataset_params,
         read_advise,
+        group.as_deref(),
         &array_name,
         z_range,
     );
