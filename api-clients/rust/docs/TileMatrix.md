@@ -4,7 +4,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**id** | **String** | Identifier selecting one of the scales defined in the [TileMatrixSet] and representing the scaleDenominator the tile. | 
+**id** | **String** | Identifier selecting one of the scales defined in the [`TileMatrixSet`] and representing the scaleDenominator the tile. | 
 **title** | Option<**String**> | Title of a tile matrix, normally used for display to a human | [optional]
 **description** | Option<**String**> | Brief narrative description of a tile matrix, normally available for display to a human | [optional]
 **keywords** | Option<**Vec<String>**> | Unordered list of one or more commonly used or formalized word(s) or phrase(s) used to describe this tile set | [optional]

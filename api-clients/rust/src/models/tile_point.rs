@@ -16,7 +16,7 @@ pub struct TilePoint {
     pub coordinates: Vec<f64>,
     #[serde(rename = "crs", skip_serializing_if = "Option::is_none")]
     pub crs: Option<Box<models::TilesCrs>>,
-    /// TileMatrix identifier associated with the scaleDenominator
+    /// [`TileMatrix`] identifier associated with the scaleDenominator
     #[serde(rename = "tileMatrix", skip_serializing_if = "Option::is_none")]
     pub tile_matrix: Option<String>,
     /// Scale denominator of the tile matrix selected

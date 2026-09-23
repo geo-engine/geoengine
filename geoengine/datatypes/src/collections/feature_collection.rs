@@ -33,7 +33,7 @@ use crate::util::arrow::{ArrowTyped, downcast_array};
 use crate::util::helpers::SomeIter;
 use crate::{
     collections::{FeatureCollectionError, IntoGeometryOptionsIterator},
-    operations::reproject::CoordinateProjection,
+    spatial_reference::CoordinateProjection,
 };
 use crate::{
     collections::{IntoGeometryIterator, VectorDataType, VectorDataTyped, error},
