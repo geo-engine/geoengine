@@ -14103,6 +14103,17 @@
           "pageLimit": {
             "type": "integer",
             "format": "int64"
+          },
+          "cacheTtlSecs": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds",
+                "description": "Optional output cache lifetime; omitted values use the global cache default."
+              }
+            ]
           }
         }
       },

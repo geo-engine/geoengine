@@ -3,15 +3,38 @@ use chrono::Utc;
 use postgres_types::{FromSql, ToSql};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize};
+use std::sync::OnceLock;
 
-const MAX_CACHE_TTL_SECONDS: u32 = 31_536_000; // 1 year
+pub const MAX_CACHE_TTL_SECONDS: u32 = 31_536_000; // 1 year
+
+static DEFAULT_CACHE_TTL_SECONDS: OnceLock<CacheTtlSeconds> = OnceLock::new();
+
+/// Sets the process-wide default used by [`CacheTtlSeconds::default`] and
+/// [`CacheHint::default`]. This is intended to be called once during service
+/// configuration initialization. Calls after initialization are ignored.
+pub fn set_default_cache_ttl_seconds(seconds: u32) {
+    let _ = DEFAULT_CACHE_TTL_SECONDS.set(CacheTtlSeconds::new(seconds));
+}
+
+fn default_cache_ttl_seconds() -> CacheTtlSeconds {
+    DEFAULT_CACHE_TTL_SECONDS
+        .get()
+        .copied()
+        .unwrap_or(CacheTtlSeconds(0))
+}
 
 /// Config parameter to indicate how long a value may be cached (0 = must not be cached)
 ///
 /// We derive the Serializer here because it makes sense to output the concrete cache ttl.
 /// For the deserializer we have a custom implementation to allow "max" as a value.
-#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, PartialOrd)]
 pub struct CacheTtlSeconds(u32);
+
+impl Default for CacheTtlSeconds {
+    fn default() -> Self {
+        default_cache_ttl_seconds()
+    }
+}
 
 impl CacheTtlSeconds {
     pub fn new(seconds: u32) -> Self {
@@ -107,7 +130,7 @@ pub struct CacheHint {
 
 impl Default for CacheHint {
     fn default() -> Self {
-        Self::no_cache()
+        CacheTtlSeconds::default().into()
     }
 }
 

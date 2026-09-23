@@ -5,7 +5,7 @@ use crate::layers::external::{DataProvider, DataProviderDefinition, TypedDataPro
 use async_trait::async_trait;
 use cache::StacQueryCache;
 use geoengine_datatypes::dataset::DataProviderId;
-use geoengine_datatypes::primitives::{SpatialResolution, TimeDimension};
+use geoengine_datatypes::primitives::{CacheTtlSeconds, SpatialResolution, TimeDimension};
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{RasterBandDescriptor, SpatialGridDescriptor};
@@ -67,6 +67,8 @@ pub struct StacDataProviderDefinition {
     pub query_timeout_secs: i64,
     #[serde(default = "default_page_limit")]
     pub page_limit: i64,
+    /// Optional output cache lifetime; omitted values use the global cache default.
+    pub cache_ttl_secs: Option<CacheTtlSeconds>,
 }
 
 fn default_query_timeout() -> i64 {
@@ -206,7 +208,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
         if self.time_dimension == TimeDimension::Irregular {
             return Err(crate::error::Error::StacIrregularTimeDimensionNotSupported);
         }
-        let mut provider = StacDataProvider::new(
+        let mut provider = StacDataProvider::new_with_cache_ttl_secs(
             self.id,
             self.name,
             self.description,
@@ -217,6 +219,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
             self.datasets,
             self.page_limit,
             self.query_timeout_secs,
+            self.cache_ttl_secs.unwrap_or_default(),
         );
 
         provider.client = provider
@@ -295,6 +298,7 @@ pub struct StacDataProvider {
     time_dimension: TimeDimension,
     datasets: Vec<StacProviderDataset>,
     page_limit: i64,
+    cache_ttl_secs: CacheTtlSeconds,
     /// Shared HTTP client, reused across all requests for this provider.
     client: StacClient,
     /// In-memory cache for STAC query results (tile files), keyed by dataset
@@ -316,6 +320,35 @@ impl StacDataProvider {
         page_limit: i64,
         query_timeout_secs: i64,
     ) -> Self {
+        Self::new_with_cache_ttl_secs(
+            id,
+            name,
+            description,
+            api_url,
+            collection_name,
+            s3_config,
+            time_dimension,
+            datasets,
+            page_limit,
+            query_timeout_secs,
+            CacheTtlSeconds::default(),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_cache_ttl_secs(
+        id: DataProviderId,
+        name: String,
+        description: String,
+        api_url: String,
+        collection_name: String,
+        s3_config: Option<StacProviderS3Config>,
+        time_dimension: TimeDimension,
+        datasets: Vec<StacProviderDataset>,
+        page_limit: i64,
+        query_timeout_secs: i64,
+        cache_ttl_secs: CacheTtlSeconds,
+    ) -> Self {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(query_timeout_secs as u64))
             .build()
@@ -331,6 +364,7 @@ impl StacDataProvider {
             datasets,
             page_limit,
             client: StacClient::new(client),
+            cache_ttl_secs,
             query_cache: Arc::new(StacQueryCache::default()),
         }
     }

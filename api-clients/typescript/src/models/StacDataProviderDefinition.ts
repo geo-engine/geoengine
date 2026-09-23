@@ -125,6 +125,12 @@ export interface StacDataProviderDefinition {
      * @memberof StacDataProviderDefinition
      */
     pageLimit?: number;
+    /**
+     * Optional output cache lifetime; omitted values use the global cache default.
+     * @type {number}
+     * @memberof StacDataProviderDefinition
+     */
+    cacheTtlSecs?: number | null;
 }
 
 
@@ -175,6 +181,7 @@ export function StacDataProviderDefinitionFromJSONTyped(json: any, ignoreDiscrim
         'datasets': ((json['datasets'] as Array<any>).map(StacProviderDatasetFromJSON)),
         'queryTimeoutSecs': json['queryTimeoutSecs'] == null ? undefined : json['queryTimeoutSecs'],
         'pageLimit': json['pageLimit'] == null ? undefined : json['pageLimit'],
+        'cacheTtlSecs': json['cacheTtlSecs'] == null ? undefined : json['cacheTtlSecs'],
     };
 }
 
@@ -202,6 +209,7 @@ export function StacDataProviderDefinitionToJSONTyped(value?: StacDataProviderDe
         'datasets': ((value['datasets'] as Array<any>).map(StacProviderDatasetToJSON)),
         'queryTimeoutSecs': value['queryTimeoutSecs'],
         'pageLimit': value['pageLimit'],
+        'cacheTtlSecs': value['cacheTtlSecs'],
     };
 }
 

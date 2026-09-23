@@ -11,7 +11,7 @@ use chrono::DateTime as ChronoDateTime;
 use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::operations::reproject::ReprojectClipped;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, CacheHint, RasterQueryRectangle, TimeDimension, TimeInstance,
+    AxisAlignedRectangle, CacheTtlSeconds, RasterQueryRectangle, TimeDimension, TimeInstance,
     TimeInterval, TryRegularTimeFillIterExt, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
@@ -44,6 +44,7 @@ struct StacMultiBandMetaData {
     dataset: StacProviderDataset,
     page_limit: i64,
     client: StacClient,
+    cache_ttl_secs: CacheTtlSeconds,
     /// Shared query-result cache from the provider.
     query_cache: Arc<StacQueryCache>,
 }
@@ -192,7 +193,7 @@ impl
             return Ok(MultiBandGdalLoadingInfo::new(
                 cached_time_steps,
                 cached_files,
-                CacheHint::default(),
+                self.cache_ttl_secs.into(),
             ));
         }
 
@@ -257,7 +258,7 @@ impl
         Ok(MultiBandGdalLoadingInfo::new(
             time_steps,
             files,
-            CacheHint::default(),
+            self.cache_ttl_secs.into(),
         ))
     }
 
@@ -629,6 +630,7 @@ impl
             time_dimension: self.time_dimension,
             dataset: dataset.clone(),
             page_limit: self.page_limit,
+            cache_ttl_secs: self.cache_ttl_secs,
             client: self.client.clone(),
             query_cache: self.query_cache.clone(),
         }))
@@ -716,6 +718,7 @@ mod tests {
             }],
             page_limit: 100,
             query_timeout_secs: 60,
+            cache_ttl_secs: None,
         }
     }
 
@@ -1132,6 +1135,7 @@ mod tests {
             ],
             page_limit: 100,
             query_timeout_secs: 60,
+            cache_ttl_secs: None,
         };
 
         admin_ctx
