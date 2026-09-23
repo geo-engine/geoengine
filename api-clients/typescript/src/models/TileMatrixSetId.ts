@@ -21,7 +21,7 @@ import {
 
 /**
  * @type TileMatrixSetId
- * Identifier for a supported TileMatrixSet
+ * Identifier for a supported [`TileMatrixSet`]
  * @export
  */
 export type TileMatrixSetId = TileMatrixSetIdOneOf | string;

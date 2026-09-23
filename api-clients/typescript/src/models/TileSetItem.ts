@@ -61,7 +61,7 @@ export interface TileSetItem {
     crs: TilesCrs;
     /**
      * Reference to a Tile Matrix Set on an offical source for Tile Matrix Sets
-     * such as the OGC NA definition server (http://www.opengis.net/def/tms/).
+     * such as the OGC NA definition server (<http://www.opengis.net/def/tms/>).
      * Required if the tile matrix set is registered on an open official source.
      * @type {string}
      * @memberof TileSetItem
@@ -69,8 +69,8 @@ export interface TileSetItem {
     tileMatrixSetURI?: string;
     /**
      * Links to related resources. A 'self' link to the tileset as well as a
-     * 'http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme' link to a
-     * definition of the TileMatrixSet are required.
+     * <http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme> link to a
+     * definition of the [`TileMatrixSet`] are required.
      * @type {Array<Link>}
      * @memberof TileSetItem
      */

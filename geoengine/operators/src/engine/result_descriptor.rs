@@ -2,7 +2,7 @@ use crate::error::{
     Error, RasterBandNameMustNotBeEmpty, RasterBandNameTooLong, RasterBandNamesMustBeUnique,
 };
 use crate::util::Result;
-use geoengine_datatypes::operations::reproject::{CoordinateProjection, ReprojectClipped};
+use geoengine_datatypes::operations::reproject::ReprojectClipped;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, Coordinate2D,
     FeatureDataType, Measurement, PlotSeriesSelection, QueryAttributeSelection, QueryRectangle,
@@ -13,6 +13,7 @@ use geoengine_datatypes::raster::{
     GeoTransform, GeoTransformAccess, Grid, GridBoundingBox2D, GridShape2D, GridShapeAccess,
     SpatialGridDefinition, TilingSpatialGridDefinition, TilingSpecification,
 };
+use geoengine_datatypes::spatial_reference::CoordinateProjection;
 use geoengine_datatypes::util::ByteSize;
 use geoengine_datatypes::{
     collections::VectorDataType, raster::RasterDataType, spatial_reference::SpatialReferenceOption,

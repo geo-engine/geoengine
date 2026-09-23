@@ -25,7 +25,7 @@ from typing_extensions import Self
 
 class TileMatrixLimits(BaseModel):
     """
-    A resource describing useful to create an array that describes the limits for a tile set [super::TileMatrixSet] based on the OGC TileSet Metadata Standard
+    A resource describing useful to create an array that describes the limits for a tile set [`super::TileMatrixSet`] based on the OGC Two Dimensional Tile Matrix Set and Tile Set Metadata Standard
     """ # noqa: E501
     tile_matrix: StrictStr = Field(alias="tileMatrix")
     min_tile_row: Annotated[int, Field(strict=True, ge=0)] = Field(alias="minTileRow")

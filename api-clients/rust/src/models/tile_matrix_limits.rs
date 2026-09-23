@@ -10,7 +10,7 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// TileMatrixLimits : A resource describing useful to create an array that describes the limits for a tile set [super::TileMatrixSet] based on the OGC TileSet Metadata Standard
+/// TileMatrixLimits : A resource describing useful to create an array that describes the limits for a tile set [`super::TileMatrixSet`] based on the OGC Two Dimensional Tile Matrix Set and Tile Set Metadata Standard
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TileMatrixLimits {
     #[serde(rename = "tileMatrix")]
@@ -26,7 +26,7 @@ pub struct TileMatrixLimits {
 }
 
 impl TileMatrixLimits {
-    /// A resource describing useful to create an array that describes the limits for a tile set [super::TileMatrixSet] based on the OGC TileSet Metadata Standard
+    /// A resource describing useful to create an array that describes the limits for a tile set [`super::TileMatrixSet`] based on the OGC Two Dimensional Tile Matrix Set and Tile Set Metadata Standard
     pub fn new(tile_matrix: String, min_tile_row: i64, max_tile_row: i64, min_tile_col: i64, max_tile_col: i64) -> TileMatrixLimits {
         TileMatrixLimits {
             tile_matrix,

@@ -36,12 +36,6 @@ export interface Collection {
      */
     description?: string | null;
     /**
-     *
-     * @type {Array<string>}
-     * @memberof Collection
-     */
-    keywords?: Array<string>;
-    /**
      * Attribution for the collection.
      * @type {string}
      * @memberof Collection

@@ -186,6 +186,7 @@ mod tests {
     };
     use actix_web::{http::header, test::TestRequest};
     use actix_web_httpauth::headers::authorization::Bearer;
+    use float_cmp::assert_approx_eq;
     use geoengine_datatypes::raster::GridShape2D;
     use geoengine_operators::engine::RasterResultDescriptor;
     use ogcapi_types::{
@@ -286,6 +287,60 @@ mod tests {
         GridShape2D::new_2d(y_indices.len(), x_indices.len())
     }
 
+    /// Asserts a `TileMatrixSet` field by field, comparing float values with a small
+    /// tolerance because `scale_denominator`, `cell_size`, and `point_of_origin` are
+    /// (re)projected and the coordinate projector is swappable, so their exact values
+    /// may differ slightly between implementations.
+    fn assert_tile_matrix_set_approx_eq(actual: &TileMatrixSet, expected: &TileMatrixSet) {
+        assert_eq!(actual.id, expected.id);
+        assert_eq!(actual.title, expected.title);
+        assert_eq!(actual.description, expected.description);
+        assert_eq!(actual.keywords, expected.keywords);
+        assert_eq!(actual.uri, expected.uri);
+        assert_eq!(actual.crs, expected.crs);
+        assert_eq!(actual.ordered_axes, expected.ordered_axes);
+        assert_eq!(actual.well_known_scale_set, expected.well_known_scale_set);
+        assert_eq!(actual.bounding_box, expected.bounding_box);
+        assert_eq!(actual.tile_matrices.len(), expected.tile_matrices.len());
+
+        for (actual, expected) in actual.tile_matrices.iter().zip(&expected.tile_matrices) {
+            assert_eq!(actual.id, expected.id);
+            assert_eq!(actual.title, expected.title);
+            assert_eq!(actual.description, expected.description);
+            assert_eq!(actual.keywords, expected.keywords);
+            // ponytail: ~meter-scale tolerance on huge scales/offsets; tighten only if a real
+            // projection regression is being hunted down.
+            assert_approx_eq!(
+                f64,
+                actual.scale_denominator,
+                expected.scale_denominator,
+                epsilon = 0.1
+            );
+            assert_approx_eq!(f64, actual.cell_size, expected.cell_size, epsilon = 0.001);
+            assert_eq!(actual.corner_of_origin, expected.corner_of_origin);
+            assert_approx_eq!(
+                f64,
+                actual.point_of_origin[0],
+                expected.point_of_origin[0],
+                epsilon = 0.001
+            );
+            assert_approx_eq!(
+                f64,
+                actual.point_of_origin[1],
+                expected.point_of_origin[1],
+                epsilon = 0.001
+            );
+            assert_eq!(actual.tile_width, expected.tile_width);
+            assert_eq!(actual.tile_height, expected.tile_height);
+            assert_eq!(actual.matrix_width, expected.matrix_width);
+            assert_eq!(actual.matrix_height, expected.matrix_height);
+            assert_eq!(
+                actual.variable_matrix_widths,
+                expected.variable_matrix_widths
+            );
+        }
+    }
+
     #[allow(
         clippy::too_many_lines,
         reason = "Test should be comprehensive and readable"
@@ -321,67 +376,66 @@ mod tests {
         let tile_matrix_set = serde_json::from_value::<TileMatrixSet>(body)
             .expect("Response body should be a valid TileMatrixSet JSON");
 
-        assert_eq!(
-            tile_matrix_set,
-            TileMatrixSet {
-                id: TileMatrixSetId::Custom(CustomNativeTMS::TILE_MATRIX_SET_ID.to_string()),
-                title: Some(CustomNativeTMS::TILE_MATRIX_SET_TITLE.to_string()),
-                description: None,
-                keywords: vec![],
-                uri: None,
-                crs: TilesCrs::Simple(Crs::from_epsg(4326)),
-                ordered_axes: ["Lon", "Lat"].iter().map(ToString::to_string).collect(),
-                well_known_scale_set: None,
-                bounding_box: None,
-                tile_matrices: vec![
-                    TileMatrix {
-                        id: "0".to_string(),
-                        title: None,
-                        description: None,
-                        keywords: vec![],
-                        scale_denominator: 159_027_844.000_000_03,
-                        cell_size: 0.4,
-                        corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-204.8, 204.8],
-                        tile_width: 512.try_into().unwrap(),
-                        tile_height: 512.try_into().unwrap(),
-                        matrix_width: 2.try_into().unwrap(),
-                        matrix_height: 2.try_into().unwrap(),
-                        variable_matrix_widths: vec![],
-                    },
-                    TileMatrix {
-                        id: "1".to_string(),
-                        title: None,
-                        description: None,
-                        keywords: vec![],
-                        scale_denominator: 79_513_922.000_000_01,
-                        cell_size: 0.2,
-                        corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-204.8, 102.4],
-                        tile_width: 512.try_into().unwrap(),
-                        tile_height: 512.try_into().unwrap(),
-                        matrix_width: 4.try_into().unwrap(),
-                        matrix_height: 2.try_into().unwrap(),
-                        variable_matrix_widths: vec![],
-                    },
-                    TileMatrix {
-                        id: "2".to_string(),
-                        title: None,
-                        description: None,
-                        keywords: vec![],
-                        scale_denominator: 39_756_961.000_000_01,
-                        cell_size: 0.1,
-                        corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-204.8, 102.4],
-                        tile_width: 512.try_into().unwrap(),
-                        tile_height: 512.try_into().unwrap(),
-                        matrix_width: 8.try_into().unwrap(),
-                        matrix_height: 4.try_into().unwrap(),
-                        variable_matrix_widths: vec![],
-                    },
-                ],
-            }
-        );
+        let expected = TileMatrixSet {
+            id: TileMatrixSetId::Custom(CustomNativeTMS::TILE_MATRIX_SET_ID.to_string()),
+            title: Some(CustomNativeTMS::TILE_MATRIX_SET_TITLE.to_string()),
+            description: None,
+            keywords: vec![],
+            uri: None,
+            crs: TilesCrs::Simple(Crs::from_epsg(4326)),
+            ordered_axes: ["Lon", "Lat"].iter().map(ToString::to_string).collect(),
+            well_known_scale_set: None,
+            bounding_box: None,
+            tile_matrices: vec![
+                TileMatrix {
+                    id: "0".to_string(),
+                    title: None,
+                    description: None,
+                    keywords: vec![],
+                    scale_denominator: 159_027_844.000_000_03,
+                    cell_size: 0.4,
+                    corner_of_origin: CornerOfOrigin::TopLeft,
+                    point_of_origin: [-204.8, 204.8],
+                    tile_width: 512.try_into().unwrap(),
+                    tile_height: 512.try_into().unwrap(),
+                    matrix_width: 2.try_into().unwrap(),
+                    matrix_height: 2.try_into().unwrap(),
+                    variable_matrix_widths: vec![],
+                },
+                TileMatrix {
+                    id: "1".to_string(),
+                    title: None,
+                    description: None,
+                    keywords: vec![],
+                    scale_denominator: 79_513_922.000_000_01,
+                    cell_size: 0.2,
+                    corner_of_origin: CornerOfOrigin::TopLeft,
+                    point_of_origin: [-204.8, 102.4],
+                    tile_width: 512.try_into().unwrap(),
+                    tile_height: 512.try_into().unwrap(),
+                    matrix_width: 4.try_into().unwrap(),
+                    matrix_height: 2.try_into().unwrap(),
+                    variable_matrix_widths: vec![],
+                },
+                TileMatrix {
+                    id: "2".to_string(),
+                    title: None,
+                    description: None,
+                    keywords: vec![],
+                    scale_denominator: 39_756_961.000_000_01,
+                    cell_size: 0.1,
+                    corner_of_origin: CornerOfOrigin::TopLeft,
+                    point_of_origin: [-204.8, 102.4],
+                    tile_width: 512.try_into().unwrap(),
+                    tile_height: 512.try_into().unwrap(),
+                    matrix_width: 8.try_into().unwrap(),
+                    matrix_height: 4.try_into().unwrap(),
+                    variable_matrix_widths: vec![],
+                },
+            ],
+        };
+
+        assert_tile_matrix_set_approx_eq(&tile_matrix_set, &expected);
 
         let execution_context = ctx.execution_context().unwrap();
 
@@ -450,82 +504,81 @@ mod tests {
         let tile_matrix_set = serde_json::from_value::<TileMatrixSet>(body)
             .expect("Response body should be a valid TileMatrixSet JSON");
 
-        assert_eq!(
-            tile_matrix_set,
-            TileMatrixSet {
-                id: TileMatrixSetId::Custom(CustomNativeTMS::TILE_MATRIX_SET_ID.to_string()),
-                title: Some(CustomNativeTMS::TILE_MATRIX_SET_TITLE.to_string()),
-                description: None,
-                keywords: vec![],
-                uri: None,
-                crs: TilesCrs::Simple(Crs::from_epsg(3857)),
-                ordered_axes: ["X", "Y"].iter().map(ToString::to_string).collect(),
-                well_known_scale_set: None,
-                bounding_box: None,
-                tile_matrices: vec![
-                    TileMatrix {
-                        id: "0".to_string(),
-                        title: None,
-                        description: None,
-                        keywords: vec![],
-                        scale_denominator: 407_286_157.394_767_2,
-                        cell_size: 114_040.124_070_534_8,
-                        corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-58_354_990.030_488_94, 58_418_366.631_411_66],
-                        tile_width: 512.try_into().unwrap(),
-                        tile_height: 512.try_into().unwrap(),
-                        matrix_width: 2.try_into().unwrap(),
-                        matrix_height: 2.try_into().unwrap(),
-                        variable_matrix_widths: vec![],
-                    },
-                    TileMatrix {
-                        id: "1".to_string(),
-                        title: None,
-                        description: None,
-                        keywords: vec![],
-                        scale_denominator: 203_643_078.697_383_6,
-                        cell_size: 57_020.062_035_267_394,
-                        corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-29_217_738.330_467_295, 29_167_074.807_319_485],
-                        tile_width: 512.try_into().unwrap(),
-                        tile_height: 512.try_into().unwrap(),
-                        matrix_width: 2.try_into().unwrap(),
-                        matrix_height: 2.try_into().unwrap(),
-                        variable_matrix_widths: vec![],
-                    },
-                    TileMatrix {
-                        id: "2".to_string(),
-                        title: None,
-                        description: None,
-                        keywords: vec![],
-                        scale_denominator: 101_821_539.348_691_8,
-                        cell_size: 28_510.031_017_633_697,
-                        corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-29_189_228.299_449_66, 29_195_584.838_337_12],
-                        tile_width: 512.try_into().unwrap(),
-                        tile_height: 512.try_into().unwrap(),
-                        matrix_width: 4.try_into().unwrap(),
-                        matrix_height: 4.try_into().unwrap(),
-                        variable_matrix_widths: vec![],
-                    },
-                    TileMatrix {
-                        id: "3".to_string(),
-                        title: None,
-                        description: None,
-                        keywords: vec![],
-                        scale_denominator: 50_910_769.674_345_896,
-                        cell_size: 14_255.015_508_816_849,
-                        corner_of_origin: CornerOfOrigin::TopLeft,
-                        point_of_origin: [-21_890_660.358_935_43, 21_897_016.897_822_894],
-                        tile_width: 512.try_into().unwrap(),
-                        tile_height: 512.try_into().unwrap(),
-                        matrix_width: 6.try_into().unwrap(),
-                        matrix_height: 6.try_into().unwrap(),
-                        variable_matrix_widths: vec![],
-                    },
-                ],
-            }
-        );
+        let expected = TileMatrixSet {
+            id: TileMatrixSetId::Custom(CustomNativeTMS::TILE_MATRIX_SET_ID.to_string()),
+            title: Some(CustomNativeTMS::TILE_MATRIX_SET_TITLE.to_string()),
+            description: None,
+            keywords: vec![],
+            uri: None,
+            crs: TilesCrs::Simple(Crs::from_epsg(3857)),
+            ordered_axes: ["X", "Y"].iter().map(ToString::to_string).collect(),
+            well_known_scale_set: None,
+            bounding_box: None,
+            tile_matrices: vec![
+                TileMatrix {
+                    id: "0".to_string(),
+                    title: None,
+                    description: None,
+                    keywords: vec![],
+                    scale_denominator: 407_286_157.394_767_2,
+                    cell_size: 114_040.124_070_534_8,
+                    corner_of_origin: CornerOfOrigin::TopLeft,
+                    point_of_origin: [-58_354_990.030_488_94, 58_418_366.631_411_66],
+                    tile_width: 512.try_into().unwrap(),
+                    tile_height: 512.try_into().unwrap(),
+                    matrix_width: 2.try_into().unwrap(),
+                    matrix_height: 2.try_into().unwrap(),
+                    variable_matrix_widths: vec![],
+                },
+                TileMatrix {
+                    id: "1".to_string(),
+                    title: None,
+                    description: None,
+                    keywords: vec![],
+                    scale_denominator: 203_643_078.697_383_6,
+                    cell_size: 57_020.062_035_267_394,
+                    corner_of_origin: CornerOfOrigin::TopLeft,
+                    point_of_origin: [-29_217_738.330_467_295, 29_167_074.807_319_485],
+                    tile_width: 512.try_into().unwrap(),
+                    tile_height: 512.try_into().unwrap(),
+                    matrix_width: 2.try_into().unwrap(),
+                    matrix_height: 2.try_into().unwrap(),
+                    variable_matrix_widths: vec![],
+                },
+                TileMatrix {
+                    id: "2".to_string(),
+                    title: None,
+                    description: None,
+                    keywords: vec![],
+                    scale_denominator: 101_821_539.348_691_8,
+                    cell_size: 28_510.031_017_633_697,
+                    corner_of_origin: CornerOfOrigin::TopLeft,
+                    point_of_origin: [-29_189_228.299_449_66, 29_195_584.838_337_12],
+                    tile_width: 512.try_into().unwrap(),
+                    tile_height: 512.try_into().unwrap(),
+                    matrix_width: 4.try_into().unwrap(),
+                    matrix_height: 4.try_into().unwrap(),
+                    variable_matrix_widths: vec![],
+                },
+                TileMatrix {
+                    id: "3".to_string(),
+                    title: None,
+                    description: None,
+                    keywords: vec![],
+                    scale_denominator: 50_910_769.674_345_896,
+                    cell_size: 14_255.015_508_816_849,
+                    corner_of_origin: CornerOfOrigin::TopLeft,
+                    point_of_origin: [-21_890_660.358_935_43, 21_897_016.897_822_894],
+                    tile_width: 512.try_into().unwrap(),
+                    tile_height: 512.try_into().unwrap(),
+                    matrix_width: 6.try_into().unwrap(),
+                    matrix_height: 6.try_into().unwrap(),
+                    variable_matrix_widths: vec![],
+                },
+            ],
+        };
+
+        assert_tile_matrix_set_approx_eq(&tile_matrix_set, &expected);
 
         let execution_context = ctx.execution_context().unwrap();
 

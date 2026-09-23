@@ -11,18 +11,17 @@ use crate::layers::listing::{
 };
 use crate::projects::{RasterSymbology, Symbology};
 use crate::stac::{Feature as StacFeature, FeatureCollection as StacCollection, StacAsset};
+use crate::util::format_stac_wgs84_bbox;
 use crate::util::operators::source_operator_from_dataset;
 use crate::util::sentinel_2_utm_zones::UtmZone;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId, NamedData};
 use geoengine_datatypes::operations::image::{RasterColorizer, RgbaColor};
-use geoengine_datatypes::operations::reproject::{
-    CoordinateProjection, CoordinateProjector, Reproject,
-};
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, CacheTtlSeconds};
+use geoengine_datatypes::primitives::AxisAlignedRectangle;
 use geoengine_datatypes::primitives::{
-    DateTime, Duration, RasterQueryRectangle, TimeInstance, TimeInterval, VectorQueryRectangle,
+    BoundingBox2D, CacheTtlSeconds, DateTime, Duration, RasterQueryRectangle, TimeInstance,
+    TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GeoTransform, SpatialGridDefinition};
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
@@ -658,21 +657,10 @@ impl SentinelS2L2aCogsMetaData {
         let t_start = t_start - Duration::seconds(self.stac_query_buffer.start_seconds);
         let t_end = t_end + Duration::seconds(self.stac_query_buffer.end_seconds);
 
-        let native_spatial_ref =
-            SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg_code());
-        let epsg_4326_ref = SpatialReference::epsg_4326();
-        let projector = CoordinateProjector::from_known_srs(native_spatial_ref, epsg_4326_ref)?;
-        let native_bounds = self.zone.native_extent();
-
         // request all features in zone in order to be able to determine the temporal validity of individual tile
-        let bbox = native_bounds
-            .reproject(&projector)
-            .inspect_err(|e| {
-                debug!(
-                    "could not project zone bounds to EPSG:4326. Was: {native_bounds:?}. Source: {e}"
-                );
-            })
-            .ok();
+        // The footprint of a Sentinel-2 zone in EPSG:4326 is the area of use of its CRS,
+        // so the CRS metadata answers this statically without any coordinate projection.
+        let bbox: Option<BoundingBox2D> = self.zone.extent().map(|extent| extent.as_bbox());
 
         Ok(bbox.map(|bbox| {
             vec![
@@ -683,11 +671,8 @@ impl SentinelS2L2aCogsMetaData {
                 (
                     "bbox".to_owned(),
                     format!(
-                        "[{},{},{},{}]", // array-brackets are not used in standard but required here for unknkown reason
-                        bbox.lower_left().x,
-                        bbox.lower_left().y,
-                        bbox.upper_right().x,
-                        bbox.upper_right().y
+                        "[{}]", // array-brackets are not used in standard but required here for unknkown reason
+                        format_stac_wgs84_bbox(bbox),
                     ),
                 ), // TODO: order coordinates depending on projection
                 (
@@ -1161,7 +1146,7 @@ mod tests {
                 request::query(url_decoded(contains(("limit", "500")))),
                 request::query(url_decoded(contains((
                     "bbox",
-                    "[9.396566748392315,-83.82852972938498,63.83756656611425,0]"
+                    "[30.00000,-80.00000,36.00000,0.00000]"
                 )))),
                 request::query(url_decoded(contains((
                     "datetime",
