@@ -11,15 +11,42 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{RasterBandDescriptor, SpatialGridDescriptor};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
+mod auth;
 mod cache;
 pub(crate) mod common;
 mod listing;
 mod loading_info;
+mod storage;
 
 const DEFAULT_QUERY_TIMEOUT_SECS: i64 = 60;
 const DEFAULT_PAGE_LIMIT: i64 = 100;
+
+fn validate_authentication(
+    authentication: Option<&StacProviderAuthentication>,
+) -> crate::error::Result<()> {
+    if authentication.is_some_and(|authentication| authentication.password == SECRET_REPLACEMENT) {
+        return Err(crate::error::Error::InvalidConfig {
+            reason: "STAC authentication password must not be the secret replacement placeholder"
+                .to_owned(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_s3_config(s3_config: Option<&StacProviderS3Config>) -> crate::error::Result<()> {
+    if s3_config.is_some_and(|s3_config| {
+        s3_config.access_key.as_deref() == Some(SECRET_REPLACEMENT)
+            || s3_config.secret_key.as_deref() == Some(SECRET_REPLACEMENT)
+    }) {
+        return Err(crate::error::Error::InvalidConfig {
+            reason: "STAC S3 credentials must not use the secret replacement placeholder"
+                .to_owned(),
+        });
+    }
+    Ok(())
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
 #[postgres(name = "StacDataProviderDefinition")]
@@ -32,6 +59,7 @@ pub struct StacDataProviderDefinition {
     pub api_url: String,
     pub collection_name: String,
     pub s3_config: Option<StacProviderS3Config>,
+    pub authentication: Option<StacProviderAuthentication>,
     pub time_dimension: TimeDimension, // TODO: should this be on dataset level?
     pub datasets: Vec<StacProviderDataset>,
     /// Timeout in seconds for outgoing STAC API HTTP requests.
@@ -49,12 +77,48 @@ fn default_page_limit() -> i64 {
     DEFAULT_PAGE_LIMIT
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
-#[postgres(name = "StacProviderS3Config")]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct StacProviderS3Config {
     pub endpoint: String,
     pub access_key: Option<String>,
     pub secret_key: Option<String>,
+}
+
+impl fmt::Debug for StacProviderS3Config {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("StacProviderS3Config")
+            .field("endpoint", &self.endpoint)
+            .field(
+                "access_key",
+                &self.access_key.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field(
+                "secret_key",
+                &self.secret_key.as_ref().map(|_| "[REDACTED]"),
+            )
+            .finish()
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
+pub struct StacProviderAuthentication {
+    pub endpoint: String,
+    pub client_id: String,
+    pub username: String,
+    pub password: String,
+}
+
+impl fmt::Debug for StacProviderAuthentication {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("StacProviderAuthentication")
+            .field("endpoint", &self.endpoint)
+            .field("client_id", &self.client_id)
+            .field("username", &self.username)
+            .field("password", &"[REDACTED]")
+            .finish()
+    }
 }
 
 /// A geo engine dataset derived from a STAC collection.
@@ -137,10 +201,12 @@ impl StacProviderDatasetBand {
 #[async_trait]
 impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
     async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
+        validate_authentication(self.authentication.as_ref())?;
+        validate_s3_config(self.s3_config.as_ref())?;
         if self.time_dimension == TimeDimension::Irregular {
             return Err(crate::error::Error::StacIrregularTimeDimensionNotSupported);
         }
-        Ok(Box::new(StacDataProvider::new(
+        let mut provider = StacDataProvider::new(
             self.id,
             self.name,
             self.description,
@@ -151,7 +217,14 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
             self.datasets,
             self.page_limit,
             self.query_timeout_secs,
-        )))
+        );
+
+        provider.client = provider
+            .client
+            .with_authentication(self.authentication, &provider.api_url)
+            .await?;
+
+        Ok(Box::new(provider))
     }
 
     fn type_name(&self) -> &'static str {
@@ -189,6 +262,21 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
                     }
                 }
 
+                if let (Some(current_authentication), Some(new_authentication)) =
+                    (&self.authentication, &mut new.authentication)
+                    && new_authentication.password == SECRET_REPLACEMENT
+                {
+                    new_authentication
+                        .password
+                        .clone_from(&current_authentication.password);
+                }
+
+                // Validate after replacing redacted values. This also covers
+                // provider creation, where the generic insert path calls
+                // `update` with the new provider as both `self` and `new`.
+                validate_authentication(new.authentication.as_ref())?;
+                validate_s3_config(new.s3_config.as_ref())?;
+
                 TypedDataProviderDefinition::StacDataProviderDefinition(new)
             }
             _ => new,
@@ -208,7 +296,7 @@ pub struct StacDataProvider {
     datasets: Vec<StacProviderDataset>,
     page_limit: i64,
     /// Shared HTTP client, reused across all requests for this provider.
-    client: reqwest::Client,
+    client: StacClient,
     /// In-memory cache for STAC query results (tile files), keyed by dataset
     /// name and spatial/temporal query bounds.
     query_cache: Arc<StacQueryCache>,
@@ -242,7 +330,7 @@ impl StacDataProvider {
             time_dimension,
             datasets,
             page_limit,
-            client,
+            client: StacClient::new(client),
             query_cache: Arc::new(StacQueryCache::default()),
         }
     }
@@ -257,5 +345,122 @@ impl DataProvider for StacDataProvider {
         Err(crate::error::Error::NotImplemented {
             message: "STAC provenance is not yet implemented".to_owned(),
         })
+    }
+}
+
+/// Shared STAC HTTP client. Clones share token renewal state, and each request
+/// reads the current token so pagination and retries use refreshed credentials.
+#[derive(Clone, Debug)]
+pub(crate) struct StacClient {
+    client: reqwest::Client,
+    authentication: Option<auth::StacAuthentication>,
+    authentication_origin: Option<url::Url>,
+}
+
+impl StacClient {
+    pub(crate) fn new(client: reqwest::Client) -> Self {
+        Self {
+            client,
+            authentication: None,
+            authentication_origin: None,
+        }
+    }
+
+    pub(crate) async fn with_authentication(
+        mut self,
+        config: Option<StacProviderAuthentication>,
+        stac_api_url: &str,
+    ) -> crate::error::Result<Self> {
+        self.authentication_origin = config
+            .as_ref()
+            .map(|_| url::Url::parse(stac_api_url))
+            .transpose()?;
+        self.authentication = match config {
+            Some(config) => {
+                Some(auth::StacAuthentication::initialize(self.client.clone(), config).await?)
+            }
+            None => None,
+        };
+        Ok(self)
+    }
+
+    pub(crate) async fn get(
+        &self,
+        url: impl reqwest::IntoUrl,
+    ) -> reqwest::Result<reqwest::RequestBuilder> {
+        let url = url.into_url()?;
+        let request = self.client.get(url.clone());
+        match (&self.authentication, &self.authentication_origin) {
+            (Some(authentication), Some(authentication_origin))
+                if same_origin(authentication_origin, &url) =>
+            {
+                Ok(authentication.authorize(request).await)
+            }
+            _ => Ok(request),
+        }
+    }
+}
+
+fn same_origin(expected: &url::Url, actual: &url::Url) -> bool {
+    expected.scheme() == actual.scheme()
+        && expected.host() == actual.host()
+        && expected.port_or_known_default() == actual.port_or_known_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn same_origin_ignores_path_but_checks_scheme_host_and_port() {
+        assert!(same_origin(
+            &url::Url::parse("https://example.test/api").unwrap(),
+            &url::Url::parse("https://example.test/other").unwrap(),
+        ));
+        assert!(!same_origin(
+            &url::Url::parse("https://example.test/api").unwrap(),
+            &url::Url::parse("https://other.test/api").unwrap(),
+        ));
+    }
+    #[test]
+    fn secret_replacement_is_rejected_without_existing_authentication() {
+        let authentication = StacProviderAuthentication {
+            endpoint: "https://identity.example/token".into(),
+            client_id: "client".into(),
+            username: "user".into(),
+            password: SECRET_REPLACEMENT.into(),
+        };
+        assert!(validate_authentication(Some(&authentication)).is_err());
+        assert!(validate_authentication(None).is_ok());
+    }
+
+    #[tokio::test]
+    async fn secret_replacement_is_rejected_during_provider_creation() {
+        let mut provider: StacDataProviderDefinition =
+            serde_json::from_str::<crate::api::model::services::StacDataProviderDefinition>(
+                include_str!("../../../../../test_data/provider_defs_api/stac_sentinel2.json"),
+            )
+            .unwrap()
+            .into();
+        provider.authentication = Some(StacProviderAuthentication {
+            endpoint: "https://identity.example/token".into(),
+            client_id: "client".into(),
+            username: "user".into(),
+            password: SECRET_REPLACEMENT.into(),
+        });
+        provider.s3_config = Some(StacProviderS3Config {
+            endpoint: "https://s3.example".into(),
+            access_key: Some(SECRET_REPLACEMENT.into()),
+            secret_key: Some(SECRET_REPLACEMENT.into()),
+        });
+
+        let result =
+            DataProviderDefinition::<crate::contexts::PostgresDb<tokio_postgres::NoTls>>::update(
+                &provider,
+                TypedDataProviderDefinition::StacDataProviderDefinition(provider.clone()),
+            )
+            .await;
+
+        assert!(result.is_err());
     }
 }

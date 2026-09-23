@@ -79,7 +79,8 @@ impl ToSql for U96 {
 
 impl<'a> FromSql<'a> for U96 {
     fn from_sql(_ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
-        Ok(U96(*Array::from_slice(raw)))
+        let nonce: [u8; 12] = raw.try_into()?;
+        Ok(U96(nonce.into()))
     }
 
     accepts!(BYTEA);
