@@ -324,7 +324,11 @@ where
     Ok(result)
 }
 
-#[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
+#[allow(
+    clippy::too_many_arguments,
+    clippy::missing_panics_doc,
+    clippy::too_many_lines
+)]
 pub async fn raster_stream_to_geotiff<
     G: ToGeoTiffProgressConsumer + Send,
     P,
