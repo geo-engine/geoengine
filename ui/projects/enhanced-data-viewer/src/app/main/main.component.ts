@@ -20,6 +20,7 @@ import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {toSignal} from '@angular/core/rxjs-interop';
+import {Subject, debounce, distinctUntilChanged, timer, EMPTY, startWith} from 'rxjs';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {MatRadioModule} from '@angular/material/radio';
 import {A11yModule} from '@angular/cdk/a11y';
@@ -81,7 +82,16 @@ export class MainComponent {
     readonly currentTime = toSignal(this.projectService.getTimeStream());
 
     readonly mapTileLayer = computed(() => this.edvLayersService.mapTileLayer());
-    readonly tileLoading = signal(false);
+    private readonly tileLoading$ = new Subject<boolean>();
+
+    readonly tileLoading = toSignal(
+        this.tileLoading$.pipe(
+            distinctUntilChanged(),
+            debounce((loading) => (loading ? EMPTY : timer(150))),
+            startWith(false),
+        ),
+        {initialValue: false},
+    );
     readonly isLoading = computed(() => (this.edvLayersService.mapTileLayerResource.isLoading() ?? false) || this.tileLoading());
 
     readonly isLayersActive = isActive('/map/layers', this.router);
@@ -130,7 +140,7 @@ export class MainComponent {
     }
 
     onTileLoading(loading: boolean): void {
-        this.tileLoading.set(loading);
+        this.tileLoading$.next(loading);
     }
 
     onResize(): void {

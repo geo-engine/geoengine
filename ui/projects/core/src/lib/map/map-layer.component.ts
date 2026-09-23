@@ -706,10 +706,6 @@ export class OlOgcApiMapTileLayerComponent
             };
             const onEnd = (): void => {
                 tilesPending--;
-                if (this.resettingAbortedTile) {
-                    // abort is transient, the retry's tileloadstart will update loading
-                    return;
-                }
                 if (tilesPending <= 0) {
                     this.loading.emit(false);
                 }
@@ -719,6 +715,8 @@ export class OlOgcApiMapTileLayerComponent
             tileSource.on('tileloaderror', onEnd);
 
             onCleanup(() => {
+                this.loading.emit(false);
+
                 unlistenState();
                 tileSource.un('tileloadstart', onStart);
                 tileSource.un('tileloadend', onEnd);
@@ -826,6 +824,8 @@ export class OlOgcApiMapTileLayerComponent
 
     ngOnDestroy(): void {
         this.destroyed = true;
+
+        this.loading.emit(false);
 
         // abort all tile requests that are still in flight
         for (const controller of this.tileAbortControllers) {
