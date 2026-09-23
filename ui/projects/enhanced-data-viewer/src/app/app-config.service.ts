@@ -1,11 +1,17 @@
 import {Injectable} from '@angular/core';
 import {mergeDeepOverrideLists} from '@geoengine/common';
 import {CoreConfig, CoreConfigStructure, DEFAULT_CORE_CONFIG} from '@geoengine/core';
+import type {PresetCategory} from './layers/data-sources';
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-interface AppConfigStructure extends CoreConfigStructure {}
+export type EdvCategory = PresetCategory;
+interface AppConfigStructure extends CoreConfigStructure {
+    EDV: {CATEGORY: EdvCategory};
+}
 
 const APP_CONFIG_DEFAULTS = mergeDeepOverrideLists(DEFAULT_CORE_CONFIG, {
+    EDV: {
+        CATEGORY: 'adHoc',
+    },
     BRANDING: {
         LOGO_URL: 'assets/CODE-DE-Lab_RGB.svg',
         LOGO_ICON_URL: 'favicon.ico',
@@ -46,6 +52,10 @@ const APP_CONFIG_DEFAULTS = mergeDeepOverrideLists(DEFAULT_CORE_CONFIG, {
 @Injectable()
 export class AppConfig extends CoreConfig {
     protected override config!: AppConfigStructure;
+
+    get EDV(): AppConfigStructure['EDV'] {
+        return this.config.EDV;
+    }
 
     override load(): Promise<void> {
         return super.load(APP_CONFIG_DEFAULTS);

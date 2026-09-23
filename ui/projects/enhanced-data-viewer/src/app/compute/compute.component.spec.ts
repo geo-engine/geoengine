@@ -29,13 +29,13 @@ import {PlotOutputFormat, WrappedPlotOutput} from '@geoengine/api-client';
 import {ComputeComponent} from './compute.component';
 import {EdvLayersService} from '../layers/layers.service';
 import {DataSourceLayer} from '../layers/data-sources';
+import {AppConfig} from '../app-config.service';
 
 describe('ComputeComponent', () => {
     let fixture: ComponentFixture<ComputeComponent>;
     let component: ComputeComponent;
     let overlayLayer: ReturnType<typeof signal<OlLayerVector<OlSourceVector<OlFeature>> | undefined>>;
     let selectedLayerSignal: WritableSignal<DataSourceLayer | undefined>;
-    let edvLayersService: EdvLayersService;
 
     const createBoxOverlay = (): OlLayerVector<OlSourceVector<OlFeature>> => {
         const geometry = new OlGeomPolygon([
@@ -72,6 +72,7 @@ describe('ComputeComponent', () => {
         };
 
         const layersService = {
+            getLayerCollectionItems: vi.fn().mockResolvedValue({items: []}),
             registerAndGetLayerWorkflowId: vi.fn().mockResolvedValue('workflow-id'),
             getWorkflowIdMetadata: vi
                 .fn()
@@ -89,14 +90,15 @@ describe('ComputeComponent', () => {
                         ),
                     ),
                 ),
-        } satisfies Pick<LayersService, 'registerAndGetLayerWorkflowId' | 'getWorkflowIdMetadata'>;
+        } satisfies Pick<LayersService, 'getLayerCollectionItems' | 'registerAndGetLayerWorkflowId' | 'getWorkflowIdMetadata'>;
 
         await TestBed.configureTestingModule({
             providers: [
                 provideZonelessChangeDetection(),
                 {provide: BackendService, useValue: {}},
+                {provide: AppConfig, useValue: {EDV: {CATEGORY: 'adHoc'}}},
                 {provide: LayersService, useValue: layersService},
-                EdvLayersService,
+                {provide: EdvLayersService, useValue: {mapTileLayer: selectedLayerSignal}},
                 {
                     provide: MapService,
                     useValue: {
@@ -117,9 +119,6 @@ describe('ComputeComponent', () => {
             ],
             imports: [ComputeComponent, MatDialogModule],
         }).compileComponents();
-
-        edvLayersService = TestBed.inject(EdvLayersService);
-        vi.spyOn(edvLayersService.mapTileLayerResource, 'value').mockImplementation(() => selectedLayerSignal());
 
         fixture = TestBed.createComponent(ComputeComponent);
         component = fixture.componentInstance;
