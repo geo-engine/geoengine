@@ -82,7 +82,7 @@ export class MainComponent {
 
     readonly mapTileLayer = computed(() => this.edvLayersService.mapTileLayer());
     readonly tileLoading = signal(false);
-    readonly isLoading = computed(() => (this.edvLayersService.mapTileLayerResource.isLoading() ?? false) || this.tileLoading());
+    readonly isLoading = computed(() => this.edvLayersService.catalogueLoading() || this.tileLoading());
 
     readonly isLayersActive = isActive('/map/layers', this.router);
     readonly isComputeActive = isActive('/map/compute', this.router);
@@ -154,7 +154,7 @@ export class MainComponent {
         const [currentDate] = (this.currentTime()?.toString() ?? new Date().toISOString()).split('T');
         const currentLayer = this.layersReverse().at(-1)?.name ?? 'enhanced-data-viewer-map';
         const citation = replaceCitationPlaceholders(
-            this.edvLayersService.selectedDataSource().citation ?? '',
+            this.edvLayersService.selectedDataSource()?.citation ?? '',
             this.currentTime() ?? new Date(),
         );
 

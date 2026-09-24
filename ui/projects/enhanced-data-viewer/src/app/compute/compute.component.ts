@@ -152,7 +152,7 @@ export class ComputeComponent {
     readonly spinnerWidthPx = computed(() => Math.round(this.plotWidthPx() / 2));
     readonly hostElement = inject(ElementRef).nativeElement as HTMLElement;
 
-    readonly selectedRasterLayer = this.edvLayerService.mapTileLayerResource.value;
+    readonly selectedRasterLayer = this.edvLayerService.mapTileLayer;
     readonly selectedProcessingGraphId = resource<string | undefined, LayerIdPair | undefined>({
         params: () => this.selectedRasterLayer(),
         loader: async ({params: rasterLayer}): Promise<string | undefined> => {
