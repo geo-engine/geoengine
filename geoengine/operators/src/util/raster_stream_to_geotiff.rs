@@ -28,7 +28,7 @@ use std::convert::TryInto;
 use std::fmt::Display;
 use std::path::Path;
 use std::path::PathBuf;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use super::{abortable_query_execution, spawn_blocking};
 
@@ -609,6 +609,22 @@ struct GdalDatasetHolder<P: Pixel + GdalType> {
     create_meta: IntermediateDatasetMetadata,
     dataset_writer: GdalDatasetWriter<P>,
     result: Vec<GdalLoadingInfoTemporalSlice>,
+}
+
+impl<P: Pixel + GdalType> Drop for GdalDatasetHolder<P> {
+    fn drop(&mut self) {
+        // The intermediate dataset is only taken out of the holder when it is renamed to its
+        // destination. A cancelled or failed query drops it here, so remove the partially
+        // written file from GDAL's in-memory filesystem instead of leaking it.
+        if let Some(intermediate_dataset) = self.intermediate_dataset.take() {
+            let intermediate_path = intermediate_dataset.intermediate_path.clone();
+            // close the dataset before removing the file it is backed by
+            drop(intermediate_dataset);
+            if let Err(error) = gdal::vsi::unlink_mem_file(&intermediate_path) {
+                warn!("Failed to remove intermediate dataset: {error}");
+            }
+        }
+    }
 }
 
 impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
@@ -1498,6 +1514,17 @@ mod tests {
 
     #[tokio::test]
     async fn geotiff_from_stream_aborts_when_connection_closes() {
+        /// signals the abort future as soon as the first tile has been written, so that the
+        /// query is cancelled while the intermediate dataset exists
+        struct AbortOnFirstTile(tokio::sync::watch::Sender<()>);
+
+        #[async_trait]
+        impl ToGeoTiffProgressConsumer for AbortOnFirstTile {
+            async fn consume_progress(&self, _status: ToGeoTiffProgress) {
+                let _ = self.0.send(());
+            }
+        }
+
         let ecx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
         let ctx = ecx.mock_query_context_test_default();
@@ -1510,8 +1537,16 @@ mod tests {
             Box::new(metadata),
         );
 
+        let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
+
+        let (first_tile_written, first_tile_written_rx) = tokio::sync::watch::channel(());
+        let conn_closed = Box::pin(async move {
+            let mut first_tile_written_rx = first_tile_written_rx;
+            let _ = first_tile_written_rx.changed().await;
+        });
+
         let result = raster_stream_to_geotiff(
-            Path::new("/vsimem/aborted/"),
+            &file_path,
             gdal_source.boxed(),
             RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
@@ -1529,12 +1564,70 @@ mod tests {
                 force_big_tiff: false,
             },
             None,
-            Box::pin(futures::future::ready(())),
-            (),
+            conn_closed,
+            AbortOnFirstTile(first_tile_written),
         )
         .await;
 
         assert!(matches!(result, Err(Error::QueryCanceled)));
+    }
+
+    #[tokio::test]
+    async fn intermediate_dataset_is_removed_when_dropped() {
+        let ecx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ctx = ecx.mock_query_context_test_default();
+        let metadata = create_ndvi_meta_data();
+
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
+            TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+            BandSelection::first(),
+        );
+        let tiling_strategy = metadata
+            .result_descriptor
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(ctx.tiling_specification())
+            .generate_data_tiling_strategy();
+
+        let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
+        let mut dataset_holder: GdalDatasetHolder<u8> = GdalDatasetHolder::new_with_tiling_strat(
+            tiling_strategy,
+            &file_path,
+            &query_rect,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Some(0.),
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                as_cog: false,
+                compression_num_threads: GdalCompressionNumThreads::NumThreads(2),
+                force_big_tiff: false,
+            },
+            None,
+        );
+
+        dataset_holder
+            .update_intermediate_dataset_from_time_interval(query_rect.time_interval())
+            .unwrap();
+
+        // the intermediate dataset is created in the query's file path directory
+        let file_count = || {
+            gdal::vsi::read_dir(&file_path, true)
+                .unwrap_or_default()
+                .len()
+        };
+        assert!(
+            file_count() > 0,
+            "the intermediate dataset should exist before the holder is dropped"
+        );
+
+        drop(dataset_holder);
+
+        assert!(
+            file_count() == 0,
+            "the intermediate dataset should be gone after the holder is dropped"
+        );
     }
 
     #[tokio::test]

@@ -993,8 +993,9 @@ export class ProjectService implements OnDestroy {
             },
         });
 
-        // All sources emit synchronously on subscription, so the first combined emission is the
-        // state at subscription time and `pairwise` compares every later emission against it.
+        // All sources emit synchronously on subscription, so `pairwise` compares every new
+        // combined emission against the previous one and cancels once it deviates from the
+        // conditions the request was issued under.
         const observables: [
             Observable<Time>,
             Observable<ViewportSize>,

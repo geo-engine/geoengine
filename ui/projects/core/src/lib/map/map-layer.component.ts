@@ -421,6 +421,13 @@ export class OlRasterLayerComponent
                     return;
                 }
 
+                // a tile evicted from the OpenLayers cache while loading never reports back, so the
+                // source's tile events alone cannot balance the loading state; only a tile whose image
+                // was disposed is guaranteed to never fire tile events again
+                if (!tile.getImage() && this.tileAbortClients.size === 0) {
+                    this.projectService.changeRasterLayerDataStatus({id: this.layerId(), layerType: 'raster'}, LoadingState.OK);
+                }
+
                 const data = client.response;
 
                 if (!data) {
@@ -589,11 +596,11 @@ export class OlOgcApiMapTileLayerComponent
             spatialReference: this.spatialReference(),
             time: this.time(), // no way to just update `context` field in OGCMapTile…
         }),
-        loader: async (): Promise<{source: OGCMapTile; objectUrls: string[]}> => {
+        loader: async ({abortSignal}): Promise<{source: OGCMapTile; objectUrls: string[]}> => {
             const objectUrls: string[] = [];
             try {
                 const source = new OGCMapTile({
-                    url: await this.tmsBlobUrl(objectUrls),
+                    url: await this.tmsBlobUrl(objectUrls, abortSignal),
                     context: {
                         datetime: this.time().asRequestString(),
                     },
@@ -659,6 +666,9 @@ export class OlOgcApiMapTileLayerComponent
                             } finally {
                                 cancelSub?.unsubscribe();
                                 this.tileAbortControllers.delete(controller);
+                                // a tile evicted from the OpenLayers cache while loading never reports
+                                // back, so the source's tile events alone cannot balance the loading state
+                                this.loading.emit(this.tileAbortControllers.size > 0);
                             }
                         })();
                     },
@@ -750,7 +760,7 @@ export class OlOgcApiMapTileLayerComponent
         });
     }
 
-    async tmsBlobUrl(objectUrls: string[]): Promise<string> {
+    async tmsBlobUrl(objectUrls: string[], signal?: AbortSignal): Promise<string> {
         const dataConnectorId = this.dataConnectorId();
         const layerId = this.dataLayerId();
         const tms = this.tmsId();
@@ -766,11 +776,11 @@ export class OlOgcApiMapTileLayerComponent
                 }
                 for (const link of metadata.links as Array<{rel: string; href: string; type: string}>) {
                     if (link.rel === 'http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme') {
-                        link.href = await this.urlToBlobUrl(link.href, 'JSON', undefined, undefined, objectUrls);
+                        link.href = await this.urlToBlobUrl(link.href, 'JSON', undefined, signal, objectUrls);
                     }
                 }
             },
-            undefined,
+            signal,
             objectUrls,
         );
     }
@@ -801,6 +811,10 @@ export class OlOgcApiMapTileLayerComponent
 
                 if (interceptor) {
                     await interceptor(metadata);
+                }
+
+                if (signal?.aborted) {
+                    throw new DOMException('Aborted', 'AbortError');
                 }
 
                 const objectUrl = URL.createObjectURL(
