@@ -18,6 +18,8 @@ export interface DataSourceVariant {
     crs?: string;
     explicit: boolean;
     presets: VisualizationPreset[];
+    /** Runtime collection references used only to load this variant's presets. */
+    collectionRefs?: Array<{collectionId: string; category: PresetCategory}>;
 }
 export interface DataSourceDefinition {
     key: string;

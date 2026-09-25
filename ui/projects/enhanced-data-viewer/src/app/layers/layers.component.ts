@@ -93,13 +93,17 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
 
         <div>
             <h2>Visualization Presets</h2>
-            @if (catalogueLoading()) {
+            @if (catalogueLoading() || variantLoading()) {
                 <div class="catalogue-loading" role="status">
                     <mat-spinner diameter="24" aria-label="Loading visualization presets"></mat-spinner>
                     <span>Loading visualization presets…</span>
                 </div>
             }
-            <mat-nav-list class="visualization-presets" [attr.aria-busy]="catalogueLoading()">
+            @if (variantError(); as error) {
+                <p class="catalogue-message catalogue-error">{{ error }}</p>
+                <button matButton type="button" (click)="retryVariant()">Retry</button>
+            }
+            <mat-nav-list class="visualization-presets" [attr.aria-busy]="catalogueLoading() || variantLoading()">
                 @for (group of presetGroups(); track group.category) {
                     @if (debug()) {
                         <span class="preset-group-label">{{ group.label }}</span>
@@ -312,6 +316,8 @@ export class LayersComponent {
     readonly dataSources = this.edvLayersService.dataSources;
     readonly catalogueLoading = this.edvLayersService.catalogueLoading;
     readonly catalogueError = this.edvLayersService.catalogueError;
+    readonly variantLoading = this.edvLayersService.variantLoading;
+    readonly variantError = this.edvLayersService.variantError;
 
     readonly autoSelectTime = signal<boolean>(true);
 
@@ -332,6 +338,7 @@ export class LayersComponent {
     }
 
     readonly retryCatalogue = (): void => this.edvLayersService.retryCatalogue();
+    readonly retryVariant = (): void => this.edvLayersService.retryVariant();
 
     onDataSourceSelectionChange(options: readonly {value: string}[]): void {
         const selected = options[0]?.value;
