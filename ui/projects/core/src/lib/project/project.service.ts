@@ -2,6 +2,7 @@ import {
     BehaviorSubject,
     combineLatest,
     firstValueFrom,
+    from,
     merge,
     Observable,
     Observer,
@@ -13,7 +14,7 @@ import {
 } from 'rxjs';
 import {debounceTime, distinctUntilChanged, filter, first, map, mergeMap, skip, switchMap, take, tap} from 'rxjs/operators';
 
-import {Injectable, OnDestroy, inject} from '@angular/core';
+import {Injectable, OnDestroy, computed, inject} from '@angular/core';
 
 import {Project} from './project.model';
 import {CoreConfig} from '../config.service';
@@ -42,7 +43,6 @@ import {
     LayerData,
     LayerMetadata,
     LayersService,
-    LineSimplificationDict,
     LineSymbology,
     NotificationService,
     Plot,
@@ -71,12 +71,18 @@ import {
     CollectionItem,
     GeoJson,
     OGCWFSApi,
+    PlotOperator,
     ProjectLayer as ProjectLayerDict,
     ProviderLayerId,
-    LegacyTypedOperatorOperator,
+    ProcessingGraph,
+    RasterOperator,
     TypedResultDescriptor,
-    Workflow as WorkflowDict,
+    VectorOperator,
+    WorkflowsApi,
+    LineSimplification,
+    TypedOperator,
 } from '@geoengine/api-client';
+import {toSignal} from '@angular/core/rxjs-interop';
 
 export type FeatureId = string | number;
 
@@ -122,7 +128,13 @@ export class ProjectService implements OnDestroy {
 
     private readonly selectedFeature$ = new BehaviorSubject<FeatureSelection>({feature: undefined});
 
+    private readonly sessionToken = toSignal(this.userService.getSessionTokenStream());
     private readonly ogcWfsApi = new ReplaySubject<OGCWFSApi>(1);
+    private readonly processingGraphAPI = computed<WorkflowsApi>(() => {
+        const sessionToken = this.sessionToken();
+        if (!sessionToken) return new WorkflowsApi();
+        return new WorkflowsApi(apiConfigurationWithAccessKey(sessionToken));
+    });
 
     constructor() {
         const config = this.config;
@@ -443,17 +455,13 @@ export class ProjectService implements OnDestroy {
         );
     }
 
-    registerWorkflow(workflow: WorkflowDict): Observable<UUID> {
-        return this.userService.getSessionTokenForRequest().pipe(
-            mergeMap((sessionToken) => this.backend.registerWorkflow(workflow, sessionToken)),
-            map((response) => response.id),
-        );
+    async registerWorkflow(processingGraph: ProcessingGraph): Promise<UUID> {
+        const response = await this.processingGraphAPI().registerWorkflowHandler({processingGraph});
+        return response.id;
     }
 
-    getWorkflow(workflowId: UUID): Observable<WorkflowDict> {
-        return this.userService
-            .getSessionTokenForRequest()
-            .pipe(mergeMap((sessionToken) => this.backend.getWorkflow(workflowId, sessionToken)));
+    async getWorkflow(processingGraphId: UUID): Promise<ProcessingGraph> {
+        return await this.processingGraphAPI().loadWorkflowHandler({id: processingGraphId});
     }
 
     getWorkflowMetaData(workflowId: UUID): Observable<TypedResultDescriptor> {
@@ -469,9 +477,9 @@ export class ProjectService implements OnDestroy {
     }
 
     /**
-     * Determines a common projection for all layers and return their operator with an added a propjection if necessary
+     * Determines a common projection for all layers and return their operator with an added a projection if necessary
      */
-    getAutomaticallyProjectedOperatorsFromLayers(layers: Array<Layer>): Observable<Array<LegacyTypedOperatorOperator>> {
+    getAutomaticallyProjectedOperatorsFromLayers(layers: Array<Layer>): Observable<Array<TypedOperator>> {
         const meta: Array<Observable<TypedResultDescriptor>> = layers.map((l) => this.getWorkflowMetaData(l.workflowId));
 
         return combineLatest(meta).pipe(
@@ -479,26 +487,30 @@ export class ProjectService implements OnDestroy {
                 const srefs = descriptors.map((l) => SpatialReference.fromSrsString(l.spatialReference));
                 const targetSref = getProjectionTarget(srefs);
 
-                const workflowsObservable = layers.map((l) => this.getWorkflow(l.workflowId));
+                const workflowsObservable = layers.map((l) => from(this.getWorkflow(l.workflowId)));
 
                 return combineLatest(workflowsObservable).pipe(
-                    map((workflows: Array<WorkflowDict>) => {
-                        const projectedOperators: Array<LegacyTypedOperatorOperator> = [];
+                    map((workflows: Array<ProcessingGraph>) => {
+                        const projectedOperators: Array<TypedOperator> = [];
 
                         for (let i = 0; i < workflows.length; i++) {
                             const sref: SpatialReference = srefs[i];
                             const workflow = workflows[i];
-                            const operator: LegacyTypedOperatorOperator = workflow.operator;
+                            if (workflow.type === 'Plot') continue;
+                            const operator: RasterOperator | VectorOperator = workflow.operator;
                             if (sref.srsString === targetSref.srsString) {
-                                projectedOperators.push(operator);
+                                projectedOperators.push(workflow);
                             } else {
                                 projectedOperators.push({
-                                    type: 'Reprojection',
-                                    params: {
-                                        targetSpatialReference: targetSref.srsString,
-                                    },
-                                    sources: {
-                                        source: operator,
+                                    type: workflow.type,
+                                    operator: {
+                                        type: 'Reprojection',
+                                        params: {
+                                            targetSpatialReference: targetSref.srsString,
+                                        },
+                                        sources: {
+                                            source: operator,
+                                        },
                                     },
                                 });
                             }
@@ -1041,10 +1053,10 @@ export class ProjectService implements OnDestroy {
      * Creates a projected operator if the layer has not the target spatial reference.
      */
     createProjectedOperator(
-        inputOperator: LegacyTypedOperatorOperator,
+        inputOperator: RasterOperator | VectorOperator | PlotOperator,
         metadata: LayerMetadata,
         targetSpatialReference: SpatialReference,
-    ): LegacyTypedOperatorOperator {
+    ): RasterOperator | VectorOperator | PlotOperator {
         if (metadata.spatialReference.equals(targetSpatialReference)) {
             return inputOperator;
         }
@@ -1057,7 +1069,7 @@ export class ProjectService implements OnDestroy {
             sources: {
                 source: inputOperator,
             },
-        };
+        } as RasterOperator | VectorOperator | PlotOperator;
     }
 
     protected async createTemporaryProject(sessionToken: string): Promise<Project> {
@@ -1587,11 +1599,15 @@ function addTimeToProperties(x: GeoJson): void {
  * This puts a new operator on top of the actual workflow.
  */
 function createClusteredPointLayerQueryWorkflow(
-    workflow: WorkflowDict,
+    workflow: ProcessingGraph,
     metadata: VectorLayerMetadata,
     mapSpatialReference: SpatialReference,
     resolution: number,
-): WorkflowDict {
+): ProcessingGraph {
+    if (workflow.type !== 'Vector') {
+        throw new Error('Cannot create clustered point layer for a non-Vector workflow.');
+    }
+
     const columnAggregates: Record<
         string,
         {
@@ -1645,13 +1661,16 @@ function createClusteredPointLayerQueryWorkflow(
  * In order to visualize simplified lines and polygons, we need to create a temporary workflow.
  * This puts a new operator on top of the actual workflow.
  */
-// eslint-disable-next-line prefer-arrow/prefer-arrow-functions
 function createSimplifiedLinesOrPolygonsLayerQueryWorkflow(
-    workflow: WorkflowDict,
+    workflow: ProcessingGraph,
     metadata: VectorLayerMetadata,
     mapSpatialReference: SpatialReference,
     resolution: number,
-): WorkflowDict {
+): ProcessingGraph {
+    if (workflow.type === 'Plot') {
+        throw new Error('Cannot create simplified lines or polygons layer for a Plot workflow.');
+    }
+
     return {
         type: 'Vector',
         operator: {
@@ -1663,18 +1682,18 @@ function createSimplifiedLinesOrPolygonsLayerQueryWorkflow(
             sources: {
                 vector: createProjectedOperator(workflow.operator, metadata, mapSpatialReference),
             },
-        } as LineSimplificationDict,
+        } as LineSimplification,
     };
 }
 
 /**
  * Creates a projected operator if the layer has not the target spatial reference.
  */
-function createProjectedOperator(
-    inputOperator: LegacyTypedOperatorOperator,
+function createProjectedOperator<Operator extends RasterOperator | VectorOperator>(
+    inputOperator: Operator,
     metadata: LayerMetadata,
     targetSpatialReference: SpatialReference,
-): LegacyTypedOperatorOperator {
+): Operator {
     if (metadata.spatialReference.equals(targetSpatialReference)) {
         return inputOperator;
     }
@@ -1687,5 +1706,5 @@ function createProjectedOperator(
         sources: {
             source: inputOperator,
         },
-    };
+    } as Operator;
 }

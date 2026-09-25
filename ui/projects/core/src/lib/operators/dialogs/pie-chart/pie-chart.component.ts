@@ -1,11 +1,10 @@
 import {AfterViewInit, ChangeDetectionStrategy, Component, OnDestroy, inject} from '@angular/core';
 import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {of, ReplaySubject, Subscription} from 'rxjs';
+import {from, of, ReplaySubject, Subscription} from 'rxjs';
 import {ProjectService} from '../../../project/project.service';
 import {map, mergeMap, tap} from 'rxjs/operators';
 import {
     NotificationService,
-    PieChartDict,
     Plot,
     ResultTypes,
     VectorLayer,
@@ -13,7 +12,7 @@ import {
     geoengineValidators,
     FxLayoutDirective,
 } from '@geoengine/common';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {ProcessingGraph, VectorOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -153,24 +152,25 @@ export class PieChartComponent implements AfterViewInit, OnDestroy {
         const donut = this.form.controls['donut'].value;
         const outputName: string = this.form.controls['name'].value;
 
-        this.projectService
-            .getWorkflow(inputLayer.workflowId)
+        from(this.projectService.getWorkflow(inputLayer.workflowId))
             .pipe(
-                mergeMap((inputWorkflow: WorkflowDict) =>
-                    this.projectService.registerWorkflow({
-                        type: 'Plot',
-                        operator: {
-                            type: 'PieChart',
-                            params: {
-                                type: pieChartType,
-                                columnName,
-                                donut,
+                mergeMap((inputWorkflow: ProcessingGraph) =>
+                    from(
+                        this.projectService.registerWorkflow({
+                            type: 'Plot',
+                            operator: {
+                                type: 'PieChart',
+                                params: {
+                                    type: pieChartType,
+                                    columnName,
+                                    donut,
+                                },
+                                sources: {
+                                    vector: inputWorkflow.operator as VectorOperator,
+                                },
                             },
-                            sources: {
-                                vector: inputWorkflow.operator,
-                            },
-                        } as PieChartDict,
-                    }),
+                        }),
+                    ),
                 ),
                 mergeMap((workflowId) =>
                     this.projectService.addPlot(

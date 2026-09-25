@@ -11,7 +11,7 @@ import {
 } from '@angular/forms';
 import {ProjectService} from '../../../project/project.service';
 import {mergeMap} from 'rxjs/operators';
-import {BehaviorSubject, Observable, combineLatest, of} from 'rxjs';
+import {BehaviorSubject, Observable, combineLatest, from, of} from 'rxjs';
 import {
     RasterDataTypes,
     RasterLayer,
@@ -21,11 +21,10 @@ import {
     UUID,
     RasterSymbology,
     SingleBandRasterColorizer,
-    BandNeighborhoodAggregateDict,
     GeoEngineError,
 } from '@geoengine/common';
 import {SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {ProcessingGraph} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -150,11 +149,14 @@ export class BandNeighborhoodAggregateComponent {
 
         const aggregate = this.getAggregate();
 
-        this.projectService
-            .getWorkflow(rasterLayer.workflowId)
+        from(this.projectService.getWorkflow(rasterLayer.workflowId))
             .pipe(
-                mergeMap((inputWorkflow) => {
-                    const workflow: WorkflowDict = {
+                mergeMap((inputWorkflow: ProcessingGraph) => {
+                    if (inputWorkflow.type !== 'Raster') {
+                        throw new Error('Expected a raster workflow for band neighborhood aggregate.');
+                    }
+
+                    const workflow: ProcessingGraph = {
                         type: 'Raster',
                         operator: {
                             type: 'BandNeighborhoodAggregate',
@@ -164,7 +166,7 @@ export class BandNeighborhoodAggregateComponent {
                             sources: {
                                 raster: inputWorkflow.operator,
                             },
-                        } as BandNeighborhoodAggregateDict,
+                        },
                     };
 
                     return this.projectService.registerWorkflow(workflow);

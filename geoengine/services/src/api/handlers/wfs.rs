@@ -345,7 +345,7 @@ where
     let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
     let operator = workflow
-        .operator()?
+        .operator
         .get_vector()?
         .initialize(workflow_operator_path_root, &exe_ctx)
         .await?;
@@ -499,7 +499,7 @@ async fn wfs_get_feature<C: ApplicationContext>(
 
     let workflow: Workflow = ctx.db().load_workflow(&type_names).await?;
 
-    let operator = workflow.operator()?.get_vector()?;
+    let operator = workflow.operator.get_vector()?;
 
     let execution_context = ctx.execution_context()?;
     let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
@@ -846,14 +846,16 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow::Typed {
+        let workflow = Workflow {
             operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                 r#type: Default::default(),
                 params: MockPointSourceParameters {
                     points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
                     spatial_bounds: SpatialBoundsDerive::None(Default::default()),
                 },
-            })),
+            }))
+            .try_into()
+            .unwrap(),
         };
 
         let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
@@ -912,7 +914,7 @@ x;y
 
         let session_id = session.id();
 
-        let workflow = Workflow::Legacy {
+        let workflow = Workflow {
             operator: OperatorsTypedOperator::Vector(
                 CsvSource {
                     params: CsvSourceParameters {
@@ -1037,7 +1039,7 @@ x;y
 
         let session_id = session.id();
 
-        let workflow = Workflow::Legacy {
+        let workflow = Workflow {
             operator: OperatorsTypedOperator::Vector(
                 CsvSource {
                     params: CsvSourceParameters {

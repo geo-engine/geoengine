@@ -20,7 +20,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { IdResponseFromJSON, ProvenanceEntryFromJSON, RasterDatasetFromWorkflowToJSON, TaskResponseFromJSON, TypedResultDescriptorFromJSON, WorkflowFromJSON, WorkflowToJSON, } from '../models/index';
+import { IdResponseFromJSON, ProcessingGraphFromJSON, ProcessingGraphToJSON, ProvenanceEntryFromJSON, RasterDatasetFromWorkflowToJSON, TaskResponseFromJSON, TypedResultDescriptorFromJSON, } from '../models/index';
 /**
  *
  */
@@ -248,7 +248,7 @@ export class WorkflowsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.loadWorkflowHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => WorkflowFromJSON(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => ProcessingGraphFromJSON(jsonValue));
         });
     }
     /**
@@ -334,8 +334,8 @@ export class WorkflowsApi extends runtime.BaseAPI {
      */
     registerWorkflowHandlerRequestOpts(requestParameters) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (requestParameters['workflow'] == null) {
-                throw new runtime.RequiredError('workflow', 'Required parameter "workflow" was null or undefined when calling registerWorkflowHandler().');
+            if (requestParameters['processingGraph'] == null) {
+                throw new runtime.RequiredError('processingGraph', 'Required parameter "processingGraph" was null or undefined when calling registerWorkflowHandler().');
             }
             const queryParameters = {};
             const headerParameters = {};
@@ -353,7 +353,7 @@ export class WorkflowsApi extends runtime.BaseAPI {
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: WorkflowToJSON(requestParameters['workflow']),
+                body: ProcessingGraphToJSON(requestParameters['processingGraph']),
             };
         });
     }

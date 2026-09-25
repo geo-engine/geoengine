@@ -238,7 +238,7 @@ impl SentinelS2L2aCogsDataProvider {
                         },
                         name: format!("Sentinel S2 L2A COGS {}:{} ({})", zone, band.long_name(), band.name()),
                         description: String::new(),
-                        workflow: Workflow::Legacy {
+                        workflow: Workflow {
                             operator: source_operator_from_dataset(
                                 GdalSource::TYPE_NAME,
                                 &NamedData {
@@ -373,7 +373,7 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
             },
             name: dataset.listing.name.clone(),
             description: dataset.listing.description.clone(),
-            workflow: Workflow::Legacy {
+            workflow: Workflow {
                 operator: TypedOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters::new(NamedData {

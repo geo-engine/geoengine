@@ -1,15 +1,15 @@
-import {BehaviorSubject, Observable, ReplaySubject} from 'rxjs';
+import {BehaviorSubject, Observable, ReplaySubject, from} from 'rxjs';
 import {map} from 'rxjs/operators';
 import {Component, ChangeDetectionStrategy, ElementRef, AfterViewInit, inject, viewChild} from '@angular/core';
 import * as dagreD3 from 'dagre-d3';
 import * as d3 from 'd3';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
-import {OperatorParams, OperatorSourcesDict} from '../../backend/backend.model';
+import {OperatorParams} from '../../backend/backend.model';
 import {LayoutService} from '../../layout.service';
 import {ProjectService} from '../../project/project.service';
 
 import {createIconDataUrl, Layer, FxLayoutDirective, FxFlexDirective} from '@geoengine/common';
-import {LegacyTypedOperatorOperator} from '@geoengine/api-client';
+import {TypedOperator} from '@geoengine/api-client';
 import {DialogHeaderComponent} from '../../dialogs/dialog-header/dialog-header.component';
 import {MatProgressSpinner} from '@angular/material/progress-spinner';
 import {DialogSectionHeadingComponent} from '../../dialogs/dialog-section-heading/dialog-section-heading.component';
@@ -77,7 +77,7 @@ export class LineageGraphComponent implements AfterViewInit {
     title = 'Layer Lineage';
     layer: Layer;
 
-    selectedOperator$ = new ReplaySubject<LegacyTypedOperatorOperator>(1);
+    selectedOperator$ = new ReplaySubject<TypedOperator>(1);
     selectedOperatorIcon$ = new ReplaySubject<string>(1);
     parameters$ = new ReplaySubject<Array<{key: string; value: string}>>(1);
 
@@ -123,10 +123,10 @@ export class LineageGraphComponent implements AfterViewInit {
     }
 
     private drawGraph(): void {
-        this.projectService.getWorkflow(this.layer.workflowId).subscribe((workflow) => {
+        void from(this.projectService.getWorkflow(this.layer.workflowId)).subscribe((workflow) => {
             const graph = new dagreD3.graphlib.Graph().setGraph({}).setDefaultEdgeLabel(() => ({label: ''}));
 
-            LineageGraphComponent.addOperatorsToGraph(graph, workflow.operator);
+            LineageGraphComponent.addOperatorsToGraph(graph, workflow);
 
             LineageGraphComponent.addLayerToGraph(graph, this.layer, 0);
 
@@ -156,10 +156,10 @@ export class LineageGraphComponent implements AfterViewInit {
         });
     }
 
-    private static addOperatorsToGraph(graph: dagreD3.graphlib.Graph, initialOperator: LegacyTypedOperatorOperator): void {
+    private static addOperatorsToGraph(graph: dagreD3.graphlib.Graph, initialOperator: TypedOperator): void {
         let nextOperatorId = 0;
 
-        const operatorQueue: Array<[number, LegacyTypedOperatorOperator]> = [[nextOperatorId++, initialOperator]];
+        const operatorQueue: Array<[number, TypedOperator]> = [[nextOperatorId++, initialOperator]];
         const edges: Array<[number, number, string]> = [];
 
         while (operatorQueue.length > 0) {
@@ -199,29 +199,25 @@ export class LineageGraphComponent implements AfterViewInit {
             });
 
             // add children
-            const nonSourceOperator = operator;
-            if (nonSourceOperator.sources) {
-                const operatorSources = nonSourceOperator.sources as OperatorSourcesDict;
-                for (const sourceKey of Object.keys(operatorSources)) {
-                    const operatorSource = operatorSources[sourceKey] as
-                        LegacyTypedOperatorOperator | Array<LegacyTypedOperatorOperator> | undefined;
+            const operatorSources = sources(operator);
+            for (const sourceKey of Object.keys(operatorSources)) {
+                const operatorSource = operatorSources[sourceKey] as TypedOperator | Array<TypedOperator> | undefined;
 
-                    if (!operatorSource) {
-                        continue;
-                    }
+                if (!operatorSource) {
+                    continue;
+                }
 
-                    let sources: Array<LegacyTypedOperatorOperator>;
-                    if (operatorSource instanceof Array) {
-                        sources = operatorSource;
-                    } else {
-                        sources = [operatorSource];
-                    }
+                let sourcesForKey: Array<TypedOperator>;
+                if (operatorSource instanceof Array) {
+                    sourcesForKey = operatorSource;
+                } else {
+                    sourcesForKey = [operatorSource];
+                }
 
-                    for (const source of sources) {
-                        const childId = nextOperatorId++;
-                        operatorQueue.push([childId, source]);
-                        edges.push([childId, operatorId, sourceKey]);
-                    }
+                for (const source of sourcesForKey) {
+                    const childId = nextOperatorId++;
+                    operatorQueue.push([childId, source]);
+                    edges.push([childId, operatorId, sourceKey]);
                 }
             }
         }
@@ -309,7 +305,7 @@ export class LineageGraphComponent implements AfterViewInit {
 
             const node = graph.node(nodeId);
             if (node.type === 'operator') {
-                const operator: LegacyTypedOperatorOperator = node.operator;
+                const operator: TypedOperator = node.operator;
 
                 // update operator type
                 this.selectedOperator$.next(operator);
@@ -326,10 +322,10 @@ export class LineageGraphComponent implements AfterViewInit {
         });
     }
 
-    private static parametersDisplayList(operator: LegacyTypedOperatorOperator): Array<{key: string; value: string}> {
+    private static parametersDisplayList(operator: TypedOperator): Array<{key: string; value: string}> {
         const list: Array<{key: string; value: string}> = [];
 
-        const params = operator.params as OperatorParams | null;
+        const params = (operator.operator as {params?: OperatorParams | null} | undefined)?.params ?? null;
 
         if (!params) {
             return list;
@@ -383,4 +379,12 @@ export class LineageGraphComponent implements AfterViewInit {
             height: heightBound(this.maxHeight$.getValue(), grapHeight),
         };
     }
+}
+
+function sources(operator: TypedOperator): Record<string, TypedOperator | Array<TypedOperator>> {
+    const nestedOperator = operator.operator as {
+        sources?: Record<string, TypedOperator | Array<TypedOperator> | undefined>;
+    };
+
+    return (nestedOperator.sources ?? {}) as Record<string, TypedOperator | Array<TypedOperator>>;
 }

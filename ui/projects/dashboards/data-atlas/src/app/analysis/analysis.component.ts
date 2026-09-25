@@ -10,12 +10,10 @@ import {
     PolygonSymbology,
     RasterDataTypes,
     RasterLayer,
-    ReprojectionDict,
     UserService,
     VectorLayer,
     CommonModule,
 } from '@geoengine/common';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
 import {MatFormField, MatLabel} from '@angular/material/input';
 import {MatSelect} from '@angular/material/select';
 import {MatOption} from '@angular/material/autocomplete';
@@ -224,7 +222,7 @@ export class AnalysisComponent {
                                                         sources: {
                                                             source: rasterWorkflow.operator,
                                                         },
-                                                    } as ReprojectionDict,
+                                                    },
                                                     countryRasterWorkflow,
                                                 ],
                                             },

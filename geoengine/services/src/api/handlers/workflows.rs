@@ -3,6 +3,7 @@ use crate::{
         handlers::tasks::TaskResponse,
         model::{
             datatypes::{BandSelection, DataId, TimeInterval},
+            processing_graphs::ProcessingGraph,
             responses::IdResponse,
         },
         ogc::util::{parse_bbox, parse_time},
@@ -43,7 +44,7 @@ use geoengine_operators::{
     engine::{ExecutionContext, OperatorData, WorkflowOperatorPath},
 };
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
+use snafu::{ResultExt, Snafu};
 use std::{
     collections::HashMap,
     io::{Cursor, Write},
@@ -97,7 +98,7 @@ where
     tag = "Workflows",
     post,
     path = "/workflow",
-    request_body(content = Workflow, examples(
+    request_body(content = ProcessingGraph, examples(
         ("MockPointSource" = (value = json!({
             "type": "Vector",
             "operator": {
@@ -138,11 +139,14 @@ where
 async fn register_workflow_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
-    workflow: web::Json<Workflow>,
+    workflow: web::Json<ProcessingGraph>,
 ) -> Result<web::Json<IdResponse<WorkflowId>>> {
     let ctx = app_ctx.session_context(session);
 
-    let workflow = workflow.into_inner();
+    let workflow: Workflow = workflow
+        .into_inner()
+        .try_into()
+        .context(crate::error::Api)?;
 
     validate_workflow(&workflow, &ctx.execution_context()?).await?;
 
@@ -156,7 +160,7 @@ async fn register_workflow_handler<C: ApplicationContext>(
     get,
     path = "/workflow/{id}",
     responses(
-        (status = 200, description = "Workflow loaded from database", body = Workflow,
+        (status = 200, description = "Workflow loaded from database", body = ProcessingGraph,
             example = json!({"type": "Vector", "operator": {"type": "MockPointSource", "params": {"points": [{"x": 0.0, "y": 0.1}, {"x": 1.0, "y": 1.1}]}}})
         )
     ),
@@ -177,7 +181,8 @@ async fn load_workflow_handler<C: ApplicationContext>(
         .db()
         .load_workflow(&id.into_inner())
         .await?;
-    Ok(web::Json(wf))
+    let processing_graph = ProcessingGraph::try_from(&wf).context(crate::error::Api)?;
+    Ok(web::Json(processing_graph))
 }
 
 /// Gets the metadata of a workflow
@@ -222,7 +227,7 @@ pub(crate) async fn workflow_metadata<C: SessionContext>(
     let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
     let result_descriptor: geoengine_operators::engine::TypedResultDescriptor = call_on_typed_operator!(
-        workflow.operator()?,
+        workflow.operator,
         operator => {
             let operator = operator
                 .initialize(workflow_operator_path_root, &execution_context).await
@@ -289,7 +294,7 @@ pub(crate) async fn workflow_provenance<C: SessionContext>(
     let db = ctx.db();
     let execution_ctx = ctx.execution_context()?;
 
-    let data_names = workflow.operator()?.data_names();
+    let data_names = workflow.operator.data_names();
     let mut datasets = Vec::<DataId>::with_capacity(data_names.len());
     for data_name in data_names {
         let data_id = execution_ctx.resolve_named_data(&data_name).await?;
@@ -546,7 +551,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
     let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
     let operator = workflow
-        .operator()?
+        .operator
         .get_raster()
         .boxed_context(error::WorkflowMustBeOfTypeRaster)?;
 
@@ -672,7 +677,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
     let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
     let operator = workflow
-        .operator()?
+        .operator
         .get_vector()
         .boxed_context(error::WorkflowMustBeOfTypeVector)?;
 
@@ -820,7 +825,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow::Typed {
+        let workflow = Workflow {
             operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                 r#type: Default::default(),
                 params: crate::api::model::processing_graphs::MockPointSourceParameters {
@@ -832,7 +837,9 @@ mod tests {
                         Default::default(),
                     ),
                 },
-            })),
+            }))
+            .try_into()
+            .unwrap(),
         };
 
         // insert workflow
@@ -865,7 +872,7 @@ mod tests {
 
     #[ge_context::test]
     async fn register_missing_header(app_ctx: PostgresContext<NoTls>) {
-        let workflow = Workflow::Typed {
+        let workflow = Workflow {
             operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                 r#type: Default::default(),
                 params: crate::api::model::processing_graphs::MockPointSourceParameters {
@@ -881,7 +888,9 @@ mod tests {
                         Default::default(),
                     ),
                 },
-            })),
+            }))
+            .try_into()
+            .unwrap(),
         };
 
         // insert workflow
@@ -944,7 +953,7 @@ mod tests {
             res,
             400,
             "BodyDeserializeError",
-            "Error in user input: data did not match any variant of untagged enum Workflow",
+            "Error in user input: missing field `type` at line 1 column 2",
         )
         .await;
     }
@@ -1041,7 +1050,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow::Legacy {
+        let workflow = Workflow {
             operator: MockFeatureCollectionSource::single(
                 MultiPointCollection::from_data(
                     MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
@@ -1111,7 +1120,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow::Legacy {
+        let workflow = Workflow {
             operator: geoengine_operators::mock::MockRasterSource::<u8> {
                 params: MockRasterSourceParams::<u8> {
                     data: vec![],
@@ -1204,7 +1213,7 @@ mod tests {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
-        let workflow = Workflow::Typed {
+        let workflow = Workflow {
             operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                 r#type: Default::default(),
                 params: MockPointSourceParameters {
@@ -1213,7 +1222,9 @@ mod tests {
                     )],
                     spatial_bounds: SpatialBoundsDerive::None(Default::default()),
                 },
-            })),
+            }))
+            .try_into()
+            .unwrap(),
         };
 
         let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
@@ -1237,7 +1248,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow::Typed {
+        let workflow = Workflow {
             operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
                 r#type: Default::default(),
                 params: StatisticsParameters {
@@ -1247,7 +1258,9 @@ mod tests {
                 sources: crate::api::model::processing_graphs::MultipleRasterOrSingleVectorSource {
                     source: MultipleRasterOrSingleVectorOperator::Raster(vec![]),
                 },
-            })),
+            }))
+            .try_into()
+            .unwrap(),
         };
 
         let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
@@ -1280,14 +1293,16 @@ mod tests {
         let session_id = session.id();
         let (dataset_id, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
-        let workflow = Workflow::Typed {
+        let workflow = Workflow {
             operator: TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
                 r#type: Default::default(),
                 params: GdalSourceParameters {
                     data: dataset.into(),
                     overview_level: None,
                 },
-            })),
+            }))
+            .try_into()
+            .unwrap(),
         };
 
         let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
@@ -1384,14 +1399,16 @@ mod tests {
 
         let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
 
-        let workflow = Workflow::Typed {
+        let workflow = Workflow {
             operator: TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
                 r#type: Default::default(),
                 params: GdalSourceParameters {
                     data: dataset_name.clone().into(),
                     overview_level: None,
                 },
-            })),
+            }))
+            .try_into()
+            .unwrap(),
         };
 
         let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
@@ -1516,14 +1533,16 @@ mod tests {
         }
         .boxed();
 
-        let workflow = Workflow::Typed {
+        let workflow = Workflow {
             operator: TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
                 r#type: Default::default(),
                 params: GdalSourceParameters {
                     data: dataset.into(),
                     overview_level: None,
                 },
-            })),
+            }))
+            .try_into()
+            .unwrap(),
         };
 
         let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
@@ -1622,14 +1641,16 @@ mod tests {
 
         let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
-        let workflow = Workflow::Typed {
+        let workflow = Workflow {
             operator: TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
                 r#type: Default::default(),
                 params: GdalSourceParameters {
                     data: dataset.into(),
                     overview_level: None,
                 },
-            })),
+            }))
+            .try_into()
+            .unwrap(),
         };
 
         let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
@@ -1699,7 +1720,7 @@ mod tests {
 
         let (_, dataset) = add_ports_to_datasets(&app_ctx, true, true).await;
 
-        let workflow = Workflow::Typed {
+        let workflow = Workflow {
             operator: TypedOperator::Vector(VectorOperator::OgrSource(
                 crate::api::model::processing_graphs::OgrSource {
                     r#type: Default::default(),
@@ -1709,7 +1730,9 @@ mod tests {
                         attribute_filters: None,
                     },
                 },
-            )),
+            ))
+            .try_into()
+            .unwrap(),
         };
 
         let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();

@@ -8,7 +8,7 @@ Name | Type
 ------------ | -------------
 `name` | string
 `description` | string
-`workflow` | [Workflow](Workflow.md)
+`workflow` | [ProcessingGraph](ProcessingGraph.md)
 `symbology` | [Symbology](Symbology.md)
 `properties` | Array&lt;Array&lt;string&gt;&gt;
 `metadata` | { [key: string]: string; }

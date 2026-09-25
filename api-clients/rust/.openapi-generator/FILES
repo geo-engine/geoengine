@@ -157,8 +157,6 @@ docs/LayerProviderListing.md
 docs/LayerResource.md
 docs/LayerVisibility.md
 docs/LayersApi.md
-docs/LegacyTypedOperator.md
-docs/LegacyTypedOperatorOperator.md
 docs/LineSimplification.md
 docs/LineSimplificationAlgorithm.md
 docs/LineSimplificationParameters.md
@@ -252,6 +250,7 @@ docs/PointInPolygonFilter.md
 docs/PointInPolygonFilterSource.md
 docs/PointSymbology.md
 docs/PolygonSymbology.md
+docs/ProcessingGraph.md
 docs/Project.md
 docs/ProjectLayer.md
 docs/ProjectListing.md
@@ -450,7 +449,6 @@ docs/WmsRequest.md
 docs/WmsResponseFormat.md
 docs/WmsService.md
 docs/WmsVersion.md
-docs/Workflow.md
 docs/WorkflowsApi.md
 docs/WrappedPlotOutput.md
 git_push.sh
@@ -626,8 +624,6 @@ src/models/layer_listing.rs
 src/models/layer_provider_listing.rs
 src/models/layer_resource.rs
 src/models/layer_visibility.rs
-src/models/legacy_typed_operator.rs
-src/models/legacy_typed_operator_operator.rs
 src/models/line_simplification.rs
 src/models/line_simplification_algorithm.rs
 src/models/line_simplification_parameters.rs
@@ -715,6 +711,7 @@ src/models/point_in_polygon_filter.rs
 src/models/point_in_polygon_filter_source.rs
 src/models/point_symbology.rs
 src/models/polygon_symbology.rs
+src/models/processing_graph.rs
 src/models/project.rs
 src/models/project_layer.rs
 src/models/project_listing.rs
@@ -907,5 +904,4 @@ src/models/wms_request.rs
 src/models/wms_response_format.rs
 src/models/wms_service.rs
 src/models/wms_version.rs
-src/models/workflow.rs
 src/models/wrapped_plot_output.rs

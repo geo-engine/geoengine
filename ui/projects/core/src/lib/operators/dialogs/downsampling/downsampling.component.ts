@@ -4,7 +4,7 @@ import {ProjectService} from '../../../project/project.service';
 
 import {mergeMap, tap} from 'rxjs/operators';
 import {UUID} from '../../../backend/backend.model';
-import {BehaviorSubject, combineLatest, Observable, of, Subscription} from 'rxjs';
+import {BehaviorSubject, combineLatest, from, Observable, of, Subscription} from 'rxjs';
 import {Layer} from 'ol/layer';
 import {SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
 import {
@@ -17,9 +17,9 @@ import {
     geoengineValidators,
     FxLayoutDirective,
     AsyncValueDefault,
-    DownsamplingDict,
+    errorToText,
 } from '@geoengine/common';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {ProcessingGraph, RasterOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -126,30 +126,30 @@ export class DownsamplingComponent implements AfterViewInit, OnDestroy {
         const inputLayer: RasterLayer = this.form.controls['layer'].value;
         const outputName: string = this.form.controls['name'].value;
 
-        const downsamplingMethod: string = this.form.controls['downsamplingMethod'].value;
-
+        const downsamplingMethod = this.form.controls['downsamplingMethod'].value as 'nearestNeighbor';
         const outputResolution: OutputResolutionDict = this.getoutputResolution();
 
         this.loading$.next(true);
 
-        this.projectService
-            .getWorkflow(inputLayer.workflowId)
+        from(this.projectService.getWorkflow(inputLayer.workflowId))
             .pipe(
-                mergeMap((inputWorkflow: WorkflowDict) =>
-                    this.projectService.registerWorkflow({
-                        type: 'Raster',
-                        operator: {
-                            type: 'Downsampling',
-                            params: {
-                                samplingMethod: downsamplingMethod,
-                                outputResolution,
-                                outputOriginReference: undefined,
+                mergeMap((inputWorkflow: ProcessingGraph) =>
+                    from(
+                        this.projectService.registerWorkflow({
+                            type: 'Raster',
+                            operator: {
+                                type: 'Downsampling',
+                                params: {
+                                    samplingMethod: downsamplingMethod,
+                                    outputResolution,
+                                    outputOriginReference: undefined,
+                                },
+                                sources: {
+                                    raster: inputWorkflow.operator as RasterOperator,
+                                },
                             },
-                            sources: {
-                                raster: inputWorkflow.operator,
-                            },
-                        } as DownsamplingDict,
-                    }),
+                        }),
+                    ),
                 ),
                 mergeMap((workflowId: UUID) => {
                     const symbology$: Observable<RasterSymbology> = this.symbologyCreator().symbologyForRasterLayer(workflowId, inputLayer);
@@ -168,15 +168,12 @@ export class DownsamplingComponent implements AfterViewInit, OnDestroy {
                 ),
             )
             .subscribe({
-                next: () => {
-                    // success
-
-                    this.loading$.next(false);
-                },
+                next: () => this.loading$.next(false),
                 error: (error) => {
-                    this.notificationService.error(error.error ? error.error.message : error);
-
-                    this.loading$.next(false);
+                    void errorToText(error, error.error?.message ?? error.message).then((errorMsg) => {
+                        this.notificationService.error(errorMsg);
+                        this.loading$.next(false);
+                    });
                 },
             });
     }

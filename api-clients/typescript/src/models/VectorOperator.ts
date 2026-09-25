@@ -67,6 +67,13 @@ import {
     TimeProjectionFromJSONTyped,
     TimeProjectionToJSON,
 } from './TimeProjection';
+import type { TimeShift } from './TimeShift';
+import {
+    instanceOfTimeShift,
+    TimeShiftFromJSON,
+    TimeShiftFromJSONTyped,
+    TimeShiftToJSON,
+} from './TimeShift';
 import type { VectorExpression } from './VectorExpression';
 import {
     instanceOfVectorExpression,
@@ -94,7 +101,7 @@ import {
  * An operator that produces vector data.
  * @export
  */
-export type VectorOperator = { type: 'ColumnRangeFilter' } & ColumnRangeFilter | { type: 'LineSimplification' } & LineSimplification | { type: 'MockPointSource' } & MockPointSource | { type: 'OgrSource' } & OgrSource | { type: 'PointInPolygonFilter' } & PointInPolygonFilter | { type: 'RasterVectorJoin' } & RasterVectorJoin | { type: 'Reprojection' } & Reprojection | { type: 'TimeProjection' } & TimeProjection | { type: 'VectorExpression' } & VectorExpression | { type: 'VectorJoin' } & VectorJoin | { type: 'VisualPointClustering' } & VisualPointClustering;
+export type VectorOperator = { type: 'ColumnRangeFilter' } & ColumnRangeFilter | { type: 'LineSimplification' } & LineSimplification | { type: 'MockPointSource' } & MockPointSource | { type: 'OgrSource' } & OgrSource | { type: 'PointInPolygonFilter' } & PointInPolygonFilter | { type: 'RasterVectorJoin' } & RasterVectorJoin | { type: 'Reprojection' } & Reprojection | { type: 'TimeProjection' } & TimeProjection | { type: 'TimeShift' } & TimeShift | { type: 'VectorExpression' } & VectorExpression | { type: 'VectorJoin' } & VectorJoin | { type: 'VisualPointClustering' } & VisualPointClustering;
 
 export function VectorOperatorFromJSON(json: any): VectorOperator {
     return VectorOperatorFromJSONTyped(json, false);
@@ -121,6 +128,8 @@ export function VectorOperatorFromJSONTyped(json: any, ignoreDiscriminator: bool
             return Object.assign({}, ReprojectionFromJSONTyped(json, true), { type: 'Reprojection' } as const);
         case 'TimeProjection':
             return Object.assign({}, TimeProjectionFromJSONTyped(json, true), { type: 'TimeProjection' } as const);
+        case 'TimeShift':
+            return Object.assign({}, TimeShiftFromJSONTyped(json, true), { type: 'TimeShift' } as const);
         case 'VectorExpression':
             return Object.assign({}, VectorExpressionFromJSONTyped(json, true), { type: 'VectorExpression' } as const);
         case 'VectorJoin':
@@ -157,6 +166,8 @@ export function VectorOperatorToJSONTyped(value?: VectorOperator | null, ignoreD
             return Object.assign({}, ReprojectionToJSON(value), { type: 'Reprojection' } as const);
         case 'TimeProjection':
             return Object.assign({}, TimeProjectionToJSON(value), { type: 'TimeProjection' } as const);
+        case 'TimeShift':
+            return Object.assign({}, TimeShiftToJSON(value), { type: 'TimeShift' } as const);
         case 'VectorExpression':
             return Object.assign({}, VectorExpressionToJSON(value), { type: 'VectorExpression' } as const);
         case 'VectorJoin':

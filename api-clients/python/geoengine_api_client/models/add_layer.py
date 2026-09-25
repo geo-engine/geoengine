@@ -20,8 +20,8 @@ import json
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
+from geoengine_api_client.models.processing_graph import ProcessingGraph
 from geoengine_api_client.models.symbology import Symbology
-from geoengine_api_client.models.workflow import Workflow
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -31,7 +31,7 @@ class AddLayer(BaseModel):
     """ # noqa: E501
     name: StrictStr
     description: StrictStr
-    workflow: Workflow
+    workflow: ProcessingGraph
     symbology: Optional[Symbology] = None
     properties: Optional[List[Annotated[List[StrictStr], Field(min_length=2, max_length=2)]]] = Field(default=None, description="properties, for instance, to be rendered in the UI")
     metadata: Optional[Dict[str, StrictStr]] = Field(default=None, description="metadata used for loading the data")
@@ -101,7 +101,7 @@ class AddLayer(BaseModel):
         _obj = cls.model_validate({
             "name": obj.get("name"),
             "description": obj.get("description"),
-            "workflow": Workflow.from_dict(obj["workflow"]) if obj.get("workflow") is not None else None,
+            "workflow": ProcessingGraph.from_dict(obj["workflow"]) if obj.get("workflow") is not None else None,
             "symbology": Symbology.from_dict(obj["symbology"]) if obj.get("symbology") is not None else None,
             "properties": obj.get("properties"),
             "metadata": obj.get("metadata")

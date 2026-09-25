@@ -1,5 +1,5 @@
 import {map, mergeMap} from 'rxjs/operators';
-import {BehaviorSubject, combineLatest, Observable, of} from 'rxjs';
+import {BehaviorSubject, combineLatest, from, Observable, of} from 'rxjs';
 import {AfterViewInit, ChangeDetectionStrategy, Component, inject, input, viewChild} from '@angular/core';
 import {AbstractControl, FormControl, FormGroup, ValidationErrors, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 
@@ -8,7 +8,6 @@ import {UUID} from '../../../backend/backend.model';
 import {LetterNumberConverter} from '../helpers/multi-layer-selection/multi-layer-selection.component';
 import {LayoutService, SidenavConfig} from '../../../layout.service';
 import {
-    ExpressionDict,
     GeoEngineError,
     Layer,
     MeasurementComponent,
@@ -23,9 +22,10 @@ import {
     CommonModule,
     AsyncStringSanitizer,
     AsyncValueDefault,
+    errorToText,
 } from '@geoengine/common';
 import {SymbologyCreationType, SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
-import {Measurement, Workflow as WorkflowDict} from '@geoengine/api-client';
+import {Measurement, ProcessingGraph, RasterDataType as ApiRasterDataType} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -252,31 +252,34 @@ export class ExpressionOperatorComponent implements AfterViewInit {
 
         const outputBand = {
             name: outputBandName,
-            measurement: outputMeasurement,
+            measurement: outputMeasurement ?? {type: 'unitless'},
         };
 
         if (!dataType || !rasterLayer) {
             return; // checked by form validator
         }
 
-        this.projectService
-            .getWorkflow(rasterLayer.workflowId)
+        from(this.projectService.getWorkflow(rasterLayer.workflowId))
             .pipe(
-                mergeMap((inputWorkflow) => {
-                    const workflow: WorkflowDict = {
+                mergeMap((inputWorkflow: ProcessingGraph) => {
+                    if (inputWorkflow.type !== 'Raster') {
+                        throw new Error('Expected a raster workflow for expression operator.');
+                    }
+
+                    const workflow: ProcessingGraph = {
                         type: 'Raster',
                         operator: {
                             type: 'Expression',
                             params: {
                                 expression,
-                                outputType: dataType.getCode(),
+                                outputType: dataType.getCode() as unknown as ApiRasterDataType,
                                 outputBand,
                                 mapNoData,
                             },
                             sources: {
                                 raster: inputWorkflow.operator,
                             },
-                        } as ExpressionDict,
+                        },
                     };
 
                     return this.projectService.registerWorkflow(workflow);
@@ -312,9 +315,10 @@ export class ExpressionOperatorComponent implements AfterViewInit {
                     this.loading$.next(false);
                 },
                 error: (error) => {
-                    const errorMsg = error.error.message;
-                    this.lastError$.next(errorMsg);
-                    this.loading$.next(false);
+                    void errorToText(error, error.error?.message ?? error.message).then((errorMsg) => {
+                        this.lastError$.next(errorMsg);
+                        this.loading$.next(false);
+                    });
                 },
             });
     }

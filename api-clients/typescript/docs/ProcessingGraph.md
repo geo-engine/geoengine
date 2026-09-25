@@ -1,24 +1,25 @@
 
-# Workflow
+# ProcessingGraph
 
+Operator outputs are distinguished by their data type. There are `raster`, `vector` and `plot` operators.
 
 ## Properties
 
 Name | Type
 ------------ | -------------
-`operator` | [LegacyTypedOperatorOperator](LegacyTypedOperatorOperator.md)
+`operator` | [PlotOperator](PlotOperator.md)
 `type` | string
 
 ## Example
 
 ```typescript
-import type { Workflow } from '@geoengine/api-client'
+import type { ProcessingGraph } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
   "operator": null,
   "type": null,
-} satisfies Workflow
+} satisfies ProcessingGraph
 
 console.log(example)
 
@@ -27,7 +28,7 @@ const exampleJSON: string = JSON.stringify(example)
 console.log(exampleJSON)
 
 // Parse the JSON string back to an object
-const exampleParsed = JSON.parse(exampleJSON) as Workflow
+const exampleParsed = JSON.parse(exampleJSON) as ProcessingGraph
 console.log(exampleParsed)
 ```
 

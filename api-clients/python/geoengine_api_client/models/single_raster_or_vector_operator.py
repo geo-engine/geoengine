@@ -133,6 +133,11 @@ class SingleRasterOrVectorOperator(BaseModel):
             instance.actual_instance = TimeProjection.from_json(json_str)
             return instance
 
+        # check if data type is `TimeShift`
+        if _data_type == "TimeShift":
+            instance.actual_instance = TimeShift.from_json(json_str)
+            return instance
+
         # check if data type is `VectorExpression`
         if _data_type == "VectorExpression":
             instance.actual_instance = VectorExpression.from_json(json_str)

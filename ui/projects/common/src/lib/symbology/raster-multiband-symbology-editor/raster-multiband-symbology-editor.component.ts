@@ -5,7 +5,7 @@ import {geoengineValidators} from '../../util/form.validators';
 import {SymbologyQueryParams, MultiBandRasterColorizer} from '../symbology.model';
 import {Color, TRANSPARENT} from '../../colors/color';
 import {WorkflowsService} from '../../workflows/workflows.service';
-import {ExpressionDict, StatisticsDict, StatisticsParams} from '../../operators/operator.model';
+import {Expression, RasterOperator, Statistics, StatisticsParameters} from '@geoengine/api-client';
 import {PlotsService} from '../../plots/plots.service';
 import {UUID} from '../../datasets/dataset.model';
 import {MatCard, MatCardHeader, MatCardTitleGroup, MatCardTitle, MatCardSubtitle, MatCardContent} from '@angular/material/card';
@@ -225,8 +225,12 @@ export class RasterMultibandSymbologyEditorComponent implements OnDestroy {
 
         const workflow = await this.workflowsService.getWorkflow(this.workflowId());
 
+        if (workflow.type !== 'Raster') {
+            throw new Error('Expected a raster workflow for multiband statistics.');
+        }
+
         // TODO: remove expressions when Statistics Operator supports multiple bands
-        const subExpression = ({name, index}: {name: string; index: number}): ExpressionDict => {
+        const subExpression = ({name, index}: {name: string; index: number}): Expression => {
             return {
                 type: 'Expression',
                 params: {
@@ -239,20 +243,20 @@ export class RasterMultibandSymbologyEditorComponent implements OnDestroy {
                     mapNoData: false,
                 },
                 sources: {
-                    raster: workflow.operator,
+                    raster: workflow.operator as RasterOperator,
                 },
-            } as ExpressionDict;
+            };
         };
 
         const statsWorkflowId = await this.workflowsService.registerWorkflow({
             type: 'Plot',
             operator: {
                 type: 'Statistics',
-                params: {columnNames: ['red', 'green', 'blue']} as StatisticsParams,
+                params: {columnNames: ['red', 'green', 'blue']} as StatisticsParameters,
                 sources: {
                     source: [subExpression(this.band1()), subExpression(this.band2()), subExpression(this.band3())],
                 },
-            } as StatisticsDict,
+            } as Statistics,
         });
 
         const plot = await this.plotsService.getPlot(

@@ -13,8 +13,6 @@ import {ProjectService} from '../../../project/project.service';
 
 import {map, mergeMap, tap} from 'rxjs/operators';
 import {
-    BoxPlotDict,
-    BoxPlotParams,
     Layer,
     NotificationService,
     Plot,
@@ -28,7 +26,7 @@ import {
     FxFlexDirective,
     FxLayoutAlignDirective,
 } from '@geoengine/common';
-import {LegacyTypedOperatorOperator} from '@geoengine/api-client';
+import {BoxPlot, ProcessingGraph, RasterOperator, VectorOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -216,20 +214,24 @@ export class BoxPlotOperatorComponent implements AfterViewInit, OnDestroy {
         this.projectService
             .getAutomaticallyProjectedOperatorsFromLayers(sources)
             .pipe(
-                mergeMap((inputOperators: Array<LegacyTypedOperatorOperator>) =>
-                    this.projectService.registerWorkflow({
+                mergeMap((inputOperators: Array<ProcessingGraph>) => {
+                    const source = isVectorLayer(inputLayer)
+                        ? (inputOperators[0].operator as VectorOperator)
+                        : inputOperators.map((inputOperator) => inputOperator.operator as RasterOperator);
+
+                    return this.projectService.registerWorkflow({
                         type: 'Plot',
                         operator: {
                             type: 'BoxPlot',
                             params: {
                                 columnNames,
-                            } as BoxPlotParams,
-                            sources: {
-                                source: isVectorLayer(inputLayer) ? inputOperators[0] : inputOperators,
                             },
-                        } as BoxPlotDict,
-                    }),
-                ),
+                            sources: {
+                                source,
+                            },
+                        } as BoxPlot,
+                    });
+                }),
                 mergeMap((workflowId) =>
                     this.projectService.addPlot(
                         new Plot({

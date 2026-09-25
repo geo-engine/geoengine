@@ -99,10 +99,9 @@ export async function errorToText(error: any, defaultMessage: string): Promise<s
         return defaultMessage;
     }
     const e = error;
-    const errorJson = await e.response.json().catch(() => ({}));
-    const errorMessage = errorJson.message ?? defaultMessage;
+    const errorJson = (await e.response.json().catch(() => ({}))) as {message?: string};
 
-    return errorMessage;
+    return errorJson.message ?? defaultMessage;
 }
 
 // we use this non-breaking hyphen to avoid line breaks in the time format

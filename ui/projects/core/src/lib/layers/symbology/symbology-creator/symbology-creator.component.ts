@@ -8,7 +8,7 @@ import {
     FormsModule,
     ReactiveFormsModule,
 } from '@angular/forms';
-import {combineLatest, first, map, mergeMap, Observable, of, Subject, takeUntil} from 'rxjs';
+import {combineLatest, first, from, map, mergeMap, Observable, of, Subject, takeUntil} from 'rxjs';
 import {BBoxDict, RasterResultDescriptorDict, SrsString, TimeIntervalDict, UUID} from '../../../backend/backend.model';
 import {BackendService} from '../../../backend/backend.service';
 import {ProjectService} from '../../../project/project.service';
@@ -199,21 +199,25 @@ export class SymbologyCreatorComponent implements OnInit, OnDestroy, ControlValu
     protected computeSymbologyForRasterLayer(workflowId: UUID): Observable<RasterSymbology> {
         const rasterName = 'raster';
 
-        const statisticsWorkflow$ = this.projectService.getWorkflow(workflowId).pipe(
-            mergeMap((workflow) =>
-                this.projectService.registerWorkflow({
+        const statisticsWorkflow$ = from(this.projectService.getWorkflow(workflowId)).pipe(
+            mergeMap((workflow) => {
+                if (workflow.type !== 'Raster') {
+                    throw new Error('Expected a raster workflow for symbology statistics.');
+                }
+
+                return this.projectService.registerWorkflow({
                     type: 'Plot',
                     operator: {
                         type: 'Statistics',
                         params: {
                             columnNames: [rasterName],
-                        } as StatisticsParams,
-                        sources: {
-                            source: [workflow['operator']],
                         },
-                    } as StatisticsDict,
-                }),
-            ),
+                        sources: {
+                            source: [workflow.operator],
+                        },
+                    },
+                });
+            }),
         );
 
         const queryParams$: Observable<{

@@ -8,11 +8,12 @@ use geoengine_datatypes::{
     raster::{GeoTransform, GridBoundingBox2D, GridIdx2D},
     spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption},
 };
+use geoengine_operators::{
+    engine::{RasterOperator, TypedOperator},
+    source::{MultiBandGdalSource, MultiBandGdalSourceParameters},
+};
 use tracing::{debug, error, info, warn};
 
-use crate::datasets::external::stac::{
-    StacDataProviderDefinition, StacProviderDataset, StacProviderDatasetBand, common,
-};
 use crate::util::retry::{RetryPolicy, retry_http};
 use crate::{
     api::{
@@ -47,13 +48,14 @@ use crate::{
         storage::{INTERNAL_LAYER_DB_ROOT_COLLECTION_ID, INTERNAL_PROVIDER_ID},
     },
     permissions::{Permission, Role},
+};
+use crate::{
+    datasets::external::stac::{
+        StacDataProviderDefinition, StacProviderDataset, StacProviderDatasetBand, common,
+    },
     workflows::workflow::Workflow,
 };
 use geoengine_api_client::apis::configuration::Configuration as ApiConfig;
-use geoengine_operators::{
-    engine::{RasterOperator, TypedOperator},
-    source::{MultiBandGdalSource, MultiBandGdalSourceParameters},
-};
 
 // ---------------------------------------------------------------------------
 // Harvest
@@ -575,7 +577,7 @@ async fn create_harvest_layer_collections(
         let add_layer = AddLayer {
             name: layer_name.clone(),
             description: format!("Dataset: {dataset_name}"),
-            workflow: Workflow::Legacy {
+            workflow: Workflow {
                 operator: TypedOperator::Raster(
                     MultiBandGdalSource {
                         params: MultiBandGdalSourceParameters::new(NamedData {

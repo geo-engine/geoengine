@@ -40,7 +40,7 @@ async fn bench() {
 
         let (_, dataset) = add_ndvi_to_datasets2(&app_ctx, true, true).await;
 
-        let workflow = Workflow::Typed {
+        let workflow = Workflow {
             operator: TypedOperator::Raster(RasterOperator::TemporalRasterAggregation(
                 TemporalRasterAggregation {
                     r#type: Default::default(),
@@ -67,7 +67,9 @@ async fn bench() {
                         }),
                     }),
                 },
-            )),
+            ))
+            .try_into()
+            .unwrap(),
         };
 
         let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();

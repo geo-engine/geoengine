@@ -40,6 +40,7 @@ use geoengine_operators::{
 use serde::{Deserialize, Serialize};
 use utoipa::{OpenApi, ToSchema};
 
+mod back_conversion;
 mod macros;
 mod parameters;
 mod plots;
@@ -89,6 +90,52 @@ pub use crate::api::model::processing_graphs::{
         SingleRasterSource, SingleVectorMultipleRasterSources,
     },
 };
+use crate::workflows::workflow::Workflow;
+
+/// Operator outputs are distinguished by their data type.
+/// There are `raster`, `vector` and `plot` operators.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[schema(no_recursion)]
+#[serde(tag = "type", content = "operator")]
+pub enum ProcessingGraph {
+    #[schema(title = "TypedVectorOperator")]
+    Vector(VectorOperator),
+    #[schema(title = "TypedRasterOperator")]
+    Raster(RasterOperator),
+    #[schema(title = "TypedPlotOperator")]
+    Plot(PlotOperator),
+}
+
+impl TryFrom<ProcessingGraph> for Workflow {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ProcessingGraph) -> Result<Self, Self::Error> {
+        let operator = match value {
+            ProcessingGraph::Vector(operator) => {
+                OperatorsTypedOperator::Vector(operator.try_into()?)
+            }
+            ProcessingGraph::Raster(operator) => {
+                OperatorsTypedOperator::Raster(operator.try_into()?)
+            }
+            ProcessingGraph::Plot(operator) => OperatorsTypedOperator::Plot(operator.try_into()?),
+        };
+        Ok(Self { operator })
+    }
+}
+
+impl TryFrom<&Workflow> for ProcessingGraph {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &Workflow) -> Result<Self, Self::Error> {
+        Ok(
+            match back_conversion::workflow_to_processing_graph(value)? {
+                TypedOperator::Vector(operator) => ProcessingGraph::Vector(operator),
+                TypedOperator::Raster(operator) => ProcessingGraph::Raster(operator),
+                TypedOperator::Plot(operator) => ProcessingGraph::Plot(operator),
+            },
+        )
+    }
+}
 
 /// Operator outputs are distinguished by their data type.
 /// There are `raster`, `vector` and `plot` operators.
@@ -146,6 +193,7 @@ pub enum VectorOperator {
     RasterVectorJoin(RasterVectorJoin),
     Reprojection(Reprojection),
     TimeProjection(TimeProjection),
+    TimeShift(TimeShift),
     VectorExpression(VectorExpression),
     VectorJoin(VectorJoin),
     VisualPointClustering(VisualPointClustering),
@@ -267,6 +315,9 @@ impl TryFrom<VectorOperator> for Box<dyn OperatorsVectorOperator> {
             VectorOperator::TimeProjection(op) => {
                 OperatorsTimeProjection::try_from(op).map(OperatorsVectorOperator::boxed)
             }
+            VectorOperator::TimeShift(op) => {
+                OperatorsTimeShift::try_from(op).map(OperatorsVectorOperator::boxed)
+            }
             VectorOperator::VectorExpression(vector_expression) => {
                 OperatorsVectorExpression::try_from(vector_expression)
                     .map(OperatorsVectorOperator::boxed)
@@ -332,6 +383,8 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
 #[openapi(components(schemas(
     // General
     PlotOperator,
+    ProcessingGraph,
+    RasterOperator,
     TypedOperator,
     VectorOperator,
     // Source
@@ -377,7 +430,6 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     PointInPolygonFilter,
     PointInPolygonFilterParameters,
     PointInPolygonFilterSource,
-    RasterOperator,
     RasterScaling,
     RasterScalingParameters,
     RasterStacker,
@@ -439,3 +491,72 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
 
 )))]
 pub struct OperatorsApi;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::model::datatypes::Coordinate2D;
+    use crate::workflows::workflow::Workflow;
+
+    #[test]
+    fn it_serializes_processing_graphs() {
+        let processing_graph =
+            ProcessingGraph::Vector(VectorOperator::MockPointSource(MockPointSource {
+                r#type: Default::default(),
+                params: MockPointSourceParameters {
+                    points: vec![Coordinate2D { x: 1., y: 2. }; 3],
+                    spatial_bounds: SpatialBoundsDerive::None(Default::default()),
+                },
+            }));
+
+        let serialized_workflow = serde_json::to_value(&processing_graph).unwrap();
+
+        assert_eq!(
+            serialized_workflow,
+            serde_json::json!({
+                "type": "Vector",
+                "operator": {
+                    "type": "MockPointSource",
+                    "params": {
+                        "points": [{
+                            "x": 1.0,
+                            "y": 2.0
+                        }, {
+                            "x": 1.0,
+                            "y": 2.0
+                        }, {
+                            "x": 1.0,
+                            "y": 2.0
+                        }],
+                    }
+                }
+            })
+        );
+
+        let deserialized_workflow: ProcessingGraph =
+            serde_json::from_value(serialized_workflow).unwrap();
+
+        assert_eq!(processing_graph, deserialized_workflow);
+    }
+
+    #[test]
+    fn it_converts_workflow_to_processing_graph_for_mock_point_source() {
+        let workflow = Workflow {
+            operator: OperatorsTypedOperator::Vector(Box::new(
+                geoengine_operators::mock::MockPointSource {
+                    params: geoengine_operators::mock::MockPointSourceParams {
+                        points: vec![(1., 2.).into()],
+                        spatial_bounds: geoengine_operators::mock::SpatialBoundsDerive::None,
+                    },
+                },
+            )),
+        };
+
+        let processing_graph = ProcessingGraph::try_from(&workflow).unwrap();
+
+        assert!(matches!(
+            processing_graph,
+            ProcessingGraph::Vector(VectorOperator::MockPointSource(_))
+        ));
+    }
+}

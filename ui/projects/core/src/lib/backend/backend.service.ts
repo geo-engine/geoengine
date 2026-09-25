@@ -10,8 +10,6 @@ import {
     ProjectListingDict,
     ProjectOrderByDict,
     ProjectPermissionDict,
-    RegisterWorkflowResultDict,
-    RegistrationDict,
     STRectangleDict,
     SrsString,
     TimeIntervalDict,
@@ -29,7 +27,6 @@ import {
     BackendInfoDict,
     WcsParamsDict,
     QuotaDict,
-    WorkflowIdResponseDict,
     TaskStatusDict,
     TaskStatusType,
     UploadFilesResponseDict,
@@ -42,7 +39,6 @@ import {
     Project as ProjectDict,
     Dataset as DatasetDict,
     Layer as LayerDict,
-    Workflow as WorkflowDict,
     TypedResultDescriptor,
 } from '@geoengine/api-client';
 import {bboxDictToExtent, unixTimestampToIsoString} from '@geoengine/common';
@@ -64,10 +60,6 @@ export class BackendService {
 
     get ogcApiBaseUrl(): string {
         return `${this.config.API_URL}/ogc`;
-    }
-
-    registerUser(request: {email: string; password: string; realName: string}): Observable<RegistrationDict> {
-        return this.http.post<RegistrationDict>(this.config.API_URL + '/user', request);
     }
 
     createProject(
@@ -137,18 +129,6 @@ export class BackendService {
 
         return this.http.get<Array<ProjectListingDict>>(this.config.API_URL + '/projects', {
             params: params.httpParams,
-            headers: BackendService.authorizationHeader(sessionId),
-        });
-    }
-
-    registerWorkflow(workflow: WorkflowDict, sessionId: UUID): Observable<RegisterWorkflowResultDict> {
-        return this.http.post<RegisterWorkflowResultDict>(this.config.API_URL + '/workflow', workflow, {
-            headers: BackendService.authorizationHeader(sessionId),
-        });
-    }
-
-    getWorkflow(workflowId: UUID, sessionId: UUID): Observable<WorkflowDict> {
-        return this.http.get<WorkflowDict>(this.config.API_URL + `/workflow/${workflowId}`, {
             headers: BackendService.authorizationHeader(sessionId),
         });
     }
@@ -363,16 +343,6 @@ export class BackendService {
 
     public static authorizationHeader(sessionId: UUID): HttpHeaders {
         return new HttpHeaders().set('Authorization', `Bearer ${sessionId}`);
-    }
-
-    registerWorkflowForLayer(sessionId: UUID, provider: UUID, layer: string): Observable<WorkflowIdResponseDict> {
-        return this.http.post<WorkflowIdResponseDict>(
-            this.config.API_URL + `/layers/${provider}/${encodeURIComponent(layer)}/workflowId`,
-            null,
-            {
-                headers: BackendService.authorizationHeader(sessionId),
-            },
-        );
     }
 
     getQuota(sessionId: UUID): Observable<QuotaDict> {

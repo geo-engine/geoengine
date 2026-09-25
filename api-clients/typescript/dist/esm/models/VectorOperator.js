@@ -18,6 +18,7 @@ import { PointInPolygonFilterFromJSONTyped, PointInPolygonFilterToJSON, } from '
 import { instanceOfRasterVectorJoin, RasterVectorJoinFromJSONTyped, RasterVectorJoinToJSON, } from './RasterVectorJoin';
 import { ReprojectionFromJSONTyped, ReprojectionToJSON, } from './Reprojection';
 import { TimeProjectionFromJSONTyped, TimeProjectionToJSON, } from './TimeProjection';
+import { TimeShiftFromJSONTyped, TimeShiftToJSON, } from './TimeShift';
 import { VectorExpressionFromJSONTyped, VectorExpressionToJSON, } from './VectorExpression';
 import { VectorJoinFromJSONTyped, VectorJoinToJSON, } from './VectorJoin';
 import { VisualPointClusteringFromJSONTyped, VisualPointClusteringToJSON, } from './VisualPointClustering';
@@ -45,6 +46,8 @@ export function VectorOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, ReprojectionFromJSONTyped(json, true), { type: 'Reprojection' });
         case 'TimeProjection':
             return Object.assign({}, TimeProjectionFromJSONTyped(json, true), { type: 'TimeProjection' });
+        case 'TimeShift':
+            return Object.assign({}, TimeShiftFromJSONTyped(json, true), { type: 'TimeShift' });
         case 'VectorExpression':
             return Object.assign({}, VectorExpressionFromJSONTyped(json, true), { type: 'VectorExpression' });
         case 'VectorJoin':
@@ -79,6 +82,8 @@ export function VectorOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, ReprojectionToJSON(value), { type: 'Reprojection' });
         case 'TimeProjection':
             return Object.assign({}, TimeProjectionToJSON(value), { type: 'TimeProjection' });
+        case 'TimeShift':
+            return Object.assign({}, TimeShiftToJSON(value), { type: 'TimeShift' });
         case 'VectorExpression':
             return Object.assign({}, VectorExpressionToJSON(value), { type: 'VectorExpression' });
         case 'VectorJoin':

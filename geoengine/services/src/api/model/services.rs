@@ -1,29 +1,37 @@
-use super::datatypes::{
-    CacheTtlSeconds, DataId, DataProviderId, DatasetId, GdalConfigOption, RasterDataType,
-    SpatialReference, SpatialResolution, TimeGranularity,
+use crate::{
+    api::model::{
+        datatypes::{
+            CacheTtlSeconds, DataId, DataProviderId, DatasetId, GdalConfigOption, LayerId,
+            MlModelName, RasterDataType, SpatialReference, SpatialResolution, TimeGranularity,
+        },
+        operators::{
+            GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
+            MlModelMetadata, MockMetaData, OgrMetaData, SpatialGridDescriptor, TimeDimension,
+            TypedResultDescriptor,
+        },
+        processing_graphs::ProcessingGraph,
+    },
+    datasets::{
+        DatasetName,
+        external::{GdalRetries, WildliveDataConnectorAuth},
+        storage::validate_tags,
+        upload::{UploadId, UploadRootPath, VolumeName, Volumes},
+    },
+    error::{self, Error, Result},
+    layers::layer::{Property, ProviderLayerId},
+    projects::Symbology,
+    quota::ComputationId,
+    util::{Secret, oidc::RefreshToken, parsing::deserialize_base_url},
 };
-use super::operators::TypedResultDescriptor;
-use crate::api::model::datatypes::MlModelName;
-use crate::api::model::operators::{
-    GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
-    MlModelMetadata, MockMetaData, OgrMetaData, SpatialGridDescriptor, TimeDimension,
-};
-use crate::datasets::DatasetName;
-use crate::datasets::external::{GdalRetries, WildliveDataConnectorAuth};
-use crate::datasets::storage::validate_tags;
-use crate::datasets::upload::{UploadId, UploadRootPath, VolumeName, Volumes};
-use crate::error::{Error, Result};
-use crate::projects::Symbology;
-use crate::quota::ComputationId;
-use crate::util::Secret;
-use crate::util::oidc::RefreshToken;
-use crate::util::parsing::deserialize_base_url;
 use actix_http::header::{HeaderName, HeaderValue, InvalidHeaderValue, TryIntoHeaderPair};
-use geoengine_datatypes::primitives::DateTime;
-use geoengine_datatypes::util::test::TestDefault;
+use geoengine_datatypes::{primitives::DateTime, util::test::TestDefault};
 use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use snafu::ResultExt;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 use url::Url;
 use utoipa::ToSchema;
 use validator::{Validate, ValidationErrors};
@@ -1477,6 +1485,133 @@ impl TryIntoHeaderPair for ComputationId {
             HeaderName::from_static("x-computation-id"), // NOTE: any uppercase letter leads to panics
             HeaderValue::from_str(&self.to_string())?,
         ))
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+pub struct Layer {
+    pub id: ProviderLayerId,
+    pub name: String,
+    pub description: String,
+    pub workflow: ProcessingGraph,
+    pub symbology: Option<Symbology>,
+    /// properties, for instance, to be rendered in the UI
+    #[serde(default)]
+    pub properties: Vec<Property>,
+    /// metadata used for loading the data
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+// TODO: validate user input
+pub struct AddLayer {
+    #[schema(example = "Example Layer")]
+    pub name: String,
+    #[schema(example = "Example layer description")]
+    pub description: String,
+    pub workflow: ProcessingGraph,
+    pub symbology: Option<Symbology>,
+    /// properties, for instance, to be rendered in the UI
+    #[serde(default)]
+    pub properties: Vec<Property>,
+    /// metadata used for loading the data
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Validate, ToSchema)]
+pub struct UpdateLayer {
+    #[schema(example = "Example Layer")]
+    #[validate(length(min = 1))]
+    pub name: String,
+    #[schema(example = "Example layer description")]
+    pub description: String,
+    pub workflow: ProcessingGraph,
+    #[serde(default)]
+    pub symbology: Option<Symbology>,
+    /// properties, for instance, to be rendered in the UI
+    #[serde(default)]
+    pub properties: Vec<Property>,
+    /// metadata used for loading the data
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+pub struct LayerDefinition {
+    pub id: LayerId,
+    pub name: String,
+    pub description: String,
+    pub workflow: ProcessingGraph,
+    pub symbology: Option<Symbology>,
+    /// properties, for instance, to be rendered in the UI
+    #[serde(default)]
+    pub properties: Vec<Property>,
+    /// metadata used for loading the data
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
+}
+
+impl TryFrom<Layer> for crate::layers::layer::Layer {
+    type Error = Error;
+
+    fn try_from(value: Layer) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: value.id,
+            name: value.name,
+            description: value.description,
+            workflow: value.workflow.try_into().context(error::Api)?,
+            symbology: value.symbology,
+            properties: value.properties,
+            metadata: value.metadata,
+        })
+    }
+}
+
+impl TryFrom<AddLayer> for crate::layers::layer::AddLayer {
+    type Error = Error;
+
+    fn try_from(value: AddLayer) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: value.name,
+            description: value.description,
+            workflow: value.workflow.try_into().context(error::Api)?,
+            symbology: value.symbology,
+            properties: value.properties,
+            metadata: value.metadata,
+        })
+    }
+}
+
+impl TryFrom<UpdateLayer> for crate::layers::layer::UpdateLayer {
+    type Error = Error;
+
+    fn try_from(value: UpdateLayer) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: value.name,
+            description: value.description,
+            workflow: value.workflow.try_into().context(error::Api)?,
+            symbology: value.symbology,
+            properties: value.properties,
+            metadata: value.metadata,
+        })
+    }
+}
+
+impl TryFrom<LayerDefinition> for crate::layers::layer::LayerDefinition {
+    type Error = Error;
+
+    fn try_from(value: LayerDefinition) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: value.id.into(),
+            name: value.name,
+            description: value.description,
+            workflow: value.workflow.try_into().context(error::Api)?,
+            symbology: value.symbology,
+            properties: value.properties,
+            metadata: value.metadata,
+        })
     }
 }
 

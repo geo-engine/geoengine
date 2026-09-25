@@ -1,11 +1,11 @@
 import {Component, ChangeDetectionStrategy, OnDestroy, inject} from '@angular/core';
 import {FormArray, FormBuilder, FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {combineLatest, Observable, of, ReplaySubject, Subscription} from 'rxjs';
+import {combineLatest, from, Observable, of, ReplaySubject, Subscription} from 'rxjs';
 import {ProjectService} from '../../../project/project.service';
 import {map, mergeMap} from 'rxjs/operators';
 import {UUID} from '../../../backend/backend.model';
-import {MapService} from '../../../map/map.service';
 import {BackendService} from '../../../backend/backend.service';
+import {MapService} from '../../../map/map.service';
 
 import {
     ColumnRangeFilterDict,
@@ -29,7 +29,7 @@ import {
     FxLayoutAlignDirective,
     CommonModule,
 } from '@geoengine/common';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {ProcessingGraph, VectorOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -262,11 +262,10 @@ export class ColumnRangeFilterComponent implements OnDestroy {
         const inputLayer = this.form.controls['layer'].value!;
         const filterValues = this.filters.value;
 
-        this.projectService
-            .getWorkflow(inputLayer.workflowId)
+        from(this.projectService.getWorkflow(inputLayer.workflowId))
             .pipe(
-                mergeMap((inputWorkflow: WorkflowDict) =>
-                    this.projectService.registerWorkflow(this.createWorkflow(filterValues, 0, inputWorkflow)),
+                mergeMap((inputWorkflow: ProcessingGraph) =>
+                    from(this.projectService.registerWorkflow(this.createWorkflow(filterValues, 0, inputWorkflow))),
                 ),
                 mergeMap((workflowId) => this.createLayer(workflowId, name)),
             )
@@ -285,10 +284,11 @@ export class ColumnRangeFilterComponent implements OnDestroy {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWorkflow(filterValues: any, index: number, inputWorkflow: WorkflowDict): WorkflowDict {
+    createWorkflow(filterValues: any, index: number, inputWorkflow: ProcessingGraph): ProcessingGraph {
         // TODO: create a type for filterValues
         if (index === filterValues.length) return inputWorkflow;
         const attribute = filterValues[index]['attribute'] as string;
+        const nestedWorkflow = this.createWorkflow(filterValues, index + 1, inputWorkflow);
         return {
             type: 'Vector',
             operator: {
@@ -299,9 +299,9 @@ export class ColumnRangeFilterComponent implements OnDestroy {
                     keepNulls: false,
                 },
                 sources: {
-                    vector: this.createWorkflow(filterValues, index + 1, inputWorkflow).operator,
+                    vector: nestedWorkflow.operator as VectorOperator,
                 },
-            } as ColumnRangeFilterDict,
+            },
         };
     }
 
@@ -385,32 +385,27 @@ export class ColumnRangeFilterComponent implements OnDestroy {
     private createHistogramWorkflowId(attribute: string): Observable<UUID> {
         const inputLayer = this.form.controls['layer'].value!;
         const attributeName = attribute;
-        return this.projectService.getWorkflow(inputLayer.workflowId).pipe(
-            mergeMap((workflow) =>
-                combineLatest([
-                    of({
-                        type: 'Plot',
-                        operator: {
-                            type: 'Histogram',
-                            params: {
-                                attributeName: attributeName,
-                                bounds: 'data',
-                                buckets: {
-                                    type: 'squareRootChoiceRule',
-                                    maxNumberOfBuckets: 100,
-                                },
-                                interactive: true,
+        return from(this.projectService.getWorkflow(inputLayer.workflowId)).pipe(
+            mergeMap((workflow: ProcessingGraph) =>
+                this.projectService.registerWorkflow({
+                    type: 'Plot',
+                    operator: {
+                        type: 'Histogram',
+                        params: {
+                            columnName: attributeName,
+                            bounds: 'data',
+                            buckets: {
+                                type: 'squareRootChoiceRule',
+                                maxNumberOfBuckets: 100,
                             },
-                            sources: {
-                                source: workflow.operator,
-                            },
-                        } as HistogramDict,
-                    } as WorkflowDict),
-                    this.userService.getSessionTokenForRequest(),
-                ]),
+                            interactive: true,
+                        },
+                        sources: {
+                            source: workflow.operator as VectorOperator,
+                        },
+                    },
+                }),
             ),
-            mergeMap(([workflow, sessionToken]) => this.backend.registerWorkflow(workflow, sessionToken)),
-            map((workflowRegistration) => workflowRegistration.id),
         );
     }
 }

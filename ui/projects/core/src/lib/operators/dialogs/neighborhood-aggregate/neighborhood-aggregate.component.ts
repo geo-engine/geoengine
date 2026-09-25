@@ -17,7 +17,6 @@ import {LayoutService, SidenavConfig} from '../../../layout.service';
 import {SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
 import {
     Layer,
-    NeighborhoodAggregateDict,
     RasterLayer,
     RasterSymbology,
     ResultTypes,
@@ -27,8 +26,9 @@ import {
     FxLayoutGapDirective,
     FxFlexDirective,
     AsyncValueDefault,
+    errorToText,
 } from '@geoengine/common';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {NeighborhoodAggregate, NeighborhoodKernel, ProcessingGraph, RasterOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -225,7 +225,7 @@ export class NeighborhoodAggregateComponent implements AfterViewInit, OnDestroy 
 
         const name: string = this.form.controls['name'].value;
         const rasterLayer: RasterLayer | undefined = this.form.controls['rasterLayer'].value;
-        const neighborhood = this.form.controls.neighborhood.value;
+        const neighborhood = this.form.controls.neighborhood.getRawValue();
         const aggregateFunction: 'sum' | 'standardDeviation' = this.form.controls.aggregateFunction.value;
 
         if (!rasterLayer) {
@@ -237,19 +237,30 @@ export class NeighborhoodAggregateComponent implements AfterViewInit, OnDestroy 
         this.projectService
             .getAutomaticallyProjectedOperatorsFromLayers([rasterLayer])
             .pipe(
-                mergeMap(([raster]) => {
-                    const workflow: WorkflowDict = {
+                mergeMap((projectedLayers) => {
+                    const raster = projectedLayers[0];
+                    if (raster?.type !== 'Raster') {
+                        throw new Error('Expected a raster workflow for neighborhood aggregate.');
+                    }
+
+                    const rasterOperator: RasterOperator = raster.operator;
+                    const kernel: NeighborhoodKernel =
+                        neighborhood.type === 'weightsMatrix'
+                            ? {type: 'weightsMatrix', weights: neighborhood.weights}
+                            : {type: 'rectangle', dimensions: neighborhood.dimensions};
+
+                    const workflow: ProcessingGraph = {
                         type: 'Raster',
                         operator: {
                             type: 'NeighborhoodAggregate',
                             params: {
-                                neighborhood,
-                                aggregateFunction,
+                                neighborhood: kernel,
+                                aggregateFunction: {type: aggregateFunction},
                             },
                             sources: {
-                                raster,
+                                raster: rasterOperator,
                             },
-                        } as NeighborhoodAggregateDict,
+                        } as NeighborhoodAggregate,
                     };
 
                     return this.projectService.registerWorkflow(workflow);
@@ -282,11 +293,10 @@ export class NeighborhoodAggregateComponent implements AfterViewInit, OnDestroy 
                     this.loading$.next(false);
                 },
                 error: (error) => {
-                    const errorMsg = error.error.message;
-
-                    this.lastError$.next(errorMsg);
-
-                    this.loading$.next(false);
+                    void errorToText(error, error.error?.message ?? error.message).then((errorMsg) => {
+                        this.lastError$.next(errorMsg);
+                        this.loading$.next(false);
+                    });
                 },
             });
     }

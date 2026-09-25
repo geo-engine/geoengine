@@ -9,14 +9,13 @@ import {
     RasterDataTypes,
     RasterLayer,
     RasterLayerMetadata,
-    RasterStackerDict,
     ResultTypes,
     RenameBandsDict,
     geoengineValidators,
     NotificationService,
     SpatialGridDefinition,
 } from '@geoengine/common';
-import {Coordinate2D, LegacyTypedOperatorOperator} from '@geoengine/api-client';
+import {Coordinate2D, ProcessingGraph, RasterOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -198,7 +197,7 @@ export class RasterStackerComponent implements AfterViewInit {
     private readonly inputDataTypes = signal<Array<RasterDataType>>([]);
     private readonly layerMetadata = signal<Array<RasterLayerMetadata>>([]);
     private readonly reprojectedLayerMetadata = signal<Array<RasterLayerMetadata>>([]);
-    private readonly workflowOperators = signal<Array<LegacyTypedOperatorOperator>>([]);
+    private readonly workflowOperators = signal<Array<RasterOperator>>([]);
     private readonly rasterLayersSignal!: ReturnType<typeof toSignal<Array<RasterLayer> | undefined>>;
     private readonly spatialReferenceSignal!: ReturnType<typeof toSignal<string | undefined>>;
 
@@ -253,13 +252,13 @@ export class RasterStackerComponent implements AfterViewInit {
             }
 
             const metadataPromises = rasterLayers.map((l) => firstValueFrom(this.projectService.getRasterLayerMetadata(l)));
-            const workflowPromises = rasterLayers.map((l) => firstValueFrom(this.projectService.getWorkflow(l.workflowId)));
+            const workflowPromises = rasterLayers.map((l) => this.projectService.getWorkflow(l.workflowId));
 
             void Promise.all([Promise.all(metadataPromises), Promise.all(workflowPromises)]).then(
-                ([metadata, workflows]: [Array<RasterLayerMetadata>, Array<{operator: LegacyTypedOperatorOperator}>]) => {
+                ([metadata, workflows]: [Array<RasterLayerMetadata>, Array<ProcessingGraph>]) => {
                     this.layerMetadata.set(metadata);
                     this.inputDataTypes.set(metadata.map((layer: RasterLayerMetadata) => layer.dataType));
-                    this.workflowOperators.set(workflows.map((w) => w.operator));
+                    this.workflowOperators.set(workflows.map((w) => w.operator as RasterOperator));
                 },
             );
         });
@@ -346,16 +345,16 @@ export class RasterStackerComponent implements AfterViewInit {
             }
 
             // Get workflows for all layers and create reprojected operators
-            const workflowPromises = rasterLayers.map((layer) => firstValueFrom(this.projectService.getWorkflow(layer.workflowId)));
+            const workflowPromises = rasterLayers.map((layer) => this.projectService.getWorkflow(layer.workflowId));
 
             void Promise.all(workflowPromises).then((workflows) => {
                 // Create reprojected operators
-                const reprojectedOperators = workflows.map((workflow, index) => {
+                const reprojectedOperators: Array<RasterOperator> = workflows.map((workflow, index) => {
                     const layerSref = this.layerMetadata()[index]?.spatialReference.srsString;
 
                     if (layerSref === spatialReference) {
                         // No reprojection needed
-                        return workflow.operator;
+                        return workflow.operator as RasterOperator;
                     } else {
                         // Create reprojection operator
                         return {
@@ -364,20 +363,18 @@ export class RasterStackerComponent implements AfterViewInit {
                                 targetSpatialReference: spatialReference,
                             },
                             sources: {
-                                source: workflow.operator,
+                                source: workflow.operator as RasterOperator,
                             },
-                        };
+                        } as RasterOperator;
                     }
                 });
 
                 // Register temporary workflows and fetch their metadata
                 const metadataPromises = reprojectedOperators.map((operator) => {
-                    const workflowPromise = firstValueFrom(
-                        this.projectService.registerWorkflow({
-                            type: 'Raster',
-                            operator,
-                        }),
-                    );
+                    const workflowPromise = this.projectService.registerWorkflow({
+                        type: 'Raster',
+                        operator,
+                    });
 
                     return workflowPromise.then((workflowId) =>
                         firstValueFrom(this.projectService.getWorkflowMetaData(workflowId)).then((descriptor) => {
@@ -465,8 +462,8 @@ export class RasterStackerComponent implements AfterViewInit {
 
         try {
             // Process each layer: reproject, regrid, convert data type
-            const processedOperators: Array<LegacyTypedOperatorOperator> = workflowOperators.map((operator, index) => {
-                let processedOperator: LegacyTypedOperatorOperator = operator;
+            const processedOperators: Array<RasterOperator> = workflowOperators.map((operator, index) => {
+                let processedOperator: RasterOperator = operator;
                 const originalSpatialReference = originalMetadata[index].spatialReference.srsString;
 
                 // Step 1: Reproject to target spatial reference if needed
@@ -527,7 +524,7 @@ export class RasterStackerComponent implements AfterViewInit {
                             sources: {
                                 raster: processedOperator,
                             },
-                        };
+                        } as RasterOperator;
                     } else {
                         // Use downsampling for finer → coarser
                         processedOperator = {
@@ -540,7 +537,7 @@ export class RasterStackerComponent implements AfterViewInit {
                             sources: {
                                 raster: processedOperator,
                             },
-                        };
+                        } as RasterOperator;
                     }
                 }
 
@@ -555,27 +552,26 @@ export class RasterStackerComponent implements AfterViewInit {
                         sources: {
                             raster: processedOperator,
                         },
-                    };
+                    } as RasterOperator;
                 }
 
                 return processedOperator;
             });
 
             // Register the final stacked workflow
-            const workflowId = await firstValueFrom(
-                this.projectService.registerWorkflow({
-                    type: 'Raster',
-                    operator: {
-                        type: 'RasterStacker',
-                        params: {
-                            renameBands,
-                        },
-                        sources: {
-                            rasters: processedOperators,
-                        },
-                    } as RasterStackerDict,
-                }),
-            );
+            const workflow: ProcessingGraph = {
+                type: 'Raster',
+                operator: {
+                    type: 'RasterStacker',
+                    params: {
+                        renameBands,
+                    },
+                    sources: {
+                        rasters: processedOperators,
+                    },
+                },
+            };
+            const workflowId = await this.projectService.registerWorkflow(workflow);
 
             // Add the layer to the project
             await firstValueFrom(

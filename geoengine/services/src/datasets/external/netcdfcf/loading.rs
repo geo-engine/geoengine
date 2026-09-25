@@ -145,7 +145,7 @@ pub fn create_layer(
         id: provider_layer_id,
         name: netcdf_entity.name.clone(),
         description: netcdf_entity.name,
-        workflow: Workflow::Legacy {
+        workflow: Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters::new(data_id),

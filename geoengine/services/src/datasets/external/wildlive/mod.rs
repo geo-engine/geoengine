@@ -364,7 +364,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                 id: self.layer_id(WildliveLayerId::Projects)?,
                 name: "Projects".to_string(),
                 description: "Overview of all projects".to_string(),
-                workflow: Workflow::Legacy {
+                workflow: Workflow {
                     operator: VectorExpression {
                         params: VectorExpressionParams {
                             expression: "centroid(geom)".into(),
@@ -432,7 +432,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                 id: self.layer_id(WildliveLayerId::ProjectBounds)?,
                 name: "Project Bounds".to_string(),
                 description: "Overview of all project bounds".to_string(),
-                workflow: Workflow::Legacy {
+                workflow: Workflow {
                     operator: OgrSource {
                         params: OgrSourceParameters {
                             data: self.named_data(WildliveLayerId::ProjectBounds)?,
@@ -462,7 +462,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                     })?,
                     name: format!("Stations for project {project_name}"),
                     description: format!("Overview of all stations within project {project_id}"),
-                    workflow: Workflow::Legacy {
+                    workflow: Workflow {
                         operator: OgrSource {
                             params: OgrSourceParameters {
                                 data: self.named_data(WildliveLayerId::Stations { project_id })?,
@@ -493,7 +493,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                     })?,
                     name: format!("Captures for project {project_name}"),
                     description: format!("Overview of all captures within project {project_id}"),
-                    workflow: Workflow::Legacy {
+                    workflow: Workflow {
                         operator: OgrSource {
                             params: OgrSourceParameters {
                                 data: self.named_data(WildliveLayerId::Captures { project_id })?,
@@ -1232,7 +1232,7 @@ mod tests {
                 },
                 name: "Project Bounds".to_string(),
                 description: "Overview of all project bounds".to_string(),
-                workflow: Workflow::Legacy {
+                workflow: Workflow {
                     operator: OgrSource {
                         params: OgrSourceParameters {
                             data: connector
@@ -1264,7 +1264,7 @@ mod tests {
                 },
                 name: "Projects".to_string(),
                 description: "Overview of all projects".to_string(),
-                workflow: Workflow::Legacy {
+                workflow: Workflow {
                     operator: VectorExpression {
                         params: VectorExpressionParams {
                             expression: "centroid(geom)".into(),
@@ -1603,7 +1603,7 @@ mod tests {
                 },
                 name: format!("Captures for project {project_name}"),
                 description: format!("Overview of all captures within project {project_id}"),
-                workflow: Workflow::Legacy {
+                workflow: Workflow {
                     operator: OgrSource {
                         params: OgrSourceParameters {
                             data: connector

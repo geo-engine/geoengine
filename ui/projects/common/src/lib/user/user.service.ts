@@ -1,4 +1,4 @@
-import {Injectable, inject} from '@angular/core';
+import {Injectable, computed, inject, resource, signal} from '@angular/core';
 import {
     ComputationQuota,
     AuthCodeRequestURL,
@@ -11,21 +11,9 @@ import {
     SessionApi,
     UserApi,
     UserSession,
+    WorkflowsApi,
 } from '@geoengine/api-client';
-import {
-    BehaviorSubject,
-    Observable,
-    ReplaySubject,
-    catchError,
-    combineLatest,
-    filter,
-    first,
-    firstValueFrom,
-    from,
-    map,
-    mergeMap,
-    of,
-} from 'rxjs';
+import {BehaviorSubject, Observable, ReplaySubject, filter, first, firstValueFrom, from, map, mergeMap} from 'rxjs';
 import {Location} from '@angular/common';
 import {UUID} from '../datasets/dataset.model';
 import {isDefined} from '../util/conversions';
@@ -36,6 +24,7 @@ import {BackendStatus, Quota, User} from './user.model';
 import {utc} from 'moment';
 import {CommonConfig} from '../config.service';
 import {NotificationService} from '../notification.service';
+import {toObservable, toSignal} from '@angular/core/rxjs-interop';
 
 /**
  * A service that is responsible for retrieving user information and modifying the current user.
@@ -57,12 +46,52 @@ export class UserService {
     protected readonly session$ = new ReplaySubject<Session | undefined>(1);
     protected readonly backendStatus$ = new BehaviorSubject<BackendStatus>({available: false, initial: true});
     protected readonly backendInfo$ = new BehaviorSubject<ServerInfo | undefined>(undefined);
-    protected readonly sessionQuota$ = new BehaviorSubject<Quota | undefined>(undefined);
-    protected readonly refreshSessionQuota$ = new BehaviorSubject<void>(undefined);
+    protected readonly sessionQuota = resource<Quota | undefined, {userApi: UserApi; refresh: void}>({
+        // update quota when session changes or update is triggered
+        params: () => ({
+            userApi: this.userApi(),
+            refresh: this.refreshSessionQuota$(),
+        }),
+        loader: async (): Promise<Quota | undefined> => {
+            try {
+                return Quota.fromDict(await this.userApi().quotaHandler());
+            } catch {
+                return undefined;
+            }
+        },
+    });
+    protected readonly refreshSessionQuota$ = signal<void>(undefined, {equal: () => false});
+    protected readonly sessionQuotaStream$ = toObservable(this.sessionQuota.value.asReadonly());
 
-    userApi = new ReplaySubject<UserApi>(1);
-    sessionApi = new ReplaySubject<SessionApi>(1);
-    backendApi = new GeneralApi();
+    readonly session = toSignal(this.session$, {initialValue: undefined});
+    readonly sessionToken = computed(() => this.session()?.sessionToken);
+
+    readonly userApi = computed<UserApi>(() => {
+        const sessionToken = this.sessionToken();
+        if (!sessionToken) return new UserApi(); // to prevent undefined
+        return new UserApi(apiConfigurationWithAccessKey(sessionToken));
+    });
+    readonly sessionApi = computed<SessionApi>(() => {
+        const sessionToken = this.sessionToken();
+        if (!sessionToken) return new SessionApi(); // to prevent undefined
+        return new SessionApi(apiConfigurationWithAccessKey(sessionToken));
+    });
+    readonly backendApi = computed<GeneralApi>(() => {
+        const sessionToken = this.sessionToken();
+        if (!sessionToken) return new GeneralApi(); // to prevent undefined
+        return new GeneralApi(apiConfigurationWithAccessKey(sessionToken));
+    });
+    readonly processingGraphAPI = computed<WorkflowsApi>(() => {
+        const sessionToken = this.sessionToken();
+        if (!sessionToken) return new WorkflowsApi(); // to prevent undefined
+        return new WorkflowsApi(apiConfigurationWithAccessKey(sessionToken));
+    });
+
+    protected readonly roleDescriptions = resource({
+        params: () => this.userApi(),
+        loader: ({params: userApi}) => userApi.getRoleDescriptions().catch(() => undefined),
+    });
+    protected readonly roleDescriptions$ = toObservable(this.roleDescriptions.value.asReadonly());
 
     protected logoutCallback?: () => void;
     protected sessionInitialized = false;
@@ -71,20 +100,9 @@ export class UserService {
         // get oidc paramters from url before routing is enabled
         const oidcParams = this.getOidcParametersFromUrl();
 
-        this.session$.subscribe((session) => {
-            // storage of the session
-            this.saveSessionInBrowser(session);
-            if (!session) return;
-            this.userApi.next(new UserApi(apiConfigurationWithAccessKey(session.sessionToken)));
-            this.sessionApi.next(new SessionApi(apiConfigurationWithAccessKey(session.sessionToken)));
-        });
-
         this.getBackendStatus()
             .pipe(mergeMap((status, _index) => this.setBackendInfo(status).then(() => this.tryLogin(status, oidcParams))))
             .subscribe();
-
-        // update quota when session changes or update is triggered
-        this.createSessionQuotaStream();
 
         // now, trigger an update of the backend status once. While this is an async call, we don't need to await here.
         void this.triggerBackendStatusUpdate();
@@ -92,7 +110,7 @@ export class UserService {
 
     async setBackendInfo(status: BackendStatus): Promise<void> {
         if (status.available) {
-            const info = await this.backendApi.serverInfoHandler();
+            const info = await this.backendApi().serverInfoHandler();
             this.backendInfo$.next(info);
         }
     }
@@ -120,7 +138,7 @@ export class UserService {
             }
 
             this.sessionInitialized = false;
-            this.session$.next(undefined);
+            this.setSession(undefined);
             return;
         }
 
@@ -129,13 +147,13 @@ export class UserService {
         const oidcRestoreRoute = sessionStorage.getItem(UserService.OIDC_RESTORE_ROUTE_KEY);
         if (oidcParams && oidcRestoreRoute) {
             const sess = await this.oidcLogin(oidcParams);
-            this.session$.next(sess);
+            this.setSession(sess);
             await this.router.navigateByUrl(oidcRestoreRoute);
         } else {
             try {
                 // restore old session if possible
                 const session = await this.sessionFromBrowser(this.config.USER.AUTO_GUEST_LOGIN);
-                this.session$.next(session);
+                this.setSession(session);
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
             } catch (error: any) {
                 // only show error if we did not expect it
@@ -148,14 +166,14 @@ export class UserService {
                 ) {
                     this.notificationService.error(error.message);
                 }
-                this.session$.next(undefined);
+                this.setSession(undefined);
             }
         }
     }
 
     async triggerBackendStatusUpdate(): Promise<void> {
         try {
-            const _available = await this.backendApi.availableHandler();
+            const _available = await this.backendApi().availableHandler();
 
             this.backendStatus$.next({available: true});
         } catch (error) {
@@ -219,7 +237,7 @@ export class UserService {
      **/
     getSessionQuotaStream(): Observable<Quota | undefined> {
         this.refreshSessionQuota();
-        return this.sessionQuota$;
+        return this.sessionQuotaStream$;
     }
 
     /**
@@ -228,7 +246,7 @@ export class UserService {
      * @returns void
      **/
     refreshSessionQuota(): void {
-        this.refreshSessionQuota$.next();
+        this.refreshSessionQuota$.set();
     }
 
     getBackendInfoStream(): Observable<ServerInfo | undefined> {
@@ -307,7 +325,7 @@ export class UserService {
         });
         const session = this.sessionFromDict(response);
 
-        this.session$.next(session);
+        this.setSession(session);
 
         return session;
     }
@@ -321,34 +339,30 @@ export class UserService {
 
         try {
             const session = await this.createGuestUser();
-            this.session$.next(session);
+            this.setSession(session);
 
             return session;
         } catch (error) {
             // failing on a guest login means we cannot do it,
             // so we are logged out
-            this.session$.next(undefined);
+            this.setSession(undefined);
             throw error;
         }
     }
 
     logout(): void {
-        this.session$.next(undefined);
+        this.setSession(undefined);
     }
 
     async computationsQuota(offset: number, limit: number): Promise<ComputationQuota[]> {
-        const userApi = await firstValueFrom(this.userApi);
-
-        return userApi.computationsQuotaHandler({
+        return this.userApi().computationsQuotaHandler({
             offset,
             limit,
         });
     }
 
     async computationQuota(computation: UUID): Promise<OperatorQuota[]> {
-        const userApi = await firstValueFrom(this.userApi);
-
-        return userApi.computationQuotaHandler({
+        return this.userApi().computationQuotaHandler({
             computation,
         });
     }
@@ -358,7 +372,7 @@ export class UserService {
 
         const session = this.sessionFromDict(response);
 
-        this.session$.next(session);
+        this.setSession(session);
 
         return session;
     }
@@ -433,13 +447,12 @@ export class UserService {
      * @returns Observable<Array<RoleDescription> | undefined>
      **/
     getRoleDescriptions(): Observable<Array<RoleDescription> | undefined> {
-        return combineLatest([this.userApi, this.getSessionOrUndefinedStream()]).pipe(
-            mergeMap(([userApi, session]) => {
-                if (!session) return of(undefined);
-                return from(userApi.getRoleDescriptions());
-            }),
-            catchError(() => of(undefined)),
-        );
+        return this.roleDescriptions$;
+    }
+
+    protected setSession(session: Session | undefined): void {
+        this.session$.next(session);
+        this.saveSessionInBrowser(session);
     }
 
     protected saveSessionInBrowser(session: Session | undefined): void {
@@ -457,8 +470,7 @@ export class UserService {
     }
 
     async getRoleByName(roleName: string): Promise<UUID> {
-        const userApi = await firstValueFrom(this.userApi);
-        return userApi
+        return this.userApi()
             .getRoleByNameHandler({
                 name: roleName,
             })
@@ -466,8 +478,7 @@ export class UserService {
     }
 
     async registerUser(userRegistration: {email: string; password: string; realName: string}): Promise<string> {
-        const sessionApi = await firstValueFrom(this.sessionApi);
-        return sessionApi.registerUserHandler({userRegistration});
+        return this.sessionApi().registerUserHandler({userRegistration});
     }
 
     protected sessionFromDict(sessionDict: UserSession): Session {
@@ -490,21 +501,6 @@ export class UserService {
         };
 
         return session;
-    }
-
-    private createSessionQuotaStream(): void {
-        combineLatest([this.userApi, this.getSessionOrUndefinedStream(), this.refreshSessionQuota$])
-            .pipe(
-                mergeMap(([userApi, session, _update]) => {
-                    if (!session) return of(undefined);
-                    return from(userApi.quotaHandler());
-                }),
-                catchError(() => of(undefined)),
-                map((quota) => (quota ? Quota.fromDict(quota) : undefined)),
-            )
-            .subscribe((quota) => {
-                this.sessionQuota$.next(quota);
-            });
     }
 
     private getOidcParametersFromUrl(): {sessionState: string; code: string; state: string} | undefined {

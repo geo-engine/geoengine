@@ -1002,8 +1002,7 @@ mod tests {
                 .expect("workflow JSON should deserialize");
 
         let operator = workflow
-            .operator()
-            .expect("workflow should have operator")
+            .operator
             .get_raster()
             .expect("workflow operator should be raster");
 

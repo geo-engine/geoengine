@@ -13,12 +13,14 @@ import {SrsString} from '../spatial-references/spatial-reference.model';
 import {Symbology} from '../symbology/symbology.model';
 import {
     Dataset as DatasetDict,
+    ProcessingGraph,
+    RasterOperator,
     TypedResultDescriptor as TypedResultDescriptorDict,
     TypedVectorResultDescriptor as VectorResultDescriptorDict,
     TypedRasterResultDescriptor as RasterResultDescriptorDict,
-    Workflow as WorkflowDict,
     RasterBandDescriptor as RasterBandDescriptor,
     TimeDescriptor,
+    VectorOperator,
 } from '@geoengine/api-client';
 
 export type UUID = string;
@@ -48,19 +50,28 @@ export class Dataset {
         return new Dataset(dict);
     }
 
-    createSourceWorkflow(): WorkflowDict {
-        return this.createSourceWorkflowWithOperator({
+    createSourceWorkflow(): ProcessingGraph {
+        const sourceOperator: SourceOperatorDict = {
             type: this.sourceOperator,
             params: {
                 data: this.name,
             },
-        });
+        };
+
+        return this.createSourceWorkflowWithOperator(sourceOperator);
     }
 
-    createSourceWorkflowWithOperator(operator: SourceOperatorDict): WorkflowDict {
+    createSourceWorkflowWithOperator(operator: SourceOperatorDict): ProcessingGraph {
+        if (this.resultDescriptor.getTypeString() === 'Raster') {
+            return {
+                type: 'Raster',
+                operator: operator as RasterOperator,
+            };
+        }
+
         return {
-            type: this.resultDescriptor.getTypeString(),
-            operator,
+            type: 'Vector',
+            operator: operator as VectorOperator,
         };
     }
 }

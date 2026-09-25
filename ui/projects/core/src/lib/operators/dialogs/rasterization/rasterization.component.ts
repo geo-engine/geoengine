@@ -3,21 +3,18 @@ import {FormBuilder, FormControl, FormGroup, Validators, FormsModule, ReactiveFo
 import {ProjectService} from '../../../project/project.service';
 import {mergeMap} from 'rxjs/operators';
 import {UUID} from '../../../backend/backend.model';
-import {BehaviorSubject, combineLatest, Observable, of, Subscription} from 'rxjs';
+import {BehaviorSubject, combineLatest, from, Observable, of, Subscription} from 'rxjs';
 import {
-    DensityRasterizationDict,
-    GridRasterizationDict,
     Layer,
     NotificationService,
     RasterLayer,
     RasterSymbology,
-    RasterizationDict,
     ResultTypes,
     geoengineValidators,
     AsyncValueDefault,
 } from '@geoengine/common';
 import {SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {ProcessingGraph, RasterizationParameters} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -166,17 +163,21 @@ export class RasterizationComponent implements OnDestroy {
             .getAutomaticallyProjectedOperatorsFromLayers([pointsLayer])
             .pipe(
                 mergeMap(([points]) => {
-                    const workflow: WorkflowDict = {
+                    if (points.type !== 'Vector') {
+                        throw new Error('Expected a vector workflow for rasterization.');
+                    }
+
+                    const workflow: ProcessingGraph = {
                         type: 'Raster',
                         operator: {
                             type: 'Rasterization',
                             params,
                             sources: {
-                                vector: points,
+                                vector: points.operator,
                             },
-                        } as RasterizationDict,
+                        },
                     };
-                    return this.projectService.registerWorkflow(workflow);
+                    return from(this.projectService.registerWorkflow(workflow));
                 }),
                 mergeMap((workflowId: UUID) => {
                     const symbology$: Observable<RasterSymbology> = this.symbologyCreator().symbologyForRasterLayer(workflowId);
@@ -221,20 +222,18 @@ export class RasterizationComponent implements OnDestroy {
         }
     }
 
-    private rasterizationParams(): GridRasterizationDict | DensityRasterizationDict | null {
-        let params: GridRasterizationDict | DensityRasterizationDict | null = null;
+    private rasterizationParams(): RasterizationParameters | null {
+        let params: RasterizationParameters | null = null;
         let rasterization;
 
         if (this.selected.value === 0) {
             rasterization = this.form.controls.rasterization as FormGroup<GridForm>;
 
             params = {
-                type: 'grid',
                 spatialResolution: {
                     x: rasterization?.value.resolution?.resX ?? 10,
                     y: rasterization?.value.resolution?.resY ?? 10,
                 },
-                gridSizeMode: rasterization?.value.gridSizeMode ?? 'fixed',
                 originCoordinate: {
                     x: rasterization?.value.origin?.originX ?? 0,
                     y: rasterization?.value.origin?.originY ?? 0,
@@ -244,9 +243,18 @@ export class RasterizationComponent implements OnDestroy {
             rasterization = this.form.controls.rasterization as FormGroup<DensityForm>;
 
             params = {
-                type: 'density',
-                cutoff: rasterization?.value.cutoff ?? 10,
-                stddev: rasterization?.value.stddev ?? 10,
+                spatialResolution: {
+                    x: 10,
+                    y: 10,
+                },
+                originCoordinate: {
+                    x: 0,
+                    y: 0,
+                },
+                densityParams: {
+                    cutoff: rasterization?.value.cutoff ?? 10,
+                    stddev: rasterization?.value.stddev ?? 10,
+                },
             };
         }
 

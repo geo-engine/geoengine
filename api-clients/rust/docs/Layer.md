@@ -7,7 +7,7 @@ Name | Type | Description | Notes
 **id** | [**models::ProviderLayerId**](ProviderLayerId.md) |  | 
 **name** | **String** |  | 
 **description** | **String** |  | 
-**workflow** | [**models::Workflow**](Workflow.md) |  | 
+**workflow** | [**models::ProcessingGraph**](ProcessingGraph.md) |  | 
 **symbology** | Option<[**models::Symbology**](Symbology.md)> |  | [optional]
 **properties** | Option<[**Vec<Vec<String>>**](Vec.md)> | properties, for instance, to be rendered in the UI | [optional]
 **metadata** | Option<**std::collections::HashMap<String, String>**> | metadata used for loading the data | [optional]

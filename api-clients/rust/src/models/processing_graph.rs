@@ -10,32 +10,35 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
+/// ProcessingGraph : Operator outputs are distinguished by their data type. There are `raster`, `vector` and `plot` operators.
+/// Operator outputs are distinguished by their data type. There are `raster`, `vector` and `plot` operators.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum Workflow {
-    TypedOperator(Box<models::TypedOperator>),
-    LegacyTypedOperator(Box<models::LegacyTypedOperator>),
+pub enum ProcessingGraph {
+    TypedVectorOperator(Box<models::TypedVectorOperator>),
+    TypedRasterOperator(Box<models::TypedRasterOperator>),
+    TypedPlotOperator(Box<models::TypedPlotOperator>),
 }
 
-impl Default for Workflow {
+impl Default for ProcessingGraph {
     fn default() -> Self {
-        Self::TypedOperator(Default::default())
+        Self::TypedVectorOperator(Default::default())
     }
 }
 /// 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum Type {
-    #[serde(rename = "Plot")]
-    Plot,
     #[serde(rename = "Vector")]
     Vector,
     #[serde(rename = "Raster")]
     Raster,
+    #[serde(rename = "Plot")]
+    Plot,
 }
 
 impl Default for Type {
     fn default() -> Type {
-        Self::Plot
+        Self::Vector
     }
 }
 

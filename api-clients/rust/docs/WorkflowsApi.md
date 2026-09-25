@@ -129,7 +129,7 @@ Name | Type | Description  | Required | Notes
 
 ## load_workflow_handler
 
-> models::Workflow load_workflow_handler(id)
+> models::ProcessingGraph load_workflow_handler(id)
 Retrieves an existing Workflow.
 
 ### Parameters
@@ -141,7 +141,7 @@ Name | Type | Description  | Required | Notes
 
 ### Return type
 
-[**models::Workflow**](Workflow.md)
+[**models::ProcessingGraph**](ProcessingGraph.md)
 
 ### Authorization
 
@@ -189,7 +189,7 @@ Name | Type | Description  | Required | Notes
 
 ## register_workflow_handler
 
-> models::IdResponse register_workflow_handler(workflow)
+> models::IdResponse register_workflow_handler(processing_graph)
 Registers a new Workflow.
 
 ### Parameters
@@ -197,7 +197,7 @@ Registers a new Workflow.
 
 Name | Type | Description  | Required | Notes
 ------------- | ------------- | ------------- | ------------- | -------------
-**workflow** | [**Workflow**](Workflow.md) |  | [required] |
+**processing_graph** | [**ProcessingGraph**](ProcessingGraph.md) |  | [required] |
 
 ### Return type
 

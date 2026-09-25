@@ -112,8 +112,7 @@ async fn run_profile_query(
         serde_json::from_str(&workflow_json).context("deserializing NDVI workflow")?;
 
     let operator = workflow
-        .operator()
-        .context("extracting workflow operator")?
+        .operator
         .get_raster()
         .context("expecting raster workflow")?;
 

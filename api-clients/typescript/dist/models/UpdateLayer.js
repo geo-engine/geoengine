@@ -18,7 +18,7 @@ exports.UpdateLayerFromJSONTyped = UpdateLayerFromJSONTyped;
 exports.UpdateLayerToJSON = UpdateLayerToJSON;
 exports.UpdateLayerToJSONTyped = UpdateLayerToJSONTyped;
 const Symbology_1 = require("./Symbology");
-const Workflow_1 = require("./Workflow");
+const ProcessingGraph_1 = require("./ProcessingGraph");
 /**
  * Check if a given object implements the UpdateLayer interface.
  */
@@ -41,7 +41,7 @@ function UpdateLayerFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'name': json['name'],
         'description': json['description'],
-        'workflow': (0, Workflow_1.WorkflowFromJSON)(json['workflow']),
+        'workflow': (0, ProcessingGraph_1.ProcessingGraphFromJSON)(json['workflow']),
         'symbology': json['symbology'] == null ? undefined : (0, Symbology_1.SymbologyFromJSON)(json['symbology']),
         'properties': json['properties'] == null ? undefined : json['properties'],
         'metadata': json['metadata'] == null ? undefined : json['metadata'],
@@ -57,7 +57,7 @@ function UpdateLayerToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'name': value['name'],
         'description': value['description'],
-        'workflow': (0, Workflow_1.WorkflowToJSON)(value['workflow']),
+        'workflow': (0, ProcessingGraph_1.ProcessingGraphToJSON)(value['workflow']),
         'symbology': (0, Symbology_1.SymbologyToJSON)(value['symbology']),
         'properties': value['properties'],
         'metadata': value['metadata'],

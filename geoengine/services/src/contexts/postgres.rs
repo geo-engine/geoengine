@@ -641,7 +641,7 @@ mod tests {
             VectorResultDescriptor,
         },
         machine_learning::MlModelMetadata,
-        mock::{MockPointSource, MockPointSourceParams},
+        mock::{MockPointSource, MockPointSourceParams, SpatialBoundsDerive},
         plot::{Statistics, StatisticsParams},
         source::{
             CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
@@ -841,7 +841,7 @@ mod tests {
             .unwrap();
 
         let layer_workflow_id = db
-            .register_workflow(Workflow::Legacy {
+            .register_workflow(Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
                         params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -855,7 +855,7 @@ mod tests {
         assert!(db.load_workflow(&layer_workflow_id).await.is_ok());
 
         let plot_workflow_id = db
-            .register_workflow(Workflow::Legacy {
+            .register_workflow(Workflow {
                 operator: Statistics {
                     params: StatisticsParams {
                         column_names: vec![],
@@ -1085,7 +1085,7 @@ mod tests {
 
     #[ge_context::test]
     async fn it_persists_workflows(app_ctx: PostgresContext<NoTls>) {
-        let workflow = Workflow::Legacy {
+        let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -1880,26 +1880,20 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
     async fn it_collects_layers(app_ctx: PostgresContext<NoTls>) {
-        use crate::api::model::processing_graphs::{
-            MockPointSource as ApiMockPointSource,
-            MockPointSourceParameters as ApiMockPointSourceParameters, SpatialBoundsDerive,
-            TypedOperator as ApiTypedOperator, VectorOperator as ApiVectorOperator,
-        };
-
         let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
 
-        let workflow = Workflow::Typed {
-            operator: ApiTypedOperator::Vector(ApiVectorOperator::MockPointSource(
-                ApiMockPointSource {
-                    r#type: Default::default(),
-                    params: ApiMockPointSourceParameters {
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(
+                MockPointSource {
+                    params: MockPointSourceParams {
                         points: vec![(1., 2.).into(); 3],
-                        spatial_bounds: SpatialBoundsDerive::None(Default::default()),
+                        spatial_bounds: SpatialBoundsDerive::None,
                     },
-                },
-            )),
+                }
+                .boxed(),
+            ),
         };
 
         let root_collection_id = layer_db.get_root_layer_collection_id().await.unwrap();
@@ -2091,7 +2085,7 @@ mod tests {
 
         let layer_db = app_ctx.session_context(session).db();
 
-        let workflow = Workflow::Legacy {
+        let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -2447,7 +2441,7 @@ mod tests {
         let user_session = app_ctx.create_anonymous_session().await.unwrap();
         let user_layer_db = app_ctx.session_context(user_session.clone()).db();
 
-        let workflow = Workflow::Legacy {
+        let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams {
@@ -2970,7 +2964,7 @@ mod tests {
 
         let layer_db = app_ctx.session_context(session).db();
 
-        let workflow = Workflow::Legacy {
+        let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -3150,7 +3144,7 @@ mod tests {
         let user_session = app_ctx.create_anonymous_session().await.unwrap();
         let user_layer_db = app_ctx.session_context(user_session.clone()).db();
 
-        let workflow = Workflow::Legacy {
+        let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams {
@@ -3689,7 +3683,7 @@ mod tests {
         let layer = AddLayer {
             name: "layer".to_string(),
             description: "description".to_string(),
-            workflow: Workflow::Legacy {
+            workflow: Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
                         params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -3885,7 +3879,7 @@ mod tests {
                 AddLayer {
                     name: "layer".to_string(),
                     description: "description".to_string(),
-                    workflow: Workflow::Legacy {
+                    workflow: Workflow {
                         operator: TypedOperator::Vector(
                             MockPointSource {
                                 params: MockPointSourceParams::new(vec![
@@ -3955,7 +3949,7 @@ mod tests {
                 AddLayer {
                     name: "layer 1".to_string(),
                     description: "description".to_string(),
-                    workflow: Workflow::Legacy {
+                    workflow: Workflow {
                         operator: TypedOperator::Vector(
                             MockPointSource {
                                 params: MockPointSourceParams::new(vec![
@@ -3980,7 +3974,7 @@ mod tests {
                 AddLayer {
                     name: "layer 2".to_string(),
                     description: "description".to_string(),
-                    workflow: Workflow::Legacy {
+                    workflow: Workflow {
                         operator: TypedOperator::Vector(
                             MockPointSource {
                                 params: MockPointSourceParams::new(vec![

@@ -943,7 +943,7 @@ impl LayerCollectionProvider for ArunaDataProvider {
             },
             name: dataset.name,
             description: dataset.description,
-            workflow: Workflow::Legacy { operator },
+            workflow: Workflow { operator },
             symbology: None,
             properties: vec![],
             metadata: HashMap::new(),
@@ -2029,7 +2029,7 @@ mod tests {
                     }
                 }
             }),
-            serde_json::to_value(result.workflow.operator().unwrap()).unwrap()
+            serde_json::to_value(result.workflow.operator).unwrap()
         );
     }
 
@@ -2065,7 +2065,7 @@ mod tests {
                     }
                 }
             }),
-            serde_json::to_value(result.workflow.operator().unwrap()).unwrap()
+            serde_json::to_value(result.workflow.operator).unwrap()
         );
     }
 

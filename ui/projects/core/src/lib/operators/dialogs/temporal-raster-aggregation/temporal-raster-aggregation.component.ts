@@ -4,7 +4,7 @@ import {ProjectService} from '../../../project/project.service';
 
 import {map, mergeMap} from 'rxjs/operators';
 import {TimeStepGranularityDict, UUID} from '../../../backend/backend.model';
-import {BehaviorSubject, combineLatest, Observable, of} from 'rxjs';
+import {BehaviorSubject, combineLatest, from, Observable, of} from 'rxjs';
 import moment, {Moment} from 'moment';
 import {SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
 import {
@@ -14,14 +14,13 @@ import {
     RasterLayer,
     RasterSymbology,
     ResultTypes,
-    TemporalRasterAggregationDict,
     TemporalRasterAggregationDictAgregationType,
     geoengineValidators,
     timeStepGranularityOptions,
     CommonModule,
     AsyncValueDefault,
 } from '@geoengine/common';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {ProcessingGraph, RasterDataType as ApiRasterDataType} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -162,7 +161,7 @@ export class TemporalRasterAggregationComponent implements AfterViewInit {
         const outputName: string = this.form.controls['name'].value;
 
         const aggregation: TemporalRasterAggregationDictAgregationType = this.form.controls['aggregation'].value;
-        const granularity: string = this.form.controls['granularity'].value;
+        const granularity: TimeStepGranularityDict = this.form.controls['granularity'].value;
         const step: number = this.form.controls['windowSize'].value;
         const dataType: RasterDataType | undefined = this.form.controls['dataType'].value;
 
@@ -176,33 +175,38 @@ export class TemporalRasterAggregationComponent implements AfterViewInit {
 
         this.loading$.next(true);
 
-        this.projectService
-            .getWorkflow(inputLayer.workflowId)
+        void from(this.projectService.getWorkflow(inputLayer.workflowId))
             .pipe(
-                mergeMap((inputWorkflow: WorkflowDict) =>
-                    this.projectService.registerWorkflow({
-                        type: 'Raster',
-                        operator: {
-                            type: 'TemporalRasterAggregation',
-                            params: {
-                                aggregation: {
-                                    type: aggregation,
-                                    ignoreNoData,
-                                    percentile,
+                mergeMap((inputWorkflow: ProcessingGraph) => {
+                    if (inputWorkflow.type !== 'Raster') {
+                        throw new Error('Expected a raster workflow for temporal raster aggregation.');
+                    }
+
+                    return from(
+                        this.projectService.registerWorkflow({
+                            type: 'Raster',
+                            operator: {
+                                type: 'TemporalRasterAggregation',
+                                params: {
+                                    aggregation: {
+                                        type: aggregation as any,
+                                        ignoreNoData,
+                                        ...(aggregation === 'percentileEstimate' && percentile !== undefined ? {percentile} : {}),
+                                    },
+                                    window: {
+                                        granularity: granularity as any,
+                                        step,
+                                    },
+                                    windowReference: stepReference?.valueOf(),
+                                    outputType: dataType ? (dataType.getCode() as unknown as ApiRasterDataType) : undefined,
                                 },
-                                window: {
-                                    granularity,
-                                    step,
+                                sources: {
+                                    raster: inputWorkflow.operator as any,
                                 },
-                                windowReference: stepReference,
-                                outputType: dataType?.getCode(),
                             },
-                            sources: {
-                                raster: inputWorkflow.operator,
-                            },
-                        } as TemporalRasterAggregationDict,
-                    }),
-                ),
+                        }),
+                    );
+                }),
                 mergeMap((workflowId: UUID) => {
                     const symbology$: Observable<RasterSymbology> = this.symbologyCreator().symbologyForRasterLayer(workflowId, inputLayer);
                     return combineLatest([of(workflowId), symbology$]);
@@ -221,7 +225,6 @@ export class TemporalRasterAggregationComponent implements AfterViewInit {
             )
             .subscribe({
                 next: () => {
-                    // success
                     this.loading$.next(false);
                 },
                 error: (error) => {

@@ -1,3 +1,4 @@
+use geoengine_datatypes::util::AsAny;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use tracing::debug;
@@ -29,7 +30,7 @@ pub trait OperatorData {
 #[typetag::serde(tag = "type")]
 #[async_trait]
 pub trait RasterOperator:
-    CloneableRasterOperator + OperatorData + Send + Sync + std::fmt::Debug
+    CloneableRasterOperator + OperatorData + Send + Sync + std::fmt::Debug + AsAny + 'static
 {
     /// Internal initialization logic of the operator
     async fn _initialize(
@@ -70,7 +71,7 @@ pub trait RasterOperator:
 #[typetag::serde(tag = "type")]
 #[async_trait]
 pub trait VectorOperator:
-    CloneableVectorOperator + OperatorData + Send + Sync + std::fmt::Debug
+    CloneableVectorOperator + OperatorData + Send + Sync + std::fmt::Debug + AsAny + 'static
 {
     async fn _initialize(
         self: Box<Self>,
@@ -105,7 +106,7 @@ pub trait VectorOperator:
 #[typetag::serde(tag = "type")]
 #[async_trait]
 pub trait PlotOperator:
-    CloneablePlotOperator + OperatorData + Send + Sync + std::fmt::Debug
+    CloneablePlotOperator + OperatorData + Send + Sync + std::fmt::Debug + AsAny + 'static
 {
     async fn _initialize(
         self: Box<Self>,

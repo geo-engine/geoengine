@@ -41,7 +41,7 @@ import {
 } from '@geoengine/common';
 import {utc} from 'moment';
 import {DataSelectionService} from '../data-selection.service';
-import {ComputationQuota, Workflow} from '@geoengine/api-client';
+import {ComputationQuota, ProcessingGraph} from '@geoengine/api-client';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {Router} from '@angular/router';
 import proj4 from 'proj4';
@@ -240,7 +240,7 @@ export class DashboardComponent implements AfterViewInit, AfterContentInit {
             },
         };
 
-        const workflow: Workflow = {
+        const workflow: ProcessingGraph = {
             type: 'Vector',
             operator: rasterVectorJoin,
         };
@@ -298,7 +298,7 @@ const PROPERTIES_SOURCE_OP: SourceOperatorDict = {
     params: {data: 'bahn_properties'},
 };
 
-const PROPERTIES_WORKFLOW: Workflow = {
+const PROPERTIES_WORKFLOW: ProcessingGraph = {
     type: 'Vector',
     operator: PROPERTIES_SOURCE_OP,
 };
@@ -329,7 +329,7 @@ const CLASSIFICATION_SOURCE_OP: SourceOperatorDict = {
     params: {data: 'esg'},
 };
 
-const CLASSIFICATION_WORKFLOW: Workflow = {
+const CLASSIFICATION_WORKFLOW: ProcessingGraph = {
     type: 'Raster',
     operator: CLASSIFICATION_SOURCE_OP,
 };

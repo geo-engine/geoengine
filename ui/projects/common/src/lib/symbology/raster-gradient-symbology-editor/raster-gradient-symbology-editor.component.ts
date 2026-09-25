@@ -20,7 +20,7 @@ import {ColorTableEditorComponent} from '../../colors/color-table-editor/color-t
 import {UUID} from '../../datasets/dataset.model';
 import {VegaChartData} from '../../plots/plot.model';
 import {WorkflowsService} from '../../workflows/workflows.service';
-import {HistogramDict} from '../../operators/operator.model';
+import {Histogram, RasterOperator} from '@geoengine/api-client';
 import {PlotsService} from '../../plots/plots.service';
 import {SymbologyQueryParams} from '../symbology.model';
 import {PercentileBreakpointSelectorComponent} from '../../colors/percentile-breakpoint-selector/percentile-breakpoint-selector.component';
@@ -288,13 +288,19 @@ export class RasterGradientSymbologyEditorComponent {
     }
 
     private createHistogramWorkflowId(): Promise<UUID> {
-        return this.workflowsService.getWorkflow(this.workflowId()).then((workflow) =>
-            this.workflowsService.registerWorkflow({
+        return this.workflowsService.getWorkflow(this.workflowId()).then((workflow) => {
+            if (workflow.type !== 'Raster') {
+                throw new Error('Expected a raster workflow for histogram plotting.');
+            }
+
+            const sourceOperator: RasterOperator = workflow.operator;
+
+            return this.workflowsService.registerWorkflow({
                 type: 'Plot',
                 operator: {
                     type: 'Histogram',
                     params: {
-                        attributeName: this.band(),
+                        columnName: this.band(),
                         buckets: {
                             type: 'number',
                             value: 20,
@@ -303,10 +309,10 @@ export class RasterGradientSymbologyEditorComponent {
                         interactive: true,
                     },
                     sources: {
-                        source: workflow.operator,
+                        source: sourceOperator,
                     },
-                } as HistogramDict,
-            }),
-        );
+                } as Histogram,
+            });
+        });
     }
 }

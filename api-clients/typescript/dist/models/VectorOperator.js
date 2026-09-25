@@ -25,6 +25,7 @@ const PointInPolygonFilter_1 = require("./PointInPolygonFilter");
 const RasterVectorJoin_1 = require("./RasterVectorJoin");
 const Reprojection_1 = require("./Reprojection");
 const TimeProjection_1 = require("./TimeProjection");
+const TimeShift_1 = require("./TimeShift");
 const VectorExpression_1 = require("./VectorExpression");
 const VectorJoin_1 = require("./VectorJoin");
 const VisualPointClustering_1 = require("./VisualPointClustering");
@@ -52,6 +53,8 @@ function VectorOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, (0, Reprojection_1.ReprojectionFromJSONTyped)(json, true), { type: 'Reprojection' });
         case 'TimeProjection':
             return Object.assign({}, (0, TimeProjection_1.TimeProjectionFromJSONTyped)(json, true), { type: 'TimeProjection' });
+        case 'TimeShift':
+            return Object.assign({}, (0, TimeShift_1.TimeShiftFromJSONTyped)(json, true), { type: 'TimeShift' });
         case 'VectorExpression':
             return Object.assign({}, (0, VectorExpression_1.VectorExpressionFromJSONTyped)(json, true), { type: 'VectorExpression' });
         case 'VectorJoin':
@@ -86,6 +89,8 @@ function VectorOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, (0, Reprojection_1.ReprojectionToJSON)(value), { type: 'Reprojection' });
         case 'TimeProjection':
             return Object.assign({}, (0, TimeProjection_1.TimeProjectionToJSON)(value), { type: 'TimeProjection' });
+        case 'TimeShift':
+            return Object.assign({}, (0, TimeShift_1.TimeShiftToJSON)(value), { type: 'TimeShift' });
         case 'VectorExpression':
             return Object.assign({}, (0, VectorExpression_1.VectorExpressionToJSON)(value), { type: 'VectorExpression' });
         case 'VectorJoin':

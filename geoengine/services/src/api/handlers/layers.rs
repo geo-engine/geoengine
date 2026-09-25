@@ -1,33 +1,38 @@
-use std::sync::Arc;
-
-use super::tasks::TaskResponse;
-
-use crate::api::model::datatypes::LayerId;
-use crate::api::model::responses::IdResponse;
-use crate::api::model::services::LayerProviderListing;
-use crate::api::model::services::TypedDataProviderDefinition;
-use crate::config::get_config_element;
-use crate::contexts::ApplicationContext;
-use crate::datasets::{
-    RasterDatasetFromWorkflowParams, schedule_raster_dataset_from_workflow_task,
+use crate::{
+    api::{
+        handlers::tasks::TaskResponse,
+        model::{
+            datatypes::LayerId,
+            responses::IdResponse,
+            services::{
+                AddLayer, Layer, LayerProviderListing, TypedDataProviderDefinition, UpdateLayer,
+            },
+        },
+    },
+    config::get_config_element,
+    contexts::{ApplicationContext, SessionContext},
+    datasets::{RasterDatasetFromWorkflowParams, schedule_raster_dataset_from_workflow_task},
+    error::{Error::NotImplemented, Result},
+    layers::{
+        layer::{
+            AddLayer as ServicesAddLayer, AddLayerCollection, CollectionItem, LayerCollection,
+            LayerCollectionListOptions, LayerCollectionListing, ProviderLayerCollectionId,
+            UpdateLayer as ServicesUpdateLayer, UpdateLayerCollection,
+        },
+        listing::{
+            LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchParameters,
+        },
+        storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions},
+    },
+    util::{
+        extractors::{ValidatedJson, ValidatedQuery},
+        workflows::validate_workflow,
+    },
+    workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
 };
-use crate::error::Error::NotImplemented;
-use crate::error::Result;
-use crate::layers::layer::{
-    AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
-    ProviderLayerCollectionId, UpdateLayer, UpdateLayerCollection,
-};
-use crate::layers::listing::{
-    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchParameters,
-};
-use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
-use crate::util::extractors::{ValidatedJson, ValidatedQuery};
-use crate::util::workflows::validate_workflow;
-use crate::workflows::registry::WorkflowRegistry;
-use crate::workflows::workflow::WorkflowId;
-use crate::{contexts::SessionContext, layers::layer::LayerCollectionListOptions};
 use actix_web::{FromRequest, HttpResponse, Responder, web};
 use geoengine_datatypes::dataset::DataProviderId;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use utoipa::IntoParams;
@@ -847,7 +852,7 @@ async fn add_layer<C: ApplicationContext>(
     request: web::Json<AddLayer>,
 ) -> Result<web::Json<IdResponse<LayerId>>> {
     let request = request.into_inner();
-    let add_layer = request;
+    let add_layer = ServicesAddLayer::try_from(request)?;
 
     let ctx = app_ctx.session_context(session);
 
@@ -881,7 +886,7 @@ async fn update_layer<C: ApplicationContext>(
     request: ValidatedJson<UpdateLayer>,
 ) -> Result<HttpResponse> {
     let layer = layer.into_inner().into();
-    let request = request.into_inner();
+    let request = ServicesUpdateLayer::try_from(request.into_inner())?;
 
     let ctx = app_ctx.session_context(session);
 
@@ -1444,10 +1449,10 @@ mod tests {
         let layer_id = ctx
             .db()
             .add_layer(
-                AddLayer {
+                ServicesAddLayer {
                     name: "Layer Name".to_string(),
                     description: "Layer Description".to_string(),
-                    workflow: Workflow::Typed {
+                    workflow: Workflow {
                         operator: TypedOperator::Vector(VectorOperator::MockPointSource(
                             MockPointSource {
                                 r#type: Default::default(),
@@ -1456,7 +1461,9 @@ mod tests {
                                     spatial_bounds: SpatialBoundsDerive::None(Default::default()),
                                 },
                             },
-                        )),
+                        ))
+                        .try_into()
+                        .unwrap(),
                     },
                     symbology: None,
                     metadata: Default::default(),
@@ -1573,18 +1580,20 @@ mod tests {
 
         let session_id = session.id();
 
-        let add_layer = AddLayer {
+        let add_layer = ServicesAddLayer {
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
-            workflow: Workflow::Typed {
+            workflow: Workflow {
                 operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                     r#type: Default::default(),
                     params: MockPointSourceParameters {
                         points: vec![(1., 2.).into(); 3],
                         spatial_bounds: SpatialBoundsDerive::Derive(Default::default()),
                     },
-                })),
+                }))
+                .try_into()
+                .unwrap(),
             },
             symbology: None,
             metadata: Default::default(),
@@ -1599,17 +1608,19 @@ mod tests {
             .await
             .unwrap();
 
-        let update_layer = UpdateLayer {
+        let update_layer = ServicesUpdateLayer {
             name: "Foo new".to_string(),
             description: "Bar new".to_string(),
-            workflow: Workflow::Typed {
+            workflow: Workflow {
                 operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                     r#type: Default::default(),
                     params: MockPointSourceParameters {
                         points: vec![(4., 5.).into(); 3],
                         spatial_bounds: SpatialBoundsDerive::Derive(Default::default()),
                     },
-                })),
+                }))
+                .try_into()
+                .unwrap(),
             },
             symbology: None,
             metadata: Default::default(),
@@ -1671,18 +1682,20 @@ mod tests {
         )
         .await;
 
-        let add_layer = AddLayer {
+        let add_layer = ServicesAddLayer {
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
-            workflow: Workflow::Typed {
+            workflow: Workflow {
                 operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                     r#type: Default::default(),
                     params: MockPointSourceParameters {
                         points: vec![(1., 2.).into(); 3],
                         spatial_bounds: SpatialBoundsDerive::Derive(Default::default()),
                     },
-                })),
+                }))
+                .try_into()
+                .unwrap(),
             },
             symbology: None,
             metadata: Default::default(),
@@ -1719,18 +1732,20 @@ mod tests {
 
         let session_id = session.id();
 
-        let add_layer = AddLayer {
+        let add_layer = ServicesAddLayer {
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
-            workflow: Workflow::Typed {
+            workflow: Workflow {
                 operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                     r#type: Default::default(),
                     params: MockPointSourceParameters {
                         points: vec![Coordinate2D::new(1., 2.).into(); 3],
                         spatial_bounds: SpatialBoundsDerive::Derive(Default::default()),
                     },
-                })),
+                }))
+                .try_into()
+                .unwrap(),
             },
             symbology: None,
             metadata: Default::default(),
@@ -1836,10 +1851,10 @@ mod tests {
         let layer_id = ctx
             .db()
             .add_layer(
-                AddLayer {
+                ServicesAddLayer {
                     name: "Layer Name".to_string(),
                     description: "Layer Description".to_string(),
-                    workflow: Workflow::Typed {
+                    workflow: Workflow {
                         operator: TypedOperator::Vector(VectorOperator::MockPointSource(
                             MockPointSource {
                                 r#type: Default::default(),
@@ -1848,7 +1863,9 @@ mod tests {
                                     spatial_bounds: SpatialBoundsDerive::None(Default::default()),
                                 },
                             },
-                        )),
+                        ))
+                        .try_into()
+                        .unwrap(),
                     },
                     symbology: None,
                     metadata: Default::default(),
@@ -2618,11 +2635,11 @@ mod tests {
             .boxed();
 
             let workflow = if time_shift_millis == 0 {
-                Workflow::Legacy {
+                Workflow {
                     operator: raster_source.into(),
                 }
             } else {
-                Workflow::Legacy {
+                Workflow {
                     operator: OperatorsTypedOperator::Raster(Box::new(TimeShift {
                         params: TimeShiftParams::Relative {
                             granularity: TimeGranularity::Millis,
@@ -2681,7 +2698,7 @@ mod tests {
             let layer_id = ctx
                 .db()
                 .add_layer(
-                    AddLayer {
+                    ServicesAddLayer {
                         name: self.layer_name.clone(),
                         description: self.layer_description.clone(),
                         workflow: self.workflow.clone(),
@@ -2761,12 +2778,7 @@ mod tests {
         };
 
         // query the layer
-        let workflow_operator = mock_source
-            .workflow
-            .operator()
-            .unwrap()
-            .get_raster()
-            .unwrap();
+        let workflow_operator = mock_source.workflow.operator.get_raster().unwrap();
 
         // query the newly created dataset
         let dataset_operator = GdalSource {

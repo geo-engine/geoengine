@@ -5480,7 +5480,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Workflow"
+                "$ref": "#/components/schemas/ProcessingGraph"
               },
               "examples": {
                 "MockPointSource": {
@@ -5563,7 +5563,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Workflow"
+                  "$ref": "#/components/schemas/ProcessingGraph"
                 },
                 "example": {
                   "type": "Vector",
@@ -5911,7 +5911,7 @@
             "example": "Example layer description"
           },
           "workflow": {
-            "$ref": "#/components/schemas/Workflow"
+            "$ref": "#/components/schemas/ProcessingGraph"
           },
           "symbology": {
             "oneOf": [
@@ -9615,7 +9615,7 @@
             "type": "string"
           },
           "workflow": {
-            "$ref": "#/components/schemas/Workflow"
+            "$ref": "#/components/schemas/ProcessingGraph"
           },
           "symbology": {
             "oneOf": [
@@ -9827,58 +9827,6 @@
             "type": "boolean"
           }
         }
-      },
-      "LegacyTypedOperator": {
-        "type": "object",
-        "description": "An enum to differentiate between `Operator` variants",
-        "required": [
-          "type",
-          "operator"
-        ],
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "Vector",
-              "Raster",
-              "Plot"
-            ]
-          },
-          "operator": {
-            "type": "object",
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "type": "string"
-              },
-              "params": {
-                "type": "object"
-              },
-              "sources": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "examples": [
-          {
-            "type": "MockPointSource",
-            "params": {
-              "points": [
-                {
-                  "x": 0.0,
-                  "y": 0.1
-                },
-                {
-                  "x": 1.0,
-                  "y": 1.1
-                }
-              ]
-            }
-          }
-        ]
       },
       "LineSimplification": {
         "type": "object",
@@ -12053,6 +12001,68 @@
             "type": "boolean"
           }
         }
+      },
+      "ProcessingGraph": {
+        "oneOf": [
+          {
+            "type": "object",
+            "title": "TypedVectorOperator",
+            "required": [
+              "operator",
+              "type"
+            ],
+            "properties": {
+              "operator": {
+                "$ref": "#/components/schemas/VectorOperator"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "Vector"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "TypedRasterOperator",
+            "required": [
+              "operator",
+              "type"
+            ],
+            "properties": {
+              "operator": {
+                "$ref": "#/components/schemas/RasterOperator"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "Raster"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "TypedPlotOperator",
+            "required": [
+              "operator",
+              "type"
+            ],
+            "properties": {
+              "operator": {
+                "$ref": "#/components/schemas/PlotOperator"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "Plot"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Operator outputs are distinguished by their data type.\nThere are `raster`, `vector` and `plot` operators."
       },
       "Project": {
         "type": "object",
@@ -16034,7 +16044,7 @@
             "example": "Example layer description"
           },
           "workflow": {
-            "$ref": "#/components/schemas/Workflow"
+            "$ref": "#/components/schemas/ProcessingGraph"
           },
           "symbology": {
             "oneOf": [
@@ -16721,6 +16731,9 @@
             "$ref": "#/components/schemas/TimeProjection"
           },
           {
+            "$ref": "#/components/schemas/TimeShift"
+          },
+          {
             "$ref": "#/components/schemas/VectorExpression"
           },
           {
@@ -16742,6 +16755,7 @@
             "RasterVectorJoin": "#/components/schemas/RasterVectorJoin",
             "Reprojection": "#/components/schemas/Reprojection",
             "TimeProjection": "#/components/schemas/TimeProjection",
+            "TimeShift": "#/components/schemas/TimeShift",
             "VectorExpression": "#/components/schemas/VectorExpression",
             "VectorJoin": "#/components/schemas/VectorJoin",
             "VisualPointClustering": "#/components/schemas/VisualPointClustering"
@@ -17084,16 +17098,6 @@
         "type": "string",
         "enum": [
           "1.3.0"
-        ]
-      },
-      "Workflow": {
-        "oneOf": [
-          {
-            "$ref": "#/components/schemas/TypedOperator"
-          },
-          {
-            "$ref": "#/components/schemas/LegacyTypedOperator"
-          }
         ]
       },
       "WorkflowId": {

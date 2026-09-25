@@ -50,7 +50,7 @@ import {
 import {utc} from 'moment';
 import {DataRange, DataSelectionService} from '../data-selection.service';
 import {MatSelectChange} from '@angular/material/select';
-import {Workflow} from '@geoengine/api-client';
+import {ProcessingGraph} from '@geoengine/api-client';
 import {createBox} from 'ol/interaction/Draw';
 import OlFormatGeoJson from 'ol/format/GeoJSON';
 import {HttpResponse} from '@angular/common/http';
@@ -61,7 +61,7 @@ import {toSignal} from '@angular/core/rxjs-interop';
 interface Indicator {
     name: string;
     description: string;
-    workflow: Workflow;
+    workflow: ProcessingGraph;
     symbology: RasterSymbology;
     dataRange: DataRange;
     measurement: 'continuous' | 'classification';
@@ -264,7 +264,7 @@ export class DashboardComponent implements AfterViewInit {
 
         this.computePlotSize();
 
-        let workflow: Workflow;
+        let workflow: ProcessingGraph;
         if (indicator.measurement === 'classification') {
             workflow = {
                 type: 'Plot',

@@ -11,12 +11,12 @@ import {
     CoreModule,
 } from '@geoengine/core';
 import {BehaviorSubject, combineLatest, combineLatestWith, first, mergeMap, Observable, of, Subscription, tap} from 'rxjs';
+import {PlotOperator} from '@geoengine/api-client';
 import {DataSelectionService} from '../data-selection.service';
 import moment from 'moment';
 import {
     ClusteredPointSymbology,
     Dataset,
-    ExpressionDict,
     Layer,
     PointSymbology,
     RasterLayer,
@@ -34,7 +34,6 @@ import {
     FxLayoutAlignDirective,
     AsyncValueDefault,
 } from '@geoengine/common';
-import {LegacyTypedOperatorOperator, Workflow as WorkflowDict} from '@geoengine/api-client';
 import {MatFormField, MatLabel} from '@angular/material/input';
 import {MatSelect} from '@angular/material/select';
 import {MatOption} from '@angular/material/autocomplete';
@@ -897,7 +896,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                                         sources: {
                                             raster: rasterOperator,
                                         },
-                                    } as ExpressionDict,
+                                    },
                                 ],
                                 vector: vectorOperator,
                             },

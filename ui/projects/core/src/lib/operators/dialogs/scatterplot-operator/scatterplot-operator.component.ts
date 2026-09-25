@@ -1,6 +1,6 @@
 import {AfterViewInit, ChangeDetectionStrategy, Component, OnDestroy, inject} from '@angular/core';
 import {UntypedFormBuilder, UntypedFormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {ReplaySubject, Subscription} from 'rxjs';
+import {from, of, ReplaySubject, Subscription} from 'rxjs';
 import {ProjectService} from '../../../project/project.service';
 
 import {map, mergeMap} from 'rxjs/operators';
@@ -9,13 +9,12 @@ import {
     NotificationService,
     Plot,
     ResultTypes,
-    ScatterPlotDict,
     VectorColumnDataTypes,
     VectorLayer,
     VectorLayerMetadata,
     geoengineValidators,
 } from '@geoengine/common';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {ProcessingGraph} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -80,8 +79,12 @@ export class ScatterplotOperatorComponent implements AfterViewInit, OnDestroy {
         this.subscriptions.push(
             this.form.controls['layer'].valueChanges
                 .pipe(
-                    mergeMap((layer: Layer) =>
-                        this.projectService.getVectorLayerMetadata(layer as VectorLayer).pipe(
+                    mergeMap((layer: Layer | undefined) => {
+                        if (!layer) {
+                            return of([]);
+                        }
+
+                        return this.projectService.getVectorLayerMetadata(layer as VectorLayer).pipe(
                             map((metadata: VectorLayerMetadata) =>
                                 metadata.dataTypes
                                     .filter(
@@ -91,8 +94,8 @@ export class ScatterplotOperatorComponent implements AfterViewInit, OnDestroy {
                                     .keySeq()
                                     .toArray(),
                             ),
-                        ),
-                    ),
+                        );
+                    }),
                 )
                 .subscribe((attributes) => this.attributes$.next(attributes)),
         );
@@ -122,11 +125,14 @@ export class ScatterplotOperatorComponent implements AfterViewInit, OnDestroy {
 
         const outputName: string = this.form.controls['name'].value;
 
-        this.projectService
-            .getWorkflow(inputLayer.workflowId)
+        from(this.projectService.getWorkflow(inputLayer.workflowId))
             .pipe(
-                mergeMap((inputWorkflow: WorkflowDict) =>
-                    this.projectService.registerWorkflow({
+                mergeMap((inputWorkflow: ProcessingGraph) => {
+                    if (inputWorkflow.type !== 'Vector') {
+                        throw new Error('Expected a vector workflow for scatter plot.');
+                    }
+
+                    return this.projectService.registerWorkflow({
                         type: 'Plot',
                         operator: {
                             type: 'ScatterPlot',
@@ -137,9 +143,9 @@ export class ScatterplotOperatorComponent implements AfterViewInit, OnDestroy {
                             sources: {
                                 vector: inputWorkflow.operator,
                             },
-                        } as ScatterPlotDict,
-                    }),
-                ),
+                        },
+                    });
+                }),
                 mergeMap((workflowId) =>
                     this.projectService.addPlot(
                         new Plot({

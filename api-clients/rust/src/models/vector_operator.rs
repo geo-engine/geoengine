@@ -30,6 +30,8 @@ pub enum VectorOperator {
     Reprojection(Box<models::Reprojection>),
     #[serde(rename="TimeProjection")]
     TimeProjection(Box<models::TimeProjection>),
+    #[serde(rename="TimeShift")]
+    TimeShift(Box<models::TimeShift>),
     #[serde(rename="VectorExpression")]
     VectorExpression(Box<models::VectorExpression>),
     #[serde(rename="VectorJoin")]

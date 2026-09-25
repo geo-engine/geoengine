@@ -23,7 +23,7 @@ from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-VECTOROPERATOR_ONE_OF_SCHEMAS = ["ColumnRangeFilter", "LineSimplification", "MockPointSource", "OgrSource", "PointInPolygonFilter", "RasterVectorJoin", "Reprojection", "TimeProjection", "VectorExpression", "VectorJoin", "VisualPointClustering"]
+VECTOROPERATOR_ONE_OF_SCHEMAS = ["ColumnRangeFilter", "LineSimplification", "MockPointSource", "OgrSource", "PointInPolygonFilter", "RasterVectorJoin", "Reprojection", "TimeProjection", "TimeShift", "VectorExpression", "VectorJoin", "VisualPointClustering"]
 
 class VectorOperator(BaseModel):
     """
@@ -45,14 +45,16 @@ class VectorOperator(BaseModel):
     oneof_schema_7_validator: Optional[Reprojection] = None
     # data type: TimeProjection
     oneof_schema_8_validator: Optional[TimeProjection] = None
+    # data type: TimeShift
+    oneof_schema_9_validator: Optional[TimeShift] = None
     # data type: VectorExpression
-    oneof_schema_9_validator: Optional[VectorExpression] = None
+    oneof_schema_10_validator: Optional[VectorExpression] = None
     # data type: VectorJoin
-    oneof_schema_10_validator: Optional[VectorJoin] = None
+    oneof_schema_11_validator: Optional[VectorJoin] = None
     # data type: VisualPointClustering
-    oneof_schema_11_validator: Optional[VisualPointClustering] = None
-    actual_instance: Optional[Union[ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, VectorExpression, VectorJoin, VisualPointClustering]] = None
-    one_of_schemas: Set[str] = { "ColumnRangeFilter", "LineSimplification", "MockPointSource", "OgrSource", "PointInPolygonFilter", "RasterVectorJoin", "Reprojection", "TimeProjection", "VectorExpression", "VectorJoin", "VisualPointClustering" }
+    oneof_schema_12_validator: Optional[VisualPointClustering] = None
+    actual_instance: Optional[Union[ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering]] = None
+    one_of_schemas: Set[str] = { "ColumnRangeFilter", "LineSimplification", "MockPointSource", "OgrSource", "PointInPolygonFilter", "RasterVectorJoin", "Reprojection", "TimeProjection", "TimeShift", "VectorExpression", "VectorJoin", "VisualPointClustering" }
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -118,6 +120,11 @@ class VectorOperator(BaseModel):
             error_messages.append(f"Error! Input type `{type(v)}` is not `TimeProjection`")
         else:
             match += 1
+        # validate data type: TimeShift
+        if not isinstance(v, TimeShift):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `TimeShift`")
+        else:
+            match += 1
         # validate data type: VectorExpression
         if not isinstance(v, VectorExpression):
             error_messages.append(f"Error! Input type `{type(v)}` is not `VectorExpression`")
@@ -135,10 +142,10 @@ class VectorOperator(BaseModel):
             match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -196,6 +203,11 @@ class VectorOperator(BaseModel):
         # check if data type is `TimeProjection`
         if _data_type == "TimeProjection":
             instance.actual_instance = TimeProjection.from_json(json_str)
+            return instance
+
+        # check if data type is `TimeShift`
+        if _data_type == "TimeShift":
+            instance.actual_instance = TimeShift.from_json(json_str)
             return instance
 
         # check if data type is `VectorExpression`
@@ -261,6 +273,12 @@ class VectorOperator(BaseModel):
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
+        # deserialize data into TimeShift
+        try:
+            instance.actual_instance = TimeShift.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
         # deserialize data into VectorExpression
         try:
             instance.actual_instance = VectorExpression.from_json(json_str)
@@ -282,10 +300,10 @@ class VectorOperator(BaseModel):
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -299,7 +317,7 @@ class VectorOperator(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, VectorExpression, VectorJoin, VisualPointClustering]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None
@@ -320,6 +338,7 @@ from geoengine_api_client.models.point_in_polygon_filter import PointInPolygonFi
 from geoengine_api_client.models.raster_vector_join import RasterVectorJoin
 from geoengine_api_client.models.reprojection import Reprojection
 from geoengine_api_client.models.time_projection import TimeProjection
+from geoengine_api_client.models.time_shift import TimeShift
 from geoengine_api_client.models.vector_expression import VectorExpression
 from geoengine_api_client.models.vector_join import VectorJoin
 from geoengine_api_client.models.visual_point_clustering import VisualPointClustering

@@ -11,7 +11,7 @@ import {
     FormsModule,
     ReactiveFormsModule,
 } from '@angular/forms';
-import {EMPTY, Subscription, combineLatest} from 'rxjs';
+import {EMPTY, Subscription, combineLatest, from} from 'rxjs';
 import {ProjectService} from '../../../project/project.service';
 
 import {filter, map, mergeMap} from 'rxjs/operators';
@@ -23,7 +23,6 @@ import {
     RandomColorService,
     RasterLayer,
     RasterLayerMetadata,
-    RasterVectorJoinDict,
     RasterVectorJoinParams,
     ResultTypes,
     StaticColor,
@@ -263,30 +262,43 @@ export class RasterVectorJoinComponent implements OnDestroy {
         const sourceOperators = this.projectService.getAutomaticallyProjectedOperatorsFromLayers([vectorLayer, ...rasterLayers]);
         sourceOperators
             .pipe(
-                mergeMap(([vectorOperator, ...rasterOperators]) =>
-                    this.projectService.registerWorkflow({
-                        type: 'Vector',
-                        operator: {
-                            type: 'RasterVectorJoin',
-                            params,
-                            sources: {
-                                vector: vectorOperator,
-                                rasters: rasterOperators,
+                mergeMap((projectedOperators) => {
+                    const vectorWorkflow = projectedOperators[0];
+                    if (vectorWorkflow.type !== 'Vector') {
+                        throw new Error('Expected a vector workflow for raster-vector join.');
+                    }
+
+                    const validRasterOperators = projectedOperators
+                        .slice(1)
+                        .filter((rasterWorkflow) => rasterWorkflow.type === 'Raster')
+                        .map((rasterWorkflow) => rasterWorkflow.operator);
+
+                    return from(
+                        this.projectService.registerWorkflow({
+                            type: 'Vector',
+                            operator: {
+                                type: 'RasterVectorJoin',
+                                params,
+                                sources: {
+                                    vector: vectorWorkflow.operator,
+                                    rasters: validRasterOperators,
+                                },
                             },
-                        } as RasterVectorJoinDict,
-                    }),
-                ),
-                mergeMap((workflowId) =>
-                    this.projectService.addLayer(
-                        new VectorLayer({
-                            workflowId,
-                            name: outputLayerName,
-                            symbology: this.symbologyWithNewColor(vectorLayer.symbology as PointSymbology),
-                            isLegendVisible: false,
-                            isVisible: true,
                         }),
-                    ),
-                ),
+                    ).pipe(
+                        mergeMap((workflowId) =>
+                            this.projectService.addLayer(
+                                new VectorLayer({
+                                    workflowId,
+                                    name: outputLayerName,
+                                    symbology: this.symbologyWithNewColor(vectorLayer.symbology as PointSymbology),
+                                    isLegendVisible: false,
+                                    isVisible: true,
+                                }),
+                            ),
+                        ),
+                    );
+                }),
             )
             .subscribe(
                 () => {

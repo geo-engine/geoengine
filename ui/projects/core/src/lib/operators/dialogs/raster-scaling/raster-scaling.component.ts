@@ -13,7 +13,7 @@ import {ProjectService} from '../../../project/project.service';
 
 import {map, mergeMap} from 'rxjs/operators';
 import {UUID} from '../../../backend/backend.model';
-import {BehaviorSubject, combineLatest, Observable, of} from 'rxjs';
+import {BehaviorSubject, combineLatest, Observable, from, of} from 'rxjs';
 import {SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
 import {
     NotificationService,
@@ -21,7 +21,6 @@ import {
     RasterLayer,
     RasterMetadataKey,
     RasterSymbology,
-    RasterUnScalingDict,
     ResultTypes,
     geoengineValidators,
     FxLayoutDirective,
@@ -30,7 +29,7 @@ import {
     FxFlexDirective,
     AsyncValueDefault,
 } from '@geoengine/common';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {ProcessingGraph, RasterOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -223,10 +222,11 @@ export class RasterScalingComponent implements AfterViewInit {
 
         this.loading$.next(true);
 
-        this.projectService
-            .getWorkflow(inputLayer.workflowId)
+        const scalingMode = scaleType.type as 'mulSlopeAddOffset' | 'subOffsetDivSlope';
+
+        from(this.projectService.getWorkflow(inputLayer.workflowId))
             .pipe(
-                mergeMap((inputWorkflow: WorkflowDict) =>
+                mergeMap((inputWorkflow: ProcessingGraph) =>
                     this.projectService.registerWorkflow({
                         type: 'Raster',
                         operator: {
@@ -234,12 +234,12 @@ export class RasterScalingComponent implements AfterViewInit {
                             params: {
                                 slope,
                                 offset,
-                                scalingMode: scaleType.type,
+                                scalingMode: {type: scalingMode},
                             },
                             sources: {
-                                raster: inputWorkflow.operator,
+                                raster: inputWorkflow.operator as RasterOperator,
                             },
-                        } as RasterUnScalingDict,
+                        },
                     }),
                 ),
                 mergeMap((workflowId: UUID) => {

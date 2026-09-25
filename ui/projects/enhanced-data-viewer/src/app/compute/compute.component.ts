@@ -19,8 +19,6 @@ import {MatSelectModule} from '@angular/material/select';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {
     BoundingBox2D,
-    ClassHistogramDict,
-    HistogramDict,
     LayersService,
     NotificationService,
     PlotsService,
@@ -227,7 +225,7 @@ export class ComputeComponent {
                         sources: {
                             source: sourceProcessingGraph.operator,
                         },
-                    } as ClassHistogramDict,
+                    },
                 };
             } else {
                 processingGraph = {
@@ -245,7 +243,7 @@ export class ComputeComponent {
                         sources: {
                             source: sourceProcessingGraph.operator,
                         },
-                    } as HistogramDict,
+                    },
                 };
             }
             const plotWorkflowId = (await firstValueFrom(this.backendService.registerWorkflow(processingGraph, sessionToken))).id;

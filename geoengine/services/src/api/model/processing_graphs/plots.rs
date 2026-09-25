@@ -637,10 +637,10 @@ pub enum PieChartParameters {
 pub struct PieChartCountType {
     /// The names of the attribute to generate pies for.  
     #[schema(example = "name")]
-    column_name: String,
+    pub column_name: String,
     /// Whether to render the chart as a donut.
     #[serde(default)]
-    donut: bool,
+    pub donut: bool,
 }
 
 impl TryFrom<PieChart> for geoengine_operators::plot::PieChart {

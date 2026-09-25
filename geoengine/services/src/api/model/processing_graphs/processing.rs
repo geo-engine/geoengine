@@ -1378,6 +1378,22 @@ impl From<StringOrNumberRange> for geoengine_operators::util::input::StringOrNum
     }
 }
 
+impl From<geoengine_operators::util::input::StringOrNumberRange> for StringOrNumberRange {
+    fn from(value: geoengine_operators::util::input::StringOrNumberRange) -> Self {
+        match value {
+            geoengine_operators::util::input::StringOrNumberRange::String(range) => {
+                Self::String([range.start().clone(), range.end().clone()])
+            }
+            geoengine_operators::util::input::StringOrNumberRange::Float(range) => {
+                Self::Float([*range.start(), *range.end()])
+            }
+            geoengine_operators::util::input::StringOrNumberRange::Int(range) => {
+                Self::Int([*range.start(), *range.end()])
+            }
+        }
+    }
+}
+
 impl TryFrom<ColumnRangeFilter> for OperatorsColumnRangeFilter {
     type Error = anyhow::Error;
 

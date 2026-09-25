@@ -4,7 +4,6 @@ import {
     TimeInterval as TimeIntervalDict,
     TimeGranularity as TimeStepGranularityDict,
     Coordinate2D as Coordinate2DDict,
-    LegacyTypedOperatorOperator,
 } from '@geoengine/api-client';
 import {NamedDataDict} from '../datasets/dataset.model';
 import {SrsString} from '../spatial-references/spatial-reference.model';
@@ -26,7 +25,7 @@ export interface WorkflowDict {
 
 export type EmptyParams = Record<string, undefined>;
 
-export interface OperatorDict extends LegacyTypedOperatorOperator {
+export interface OperatorDict {
     type: string;
     params: OperatorParams | undefined;
     sources: OperatorSourcesDict;

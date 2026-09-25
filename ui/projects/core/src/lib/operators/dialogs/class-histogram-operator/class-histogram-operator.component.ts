@@ -9,11 +9,10 @@ import {
     Validators,
     NonNullableFormBuilder,
 } from '@angular/forms';
-import {Observable, of, ReplaySubject, Subscription, first} from 'rxjs';
+import {from, Observable, of, ReplaySubject, Subscription, first} from 'rxjs';
 import {ProjectService} from '../../../project/project.service';
 import {map, mergeMap, tap} from 'rxjs/operators';
 import {
-    ClassHistogramDict,
     ClassificationMeasurement,
     Layer,
     NotificationService,
@@ -25,7 +24,7 @@ import {
     VectorLayerMetadata,
     geoengineValidators,
 } from '@geoengine/common';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {ProcessingGraph} from '@geoengine/api-client';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconModule} from '@angular/material/icon';
 import {MatButtonModule} from '@angular/material/button';
@@ -174,11 +173,14 @@ export class ClassHistogramOperatorComponent implements AfterViewInit, OnDestroy
 
         const outputName: string = this.form.controls['name'].value;
 
-        this.projectService
-            .getWorkflow(inputLayer.workflowId)
+        from(this.projectService.getWorkflow(inputLayer.workflowId))
             .pipe(
-                mergeMap((inputWorkflow: WorkflowDict) =>
-                    this.projectService.registerWorkflow({
+                mergeMap((inputWorkflow: ProcessingGraph) => {
+                    if (inputWorkflow.type === 'Plot') {
+                        throw new Error('Expected a raster or vector workflow for class histogram.');
+                    }
+
+                    return this.projectService.registerWorkflow({
                         type: 'Plot',
                         operator: {
                             type: 'ClassHistogram',
@@ -188,9 +190,9 @@ export class ClassHistogramOperatorComponent implements AfterViewInit, OnDestroy
                             sources: {
                                 source: inputWorkflow.operator,
                             },
-                        } as ClassHistogramDict,
-                    }),
-                ),
+                        },
+                    });
+                }),
                 mergeMap((workflowId) =>
                     this.projectService.addPlot(
                         new Plot({

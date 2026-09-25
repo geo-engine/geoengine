@@ -196,8 +196,6 @@ __all__ = [
     "LayerProviderListing",
     "LayerResource",
     "LayerVisibility",
-    "LegacyTypedOperator",
-    "LegacyTypedOperatorOperator",
     "LineSimplification",
     "LineSimplificationAlgorithm",
     "LineSimplificationParameters",
@@ -284,6 +282,7 @@ __all__ = [
     "PointInPolygonFilterSource",
     "PointSymbology",
     "PolygonSymbology",
+    "ProcessingGraph",
     "Project",
     "ProjectLayer",
     "ProjectListing",
@@ -476,7 +475,6 @@ __all__ = [
     "WmsResponseFormat",
     "WmsService",
     "WmsVersion",
-    "Workflow",
     "WrappedPlotOutput",
 ]
 
@@ -663,8 +661,6 @@ from geoengine_api_client.models.layer_listing import LayerListing as LayerListi
 from geoengine_api_client.models.layer_provider_listing import LayerProviderListing as LayerProviderListing
 from geoengine_api_client.models.layer_resource import LayerResource as LayerResource
 from geoengine_api_client.models.layer_visibility import LayerVisibility as LayerVisibility
-from geoengine_api_client.models.legacy_typed_operator import LegacyTypedOperator as LegacyTypedOperator
-from geoengine_api_client.models.legacy_typed_operator_operator import LegacyTypedOperatorOperator as LegacyTypedOperatorOperator
 from geoengine_api_client.models.line_simplification import LineSimplification as LineSimplification
 from geoengine_api_client.models.line_simplification_algorithm import LineSimplificationAlgorithm as LineSimplificationAlgorithm
 from geoengine_api_client.models.line_simplification_parameters import LineSimplificationParameters as LineSimplificationParameters
@@ -751,6 +747,7 @@ from geoengine_api_client.models.point_in_polygon_filter import PointInPolygonFi
 from geoengine_api_client.models.point_in_polygon_filter_source import PointInPolygonFilterSource as PointInPolygonFilterSource
 from geoengine_api_client.models.point_symbology import PointSymbology as PointSymbology
 from geoengine_api_client.models.polygon_symbology import PolygonSymbology as PolygonSymbology
+from geoengine_api_client.models.processing_graph import ProcessingGraph as ProcessingGraph
 from geoengine_api_client.models.project import Project as Project
 from geoengine_api_client.models.project_layer import ProjectLayer as ProjectLayer
 from geoengine_api_client.models.project_listing import ProjectListing as ProjectListing
@@ -943,6 +940,5 @@ from geoengine_api_client.models.wms_request import WmsRequest as WmsRequest
 from geoengine_api_client.models.wms_response_format import WmsResponseFormat as WmsResponseFormat
 from geoengine_api_client.models.wms_service import WmsService as WmsService
 from geoengine_api_client.models.wms_version import WmsVersion as WmsVersion
-from geoengine_api_client.models.workflow import Workflow as Workflow
 from geoengine_api_client.models.wrapped_plot_output import WrappedPlotOutput as WrappedPlotOutput
 
