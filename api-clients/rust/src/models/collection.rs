@@ -19,8 +19,6 @@ pub struct Collection {
     pub title: Option<Option<String>>,
     #[serde(rename = "description", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub description: Option<Option<String>>,
-    #[serde(rename = "keywords", skip_serializing_if = "Option::is_none")]
-    pub keywords: Option<Vec<String>>,
     /// Attribution for the collection.
     #[serde(rename = "attribution", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub attribution: Option<Option<String>>,
@@ -47,7 +45,6 @@ impl Collection {
             id,
             title: None,
             description: None,
-            keywords: None,
             attribution: None,
             extent: None,
             item_type: None,

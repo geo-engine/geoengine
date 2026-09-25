@@ -10,7 +10,7 @@
  */
 /**
  * A resource describing useful to create an array that describes the limits
- * for a tile set [super::TileMatrixSet] based on the OGC TileSet Metadata Standard
+ * for a tile set [`super::TileMatrixSet`] based on the OGC Two Dimensional Tile Matrix Set and Tile Set Metadata Standard
  * @export
  * @interface TileMatrixLimits
  */

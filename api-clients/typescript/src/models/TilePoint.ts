@@ -39,7 +39,7 @@ export interface TilePoint {
      */
     crs?: TilesCrs;
     /**
-     * TileMatrix identifier associated with the scaleDenominator
+     * [`TileMatrix`] identifier associated with the scaleDenominator
      * @type {string}
      * @memberof TilePoint
      */

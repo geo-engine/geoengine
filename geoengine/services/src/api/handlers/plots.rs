@@ -16,7 +16,7 @@ use geoengine_datatypes::{
     operations::reproject::reproject_spatial_query,
     plots::PlotOutputFormat,
     primitives::{BoundingBox2D, PlotQueryRectangle, PlotSeriesSelection, SpatialResolution},
-    spatial_reference::SpatialReference,
+    spatial_reference::{DefaultCoordinateProjector, SpatialReference},
     util::Identifier,
 };
 use geoengine_operators::{
@@ -140,7 +140,7 @@ async fn get_plot_handler<C: ApplicationContext>(
     let query_rect = if request_spatial_ref == workflow_spatial_ref {
         Some(query_rect)
     } else {
-        let repr_spatial_query = reproject_spatial_query(
+        let repr_spatial_query = reproject_spatial_query::<_, DefaultCoordinateProjector>(
             query_rect.spatial_bounds(),
             workflow_spatial_ref,
             request_spatial_ref,

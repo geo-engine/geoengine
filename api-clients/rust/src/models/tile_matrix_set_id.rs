@@ -10,8 +10,8 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// TileMatrixSetId : Identifier for a supported TileMatrixSet
-/// Identifier for a supported TileMatrixSet
+/// TileMatrixSetId : Identifier for a supported [`TileMatrixSet`]
+/// Identifier for a supported [`TileMatrixSet`]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum TileMatrixSetId {
