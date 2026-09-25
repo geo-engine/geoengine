@@ -143,7 +143,10 @@ pub trait RasterQueryProcessor:
 
         debug!("Delegating time query to the query processors implementation",); // TODO: get operator name in debug output
         #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
-        self._time_query(query, ctx).await
+        Ok(Box::pin(
+            ctx.abort_registration()
+                .wrap(self._time_query(query, ctx).await?),
+        ))
     }
 }
 
