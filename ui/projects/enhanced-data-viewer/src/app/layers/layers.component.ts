@@ -48,6 +48,24 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
         </div>
         <mat-divider></mat-divider>
 
+        @if (currentVariants().length > 1) {
+            <div>
+                <h2>Region</h2>
+                <mat-selection-list [multiple]="false" class="variants" (selectionChange)="onVariantSelectionChange($event.options)">
+                    @for (variant of currentVariants(); track variant.key) {
+                        <mat-list-option
+                            [value]="variant.key"
+                            [selected]="selectedVariant().key === variant.key"
+                            [matTooltip]="variant.crs ?? variant.name"
+                        >
+                            <span matListItemTitle>{{ variant.name }}</span>
+                        </mat-list-option>
+                    }
+                </mat-selection-list>
+            </div>
+            <mat-divider></mat-divider>
+        }
+
         <div class="time-selection">
             <h2>Time Selection</h2>
             <mat-checkbox [checked]="autoSelectTime()" (change)="autoSelectTime.set($event.checked)">Auto select time</mat-checkbox>
@@ -86,7 +104,7 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                     @if (debug()) {
                         <span class="preset-group-label">{{ group.label }}</span>
                     }
-                    @for (preset of group.presets; track $index) {
+                    @for (preset of group.presets; track preset.key) {
                         <mat-list-item
                             [activated]="preset === activePreset()"
                             [class.preset-active]="preset === activePreset()"
@@ -160,6 +178,17 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                             padding-right: 0;
                         }
                     }
+                }
+            }
+
+            .variants {
+                padding: 0;
+                margin: -0.25rem;
+
+                mat-list-option {
+                    border-radius: 0.5rem;
+                    padding: 0 0.25rem;
+                    --mat-list-list-item-label-text-size: #{$text2};
                 }
             }
 
@@ -287,6 +316,8 @@ export class LayersComponent {
     readonly autoSelectTime = signal<boolean>(true);
 
     readonly selectedDataSource = this.edvLayersService.selectedDataSource;
+    readonly currentVariants = this.edvLayersService.currentVariants;
+    readonly selectedVariant = this.edvLayersService.selectedVariant;
     readonly currentPresets = this.edvLayersService.currentPresets;
     readonly presetGroups = this.edvLayersService.presetGroups;
     readonly selectedPresetIndex = this.edvLayersService.selectedPresetIndex;
@@ -311,8 +342,16 @@ export class LayersComponent {
     setSelectedDataSource(key: string): void {
         const dataSource = this.dataSources().find((d) => d.key === key);
         if (!dataSource) return;
-        this.selectedDataSource.set(dataSource);
-        this.selectedPresetIndex.set(0);
+        this.edvLayersService.setSelectedDataSource(dataSource.key);
+    }
+
+    onVariantSelectionChange(options: readonly {value: string}[]): void {
+        const selected = options[0]?.value;
+        if (selected) this.edvLayersService.setSelectedVariant(selected);
+    }
+
+    setSelectedVariant(key: string): void {
+        this.edvLayersService.setSelectedVariant(key);
     }
 
     private async applyDataSourceTime(dataSource: DataSourceDefinition): Promise<void> {
@@ -320,9 +359,8 @@ export class LayersComponent {
         if (dataSource.defaultTimeStep) this.projectService.setTimeStepDuration(dataSource.defaultTimeStep);
     }
 
-    selectPreset(preset: DataSourceDefinition['presets'][number]): void {
-        const index = this.currentPresets().indexOf(preset);
-        if (index >= 0) this.selectedPresetIndex.set(index);
+    selectPreset(preset: DataSourceDefinition['variants'][number]['presets'][number]): void {
+        this.edvLayersService.setSelectedPreset(preset.key);
     }
 
     async timeForward(): Promise<void> {

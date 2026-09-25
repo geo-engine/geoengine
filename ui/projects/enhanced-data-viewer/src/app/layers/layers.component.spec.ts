@@ -147,4 +147,180 @@ describe('LayersComponent', () => {
         await fixture.whenStable();
         expect(fixture.componentInstance.presetGroups().map((group) => group.category)).toEqual(['adHoc']);
     });
+    it('keeps variant and preset selection when collection and layer ids change', async () => {
+        let deployment = 0;
+        const deploymentListings: Array<Record<string, {items: unknown[]}>> = [
+            {
+                root: {items: [{type: 'collection', name: 'EDV', id: {providerId: 'p0', collectionId: 'edv0'}, description: ''}]},
+                edv0: {items: [{type: 'collection', name: 'adHoc', id: {providerId: 'p0', collectionId: 'cat0'}, description: ''}]},
+                cat0: {
+                    items: [
+                        {
+                            type: 'collection',
+                            name: 'Sentinel',
+                            id: {providerId: 'p0', collectionId: 'ds0'},
+                            description: '',
+                            properties: [
+                                ['edv:type', 'dataset'],
+                                ['edv:dataset', 'sentinel'],
+                            ],
+                        },
+                    ],
+                },
+                ds0: {
+                    items: [
+                        {
+                            type: 'collection',
+                            name: 'UTM 32N',
+                            id: {providerId: 'p0', collectionId: 'v320'},
+                            description: '',
+                            properties: [
+                                ['edv:type', 'variant'],
+                                ['edv:variant', 'epsg32632'],
+                                ['edv:crs', 'EPSG:32632'],
+                            ],
+                        },
+                        {
+                            type: 'collection',
+                            name: 'UTM 33N',
+                            id: {providerId: 'p0', collectionId: 'v330'},
+                            description: '',
+                            properties: [
+                                ['edv:type', 'variant'],
+                                ['edv:variant', 'epsg32633'],
+                                ['edv:crs', 'EPSG:32633'],
+                            ],
+                        },
+                    ],
+                },
+                v320: {
+                    items: [
+                        {
+                            type: 'layer',
+                            name: 'Red',
+                            id: {providerId: 'data0', layerId: 'red32-0'},
+                            description: '',
+                            properties: [
+                                ['edv:type', 'preset'],
+                                ['edv:presetKey', 'red_band'],
+                                ['edv:preset', 'Red Band'],
+                                ['edv:order', '10'],
+                            ],
+                        },
+                    ],
+                },
+                v330: {
+                    items: [
+                        {
+                            type: 'layer',
+                            name: 'Red',
+                            id: {providerId: 'data0', layerId: 'red33-0'},
+                            description: '',
+                            properties: [
+                                ['edv:type', 'preset'],
+                                ['edv:presetKey', 'red_band'],
+                                ['edv:preset', 'Red Band'],
+                                ['edv:order', '10'],
+                            ],
+                        },
+                    ],
+                },
+            },
+            {
+                root: {items: [{type: 'collection', name: 'EDV', id: {providerId: 'p1', collectionId: 'edv1'}, description: ''}]},
+                edv1: {items: [{type: 'collection', name: 'adHoc', id: {providerId: 'p1', collectionId: 'cat1'}, description: ''}]},
+                cat1: {
+                    items: [
+                        {
+                            type: 'collection',
+                            name: 'Sentinel',
+                            id: {providerId: 'p1', collectionId: 'ds1'},
+                            description: '',
+                            properties: [
+                                ['edv:type', 'dataset'],
+                                ['edv:dataset', 'sentinel'],
+                            ],
+                        },
+                    ],
+                },
+                ds1: {
+                    items: [
+                        {
+                            type: 'collection',
+                            name: 'UTM 32N',
+                            id: {providerId: 'p1', collectionId: 'v321'},
+                            description: '',
+                            properties: [
+                                ['edv:type', 'variant'],
+                                ['edv:variant', 'epsg32632'],
+                                ['edv:crs', 'EPSG:32632'],
+                            ],
+                        },
+                        {
+                            type: 'collection',
+                            name: 'UTM 33N',
+                            id: {providerId: 'p1', collectionId: 'v331'},
+                            description: '',
+                            properties: [
+                                ['edv:type', 'variant'],
+                                ['edv:variant', 'epsg32633'],
+                                ['edv:crs', 'EPSG:32633'],
+                            ],
+                        },
+                    ],
+                },
+                v321: {
+                    items: [
+                        {
+                            type: 'layer',
+                            name: 'Red',
+                            id: {providerId: 'data1', layerId: 'red32-1'},
+                            description: '',
+                            properties: [
+                                ['edv:type', 'preset'],
+                                ['edv:presetKey', 'red_band'],
+                                ['edv:preset', 'Red Band'],
+                                ['edv:order', '10'],
+                            ],
+                        },
+                    ],
+                },
+                v331: {
+                    items: [
+                        {
+                            type: 'layer',
+                            name: 'Red',
+                            id: {providerId: 'data1', layerId: 'red33-1'},
+                            description: '',
+                            properties: [
+                                ['edv:type', 'preset'],
+                                ['edv:presetKey', 'red_band'],
+                                ['edv:preset', 'Red Band'],
+                                ['edv:order', '10'],
+                            ],
+                        },
+                    ],
+                },
+            },
+        ];
+        getLayerCollectionItems.mockImplementation((_provider, collection) => {
+            const key = collection === LAYER_DB_ROOT_COLLECTION_ID ? 'root' : collection;
+            return Promise.resolve(deploymentListings[deployment][key] ?? {items: []});
+        });
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(edvLayersService.currentVariants().map((variant) => variant.key)).toEqual(['epsg32632', 'epsg32633']);
+        edvLayersService.setSelectedVariant('epsg32633');
+        fixture.detectChanges();
+        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32633');
+        expect(edvLayersService.mapTileLayer()).toEqual({dataConnectorId: 'data0', layerId: 'red33-0'});
+
+        deployment = 1;
+        edvLayersService.retryCatalogue();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32633');
+        expect(edvLayersService.mapTileLayer()).toEqual({dataConnectorId: 'data1', layerId: 'red33-1'});
+    });
 });
