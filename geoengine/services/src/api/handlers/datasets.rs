@@ -3683,7 +3683,7 @@ mod tests {
         assert_eq!(res.status(), 200, "response: {res:?}");
 
         // create workflow
-        let workflow = Workflow::Typed {
+        let workflow = Workflow {
             operator: TypedOperator::Raster(RasterOperator::MultiBandGdalSource(
                 MultiBandGdalSource {
                     r#type: Default::default(),
@@ -3692,7 +3692,9 @@ mod tests {
                         overview_level: None,
                     },
                 },
-            )),
+            ))
+            .try_into()
+            .unwrap(),
         };
 
         let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
@@ -3870,7 +3872,7 @@ mod tests {
         assert_eq!(res.status(), 200, "response: {res:?}");
 
         // create workflow
-        let workflow = Workflow::Typed {
+        let workflow = Workflow {
             operator: TypedOperator::Raster(RasterOperator::MultiBandGdalSource(
                 MultiBandGdalSource {
                     r#type: Default::default(),
@@ -3879,7 +3881,9 @@ mod tests {
                         overview_level: None,
                     },
                 },
-            )),
+            ))
+            .try_into()
+            .unwrap(),
         };
 
         let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();

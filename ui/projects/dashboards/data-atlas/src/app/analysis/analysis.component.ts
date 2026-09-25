@@ -2,20 +2,9 @@ import {Component, ChangeDetectionStrategy, inject} from '@angular/core';
 import {BackendService, BBoxDict, ProjectService, SourceOperatorDict, RasterResultDescriptorDict} from '@geoengine/core';
 import {first, map, mergeMap, tap} from 'rxjs/operators';
 import {DataSelectionService} from '../data-selection.service';
-import {BehaviorSubject, combineLatest, Observable, of} from 'rxjs';
+import {BehaviorSubject, combineLatest, from, Observable, of} from 'rxjs';
 import {COUNTRY_METADATA, countryDatasetName} from './country-data.model';
-import {
-    HistogramDict,
-    HistogramParams,
-    PolygonSymbology,
-    RasterDataTypes,
-    RasterLayer,
-    ReprojectionDict,
-    UserService,
-    VectorLayer,
-    CommonModule,
-} from '@geoengine/common';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {PolygonSymbology, RasterDataTypes, RasterLayer, UserService, VectorLayer, CommonModule} from '@geoengine/common';
 import {MatFormField, MatLabel} from '@angular/material/input';
 import {MatSelect} from '@angular/material/select';
 import {MatOption} from '@angular/material/autocomplete';
@@ -24,6 +13,7 @@ import {FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {MatButton} from '@angular/material/button';
 import {MatProgressSpinner} from '@angular/material/progress-spinner';
 import {AsyncPipe} from '@angular/common';
+import {Histogram, HistogramParameters, ProcessingGraph, RasterOperator} from '@geoengine/api-client';
 
 @Component({
     selector: 'geoengine-analysis',
@@ -73,7 +63,7 @@ export class AnalysisComponent {
     selectCountry(country: string): void {
         this.selectedCountryName = country;
 
-        const workflow: WorkflowDict = {
+        const workflow: ProcessingGraph = {
             type: 'Vector',
             operator: {
                 type: 'OgrSource',
@@ -83,8 +73,7 @@ export class AnalysisComponent {
             },
         };
 
-        this.projectService
-            .registerWorkflow(workflow)
+        from(this.projectService.registerWorkflow(workflow))
             .pipe(
                 mergeMap((workflowId) =>
                     this.dataSelectionService.setPolygonLayer(
@@ -154,12 +143,12 @@ export class AnalysisComponent {
 
         combineLatest([
             this.dataSelectionService.rasterLayer.pipe(
-                mergeMap<RasterLayer | undefined, Observable<WorkflowDict>>((layer) => {
+                mergeMap<RasterLayer | undefined, Observable<ProcessingGraph>>((layer) => {
                     if (!layer) {
                         return of(); // no next, just complete
                     }
 
-                    return this.projectService.getWorkflow(layer.workflowId);
+                    return from(this.projectService.getWorkflow(layer.workflowId));
                 }),
             ),
             this.dataSelectionService.rasterLayer.pipe(
@@ -185,13 +174,15 @@ export class AnalysisComponent {
                         operator: {
                             type: 'Histogram',
                             params: {
+                                // the output band of the expression below
+                                columnName: 'expression',
                                 // TODO: get params from selected data
                                 buckets: {
                                     type: 'number',
                                     value: 20,
                                 },
                                 bounds: dataRange,
-                            } as HistogramParams,
+                            } satisfies HistogramParameters,
                             sources: {
                                 source: {
                                     type: 'Expression',
@@ -222,9 +213,9 @@ export class AnalysisComponent {
                                                             targetSpatialReference: 'EPSG:4326',
                                                         },
                                                         sources: {
-                                                            source: rasterWorkflow.operator,
+                                                            source: rasterWorkflow.operator as RasterOperator,
                                                         },
-                                                    } as ReprojectionDict,
+                                                    },
                                                     countryRasterWorkflow,
                                                 ],
                                             },
@@ -232,7 +223,7 @@ export class AnalysisComponent {
                                     },
                                 },
                             },
-                        } as HistogramDict,
+                        } as Histogram,
                     }),
                 ),
                 mergeMap((workflowId) =>

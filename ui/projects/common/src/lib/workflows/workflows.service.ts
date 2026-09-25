@@ -1,5 +1,5 @@
 import {Injectable, inject} from '@angular/core';
-import {TypedResultDescriptor, Workflow, WorkflowsApi} from '@geoengine/api-client';
+import {ProcessingGraph, TypedResultDescriptor, WorkflowsApi} from '@geoengine/api-client';
 import {ReplaySubject, firstValueFrom} from 'rxjs';
 import {UserService, apiConfigurationWithAccessKey} from '../user/user.service';
 import {UUID} from '../datasets/dataset.model';
@@ -18,7 +18,7 @@ export class WorkflowsService {
         });
     }
 
-    async getWorkflow(id: string): Promise<Workflow> {
+    async getWorkflow(id: string): Promise<ProcessingGraph> {
         const workflowApi = await firstValueFrom(this.workflowApi);
 
         return workflowApi.loadWorkflowHandler({
@@ -34,12 +34,12 @@ export class WorkflowsService {
         });
     }
 
-    async registerWorkflow(workflow: Workflow): Promise<UUID> {
+    async registerWorkflow(workflow: ProcessingGraph): Promise<UUID> {
         const workflowApi = await firstValueFrom(this.workflowApi);
 
         return workflowApi
             .registerWorkflowHandler({
-                workflow,
+                processingGraph: workflow,
             })
             .then((response) => response.id);
     }

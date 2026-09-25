@@ -11,8 +11,6 @@ import {
     Plot,
     RasterLayer,
     ResultTypes,
-    StatisticsDict,
-    StatisticsParams,
     VectorColumnDataTypes,
     VectorLayer,
     VectorLayerMetadata,
@@ -20,7 +18,7 @@ import {
     FxFlexDirective,
     FxLayoutAlignDirective,
 } from '@geoengine/common';
-import {LegacyTypedOperatorOperator} from '@geoengine/api-client';
+import {MultipleRasterOrSingleVectorOperator, Statistics, StatisticsParameters, TypedOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -190,18 +188,18 @@ export class StatisticsPlotComponent implements AfterViewInit, OnDestroy {
         this.projectService
             .getAutomaticallyProjectedOperatorsFromLayers(sources)
             .pipe(
-                mergeMap((inputOperators: Array<LegacyTypedOperatorOperator>) =>
+                mergeMap((inputOperators: Array<TypedOperator>) =>
                     this.projectService.registerWorkflow({
                         type: 'Plot',
                         operator: {
                             type: 'Statistics',
                             params: {
                                 columnNames,
-                            } as StatisticsParams,
+                            } as StatisticsParameters,
                             sources: {
-                                source: isVectorLayer(inputLayer) ? inputOperators[0] : inputOperators,
+                                source: singleVectorOrMultipleRasterOperators(inputOperators),
                             },
-                        } as StatisticsDict,
+                        } as Statistics,
                     }),
                 ),
                 mergeMap((workflowId) =>
@@ -229,4 +227,16 @@ export class StatisticsPlotComponent implements AfterViewInit, OnDestroy {
             this.form.controls['layer'].updateValueAndValidity();
         });
     }
+}
+
+function singleVectorOrMultipleRasterOperators(inputOperators: Array<TypedOperator>): MultipleRasterOrSingleVectorOperator {
+    if (inputOperators.length === 1 && inputOperators[0].type === 'Vector') {
+        return inputOperators[0].operator;
+    }
+
+    if (inputOperators.every((op) => op.type === 'Raster')) {
+        return inputOperators.map((op) => op.operator);
+    }
+
+    throw new Error('Input operators must be either a single vector or multiple rasters.');
 }

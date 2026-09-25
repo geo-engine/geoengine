@@ -21,17 +21,13 @@ import {ActivatedRoute} from '@angular/router';
 import {countryDatasetName} from '../country-selector/country-data.model';
 import {
     LayersService,
-    MeanRasterPixelValuesOverTimeDict,
     NotificationService,
-    OperatorDict,
     PathChange,
     PathChangeSource,
     RasterDataType,
     RasterDataTypes,
     RasterLayer,
-    RasterStackerDict,
     RasterSymbology,
-    SourceOperatorDict,
     Time,
     UserService,
     extentToBboxDict,
@@ -40,7 +36,7 @@ import {
     FxLayoutDirective,
     FxLayoutAlignDirective,
 } from '@geoengine/common';
-import {LayerListing} from '@geoengine/api-client';
+import {LayerListing, MeanRasterPixelValuesOverTime, RasterDataType as ApiRasterDataType, RasterOperator} from '@geoengine/api-client';
 import {MatButton} from '@angular/material/button';
 import {MatIcon} from '@angular/material/icon';
 import {MatSlideToggle} from '@angular/material/slide-toggle';
@@ -351,8 +347,8 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
         });
     }
 
-    createCountryOperator(country: Country, dataType: RasterDataType): OperatorDict | SourceOperatorDict {
-        const operator = {
+    createCountryOperator(country: Country, dataType: RasterDataType): RasterOperator {
+        const operator: RasterOperator = {
             type: 'GdalSource',
             params: {
                 data: 'raster_country_' + countryDatasetName(country.name),
@@ -366,7 +362,7 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
         return {
             type: 'RasterTypeConversion',
             params: {
-                outputDataType: dataType.getCode(),
+                outputDataType: dataType.getCode() as ApiRasterDataType,
             },
             sources: {
                 raster: operator,
@@ -390,7 +386,7 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
 
         const sessionToken = await firstValueFrom(this.userService.getSessionTokenForRequest());
 
-        const rasterWorkflow = await firstValueFrom(this.projectService.getWorkflow(rasterLayer.workflowId));
+        const rasterWorkflow = await this.projectService.getWorkflow(rasterLayer.workflowId);
 
         // TODO: use native CRS from raster layer for plot -> determine resolution in this CRS
         const projectedRasterWorkflow = this.projectService.createProjectedOperator(
@@ -398,19 +394,19 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
             rasterLayerMetadata,
             // always use WGS 84 for computing the plot
             WGS_84.spatialReference,
-        );
+        ) as RasterOperator;
 
-        const projectedRasterWorkflowMetadata$ = this.projectService
-            .registerWorkflow({
+        const projectedRasterWorkflowMetadata$ = from(
+            this.projectService.registerWorkflow({
                 type: 'Raster',
                 operator: projectedRasterWorkflow,
-            })
-            .pipe(
-                mergeMap(
-                    (projectedRasterWorkflowId) =>
-                        this.backend.getWorkflowMetadata(projectedRasterWorkflowId, sessionToken) as Observable<RasterResultDescriptorDict>,
-                ),
-            );
+            }),
+        ).pipe(
+            mergeMap(
+                (projectedRasterWorkflowId) =>
+                    this.backend.getWorkflowMetadata(projectedRasterWorkflowId, sessionToken) as Observable<RasterResultDescriptorDict>,
+            ),
+        );
 
         const plotWorkflowId$ = this.projectService.registerWorkflow({
             type: 'Plot',
@@ -448,11 +444,11 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
                                         this.createCountryOperator(selectedCountry, rasterLayerMetadata.dataType),
                                     ],
                                 },
-                            } as RasterStackerDict,
+                            },
                         },
                     },
                 },
-            } as MeanRasterPixelValuesOverTimeDict,
+            } as MeanRasterPixelValuesOverTime,
         });
 
         const [projectedRasterWorkflowMetadata, plotWorkflowId] = await firstValueFrom(

@@ -211,7 +211,7 @@ pub async fn get_workflow_provenance_handler(configuration: &configuration::Conf
     }
 }
 
-pub async fn load_workflow_handler(configuration: &configuration::Configuration, id: &str) -> Result<models::Workflow, Error<LoadWorkflowHandlerError>> {
+pub async fn load_workflow_handler(configuration: &configuration::Configuration, id: &str) -> Result<models::ProcessingGraph, Error<LoadWorkflowHandlerError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_id = id;
 
@@ -240,8 +240,8 @@ pub async fn load_workflow_handler(configuration: &configuration::Configuration,
         let content = resp.text().await?;
         match content_type {
             ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
-            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::Workflow`"))),
-            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::Workflow`")))),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::ProcessingGraph`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::ProcessingGraph`")))),
         }
     } else {
         let content = resp.text().await?;
@@ -286,9 +286,9 @@ pub async fn raster_stream_websocket(configuration: &configuration::Configuratio
     }
 }
 
-pub async fn register_workflow_handler(configuration: &configuration::Configuration, workflow: models::Workflow) -> Result<models::IdResponse, Error<RegisterWorkflowHandlerError>> {
+pub async fn register_workflow_handler(configuration: &configuration::Configuration, processing_graph: models::ProcessingGraph) -> Result<models::IdResponse, Error<RegisterWorkflowHandlerError>> {
     // add a prefix to parameters to efficiently prevent name collisions
-    let p_body_workflow = workflow;
+    let p_body_processing_graph = processing_graph;
 
     let uri_str = format!("{}/workflow", configuration.base_path);
     let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
@@ -299,7 +299,7 @@ pub async fn register_workflow_handler(configuration: &configuration::Configurat
     if let Some(ref token) = configuration.bearer_access_token {
         req_builder = req_builder.bearer_auth(token.to_owned());
     };
-    req_builder = req_builder.json(&p_body_workflow);
+    req_builder = req_builder.json(&p_body_processing_graph);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req).await?;

@@ -20,13 +20,13 @@ from typing import List, Tuple, Union
 from typing_extensions import Annotated
 from uuid import UUID
 from geoengine_api_client.models.id_response import IdResponse
+from geoengine_api_client.models.processing_graph import ProcessingGraph
 from geoengine_api_client.models.provenance_entry import ProvenanceEntry
 from geoengine_api_client.models.raster_dataset_from_workflow import RasterDatasetFromWorkflow
 from geoengine_api_client.models.raster_stream_websocket_result_type import RasterStreamWebsocketResultType
 from geoengine_api_client.models.spatial_partition2_d import SpatialPartition2D
 from geoengine_api_client.models.task_response import TaskResponse
 from geoengine_api_client.models.typed_result_descriptor import TypedResultDescriptor
-from geoengine_api_client.models.workflow import Workflow
 
 from geoengine_api_client.api_client import ApiClient, RequestSerialized
 from geoengine_api_client.api_response import ApiResponse
@@ -1122,7 +1122,7 @@ class WorkflowsApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> Workflow:
+    ) -> ProcessingGraph:
         """Retrieves an existing Workflow.
 
 
@@ -1159,7 +1159,7 @@ class WorkflowsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "Workflow",
+            '200': "ProcessingGraph",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1188,7 +1188,7 @@ class WorkflowsApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[Workflow]:
+    ) -> ApiResponse[ProcessingGraph]:
         """Retrieves an existing Workflow.
 
 
@@ -1225,7 +1225,7 @@ class WorkflowsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "Workflow",
+            '200': "ProcessingGraph",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1291,7 +1291,7 @@ class WorkflowsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "Workflow",
+            '200': "ProcessingGraph",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1686,7 +1686,7 @@ class WorkflowsApi:
     @validate_call
     def register_workflow_handler(
         self,
-        workflow: Workflow,
+        processing_graph: ProcessingGraph,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1703,8 +1703,8 @@ class WorkflowsApi:
         """Registers a new Workflow.
 
 
-        :param workflow: (required)
-        :type workflow: Workflow
+        :param processing_graph: (required)
+        :type processing_graph: ProcessingGraph
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1728,7 +1728,7 @@ class WorkflowsApi:
         """ # noqa: E501
 
         _param = self._register_workflow_handler_serialize(
-            workflow=workflow,
+            processing_graph=processing_graph,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1752,7 +1752,7 @@ class WorkflowsApi:
     @validate_call
     def register_workflow_handler_with_http_info(
         self,
-        workflow: Workflow,
+        processing_graph: ProcessingGraph,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1769,8 +1769,8 @@ class WorkflowsApi:
         """Registers a new Workflow.
 
 
-        :param workflow: (required)
-        :type workflow: Workflow
+        :param processing_graph: (required)
+        :type processing_graph: ProcessingGraph
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1794,7 +1794,7 @@ class WorkflowsApi:
         """ # noqa: E501
 
         _param = self._register_workflow_handler_serialize(
-            workflow=workflow,
+            processing_graph=processing_graph,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1818,7 +1818,7 @@ class WorkflowsApi:
     @validate_call
     def register_workflow_handler_without_preload_content(
         self,
-        workflow: Workflow,
+        processing_graph: ProcessingGraph,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1835,8 +1835,8 @@ class WorkflowsApi:
         """Registers a new Workflow.
 
 
-        :param workflow: (required)
-        :type workflow: Workflow
+        :param processing_graph: (required)
+        :type processing_graph: ProcessingGraph
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1860,7 +1860,7 @@ class WorkflowsApi:
         """ # noqa: E501
 
         _param = self._register_workflow_handler_serialize(
-            workflow=workflow,
+            processing_graph=processing_graph,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1879,7 +1879,7 @@ class WorkflowsApi:
 
     def _register_workflow_handler_serialize(
         self,
-        workflow,
+        processing_graph,
         _request_auth,
         _content_type,
         _headers,
@@ -1905,8 +1905,8 @@ class WorkflowsApi:
         # process the header parameters
         # process the form parameters
         # process the body parameter
-        if workflow is not None:
-            _body_params = workflow
+        if processing_graph is not None:
+            _body_params = processing_graph
 
 
         # set the HTTP header `Accept`
