@@ -11,8 +11,8 @@ use chrono::DateTime as ChronoDateTime;
 use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::operations::reproject::ReprojectClipped;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, RasterQueryRectangle, TimeDimension, TimeInstance, TimeInterval,
-    TryRegularTimeFillIterExt, VectorQueryRectangle,
+    AxisAlignedRectangle, CacheTtlSeconds, RasterQueryRectangle, TimeDimension, TimeInstance,
+    TimeInterval, TryRegularTimeFillIterExt, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
 use geoengine_datatypes::spatial_reference::{
@@ -43,6 +43,7 @@ struct StacMultiBandMetaData {
     time_dimension: TimeDimension,
     dataset: StacProviderDataset,
     page_limit: i64,
+    cache_ttl_secs: Option<CacheTtlSeconds>,
     client: StacClient,
     /// Shared query-result cache from the provider.
     query_cache: Arc<StacQueryCache>,
@@ -192,7 +193,7 @@ impl
             return Ok(MultiBandGdalLoadingInfo::new(
                 cached_time_steps,
                 cached_files,
-                None,
+                self.cache_ttl_secs,
             ));
         }
 
@@ -254,7 +255,11 @@ impl
             )
             .await;
 
-        Ok(MultiBandGdalLoadingInfo::new(time_steps, files, None))
+        Ok(MultiBandGdalLoadingInfo::new(
+            time_steps,
+            files,
+            self.cache_ttl_secs,
+        ))
     }
 
     async fn result_descriptor(&self) -> geoengine_operators::util::Result<RasterResultDescriptor> {
@@ -625,6 +630,7 @@ impl
             time_dimension: self.time_dimension,
             dataset: dataset.clone(),
             page_limit: self.page_limit,
+            cache_ttl_secs: self.cache_ttl_secs,
             client: self.client.clone(),
             query_cache: self.query_cache.clone(),
         }))
@@ -712,6 +718,7 @@ mod tests {
             }],
             page_limit: 100,
             query_timeout_secs: 60,
+            cache_ttl_secs: None,
         }
     }
 
@@ -1128,6 +1135,7 @@ mod tests {
             ],
             page_limit: 100,
             query_timeout_secs: 60,
+            cache_ttl_secs: None,
         };
 
         admin_ctx

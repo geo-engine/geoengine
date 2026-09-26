@@ -50,7 +50,7 @@ export interface GfbioAbcdDataProviderDefinition {
      * @type {number}
      * @memberof GfbioAbcdDataProviderDefinition
      */
-    cacheTtl?: number;
+    cacheTtl?: number | null;
 }
 /**
  * @export

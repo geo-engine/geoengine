@@ -6215,7 +6215,14 @@
             "type": "string"
           },
           "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds"
+              }
+            ]
           }
         }
       },
@@ -8125,7 +8132,14 @@
             "description": "Path were overview files are stored"
           },
           "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds"
+              }
+            ]
           }
         }
       },
@@ -8176,7 +8190,14 @@
             ]
           },
           "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds"
+              }
+            ]
           },
           "discreteVrs": {
             "type": "array",
@@ -8508,7 +8529,14 @@
             "$ref": "#/components/schemas/DatabaseConnectionConfig"
           },
           "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds"
+              }
+            ]
           },
           "autocompleteTimeout": {
             "type": "integer",
@@ -8615,7 +8643,14 @@
             ]
           },
           "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds"
+              }
+            ]
           }
         }
       },
@@ -8683,7 +8718,14 @@
             "$ref": "#/components/schemas/TimeStep"
           },
           "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds"
+              }
+            ]
           }
         }
       },
@@ -8718,7 +8760,14 @@
             "$ref": "#/components/schemas/RasterResultDescriptor"
           },
           "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds"
+              }
+            ]
           }
         }
       },
@@ -8782,7 +8831,14 @@
             "minimum": 0
           },
           "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds"
+              }
+            ]
           }
         }
       },
@@ -9140,7 +9196,14 @@
             "$ref": "#/components/schemas/DatabaseConnectionConfig"
           },
           "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds"
+              }
+            ]
           }
         }
       },
@@ -9190,7 +9253,14 @@
             "format": "uri"
           },
           "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds"
+              }
+            ]
           }
         }
       },
@@ -10949,7 +11019,14 @@
             "description": "Path were overview files are stored"
           },
           "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds"
+              }
+            ]
           }
         }
       },
@@ -11164,7 +11241,14 @@
             ]
           },
           "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds"
+              }
+            ]
           }
         }
       },
@@ -11652,8 +11736,7 @@
           "type",
           "name",
           "description",
-          "baseUrl",
-          "cacheTtl"
+          "baseUrl"
         ],
         "properties": {
           "type": {
@@ -11680,7 +11763,14 @@
             "format": "uri"
           },
           "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds"
+              }
+            ]
           }
         }
       },
@@ -13562,7 +13652,14 @@
             "minimum": 0
           },
           "cacheTtl": {
-            "$ref": "#/components/schemas/CacheTtlSeconds"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds"
+              }
+            ]
           },
           "queryBuffer": {
             "$ref": "#/components/schemas/StacQueryBuffer"
@@ -14103,6 +14200,17 @@
           "pageLimit": {
             "type": "integer",
             "format": "int64"
+          },
+          "cacheTtlSecs": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds",
+                "description": "Optional cache lifetime for tiles of this provider; an omitted value inherits the query default."
+              }
+            ]
           }
         }
       },

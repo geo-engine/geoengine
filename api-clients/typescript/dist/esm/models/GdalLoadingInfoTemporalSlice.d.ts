@@ -33,7 +33,7 @@ export interface GdalLoadingInfoTemporalSlice {
      * @type {number}
      * @memberof GdalLoadingInfoTemporalSlice
      */
-    cacheTtl?: number;
+    cacheTtl?: number | null;
 }
 /**
  * Check if a given object implements the GdalLoadingInfoTemporalSlice interface.

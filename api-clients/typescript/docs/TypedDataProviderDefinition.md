@@ -45,6 +45,7 @@ Name | Type
 `datasets` | [Array&lt;StacProviderDataset&gt;](StacProviderDataset.md)
 `queryTimeoutSecs` | number
 `pageLimit` | number
+`cacheTtlSecs` | number
 `user` | string
 `refreshToken` | string
 `expiryDate` | Date
@@ -95,6 +96,7 @@ const example = {
   "datasets": null,
   "queryTimeoutSecs": null,
   "pageLimit": null,
+  "cacheTtlSecs": null,
   "user": null,
   "refreshToken": null,
   "expiryDate": null,

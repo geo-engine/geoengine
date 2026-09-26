@@ -63,7 +63,7 @@ export interface EdrDataProviderDefinition {
      * @type {number}
      * @memberof EdrDataProviderDefinition
      */
-    cacheTtl?: number;
+    cacheTtl?: number | null;
     /**
      * List of vertical reference systems with a discrete scale
      * @type {Array<string>}

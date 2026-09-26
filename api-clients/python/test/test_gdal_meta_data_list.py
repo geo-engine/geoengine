@@ -69,7 +69,7 @@ class TestGdalMetaDataList(unittest.TestCase):
                             start = 56, 
                             end = 56, ), 
                         params = null, 
-                        cache_ttl = 0, )
+                        cache_ttl = null, )
                     ]
             )
         else:
@@ -108,7 +108,7 @@ class TestGdalMetaDataList(unittest.TestCase):
                             start = 56, 
                             end = 56, ), 
                         params = null, 
-                        cache_ttl = 0, )
+                        cache_ttl = null, )
                     ],
         )
         """

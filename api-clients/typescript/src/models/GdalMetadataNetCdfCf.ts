@@ -90,7 +90,7 @@ export interface GdalMetadataNetCdfCf {
      * @type {number}
      * @memberof GdalMetadataNetCdfCf
      */
-    cacheTtl?: number;
+    cacheTtl?: number | null;
 }
 
 

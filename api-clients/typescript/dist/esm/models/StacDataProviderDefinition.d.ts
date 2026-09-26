@@ -96,6 +96,12 @@ export interface StacDataProviderDefinition {
      * @memberof StacDataProviderDefinition
      */
     pageLimit?: number;
+    /**
+     * Optional cache lifetime for tiles of this provider; an omitted value inherits the query default.
+     * @type {number}
+     * @memberof StacDataProviderDefinition
+     */
+    cacheTtlSecs?: number | null;
 }
 /**
  * @export
