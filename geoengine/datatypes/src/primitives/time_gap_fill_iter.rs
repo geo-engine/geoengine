@@ -3,12 +3,17 @@ use crate::primitives::{TimeInstance, TimeInterval};
 use std::iter::Peekable;
 
 pub trait TimeFilledItem {
-    fn create_fill_element(ti: TimeInterval) -> Self;
+    /// Creates the item that fills a temporal gap at `ti`.
+    ///
+    /// `template` is the adjacent source item, if there is one. Implementations should copy
+    /// everything but the time from it, so that fill items carry the same properties as the
+    /// items they are wedged between. It is `None` when the source is empty.
+    fn create_fill_element(ti: TimeInterval, template: Option<&Self>) -> Self;
     fn time(&self) -> TimeInterval;
 }
 
 impl TimeFilledItem for TimeInterval {
-    fn create_fill_element(ti: TimeInterval) -> Self {
+    fn create_fill_element(ti: TimeInterval, _template: Option<&Self>) -> Self {
         ti
     }
 
@@ -143,7 +148,9 @@ impl<T: TimeFilledItem, I: Iterator<Item = T>, S: TimeGapFill> Iterator
         match action {
             TimeGapFillNextAction::End => None,
             TimeGapFillNextAction::SourceNext => self.source.next(),
-            TimeGapFillNextAction::CreateFillElement(ti) => Some(T::create_fill_element(ti)),
+            TimeGapFillNextAction::CreateFillElement(ti) => {
+                Some(T::create_fill_element(ti, self.source.peek()))
+            }
         }
     }
 }
@@ -185,7 +192,10 @@ impl<T: TimeFilledItem, E, I: Iterator<Item = Result<T, E>>, S: TimeGapFill> Ite
         match self.state.next_action(peek_time.as_ref()) {
             TimeGapFillNextAction::End => None,
             TimeGapFillNextAction::SourceNext => self.source.next(),
-            TimeGapFillNextAction::CreateFillElement(ti) => Some(Ok(T::create_fill_element(ti))),
+            TimeGapFillNextAction::CreateFillElement(ti) => Some(Ok(T::create_fill_element(
+                ti,
+                self.source.peek().and_then(|r| r.as_ref().ok()),
+            ))),
         }
     }
 }

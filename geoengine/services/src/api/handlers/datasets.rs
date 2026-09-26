@@ -38,9 +38,7 @@ use gdal::{
 use geoengine_datatypes::{
     collections::VectorDataType,
     error::BoxedResultExt,
-    primitives::{
-        CacheTtlSeconds, FeatureDataType, Measurement, TimeInterval, VectorQueryRectangle,
-    },
+    primitives::{FeatureDataType, Measurement, TimeInterval, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
 use geoengine_operators::{
@@ -1027,7 +1025,7 @@ pub async fn suggest_meta_data_handler<C: ApplicationContext>(
                 params: vec![GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::default().into(),
                     params: Some(gdal_params.into()),
-                    cache_ttl: CacheTtlSeconds::default().into(),
+                    cache_ttl: None,
                 }],
             }),
         }))
@@ -1132,7 +1130,7 @@ fn auto_detect_vector_meta_data_definition_from_dataset(
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         },
         result_descriptor: VectorResultDescriptor {
             data_type: geometry.data_type,
@@ -1707,7 +1705,7 @@ mod tests {
         collections::{GeometryCollection, MultiPointCollection, VectorDataType},
         operations::image::{RasterColorizer, RgbaColor},
         primitives::{
-            BandSelection, BoundingBox2D, ColumnSelection, DateTimeParseFormat,
+            BandSelection, BoundingBox2D, CacheTtlSeconds, ColumnSelection, DateTimeParseFormat,
             RasterQueryRectangle, SpatialPartition2D,
         },
         raster::{GridShape2D, TilingSpecification},
@@ -1771,7 +1769,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: Some(CacheTtlSeconds::default()),
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1804,7 +1802,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: Some(CacheTtlSeconds::default()),
             },
             result_descriptor: descriptor,
             phantom: Default::default(),
@@ -2244,7 +2242,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default()
+                    cache_ttl: None
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2343,7 +2341,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default()
+                    cache_ttl: None
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2421,7 +2419,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default()
+                    cache_ttl: None
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2499,7 +2497,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default()
+                    cache_ttl: None
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2570,7 +2568,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default()
+                    cache_ttl: None
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2645,7 +2643,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default()
+                    cache_ttl: None
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2720,7 +2718,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: Some(CacheTtlSeconds::default()),
             },
             result_descriptor: descriptor,
             phantom: Default::default(),
@@ -2878,11 +2876,11 @@ mod tests {
                   "forceOgrSpatialFilter": false,
                   "onError": "ignore",
                   "sqlQuery": null,
-                  "attributeQuery": null,
-                  "cacheTtl": 0,
-                },
-                "resultDescriptor": {
-                  "dataType": "MultiPoint",
+            "attributeQuery": null,
+                   "cacheTtl": null,
+                 },
+                 "resultDescriptor": {
+                   "dataType": "MultiPoint",
                   "spatialReference": "EPSG:4326",
                   "columns": {
                     "id": {
@@ -3005,7 +3003,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: Some(CacheTtlSeconds::default()),
             },
             result_descriptor: descriptor,
             phantom: Default::default(),
@@ -3096,7 +3094,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: Some(CacheTtlSeconds::default()),
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -3122,7 +3120,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: Some(CacheTtlSeconds::default()),
                 },
                 result_descriptor: descriptor,
                 phantom: Default::default(),

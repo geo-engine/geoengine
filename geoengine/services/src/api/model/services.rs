@@ -340,7 +340,7 @@ pub struct ArunaDataProviderDefinition {
     pub api_token: String,
     pub filter_label: String,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<ArunaDataProviderDefinition>
@@ -356,7 +356,7 @@ impl From<ArunaDataProviderDefinition>
             project_id: value.project_id,
             api_token: value.api_token,
             filter_label: value.filter_label,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -375,7 +375,7 @@ impl From<crate::datasets::external::aruna::ArunaDataProviderDefinition>
             project_id: value.project_id,
             api_token: SECRET_REPLACEMENT.to_string(),
             filter_label: value.filter_label,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -450,7 +450,7 @@ pub struct EbvPortalDataProviderDefinition {
     #[schema(value_type = String)]
     pub overviews: PathBuf,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<EbvPortalDataProviderDefinition>
@@ -464,7 +464,7 @@ impl From<EbvPortalDataProviderDefinition>
             base_url: value.base_url,
             data: value.data,
             overviews: value.overviews,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -481,7 +481,7 @@ impl From<crate::datasets::external::netcdfcf::EbvPortalDataProviderDefinition>
             base_url: value.base_url,
             data: value.data,
             overviews: value.overviews,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -500,7 +500,7 @@ pub struct NetCdfCfDataProviderDefinition {
     #[schema(value_type = String)]
     pub overviews: PathBuf,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<NetCdfCfDataProviderDefinition>
@@ -513,7 +513,7 @@ impl From<NetCdfCfDataProviderDefinition>
             priority: value.priority,
             data: value.data,
             overviews: value.overviews,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -529,7 +529,7 @@ impl From<crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition>
             priority: value.priority,
             data: value.data,
             overviews: value.overviews,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -542,7 +542,7 @@ pub struct PangaeaDataProviderDefinition {
     pub description: String,
     pub priority: Option<i16>,
     pub base_url: Url,
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<PangaeaDataProviderDefinition>
@@ -554,7 +554,7 @@ impl From<PangaeaDataProviderDefinition>
             description: value.description,
             priority: value.priority,
             base_url: value.base_url,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -569,7 +569,7 @@ impl From<crate::datasets::external::pangaea::PangaeaDataProviderDefinition>
             description: value.description,
             priority: value.priority,
             base_url: value.base_url,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -586,7 +586,7 @@ pub struct EdrDataProviderDefinition {
     pub base_url: Url,
     pub vector_spec: Option<EdrVectorSpec>,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
     #[serde(default)]
     /// List of vertical reference systems with a discrete scale
     pub discrete_vrs: Vec<String>,
@@ -629,7 +629,7 @@ impl From<EdrDataProviderDefinition> for crate::datasets::external::edr::EdrData
             id: value.id.into(),
             base_url: value.base_url,
             vector_spec: value.vector_spec.map(Into::into),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
             discrete_vrs: value.discrete_vrs,
             provenance: value
                 .provenance
@@ -648,7 +648,7 @@ impl From<crate::datasets::external::edr::EdrDataProviderDefinition> for EdrData
             id: value.id.into(),
             base_url: value.base_url,
             vector_spec: value.vector_spec.map(Into::into),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
             discrete_vrs: value.discrete_vrs,
             provenance: value
                 .provenance
@@ -666,7 +666,7 @@ pub struct GbifDataProviderDefinition {
     pub priority: Option<i16>,
     pub db_config: DatabaseConnectionConfig,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
     pub autocomplete_timeout: i32,
     pub columns: Vec<String>,
 }
@@ -716,7 +716,7 @@ impl From<GbifDataProviderDefinition>
             description: value.description,
             priority: value.priority,
             db_config: value.db_config.into(),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
             autocomplete_timeout: value.autocomplete_timeout,
             columns: value.columns,
         }
@@ -733,7 +733,7 @@ impl From<crate::datasets::external::gbif::GbifDataProviderDefinition>
             description: value.description,
             priority: value.priority,
             db_config: value.db_config.into(),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
             autocomplete_timeout: value.autocomplete_timeout,
             columns: value.columns,
         }
@@ -749,7 +749,7 @@ pub struct GfbioAbcdDataProviderDefinition {
     pub priority: Option<i16>,
     pub db_config: DatabaseConnectionConfig,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<GfbioAbcdDataProviderDefinition>
@@ -761,7 +761,7 @@ impl From<GfbioAbcdDataProviderDefinition>
             description: value.description,
             priority: value.priority,
             db_config: value.db_config.into(),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -776,7 +776,7 @@ impl From<crate::datasets::external::gfbio_abcd::GfbioAbcdDataProviderDefinition
             description: value.description,
             priority: value.priority,
             db_config: value.db_config.into(),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -793,7 +793,7 @@ pub struct GfbioCollectionsDataProviderDefinition {
     pub abcd_db_config: DatabaseConnectionConfig,
     pub pangaea_url: Url,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<GfbioCollectionsDataProviderDefinition>
@@ -808,7 +808,7 @@ impl From<GfbioCollectionsDataProviderDefinition>
             collection_api_auth_token: value.collection_api_auth_token,
             abcd_db_config: value.abcd_db_config.into(),
             pangaea_url: value.pangaea_url,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -828,7 +828,7 @@ impl From<crate::datasets::external::gfbio_collections::GfbioCollectionsDataProv
             collection_api_auth_token: value.collection_api_auth_token,
             abcd_db_config: value.abcd_db_config.into(),
             pangaea_url: value.pangaea_url,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -847,7 +847,7 @@ pub struct SentinelS2L2ACogsProviderDefinition {
     #[serde(default)]
     pub gdal_retries: usize,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
     #[serde(default)]
     pub query_buffer: StacQueryBuffer,
 }
@@ -933,7 +933,7 @@ impl From<SentinelS2L2ACogsProviderDefinition>
             api_url: value.api_url,
             stac_api_retries: value.stac_api_retries.into(),
             gdal_retries: value.gdal_retries.into(),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
             query_buffer: value.query_buffer.into(),
         }
     }
@@ -954,7 +954,7 @@ impl From<crate::datasets::external::sentinel_s2_l2a_cogs::SentinelS2L2ACogsProv
             api_url: value.api_url,
             stac_api_retries: value.stac_api_retries.into(),
             gdal_retries: value.gdal_retries.into(),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
             query_buffer: value.query_buffer.into(),
         }
     }

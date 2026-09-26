@@ -57,7 +57,7 @@ pub struct GfbioAbcdDataProviderDefinition {
     pub priority: Option<i16>,
     pub db_config: DatabaseConnectionConfig,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 #[async_trait]
@@ -110,7 +110,7 @@ pub struct GfbioAbcdDataProvider {
     pool: Pool<PostgresConnectionManager<NoTls>>,
     column_hash_to_name: HashMap<String, String>,
     column_name_to_hash: HashMap<String, String>,
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl GfbioAbcdDataProvider {
@@ -121,7 +121,7 @@ impl GfbioAbcdDataProvider {
         name: String,
         description: String,
         db_config: DatabaseConnectionConfig,
-        cache_ttl: CacheTtlSeconds,
+        cache_ttl: Option<CacheTtlSeconds>,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
         let pool = Pool::builder().build(pg_mgr).await?;
@@ -1403,7 +1403,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: Some("surrogate_key = 1".to_string()),
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             };
 
             if loading_info != expected {

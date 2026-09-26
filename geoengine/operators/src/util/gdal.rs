@@ -40,15 +40,17 @@ use tracing::warn;
 
 // TODO: move test helper somewhere else?
 pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
-    create_ndvi_meta_data_with_cache_ttl(CacheTtlSeconds::default())
+    create_ndvi_meta_data_with_cache_ttl(None)
 }
 
 pub fn create_ndvi_meta_data_cropped_to_valid_webmercator_bounds() -> GdalMetaDataRegular {
-    create_ndvi_meta_data_with_cache_ttl(CacheTtlSeconds::default())
+    create_ndvi_meta_data_with_cache_ttl(None)
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalMetaDataRegular {
+pub fn create_ndvi_meta_data_with_cache_ttl(
+    cache_ttl: Option<CacheTtlSeconds>,
+) -> GdalMetaDataRegular {
     let no_data_value = Some(0.); // TODO: is it really 0?
     let time_bounds = TimeInterval::new_unchecked(
         TimeInstance::from_str("2014-01-01T00:00:00.000Z")
@@ -131,7 +133,7 @@ pub fn create_ndvi_result_descriptor(as_regular_timeseries: bool) -> RasterResul
 
 #[allow(clippy::missing_panics_doc)]
 pub fn create_ndvi_meta_data_cropped_to_valid_webmercator_bounds_with_cache_ttl(
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl: Option<CacheTtlSeconds>,
 ) -> GdalMetaDataRegular {
     let no_data_value = Some(0.); // TODO: is it really 0?
     let time_bounds = TimeInterval::new_unchecked(
@@ -211,7 +213,7 @@ pub fn add_ndvi_dataset_cropped_to_valid_webmercator_bounds(
 
 #[allow(clippy::missing_panics_doc)]
 pub fn create_ndvi_downscaled_3x_meta_data_with_cache_ttl(
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl: Option<CacheTtlSeconds>,
 ) -> GdalMetaDataRegular {
     let no_data_value = Some(0.);
     let time_bounds = TimeInterval::new_unchecked(
@@ -288,9 +290,7 @@ pub fn add_ndvi_downscaled_3x_dataset(ctx: &mut MockExecutionContext) -> NamedDa
     ctx.add_meta_data(
         id,
         name.clone(),
-        Box::new(create_ndvi_downscaled_3x_meta_data_with_cache_ttl(
-            CacheTtlSeconds::default(),
-        )),
+        Box::new(create_ndvi_downscaled_3x_meta_data_with_cache_ttl(None)),
     );
     name
 }
@@ -325,7 +325,7 @@ pub fn create_ports_meta_data()
             sql_query: None,
             attribute_query: None,
             default_geometry: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         },
         result_descriptor: VectorResultDescriptor {
             data_type: VectorDataType::MultiPoint,

@@ -112,7 +112,7 @@ pub struct OgrSourceDataset {
     pub sql_query: Option<String>,
     pub attribute_query: Option<String>,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl OgrSourceDataset {
@@ -554,8 +554,14 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+        let mut loading_info = self.dataset_information.loading_info(query.clone()).await?;
+
+        // This is the point where the source turns a loading info into features, so a dataset
+        // that carries no cache TTL of its own picks up the query default here.
+        loading_info.cache_ttl = Some(loading_info.cache_ttl.unwrap_or(ctx.default_cache_ttl()));
+
         Ok(OgrSourceStream::new(
-            self.dataset_information.loading_info(query.clone()).await?,
+            loading_info,
             query,
             ctx.chunk_byte_size().into(),
             self.attribute_filters.clone(),
@@ -1169,7 +1175,9 @@ where
             }
         }
 
-        builder.cache_hint(dataset_information.cache_ttl.into());
+        // Already resolved against the query default in `_query`. If it somehow is not, fall back
+        // to `0`, i.e. no caching.
+        builder.cache_hint(dataset_information.cache_ttl.unwrap_or_default().into());
 
         builder.build().map_err(Into::into)
     }
@@ -1948,7 +1956,7 @@ mod db_types {
         pub on_error: OgrSourceErrorSpec,
         pub sql_query: Option<String>,
         pub attribute_query: Option<String>,
-        pub cache_ttl: CacheTtlSeconds,
+        pub cache_ttl: Option<CacheTtlSeconds>,
     }
 
     impl From<&OgrSourceDataset> for OgrSourceDatasetDbType {
@@ -2059,7 +2067,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let serialized_spec = serde_json::to_value(&spec).unwrap();
@@ -2108,7 +2116,7 @@ mod tests {
                 "onError": "ignore",
                 "sqlQuery": null,
                 "attributeQuery": null,
-                "cacheTtl": 0,
+                "cacheTtl": null,
             })
         );
 
@@ -2178,7 +2186,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -2233,7 +2241,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -2282,7 +2290,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Abort,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -2336,7 +2344,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -2406,7 +2414,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2505,7 +2513,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2607,7 +2615,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2721,7 +2729,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2934,7 +2942,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4110,7 +4118,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -4232,7 +4240,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -4347,7 +4355,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4590,7 +4598,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4676,7 +4684,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPolygon,
@@ -4774,7 +4782,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -4906,7 +4914,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -5027,7 +5035,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -5148,7 +5156,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -5265,7 +5273,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -5386,7 +5394,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -5511,7 +5519,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -5623,7 +5631,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -5743,7 +5751,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -5864,7 +5872,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -5983,7 +5991,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -6106,7 +6114,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -6225,7 +6233,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -6356,7 +6364,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -6484,7 +6492,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: Some("\"c\" = 'foo'".to_string()),
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -6602,7 +6610,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -6696,7 +6704,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -6793,7 +6801,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: Some("\"name\" = 'Bangkok'".to_string()),
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -6887,7 +6895,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let rd = VectorResultDescriptor {
@@ -6981,7 +6989,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::max(),
+            cache_ttl: Some(CacheTtlSeconds::max()),
         };
 
         let rd = VectorResultDescriptor {

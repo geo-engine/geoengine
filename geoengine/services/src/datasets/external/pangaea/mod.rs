@@ -38,7 +38,7 @@ pub struct PangaeaDataProviderDefinition {
     pub description: String,
     pub priority: Option<i16>,
     pub base_url: Url,
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 #[async_trait]
@@ -73,11 +73,11 @@ pub struct PangaeaDataProvider {
     description: String,
     client: Client,
     base_url: Url,
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl PangaeaDataProvider {
-    pub fn new(base_url: Url, cache_ttl: CacheTtlSeconds) -> PangaeaDataProvider {
+    pub fn new(base_url: Url, cache_ttl: Option<CacheTtlSeconds>) -> PangaeaDataProvider {
         PangaeaDataProvider {
             name: "Pangaea".to_string(),
             description: "Pangaea".to_string(),
@@ -91,7 +91,7 @@ impl PangaeaDataProvider {
         name: String,
         description: String,
         base_url: Url,
-        cache_ttl: CacheTtlSeconds,
+        cache_ttl: Option<CacheTtlSeconds>,
     ) -> PangaeaDataProvider {
         PangaeaDataProvider {
             name,

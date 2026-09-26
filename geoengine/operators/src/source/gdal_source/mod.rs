@@ -25,8 +25,9 @@ use geoengine_datatypes::raster::ChangeGridBounds;
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
-        BandSelection, CacheHint, RasterQueryRectangle, SpatialResolution, TimeInterval,
-        TryIrregularTimeFillIterExt, TryRegularTimeFillIterExt, find_next_best_overview_level,
+        BandSelection, CacheHint, CacheTtlSeconds, RasterQueryRectangle, SpatialResolution,
+        TimeInterval, TryIrregularTimeFillIterExt, TryRegularTimeFillIterExt,
+        find_next_best_overview_level,
     },
     raster::{
         EmptyGrid, GridBoundingBox2D, Pixel, RasterDataType, RasterProperties, RasterTile2D,
@@ -206,7 +207,11 @@ fn temporal_slice_tile_future_stream<T: Pixel + GdalType + FromPrimitive>(
     tiling_strategy: TilingStrategy,
     reader_mode: GdalReaderMode,
     gdal_worker: GdalPoolDispatcher,
+    default_cache_ttl: CacheTtlSeconds,
 ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> + use<T> {
+    // A slice that carries no TTL of its own falls back to the query default.
+    let cache_hint = CacheHint::from(info.cache_ttl.unwrap_or(default_cache_ttl));
+
     stream::iter(tiling_strategy.tile_information_iterator_from_pixel_bounds(spatial_bounds)).map(
         move |tile| {
             GdalRasterLoader::load_tile_async(
@@ -214,7 +219,7 @@ fn temporal_slice_tile_future_stream<T: Pixel + GdalType + FromPrimitive>(
                 reader_mode,
                 tile,
                 info.time,
-                info.cache_ttl.into(),
+                cache_hint,
                 gdal_worker.clone(),
             )
             .map_err(Into::into)
@@ -394,6 +399,7 @@ where
             tiling_strategy,
             reader_mode,
             ctx.get_gdal_worker(),
+            ctx.default_cache_ttl(),
         );
 
         Ok(loaded_source_stream.boxed())
@@ -471,6 +477,7 @@ fn load_source_stream<P, S>(
     tiling_strategy: TilingStrategy,
     reader_mode: GdalReaderMode,
     gdal_worker: GdalPoolDispatcher,
+    default_cache_ttl: CacheTtlSeconds,
 ) -> impl Stream<Item = Result<RasterTile2D<P>>> + use<P, S>
 where
     P: Pixel + GdalType + FromPrimitive,
@@ -484,6 +491,7 @@ where
                 tiling_strategy,
                 reader_mode,
                 gdal_worker.clone(),
+                default_cache_ttl,
             )
             .map(Result::Ok)
         })
@@ -786,7 +794,8 @@ mod tests {
         GdalProcessPoolAccess, GdalSourceTimePlaceholder, TimeReference, WorkerConfig,
     };
     use crate::util::Result;
-    use crate::util::gdal::add_ndvi_dataset;
+    use crate::util::gdal::{add_ndvi_dataset, create_ndvi_meta_data_with_cache_ttl};
+    use geoengine_datatypes::dataset::{DataId, DatasetId};
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::DateTimeParseFormat;
     use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
@@ -795,6 +804,7 @@ mod tests {
         RasterPropertiesEntryType, RasterPropertiesKey, SpatialGridDefinition, TileInformation,
         TilesEqualIgnoringCacheHint, TilingStrategy,
     };
+    use geoengine_datatypes::util::Identifier;
     use geoengine_datatypes::util::{gdal::hide_gdal_errors, test::TestDefault};
 
     async fn query_gdal_source(
@@ -1417,5 +1427,44 @@ mod tests {
         );
 
         assert!(tile.unwrap().tiles_equal_ignoring_cache_hint(&expected));
+    }
+
+    #[tokio::test]
+    async fn cache_ttl_resolution() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let mut query_ctx = exe_ctx.mock_query_context_test_default();
+        query_ctx.default_cache_ttl = CacheTtlSeconds::new(60);
+        let spatial_query = GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap();
+        let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_001);
+
+        let cases = [
+            // metadata ttl wins over the query default
+            (Some(CacheTtlSeconds::new(30)), CacheTtlSeconds::new(30)),
+            // explicit zero means "never cache", even with a query default
+            (Some(CacheTtlSeconds::new(0)), CacheTtlSeconds::new(0)),
+            // unset metadata ttl falls back to the query default
+            (None, CacheTtlSeconds::new(60)),
+        ];
+
+        for (idx, (ttl, expected)) in cases.into_iter().enumerate() {
+            let id: DataId = DatasetId::new().into();
+            let name = NamedData::with_system_name(format!("ndvi_resolution_{idx}"));
+            exe_ctx.add_meta_data(
+                id,
+                name.clone(),
+                Box::new(create_ndvi_meta_data_with_cache_ttl(ttl)),
+            );
+
+            let tiles =
+                query_gdal_source(&exe_ctx, &query_ctx, name, spatial_query, time_interval).await;
+            let tiles: Vec<RasterTile2D<u8>> = tiles.into_iter().map(Result::unwrap).collect();
+
+            assert!(
+                tiles
+                    .iter()
+                    .all(|t| t.cache_hint.total_ttl_seconds() == expected),
+                "case {idx}: expected ttl {expected:?}"
+            );
+        }
     }
 }

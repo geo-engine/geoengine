@@ -23,7 +23,7 @@ use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::primitives::{
-    CacheHint, RasterQueryRectangle, TimeDimension, TimeInstance, TryIrregularTimeFillIterExt,
+    RasterQueryRectangle, TimeDimension, TimeInstance, TryIrregularTimeFillIterExt,
     TryRegularTimeFillIterExt,
 };
 use geoengine_datatypes::primitives::{TimeInterval, VectorQueryRectangle};
@@ -1063,11 +1063,9 @@ where
             source: Box::new(e),
         })?;
 
-        Ok(MultiBandGdalLoadingInfo::new(
-            time_steps,
-            files,
-            CacheHint::default(), // TODO: implement cache hint, should it be one value for the whole dataset? If so, load it once(!) from the database and add it to the loading info. Otherwise add the cache hint as a new attribute to the tiles.
-        ))
+        // TODO: should the TTL be one value for the whole dataset? If so, load it once(!) from
+        // the database and add it to the loading info. For now the query default applies.
+        Ok(MultiBandGdalLoadingInfo::new(time_steps, files, None))
     }
 
     async fn result_descriptor(
@@ -1801,7 +1799,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: Some(CacheTtlSeconds::default()),
         };
 
         let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<

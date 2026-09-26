@@ -21,8 +21,8 @@ use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
-        BandSelection, QueryRectangle, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
-        TimeInterval, find_next_best_overview_level,
+        BandSelection, CacheHint, QueryRectangle, RasterQueryRectangle, SpatialPartition2D,
+        SpatialResolution, TimeInterval, find_next_best_overview_level,
     },
     raster::{
         GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D, SpatialGridDefinition,
@@ -228,6 +228,10 @@ where
 
         let gdal_worker = ctx.get_gdal_worker();
         let time_steps = loading_info.time_steps().to_vec();
+        // The loading info carries no TTL of its own if the provider did not set one, in which case
+        // the query default applies.
+        let cache_hint =
+            CacheHint::from(loading_info.cache_ttl().unwrap_or(ctx.default_cache_ttl()));
         let bands = query.attributes().clone().as_vec();
         let spatial_tiles = tiling_strategy
             .tile_information_iterator_from_pixel_bounds(query.spatial_bounds())
@@ -256,6 +260,7 @@ where
                     time_interval,
                     band_idx,
                     gdal_worker.clone(),
+                    cache_hint,
                 )
                 .map_err(Error::from)
             })
@@ -969,7 +974,7 @@ mod tests {
         )));
 
         let meta: MultiBandGdalMetaData = Box::new(StaticMetaData {
-            loading_info: MultiBandGdalLoadingInfo::new(time_steps, files, CacheHint::default()),
+            loading_info: MultiBandGdalLoadingInfo::new(time_steps, files, None),
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U16,
                 spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1974,11 +1979,8 @@ mod tests {
             params: params_b,
         };
 
-        let loading_info = MultiBandGdalLoadingInfo::new(
-            vec![time_interval],
-            vec![tile_a, tile_b],
-            CacheHint::default(),
-        );
+        let loading_info =
+            MultiBandGdalLoadingInfo::new(vec![time_interval], vec![tile_a, tile_b], None);
 
         // Both files and tile share the same spatial grid
         let data_grid = SpatialGridDefinition::new(
@@ -2006,6 +2008,7 @@ mod tests {
             time_interval,
             0, // band
             gw,
+            CacheHint::default(),
         )
         .await
         .unwrap();

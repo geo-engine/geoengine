@@ -11,8 +11,8 @@ use chrono::DateTime as ChronoDateTime;
 use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::operations::reproject::ReprojectClipped;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, CacheHint, RasterQueryRectangle, TimeDimension, TimeInstance,
-    TimeInterval, TryRegularTimeFillIterExt, VectorQueryRectangle,
+    AxisAlignedRectangle, RasterQueryRectangle, TimeDimension, TimeInstance, TimeInterval,
+    TryRegularTimeFillIterExt, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
 use geoengine_datatypes::spatial_reference::{
@@ -192,7 +192,7 @@ impl
             return Ok(MultiBandGdalLoadingInfo::new(
                 cached_time_steps,
                 cached_files,
-                CacheHint::default(),
+                None,
             ));
         }
 
@@ -254,11 +254,7 @@ impl
             )
             .await;
 
-        Ok(MultiBandGdalLoadingInfo::new(
-            time_steps,
-            files,
-            CacheHint::default(),
-        ))
+        Ok(MultiBandGdalLoadingInfo::new(time_steps, files, None))
     }
 
     async fn result_descriptor(&self) -> geoengine_operators::util::Result<RasterResultDescriptor> {

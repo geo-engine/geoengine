@@ -650,6 +650,9 @@ impl ConfigElement for Cache {
 /// This is the single reader of [`Cache::default_ttl_seconds`]. It is handed to
 /// `QueryContext::default_cache_ttl` by the session context, so that every query
 /// resolves unset TTLs against the configured value instead of a process-wide global.
+///
+/// # Panics
+/// If the `Cache` config element is missing.
 pub fn default_cache_ttl() -> CacheTtlSeconds {
     let cache = get_config_element::<Cache>()
         .expect("Cache config should be present because it is part of the Settings-default.toml");

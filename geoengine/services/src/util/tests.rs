@@ -140,13 +140,13 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
 pub async fn register_ndvi_workflow_helper(
     app_ctx: &PostgresContext<NoTls>,
 ) -> (Workflow, WorkflowId) {
-    register_ndvi_workflow_helper_with_cache_ttl(app_ctx, CacheTtlSeconds::default()).await
+    register_ndvi_workflow_helper_with_cache_ttl(app_ctx, None).await
 }
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn register_ndvi_workflow_helper_with_cache_ttl(
     app_ctx: &PostgresContext<NoTls>,
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl: Option<CacheTtlSeconds>,
 ) -> (Workflow, WorkflowId) {
     let (_, dataset) = add_ndvi_to_datasets_with_cache_ttl(app_ctx, cache_ttl).await;
 
@@ -172,7 +172,7 @@ pub async fn register_ndvi_workflow_helper_with_cache_ttl(
 }
 
 pub async fn add_ndvi_to_datasets(app_ctx: &PostgresContext<NoTls>) -> (DatasetId, NamedData) {
-    add_ndvi_to_datasets_with_cache_ttl(app_ctx, CacheTtlSeconds::default()).await
+    add_ndvi_to_datasets_with_cache_ttl(app_ctx, None).await
 }
 
 /// .
@@ -182,7 +182,7 @@ pub async fn add_ndvi_to_datasets(app_ctx: &PostgresContext<NoTls>) -> (DatasetI
 /// Panics if the default session context could not be created.
 pub async fn add_ndvi_to_datasets_with_cache_ttl(
     app_ctx: &PostgresContext<NoTls>,
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl: Option<CacheTtlSeconds>,
 ) -> (DatasetId, NamedData) {
     let dataset_name = DatasetName {
         namespace: None,
@@ -335,7 +335,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
                     (16, "Barren or Sparsely Vegetated".to_string()),
                 ].into()))]).unwrap(),
             },
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: Some(CacheTtlSeconds::default()),
         }),
     };
 
