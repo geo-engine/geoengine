@@ -13,7 +13,9 @@ use crate::{
 };
 use crate::{meta::quota::QuotaTracking, util::Result};
 use futures::Stream;
-use geoengine_datatypes::{raster::TilingSpecification, util::test::TestDefault};
+use geoengine_datatypes::{
+    primitives::CacheTtlSeconds, raster::TilingSpecification, util::test::TestDefault,
+};
 use pin_project::pin_project;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -64,6 +66,13 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
     fn quota_checker(&self) -> Option<&QuotaChecker>;
 
     fn cache(&self) -> Option<Arc<SharedCache>>;
+
+    /// The cache lifetime to use for tiles and feature collections that carry no
+    /// explicit cache TTL of their own.
+    ///
+    /// Sources resolve this while they turn a loading info into tiles, so the value is
+    /// fixed for the whole query and does not depend on process-wide state.
+    fn default_cache_ttl(&self) -> CacheTtlSeconds;
 
     fn new_raster_cache(&self) -> Option<Arc<crate::cache::new_raster_cache::NewRasterCacheEnum>> {
         None
@@ -137,6 +146,8 @@ pub struct MockQueryContext {
     pub quota_tracking: Option<QuotaTracking>,
     pub quota_checker: Option<QuotaChecker>,
     pub new_raster_cache: Option<Arc<crate::cache::new_raster_cache::NewRasterCacheEnum>>,
+    /// `0` (i.e. no caching) unless a test opts into another value.
+    pub default_cache_ttl: CacheTtlSeconds,
 
     pub abort_registration: QueryAbortRegistration,
     pub abort_trigger: Option<QueryAbortTrigger>,
@@ -161,6 +172,7 @@ impl MockQueryContext {
             new_raster_cache: Some(Arc::new(
                 crate::cache::new_raster_cache::NewRasterCacheEnum::new_fifo(1_073_741_824),
             )),
+            default_cache_ttl: CacheTtlSeconds::default(),
             abort_registration,
             abort_trigger: Some(abort_trigger),
             gdal_process_pool,
@@ -186,6 +198,7 @@ impl MockQueryContext {
             new_raster_cache: Some(Arc::new(
                 crate::cache::new_raster_cache::NewRasterCacheEnum::new_fifo(1_073_741_824),
             )),
+            default_cache_ttl: CacheTtlSeconds::default(),
             abort_registration,
             abort_trigger: Some(abort_trigger),
             gdal_process_pool,
@@ -210,6 +223,7 @@ impl MockQueryContext {
             new_raster_cache: Some(Arc::new(
                 crate::cache::new_raster_cache::NewRasterCacheEnum::new_fifo(1_073_741_824),
             )),
+            default_cache_ttl: CacheTtlSeconds::default(),
             abort_registration,
             abort_trigger: Some(abort_trigger),
         }
@@ -253,6 +267,10 @@ impl QueryContext for MockQueryContext {
 
     fn new_raster_cache(&self) -> Option<Arc<crate::cache::new_raster_cache::NewRasterCacheEnum>> {
         self.new_raster_cache.clone()
+    }
+
+    fn default_cache_ttl(&self) -> CacheTtlSeconds {
+        self.default_cache_ttl
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::{
     api::model::services::Volume,
-    config::{Cache, Oidc, Quota, get_config_element},
+    config::{Cache, Oidc, Quota, default_cache_ttl, get_config_element},
     contexts::{
         ApplicationContext, CurrentSchemaMigration, ExecutionContextImpl, GeoEngineDb,
         MigrationResult, QueryContextImpl, QuotaCheckerImpl, SessionContext, SessionId,
@@ -463,6 +463,7 @@ where
                     .create_quota_tracking(&self.session, workflow, computation),
             ),
             Some(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker),
+            default_cache_ttl(),
         ))
     }
 

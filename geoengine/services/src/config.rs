@@ -706,3 +706,28 @@ pub struct WildliveOidc {
 impl ConfigElement for Wildlive {
     const KEY: &'static str = "wildlive";
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Cache, MAX_CACHE_TTL_SECONDS, default_cache_ttl};
+    use geoengine_datatypes::util::test::TestDefault;
+
+    /// Guards the toml key against `Cache` field drift, which would silently fall back to
+    /// serde's zero value.
+    #[test]
+    fn default_cache_ttl_is_read_from_the_settings() {
+        assert_eq!(default_cache_ttl().seconds(), 0);
+    }
+
+    #[test]
+    fn default_ttl_seconds_is_validated() {
+        let mut cache = Cache::test_default();
+        assert!(cache.validate().is_ok());
+
+        cache.default_ttl_seconds = MAX_CACHE_TTL_SECONDS;
+        assert!(cache.validate().is_ok());
+
+        cache.default_ttl_seconds = MAX_CACHE_TTL_SECONDS + 1;
+        assert!(cache.validate().is_err());
+    }
+}

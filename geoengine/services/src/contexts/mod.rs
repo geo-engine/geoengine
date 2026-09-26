@@ -22,7 +22,7 @@ use async_trait::async_trait;
 use geoengine_datatypes::{
     dataset::{DataId, DataProviderId, ExternalDataId, LayerId},
     machine_learning::MlModelName,
-    primitives::{RasterQueryRectangle, VectorQueryRectangle},
+    primitives::{CacheTtlSeconds, RasterQueryRectangle, VectorQueryRectangle},
     raster::TilingSpecification,
 };
 use geoengine_operators::{
@@ -145,6 +145,7 @@ pub struct QueryContextImpl {
     abort_registration: QueryAbortRegistration,
     abort_trigger: Option<QueryAbortTrigger>,
     gdal_process_pool: Arc<GdalProcessPool>,
+    default_cache_ttl: CacheTtlSeconds,
 }
 
 impl QueryContextImpl {
@@ -153,6 +154,7 @@ impl QueryContextImpl {
         tiling_specification: TilingSpecification,
         thread_pool: Arc<ThreadPool>,
         gdal_process_pool: Arc<GdalProcessPool>,
+        default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
@@ -166,6 +168,7 @@ impl QueryContextImpl {
             abort_registration,
             abort_trigger: Some(abort_trigger),
             gdal_process_pool,
+            default_cache_ttl,
         }
     }
 
@@ -179,6 +182,7 @@ impl QueryContextImpl {
         new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
         quota_tracking: Option<QuotaTracking>,
         quota_checker: Option<QuotaChecker>,
+        default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
@@ -192,6 +196,7 @@ impl QueryContextImpl {
             abort_registration,
             abort_trigger: Some(abort_trigger),
             gdal_process_pool,
+            default_cache_ttl,
         }
     }
 }
@@ -234,6 +239,10 @@ impl QueryContext for QueryContextImpl {
 
     fn new_raster_cache(&self) -> Option<Arc<NewRasterCacheEnum>> {
         self.new_raster_cache.clone()
+    }
+
+    fn default_cache_ttl(&self) -> CacheTtlSeconds {
+        self.default_cache_ttl
     }
 }
 
