@@ -4,7 +4,7 @@ use postgres_types::{FromSql, ToSql};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize};
 
-const MAX_CACHE_TTL_SECONDS: u32 = 31_536_000; // 1 year
+pub const MAX_CACHE_TTL_SECONDS: u32 = 31_536_000; // 1 year
 
 /// Config parameter to indicate how long a value may be cached (0 = must not be cached)
 ///

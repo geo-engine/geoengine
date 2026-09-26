@@ -2,7 +2,7 @@ use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
 use config::{Config, Environment, File};
-use geoengine_datatypes::primitives::TimeInterval;
+use geoengine_datatypes::primitives::{CacheTtlSeconds, MAX_CACHE_TTL_SECONDS, TimeInterval};
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use serde::Deserialize;
@@ -585,6 +585,9 @@ pub struct Cache {
     /// Ignored if `enable_new_raster_cache` is `false`, in which case the old cache holds both
     /// vector and raster data and gets the full `size_in_mb`.
     pub raster_cache_size_ratio: f64,
+    /// Default cache lifetime in seconds for values that carry no explicit cache TTL.
+    /// `0` disables caching for those values.
+    pub default_ttl_seconds: u32,
 }
 
 impl Cache {
@@ -605,6 +608,14 @@ impl Cache {
     }
 
     pub fn validate(&self) -> Result<()> {
+        if self.default_ttl_seconds > MAX_CACHE_TTL_SECONDS {
+            return Err(crate::error::Error::InvalidConfig {
+                reason: format!(
+                    "default_ttl_seconds must be between 0 and {MAX_CACHE_TTL_SECONDS}, got {}",
+                    self.default_ttl_seconds
+                ),
+            });
+        }
         if !(0.0..=1.0).contains(&self.raster_cache_size_ratio) {
             return Err(crate::error::Error::InvalidConfig {
                 reason: format!(
@@ -625,12 +636,24 @@ impl TestDefault for Cache {
             landing_zone_ratio: 0.1, // 10% of cache size
             enable_new_raster_cache: false,
             raster_cache_size_ratio: 0.5,
+            default_ttl_seconds: 0,
         }
     }
 }
 
 impl ConfigElement for Cache {
     const KEY: &'static str = "cache";
+}
+
+/// The cache lifetime to use for values that carry no explicit cache TTL.
+///
+/// This is the single reader of [`Cache::default_ttl_seconds`]. It is handed to
+/// `QueryContext::default_cache_ttl` by the session context, so that every query
+/// resolves unset TTLs against the configured value instead of a process-wide global.
+pub fn default_cache_ttl() -> CacheTtlSeconds {
+    let cache = get_config_element::<Cache>()
+        .expect("Cache config should be present because it is part of the Settings-default.toml");
+    CacheTtlSeconds::new(cache.default_ttl_seconds)
 }
 
 #[derive(Debug, Deserialize, Clone, Copy)]
