@@ -801,7 +801,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: Some(CacheTtlSeconds::default()),
             },
             result_descriptor: vector_descriptor.clone(),
             phantom: Default::default(),
@@ -816,7 +816,7 @@ mod tests {
                 granularity: TimeGranularity::Millis,
                 step: 0,
             },
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: Some(CacheTtlSeconds::default()),
         };
 
         let _ = db

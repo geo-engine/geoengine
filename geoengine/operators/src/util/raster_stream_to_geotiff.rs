@@ -800,7 +800,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
             self.result.push(GdalLoadingInfoTemporalSlice {
                 time: time_interval,
                 params: Some(dataset_parameters),
-                cache_ttl: CacheTtlSeconds::max(), // not relevant for writing tiffs, but required for persistent datasets. Since persistent datasets are constant, we can set this to max (for now)
+                cache_ttl: Some(CacheTtlSeconds::max()), // not relevant for writing tiffs, but required for persistent datasets. Since persistent datasets are constant, we can set this to max (for now)
             });
             self.init_new_intermediate_dataset(
                 time_interval,

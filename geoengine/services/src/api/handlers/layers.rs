@@ -2489,7 +2489,7 @@ mod tests {
             project_id: String::new(),
             api_token: String::new(),
             filter_label: String::new(),
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: Some(CacheTtlSeconds::default()),
         };
 
         let req = test::TestRequest::put()

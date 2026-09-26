@@ -1155,7 +1155,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: Some(CacheTtlSeconds::default()),
         };
 
         let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
@@ -1318,7 +1318,7 @@ mod tests {
             priority: Some(33),
             data: test_data!("netcdf4d/").into(),
             overviews: test_data!("netcdf4d/overviews/").into(),
-            cache_ttl: CacheTtlSeconds::new(0),
+            cache_ttl: Some(CacheTtlSeconds::new(0)),
         };
 
         let provider_id = db.add_layer_provider(provider.into()).await.unwrap();
@@ -1397,7 +1397,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: Some(CacheTtlSeconds::default()),
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1471,7 +1471,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: Some(CacheTtlSeconds::default()),
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1523,7 +1523,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: Some(CacheTtlSeconds::default()),
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1581,7 +1581,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: Some(CacheTtlSeconds::default()),
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1639,7 +1639,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: Some(CacheTtlSeconds::default()),
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1748,7 +1748,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: Some(CacheTtlSeconds::default()),
             },
             result_descriptor: vector_descriptor.clone(),
             phantom: Default::default(),
@@ -1775,7 +1775,7 @@ mod tests {
                 granularity: TimeGranularity::Millis,
                 step: 0,
             },
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: Some(CacheTtlSeconds::default()),
         };
 
         let id = db
@@ -1794,7 +1794,7 @@ mod tests {
             time: None,
             params: gdal_params.clone(),
             result_descriptor: raster_descriptor.clone(),
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: Some(CacheTtlSeconds::default()),
         };
 
         let id = db
@@ -1836,7 +1836,7 @@ mod tests {
                 step: 0,
             },
             band_offset: 0,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: Some(CacheTtlSeconds::default()),
         };
 
         let id = db
@@ -4089,7 +4089,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: Some(CacheTtlSeconds::default()),
         };
 
         let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
@@ -4183,7 +4183,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: Some(CacheTtlSeconds::default()),
         };
 
         let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
@@ -4873,7 +4873,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: Some(CacheTtlSeconds::default()),
         };
 
         let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
