@@ -36,7 +36,8 @@ import {EdvLayersService} from '../layers/layers.service';
  * Note: the duration observable must emit for `debounce` to pass the value on, so the `loading`
  * case has to return `of(undefined)` instead of an empty observable.
  */
-export const tileLoadingIndicator = (tileLoading$: Observable<boolean>): Observable<boolean> => tileLoading$.pipe(
+export const tileLoadingIndicator = (tileLoading$: Observable<boolean>): Observable<boolean> =>
+    tileLoading$.pipe(
         distinctUntilChanged(),
         debounce((loading) => (loading ? of(undefined) : timer(150))),
         startWith(false),
