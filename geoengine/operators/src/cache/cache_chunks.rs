@@ -521,7 +521,7 @@ mod tests {
                     "strings".to_owned(),
                     FeatureData::Text(strngs),
                 )]),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap();
 

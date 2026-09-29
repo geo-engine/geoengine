@@ -3,48 +3,21 @@ use chrono::Utc;
 use postgres_types::{FromSql, ToSql};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize};
-use std::sync::OnceLock;
-
 pub const MAX_CACHE_TTL_SECONDS: u32 = 31_536_000; // 1 year
-
-static DEFAULT_CACHE_TTL_SECONDS: OnceLock<CacheTtlSeconds> = OnceLock::new();
-
-/// Sets the process-wide default used by [`CacheTtlSeconds::default`] and
-/// [`CacheHint::default`]. This is intended to be called once during service
-/// configuration initialization. Calls after initialization are ignored.
-pub fn set_default_cache_ttl_seconds(seconds: u32) {
-    let _ = DEFAULT_CACHE_TTL_SECONDS.set(CacheTtlSeconds::new(seconds));
-}
-
-fn default_cache_ttl_seconds() -> CacheTtlSeconds {
-    DEFAULT_CACHE_TTL_SECONDS
-        .get()
-        .copied()
-        .unwrap_or(CacheTtlSeconds(0))
-}
 
 /// Config parameter to indicate how long a value may be cached (0 = must not be cached)
 ///
-/// We derive the Serializer here because it makes sense to output the concrete cache ttl.
-/// For the deserializer we have a custom implementation to allow "max" as a value.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, PartialOrd)]
+/// The serializer outputs the concrete cache ttl; deserialization also accepts "max".
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize)]
 pub struct CacheTtlSeconds(u32);
-
-impl Default for CacheTtlSeconds {
-    fn default() -> Self {
-        default_cache_ttl_seconds()
-    }
-}
 
 impl CacheTtlSeconds {
     pub fn new(seconds: u32) -> Self {
         Self(seconds.min(MAX_CACHE_TTL_SECONDS))
     }
-
     pub fn max() -> Self {
         Self(MAX_CACHE_TTL_SECONDS)
     }
-
     pub fn seconds(self) -> u32 {
         self.0
     }
@@ -77,16 +50,14 @@ impl<'de> Deserialize<'de> for CacheTtlSeconds {
 
         match val {
             serde_json::Value::Number(n) => {
-                if let Some(num) = n.as_u64() {
-                    Ok(Self(num as u32))
+                if let Some(num) = n.as_u64().and_then(|num| u32::try_from(num).ok()) {
+                    Ok(Self::new(num))
                 } else {
                     Err(D::Error::custom("Invalid number for CacheTtl::Seconds"))
                 }
             }
-            serde_json::Value::String(s) if s.eq_ignore_ascii_case("max") => {
-                Ok(Self(MAX_CACHE_TTL_SECONDS))
-            }
-            serde_json::Value::Null => Ok(Self(0)),
+            serde_json::Value::String(s) if s.eq_ignore_ascii_case("max") => Ok(Self::max()),
+            serde_json::Value::Null => Ok(Self::new(0)),
             _ => Err(D::Error::custom("Invalid value for CacheTtl")),
         }
     }
@@ -113,7 +84,7 @@ impl<'a> FromSql<'a> for CacheTtlSeconds {
         ty: &postgres_types::Type,
         raw: &'a [u8],
     ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
-        Ok(Self(<i32 as FromSql>::from_sql(ty, raw)? as u32))
+        Ok(Self::new(<i32 as FromSql>::from_sql(ty, raw)? as u32))
     }
 
     fn accepts(ty: &postgres_types::Type) -> bool {
@@ -126,12 +97,6 @@ impl<'a> FromSql<'a> for CacheTtlSeconds {
 pub struct CacheHint {
     created: DateTime,
     expires: CacheExpiration,
-}
-
-impl Default for CacheHint {
-    fn default() -> Self {
-        CacheTtlSeconds::default().into()
-    }
 }
 
 impl CacheHint {
@@ -274,16 +239,21 @@ mod tests {
     fn it_deserializes_ttl() {
         assert_eq!(
             serde_json::from_str::<CacheTtlSeconds>("1234").unwrap(),
-            CacheTtlSeconds(1234)
+            CacheTtlSeconds::new(1234)
         );
         assert_eq!(
             serde_json::from_str::<CacheTtlSeconds>("\"max\"").unwrap(),
-            CacheTtlSeconds(MAX_CACHE_TTL_SECONDS)
+            CacheTtlSeconds::max()
         );
         assert_eq!(
             serde_json::from_value::<CacheTtlSeconds>(serde_json::Value::Null).unwrap(),
-            CacheTtlSeconds(0)
+            CacheTtlSeconds::new(0)
         );
+    }
+
+    #[test]
+    fn it_rejects_ttl_overflow() {
+        assert!(serde_json::from_str::<CacheTtlSeconds>("4294967296").is_err());
     }
 
     #[test]

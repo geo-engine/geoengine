@@ -1,7 +1,9 @@
 use super::GdalDatasetParameters;
 use crate::engine::RasterResultDescriptor;
 use geoengine_datatypes::{
-    primitives::{CacheHint, SpatialPartition2D, SpatialPartitioned, TimeInterval},
+    primitives::{
+        CacheHint, CacheTtlSeconds, SpatialPartition2D, SpatialPartitioned, TimeInterval,
+    },
     raster::TileInformation,
 };
 use postgres_types::{FromSql, ToSql};
@@ -17,7 +19,7 @@ pub struct GdalMultiBand {
 pub struct MultiBandGdalLoadingInfo {
     files: Vec<TileFile>,
     time_steps: Vec<TimeInterval>,
-    cache_hint: CacheHint,
+    cache_ttl: Option<CacheTtlSeconds>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -30,7 +32,11 @@ pub struct TileFile {
 }
 
 impl MultiBandGdalLoadingInfo {
-    pub fn new(time_steps: Vec<TimeInterval>, files: Vec<TileFile>, cache_hint: CacheHint) -> Self {
+    pub fn new(
+        time_steps: Vec<TimeInterval>,
+        files: Vec<TileFile>,
+        cache_ttl: Option<CacheTtlSeconds>,
+    ) -> Self {
         debug_assert!(!time_steps.is_empty(), "time_steps must not be empty");
 
         debug_assert!(
@@ -58,7 +64,7 @@ impl MultiBandGdalLoadingInfo {
         Self {
             files,
             time_steps,
-            cache_hint,
+            cache_ttl,
         }
     }
 
@@ -115,7 +121,7 @@ impl MultiBandGdalLoadingInfo {
         result
     }
 
-    pub fn cache_hint(&self) -> CacheHint {
-        self.cache_hint
+    pub fn cache_hint(&self, default_ttl: CacheTtlSeconds) -> CacheHint {
+        self.cache_ttl.unwrap_or(default_ttl).into()
     }
 }

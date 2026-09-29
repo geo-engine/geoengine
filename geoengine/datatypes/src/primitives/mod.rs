@@ -59,7 +59,4 @@ pub use time_gap_fill_iter::{
 pub use time_instance::TimeInstance;
 pub use time_interval::{TimeInterval, time_interval_extent};
 pub use time_step::{TimeGranularity, TimeStep, TimeStepIter};
-pub use ttl::{
-    CacheExpiration, CacheHint, CacheTtlSeconds, MAX_CACHE_TTL_SECONDS,
-    set_default_cache_ttl_seconds,
-};
+pub use ttl::{CacheExpiration, CacheHint, CacheTtlSeconds, MAX_CACHE_TTL_SECONDS};

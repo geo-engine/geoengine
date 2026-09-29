@@ -240,7 +240,7 @@ mod tests {
             0,
             GeoTransform::new((0., 0.).into(), 1., -1.),
             g_u8,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
         let tile_f64: RasterTile2D<f32> = tile_u8.convert_data_type();
 
@@ -268,7 +268,7 @@ mod tests {
             0,
             GeoTransform::new((0., 0.).into(), 1., -1.),
             g_u8,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
         let tile_f64: RasterTile2D<f32> = tile_u8.convert_data_type_parallel();
 

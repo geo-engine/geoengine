@@ -192,7 +192,7 @@ pub fn create_loading_info(
     result_descriptor: RasterResultDescriptor,
     params_blueprint: &GdalDatasetParameters,
     modifications: impl Iterator<Item = ParamModification>,
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl: Option<CacheTtlSeconds>,
 ) -> GdalMetaDataList {
     GdalMetaDataList {
         result_descriptor,
@@ -205,7 +205,7 @@ pub fn create_loading_info(
 fn create_loading_info_part(
     params_blueprint: &GdalDatasetParameters,
     modification: ParamModification,
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl: Option<CacheTtlSeconds>,
 ) -> GdalLoadingInfoTemporalSlice {
     let mut params = params_blueprint.clone();
 

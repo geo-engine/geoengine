@@ -108,6 +108,11 @@ class EdrDataProviderDefinition(BaseModel):
         if self.vector_spec is None and "vector_spec" in self.model_fields_set:
             _dict['vectorSpec'] = None
 
+        # set to None if cache_ttl (nullable) is None
+        # and model_fields_set contains the field
+        if self.cache_ttl is None and "cache_ttl" in self.model_fields_set:
+            _dict['cacheTtl'] = None
+
         # set to None if provenance (nullable) is None
         # and model_fields_set contains the field
         if self.provenance is None and "provenance" in self.model_fields_set:

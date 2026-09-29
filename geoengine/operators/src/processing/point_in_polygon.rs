@@ -429,7 +429,7 @@ mod tests {
             ],
             vec![Default::default(); 1],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -512,7 +512,7 @@ mod tests {
             MultiPoint::many(vec![(0.001, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )?;
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
@@ -530,7 +530,7 @@ mod tests {
                 ]]])?],
                 vec![TimeInterval::new_unchecked(0, 1); 1],
                 Default::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )?)
             .boxed();
 
@@ -574,7 +574,7 @@ mod tests {
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )?;
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
@@ -584,7 +584,7 @@ mod tests {
                 vec![],
                 vec![],
                 Default::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )?)
             .boxed();
 
@@ -633,7 +633,7 @@ mod tests {
                 TimeInterval::new(0, 5)?,
             ],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )?;
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
@@ -651,7 +651,7 @@ mod tests {
                 vec![polygon.clone(), polygon],
                 vec![TimeInterval::new(0, 1)?, TimeInterval::new(1, 2)?],
                 Default::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )?)
             .boxed();
 
@@ -700,13 +700,13 @@ mod tests {
             MultiPoint::many(vec![(5.0, 5.1), (15.0, 15.1)]).unwrap(),
             vec![TimeInterval::new(0, 1)?; 2],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )?;
         let points2 = MultiPointCollection::from_data(
             MultiPoint::many(vec![(6.0, 6.1), (16.0, 16.1)]).unwrap(),
             vec![TimeInterval::new(1, 2)?; 2],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )?;
 
         let point_source =
@@ -732,13 +732,13 @@ mod tests {
                 vec![polygon1.clone()],
                 vec![TimeInterval::new(0, 1)?],
                 Default::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )?,
             MultiPolygonCollection::from_data(
                 vec![polygon1, polygon2],
                 vec![TimeInterval::new(1, 2)?, TimeInterval::new(1, 2)?],
                 Default::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )?,
         ])
         .boxed();
@@ -808,7 +808,7 @@ mod tests {
             vec![],
             vec![],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -825,7 +825,7 @@ mod tests {
             ],
             vec![TimeInterval::default()],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -874,7 +874,7 @@ mod tests {
             vec![],
             vec![],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -891,7 +891,7 @@ mod tests {
             ],
             vec![TimeInterval::default()],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 

@@ -25,8 +25,9 @@ use geoengine_datatypes::raster::ChangeGridBounds;
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
-        BandSelection, CacheHint, RasterQueryRectangle, SpatialResolution, TimeInterval,
-        TryIrregularTimeFillIterExt, TryRegularTimeFillIterExt, find_next_best_overview_level,
+        BandSelection, CacheHint, CacheTtlSeconds, RasterQueryRectangle, SpatialResolution,
+        TimeInterval, TryIrregularTimeFillIterExt, TryRegularTimeFillIterExt,
+        find_next_best_overview_level,
     },
     raster::{
         EmptyGrid, GridBoundingBox2D, Pixel, RasterDataType, RasterProperties, RasterTile2D,
@@ -198,6 +199,13 @@ impl GdalRasterLoader {
     }
 }
 
+fn resolve_cache_ttl(
+    cache_ttl: Option<CacheTtlSeconds>,
+    default_cache_ttl: CacheTtlSeconds,
+) -> CacheTtlSeconds {
+    cache_ttl.unwrap_or(default_cache_ttl)
+}
+
 // This is where the source attaches!
 /// A stream of futures producing `RasterTile2D` for a single slice in time
 fn temporal_slice_tile_future_stream<T: Pixel + GdalType + FromPrimitive>(
@@ -206,6 +214,7 @@ fn temporal_slice_tile_future_stream<T: Pixel + GdalType + FromPrimitive>(
     tiling_strategy: TilingStrategy,
     reader_mode: GdalReaderMode,
     gdal_worker: GdalPoolDispatcher,
+    default_cache_ttl: CacheTtlSeconds,
 ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> + use<T> {
     stream::iter(tiling_strategy.tile_information_iterator_from_pixel_bounds(spatial_bounds)).map(
         move |tile| {
@@ -214,7 +223,7 @@ fn temporal_slice_tile_future_stream<T: Pixel + GdalType + FromPrimitive>(
                 reader_mode,
                 tile,
                 info.time,
-                info.cache_ttl.into(),
+                resolve_cache_ttl(info.cache_ttl, default_cache_ttl).into(),
                 gdal_worker.clone(),
             )
             .map_err(Into::into)
@@ -231,6 +240,7 @@ where
     pub meta_data: GdalMetaData,
     pub overview_level: u32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
+    pub default_cache_ttl: CacheTtlSeconds,
     pub _phantom_data: PhantomData<T>,
 }
 
@@ -251,6 +261,7 @@ where
             meta_data,
             overview_level,
             original_resolution_spatial_grid,
+            default_cache_ttl: CacheTtlSeconds::new(0),
             _phantom_data: PhantomData,
         }
     }
@@ -394,6 +405,7 @@ where
             tiling_strategy,
             reader_mode,
             ctx.get_gdal_worker(),
+            self.default_cache_ttl,
         );
 
         Ok(loaded_source_stream.boxed())
@@ -471,6 +483,7 @@ fn load_source_stream<P, S>(
     tiling_strategy: TilingStrategy,
     reader_mode: GdalReaderMode,
     gdal_worker: GdalPoolDispatcher,
+    default_cache_ttl: CacheTtlSeconds,
 ) -> impl Stream<Item = Result<RasterTile2D<P>>> + use<P, S>
 where
     P: Pixel + GdalType + FromPrimitive,
@@ -484,6 +497,7 @@ where
                 tiling_strategy,
                 reader_mode,
                 gdal_worker.clone(),
+                default_cache_ttl,
             )
             .map(Result::Ok)
         })
@@ -519,6 +533,7 @@ impl RasterOperator for GdalSource {
                 meta_data,
                 meta_data_result_descriptor,
                 context.tiling_specification(),
+                context.default_cache_ttl(),
             )
         } else {
             // generate a result descriptor with the overview level
@@ -530,6 +545,7 @@ impl RasterOperator for GdalSource {
                 meta_data_result_descriptor,
                 context.tiling_specification(),
                 self.params.overview_level.unwrap_or(0),
+                context.default_cache_ttl(),
             )
         };
 
@@ -550,6 +566,7 @@ pub struct InitializedGdalSourceOperator {
     // the overview level to use. 0/1 means the highest resolution
     pub overview_level: u32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
+    pub default_cache_ttl: CacheTtlSeconds,
 }
 
 impl InitializedGdalSourceOperator {
@@ -560,6 +577,7 @@ impl InitializedGdalSourceOperator {
         meta_data: GdalMetaData,
         result_descriptor: RasterResultDescriptor,
         tiling_specification: TilingSpecification,
+        default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
         InitializedGdalSourceOperator {
             name,
@@ -570,6 +588,7 @@ impl InitializedGdalSourceOperator {
             tiling_specification,
             overview_level: 0,
             original_resolution_spatial_grid: None,
+            default_cache_ttl,
         }
     }
 
@@ -587,6 +606,7 @@ impl InitializedGdalSourceOperator {
         result_descriptor: RasterResultDescriptor,
         tiling_specification: TilingSpecification,
         overview_level: u32,
+        default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
         let source_resolution_spatial_grid = result_descriptor
             .spatial_grid_descriptor()
@@ -616,6 +636,7 @@ impl InitializedGdalSourceOperator {
             data_name,
             overview_level,
             original_resolution_spatial_grid: original_grid,
+            default_cache_ttl,
         }
     }
 }
@@ -635,6 +656,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -646,6 +668,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -657,6 +680,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -678,6 +702,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -689,6 +714,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -705,6 +731,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -716,6 +743,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -1225,7 +1253,7 @@ mod tests {
             reader_mode,
             tile_info,
             time_interval,
-            CacheHint::default(),
+            CacheHint::no_cache(),
             gw,
         )
         .await;
@@ -1237,7 +1265,7 @@ mod tests {
             tile_info,
             0,
             EmptyGrid2D::new(output_shape).into(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
 
         assert!(tile.unwrap().tiles_equal_ignoring_cache_hint(&expected));
@@ -1375,6 +1403,22 @@ mod tests {
         assert_eq!(
             deserialized_parameters.gdal_config_options,
             dataset_parameters.gdal_config_options,
+        );
+    }
+
+    #[test]
+    fn cache_ttl_uses_context_default_unless_overridden() {
+        assert_eq!(
+            resolve_cache_ttl(None, CacheTtlSeconds::new(17)).seconds(),
+            17
+        );
+        assert_eq!(
+            resolve_cache_ttl(Some(CacheTtlSeconds::new(31)), CacheTtlSeconds::new(17)).seconds(),
+            31
+        );
+        assert_eq!(
+            resolve_cache_ttl(Some(CacheTtlSeconds::new(0)), CacheTtlSeconds::new(17)).seconds(),
+            0
         );
     }
 

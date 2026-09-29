@@ -614,6 +614,7 @@ where
     for<'c> FeatureCollection<G>: ToGeoJson<'c>,
 {
     let query_abort_trigger = query_ctx.abort_trigger()?;
+    let default_cache_ttl = query_ctx.default_cache_ttl();
 
     let features: Vec<serde_json::Value> = Vec::new();
     // TODO: more efficient merging of the partial feature collections
@@ -644,7 +645,7 @@ where
 
     let (features, cache_hint) =
         abortable_query_execution(future, conn_closed, query_abort_trigger).await?;
-    let cache_hint = cache_hint.unwrap_or_default();
+    let cache_hint = cache_hint.unwrap_or_else(|| default_cache_ttl.into());
 
     let mut output = json!({
         "type": "FeatureCollection"
@@ -675,7 +676,7 @@ fn get_feature_mock(_request: &GetFeature) -> Result<HttpResponse> {
         .iter()
         .cloned()
         .collect(),
-        CacheHint::default(),
+        CacheHint::no_cache(),
     )?;
 
     Ok(HttpResponse::Ok()

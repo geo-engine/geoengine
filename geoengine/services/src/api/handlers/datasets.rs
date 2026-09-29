@@ -38,9 +38,7 @@ use gdal::{
 use geoengine_datatypes::{
     collections::VectorDataType,
     error::BoxedResultExt,
-    primitives::{
-        CacheTtlSeconds, FeatureDataType, Measurement, TimeInterval, VectorQueryRectangle,
-    },
+    primitives::{FeatureDataType, Measurement, TimeInterval, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
 use geoengine_operators::{
@@ -1027,7 +1025,7 @@ pub async fn suggest_meta_data_handler<C: ApplicationContext>(
                 params: vec![GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::default().into(),
                     params: Some(gdal_params.into()),
-                    cache_ttl: CacheTtlSeconds::default().into(),
+                    cache_ttl: None,
                 }],
             }),
         }))
@@ -1132,7 +1130,7 @@ fn auto_detect_vector_meta_data_definition_from_dataset(
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         },
         result_descriptor: VectorResultDescriptor {
             data_type: geometry.data_type,
@@ -1771,7 +1769,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1804,7 +1802,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: descriptor,
             phantom: Default::default(),
@@ -2244,7 +2242,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default()
+                    cache_ttl: None
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2343,7 +2341,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default()
+                    cache_ttl: None
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2421,7 +2419,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default()
+                    cache_ttl: None
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2499,7 +2497,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default()
+                    cache_ttl: None
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2570,7 +2568,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default()
+                    cache_ttl: None
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2645,7 +2643,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default()
+                    cache_ttl: None
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2720,7 +2718,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: descriptor,
             phantom: Default::default(),
@@ -2838,7 +2836,7 @@ mod tests {
                 layer_name: None,
                 main_file: None,
             });
-        let res = send_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
@@ -2879,7 +2877,6 @@ mod tests {
                   "onError": "ignore",
                   "sqlQuery": null,
                   "attributeQuery": null,
-                  "cacheTtl": 0,
                 },
                 "resultDescriptor": {
                   "dataType": "MultiPoint",
@@ -2903,6 +2900,32 @@ mod tests {
                 }
               }
             })
+        );
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset/suggest")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .set_json(SuggestMetaData {
+                data_path: DataPath::Volume(VolumeName("test_data".to_string())),
+                layer_name: None,
+                main_file: Some(
+                    "raster/modis_ndvi/tiled/MOD13A2_M_NDVI_2014-01-01_1_1.tif".to_string(),
+                ),
+            });
+        let res = send_test_request(req, app_ctx).await;
+        let res_status = res.status();
+        let suggestion: Value = read_body_json(res).await;
+
+        assert_eq!(res_status, 200, "{suggestion}");
+        assert_eq!(
+            suggestion["metaData"]["type"], "GdalMetaDataList",
+            "{suggestion}"
+        );
+        assert!(
+            suggestion["metaData"]["params"][0]
+                .get("cacheTtl")
+                .is_none()
         );
 
         Ok(())
@@ -3005,7 +3028,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: descriptor,
             phantom: Default::default(),
@@ -3032,7 +3055,6 @@ mod tests {
             json!({
                 "loadingInfo":  {
                     "attributeQuery": null,
-                    "cacheTtl": 0,
                     "columns": null,
                     "dataType": null,
                     "defaultGeometry": null,
@@ -3096,7 +3118,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -3122,7 +3144,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: descriptor,
                 phantom: Default::default(),

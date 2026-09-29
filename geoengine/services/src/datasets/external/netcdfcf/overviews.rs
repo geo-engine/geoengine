@@ -698,7 +698,7 @@ fn generate_loading_info(
     .boxed_context(error::CannotGenerateLoadingInfo)?;
 
     // we change the cache ttl when returning the overview metadata in the provider
-    let cache_ttl = CacheTtlSeconds::default();
+    let cache_ttl = CacheTtlSeconds::new(0);
 
     Ok(create_loading_info(
         result_descriptor,
@@ -710,7 +710,7 @@ fn generate_loading_info(
                 file_path: params.file_path.clone(),
                 time_instance: *time_instance,
             }),
-        cache_ttl,
+        Some(cache_ttl),
     ))
 }
 
@@ -855,7 +855,7 @@ mod tests {
                             allow_alphaband_as_mask: true,
                             retry: None,
                         }),
-                        cache_ttl: CacheTtlSeconds::default(),
+                        cache_ttl: None,
                     },
                     GdalLoadingInfoTemporalSlice {
                         time: TimeInterval::new(expected_time_2, expected_time_2 + 1).unwrap(),
@@ -877,7 +877,7 @@ mod tests {
                             allow_alphaband_as_mask: true,
                             retry: None,
                         }),
-                        cache_ttl: CacheTtlSeconds::default(),
+                        cache_ttl: None,
                     },
                 ],
             }
@@ -1030,7 +1030,7 @@ mod tests {
                             allow_alphaband_as_mask: true,
                             retry: None,
                         }),
-                        cache_ttl: CacheTtlSeconds::default(),
+                        cache_ttl: None,
                     },
                     GdalLoadingInfoTemporalSlice {
                         time: TimeInterval::new(expected_time_2, expected_time_2 + 1).unwrap(),
@@ -1053,7 +1053,7 @@ mod tests {
                             allow_alphaband_as_mask: true,
                             retry: None,
                         }),
-                        cache_ttl: CacheTtlSeconds::default(),
+                        cache_ttl: None,
                     },
                     GdalLoadingInfoTemporalSlice {
                         time: TimeInterval::new(expected_time_3, expected_time_3 + 1).unwrap(),
@@ -1076,7 +1076,7 @@ mod tests {
                             allow_alphaband_as_mask: true,
                             retry: None,
                         }),
-                        cache_ttl: CacheTtlSeconds::default(),
+                        cache_ttl: None,
                     }
                 ],
             }

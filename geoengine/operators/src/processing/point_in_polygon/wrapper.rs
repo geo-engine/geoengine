@@ -81,7 +81,7 @@ mod tests {
             ],
             vec![Default::default(); 2],
             HashMap::new(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 

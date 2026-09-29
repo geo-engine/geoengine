@@ -28,8 +28,8 @@ pub struct EbvPortalDataProviderDefinition {
     /// Path were overview files are stored
     #[serde(rename = "overviews")]
     pub overviews: String,
-    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
-    pub cache_ttl: Option<i32>,
+    #[serde(rename = "cacheTtl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<Option<i32>>,
 }
 
 impl EbvPortalDataProviderDefinition {

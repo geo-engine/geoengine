@@ -1053,7 +1053,7 @@ mod tests {
                     .iter()
                     .cloned()
                     .collect(),
-                    CacheHint::default(),
+                    CacheHint::no_cache(),
                 )
                 .unwrap(),
             )

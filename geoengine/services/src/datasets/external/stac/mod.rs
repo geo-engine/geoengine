@@ -219,7 +219,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
             self.datasets,
             self.page_limit,
             self.query_timeout_secs,
-            self.cache_ttl_secs.unwrap_or_default(),
+            self.cache_ttl_secs,
         );
 
         provider.client = provider
@@ -298,7 +298,7 @@ pub struct StacDataProvider {
     time_dimension: TimeDimension,
     datasets: Vec<StacProviderDataset>,
     page_limit: i64,
-    cache_ttl_secs: CacheTtlSeconds,
+    cache_ttl_secs: Option<CacheTtlSeconds>,
     /// Shared HTTP client, reused across all requests for this provider.
     client: StacClient,
     /// In-memory cache for STAC query results (tile files), keyed by dataset
@@ -331,7 +331,7 @@ impl StacDataProvider {
             datasets,
             page_limit,
             query_timeout_secs,
-            CacheTtlSeconds::default(),
+            None,
         )
     }
 
@@ -347,7 +347,7 @@ impl StacDataProvider {
         datasets: Vec<StacProviderDataset>,
         page_limit: i64,
         query_timeout_secs: i64,
-        cache_ttl_secs: CacheTtlSeconds,
+        cache_ttl_secs: Option<CacheTtlSeconds>,
     ) -> Self {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(query_timeout_secs as u64))

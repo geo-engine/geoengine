@@ -1,6 +1,6 @@
 use gdal::raster::GdalType;
 use geoengine_datatypes::{
-    primitives::TimeInterval,
+    primitives::{CacheTtlSeconds, TimeInterval},
     raster::{
         ChangeGridBounds, EmptyGrid, GridBoundingBox2D, GridOrEmpty, Pixel, RasterProperties,
         RasterTile2D, TileInformation,
@@ -88,6 +88,7 @@ impl GdalPoolReader {
         time: TimeInterval,
         band: u32,
         gdal_worker: GdalPoolDispatcher,
+        default_cache_ttl: CacheTtlSeconds,
     ) -> Result<RasterTile2D<T>, MultiBandGdalSourceError> {
         debug!(
             "loading tile {:?} for time: {}, band: {band}",
@@ -109,7 +110,7 @@ impl GdalPoolReader {
             GridOrEmpty::from(EmptyGrid::new(tile_information.global_pixel_bounds()));
 
         let mut properties = RasterProperties::default();
-        let cache_hint = loading_info.cache_hint();
+        let cache_hint = loading_info.cache_hint(default_cache_ttl);
 
         let reader = Self::from(gdal_worker);
 

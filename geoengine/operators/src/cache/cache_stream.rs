@@ -185,7 +185,7 @@ mod tests {
                 geoengine_datatypes::raster::GridOrEmpty::from(
                     Grid2D::new([2, 2].into(), vec![i as u8; 4]).unwrap(),
                 ),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             );
             let compressed_tile = CompressedRasterTile2D::compress_tile(tile);
             data.push(compressed_tile);
@@ -212,7 +212,7 @@ mod tests {
                     "strings".to_owned(),
                     FeatureData::Text(strngs),
                 )]),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap();
 

@@ -22,7 +22,7 @@ use async_trait::async_trait;
 use geoengine_datatypes::{
     dataset::{DataId, DataProviderId, ExternalDataId, LayerId},
     machine_learning::MlModelName,
-    primitives::{RasterQueryRectangle, VectorQueryRectangle},
+    primitives::{CacheTtlSeconds, RasterQueryRectangle, VectorQueryRectangle},
     raster::TilingSpecification,
 };
 use geoengine_operators::{
@@ -138,6 +138,7 @@ pub struct QueryContextImpl {
     chunk_byte_size: ChunkByteSize,
     tiling_specification: TilingSpecification,
     thread_pool: Arc<ThreadPool>,
+    default_cache_ttl: CacheTtlSeconds,
     cache: Option<Arc<SharedCache>>,
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     quota_tracking: Option<QuotaTracking>,
@@ -153,12 +154,14 @@ impl QueryContextImpl {
         tiling_specification: TilingSpecification,
         thread_pool: Arc<ThreadPool>,
         gdal_process_pool: Arc<GdalProcessPool>,
+        default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
             chunk_byte_size,
             tiling_specification,
             thread_pool,
+            default_cache_ttl,
             cache: None,
             new_raster_cache: None,
             quota_tracking: None,
@@ -175,6 +178,7 @@ impl QueryContextImpl {
         tiling_specification: TilingSpecification,
         thread_pool: Arc<ThreadPool>,
         gdal_process_pool: Arc<GdalProcessPool>,
+        default_cache_ttl: CacheTtlSeconds,
         cache: Option<Arc<SharedCache>>,
         new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
         quota_tracking: Option<QuotaTracking>,
@@ -185,6 +189,7 @@ impl QueryContextImpl {
             chunk_byte_size,
             tiling_specification,
             thread_pool,
+            default_cache_ttl,
             cache,
             new_raster_cache,
             quota_checker,
@@ -204,6 +209,10 @@ impl QueryContext for QueryContextImpl {
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
+    }
+
+    fn default_cache_ttl(&self) -> CacheTtlSeconds {
+        self.default_cache_ttl
     }
 
     fn abort_registration(&self) -> &QueryAbortRegistration {
@@ -252,6 +261,7 @@ where
     tiling_specification: TilingSpecification,
     gdal_process_pool: Arc<GdalProcessPool>,
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
+    default_cache_ttl: CacheTtlSeconds,
 }
 
 impl<D> ExecutionContextImpl<D>
@@ -264,6 +274,7 @@ where
         tiling_specification: TilingSpecification,
         gdal_process_pool: Arc<GdalProcessPool>,
         new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
+        default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
         Self {
             db,
@@ -271,6 +282,7 @@ where
             tiling_specification,
             gdal_process_pool,
             new_raster_cache,
+            default_cache_ttl,
         }
     }
 }
@@ -298,6 +310,10 @@ where
 
     fn tiling_specification(&self) -> TilingSpecification {
         self.tiling_specification
+    }
+
+    fn default_cache_ttl(&self) -> CacheTtlSeconds {
+        self.default_cache_ttl
     }
 
     fn wrap_initialized_raster_operator(

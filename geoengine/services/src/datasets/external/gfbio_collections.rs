@@ -65,7 +65,7 @@ pub struct GfbioCollectionsDataProviderDefinition {
     pub abcd_db_config: DatabaseConnectionConfig,
     pub pangaea_url: Url,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 #[async_trait]
@@ -132,7 +132,7 @@ pub struct GfbioCollectionsDataProvider {
     abcd_db_config: DatabaseConnectionConfig,
     pangaea_url: Url,
     pool: Pool<PostgresConnectionManager<NoTls>>,
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl: Option<CacheTtlSeconds>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -298,7 +298,7 @@ impl GfbioCollectionsDataProvider {
         auth_token: String,
         db_config: DatabaseConnectionConfig,
         pangaea_url: Url,
-        cache_ttl: CacheTtlSeconds,
+        cache_ttl: Option<CacheTtlSeconds>,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
         let pool = Pool::builder().build(pg_mgr).await?;
@@ -1006,7 +1006,7 @@ mod tests {
                     password: db_config.password.clone(),
                 },
                 "https://doi.pangaea.de".parse().unwrap(),
-                Default::default(),
+                None,
             )
             .await
             .unwrap();
@@ -1108,7 +1108,7 @@ mod tests {
                 gfbio_collections_server_token.to_string(),
                 provider_db_config,
                 "https://doi.pangaea.de".parse().unwrap(),
-                Default::default(),
+                None,
             )
             .await
             .unwrap();
@@ -1251,7 +1251,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: Some("surrogate_key = 17 AND adf8c075f2c6b97eaab5cee8f22e97abfdaf6b71 = 'ZFMK Sc0602'".to_string()),
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             };
 
             if loading_info != expected {
@@ -1293,7 +1293,7 @@ mod tests {
                 gfbio_collections_server_token.to_string(),
                 provider_db_config,
                 "https://doi.pangaea.de".parse().unwrap(),
-                Default::default(),
+                None,
             )
             .await
             .unwrap();

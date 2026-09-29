@@ -84,7 +84,7 @@ pub struct SentinelS2L2ACogsProviderDefinition {
     #[serde(default)]
     pub gdal_retries: GdalRetries,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
     #[serde(default)]
     pub query_buffer: StacQueryBuffer,
 }
@@ -194,7 +194,7 @@ pub struct SentinelS2L2aCogsDataProvider {
     stac_api_retries: StacApiRetries,
     gdal_retries: GdalRetries,
 
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl: Option<CacheTtlSeconds>,
 
     query_buffer: StacQueryBuffer,
 }
@@ -208,7 +208,7 @@ impl SentinelS2L2aCogsDataProvider {
         api_url: String,
         stac_api_retries: StacApiRetries,
         gdal_retries: GdalRetries,
-        cache_ttl: CacheTtlSeconds,
+        cache_ttl: Option<CacheTtlSeconds>,
         query_buffer: StacQueryBuffer,
     ) -> Self {
         Self {
@@ -399,7 +399,7 @@ pub struct SentinelS2L2aCogsMetaData {
     band: ImageProduct,
     stac_api_retries: StacApiRetries,
     gdal_retries: GdalRetries,
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl: Option<CacheTtlSeconds>,
     stac_query_buffer: StacQueryBuffer,
 }
 
@@ -604,7 +604,7 @@ impl SentinelS2L2aCogsMetaData {
         &self,
         time_interval: TimeInterval,
         asset: &StacAsset,
-        cache_ttl: CacheTtlSeconds,
+        cache_ttl: Option<CacheTtlSeconds>,
     ) -> Result<GdalLoadingInfoTemporalSlice> {
         let [stac_shape_y, stac_shape_x] = asset.proj_shape.ok_or(error::Error::StacInvalidBbox)?;
 
@@ -1033,7 +1033,7 @@ mod tests {
                 allow_alphaband_as_mask: true,
                 retry: Some(GdalRetryOptions { max_retries: 10 }),
             }),
-            cache_ttl: CacheTtlSeconds::new(86_400),
+            cache_ttl: Some(CacheTtlSeconds::new(86_400)),
         }];
 
         if let GdalLoadingInfoTemporalSliceIterator::Static { parts } = loading_info.info {
@@ -1433,7 +1433,7 @@ mod tests {
                     allow_alphaband_as_mask: true,
                     retry: Some(GdalRetryOptions { max_retries: 999 }),
                 }),
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             }]
         );
 
@@ -1467,7 +1467,7 @@ mod tests {
                 time: None,
                 result_descriptor,
                 params,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             }),
         );
 

@@ -2,9 +2,7 @@ use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
 use config::{Config, Environment, File};
-use geoengine_datatypes::primitives::{
-    MAX_CACHE_TTL_SECONDS, TimeInterval, set_default_cache_ttl_seconds,
-};
+use geoengine_datatypes::primitives::{MAX_CACHE_TTL_SECONDS, TimeInterval};
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use serde::Deserialize;
@@ -46,15 +44,6 @@ fn init_settings() -> RwLock<Config> {
     let config = settings
         .build()
         .expect("it should crash the program if this fails");
-    let default_ttl_seconds = config
-        .get::<u32>("cache.default_ttl_seconds")
-        .expect("cache.default_ttl_seconds must be a non-negative integer");
-    assert!(
-        default_ttl_seconds <= MAX_CACHE_TTL_SECONDS,
-        "cache.default_ttl_seconds must be between 0 and {MAX_CACHE_TTL_SECONDS}"
-    );
-    set_default_cache_ttl_seconds(default_ttl_seconds);
-
     RwLock::new(config)
 }
 

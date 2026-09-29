@@ -43,7 +43,7 @@ struct StacMultiBandMetaData {
     dataset: StacProviderDataset,
     page_limit: i64,
     client: StacClient,
-    cache_ttl_secs: CacheTtlSeconds,
+    cache_ttl_secs: Option<CacheTtlSeconds>,
     /// Shared query-result cache from the provider.
     query_cache: Arc<StacQueryCache>,
 }
@@ -192,7 +192,7 @@ impl
             return Ok(MultiBandGdalLoadingInfo::new(
                 cached_time_steps,
                 cached_files,
-                self.cache_ttl_secs.into(),
+                self.cache_ttl_secs,
             ));
         }
 
@@ -257,7 +257,7 @@ impl
         Ok(MultiBandGdalLoadingInfo::new(
             time_steps,
             files,
-            self.cache_ttl_secs.into(),
+            self.cache_ttl_secs,
         ))
     }
 

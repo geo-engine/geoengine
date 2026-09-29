@@ -848,8 +848,7 @@ mod tests {
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::{
-        CacheHint, CacheTtlSeconds, DateTimeParseFormat, SpatialResolution, TimeGranularity,
-        TimeInstance,
+        CacheHint, DateTimeParseFormat, SpatialResolution, TimeGranularity, TimeInstance,
     };
     use geoengine_datatypes::primitives::{Coordinate2D, TimeStep};
     use geoengine_datatypes::raster::{
@@ -888,7 +887,7 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )?;
 
         let expected = MultiPoint::many(vec![
@@ -964,7 +963,7 @@ mod tests {
             ],
             vec![TimeInterval::new_unchecked(0, 1); 1],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )?;
 
         let expected = [MultiLineString::new(vec![vec![
@@ -1046,7 +1045,7 @@ mod tests {
             ],
             vec![TimeInterval::new_unchecked(0, 1); 1],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )?;
 
         let expected = [MultiPolygon::new(vec![vec![vec![
@@ -1125,7 +1124,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1134,7 +1133,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1145,7 +1144,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1154,7 +1153,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -1165,7 +1164,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -1176,7 +1175,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -1187,7 +1186,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -1198,7 +1197,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
         ];
 
@@ -1477,7 +1476,7 @@ mod tests {
                 retry: None,
             },
             result_descriptor: result_descriptor.clone(),
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
@@ -1582,7 +1581,7 @@ mod tests {
                 retry: None,
             },
             result_descriptor: result_descriptor.clone(),
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
@@ -1657,7 +1656,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::default(); 3],
                 HashMap::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap(),
         )
@@ -1735,7 +1734,7 @@ mod tests {
                     .unwrap(),
                     vec![TimeInterval::default(); 3],
                     HashMap::default(),
-                    CacheHint::default(),
+                    CacheHint::no_cache(),
                 )
                 .unwrap(),
             ],
@@ -1818,7 +1817,7 @@ mod tests {
                     .unwrap(),
                     vec![TimeInterval::default(); 1],
                     HashMap::default(),
-                    CacheHint::default(),
+                    CacheHint::no_cache(),
                 )
                 .unwrap(),
             ],

@@ -166,7 +166,6 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                 project_id = '',
                 api_token = '',
                 filter_label = '',
-                cache_ttl = 0,
                 stac_url = '',
                 s3_url = '',
                 s3_access_key = '',

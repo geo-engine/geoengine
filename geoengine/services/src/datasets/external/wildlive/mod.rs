@@ -795,7 +795,7 @@ async fn project_metadata<D: GeoEngineDb>(
                 "cache_date = current_date AND provider_id = {}",
                 escape_literal(&definition.id.to_string())
             )),
-            cache_ttl: CacheTtlSeconds::new(60 * 60),
+            cache_ttl: Some(CacheTtlSeconds::new(60 * 60)),
         },
         result_descriptor: VectorResultDescriptor {
             data_type: VectorDataType::MultiPolygon,
@@ -874,7 +874,7 @@ async fn stations_metadata<D: GeoEngineDb>(
                 escape_literal(&definition.id.to_string()),
                 escape_literal(project_id)
             )),
-            cache_ttl: CacheTtlSeconds::new(60 * 60),
+            cache_ttl: Some(CacheTtlSeconds::new(60 * 60)),
         },
         result_descriptor: VectorResultDescriptor {
             data_type: VectorDataType::MultiPoint,
@@ -979,7 +979,7 @@ async fn captures_metadata<D: GeoEngineDb>(
                 escape_literal(&definition.id.to_string()),
                 escape_literal(&project_id)
             )),
-            cache_ttl: CacheTtlSeconds::new(60 * 60),
+            cache_ttl: Some(CacheTtlSeconds::new(60 * 60)),
         },
         result_descriptor: VectorResultDescriptor {
             data_type: VectorDataType::MultiPoint,
@@ -1390,7 +1390,7 @@ mod tests {
                 attribute_query: Some(
                     "cache_date = current_date AND provider_id = '0000009b-d30a-3c64-5943-dd1690a03a14'".to_string()
                 ),
-                cache_ttl: CacheTtlSeconds::new(3600),
+                cache_ttl: Some(CacheTtlSeconds::new(3600)),
             }
         );
 
@@ -1698,7 +1698,7 @@ mod tests {
                 attribute_query: Some(format!(
                     "cache_date = current_date AND provider_id = '0000009b-d30a-3c64-5943-dd1690a03a14' AND project_id = '{project_id}'"
                 )),
-                cache_ttl: CacheTtlSeconds::new(3600),
+                cache_ttl: Some(CacheTtlSeconds::new(3600)),
             }
         );
 

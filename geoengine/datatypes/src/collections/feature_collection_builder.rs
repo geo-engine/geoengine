@@ -454,7 +454,7 @@ where
         Self {
             types: Default::default(),
             _collection_type: Default::default(),
-            cache_hint: CacheHint::default(),
+            cache_hint: CacheHint::no_cache(),
         }
     }
 }

@@ -655,8 +655,8 @@ pub struct GdalMetaDataStatic {
     pub time: Option<TimeInterval>,
     pub params: GdalDatasetParameters,
     pub result_descriptor: RasterResultDescriptor,
-    #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<geoengine_operators::source::GdalMetaDataStatic> for GdalMetaDataStatic {
@@ -666,7 +666,7 @@ impl From<geoengine_operators::source::GdalMetaDataStatic> for GdalMetaDataStati
             time: value.time.map(Into::into),
             params: value.params.into(),
             result_descriptor: value.result_descriptor.into(),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -677,7 +677,7 @@ impl From<GdalMetaDataStatic> for geoengine_operators::source::GdalMetaDataStati
             time: value.time.map(Into::into),
             params: value.params.into(),
             result_descriptor: value.result_descriptor.into(),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -700,8 +700,8 @@ pub struct OgrSourceDataset {
     pub on_error: OgrSourceErrorSpec,
     pub sql_query: Option<String>,
     pub attribute_query: Option<String>,
-    #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<geoengine_operators::source::OgrSourceDataset> for OgrSourceDataset {
@@ -718,7 +718,7 @@ impl From<geoengine_operators::source::OgrSourceDataset> for OgrSourceDataset {
             on_error: value.on_error.into(),
             sql_query: value.sql_query,
             attribute_query: value.attribute_query,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -737,7 +737,7 @@ impl From<OgrSourceDataset> for geoengine_operators::source::OgrSourceDataset {
             on_error: value.on_error.into(),
             sql_query: value.sql_query,
             attribute_query: value.attribute_query,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -1163,8 +1163,8 @@ pub struct GdalMetaDataRegular {
     pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
     pub data_time: TimeInterval,
     pub step: TimeStep,
-    #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<geoengine_operators::source::GdalMetaDataRegular> for GdalMetaDataRegular {
@@ -1180,7 +1180,7 @@ impl From<geoengine_operators::source::GdalMetaDataRegular> for GdalMetaDataRegu
                 .collect(),
             data_time: value.data_time.into(),
             step: value.step.into(),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -1197,7 +1197,7 @@ impl From<GdalMetaDataRegular> for geoengine_operators::source::GdalMetaDataRegu
                 .collect(),
             data_time: value.data_time.into(),
             step: value.step.into(),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -1388,8 +1388,8 @@ pub struct GdalMetadataNetCdfCf {
     /// A band offset specifies the first band index to use for the first point in time.
     /// All other time steps are added to this offset.
     pub band_offset: usize,
-    #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<geoengine_operators::source::GdalMetadataNetCdfCf> for GdalMetadataNetCdfCf {
@@ -1402,7 +1402,7 @@ impl From<geoengine_operators::source::GdalMetadataNetCdfCf> for GdalMetadataNet
             end: value.end.into(),
             step: value.step.into(),
             band_offset: value.band_offset,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -1416,7 +1416,7 @@ impl From<GdalMetadataNetCdfCf> for geoengine_operators::source::GdalMetadataNet
             end: value.end.into(),
             step: value.step.into(),
             band_offset: value.band_offset,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -1454,8 +1454,8 @@ impl From<GdalMetaDataList> for geoengine_operators::source::GdalMetaDataList {
 pub struct GdalLoadingInfoTemporalSlice {
     pub time: TimeInterval,
     pub params: Option<GdalDatasetParameters>,
-    #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<geoengine_operators::source::GdalLoadingInfoTemporalSlice>
@@ -1465,7 +1465,7 @@ impl From<geoengine_operators::source::GdalLoadingInfoTemporalSlice>
         Self {
             time: value.time.into(),
             params: value.params.map(Into::into),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -1477,7 +1477,7 @@ impl From<GdalLoadingInfoTemporalSlice>
         Self {
             time: value.time.into(),
             params: value.params.map(Into::into),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -1706,6 +1706,43 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn cache_ttl_is_optional_and_nullable_for_loading_info() {
+        let base = json!({
+            "time": {"start": 0, "end": 1},
+            "params": null
+        });
+
+        let omitted: GdalLoadingInfoTemporalSlice = serde_json::from_value(base.clone()).unwrap();
+        assert_eq!(omitted.cache_ttl, None);
+        let serialized = serde_json::to_value(omitted).unwrap();
+        assert!(serialized.get("cacheTtl").is_none());
+
+        let explicit_null: GdalLoadingInfoTemporalSlice = serde_json::from_value(json!({
+            "time": {"start": 0, "end": 1},
+            "params": null,
+            "cacheTtl": null
+        }))
+        .unwrap();
+        assert_eq!(explicit_null.cache_ttl, None);
+
+        let zero: GdalLoadingInfoTemporalSlice = serde_json::from_value(json!({
+            "time": {"start": 0, "end": 1},
+            "params": null,
+            "cacheTtl": 0
+        }))
+        .unwrap();
+        assert_eq!(zero.cache_ttl.unwrap().seconds(), 0);
+
+        let positive: GdalLoadingInfoTemporalSlice = serde_json::from_value(json!({
+            "time": {"start": 0, "end": 1},
+            "params": null,
+            "cacheTtl": 42
+        }))
+        .unwrap();
+        assert_eq!(positive.cache_ttl.unwrap().seconds(), 42);
+    }
 
     #[test]
     fn it_checks_duplicates_while_deserializing_band_descriptors() {

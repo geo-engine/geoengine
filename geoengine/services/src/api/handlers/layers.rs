@@ -2489,7 +2489,7 @@ mod tests {
             project_id: String::new(),
             api_token: String::new(),
             filter_label: String::new(),
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: Some(CacheTtlSeconds::new(0)),
         };
 
         let req = test::TestRequest::put()
@@ -2578,7 +2578,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                     grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                     properties: Default::default(),
-                    cache_hint: CacheHint::default(),
+                    cache_hint: CacheHint::no_cache(),
                 },
                 RasterTile2D {
                     time: TimeInterval::new_unchecked(1_671_955_200_000, 1_672_041_600_000),
@@ -2587,7 +2587,7 @@ mod tests {
                     global_geo_transform: TestDefault::test_default(),
                     grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                     properties: Default::default(),
-                    cache_hint: CacheHint::default(),
+                    cache_hint: CacheHint::no_cache(),
                 },
             ];
 

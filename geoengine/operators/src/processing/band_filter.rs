@@ -351,21 +351,21 @@ mod tests {
                 tile_info,
                 0,
                 band_0.into(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 time_interval,
                 tile_info,
                 1,
                 band_1.into(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 time_interval,
                 tile_info,
                 2,
                 band_2.into(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
         ];
 
@@ -477,21 +477,21 @@ mod tests {
                 tile_info,
                 0,
                 band_0.into(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 time_interval,
                 tile_info,
                 1,
                 band_1.into(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 time_interval,
                 tile_info,
                 2,
                 band_2.into(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
         ];
 
