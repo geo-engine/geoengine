@@ -855,7 +855,7 @@ mod tests {
                             allow_alphaband_as_mask: true,
                             retry: None,
                         }),
-                        cache_ttl: None,
+                        cache_ttl: Some(CacheTtlSeconds::new(0)),
                     },
                     GdalLoadingInfoTemporalSlice {
                         time: TimeInterval::new(expected_time_2, expected_time_2 + 1).unwrap(),
@@ -877,7 +877,7 @@ mod tests {
                             allow_alphaband_as_mask: true,
                             retry: None,
                         }),
-                        cache_ttl: None,
+                        cache_ttl: Some(CacheTtlSeconds::new(0)),
                     },
                 ],
             }
@@ -1030,7 +1030,7 @@ mod tests {
                             allow_alphaband_as_mask: true,
                             retry: None,
                         }),
-                        cache_ttl: None,
+                        cache_ttl: Some(CacheTtlSeconds::new(0)),
                     },
                     GdalLoadingInfoTemporalSlice {
                         time: TimeInterval::new(expected_time_2, expected_time_2 + 1).unwrap(),
@@ -1053,7 +1053,7 @@ mod tests {
                             allow_alphaband_as_mask: true,
                             retry: None,
                         }),
-                        cache_ttl: None,
+                        cache_ttl: Some(CacheTtlSeconds::new(0)),
                     },
                     GdalLoadingInfoTemporalSlice {
                         time: TimeInterval::new(expected_time_3, expected_time_3 + 1).unwrap(),
@@ -1076,7 +1076,7 @@ mod tests {
                             allow_alphaband_as_mask: true,
                             retry: None,
                         }),
-                        cache_ttl: None,
+                        cache_ttl: Some(CacheTtlSeconds::new(0)),
                     }
                 ],
             }
