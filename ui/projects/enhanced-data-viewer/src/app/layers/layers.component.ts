@@ -1,10 +1,10 @@
-import {afterNextRender, ChangeDetectionStrategy, Component, computed, inject, signal} from '@angular/core';
-import {CoreModule, ProjectService} from '@geoengine/core';
+import {afterNextRender, ChangeDetectionStrategy, Component, computed, inject, resource, signal} from '@angular/core';
+import {CoreModule, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
 import {A11yModule} from '@angular/cdk/a11y';
 import {EdvLayersService} from './layers.service';
 import {MatCheckboxModule} from '@angular/material/checkbox';
 import {MatListModule} from '@angular/material/list';
-import {Time} from '@geoengine/common';
+import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, RasterSymbology, Time} from '@geoengine/common';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {DATA_SOURCES} from './data-sources';
 import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
@@ -76,6 +76,14 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
             </mat-nav-list>
         </div>
         <mat-divider></mat-divider>
+
+        @if (legendLayer.value(); as legend) {
+            <div class="legend">
+                <h2>Legend</h2>
+                <span class="legend-layer-name" [matTooltip]="legend.layer.name">{{ legend.layer.name }}</span>
+                <geoengine-raster-legend-view [layer]="legend.layer" [metadata]="legend.metadata"></geoengine-raster-legend-view>
+            </div>
+        }
     `,
     styles: [
         `
@@ -224,13 +232,26 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
             .time-selection {
                 --mat-button-text-label-text-size: #{$text2};
             }
+
+            .legend {
+                .legend-layer-name {
+                    display: block;
+                    margin-bottom: 0.5rem;
+                    font-size: $text2;
+                    color: var(--mat-sys-on-surface-variant);
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+            }
         `,
     ],
-    imports: [A11yModule, CoreModule, MatDatepickerModule, MatCheckboxModule, MatListModule],
+    imports: [A11yModule, CoreModule, MatDatepickerModule, MatCheckboxModule, MatListModule, RasterLegendViewComponent],
 })
 export class LayersComponent {
     readonly projectService = inject(ProjectService);
     readonly edvLayersService = inject(EdvLayersService);
+    private readonly layerService = inject(LayersService);
 
     readonly debug = this.edvLayersService.debug;
 
@@ -256,6 +277,35 @@ export class LayersComponent {
     readonly presetGroups = this.edvLayersService.presetGroups;
     readonly selectedPresetIndex = this.edvLayersService.selectedPresetIndex;
     readonly mapTileLayer = this.edvLayersService.mapTileLayer;
+
+    readonly legendLayer = resource({
+        params: () => ({layerId: this.edvLayersService.mapTileLayer()}),
+        loader: async ({params: {layerId}}): Promise<{layer: RasterLayer; metadata: RasterLayerMetadata} | undefined> => {
+            if (!layerId) return undefined;
+
+            const layer = await this.layerService.getLayer(layerId.dataConnectorId, layerId.layerId);
+
+            const processingGraphId = await this.layerService.registerAndGetLayerWorkflowId(layerId.dataConnectorId, layerId.layerId);
+
+            if (layer.symbology?.type !== 'raster') return undefined;
+
+            const metadata = await this.layerService.getWorkflowIdMetadata(processingGraphId);
+
+            if (!(metadata instanceof RasterLayerMetadata)) return undefined;
+
+            const rasterSymbology = layer.symbology;
+
+            const rasterLayer = new RasterLayer({
+                name: layer.name,
+                workflowId: processingGraphId,
+                isVisible: true,
+                isLegendVisible: true,
+                symbology: new RasterSymbology(rasterSymbology.opacity, RasterColorizer.fromDict(rasterSymbology.rasterColorizer)),
+            });
+
+            return {layer: rasterLayer, metadata};
+        },
+    });
 
     constructor() {
         afterNextRender(() => {
