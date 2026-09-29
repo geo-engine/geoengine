@@ -405,6 +405,7 @@ impl InitializedGdalSourceOperator {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn initialize_with_overview_level(
         name: CanonicOperatorName,
         path: WorkflowOperatorPath,
@@ -453,6 +454,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
         &self.produced_result_descriptor
     }
 
+    #[allow(clippy::too_many_lines)]
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         Ok(match self.result_descriptor().data_type {
             RasterDataType::U8 => TypedRasterQueryProcessor::U8(
