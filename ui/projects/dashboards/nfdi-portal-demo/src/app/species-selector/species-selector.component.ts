@@ -10,20 +10,17 @@ import {
     NamedDataDict,
     CoreModule,
 } from '@geoengine/core';
-import {BehaviorSubject, combineLatest, combineLatestWith, first, mergeMap, Observable, of, Subscription, tap} from 'rxjs';
+import {BehaviorSubject, combineLatest, combineLatestWith, first, from, mergeMap, Observable, of, Subscription, tap} from 'rxjs';
 import {DataSelectionService} from '../data-selection.service';
 import moment from 'moment';
 import {
     ClusteredPointSymbology,
     Dataset,
-    ExpressionDict,
     Layer,
     PointSymbology,
     RasterLayer,
     RasterSymbology,
-    RasterVectorJoinDict,
     Time,
-    TimeProjectionDict,
     UserService,
     VectorLayer,
     extentToBboxDict,
@@ -34,7 +31,6 @@ import {
     FxLayoutAlignDirective,
     AsyncValueDefault,
 } from '@geoengine/common';
-import {LegacyTypedOperatorOperator, Workflow as WorkflowDict} from '@geoengine/api-client';
 import {MatFormField, MatLabel} from '@angular/material/input';
 import {MatSelect} from '@angular/material/select';
 import {MatOption} from '@angular/material/autocomplete';
@@ -49,6 +45,7 @@ import {MatButton} from '@angular/material/button';
 import {MatProgressSpinner} from '@angular/material/progress-spinner';
 import {AttributionsComponent} from '../attributions/attributions.component';
 import {AsyncPipe} from '@angular/common';
+import {PlotOperator, RasterOperator, TypedRasterOperator, TypedVectorOperator, VectorOperator} from '@geoengine/api-client';
 
 interface EnvironmentLayer {
     name: string;
@@ -520,7 +517,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
             return;
         }
 
-        const workflow: WorkflowDict = {
+        const workflow: TypedVectorOperator = {
             type: 'Vector',
             operator: {
                 type: 'TimeProjection',
@@ -546,11 +543,10 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                         },
                     },
                 },
-            } as TimeProjectionDict,
+            },
         };
 
-        this.projectService
-            .registerWorkflow(workflow)
+        from(this.projectService.registerWorkflow(workflow))
             .pipe(
                 mergeMap((workflowId) =>
                     this.dataSelectionService.setSpecies1Layer(
@@ -596,7 +592,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
             return;
         }
 
-        const workflow: WorkflowDict = {
+        const workflow: TypedVectorOperator = {
             type: 'Vector',
             operator: {
                 type: 'TimeProjection',
@@ -622,11 +618,10 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                         },
                     },
                 },
-            } as TimeProjectionDict,
+            },
         };
 
-        this.projectService
-            .registerWorkflow(workflow)
+        from(this.projectService.registerWorkflow(workflow))
             .pipe(
                 mergeMap((workflowId) =>
                     this.dataSelectionService.setSpecies2Layer(
@@ -676,7 +671,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
 
         this.selectedEnvironmentLayer = layer;
 
-        const workflow: WorkflowDict = {
+        const workflow: TypedRasterOperator = {
             type: 'Raster',
             operator: {
                 type: 'GdalSource',
@@ -688,8 +683,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
 
         this.selectedEnvironmentCitation.next('');
 
-        this.projectService
-            .registerWorkflow(workflow)
+        from(this.projectService.registerWorkflow(workflow))
             .pipe(
                 combineLatestWith(this.datasetService.getDataset(layer.name)),
                 tap(([workflowId, _dataset]) => {
@@ -739,7 +733,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
             return;
         }
 
-        const workflow: WorkflowDict = {
+        const workflow: TypedRasterOperator = {
             type: 'Raster',
             operator: {
                 type: 'GdalSource',
@@ -749,8 +743,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
             },
         };
 
-        this.projectService
-            .registerWorkflow(workflow)
+        from(this.projectService.registerWorkflow(workflow))
             .pipe(
                 combineLatestWith(this.datasetService.getDataset(this.intensityDataset)),
                 tap(([workflowId, _dataset]) => {
@@ -836,7 +829,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                     ]),
                 ),
                 mergeMap(([rasterWorkflow, speciesWorkflow, rasterMetadata, vectorMetadata]) => {
-                    let rasterOperator = rasterWorkflow.operator;
+                    let rasterOperator = rasterWorkflow.operator as RasterOperator;
                     if (!rasterMetadata.spatialReference.equals(computationCrs.spatialReference)) {
                         rasterOperator = {
                             type: 'Reprojection',
@@ -849,7 +842,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                         };
                     }
 
-                    let vectorOperator = speciesWorkflow.operator;
+                    let vectorOperator = speciesWorkflow.operator as VectorOperator;
                     if (!vectorMetadata.spatialReference.equals(computationCrs.spatialReference)) {
                         vectorOperator = {
                             type: 'Reprojection',
@@ -897,11 +890,11 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                                         sources: {
                                             raster: rasterOperator,
                                         },
-                                    } as ExpressionDict,
+                                    },
                                 ],
                                 vector: vectorOperator,
                             },
-                        } as RasterVectorJoinDict,
+                        },
                     });
                 }),
                 mergeMap((workflowId) =>
@@ -912,7 +905,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                     ]),
                 ),
                 mergeMap(([workflow, metadata, dataRange]) => {
-                    let plotWorkflow: LegacyTypedOperatorOperator;
+                    let plotWorkflow: PlotOperator;
 
                     if (
                         environmentColumnName in metadata.columns &&
@@ -926,7 +919,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                                 donut: false,
                             },
                             sources: {
-                                vector: workflow.operator,
+                                vector: workflow.operator as VectorOperator,
                             },
                         };
                     } else {
@@ -934,7 +927,6 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                             type: 'Histogram',
                             params: {
                                 // TODO: get params from selected data
-                                attributeName: 'band',
                                 buckets: {
                                     type: 'number',
                                     value: 20,
@@ -943,7 +935,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                                 columnName: environmentColumnName,
                             },
                             sources: {
-                                source: workflow.operator,
+                                source: workflow.operator as RasterOperator,
                             },
                         };
                     }
@@ -1045,7 +1037,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                     ]),
                 ),
                 mergeMap(([rasterWorkflow, speciesWorkflow, rasterMetadata, vectorMetadata]) => {
-                    let rasterOperator = rasterWorkflow.operator;
+                    let rasterOperator = rasterWorkflow.operator as RasterOperator;
                     if (!rasterMetadata.spatialReference.equals(computationCrs.spatialReference)) {
                         rasterOperator = {
                             type: 'Reprojection',
@@ -1058,7 +1050,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                         };
                     }
 
-                    let vectorOperator = speciesWorkflow.operator;
+                    let vectorOperator = speciesWorkflow.operator as VectorOperator;
                     if (!vectorMetadata.spatialReference.equals(computationCrs.spatialReference)) {
                         vectorOperator = {
                             type: 'Reprojection',
@@ -1087,7 +1079,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                                 rasters: [rasterOperator],
                                 vector: vectorOperator,
                             },
-                        } as RasterVectorJoinDict,
+                        },
                     });
                 }),
                 mergeMap((workflowId) =>
@@ -1098,7 +1090,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                     ]),
                 ),
                 mergeMap(([workflow, metadata, dataRange]) => {
-                    let plotWorkflow: LegacyTypedOperatorOperator;
+                    let plotWorkflow: PlotOperator;
 
                     if (
                         environmentColumnName in metadata.columns &&
@@ -1110,7 +1102,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                                 columnName: environmentColumnName,
                             },
                             sources: {
-                                source: workflow.operator,
+                                source: workflow.operator as RasterOperator,
                             },
                         };
                     } else {
@@ -1118,7 +1110,6 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                             type: 'Histogram',
                             params: {
                                 // TODO: get params from selected data
-                                attributeName: 'band',
                                 buckets: {
                                     type: 'number',
                                     value: 20,
@@ -1127,7 +1118,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                                 columnName: environmentColumnName,
                             },
                             sources: {
-                                source: workflow.operator,
+                                source: workflow.operator as RasterOperator,
                             },
                         };
                     }

@@ -7,12 +7,7 @@ use crate::{
         },
         model::{
             datatypes::{DataProviderId, LayerId},
-            processing_graphs::{
-                DeriveOutRasterSpecsSource, Interpolation, InterpolationMethod,
-                InterpolationParameters, InterpolationResolution, InterpolationResolutionFraction,
-                RasterOperator, Reprojection, ReprojectionParameters, SingleRasterOrVectorOperator,
-                SingleRasterOrVectorSource, SingleRasterSource, TypedOperator,
-            },
+            processing_graphs::DeriveOutRasterSpecsSource,
         },
     },
     contexts::{ApplicationContext, SessionContext},
@@ -184,8 +179,8 @@ pub async fn get_initialized_raster_operator<C: SessionContext>(
     layer: &Layer,
     execution_context: &C::ExecutionContext,
 ) -> OgcApiResult<Box<dyn InitializedRasterOperator>> {
-    let operator = match layer.workflow.operator()? {
-        geoengine_operators::engine::TypedOperator::Raster(operator) => operator,
+    let operator = match &layer.workflow.operator {
+        geoengine_operators::engine::TypedOperator::Raster(operator) => operator.clone(),
         geoengine_operators::engine::TypedOperator::Vector(_) => {
             return Err(OgcApiError::ExpectedRaster {
                 found: "vector".to_string(),
@@ -213,56 +208,31 @@ pub fn processing_graph_with_reprojection(
 ) -> OgcApiResult<()> {
     const DERIVE_OUT_SPEC: DeriveOutRasterSpecsSource = DeriveOutRasterSpecsSource::DataBounds;
 
-    *processing_graph = match processing_graph {
-        Workflow::Typed { operator } => match operator {
-            TypedOperator::Raster(operator) => Workflow::Typed {
-                operator: TypedOperator::Raster(RasterOperator::Reprojection(Reprojection {
-                    r#type: Default::default(),
-                    params: ReprojectionParameters {
-                        target_spatial_reference: target_spatial_reference.into(),
-                        derive_out_spec: DERIVE_OUT_SPEC,
+    processing_graph.operator = match &processing_graph.operator {
+        geoengine_operators::engine::TypedOperator::Raster(operator) => {
+            geoengine_operators::engine::TypedOperator::Raster(
+                geoengine_operators::processing::Reprojection {
+                    params: geoengine_operators::processing::ReprojectionParams {
+                        target_spatial_reference,
+                        derive_out_spec: DERIVE_OUT_SPEC.into(),
                     },
-                    sources: Box::new(SingleRasterOrVectorSource {
-                        source: SingleRasterOrVectorOperator::Raster(operator.clone()),
-                    }),
-                })),
-            },
-            TypedOperator::Vector(_) => Err(OgcApiError::ExpectedRaster {
+                    sources: geoengine_operators::engine::SingleRasterOrVectorSource {
+                        source: geoengine_operators::util::input::RasterOrVectorOperator::Raster(
+                            operator.clone(),
+                        ),
+                    },
+                }
+                .boxed(),
+            )
+        }
+        geoengine_operators::engine::TypedOperator::Vector(_) => {
+            Err(OgcApiError::ExpectedRaster {
                 found: "vector".to_string(),
-            })?,
-            TypedOperator::Plot(_) => Err(OgcApiError::ExpectedRaster {
-                found: "plot".to_string(),
-            })?,
-        },
-        Workflow::Legacy { operator } => match operator {
-            geoengine_operators::engine::TypedOperator::Raster(operator) => Workflow::Legacy {
-                operator: geoengine_operators::engine::TypedOperator::Raster(
-                    geoengine_operators::processing::Reprojection {
-                        params: geoengine_operators::processing::ReprojectionParams {
-                            target_spatial_reference,
-                            derive_out_spec: DERIVE_OUT_SPEC.into(),
-                        },
-                        sources: geoengine_operators::engine::SingleRasterOrVectorSource {
-                            source:
-                                geoengine_operators::util::input::RasterOrVectorOperator::Raster(
-                                    operator.clone(),
-                                ),
-                        },
-                    }
-                    .boxed(),
-                ),
-            },
-            geoengine_operators::engine::TypedOperator::Vector(_) => {
-                Err(OgcApiError::ExpectedRaster {
-                    found: "vector".to_string(),
-                })?
-            }
-            geoengine_operators::engine::TypedOperator::Plot(_) => {
-                Err(OgcApiError::ExpectedRaster {
-                    found: "plot".to_string(),
-                })?
-            }
-        },
+            })?
+        }
+        geoengine_operators::engine::TypedOperator::Plot(_) => Err(OgcApiError::ExpectedRaster {
+            found: "plot".to_string(),
+        })?,
     };
 
     Ok(())
@@ -276,63 +246,37 @@ pub fn processing_graph_with_resampling(
     target_origin: Coordinate2D,
     target_resolution: SpatialResolution,
 ) -> OgcApiResult<()> {
-    *processing_graph = match processing_graph {
-        Workflow::Typed { operator } => match operator {
-            TypedOperator::Raster(operator) => Workflow::Typed {
-                operator: TypedOperator::Raster(RasterOperator::Interpolation(Interpolation {
-                    r#type: Default::default(),
-                    params: InterpolationParameters {
-                        interpolation: InterpolationMethod::NearestNeighbor,
-                        output_resolution: InterpolationResolution::Fraction(
-                            InterpolationResolutionFraction {
-                                r#type: Default::default(),
-                                x: target_resolution.x,
-                                y: target_resolution.y,
-                            },
-                        ),
-                        output_origin_reference: Some(target_origin.into()),
+    processing_graph.operator = match &processing_graph.operator {
+        geoengine_operators::engine::TypedOperator::Raster(operator) => {
+            geoengine_operators::engine::TypedOperator::Raster(
+                geoengine_operators::processing::Interpolation {
+                    params: geoengine_operators::processing::InterpolationParams {
+                        interpolation:
+                            geoengine_operators::processing::InterpolationMethod::NearestNeighbor,
+                        output_resolution:
+                            geoengine_operators::processing::InterpolationResolution::Fraction(
+                                geoengine_operators::processing::Fraction {
+                                    x: target_resolution.x,
+                                    y: target_resolution.y,
+                                },
+                            ),
+                        output_origin_reference: Some(target_origin),
                     },
-                    sources: Box::new(SingleRasterSource {
+                    sources: geoengine_operators::engine::SingleRasterSource {
                         raster: operator.clone(),
-                    }),
-                })),
-            },
-            TypedOperator::Vector(_) => Err(OgcApiError::ExpectedRaster {
+                    },
+                }
+                .boxed(),
+            )
+        }
+        geoengine_operators::engine::TypedOperator::Vector(_) => {
+            Err(OgcApiError::ExpectedRaster {
                 found: "vector".to_string(),
-            })?,
-            TypedOperator::Plot(_) => Err(OgcApiError::ExpectedRaster {
-                found: "plot".to_string(),
-            })?,
-        },
-        Workflow::Legacy { operator } => match operator {
-            geoengine_operators::engine::TypedOperator::Raster(operator) => Workflow::Legacy {
-                operator: geoengine_operators::engine::TypedOperator::Raster(
-                    geoengine_operators::processing::Interpolation {
-                        params: geoengine_operators::processing::InterpolationParams {
-                            interpolation: geoengine_operators::processing::InterpolationMethod::NearestNeighbor,
-                            output_resolution: geoengine_operators::processing::InterpolationResolution::Fraction(geoengine_operators::processing::Fraction {
-                                x: target_resolution.x,
-                                y: target_resolution.y,
-                            }),
-                            output_origin_reference: Some(target_origin),
-                        },
-                        sources: geoengine_operators::engine::SingleRasterSource {
-                            raster: operator.clone(),
-                        },
-                    }.boxed(),
-                ),
-            },
-            geoengine_operators::engine::TypedOperator::Vector(_) => {
-                Err(OgcApiError::ExpectedRaster {
-                    found: "vector".to_string(),
-                })?
-            }
-            geoengine_operators::engine::TypedOperator::Plot(_) => {
-                Err(OgcApiError::ExpectedRaster {
-                    found: "plot".to_string(),
-                })?
-            }
-        },
+            })?
+        }
+        geoengine_operators::engine::TypedOperator::Plot(_) => Err(OgcApiError::ExpectedRaster {
+            found: "plot".to_string(),
+        })?,
     };
 
     Ok(())

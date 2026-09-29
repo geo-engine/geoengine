@@ -3,17 +3,9 @@ import {UntypedFormBuilder, UntypedFormGroup, Validators, FormsModule, ReactiveF
 import {ProjectService} from '../../../project/project.service';
 
 import {map, mergeMap} from 'rxjs/operators';
-import {Observable} from 'rxjs';
-import {
-    MeanRasterPixelValuesOverTimeDict,
-    MeanRasterPixelValuesOverTimeParams,
-    NotificationService,
-    Plot,
-    RasterLayer,
-    ResultTypes,
-    geoengineValidators,
-} from '@geoengine/common';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {from, Observable} from 'rxjs';
+import {NotificationService, Plot, RasterLayer, ResultTypes, geoengineValidators} from '@geoengine/common';
+import {ProcessingGraph, MeanRasterPixelValuesOverTimeParameters} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -115,16 +107,19 @@ export class MeanRasterPixelValuesOverTimeDialogComponent implements AfterViewIn
         const timePosition: TimePosition = this.form.controls['timePosition'].value;
         const area: boolean = this.form.controls['area'].value;
 
-        const params: MeanRasterPixelValuesOverTimeParams = {
+        const params: MeanRasterPixelValuesOverTimeParameters = {
             timePosition,
             area,
         };
 
-        this.projectService
-            .getWorkflow(inputLayer.workflowId)
+        from(this.projectService.getWorkflow(inputLayer.workflowId))
             .pipe(
-                mergeMap((inputWorkflow: WorkflowDict) =>
-                    this.projectService.registerWorkflow({
+                mergeMap((inputWorkflow: ProcessingGraph) => {
+                    if (inputWorkflow.type !== 'Raster') {
+                        throw new Error('Expected a raster workflow for mean raster pixel values over time.');
+                    }
+
+                    return this.projectService.registerWorkflow({
                         type: 'Plot',
                         operator: {
                             type: 'MeanRasterPixelValuesOverTime',
@@ -132,9 +127,9 @@ export class MeanRasterPixelValuesOverTimeDialogComponent implements AfterViewIn
                             sources: {
                                 raster: inputWorkflow.operator,
                             },
-                        } as MeanRasterPixelValuesOverTimeDict,
-                    }),
-                ),
+                        },
+                    });
+                }),
                 mergeMap((workflowId) =>
                     this.projectService.addPlot(
                         new Plot({

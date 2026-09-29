@@ -426,6 +426,10 @@ pub enum Error {
         source: crate::api::handlers::workflows::WorkflowApiError,
     },
 
+    Api {
+        source: anyhow::Error,
+    },
+
     #[snafu(display("The sub path '{}' escapes the base path '{}'", sub_path.display(), base.display()))]
     SubPathMustNotEscapeBasePath {
         base: PathBuf,

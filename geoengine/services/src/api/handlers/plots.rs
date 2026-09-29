@@ -115,7 +115,7 @@ async fn get_plot_handler<C: ApplicationContext>(
     let workflow_id = WorkflowId(id.into_inner());
     let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
-    let operator = workflow.operator()?.get_plot()?;
+    let operator = workflow.operator.get_plot()?;
 
     let execution_context = ctx.execution_context()?;
 
@@ -261,7 +261,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow::Typed {
+        let workflow = Workflow {
             operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
                 r#type: Default::default(),
                 params: StatisticsParameters {
@@ -279,7 +279,9 @@ mod tests {
                         }),
                     ]),
                 },
-            })),
+            }))
+            .try_into()
+            .unwrap(),
         };
 
         let id = app_ctx
@@ -348,7 +350,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow::Typed {
+        let workflow = Workflow {
             operator: TypedOperator::Plot(PlotOperator::Histogram(Histogram {
                 r#type: Default::default(),
                 params: HistogramParameters {
@@ -374,7 +376,9 @@ mod tests {
                         },
                     )),
                 },
-            })),
+            }))
+            .try_into()
+            .unwrap(),
         };
 
         let id = app_ctx
@@ -500,7 +504,7 @@ mod tests {
 
             let session_id = session.id();
 
-            let workflow = Workflow::Typed {
+            let workflow = Workflow {
                 operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
                     r#type: Default::default(),
                     params: StatisticsParameters {
@@ -510,7 +514,9 @@ mod tests {
                     sources: MultipleRasterOrSingleVectorSource {
                         source: MultipleRasterOrSingleVectorOperator::Raster(vec![]),
                     },
-                })),
+                }))
+                .try_into()
+                .unwrap(),
             };
 
             let id = ctx.db().register_workflow(workflow).await.unwrap();

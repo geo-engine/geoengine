@@ -19,13 +19,13 @@ import {
     SymbologyToJSON,
     SymbologyToJSONTyped,
 } from './Symbology';
-import type { Workflow } from './Workflow';
+import type { ProcessingGraph } from './ProcessingGraph';
 import {
-    WorkflowFromJSON,
-    WorkflowFromJSONTyped,
-    WorkflowToJSON,
-    WorkflowToJSONTyped,
-} from './Workflow';
+    ProcessingGraphFromJSON,
+    ProcessingGraphFromJSONTyped,
+    ProcessingGraphToJSON,
+    ProcessingGraphToJSONTyped,
+} from './ProcessingGraph';
 
 /**
  * 
@@ -47,10 +47,10 @@ export interface AddLayer {
     description: string;
     /**
      * 
-     * @type {Workflow}
+     * @type {ProcessingGraph}
      * @memberof AddLayer
      */
-    workflow: Workflow;
+    workflow: ProcessingGraph;
     /**
      * 
      * @type {Symbology}
@@ -93,7 +93,7 @@ export function AddLayerFromJSONTyped(json: any, ignoreDiscriminator: boolean): 
         
         'name': json['name'],
         'description': json['description'],
-        'workflow': WorkflowFromJSON(json['workflow']),
+        'workflow': ProcessingGraphFromJSON(json['workflow']),
         'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
         'properties': json['properties'] == null ? undefined : json['properties'],
         'metadata': json['metadata'] == null ? undefined : json['metadata'],
@@ -113,7 +113,7 @@ export function AddLayerToJSONTyped(value?: AddLayer | null, ignoreDiscriminator
         
         'name': value['name'],
         'description': value['description'],
-        'workflow': WorkflowToJSON(value['workflow']),
+        'workflow': ProcessingGraphToJSON(value['workflow']),
         'symbology': SymbologyToJSON(value['symbology']),
         'properties': value['properties'],
         'metadata': value['metadata'],

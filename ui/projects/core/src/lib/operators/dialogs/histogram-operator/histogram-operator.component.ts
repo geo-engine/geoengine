@@ -1,12 +1,10 @@
 import {AfterViewInit, ChangeDetectionStrategy, Component, OnDestroy, inject} from '@angular/core';
 import {UntypedFormBuilder, UntypedFormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {Observable, of, ReplaySubject, Subscription} from 'rxjs';
+import {from, Observable, of, ReplaySubject, Subscription} from 'rxjs';
 import {ProjectService} from '../../../project/project.service';
 
 import {map, mergeMap, tap} from 'rxjs/operators';
 import {
-    HistogramDict,
-    HistogramParams,
     Layer,
     NotificationService,
     Plot,
@@ -20,7 +18,7 @@ import {
     FxLayoutDirective,
     FxFlexDirective,
 } from '@geoengine/common';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {Histogram, HistogramParameters, ProcessingGraph, RasterOperator, VectorOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -173,8 +171,10 @@ export class HistogramOperatorComponent implements AfterViewInit, OnDestroy {
 
         const attributeName = this.form.controls['attribute'].value as string;
 
-        let range: {min: number; max: number} | string = this.form.controls['rangeType'].value as string;
-        if (range === 'custom') {
+        const rangeType: 'data' | 'custom' = this.form.controls['rangeType'].value as 'data' | 'custom';
+
+        let range: 'data' | {min: number; max: number} = rangeType === 'custom' ? {min: 0, max: 0} : 'data';
+        if (rangeType === 'custom') {
             range = this.form.controls['range'].value as {min: number; max: number};
         }
 
@@ -202,25 +202,30 @@ export class HistogramOperatorComponent implements AfterViewInit, OnDestroy {
 
         const outputName: string = this.form.controls['name'].value;
 
-        this.projectService
-            .getWorkflow(inputLayer.workflowId)
+        from(this.projectService.getWorkflow(inputLayer.workflowId))
             .pipe(
-                mergeMap((inputWorkflow: WorkflowDict) =>
-                    this.projectService.registerWorkflow({
+                mergeMap((inputWorkflow: ProcessingGraph) => {
+                    if (inputWorkflow.type !== 'Raster' && inputWorkflow.type !== 'Vector') {
+                        throw new Error(`Invalid workflow type ${inputWorkflow.type}.`);
+                    }
+
+                    const sourceOperator: RasterOperator | VectorOperator = inputWorkflow.operator;
+
+                    return this.projectService.registerWorkflow({
                         type: 'Plot',
                         operator: {
                             type: 'Histogram',
                             params: {
-                                attributeName: attributeName,
+                                columnName: attributeName,
                                 buckets,
                                 bounds: range,
-                            } as HistogramParams,
+                            } satisfies HistogramParameters,
                             sources: {
-                                source: inputWorkflow.operator,
+                                source: sourceOperator,
                             },
-                        } as HistogramDict,
-                    }),
-                ),
+                        } as Histogram,
+                    });
+                }),
                 mergeMap((workflowId) =>
                     this.projectService.addPlot(
                         new Plot({

@@ -1,6 +1,7 @@
 use super::listing::LayerCollectionId;
 use crate::config::{LayerService, get_config_element};
-use crate::{projects::Symbology, workflows::workflow::Workflow};
+use crate::projects::Symbology;
+use crate::workflows::workflow::Workflow;
 use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize};
@@ -27,7 +28,7 @@ pub struct ProviderLayerCollectionId {
     pub collection_id: LayerCollectionId,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Layer {
     pub id: ProviderLayerId,
     pub name: String,
@@ -53,12 +54,12 @@ pub struct LayerListing {
     pub properties: Vec<Property>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 // TODO: validate user input
 pub struct AddLayer {
-    #[schema(example = "Example Layer")]
+    // #[schema(example = "Example Layer")]
     pub name: String,
-    #[schema(example = "Example layer description")]
+    // #[schema(example = "Example layer description")]
     pub description: String,
     pub workflow: Workflow,
     pub symbology: Option<Symbology>,
@@ -70,12 +71,12 @@ pub struct AddLayer {
     pub metadata: HashMap<String, String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, ToSchema, Validate)]
+#[derive(Debug, Serialize, Deserialize, Clone, Validate)]
 pub struct UpdateLayer {
-    #[schema(example = "Example Layer")]
+    // #[schema(example = "Example Layer")]
     #[validate(length(min = 1))]
     pub name: String,
-    #[schema(example = "Example layer description")]
+    // #[schema(example = "Example layer description")]
     pub description: String,
     pub workflow: Workflow,
     #[serde(default)]

@@ -22,11 +22,8 @@ import {MatCardModule} from '@angular/material/card';
 import {firstValueFrom} from 'rxjs';
 import {BackendService, BBoxDict, CoreModule, DatasetService, MapContainerComponent, ProjectService, WfsParamsDict} from '@geoengine/core';
 import {
-    ColumnRangeFilterDict,
     extentToBboxDict,
     PolygonSymbology,
-    RasterVectorJoinDict,
-    SourceOperatorDict,
     Time,
     VectorLayer,
     VectorSymbology,
@@ -41,7 +38,7 @@ import {
 } from '@geoengine/common';
 import {utc} from 'moment';
 import {DataSelectionService} from '../data-selection.service';
-import {ComputationQuota, Workflow} from '@geoengine/api-client';
+import {ComputationQuota, ProcessingGraph, RasterOperator, VectorOperator} from '@geoengine/api-client';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {Router} from '@angular/router';
 import proj4 from 'proj4';
@@ -167,7 +164,7 @@ export class DashboardComponent implements AfterViewInit, AfterContentInit {
     }
 
     async loadClassification(): Promise<void> {
-        const workflowId = await firstValueFrom(this.projectService.registerWorkflow(CLASSIFICATION_WORKFLOW));
+        const workflowId = await this.projectService.registerWorkflow(CLASSIFICATION_WORKFLOW);
 
         const rasterLayer = new RasterLayer({
             name: 'ESG Classification',
@@ -181,7 +178,7 @@ export class DashboardComponent implements AfterViewInit, AfterContentInit {
     }
 
     async loadProperties(): Promise<void> {
-        const workflowId = await firstValueFrom(this.projectService.registerWorkflow(PROPERTIES_WORKFLOW));
+        const workflowId = await this.projectService.registerWorkflow(PROPERTIES_WORKFLOW);
 
         const polygonLayer = new VectorLayer({
             name: 'Bahn Properties',
@@ -203,7 +200,7 @@ export class DashboardComponent implements AfterViewInit, AfterContentInit {
         this.scoreLoading.set(true);
         this.score.set(undefined);
 
-        const columnFilter: ColumnRangeFilterDict = {
+        const columnFilter: VectorOperator = {
             type: 'ColumnRangeFilter',
             params: {
                 column: PROPERTY_IDENTIFIER_COLUMN_NAME,
@@ -215,7 +212,7 @@ export class DashboardComponent implements AfterViewInit, AfterContentInit {
             },
         };
 
-        const rasterVectorJoin: RasterVectorJoinDict = {
+        const rasterVectorJoin: VectorOperator = {
             type: 'RasterVectorJoin',
             params: {
                 names: {
@@ -240,12 +237,12 @@ export class DashboardComponent implements AfterViewInit, AfterContentInit {
             },
         };
 
-        const workflow: Workflow = {
+        const workflow: ProcessingGraph = {
             type: 'Vector',
             operator: rasterVectorJoin,
         };
 
-        const workflowId = await firstValueFrom(this.projectService.registerWorkflow(workflow));
+        const workflowId = await this.projectService.registerWorkflow(workflow);
 
         const time = await this.projectService.getTimeOnce();
 
@@ -293,12 +290,12 @@ export class DashboardComponent implements AfterViewInit, AfterContentInit {
     }
 }
 
-const PROPERTIES_SOURCE_OP: SourceOperatorDict = {
+const PROPERTIES_SOURCE_OP: VectorOperator = {
     type: 'OgrSource',
     params: {data: 'bahn_properties'},
 };
 
-const PROPERTIES_WORKFLOW: Workflow = {
+const PROPERTIES_WORKFLOW: ProcessingGraph = {
     type: 'Vector',
     operator: PROPERTIES_SOURCE_OP,
 };
@@ -324,12 +321,12 @@ const PROPERTIES_SYMBOLOGY: VectorSymbology = PolygonSymbology.fromPolygonSymbol
     autoSimplified: true,
 });
 
-const CLASSIFICATION_SOURCE_OP: SourceOperatorDict = {
+const CLASSIFICATION_SOURCE_OP: RasterOperator = {
     type: 'GdalSource',
     params: {data: 'esg'},
 };
 
-const CLASSIFICATION_WORKFLOW: Workflow = {
+const CLASSIFICATION_WORKFLOW: ProcessingGraph = {
     type: 'Raster',
     operator: CLASSIFICATION_SOURCE_OP,
 };

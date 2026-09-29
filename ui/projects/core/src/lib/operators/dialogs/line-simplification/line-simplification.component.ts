@@ -2,17 +2,9 @@ import {ChangeDetectionStrategy, Component, OnInit, inject} from '@angular/core'
 import {FormBuilder, FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {ProjectService} from '../../../project/project.service';
 import {mergeMap} from 'rxjs/operators';
-import {BehaviorSubject} from 'rxjs';
-import {
-    Layer,
-    LineSimplificationDict,
-    NotificationService,
-    ResultTypes,
-    VectorLayer,
-    geoengineValidators,
-    AsyncValueDefault,
-} from '@geoengine/common';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {BehaviorSubject, from} from 'rxjs';
+import {Layer, NotificationService, ResultTypes, VectorLayer, geoengineValidators, AsyncValueDefault} from '@geoengine/common';
+import {ProcessingGraph, VectorOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -110,24 +102,23 @@ export class LineSimplificationComponent implements OnInit {
 
         this.loading$.next(true);
 
-        this.projectService
-            .getWorkflow(vectorLayer.workflowId)
+        from(this.projectService.getWorkflow(vectorLayer.workflowId))
             .pipe(
-                mergeMap((sourceWorkflow) => {
-                    const workflow: WorkflowDict = {
+                mergeMap((sourceWorkflow: ProcessingGraph) => {
+                    const workflow: ProcessingGraph = {
                         type: 'Vector',
                         operator: {
                             type: 'LineSimplification',
                             params: {
                                 algorithm,
-                                epsilon,
+                                epsilon: epsilon ?? 1.0,
                             },
                             sources: {
-                                vector: sourceWorkflow.operator,
+                                vector: sourceWorkflow.operator as VectorOperator,
                             },
-                        } as LineSimplificationDict,
+                        },
                     };
-                    return this.projectService.registerWorkflow(workflow);
+                    return from(this.projectService.registerWorkflow(workflow));
                 }),
                 mergeMap((workflowId) =>
                     this.projectService.addLayer(

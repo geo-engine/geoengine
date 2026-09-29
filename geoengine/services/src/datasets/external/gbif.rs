@@ -788,7 +788,7 @@ impl LayerCollectionProvider for GbifDataProvider {
             },
             name: canonicalname.to_string(),
             description: format!("All occurrences with a {taxonrank} of {canonicalname}"),
-            workflow: Workflow::Legacy {
+            workflow: Workflow {
                 operator: TypedOperator::Vector(
                     OgrSource {
                         params: OgrSourceParameters {
@@ -3641,7 +3641,7 @@ mod tests {
                 },
                 name: "Rhipidia willistoniana".to_string(),
                 description: "All occurrences with a species of Rhipidia willistoniana".to_string(),
-                workflow: Workflow::Legacy {
+                workflow: Workflow {
                     operator: TypedOperator::Vector(
                         OgrSource {
                             params: OgrSourceParameters {

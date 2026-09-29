@@ -686,7 +686,7 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
                     },
                     name: layer.name,
                     description: String::new(),
-                    workflow: Workflow::Legacy {
+                    workflow: Workflow {
                         operator: TypedOperator::Vector(
                             OgrSource {
                                 params: OgrSourceParameters {

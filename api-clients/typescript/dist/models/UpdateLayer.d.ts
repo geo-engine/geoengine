@@ -9,7 +9,7 @@
  * Do not edit the class manually.
  */
 import type { Symbology } from './Symbology';
-import type { Workflow } from './Workflow';
+import type { ProcessingGraph } from './ProcessingGraph';
 /**
  *
  * @export
@@ -30,10 +30,10 @@ export interface UpdateLayer {
     description: string;
     /**
      *
-     * @type {Workflow}
+     * @type {ProcessingGraph}
      * @memberof UpdateLayer
      */
-    workflow: Workflow;
+    workflow: ProcessingGraph;
     /**
      *
      * @type {Symbology}

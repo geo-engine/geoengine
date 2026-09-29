@@ -873,7 +873,7 @@ def _add_layer_to_collection(
             geoengine_api_client.AddLayer(
                 name=name,
                 description=description,
-                workflow=geoengine_api_client.Workflow.from_dict(workflow),
+                workflow=geoengine_api_client.ProcessingGraph.from_dict(workflow),
                 symbology=symbology_dict,
             ),
             _request_timeout=timeout,

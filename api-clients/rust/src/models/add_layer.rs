@@ -17,7 +17,7 @@ pub struct AddLayer {
     #[serde(rename = "description")]
     pub description: String,
     #[serde(rename = "workflow")]
-    pub workflow: Box<models::Workflow>,
+    pub workflow: Box<models::ProcessingGraph>,
     #[serde(rename = "symbology", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub symbology: Option<Option<Box<models::Symbology>>>,
     /// properties, for instance, to be rendered in the UI
@@ -29,7 +29,7 @@ pub struct AddLayer {
 }
 
 impl AddLayer {
-    pub fn new(name: String, description: String, workflow: models::Workflow) -> AddLayer {
+    pub fn new(name: String, description: String, workflow: models::ProcessingGraph) -> AddLayer {
         AddLayer {
             name,
             description,
