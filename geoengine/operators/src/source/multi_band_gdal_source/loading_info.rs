@@ -13,12 +13,16 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct GdalMultiBand {
     pub result_descriptor: RasterResultDescriptor,
+    /// Dataset-level TTL fallback used when no tile-level TTL is provided.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 #[derive(Debug, Clone)]
 pub struct MultiBandGdalLoadingInfo {
     files: Vec<TileFile>,
     time_steps: Vec<TimeInterval>,
+    /// Fallback TTL used when a tile does not provide its own TTL.
     cache_ttl: Option<CacheTtlSeconds>,
 }
 

@@ -744,8 +744,8 @@ where
 
         let meta_data: MetaDataDefinition = try_get_dataset_by_index_operators(&row, 0, &id)?;
 
-        let result_descriptor = match meta_data {
-            MetaDataDefinition::GdalMultiBand(b) => b.result_descriptor,
+        let (result_descriptor, dataset_cache_ttl) = match meta_data {
+            MetaDataDefinition::GdalMultiBand(b) => (b.result_descriptor, b.cache_ttl),
             _ => return Err(geoengine_operators::error::Error::DataIdTypeMissMatch),
         };
 
@@ -754,6 +754,7 @@ where
         Ok(Box::new(MultiBandGdalLoadingInfoProvider {
             dataset_id: id,
             result_descriptor,
+            dataset_cache_ttl,
             data_path,
             db: self.clone(),
         }))
@@ -770,6 +771,7 @@ where
 {
     dataset_id: DatasetId,
     result_descriptor: RasterResultDescriptor,
+    dataset_cache_ttl: Option<geoengine_datatypes::primitives::CacheTtlSeconds>,
     data_path: DataPath,
     db: PostgresDb<Tls>,
 }
@@ -1064,7 +1066,9 @@ where
         })?;
 
         Ok(MultiBandGdalLoadingInfo::new(
-            time_steps, files, None, // inherit the execution-context default
+            time_steps,
+            files,
+            self.dataset_cache_ttl, // fall back to the dataset TTL, then the context default
         ))
     }
 

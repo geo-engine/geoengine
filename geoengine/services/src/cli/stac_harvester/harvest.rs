@@ -445,6 +445,7 @@ async fn create_dataset_api(
                     },
                     bands: RasterBandDescriptors::new(bands).context("Invalid band descriptors")?,
                 },
+                cache_ttl: None,
             }),
         },
     };

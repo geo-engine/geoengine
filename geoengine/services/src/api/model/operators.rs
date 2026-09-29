@@ -1487,6 +1487,9 @@ impl From<GdalLoadingInfoTemporalSlice>
 #[serde(rename_all = "camelCase")]
 pub struct GdalMultiBand {
     pub result_descriptor: RasterResultDescriptor,
+    /// Dataset-level TTL fallback used when no tile-level TTL is provided.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<geoengine_operators::source::GdalMultiBand> for GdalMultiBand {
@@ -1494,6 +1497,7 @@ impl From<geoengine_operators::source::GdalMultiBand> for GdalMultiBand {
         Self {
             r#type: Default::default(),
             result_descriptor: value.result_descriptor.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -1502,6 +1506,7 @@ impl From<GdalMultiBand> for geoengine_operators::source::GdalMultiBand {
     fn from(value: GdalMultiBand) -> Self {
         Self {
             result_descriptor: value.result_descriptor.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }

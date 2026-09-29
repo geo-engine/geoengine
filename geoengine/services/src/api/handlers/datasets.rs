@@ -3664,6 +3664,7 @@ mod tests {
                 meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
                     r#type: Default::default(),
                     result_descriptor: create_ndvi_result_descriptor(true).into(),
+                    cache_ttl: None,
                 }),
             },
         };
@@ -3852,6 +3853,7 @@ mod tests {
                 meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
                     r#type: Default::default(),
                     result_descriptor: create_ndvi_result_descriptor(true).into(),
+                    cache_ttl: None,
                 }),
             },
         };
@@ -5115,6 +5117,7 @@ mod tests {
                 meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
                     r#type: Default::default(),
                     result_descriptor: create_ndvi_result_descriptor(true).into(),
+                    cache_ttl: None,
                 }),
             },
         };
@@ -5207,6 +5210,7 @@ mod tests {
                 meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
                     r#type: Default::default(),
                     result_descriptor: create_ndvi_result_descriptor(false).into(),
+                    cache_ttl: None,
                 }),
             },
         };
@@ -5299,6 +5303,7 @@ mod tests {
                 meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
                     r#type: Default::default(),
                     result_descriptor: create_ndvi_result_descriptor(true).into(),
+                    cache_ttl: None,
                 }),
             },
         };
@@ -5424,6 +5429,7 @@ mod tests {
                         }])
                         .unwrap(),
                     },
+                    cache_ttl: None,
                 }),
             },
         };

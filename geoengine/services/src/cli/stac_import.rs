@@ -874,6 +874,7 @@ impl StacImporter {
                         bands: RasterBandDescriptors::new(bands.clone())
                             .context(format!("Failed to create band descriptors {bands:?}"))?,
                     },
+                    cache_ttl: None,
                 }),
             },
         };

@@ -8863,6 +8863,17 @@
           },
           "resultDescriptor": {
             "$ref": "#/components/schemas/RasterResultDescriptor"
+          },
+          "cacheTtl": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds",
+                "description": "Dataset-level TTL fallback used when no tile-level TTL is provided."
+              }
+            ]
           }
         }
       },

@@ -562,7 +562,8 @@ CREATE TYPE "GdalMetaDataList" AS (
 );
 
 CREATE TYPE "GdalMultiBand" AS (
-    result_descriptor "RasterResultDescriptor"
+    result_descriptor "RasterResultDescriptor",
+    cache_ttl int
 );
 
 CREATE TYPE "MetaDataDefinition" AS (
