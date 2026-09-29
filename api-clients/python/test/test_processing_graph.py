@@ -14,10 +14,10 @@
 
 import unittest
 
-from geoengine_api_client.models.legacy_typed_operator_operator import LegacyTypedOperatorOperator
+from geoengine_api_client.models.processing_graph import ProcessingGraph
 
-class TestLegacyTypedOperatorOperator(unittest.TestCase):
-    """LegacyTypedOperatorOperator unit test stubs"""
+class TestProcessingGraph(unittest.TestCase):
+    """ProcessingGraph unit test stubs"""
 
     def setUp(self):
         pass
@@ -25,28 +25,28 @@ class TestLegacyTypedOperatorOperator(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def make_instance(self, include_optional) -> LegacyTypedOperatorOperator:
-        """Test LegacyTypedOperatorOperator
+    def make_instance(self, include_optional) -> ProcessingGraph:
+        """Test ProcessingGraph
             include_optional is a boolean, when False only required
             params are included, when True both required and
             optional params are included """
-        # uncomment below to create an instance of `LegacyTypedOperatorOperator`
+        # uncomment below to create an instance of `ProcessingGraph`
         """
-        model = LegacyTypedOperatorOperator()
+        model = ProcessingGraph()
         if include_optional:
-            return LegacyTypedOperatorOperator(
-                type = '',
-                params = geoengine_api_client.models.params.params(),
-                sources = geoengine_api_client.models.sources.sources()
+            return ProcessingGraph(
+                operator = None,
+                type = 'Vector'
             )
         else:
-            return LegacyTypedOperatorOperator(
-                type = '',
+            return ProcessingGraph(
+                operator = None,
+                type = 'Vector',
         )
         """
 
-    def testLegacyTypedOperatorOperator(self):
-        """Test LegacyTypedOperatorOperator"""
+    def testProcessingGraph(self):
+        """Test ProcessingGraph"""
         # inst_req_only = self.make_instance(include_optional=False)
         # inst_req_and_optional = self.make_instance(include_optional=True)
 

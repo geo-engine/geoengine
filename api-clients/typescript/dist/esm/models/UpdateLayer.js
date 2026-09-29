@@ -11,7 +11,7 @@
  * Do not edit the class manually.
  */
 import { SymbologyFromJSON, SymbologyToJSON, } from './Symbology';
-import { WorkflowFromJSON, WorkflowToJSON, } from './Workflow';
+import { ProcessingGraphFromJSON, ProcessingGraphToJSON, } from './ProcessingGraph';
 /**
  * Check if a given object implements the UpdateLayer interface.
  */
@@ -34,7 +34,7 @@ export function UpdateLayerFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'name': json['name'],
         'description': json['description'],
-        'workflow': WorkflowFromJSON(json['workflow']),
+        'workflow': ProcessingGraphFromJSON(json['workflow']),
         'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
         'properties': json['properties'] == null ? undefined : json['properties'],
         'metadata': json['metadata'] == null ? undefined : json['metadata'],
@@ -50,7 +50,7 @@ export function UpdateLayerToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'name': value['name'],
         'description': value['description'],
-        'workflow': WorkflowToJSON(value['workflow']),
+        'workflow': ProcessingGraphToJSON(value['workflow']),
         'symbology': SymbologyToJSON(value['symbology']),
         'properties': value['properties'],
         'metadata': value['metadata'],

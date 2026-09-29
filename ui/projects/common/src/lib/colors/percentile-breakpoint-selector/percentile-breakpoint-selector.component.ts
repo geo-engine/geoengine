@@ -6,7 +6,7 @@ import {ColorBreakpoint} from '../color-breakpoint.model';
 import {geoengineValidators} from '../../util/form.validators';
 import {UUID} from '../../datasets/dataset.model';
 import {WorkflowsService} from '../../workflows/workflows.service';
-import {StatisticsDict} from '../../operators/operator.model';
+import {RasterOperator, Statistics} from '@geoengine/api-client';
 import {SymbologyQueryParams} from '../../symbology/symbology.model';
 import {PlotsService} from '../../plots/plots.service';
 import {ALL_COLORMAPS} from '../colormaps/colormaps';
@@ -259,8 +259,14 @@ export class PercentileBreakpointSelectorComponent {
     }
 
     protected createStatisticsWorkflow(percentiles: number[]): Promise<UUID> {
-        return this.workflowsService.getWorkflow(this.workflowId()).then((workflow) =>
-            this.workflowsService.registerWorkflow({
+        return this.workflowsService.getWorkflow(this.workflowId()).then((workflow) => {
+            if (workflow.type !== 'Raster') {
+                throw new Error('Expected a raster workflow for percentile statistics.');
+            }
+
+            const sourceOperator: RasterOperator = workflow.operator;
+
+            return this.workflowsService.registerWorkflow({
                 type: 'Plot',
                 operator: {
                     type: 'Statistics',
@@ -269,10 +275,10 @@ export class PercentileBreakpointSelectorComponent {
                         percentiles,
                     },
                     sources: {
-                        source: [workflow.operator],
+                        source: [sourceOperator],
                     },
-                } as StatisticsDict,
-            }),
-        );
+                } as Statistics,
+            });
+        });
     }
 }

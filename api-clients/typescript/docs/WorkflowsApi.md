@@ -295,7 +295,7 @@ example().catch(console.error);
 
 ## loadWorkflowHandler
 
-> Workflow loadWorkflowHandler(id)
+> ProcessingGraph loadWorkflowHandler(id)
 
 Retrieves an existing Workflow.
 
@@ -342,7 +342,7 @@ example().catch(console.error);
 
 ### Return type
 
-[**Workflow**](Workflow.md)
+[**ProcessingGraph**](ProcessingGraph.md)
 
 ### Authorization
 
@@ -445,7 +445,7 @@ example().catch(console.error);
 
 ## registerWorkflowHandler
 
-> IdResponse registerWorkflowHandler(workflow)
+> IdResponse registerWorkflowHandler(processingGraph)
 
 Registers a new Workflow.
 
@@ -467,8 +467,8 @@ async function example() {
   const api = new WorkflowsApi(config);
 
   const body = {
-    // Workflow
-    workflow: {"type":"Vector","operator":{"type":"MockPointSource","params":{"points":[{"x":0.0,"y":0.1},{"x":1.0,"y":1.1}]}}},
+    // ProcessingGraph
+    processingGraph: {"type":"Vector","operator":{"type":"MockPointSource","params":{"points":[{"x":0.0,"y":0.1},{"x":1.0,"y":1.1}]}}},
   } satisfies RegisterWorkflowHandlerRequest;
 
   try {
@@ -488,7 +488,7 @@ example().catch(console.error);
 
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
-| **workflow** | [Workflow](Workflow.md) |  | |
+| **processingGraph** | [ProcessingGraph](ProcessingGraph.md) |  | |
 
 ### Return type
 

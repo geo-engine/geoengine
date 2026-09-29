@@ -1,13 +1,5 @@
 #![allow(clippy::print_stdout)]
 
-use ordered_float::OrderedFloat;
-use std::{
-    collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
-    str::FromStr,
-    time::{Duration, Instant},
-};
-
 use anyhow::Context;
 use chrono::Timelike;
 use clap::{Parser, ValueEnum};
@@ -17,8 +9,19 @@ use geoengine_datatypes::{
     raster::{GdalGeoTransform, GeoTransform},
     spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption},
 };
+use geoengine_operators::{
+    engine::{RasterOperator, TypedOperator},
+    source::{MultiBandGdalSource, MultiBandGdalSourceParameters},
+};
+use ordered_float::OrderedFloat;
 use serde::Deserialize;
 use stac::Asset;
+use std::{
+    collections::{HashMap, HashSet},
+    path::{Path, PathBuf},
+    str::FromStr,
+    time::{Duration, Instant},
+};
 use tracing::{debug, error, info, warn};
 
 use crate::{
@@ -39,9 +42,6 @@ use crate::{
                 GdalDatasetParameters, GdalMultiBand, RasterBandDescriptor, RasterBandDescriptors,
                 RasterResultDescriptor, RegularTimeDimension, SpatialGridDescriptor,
                 SpatialGridDescriptorState, TimeDescriptor, TimeDimension,
-            },
-            processing_graphs::{
-                GdalSourceParameters, MultiBandGdalSource, RasterOperator, TypedOperator,
             },
             responses::{ErrorResponse, IdResponse},
             services::{
@@ -1202,21 +1202,20 @@ impl StacImporter {
         let add_layer = AddLayer {
             name: layer_name.clone(),
             description: format!("Dataset: {dataset_name}"),
-            workflow: Workflow::Typed {
-                operator: TypedOperator::Raster(RasterOperator::MultiBandGdalSource(
+            workflow: Workflow {
+                operator: TypedOperator::Raster(
                     MultiBandGdalSource {
-                        r#type: Default::default(),
-                        params: GdalSourceParameters {
+                        params: MultiBandGdalSourceParameters {
                             data: NamedData {
                                 namespace: None,
                                 provider: None,
                                 name: dataset_name.clone(),
-                            }
-                            .into(),
+                            },
                             overview_level: None,
                         },
-                    },
-                )),
+                    }
+                    .boxed(),
+                ),
             },
             symbology: None,
             properties: vec![],

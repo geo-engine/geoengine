@@ -1,6 +1,6 @@
 import {Injectable, inject} from '@angular/core';
 import moment from 'moment';
-import {mergeMap, Observable} from 'rxjs';
+import {from, mergeMap, Observable} from 'rxjs';
 import {DatasetService, BackendService, ProjectService} from '@geoengine/core';
 import {DataSelectionService} from './data-selection.service';
 import {Dataset, RandomColorService, RasterLayer, RasterSymbology, Time, UserService} from '@geoengine/common';
@@ -26,7 +26,7 @@ export class AppDatasetService extends DatasetService {
     override addDatasetToMap(dataset: Dataset): Observable<void> {
         const workflow = dataset.createSourceWorkflow();
 
-        return this.projectService.registerWorkflow(workflow).pipe(
+        return from(this.projectService.registerWorkflow(workflow)).pipe(
             mergeMap((workflowId) => {
                 if (dataset.resultDescriptor.getTypeString() === 'Raster') {
                     const symbology = dataset.symbology as RasterSymbology;

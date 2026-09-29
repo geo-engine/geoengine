@@ -12,7 +12,7 @@ import {
     FxLayoutDirective,
     FxFlexDirective,
 } from '@geoengine/common';
-import {LayerCollectionListing, LayerListing, ProviderLayerCollectionId, Workflow} from '@geoengine/api-client';
+import {LayerCollectionListing, LayerListing, ProcessingGraph, ProviderLayerCollectionId} from '@geoengine/api-client';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {MAT_DIALOG_DATA, MatDialog, MatDialogRef, MatDialogTitle} from '@angular/material/dialog';
 import {filter, firstValueFrom, merge} from 'rxjs';
@@ -158,7 +158,7 @@ export class AddLayerItemComponent {
                 const layer = await this.layersService.addLayer(this.parentCollectionId.collectionId, {
                     name: this.form.controls.name.value,
                     description: this.form.controls.description.value,
-                    workflow: JSON.parse(this.form.controls.workflow.value ?? '{}') as Workflow,
+                    workflow: JSON.parse(this.form.controls.workflow.value ?? '{}') as ProcessingGraph,
                 });
 
                 const res: ItemId = {type: ItemType.Layer, layer: layer};

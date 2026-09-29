@@ -1,6 +1,6 @@
 import {Injectable, inject} from '@angular/core';
 import {BackendService} from '../backend/backend.service';
-import {Observable} from 'rxjs';
+import {from, Observable} from 'rxjs';
 import {map, mergeMap} from 'rxjs/operators';
 import {HttpEvent} from '@angular/common/http';
 import {
@@ -30,7 +30,7 @@ import {
     colorToDict,
 } from '@geoengine/common';
 
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {ProcessingGraph} from '@geoengine/api-client';
 
 @Injectable({
     providedIn: 'root',
@@ -77,7 +77,7 @@ export class DatasetService {
         return this.addDatasetToMapWithSourceWorkflow(dataset, workflow);
     }
 
-    addDatasetToMapWithSourceWorkflow(dataset: Dataset, workflow: WorkflowDict): Observable<void> {
+    addDatasetToMapWithSourceWorkflow(dataset: Dataset, workflow: ProcessingGraph): Observable<void> {
         return this.createLayerFromDatasetWithWorkflow(dataset, workflow).pipe(mergeMap((layer) => this.projectService.addLayer(layer)));
     }
 
@@ -86,8 +86,8 @@ export class DatasetService {
         return this.createLayerFromDatasetWithWorkflow(dataset, workflow);
     }
 
-    createLayerFromDatasetWithWorkflow(dataset: Dataset, workflow: WorkflowDict): Observable<Layer> {
-        return this.projectService.registerWorkflow(workflow).pipe(map((workflowId) => this.createLayer(workflowId, dataset)));
+    createLayerFromDatasetWithWorkflow(dataset: Dataset, workflow: ProcessingGraph): Observable<Layer> {
+        return from(this.projectService.registerWorkflow(workflow)).pipe(map((workflowId) => this.createLayer(workflowId, dataset)));
     }
 
     createLayer(workflowId: string, dataset: Dataset): Layer {

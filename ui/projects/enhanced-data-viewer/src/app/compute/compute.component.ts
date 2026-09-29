@@ -20,8 +20,6 @@ import {MatSelectModule} from '@angular/material/select';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {
     BoundingBox2D,
-    ClassHistogramDict,
-    HistogramDict,
     LayersService,
     NotificationService,
     PlotsService,
@@ -30,13 +28,11 @@ import {
     UserService,
     VegaChartData,
     VegaViewerComponent,
-    WorkflowDict,
 } from '@geoengine/common';
-import {firstValueFrom} from 'rxjs';
 import OlPolygon from 'ol/geom/Polygon';
 import {LayerIdPair} from '../main/main.component';
 import {EdvLayersService} from '../layers/layers.service';
-import {PlotOutputFormat, RasterBandDescriptor, WrappedPlotOutput} from '@geoengine/api-client';
+import {PlotOutputFormat, RasterBandDescriptor, TypedPlotOperator, TypedRasterOperator, WrappedPlotOutput} from '@geoengine/api-client';
 import {PlotDialogComponent} from './plot-dialog.component';
 
 @Component({
@@ -262,10 +258,11 @@ export class ComputeComponent {
         this.plotData.set(undefined);
 
         try {
-            const sessionToken = await this.userService.getSessionToken();
-            const sourceProcessingGraph = await firstValueFrom(this.backendService.getWorkflow(processingGraphId, sessionToken));
+            const sourceProcessingGraph = (await this.userService
+                .processingGraphAPI()
+                .loadWorkflowHandler({id: processingGraphId})) as TypedRasterOperator;
             const measurementType = bandMeasurementType(metadata.bands, band);
-            let processingGraph: WorkflowDict;
+            let processingGraph: TypedPlotOperator;
             if (measurementType === 'classification') {
                 processingGraph = {
                     type: 'Plot',
@@ -275,7 +272,7 @@ export class ComputeComponent {
                         sources: {
                             source: sourceProcessingGraph.operator,
                         },
-                    } as ClassHistogramDict,
+                    },
                 };
             } else {
                 processingGraph = {
@@ -283,7 +280,7 @@ export class ComputeComponent {
                     operator: {
                         type: 'Histogram',
                         params: {
-                            attributeName: band,
+                            columnName: band,
                             bounds: 'data',
                             buckets: {
                                 type: 'squareRootChoiceRule',
@@ -293,10 +290,10 @@ export class ComputeComponent {
                         sources: {
                             source: sourceProcessingGraph.operator,
                         },
-                    } as HistogramDict,
+                    },
                 };
             }
-            const plotWorkflowId = (await firstValueFrom(this.backendService.registerWorkflow(processingGraph, sessionToken))).id;
+            const plotWorkflowId = (await this.userService.processingGraphAPI().registerWorkflowHandler({processingGraph})).id;
 
             const plotData = await this.plotsService.getPlot(
                 plotWorkflowId,

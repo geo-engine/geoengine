@@ -3,18 +3,10 @@ import {FormControl, FormBuilder, FormGroup, Validators, FormsModule, ReactiveFo
 import {ProjectService} from '../../../project/project.service';
 
 import {map, mergeMap} from 'rxjs/operators';
-import {Observable} from 'rxjs';
+import {from, Observable} from 'rxjs';
 import {Layer} from 'ol/layer';
-import {
-    NotificationService,
-    RasterDataType,
-    RasterDataTypes,
-    RasterLayer,
-    RasterTypeConversionDict,
-    ResultTypes,
-    geoengineValidators,
-} from '@geoengine/common';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {NotificationService, RasterDataType, RasterDataTypes, RasterLayer, ResultTypes, geoengineValidators} from '@geoengine/common';
+import {ProcessingGraph, RasterOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -86,21 +78,21 @@ export class RasterTypeConversionComponent implements AfterViewInit {
 
         const outputDataType: RasterDataType = this.form.controls['dataType'].value;
 
-        this.projectService
-            .getWorkflow(inputLayer.workflowId)
+        from(this.projectService.getWorkflow(inputLayer.workflowId))
             .pipe(
-                mergeMap((inputWorkflow: WorkflowDict) =>
+                mergeMap((inputWorkflow: ProcessingGraph) =>
                     this.projectService.registerWorkflow({
                         type: 'Raster',
                         operator: {
                             type: 'RasterTypeConversion',
                             params: {
-                                outputDataType: outputDataType.getCode(),
+                                outputDataType: outputDataType.getCode() as
+                                    'U8' | 'U16' | 'U32' | 'U64' | 'I8' | 'I16' | 'I32' | 'I64' | 'F32' | 'F64',
                             },
                             sources: {
-                                raster: inputWorkflow.operator,
+                                raster: inputWorkflow.operator as RasterOperator,
                             },
-                        } as RasterTypeConversionDict,
+                        },
                     }),
                 ),
                 mergeMap((workflowId) =>

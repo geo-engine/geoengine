@@ -3,16 +3,7 @@
 use crate::{
     api::{
         handlers::{self},
-        model::{
-            processing_graphs::{
-                DeriveOutRasterSpecsSource, GdalSource as NewGdalSource,
-                GdalSourceParameters as NewGdalSourceParameters,
-                RasterOperator as NewRasterOperator, Reprojection, ReprojectionParameters,
-                SingleRasterOrVectorOperator, SingleRasterOrVectorSource,
-                TypedOperator as NewTypedOperator,
-            },
-            responses::ErrorResponse,
-        },
+        model::responses::ErrorResponse,
     },
     config::{Postgres, Quota, get_config_element},
     contexts::{ApplicationContext, GeoEngineDb, PostgresContext, SessionContext, SessionId},
@@ -68,17 +59,23 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     engine::{
         ChunkByteSize, MultipleRasterSources, QueryContext, RasterBandDescriptor,
-        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
-        TimeDescriptor, TypedOperator, WorkflowOperatorPath,
+        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SingleRasterOrVectorSource,
+        SpatialGridDescriptor, TimeDescriptor, TypedOperator, WorkflowOperatorPath,
     },
     meta::quota::QuotaTracking,
-    processing::{RasterStacker, RasterStackerParams},
+    processing::{
+        DeriveOutRasterSpecsSource, RasterStacker, RasterStackerParams, Reprojection,
+        ReprojectionParams,
+    },
     source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataStatic,
-        GdalSource, GdalSourceParameters,
+        GdalSource, GdalSourceParameters, MultiBandGdalSource, MultiBandGdalSourceParameters,
     },
-    util::gdal::{
-        create_ndvi_meta_data, create_ndvi_meta_data_with_cache_ttl, create_ports_meta_data,
+    util::{
+        gdal::{
+            create_ndvi_meta_data, create_ndvi_meta_data_with_cache_ttl, create_ports_meta_data,
+        },
+        input::RasterOrVectorOperator,
     },
 };
 use rand::Rng;
@@ -150,7 +147,7 @@ pub async fn register_ndvi_workflow_helper_with_cache_ttl(
 ) -> (Workflow, WorkflowId) {
     let (_, dataset) = add_ndvi_to_datasets_with_cache_ttl(app_ctx, cache_ttl).await;
 
-    let workflow = Workflow::Legacy {
+    let workflow = Workflow {
         operator: TypedOperator::Raster(
             GdalSource {
                 params: GdalSourceParameters::new(dataset),
@@ -368,7 +365,7 @@ pub async fn register_ne2_multiband_workflow(
     )
     .await;
 
-    let workflow = Workflow::Legacy {
+    let workflow = Workflow {
         operator: TypedOperator::Raster(
             RasterStacker {
                 params: RasterStackerParams {
@@ -508,22 +505,24 @@ pub async fn add_file_definition_to_datasets_and_return_layer<D: GeoEngineDb>(
     let dataset_metadata = db.load_dataset(&dataset.id).await.unwrap();
 
     let operator = match dataset_metadata.source_operator.as_str() {
-        "GdalSource" => NewTypedOperator::Raster(NewRasterOperator::GdalSource(NewGdalSource {
-            r#type: Default::default(),
-            params: NewGdalSourceParameters {
-                data: dataset.name.into(),
-                overview_level: None,
-            },
-        })),
-        "MultiBandGdalSource" => NewTypedOperator::Raster(NewRasterOperator::MultiBandGdalSource(
-            crate::api::model::processing_graphs::MultiBandGdalSource {
-                r#type: Default::default(),
-                params: crate::api::model::processing_graphs::GdalSourceParameters {
+        "GdalSource" => TypedOperator::Raster(
+            GdalSource {
+                params: GdalSourceParameters {
                     data: dataset.name.into(),
                     overview_level: None,
                 },
-            },
-        )),
+            }
+            .boxed(),
+        ),
+        "MultiBandGdalSource" => TypedOperator::Raster(
+            MultiBandGdalSource {
+                params: MultiBandGdalSourceParameters {
+                    data: dataset.name.into(),
+                    overview_level: None,
+                },
+            }
+            .boxed(),
+        ),
         _ => {
             panic!("Only GdalSource and MultiBandGdalSource are supported in this helper function")
         }
@@ -534,7 +533,7 @@ pub async fn add_file_definition_to_datasets_and_return_layer<D: GeoEngineDb>(
         AddLayer {
             name: dataset_metadata.display_name,
             description: dataset_metadata.description,
-            workflow: Workflow::Typed { operator },
+            workflow: Workflow { operator },
             symbology,
             properties: vec![],
             metadata: Default::default(),
@@ -1016,14 +1015,16 @@ pub async fn add_ndvi_to_layers<C: ApplicationContext<Session = UserSession>>(
         AddLayer {
             name: "NDVI".to_string(),
             description: "NDVI Layer".to_string(),
-            workflow: Workflow::Typed {
-                operator: NewTypedOperator::Raster(NewRasterOperator::GdalSource(NewGdalSource {
-                    r#type: Default::default(),
-                    params: NewGdalSourceParameters {
-                        data: named_data.into(),
-                        overview_level: None,
-                    },
-                })),
+            workflow: Workflow {
+                operator: TypedOperator::Raster(
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            data: named_data,
+                            overview_level: None,
+                        },
+                    }
+                    .boxed(),
+                ),
             },
             symbology: Some(Symbology::Raster(RasterSymbology {
                 r#type: Default::default(),
@@ -1348,26 +1349,27 @@ pub async fn add_ndvi_3857_to_layers<C: ApplicationContext<Session = UserSession
         AddLayer {
             name: "NDVI".to_string(),
             description: "NDVI Layer".to_string(),
-            workflow: Workflow::Typed {
-                operator: NewTypedOperator::Raster(NewRasterOperator::Reprojection(Reprojection {
-                    r#type: Default::default(),
-                    params: ReprojectionParameters {
-                        target_spatial_reference: SpatialReference::web_mercator().into(),
-                        derive_out_spec: DeriveOutRasterSpecsSource::DataBounds,
-                    },
-                    sources: SingleRasterOrVectorSource {
-                        source: SingleRasterOrVectorOperator::Raster(
-                            NewRasterOperator::GdalSource(NewGdalSource {
-                                r#type: Default::default(),
-                                params: NewGdalSourceParameters {
-                                    data: named_data.into(),
-                                    overview_level: None,
-                                },
-                            }),
-                        ),
+            workflow: Workflow {
+                operator: TypedOperator::Raster(
+                    Reprojection {
+                        params: ReprojectionParams {
+                            target_spatial_reference: SpatialReference::web_mercator(),
+                            derive_out_spec: DeriveOutRasterSpecsSource::DataBounds,
+                        },
+                        sources: SingleRasterOrVectorSource {
+                            source: RasterOrVectorOperator::Raster(
+                                GdalSource {
+                                    params: GdalSourceParameters {
+                                        data: named_data,
+                                        overview_level: None,
+                                    },
+                                }
+                                .boxed(),
+                            ),
+                        },
                     }
-                    .into(),
-                })),
+                    .boxed(),
+                ),
             },
             symbology: Some(Symbology::Raster(RasterSymbology {
                 r#type: Default::default(),

@@ -1,10 +1,10 @@
 import {Injectable, inject} from '@angular/core';
-import {BehaviorSubject, mergeMap, Observable} from 'rxjs';
+import {BehaviorSubject, from, mergeMap, Observable} from 'rxjs';
 import {COUNTRY_LIST} from './country-selector/country-selector-data.model';
 import {ProjectService} from '@geoengine/core';
 import {DataSelectionService} from './data-selection.service';
 import {countryDatasetName} from './country-selector/country-data.model';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {ProcessingGraph} from '@geoengine/api-client';
 import {PolygonSymbology, VectorLayer} from '@geoengine/common';
 
 export interface Country {
@@ -43,7 +43,7 @@ export class CountryProviderService {
     public setSelectedCountry(country: Country): void {
         this.selectedCountry$.next(country);
 
-        const workflow: WorkflowDict = {
+        const workflow: ProcessingGraph = {
             type: 'Vector',
             operator: {
                 type: 'OgrSource',
@@ -53,8 +53,7 @@ export class CountryProviderService {
             },
         };
 
-        this.projectService
-            .registerWorkflow(workflow)
+        from(this.projectService.registerWorkflow(workflow))
             .pipe(
                 mergeMap((workflowId) =>
                     this.dataSelectionService.setPolygonLayer(

@@ -9,7 +9,7 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { IdResponse, ProvenanceEntry, RasterDatasetFromWorkflow, RasterStreamWebsocketResultType, SpatialPartition2D, TaskResponse, TypedResultDescriptor, Workflow } from '../models/index';
+import type { IdResponse, ProcessingGraph, ProvenanceEntry, RasterDatasetFromWorkflow, RasterStreamWebsocketResultType, SpatialPartition2D, TaskResponse, TypedResultDescriptor } from '../models/index';
 export interface DatasetFromWorkflowHandlerRequest {
     id: string;
     rasterDatasetFromWorkflow: RasterDatasetFromWorkflow;
@@ -34,7 +34,7 @@ export interface RasterStreamWebsocketRequest {
     resultType: RasterStreamWebsocketResultType;
 }
 export interface RegisterWorkflowHandlerRequest {
-    workflow: Workflow;
+    processingGraph: ProcessingGraph;
 }
 /**
  *
@@ -95,11 +95,11 @@ export declare class WorkflowsApi extends runtime.BaseAPI {
     /**
      * Retrieves an existing Workflow.
      */
-    loadWorkflowHandlerRaw(requestParameters: LoadWorkflowHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Workflow>>;
+    loadWorkflowHandlerRaw(requestParameters: LoadWorkflowHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProcessingGraph>>;
     /**
      * Retrieves an existing Workflow.
      */
-    loadWorkflowHandler(requestParameters: LoadWorkflowHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Workflow>;
+    loadWorkflowHandler(requestParameters: LoadWorkflowHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProcessingGraph>;
     /**
      * Creates request options for rasterStreamWebsocket without sending the request
      */

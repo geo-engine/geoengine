@@ -548,8 +548,7 @@ async fn register_harvest_workflow(api: &Configuration) -> Result<Uuid> {
         raster_operator,
         models::typed_raster_operator::Type::Raster,
     );
-    let typed_operator = models::TypedOperator::TypedRasterOperator(Box::new(typed_raster));
-    let workflow = models::Workflow::TypedOperator(Box::new(typed_operator));
+    let workflow = models::ProcessingGraph::TypedRasterOperator(Box::new(typed_raster));
 
     let id = apis::workflows_api::register_workflow_handler(api, workflow)
         .await

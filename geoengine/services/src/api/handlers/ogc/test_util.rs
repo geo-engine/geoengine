@@ -261,7 +261,9 @@ pub async fn session_and_ndvi_multi_band_layer_id(
         crate::layers::layer::AddLayer {
             name: "NDVI MultiBand".to_string(),
             description: "NDVI data loaded via MultiBandGdalSource".to_string(),
-            workflow: crate::workflows::workflow::Workflow::Typed { operator },
+            workflow: crate::workflows::workflow::Workflow {
+                operator: operator.try_into().unwrap(),
+            },
             symbology: Some(ndvi_255_symbology()),
             properties: vec![],
             metadata: Default::default(),
