@@ -22,6 +22,7 @@ export class EdvLayersService {
     readonly selectedVariantKey = signal<string | undefined>(undefined);
     readonly selectedPresetKey = signal<string | undefined>(undefined);
     readonly selectedPresetIndex = signal(0);
+    private readonly appliedPreset = signal<VisualizationPreset | undefined>(undefined);
     private readonly variantPresetCache = signal(new Map<string, VisualizationPreset[]>());
     private variantLoadGeneration = 0;
     private readonly variantLoadEpochs = new Map<string, number>();
@@ -95,12 +96,17 @@ export class EdvLayersService {
             presets,
         }));
     });
-    readonly activePreset = computed(() => {
+    readonly selectedPreset = computed(() => {
         const presets = this.currentPresets();
-        return presets.find((preset) => preset.key === this.selectedPresetKey()) ?? presets[0];
+        return presets.find((preset) => preset.key === this.selectedPresetKey());
+    });
+    readonly canApplyPreset = computed(() => {
+        const selected = this.selectedPreset();
+        const applied = this.appliedPreset();
+        return !!selected && (selected.connectorId !== applied?.connectorId || selected.layerId !== applied?.layerId);
     });
     readonly mapTileLayer = computed<DataSourceLayer | undefined>(() => {
-        const preset = this.activePreset();
+        const preset = this.appliedPreset();
         if (!preset) {
             return undefined;
         }
@@ -111,6 +117,7 @@ export class EdvLayersService {
         effect(() => {
             if (this.catalogueLoading()) {
                 this.invalidateVariantPresets();
+                this.clearAppliedPreset();
                 return;
             }
             const sources = this.dataSources();
@@ -119,6 +126,7 @@ export class EdvLayersService {
                 this.selectedVariantKey.set(undefined);
                 this.selectedPresetKey.set(undefined);
                 this.selectedPresetIndex.set(0);
+                this.clearAppliedPreset();
                 return;
             }
 
@@ -126,21 +134,22 @@ export class EdvLayersService {
             const next = current ? sources.find((source) => source.key === current.key) : undefined;
             const selected = next ?? sources[0];
             const sourceChanged = current?.key !== selected.key;
+            if (sourceChanged) {
+                this.clearAppliedPreset();
+            }
             this.selectedDataSource.set(selected);
 
             const wantedVariantKey = sourceChanged ? undefined : this.selectedVariantKey();
             const variant = selected.variants.find((candidate) => candidate.key === wantedVariantKey) ?? selected.variants[0];
             this.selectedVariantKey.set(variant?.key);
 
-            const wantedPresetKey = sourceChanged ? undefined : this.selectedPresetKey();
             if (variant?.explicit) {
-                this.selectedPresetKey.set(wantedPresetKey);
+                this.selectedPresetKey.set(undefined);
                 this.selectedPresetIndex.set(0);
                 untracked(() => void this.ensureVariantPresets(selected, variant));
             } else {
-                const preset = variant?.presets.find((candidate) => candidate.key === wantedPresetKey) ?? variant?.presets[0];
-                this.selectedPresetKey.set(preset?.key);
-                this.selectedPresetIndex.set(preset ? (variant?.presets.indexOf(preset) ?? 0) : 0);
+                this.selectedPresetKey.set(undefined);
+                this.selectedPresetIndex.set(0);
             }
         });
     }
@@ -162,10 +171,11 @@ export class EdvLayersService {
 
     setSelectedDataSource(key: string): void {
         const dataSource = this.dataSources().find((source) => source.key === key);
-        if (!dataSource) {
+        if (!dataSource || this.selectedDataSource()?.key === dataSource.key) {
             return;
         }
         this.selectedDataSource.set(dataSource);
+        this.clearAppliedPreset();
         this.selectedVariantKey.set(undefined);
         this.selectedPresetKey.set(undefined);
         this.selectedPresetIndex.set(0);
@@ -176,20 +186,12 @@ export class EdvLayersService {
         if (!variant) {
             return;
         }
-        this.selectedVariantKey.set(variant.key);
-        if (!variant.explicit) {
-            const currentPreset = variant.presets.find((preset) => preset.key === this.selectedPresetKey());
-            const nextPreset = currentPreset ?? variant.presets[0];
-            this.selectedPresetKey.set(nextPreset?.key);
-            this.selectedPresetIndex.set(nextPreset ? variant.presets.indexOf(nextPreset) : 0);
-        } else {
-            const cached = this.variantPresetCache().get(variantCacheKey(this.selectedDataSource()?.key ?? '', variant.key));
-            if (cached) {
-                this.selectPresetFrom(cached);
-            } else {
-                this.selectedPresetIndex.set(0);
-            }
+        if (this.selectedVariantKey() !== variant.key) {
+            this.clearAppliedPreset();
+            this.selectedPresetKey.set(undefined);
         }
+        this.selectedVariantKey.set(variant.key);
+        this.selectedPresetIndex.set(0);
     }
 
     setSelectedPreset(key: string): void {
@@ -199,6 +201,16 @@ export class EdvLayersService {
         }
         this.selectedPresetKey.set(key);
         this.selectedPresetIndex.set(index);
+    }
+
+    applySelectedPreset(): void {
+        if (this.canApplyPreset()) {
+            this.appliedPreset.set(this.selectedPreset());
+        }
+    }
+
+    private clearAppliedPreset(): void {
+        this.appliedPreset.set(undefined);
     }
 
     /** Discover datasets in the EDV -> category -> dataset -> variant -> preset hierarchy. */
@@ -353,9 +365,6 @@ export class EdvLayersService {
         const key = variantCacheKey(source.key, variant.key);
         const cached = this.variantPresetCache().get(key);
         if (!force && cached) {
-            if (this.selectedDataSource()?.key === source.key && this.selectedVariantKey() === variant.key) {
-                this.selectPresetFrom(cached);
-            }
             return;
         }
         if (this.variantLoadTokens.has(key)) {
@@ -407,7 +416,6 @@ export class EdvLayersService {
                     this.variantLoadErrorKey.set(undefined);
                     this.variantLoadError.set(undefined);
                 }
-                this.selectPresetFrom(sorted);
             }
         } catch (error) {
             if (generation !== this.variantLoadGeneration || epoch !== (this.variantLoadEpochs.get(key) ?? 0)) {
@@ -432,12 +440,6 @@ export class EdvLayersService {
             next.delete(key);
             return next;
         });
-    }
-
-    private selectPresetFrom(presets: VisualizationPreset[]): void {
-        const preset = presets.find((candidate) => candidate.key === this.selectedPresetKey()) ?? presets[0];
-        this.selectedPresetKey.set(preset?.key);
-        this.selectedPresetIndex.set(preset ? presets.indexOf(preset) : 0);
     }
 
     private async findItem(collection: string, predicate: (item: CollectionItem) => boolean): Promise<CollectionItem | undefined> {

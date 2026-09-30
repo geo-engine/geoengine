@@ -110,8 +110,8 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                     }
                     @for (preset of group.presets; track preset.key) {
                         <mat-list-item
-                            [activated]="preset === activePreset()"
-                            [class.preset-active]="preset === activePreset()"
+                            [activated]="preset === selectedPreset()"
+                            [class.preset-active]="preset === selectedPreset()"
                             (click)="selectPreset(preset)"
                             [matTooltip]="preset.displayName"
                             [style.backgroundImage]="'url(' + preset.backgroundImage + ')'"
@@ -121,6 +121,11 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                     }
                 }
             </mat-nav-list>
+            <div class="apply-preset-action">
+                <button mat-flat-button color="primary" type="button" [disabled]="!canApplyPreset()" (click)="applySelectedPreset()">
+                    Apply visualization
+                </button>
+            </div>
         </div>
         <mat-divider></mat-divider>
     `,
@@ -288,6 +293,12 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                 }
             }
 
+            .apply-preset-action {
+                display: flex;
+                justify-content: center;
+                margin-top: 1rem;
+            }
+
             .time-selection {
                 --mat-button-text-label-text-size: #{$text2};
             }
@@ -327,7 +338,8 @@ export class LayersComponent {
     readonly currentPresets = this.edvLayersService.currentPresets;
     readonly presetGroups = this.edvLayersService.presetGroups;
     readonly selectedPresetIndex = this.edvLayersService.selectedPresetIndex;
-    readonly activePreset = this.edvLayersService.activePreset;
+    readonly selectedPreset = this.edvLayersService.selectedPreset;
+    readonly canApplyPreset = this.edvLayersService.canApplyPreset;
     readonly mapTileLayer = this.edvLayersService.mapTileLayer;
 
     constructor() {
@@ -368,6 +380,10 @@ export class LayersComponent {
 
     selectPreset(preset: DataSourceDefinition['variants'][number]['presets'][number]): void {
         this.edvLayersService.setSelectedPreset(preset.key);
+    }
+
+    applySelectedPreset(): void {
+        this.edvLayersService.applySelectedPreset();
     }
 
     async timeForward(): Promise<void> {

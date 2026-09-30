@@ -58,6 +58,17 @@ describe('LayersComponent', () => {
                         ['edv:order', '10'],
                     ],
                 },
+                {
+                    type: 'layer',
+                    name: 'Alternate',
+                    id: {providerId: 'provider', layerId: 'alternate'},
+                    description: '',
+                    properties: [
+                        ['edv:type', 'preset'],
+                        ['edv:preset', 'Alternate'],
+                        ['edv:order', '20'],
+                    ],
+                },
             ],
         },
     };
@@ -129,14 +140,37 @@ describe('LayersComponent', () => {
         expect(element.textContent).not.toContain('Catalogue unavailable');
     });
 
-    it('loads the configured category and returned layer id', async () => {
+    it('requires a preset selection and explicit apply, with the button tracking changes', async () => {
         fixture.detectChanges();
         await fixture.whenStable();
+        fixture.detectChanges();
+        const element = fixture.nativeElement as HTMLElement;
+        const button = [...element.querySelectorAll('button')].find((candidate) =>
+            candidate.textContent?.includes('Apply visualization'),
+        ) as HTMLButtonElement;
         expect(fixture.componentInstance.dataSources().map((source) => source.key)).toEqual(['sentinel']);
         expect(fixture.componentInstance.currentPresets()[0].category).toBe('adHoc');
-        expect(fixture.componentInstance.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
+        expect(fixture.componentInstance.mapTileLayer()).toBeUndefined();
+        expect(button.disabled).toBe(true);
         expect(setTime).toHaveBeenCalledWith(new Time(new Date(1775001600000)));
         expect(setTimeStepDuration).toHaveBeenCalledWith({durationAmount: 1, durationUnit: 'day'});
+
+        fixture.componentInstance.selectPreset(fixture.componentInstance.currentPresets()[0]);
+        fixture.detectChanges();
+        expect(button.disabled).toBe(false);
+        button.click();
+        fixture.detectChanges();
+        expect(fixture.componentInstance.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
+        expect(button.disabled).toBe(true);
+
+        fixture.componentInstance.selectPreset(fixture.componentInstance.currentPresets()[1]);
+        fixture.detectChanges();
+        expect(button.disabled).toBe(false);
+        expect(fixture.componentInstance.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
+        button.click();
+        fixture.detectChanges();
+        expect(fixture.componentInstance.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'alternate'});
+        expect(button.disabled).toBe(true);
     });
 
     it('loads all configured categories when debug mode is enabled', async () => {
@@ -312,12 +346,17 @@ describe('LayersComponent', () => {
         await fixture.whenStable();
         expect(edvLayersService.currentVariants().map((variant) => variant.key)).toEqual(['epsg32632', 'epsg32633']);
         expect(getLayerCollectionItems.mock.calls.map(([, collection]) => collection)).not.toContain('v330');
+        expect(edvLayersService.mapTileLayer()).toBeUndefined();
         edvLayersService.setSelectedVariant('epsg32633');
         fixture.detectChanges();
         await fixture.whenStable();
         fixture.detectChanges();
         expect(edvLayersService.selectedVariant()?.key).toBe('epsg32633');
-        await vi.waitFor(() => expect(edvLayersService.mapTileLayer()).toEqual({dataConnectorId: 'data0', layerId: 'red33-0'}));
+        await vi.waitFor(() => expect(edvLayersService.currentPresets().length).toBe(1));
+        expect(edvLayersService.mapTileLayer()).toBeUndefined();
+        edvLayersService.setSelectedPreset('red_band');
+        edvLayersService.applySelectedPreset();
+        expect(edvLayersService.mapTileLayer()).toEqual({dataConnectorId: 'data0', layerId: 'red33-0'});
 
         deployment = 1;
         edvLayersService.retryCatalogue();
@@ -326,7 +365,8 @@ describe('LayersComponent', () => {
         await fixture.whenStable();
         fixture.detectChanges();
         expect(edvLayersService.selectedVariant()?.key).toBe('epsg32633');
-        await vi.waitFor(() => expect(edvLayersService.mapTileLayer()).toEqual({dataConnectorId: 'data1', layerId: 'red33-1'}));
+        expect(edvLayersService.mapTileLayer()).toBeUndefined();
+        expect(edvLayersService.selectedPresetKey()).toBeUndefined();
     });
 
     it('ignores a stale preset response after switching variants', async () => {
@@ -416,7 +456,11 @@ describe('LayersComponent', () => {
         edvLayersService.setSelectedVariant('epsg32633');
         fixture.detectChanges();
         resolve33({items: [layer('red33')]});
-        await vi.waitFor(() => expect(edvLayersService.mapTileLayer()).toEqual({dataConnectorId: 'data', layerId: 'red33'}));
+        await vi.waitFor(() => expect(edvLayersService.currentPresets().length).toBe(1));
+        expect(edvLayersService.mapTileLayer()).toBeUndefined();
+        edvLayersService.setSelectedPreset('red_band');
+        edvLayersService.applySelectedPreset();
+        expect(edvLayersService.mapTileLayer()).toEqual({dataConnectorId: 'data', layerId: 'red33'});
         resolve32({items: [layer('red32')]});
         await Promise.resolve();
         expect(edvLayersService.mapTileLayer()).toEqual({dataConnectorId: 'data', layerId: 'red33'});
@@ -509,7 +553,11 @@ describe('LayersComponent', () => {
         await vi.waitFor(() => expect(edvLayersService.variantError()).toBe('variant unavailable'));
         expect(edvLayersService.mapTileLayer()).toBeUndefined();
         edvLayersService.retryVariant();
-        await vi.waitFor(() => expect(edvLayersService.mapTileLayer()).toEqual({dataConnectorId: 'data', layerId: 'red33'}));
+        await vi.waitFor(() => expect(edvLayersService.currentPresets().length).toBe(1));
+        expect(edvLayersService.mapTileLayer()).toBeUndefined();
+        edvLayersService.setSelectedPreset('red_band');
+        edvLayersService.applySelectedPreset();
+        expect(edvLayersService.mapTileLayer()).toEqual({dataConnectorId: 'data', layerId: 'red33'});
         expect(edvLayersService.variantError()).toBeUndefined();
     });
     it('reconciles the selected preset when switching to a cached variant', async () => {
@@ -581,18 +629,25 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
-        await vi.waitFor(() => expect(edvLayersService.mapTileLayer()?.layerId).toBe('red32'));
+        expect(edvLayersService.mapTileLayer()).toBeUndefined();
         edvLayersService.setSelectedPreset('ndvi');
+        expect(edvLayersService.canApplyPreset()).toBe(true);
+        edvLayersService.applySelectedPreset();
+        expect(edvLayersService.mapTileLayer()?.layerId).toBe('ndvi32');
         edvLayersService.setSelectedVariant('epsg32633');
         fixture.detectChanges();
-        await vi.waitFor(() => expect(edvLayersService.mapTileLayer()?.layerId).toBe('red33'));
+        expect(edvLayersService.mapTileLayer()).toBeUndefined();
+        await vi.waitFor(() => expect(edvLayersService.currentPresets().length).toBe(1));
+        edvLayersService.setSelectedPreset('red_band');
+        edvLayersService.applySelectedPreset();
+        expect(edvLayersService.mapTileLayer()?.layerId).toBe('red33');
         edvLayersService.setSelectedVariant('epsg32632');
         fixture.detectChanges();
-        edvLayersService.setSelectedPreset('ndvi');
+        expect(edvLayersService.mapTileLayer()).toBeUndefined();
         edvLayersService.setSelectedVariant('epsg32633');
         fixture.detectChanges();
-        expect(edvLayersService.selectedPresetKey()).toBe('red_band');
-        expect(edvLayersService.mapTileLayer()?.layerId).toBe('red33');
+        expect(edvLayersService.selectedPresetKey()).toBeUndefined();
+        expect(edvLayersService.canApplyPreset()).toBe(false);
     });
 
     it('keeps an in-flight variant load alive when retrying another variant', async () => {
@@ -657,10 +712,16 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         await vi.waitFor(() => expect(edvLayersService.variantError()).toBe('B unavailable'));
         edvLayersService.retryVariant();
-        await vi.waitFor(() => expect(edvLayersService.mapTileLayer()?.layerId).toBe('red-b'));
+        await vi.waitFor(() => expect(edvLayersService.currentPresets().length).toBe(1));
+        expect(edvLayersService.mapTileLayer()).toBeUndefined();
+        edvLayersService.setSelectedPreset('red');
+        edvLayersService.applySelectedPreset();
+        expect(edvLayersService.mapTileLayer()?.layerId).toBe('red-b');
         edvLayersService.setSelectedVariant('a');
         fixture.detectChanges();
+        expect(edvLayersService.mapTileLayer()).toBeUndefined();
         resolveA({items: [layer('red-a')]});
-        await vi.waitFor(() => expect(edvLayersService.mapTileLayer()?.layerId).toBe('red-a'));
+        await vi.waitFor(() => expect(edvLayersService.currentPresets().length).toBe(1));
+        expect(edvLayersService.mapTileLayer()).toBeUndefined();
     });
 });
