@@ -318,11 +318,11 @@ mod tests {
     };
     use crate::test_data;
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
+    use geoengine_datatypes::primitives::VectorQueryRectangle;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, FeatureDataType, NoGeometry, PlotQueryRectangle,
         PlotSeriesSelection, TimeInterval,
     };
-    use geoengine_datatypes::primitives::{CacheTtlSeconds, VectorQueryRectangle};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::Identifier;
     use geoengine_datatypes::util::test::TestDefault;
@@ -564,7 +564,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,

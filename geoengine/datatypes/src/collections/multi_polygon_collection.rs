@@ -1097,7 +1097,7 @@ mod tests {
             ],
             vec![Default::default(); 1],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 

@@ -417,7 +417,8 @@ def add_multiband_gdal_source(name: str,
                               description: str = "",
                               share_with: list[RoleId] | None = None,
                               permission: Permission = Permission.READ,
-                              timeout: int = 60) -> DatasetName
+                              timeout: int = 60,
+                              cache_ttl: int | None = None) -> DatasetName
 ```
 
 Create a `MultiBandGdalSource` dataset, grant optional permissions and add the given files as tiles.
@@ -425,7 +426,9 @@ Create a `MultiBandGdalSource` dataset, grant optional permissions and add the g
 By default the dataset is created as external data, so GDAL resolves the
 files (e.g. https or s3 links) when they are queried. A volume name or a
 `Volume` can be given to store the files in a Geo Engine volume. No
-permissions are granted unless `share_with` is given.
+permissions are granted unless `share_with` is given. `cache_ttl` optionally sets the
+dataset-level cache lifetime in seconds as a fallback for tiles without their own TTL.
+When `cache_ttl` is `None`, the server default is used; `0` disables caching.
 
 #### add\_or\_replace\_dataset\_with\_permissions
 

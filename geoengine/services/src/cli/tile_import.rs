@@ -463,6 +463,7 @@ async fn add_dataset_and_tiles_to_geoengine(
             meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
                 r#type: crate::api::model::operators::GdalMultiBandTypeTag::GdalMultiBandTypeTag,
                 result_descriptor: files[0].result_descriptor.clone().into(),
+                cache_ttl: None,
             }),
         },
     };

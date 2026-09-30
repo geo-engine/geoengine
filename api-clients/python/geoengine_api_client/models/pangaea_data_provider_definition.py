@@ -32,7 +32,7 @@ class PangaeaDataProviderDefinition(BaseModel):
     description: StrictStr
     priority: Optional[StrictInt] = None
     base_url: StrictStr = Field(alias="baseUrl")
-    cache_ttl: Annotated[int, Field(strict=True, ge=0)] = Field(alias="cacheTtl")
+    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
     __properties: ClassVar[List[str]] = ["type", "name", "description", "priority", "baseUrl", "cacheTtl"]
 
     @field_validator('type')
@@ -85,6 +85,11 @@ class PangaeaDataProviderDefinition(BaseModel):
         # and model_fields_set contains the field
         if self.priority is None and "priority" in self.model_fields_set:
             _dict['priority'] = None
+
+        # set to None if cache_ttl (nullable) is None
+        # and model_fields_set contains the field
+        if self.cache_ttl is None and "cache_ttl" in self.model_fields_set:
+            _dict['cacheTtl'] = None
 
         return _dict
 

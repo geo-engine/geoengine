@@ -28,8 +28,6 @@ export function instanceOfPangaeaDataProviderDefinition(value) {
         return false;
     if (!('baseUrl' in value) || value['baseUrl'] === undefined)
         return false;
-    if (!('cacheTtl' in value) || value['cacheTtl'] === undefined)
-        return false;
     return true;
 }
 export function PangaeaDataProviderDefinitionFromJSON(json) {
@@ -45,7 +43,7 @@ export function PangaeaDataProviderDefinitionFromJSONTyped(json, ignoreDiscrimin
         'description': json['description'],
         'priority': json['priority'] == null ? undefined : json['priority'],
         'baseUrl': json['baseUrl'],
-        'cacheTtl': json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 export function PangaeaDataProviderDefinitionToJSON(json) {

@@ -49,7 +49,7 @@ export interface PangaeaDataProviderDefinition {
      * @type {number}
      * @memberof PangaeaDataProviderDefinition
      */
-    cacheTtl: number;
+    cacheTtl?: number | null;
 }
 /**
  * @export

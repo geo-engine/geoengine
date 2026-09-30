@@ -657,7 +657,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -668,7 +668,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
         ];
 
@@ -682,7 +682,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -693,7 +693,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
         ];
 
@@ -810,7 +810,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -821,7 +821,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
         ];
 
@@ -841,7 +841,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -852,7 +852,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
         ];
 
@@ -866,7 +866,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -877,7 +877,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
         ];
 
@@ -891,7 +891,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -902,7 +902,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
         ];
 
@@ -1059,7 +1059,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1070,7 +1070,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
         ];
 
@@ -1084,7 +1084,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1095,7 +1095,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
         ];
 
@@ -1199,7 +1199,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1210,7 +1210,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
         ];
 

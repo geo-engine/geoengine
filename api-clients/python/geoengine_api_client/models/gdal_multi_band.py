@@ -18,9 +18,10 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
+from typing_extensions import Annotated
 from geoengine_api_client.models.raster_result_descriptor import RasterResultDescriptor
-from typing import Optional, Set
+from typing import Set
 from typing_extensions import Self
 
 class GdalMultiBand(BaseModel):
@@ -29,7 +30,8 @@ class GdalMultiBand(BaseModel):
     """ # noqa: E501
     type: StrictStr
     result_descriptor: RasterResultDescriptor = Field(alias="resultDescriptor")
-    __properties: ClassVar[List[str]] = ["type", "resultDescriptor"]
+    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
+    __properties: ClassVar[List[str]] = ["type", "resultDescriptor", "cacheTtl"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -80,6 +82,10 @@ class GdalMultiBand(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of result_descriptor
         if self.result_descriptor:
             _dict['resultDescriptor'] = self.result_descriptor.to_dict()
+        # set to None if cache_ttl (nullable) is None
+        # and model_fields_set contains the field
+        if self.cache_ttl is None and "cache_ttl" in self.model_fields_set:
+            _dict['cacheTtl'] = None
         return _dict
 
     @classmethod
@@ -93,7 +99,8 @@ class GdalMultiBand(BaseModel):
 
         _obj = cls.model_validate({
             "type": obj.get("type"),
-            "resultDescriptor": RasterResultDescriptor.from_dict(obj["resultDescriptor"]) if obj.get("resultDescriptor") is not None else None
+            "resultDescriptor": RasterResultDescriptor.from_dict(obj["resultDescriptor"]) if obj.get("resultDescriptor") is not None else None,
+            "cacheTtl": obj.get("cacheTtl")
         })
         return _obj
 

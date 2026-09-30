@@ -252,7 +252,7 @@ mod tests {
             },
             0,
             raster.into(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
 
         let mrs = MockRasterSource {

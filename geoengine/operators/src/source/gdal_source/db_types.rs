@@ -26,7 +26,7 @@ pub struct GdalMetaDataRegularDbType {
     pub time_placeholders: Vec<TextGdalSourceTimePlaceholderKeyValue>,
     pub data_time: TimeInterval,
     pub step: TimeStep,
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<&GdalMetaDataRegular> for GdalMetaDataRegularDbType {
@@ -77,7 +77,7 @@ pub struct GdalMetadataNetCdfCfDbType {
     pub end: TimeInstance,
     pub step: TimeStep,
     pub band_offset: i64,
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<&GdalMetadataNetCdfCf> for GdalMetadataNetCdfCfDbType {

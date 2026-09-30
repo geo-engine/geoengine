@@ -21,8 +21,8 @@ use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
-        BandSelection, QueryRectangle, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
-        TimeInterval, find_next_best_overview_level,
+        BandSelection, CacheTtlSeconds, QueryRectangle, RasterQueryRectangle, SpatialPartition2D,
+        SpatialResolution, TimeInterval, find_next_best_overview_level,
     },
     raster::{
         GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D, SpatialGridDefinition,
@@ -146,6 +146,7 @@ where
     pub meta_data: MultiBandGdalMetaData,
     pub overview_level: u32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
+    pub default_cache_ttl: CacheTtlSeconds,
     pub _phantom_data: PhantomData<T>,
 }
 
@@ -256,6 +257,7 @@ where
                     time_interval,
                     band_idx,
                     gdal_worker.clone(),
+                    self.default_cache_ttl,
                 )
                 .map_err(Error::from)
             })
@@ -345,6 +347,7 @@ impl RasterOperator for MultiBandGdalSource {
                 meta_data,
                 meta_data_result_descriptor,
                 context.tiling_specification(),
+                context.default_cache_ttl(),
             )
         } else {
             // generate a result descriptor with the overview level
@@ -356,6 +359,7 @@ impl RasterOperator for MultiBandGdalSource {
                 meta_data_result_descriptor,
                 context.tiling_specification(),
                 self.params.overview_level.unwrap_or(0),
+                context.default_cache_ttl(),
             )
         };
 
@@ -375,6 +379,7 @@ pub struct InitializedGdalSourceOperator {
     // the overview level to use. 0/1 means the highest resolution
     pub overview_level: u32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
+    pub default_cache_ttl: CacheTtlSeconds,
 }
 
 impl InitializedGdalSourceOperator {
@@ -385,6 +390,7 @@ impl InitializedGdalSourceOperator {
         meta_data: MultiBandGdalMetaData,
         result_descriptor: RasterResultDescriptor,
         tiling_specification: TilingSpecification,
+        default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
         InitializedGdalSourceOperator {
             name,
@@ -395,9 +401,11 @@ impl InitializedGdalSourceOperator {
             tiling_specification,
             overview_level: 0,
             original_resolution_spatial_grid: None,
+            default_cache_ttl,
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn initialize_with_overview_level(
         name: CanonicOperatorName,
         path: WorkflowOperatorPath,
@@ -406,6 +414,7 @@ impl InitializedGdalSourceOperator {
         result_descriptor: RasterResultDescriptor,
         tiling_specification: TilingSpecification,
         overview_level: u32,
+        default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
         let source_resolution_spatial_grid = result_descriptor
             .spatial_grid_descriptor()
@@ -435,6 +444,7 @@ impl InitializedGdalSourceOperator {
             tiling_specification,
             overview_level,
             original_resolution_spatial_grid: original_grid,
+            default_cache_ttl,
         }
     }
 }
@@ -444,6 +454,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
         &self.produced_result_descriptor
     }
 
+    #[allow(clippy::too_many_lines)]
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         Ok(match self.result_descriptor().data_type {
             RasterDataType::U8 => TypedRasterQueryProcessor::U8(
@@ -453,6 +464,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -464,6 +476,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -475,6 +488,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -496,6 +510,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -507,6 +522,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -523,6 +539,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -534,6 +551,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -613,9 +631,7 @@ mod tests {
     use crate::util::test::raster_tile_from_file;
     use futures::TryStreamExt;
     use geoengine_datatypes::dataset::{DataId, DatasetId};
-    use geoengine_datatypes::primitives::{
-        CacheHint, Measurement, SpatialPartition2D, TimeInstance,
-    };
+    use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D, TimeInstance};
     use geoengine_datatypes::raster::{
         GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridSize,
         RasterDataType,
@@ -969,7 +985,7 @@ mod tests {
         )));
 
         let meta: MultiBandGdalMetaData = Box::new(StaticMetaData {
-            loading_info: MultiBandGdalLoadingInfo::new(time_steps, files, CacheHint::default()),
+            loading_info: MultiBandGdalLoadingInfo::new(time_steps, files, None),
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U16,
                 spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1974,11 +1990,8 @@ mod tests {
             params: params_b,
         };
 
-        let loading_info = MultiBandGdalLoadingInfo::new(
-            vec![time_interval],
-            vec![tile_a, tile_b],
-            CacheHint::default(),
-        );
+        let loading_info =
+            MultiBandGdalLoadingInfo::new(vec![time_interval], vec![tile_a, tile_b], None);
 
         // Both files and tile share the same spatial grid
         let data_grid = SpatialGridDefinition::new(
@@ -2006,6 +2019,7 @@ mod tests {
             time_interval,
             0, // band
             gw,
+            CacheTtlSeconds::new(0),
         )
         .await
         .unwrap();

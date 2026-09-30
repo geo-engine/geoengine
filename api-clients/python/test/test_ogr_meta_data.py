@@ -48,7 +48,7 @@ class TestOgrMetaData(unittest.TestCase):
                     on_error = 'ignore', 
                     sql_query = '', 
                     attribute_query = '', 
-                    cache_ttl = 0, ),
+                    cache_ttl = null, ),
                 result_descriptor = geoengine_api_client.models.vector_result_descriptor.VectorResultDescriptor(
                     data_type = 'Data', 
                     spatial_reference = '', 
@@ -75,7 +75,7 @@ class TestOgrMetaData(unittest.TestCase):
                     on_error = 'ignore', 
                     sql_query = '', 
                     attribute_query = '', 
-                    cache_ttl = 0, ),
+                    cache_ttl = null, ),
                 result_descriptor = geoengine_api_client.models.vector_result_descriptor.VectorResultDescriptor(
                     data_type = 'Data', 
                     spatial_reference = '', 

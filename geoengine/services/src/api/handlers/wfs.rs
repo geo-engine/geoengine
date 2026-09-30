@@ -614,14 +614,15 @@ where
     for<'c> FeatureCollection<G>: ToGeoJson<'c>,
 {
     let query_abort_trigger = query_ctx.abort_trigger()?;
+    let default_cache_ttl = query_ctx.default_cache_ttl();
 
     let features: Vec<serde_json::Value> = Vec::new();
     // TODO: more efficient merging of the partial feature collections
     let stream = processor.query(query_rect, &query_ctx).await?;
 
-    let future: BoxFuture<geoengine_operators::util::Result<(Vec<serde_json::Value>, CacheHint)>> =
+    let future: BoxFuture<geoengine_operators::util::Result<(Vec<_>, Option<CacheHint>)>> =
         Box::pin(stream.try_fold(
-            (features, CacheHint::max_duration()),
+            (features, None::<CacheHint>),
             |(mut output, mut cache_hint), collection| async move {
                 // TODO: avoid parsing the generated json
                 let mut json: serde_json::Value =
@@ -634,7 +635,9 @@ where
 
                 output.append(more_features);
 
-                cache_hint.merge_with(&collection.cache_hint);
+                cache_hint
+                    .get_or_insert_with(CacheHint::max_duration)
+                    .merge_with(&collection.cache_hint);
 
                 Ok((output, cache_hint))
             },
@@ -642,6 +645,7 @@ where
 
     let (features, cache_hint) =
         abortable_query_execution(future, conn_closed, query_abort_trigger).await?;
+    let cache_hint = cache_hint.unwrap_or_else(|| default_cache_ttl.into());
 
     let mut output = json!({
         "type": "FeatureCollection"
@@ -672,7 +676,7 @@ fn get_feature_mock(_request: &GetFeature) -> Result<HttpResponse> {
         .iter()
         .cloned()
         .collect(),
-        CacheHint::default(),
+        CacheHint::no_cache(),
     )?;
 
     Ok(HttpResponse::Ok()

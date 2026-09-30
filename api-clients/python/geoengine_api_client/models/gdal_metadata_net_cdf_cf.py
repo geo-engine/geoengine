@@ -95,6 +95,11 @@ class GdalMetadataNetCdfCf(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of step
         if self.step:
             _dict['step'] = self.step.to_dict()
+        # set to None if cache_ttl (nullable) is None
+        # and model_fields_set contains the field
+        if self.cache_ttl is None and "cache_ttl" in self.model_fields_set:
+            _dict['cacheTtl'] = None
+
         return _dict
 
     @classmethod

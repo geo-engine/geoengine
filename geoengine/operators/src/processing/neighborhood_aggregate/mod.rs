@@ -573,7 +573,7 @@ mod tests {
                 GridOrEmpty::from(
                     Grid2D::new([3, 3].into(), vec![1, 2, 3, 7, 8, 9, 13, 14, 15]).unwrap(),
                 ),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
@@ -586,7 +586,7 @@ mod tests {
                 GridOrEmpty::from(
                     Grid2D::new([3, 3].into(), vec![4, 5, 6, 10, 11, 12, 16, 17, 18]).unwrap(),
                 ),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -599,7 +599,7 @@ mod tests {
                 GridOrEmpty::from(
                     Grid2D::new([3, 3].into(), vec![18, 17, 16, 12, 11, 10, 6, 5, 4]).unwrap(),
                 ),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -612,7 +612,7 @@ mod tests {
                 GridOrEmpty::from(
                     Grid2D::new([3, 3].into(), vec![15, 14, 13, 9, 8, 7, 3, 2, 1]).unwrap(),
                 ),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
         ];
 
@@ -643,7 +643,7 @@ mod tests {
                 GridOrEmpty::from(
                     Grid2D::new([3, 3].into(), vec![1, 2, 3, 7, 8, 9, 13, 14, 15]).unwrap(),
                 ),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
@@ -656,7 +656,7 @@ mod tests {
                 GridOrEmpty::from(
                     Grid2D::new([3, 3].into(), vec![4, 5, 6, 10, 11, 12, 16, 17, 18]).unwrap(),
                 ),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -669,7 +669,7 @@ mod tests {
                 GridOrEmpty::from(
                     Grid2D::new([3, 3].into(), vec![18, 17, 16, 12, 11, 10, 6, 5, 4]).unwrap(),
                 ),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
@@ -682,7 +682,7 @@ mod tests {
                 GridOrEmpty::from(
                     Grid2D::new([3, 3].into(), vec![15, 14, 13, 9, 8, 7, 3, 2, 1]).unwrap(),
                 ),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
         ];
 

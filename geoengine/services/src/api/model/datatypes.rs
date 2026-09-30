@@ -2280,20 +2280,18 @@ pub enum PlotOutputFormat {
     ImagePng,
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, PartialOrd, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ToSchema)]
 pub struct CacheTtlSeconds(u32);
 
-const MAX_CACHE_TTL_SECONDS: u32 = 31_536_000; // 1 year
+const MAX_CACHE_TTL_SECONDS: u32 = 31_536_000;
 
 impl CacheTtlSeconds {
     pub fn new(seconds: u32) -> Self {
         Self(seconds.min(MAX_CACHE_TTL_SECONDS))
     }
-
     pub fn max() -> Self {
         Self(MAX_CACHE_TTL_SECONDS)
     }
-
     pub fn seconds(self) -> u32 {
         self.0
     }

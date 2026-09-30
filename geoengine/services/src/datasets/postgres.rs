@@ -23,7 +23,7 @@ use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::primitives::{
-    CacheHint, RasterQueryRectangle, TimeDimension, TimeInstance, TryIrregularTimeFillIterExt,
+    RasterQueryRectangle, TimeDimension, TimeInstance, TryIrregularTimeFillIterExt,
     TryRegularTimeFillIterExt,
 };
 use geoengine_datatypes::primitives::{TimeInterval, VectorQueryRectangle};
@@ -744,8 +744,8 @@ where
 
         let meta_data: MetaDataDefinition = try_get_dataset_by_index_operators(&row, 0, &id)?;
 
-        let result_descriptor = match meta_data {
-            MetaDataDefinition::GdalMultiBand(b) => b.result_descriptor,
+        let (result_descriptor, dataset_cache_ttl) = match meta_data {
+            MetaDataDefinition::GdalMultiBand(b) => (b.result_descriptor, b.cache_ttl),
             _ => return Err(geoengine_operators::error::Error::DataIdTypeMissMatch),
         };
 
@@ -754,6 +754,7 @@ where
         Ok(Box::new(MultiBandGdalLoadingInfoProvider {
             dataset_id: id,
             result_descriptor,
+            dataset_cache_ttl,
             data_path,
             db: self.clone(),
         }))
@@ -770,6 +771,7 @@ where
 {
     dataset_id: DatasetId,
     result_descriptor: RasterResultDescriptor,
+    dataset_cache_ttl: Option<geoengine_datatypes::primitives::CacheTtlSeconds>,
     data_path: DataPath,
     db: PostgresDb<Tls>,
 }
@@ -1066,7 +1068,7 @@ where
         Ok(MultiBandGdalLoadingInfo::new(
             time_steps,
             files,
-            CacheHint::default(), // TODO: implement cache hint, should it be one value for the whole dataset? If so, load it once(!) from the database and add it to the loading info. Otherwise add the cache hint as a new attribute to the tiles.
+            self.dataset_cache_ttl, // fall back to the dataset TTL, then the context default
         ))
     }
 
@@ -1658,7 +1660,7 @@ mod tests {
     };
     use geoengine_datatypes::{
         collections::VectorDataType,
-        primitives::{CacheTtlSeconds, FeatureDataType, Measurement},
+        primitives::{FeatureDataType, Measurement},
         spatial_reference::SpatialReference,
     };
     use geoengine_operators::{
@@ -1801,7 +1803,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<

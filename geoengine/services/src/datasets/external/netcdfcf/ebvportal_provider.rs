@@ -54,7 +54,7 @@ pub struct EbvPortalDataProviderDefinition {
     /// Path were overview files are stored
     pub overviews: PathBuf,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 #[derive(Debug)]

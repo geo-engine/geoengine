@@ -141,7 +141,7 @@ mod tests {
                     0,
                     r.grid.unbounded(),
                     r.properties,
-                    CacheHint::default(),
+                    CacheHint::no_cache(),
                 )
             })
     }

@@ -125,7 +125,7 @@ export interface OgrSourceDataset {
      * @type {number}
      * @memberof OgrSourceDataset
      */
-    cacheTtl?: number;
+    cacheTtl?: number | null;
 }
 
 

@@ -397,7 +397,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -406,7 +406,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -417,7 +417,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -428,7 +428,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
         ];
 

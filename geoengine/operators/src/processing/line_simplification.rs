@@ -357,8 +357,7 @@ mod tests {
         },
         dataset::{DataId, DatasetId, NamedData},
         primitives::{
-            BoundingBox2D, CacheHint, CacheTtlSeconds, FeatureData, MultiLineString, MultiPoint,
-            TimeInterval,
+            BoundingBox2D, CacheHint, FeatureData, MultiLineString, MultiPoint, TimeInterval,
         },
         spatial_reference::SpatialReference,
         test_data,
@@ -492,7 +491,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -553,7 +552,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -591,7 +590,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Abort,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPolygon,
