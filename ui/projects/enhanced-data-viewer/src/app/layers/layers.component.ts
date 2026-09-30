@@ -1,25 +1,44 @@
-import {afterNextRender, ChangeDetectionStrategy, Component, computed, inject, signal} from '@angular/core';
+import {ChangeDetectionStrategy, Component, computed, effect, inject, signal} from '@angular/core';
 import {CoreModule, ProjectService} from '@geoengine/core';
 import {A11yModule} from '@angular/cdk/a11y';
 import {EdvLayersService} from './layers.service';
 import {MatCheckboxModule} from '@angular/material/checkbox';
 import {MatListModule} from '@angular/material/list';
+import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {Time} from '@geoengine/common';
 import {toSignal} from '@angular/core/rxjs-interop';
-import {DATA_SOURCES} from './data-sources';
+import type {DataSourceDefinition} from './data-sources';
 import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
 
 @Component({
     selector: 'geoengine-layers',
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
+        @if (catalogueError(); as error) {
+            <p class="catalogue-message catalogue-error">{{ error }}</p>
+            <button matButton type="button" (click)="retryCatalogue()">Retry</button>
+        } @else if (!catalogueLoading() && dataSources().length === 0) {
+            <p class="catalogue-message">No data sources are available for this configuration.</p>
+        }
+
         <div>
             <h2>Data Source</h2>
-            <mat-selection-list [multiple]="false" class="data-sources" (selectionChange)="onDataSourceSelectionChange($event.options)">
-                @for (dataSource of dataSources; track dataSource.key) {
+            @if (catalogueLoading()) {
+                <div class="catalogue-loading" role="status">
+                    <mat-spinner diameter="24" aria-label="Loading data sources"></mat-spinner>
+                    <span>Loading data sources…</span>
+                </div>
+            }
+            <mat-selection-list
+                [multiple]="false"
+                class="data-sources"
+                [attr.aria-busy]="catalogueLoading()"
+                (selectionChange)="onDataSourceSelectionChange($event.options)"
+            >
+                @for (dataSource of dataSources(); track dataSource.key) {
                     <mat-list-option
                         [value]="dataSource.key"
-                        [selected]="selectedDataSource().key === dataSource.key"
+                        [selected]="selectedDataSource()?.key === dataSource.key"
                         [matTooltip]="dataSource.name"
                     >
                         <span matListItemTitle>{{ dataSource.name }}</span>
@@ -56,16 +75,22 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
 
         <div>
             <h2>Visualization Presets</h2>
-            <mat-nav-list class="visualization-presets">
+            @if (catalogueLoading()) {
+                <div class="catalogue-loading" role="status">
+                    <mat-spinner diameter="24" aria-label="Loading visualization presets"></mat-spinner>
+                    <span>Loading visualization presets…</span>
+                </div>
+            }
+            <mat-nav-list class="visualization-presets" [attr.aria-busy]="catalogueLoading()">
                 @for (group of presetGroups(); track group.category) {
                     @if (debug()) {
                         <span class="preset-group-label">{{ group.label }}</span>
                     }
                     @for (preset of group.presets; track $index) {
                         <mat-list-item
-                            [activated]="$index === selectedPresetIndex()"
-                            [class.preset-active]="$index === selectedPresetIndex()"
-                            (click)="selectPreset($index)"
+                            [activated]="preset === activePreset()"
+                            [class.preset-active]="preset === activePreset()"
+                            (click)="selectPreset(preset)"
                             [matTooltip]="preset.displayName"
                             [style.backgroundImage]="'url(' + preset.backgroundImage + ')'"
                         >
@@ -97,6 +122,15 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
 
             mat-divider {
                 margin: 1rem 0;
+            }
+
+            .catalogue-loading {
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+                padding: 0.75rem 0;
+                font-size: $text2;
+                color: var(--mat-sys-on-surface-variant);
             }
 
             .data-sources {
@@ -226,7 +260,7 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
             }
         `,
     ],
-    imports: [A11yModule, CoreModule, MatDatepickerModule, MatCheckboxModule, MatListModule],
+    imports: [A11yModule, CoreModule, MatDatepickerModule, MatCheckboxModule, MatListModule, MatProgressSpinnerModule],
 })
 export class LayersComponent {
     readonly projectService = inject(ProjectService);
@@ -246,37 +280,27 @@ export class LayersComponent {
         if (!time) return undefined;
         return time.start.toDate();
     });
-    readonly dataSources = DATA_SOURCES;
+    readonly dataSources = this.edvLayersService.dataSources;
+    readonly catalogueLoading = this.edvLayersService.catalogueLoading;
+    readonly catalogueError = this.edvLayersService.catalogueError;
 
     readonly autoSelectTime = signal<boolean>(true);
 
     readonly selectedDataSource = this.edvLayersService.selectedDataSource;
-    readonly selectedDataSourceKey = computed(() => this.selectedDataSource()?.key ?? '');
     readonly currentPresets = this.edvLayersService.currentPresets;
     readonly presetGroups = this.edvLayersService.presetGroups;
     readonly selectedPresetIndex = this.edvLayersService.selectedPresetIndex;
+    readonly activePreset = this.edvLayersService.activePreset;
     readonly mapTileLayer = this.edvLayersService.mapTileLayer;
 
     constructor() {
-        afterNextRender(() => {
-            void this.setInitialTime();
+        effect(() => {
+            const source = this.selectedDataSource();
+            if (source) void this.applyDataSourceTime(source);
         });
     }
 
-    private async setInitialTime(): Promise<void> {
-        if (!this.autoSelectTime()) return;
-
-        const dataSource = this.selectedDataSource();
-        if (!dataSource?.defaultTime) return;
-
-        const utcDate = new Date(dataSource.defaultTime);
-        const time = new Time(utcDate);
-        await this.projectService.setTime(time);
-
-        if (dataSource.defaultTimeStep) {
-            this.projectService.setTimeStepDuration(dataSource.defaultTimeStep);
-        }
-    }
+    readonly retryCatalogue = (): void => this.edvLayersService.retryCatalogue();
 
     onDataSourceSelectionChange(options: readonly {value: string}[]): void {
         const selected = options[0]?.value;
@@ -284,26 +308,21 @@ export class LayersComponent {
         void this.setSelectedDataSource(selected);
     }
 
-    async setSelectedDataSource(key: string): Promise<void> {
-        const dataSource = DATA_SOURCES.find((d) => d.key === key);
+    setSelectedDataSource(key: string): void {
+        const dataSource = this.dataSources().find((d) => d.key === key);
         if (!dataSource) return;
-
-        if (this.autoSelectTime() && dataSource.defaultTime) {
-            const utcDate = new Date(dataSource.defaultTime);
-            const time = new Time(utcDate);
-            await this.projectService.setTime(time);
-        }
-
-        if (dataSource.defaultTimeStep) {
-            this.projectService.setTimeStepDuration(dataSource.defaultTimeStep);
-        }
-
         this.selectedDataSource.set(dataSource);
-        this.selectedPresetIndex.set(dataSource.defaultPresetIndex ?? 0);
+        this.selectedPresetIndex.set(0);
     }
 
-    selectPreset(index: number): void {
-        this.selectedPresetIndex.set(index);
+    private async applyDataSourceTime(dataSource: DataSourceDefinition): Promise<void> {
+        if (this.autoSelectTime() && dataSource.defaultTime) await this.projectService.setTime(new Time(new Date(dataSource.defaultTime)));
+        if (dataSource.defaultTimeStep) this.projectService.setTimeStepDuration(dataSource.defaultTimeStep);
+    }
+
+    selectPreset(preset: DataSourceDefinition['presets'][number]): void {
+        const index = this.currentPresets().indexOf(preset);
+        if (index >= 0) this.selectedPresetIndex.set(index);
     }
 
     async timeForward(): Promise<void> {

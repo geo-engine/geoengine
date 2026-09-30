@@ -3,26 +3,77 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {Observable, of} from 'rxjs';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {ProjectService} from '@geoengine/core';
-import {LayersService, Time, TimeStepDuration} from '@geoengine/common';
+import {LAYER_DB_ROOT_COLLECTION_ID, LayersService, Time, TimeStepDuration} from '@geoengine/common';
 import {LayersComponent} from './layers.component';
 import {EdvLayersService} from './layers.service';
+import {AppConfig} from '../app-config.service';
 
 describe('LayersComponent', () => {
     let fixture: ComponentFixture<LayersComponent>;
     let edvLayersService: EdvLayersService;
-    const getLayerCollectionItems = vi.fn();
+    const getLayerCollectionItems = vi.fn<(_provider: string, collection: string) => Promise<{items: unknown[]}>>();
     const setTime = vi.fn().mockResolvedValue(undefined);
     const setTimeStepDuration = vi.fn();
+    const listings: Record<string, {items: unknown[]}> = {
+        [LAYER_DB_ROOT_COLLECTION_ID]: {
+            items: [{type: 'collection', name: 'EDV', id: {providerId: 'provider', collectionId: 'edv'}, description: ''}],
+        },
+        edv: {
+            items: [
+                {
+                    type: 'collection',
+                    name: 'adHoc',
+                    id: {providerId: 'provider', collectionId: 'adhoc'},
+                    description: '',
+                    properties: [['edv:category', 'adHoc']],
+                },
+            ],
+        },
+        adhoc: {
+            items: [
+                {
+                    type: 'collection',
+                    name: 'Sentinel',
+                    id: {providerId: 'provider', collectionId: 'dataset'},
+                    description: '',
+                    properties: [
+                        ['edv:type', 'dataset'],
+                        ['edv:dataset', 'sentinel'],
+                        ['edv:defaultTime', '1775001600000'],
+                        ['edv:timeStep', '{"step":1,"granularity":"days"}'],
+                    ],
+                },
+            ],
+        },
+        dataset: {
+            items: [
+                {
+                    type: 'layer',
+                    name: 'Default',
+                    id: {providerId: 'provider', layerId: 'vv'},
+                    description: '',
+                    properties: [
+                        ['edv:type', 'preset'],
+                        ['edv:preset', 'Default'],
+                        ['edv:order', '10'],
+                    ],
+                },
+            ],
+        },
+    };
 
     beforeEach(async () => {
         vi.clearAllMocks();
-        getLayerCollectionItems.mockReset().mockResolvedValue({items: []});
-
+        getLayerCollectionItems.mockImplementation((_provider, collection) => Promise.resolve(listings[collection] ?? {items: []}));
         await TestBed.configureTestingModule({
             imports: [LayersComponent],
             providers: [
                 provideNativeDateAdapter(),
-                {provide: LayersService, useValue: {getLayerCollectionItems}},
+                {
+                    provide: LayersService,
+                    useValue: {getLayerCollectionItems},
+                },
+                {provide: AppConfig, useValue: {EDV: {CATEGORY: 'adHoc'}}},
                 EdvLayersService,
                 {
                     provide: ProjectService,
@@ -35,61 +86,65 @@ describe('LayersComponent', () => {
                 },
             ],
         }).compileComponents();
-
         edvLayersService = TestBed.inject(EdvLayersService);
         fixture = TestBed.createComponent(LayersComponent);
     });
 
-    it('shows harvested presets by default and exposes all categories in debug mode', async () => {
+    it('shows loading indicators for both lists until catalogue discovery finishes', async () => {
+        const element = fixture.nativeElement as HTMLElement;
+        let resolveRoot!: (value: (typeof listings)[typeof LAYER_DB_ROOT_COLLECTION_ID]) => void;
+        getLayerCollectionItems.mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    resolveRoot = resolve;
+                }),
+        );
         fixture.detectChanges();
-        await fixture.whenStable();
-        expect(fixture.componentInstance.currentPresets().map((preset) => preset.category)).toEqual(['harvested', 'harvested']);
-        expect((fixture.nativeElement as HTMLElement).querySelectorAll('.preset-group-label')).toHaveLength(0);
-
-        edvLayersService.debug.set(true);
-
+        await Promise.resolve();
         fixture.detectChanges();
+        expect(element.querySelectorAll('mat-spinner').length).toBe(2);
+        expect(element.querySelector('.data-sources')?.getAttribute('aria-busy')).toBe('true');
+        expect(element.querySelector('.visualization-presets')?.getAttribute('aria-busy')).toBe('true');
+        resolveRoot(listings[LAYER_DB_ROOT_COLLECTION_ID]);
         await fixture.whenStable();
-        expect(fixture.componentInstance.presetGroups().map((group) => group.category)).toEqual(['static', 'harvested', 'adHoc']);
-        expect((fixture.nativeElement as HTMLElement).querySelectorAll('.preset-group-label')).toHaveLength(3);
+        fixture.detectChanges();
+        expect(element.querySelectorAll('mat-spinner').length).toBe(0);
+        expect(element.textContent).toContain('Sentinel');
     });
 
-    it('finds a preset beyond the first collection page and updates the selected map layer', async () => {
-        getLayerCollectionItems
-            .mockResolvedValueOnce({items: Array.from({length: 20}, (_, index) => ({name: `Other ${index}`}))})
-            .mockResolvedValueOnce({
-                items: [{name: 'Sentinel-1 VV Band (Harvested)', id: {providerId: 'provider', layerId: 'vv'}}],
-            });
+    it('ends loading on failure and displays both indicators again during retry', async () => {
+        const element = fixture.nativeElement as HTMLElement;
+        getLayerCollectionItems.mockRejectedValueOnce(new Error('Catalogue unavailable'));
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(getLayerCollectionItems).toHaveBeenNthCalledWith(2, expect.any(String), expect.any(String), 20, 20);
+        fixture.detectChanges();
+        expect(element.textContent).toContain('Catalogue unavailable');
+        expect(element.querySelectorAll('mat-spinner').length).toBe(0);
+        fixture.componentInstance.retryCatalogue();
+        fixture.detectChanges();
+        expect(element.querySelectorAll('mat-spinner').length).toBe(2);
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(element.querySelectorAll('mat-spinner').length).toBe(0);
+        expect(element.textContent).not.toContain('Catalogue unavailable');
+    });
+
+    it('loads the configured category and returned layer id', async () => {
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(fixture.componentInstance.dataSources().map((source) => source.key)).toEqual(['sentinel']);
+        expect(fixture.componentInstance.currentPresets()[0].category).toBe('adHoc');
         expect(fixture.componentInstance.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
-
-        getLayerCollectionItems.mockResolvedValue({
-            items: [{name: 'Sentinel-1 SAR False Color (Harvested)', id: {providerId: 'provider', layerId: 'false-color'}}],
-        });
-        const presets = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.visualization-presets mat-list-item');
-        presets[1].click();
-        fixture.detectChanges();
-        await fixture.whenStable();
-        expect(fixture.componentInstance.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'false-color'});
+        expect(setTime).toHaveBeenCalledWith(new Time(new Date(1775001600000)));
+        expect(setTimeStepDuration).toHaveBeenCalledWith({durationAmount: 1, durationUnit: 'day'});
     });
 
-    it('applies datasource time defaults and preserves the date when auto selection is disabled', async () => {
+    it('loads all configured categories when debug mode is enabled', async () => {
         fixture.detectChanges();
         await fixture.whenStable();
-        const component = fixture.componentInstance;
-        component.selectPreset(1);
-        await component.setSelectedDataSource('landsat');
-        expect(setTime).toHaveBeenLastCalledWith(new Time(new Date(1767916800000)));
-        expect(setTimeStepDuration).toHaveBeenLastCalledWith({durationAmount: 1, durationUnit: 'day'});
-        expect(component.selectedPresetIndex()).toBe(0);
-
-        setTime.mockClear();
-        component.autoSelectTime.set(false);
-        await component.setSelectedDataSource('opengeohub-landsat');
-        expect(setTime).not.toHaveBeenCalled();
-        expect(setTimeStepDuration).toHaveBeenLastCalledWith({durationAmount: 2, durationUnit: 'months'});
-        expect(component.selectedDataSourceKey()).toBe('opengeohub-landsat');
+        edvLayersService.debug.set(true);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(fixture.componentInstance.presetGroups().map((group) => group.category)).toEqual(['adHoc']);
     });
 });
