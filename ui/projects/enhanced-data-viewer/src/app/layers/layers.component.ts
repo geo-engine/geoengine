@@ -48,6 +48,24 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
         </div>
         <mat-divider></mat-divider>
 
+        @if (currentVariants().length > 1) {
+            <div>
+                <h2>Region</h2>
+                <mat-selection-list [multiple]="false" class="variants" (selectionChange)="onVariantSelectionChange($event.options)">
+                    @for (variant of currentVariants(); track variant.key) {
+                        <mat-list-option
+                            [value]="variant.key"
+                            [selected]="selectedVariant().key === variant.key"
+                            [matTooltip]="variant.crs ?? variant.name"
+                        >
+                            <span matListItemTitle>{{ variant.name }}</span>
+                        </mat-list-option>
+                    }
+                </mat-selection-list>
+            </div>
+            <mat-divider></mat-divider>
+        }
+
         <div class="time-selection">
             <h2>Time Selection</h2>
             <mat-checkbox [checked]="autoSelectTime()" (change)="autoSelectTime.set($event.checked)">Auto select time</mat-checkbox>
@@ -75,21 +93,25 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
 
         <div>
             <h2>Visualization Presets</h2>
-            @if (catalogueLoading()) {
+            @if (catalogueLoading() || variantLoading()) {
                 <div class="catalogue-loading" role="status">
                     <mat-spinner diameter="24" aria-label="Loading visualization presets"></mat-spinner>
                     <span>Loading visualization presets…</span>
                 </div>
             }
-            <mat-nav-list class="visualization-presets" [attr.aria-busy]="catalogueLoading()">
+            @if (variantError(); as error) {
+                <p class="catalogue-message catalogue-error">{{ error }}</p>
+                <button matButton type="button" (click)="retryVariant()">Retry</button>
+            }
+            <mat-nav-list class="visualization-presets" [attr.aria-busy]="catalogueLoading() || variantLoading()">
                 @for (group of presetGroups(); track group.category) {
                     @if (debug()) {
                         <span class="preset-group-label">{{ group.label }}</span>
                     }
-                    @for (preset of group.presets; track $index) {
+                    @for (preset of group.presets; track preset.key) {
                         <mat-list-item
-                            [activated]="preset === activePreset()"
-                            [class.preset-active]="preset === activePreset()"
+                            [activated]="preset === selectedPreset()"
+                            [class.preset-active]="preset === selectedPreset()"
                             (click)="selectPreset(preset)"
                             [matTooltip]="preset.displayName"
                             [style.backgroundImage]="'url(' + preset.backgroundImage + ')'"
@@ -99,6 +121,11 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                     }
                 }
             </mat-nav-list>
+            <div class="apply-preset-action">
+                <button mat-flat-button color="primary" type="button" [disabled]="!canApplyPreset()" (click)="applySelectedPreset()">
+                    Apply visualization
+                </button>
+            </div>
         </div>
         <mat-divider></mat-divider>
     `,
@@ -160,6 +187,17 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                             padding-right: 0;
                         }
                     }
+                }
+            }
+
+            .variants {
+                padding: 0;
+                margin: -0.25rem;
+
+                mat-list-option {
+                    border-radius: 0.5rem;
+                    padding: 0 0.25rem;
+                    --mat-list-list-item-label-text-size: #{$text2};
                 }
             }
 
@@ -255,6 +293,12 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                 }
             }
 
+            .apply-preset-action {
+                display: flex;
+                justify-content: center;
+                margin-top: 1rem;
+            }
+
             .time-selection {
                 --mat-button-text-label-text-size: #{$text2};
             }
@@ -283,14 +327,19 @@ export class LayersComponent {
     readonly dataSources = this.edvLayersService.dataSources;
     readonly catalogueLoading = this.edvLayersService.catalogueLoading;
     readonly catalogueError = this.edvLayersService.catalogueError;
+    readonly variantLoading = this.edvLayersService.variantLoading;
+    readonly variantError = this.edvLayersService.variantError;
 
     readonly autoSelectTime = signal<boolean>(true);
 
     readonly selectedDataSource = this.edvLayersService.selectedDataSource;
+    readonly currentVariants = this.edvLayersService.currentVariants;
+    readonly selectedVariant = this.edvLayersService.selectedVariant;
     readonly currentPresets = this.edvLayersService.currentPresets;
     readonly presetGroups = this.edvLayersService.presetGroups;
     readonly selectedPresetIndex = this.edvLayersService.selectedPresetIndex;
-    readonly activePreset = this.edvLayersService.activePreset;
+    readonly selectedPreset = this.edvLayersService.selectedPreset;
+    readonly canApplyPreset = this.edvLayersService.canApplyPreset;
     readonly mapTileLayer = this.edvLayersService.mapTileLayer;
 
     constructor() {
@@ -301,6 +350,7 @@ export class LayersComponent {
     }
 
     readonly retryCatalogue = (): void => this.edvLayersService.retryCatalogue();
+    readonly retryVariant = (): void => this.edvLayersService.retryVariant();
 
     onDataSourceSelectionChange(options: readonly {value: string}[]): void {
         const selected = options[0]?.value;
@@ -311,8 +361,16 @@ export class LayersComponent {
     setSelectedDataSource(key: string): void {
         const dataSource = this.dataSources().find((d) => d.key === key);
         if (!dataSource) return;
-        this.selectedDataSource.set(dataSource);
-        this.selectedPresetIndex.set(0);
+        this.edvLayersService.setSelectedDataSource(dataSource.key);
+    }
+
+    onVariantSelectionChange(options: readonly {value: string}[]): void {
+        const selected = options[0]?.value;
+        if (selected) this.edvLayersService.setSelectedVariant(selected);
+    }
+
+    setSelectedVariant(key: string): void {
+        this.edvLayersService.setSelectedVariant(key);
     }
 
     private async applyDataSourceTime(dataSource: DataSourceDefinition): Promise<void> {
@@ -320,9 +378,12 @@ export class LayersComponent {
         if (dataSource.defaultTimeStep) this.projectService.setTimeStepDuration(dataSource.defaultTimeStep);
     }
 
-    selectPreset(preset: DataSourceDefinition['presets'][number]): void {
-        const index = this.currentPresets().indexOf(preset);
-        if (index >= 0) this.selectedPresetIndex.set(index);
+    selectPreset(preset: DataSourceDefinition['variants'][number]['presets'][number]): void {
+        this.edvLayersService.setSelectedPreset(preset.key);
+    }
+
+    applySelectedPreset(): void {
+        this.edvLayersService.applySelectedPreset();
     }
 
     async timeForward(): Promise<void> {

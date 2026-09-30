@@ -3,17 +3,28 @@ import type {TimeStepDuration} from '@geoengine/common';
 export const PRESET_CATEGORIES = ['static', 'harvested', 'adHoc'] as const;
 export type PresetCategory = (typeof PRESET_CATEGORIES)[number];
 export interface VisualizationPreset {
+    key: string;
     displayName: string;
     backgroundImage: string;
     connectorId: string;
     layerId: string;
     category: PresetCategory;
     order: number;
+    variantKey: string;
+}
+export interface DataSourceVariant {
+    key: string;
+    name: string;
+    crs?: string;
+    explicit: boolean;
+    presets: VisualizationPreset[];
+    /** Runtime collection references used only to load this variant's presets. */
+    collectionRefs?: Array<{collectionId: string; category: PresetCategory}>;
 }
 export interface DataSourceDefinition {
     key: string;
     name: string;
-    presets: VisualizationPreset[];
+    variants: DataSourceVariant[];
     defaultTime?: number;
     defaultTimeStep?: TimeStepDuration;
     citation: string;
