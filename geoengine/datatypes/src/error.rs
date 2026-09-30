@@ -2,7 +2,7 @@ use crate::{
     collections::FeatureCollectionError,
     primitives::{BoundingBox2D, Coordinate2D, PrimitivesError, TimeInstance, TimeInterval},
     raster::RasterDataType,
-    spatial_reference::SpatialReference,
+    spatial_reference::{self, SpatialReference},
 };
 use snafu::{AsErrorSource, ErrorCompat, IntoError, prelude::*};
 use std::{any::Any, convert::Infallible, path::PathBuf, sync::Arc};
@@ -381,6 +381,9 @@ pub enum Error {
         srs_out: SpatialReference,
         bounds: BoundingBox2D,
     },
+    GeodesyProjector {
+        source: spatial_reference::GeodesyProjectorError,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {
@@ -410,5 +413,11 @@ impl From<gdal::errors::GdalError> for Error {
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
         Self::Io { source: e }
+    }
+}
+
+impl From<crate::spatial_reference::GeodesyProjectorError> for Error {
+    fn from(source: crate::spatial_reference::GeodesyProjectorError) -> Self {
+        Self::GeodesyProjector { source }
     }
 }

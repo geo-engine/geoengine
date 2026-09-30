@@ -10,7 +10,7 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// TilesCrsOneOf2 : A reference system data structure as defined in the MD_ReferenceSystem of the ISO 19115
+/// TilesCrsOneOf2 : A reference system data structure as defined in the `MD_ReferenceSystem` of the ISO 19115
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TilesCrsOneOf2 {
     #[serde(rename = "referenceSystem")]
@@ -18,7 +18,7 @@ pub struct TilesCrsOneOf2 {
 }
 
 impl TilesCrsOneOf2 {
-    /// A reference system data structure as defined in the MD_ReferenceSystem of the ISO 19115
+    /// A reference system data structure as defined in the `MD_ReferenceSystem` of the ISO 19115
     pub fn new(reference_system: String) -> TilesCrsOneOf2 {
         TilesCrsOneOf2 {
             reference_system,

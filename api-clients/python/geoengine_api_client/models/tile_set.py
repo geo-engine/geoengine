@@ -35,17 +35,17 @@ from typing_extensions import Self
 
 class TileSet(BaseModel):
     """
-    A resource describing a tileset based on the OGC TileSet Metadata Standard. At least one of the 'TileMatrixSet',  or a link with 'rel' tiling-scheme\"
+    A resource describing a tileset based on the OGC Two Dimensional Tile Matrix Set and Tile Set Metadata. At least one of the [`TileMatrixSet`], or a link with 'rel' tiling-scheme\"
     """ # noqa: E501
     title: Optional[StrictStr] = Field(default=None, description="A title for this tileset")
     description: Optional[StrictStr] = Field(default=None, description="Brief narrative description of this tile set")
-    keywords: Optional[List[StrictStr]] = Field(default=None, description="Unordered list of one or more commonly used or formalized word(s) or phrase(s) used to describe a TileSet")
+    keywords: Optional[List[StrictStr]] = Field(default=None, description="Unordered list of one or more commonly used or formalized word(s) or phrase(s) used to describe a [`TileSet`]")
     data_type: GeospatialDataDataType = Field(alias="dataType")
     tile_matrix_set_uri: Optional[StrictStr] = Field(default=None, description="Reference to a Tile Matrix Set on the OGC NA definition server (<http://www.opengis.net/def/tms/>). Required if the tile matrix set is registered on the definition server.", alias="tileMatrixSetURI")
-    tile_matrix_set_limits: Optional[List[TileMatrixLimits]] = Field(default=None, description="Limits for the TileRow and TileCol values for each TileMatrix in the TileMatrixSet. If missing, there are no limits other that the ones imposed by the TileMatrixSet. If present the TileMatrices listed are limited and the rest not available at all", alias="tileMatrixSetLimits")
+    tile_matrix_set_limits: Optional[List[TileMatrixLimits]] = Field(default=None, description="Limits for the [`TileRow`] and [`TileCol`] values for each [`TileMatrix`] in the [`TileMatrixSet`]. If missing, there are no limits other that the ones imposed by the [`TileMatrixSet`]. If present the tile matrices listed are limited and the rest not available at all", alias="tileMatrixSetLimits")
     crs: TilesCrs = Field(description="Coordinate Reference System (CRS)")
     epoch: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, description="Epoch of the Coordinate Reference System (CRS)")
-    links: List[Link] = Field(description="Links to related resources. Possible link 'rel' values are: 'dataset' for a URL pointing to the dataset, 'tiles' for a URL template to get the tiles; 'alternate' for a URL pointing to another representation of the TileSetMetadata (e.g a TileJSON file); 'tiling-scheme' for a definition of the TileMatrixSet")
+    links: List[Link] = Field(description="Links to related resources. Possible link 'rel' values are: 'dataset' for a URL pointing to the dataset, 'tiles' for a URL template to get the tiles; 'alternate' for a URL pointing to another representation of the [`TileSetMetadata`] (e.g a [`TileJSON` file); 'tiling-scheme' for a definition of the [`TileMatrixSet`]")
     layers: Optional[Annotated[List[GeospatialData], Field(min_length=1)]] = None
     bounding_box: Optional[BoundingBox2D] = Field(default=None, description="Minimum bounding rectangle surrounding the tile matrix set, in the supported CRS", alias="boundingBox")
     center_point: Optional[TilePoint] = Field(default=None, description="Location of a tile that nicely represents the tileset. Implementations may use this center value to set the default location or to present a representative tile in a user interface", alias="centerPoint")

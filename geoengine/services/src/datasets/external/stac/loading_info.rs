@@ -3,20 +3,21 @@ use super::{
     StacClient, StacDataProvider, StacProviderDataset, StacProviderS3Config, cache::StacQueryCache,
 };
 use crate::error::Result;
+use crate::util::format_stac_wgs84_bbox;
 use crate::util::join_base_url_and_path;
 use crate::util::retry::{RetryPolicy, retry_http};
 use async_trait::async_trait;
 use chrono::DateTime as ChronoDateTime;
 use geoengine_datatypes::dataset::DataId;
-use geoengine_datatypes::operations::reproject::{
-    CoordinateProjection, CoordinateProjector, ReprojectClipped,
-};
+use geoengine_datatypes::operations::reproject::ReprojectClipped;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, CacheHint, RasterQueryRectangle, TimeDimension, TimeInstance,
     TimeInterval, TryRegularTimeFillIterExt, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
-use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
+use geoengine_datatypes::spatial_reference::{
+    CoordinateProjection, DefaultCoordinateProjector, SpatialReference, SpatialReferenceAuthority,
+};
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterBandDescriptors, RasterResultDescriptor, TimeDescriptor,
     VectorResultDescriptor,
@@ -374,16 +375,7 @@ impl StacMultiBandMetaData {
         let time_end = time_interval.end();
 
         let query_params = vec![
-            (
-                "bbox".to_owned(),
-                format!(
-                    "{},{},{},{}",
-                    bbox.lower_left().x,
-                    bbox.lower_left().y,
-                    bbox.upper_right().x,
-                    bbox.upper_right().y
-                ),
-            ),
+            ("bbox".to_owned(), format_stac_wgs84_bbox(bbox)),
             (
                 "datetime".to_owned(),
                 format!(
@@ -616,13 +608,15 @@ fn stac_query_bbox(
     spatial_bounds: geoengine_datatypes::primitives::SpatialPartition2D,
     spatial_reference: SpatialReference,
 ) -> geoengine_operators::util::Result<Option<geoengine_datatypes::primitives::BoundingBox2D>> {
-    let projector =
-        CoordinateProjector::from_known_srs(spatial_reference, SpatialReference::epsg_4326())
-            .map_err(
-                |e| geoengine_operators::error::Error::InvalidDataProviderConfig {
-                    reason: format!("could not create coordinate projector for STAC bbox: {e}"),
-                },
-            )?;
+    let projector = DefaultCoordinateProjector::from_known_srs(
+        spatial_reference,
+        SpatialReference::epsg_4326(),
+    )
+    .map_err(
+        |e| geoengine_operators::error::Error::InvalidDataProviderConfig {
+            reason: format!("could not create coordinate projector for STAC bbox: {e}"),
+        },
+    )?;
 
     spatial_bounds
         .as_bbox()
@@ -1331,8 +1325,7 @@ mod tests {
                 .expect("workflow JSON should deserialize");
 
         let operator = workflow
-            .operator()
-            .expect("workflow should have operator")
+            .operator
             .get_raster()
             .expect("workflow operator should be raster");
 

@@ -471,7 +471,7 @@ impl LayerCollectionProvider for StacDataProvider {
             },
             name: dataset.name.clone(),
             description: dataset.description.clone(),
-            workflow: Workflow::Legacy {
+            workflow: Workflow {
                 operator: TypedOperator::Raster(
                     MultiBandGdalSource {
                         params: MultiBandGdalSourceParameters::new(NamedData {

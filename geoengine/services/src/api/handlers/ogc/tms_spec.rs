@@ -17,7 +17,7 @@ use geoengine_datatypes::{
         GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
         TilingSpatialGridDefinition, TilingSpecification,
     },
-    spatial_reference::SpatialReference,
+    spatial_reference::{DefaultCoordinateProjector, SpatialReference},
 };
 use geoengine_operators::engine::{RasterResultDescriptor, ResultDescriptor};
 use ogcapi_types::tiles::{CornerOfOrigin, TileMatrix, TileMatrixSet, TileMatrixSetId, TilesCrs};
@@ -146,7 +146,7 @@ impl TypedTileMatrixSetProvider {
                 let resolution = if spatial_reference == web_mercator {
                     source_resolution
                 } else {
-                    suggest_pixel_size_like_gdal_helper(
+                    suggest_pixel_size_like_gdal_helper::<_, DefaultCoordinateProjector>(
                         result_descriptor.spatial_bounds(),
                         source_resolution,
                         spatial_reference,
@@ -557,8 +557,12 @@ impl WebMercatorQuadTMS {
                 return SpatialResolution::new_unchecked(resolution, resolution);
             }
         }
-        // If no suitable resolution is found, return the smallest available resolution
-        let &(_, _, cell_size, _, _) = Self::DATA.last().expect("DATA should not be empty");
+        // The resolution is coarser than the coarsest WebMercatorQuad cell: clamp to the
+        // coarsest cell. Data finer than the finest cell never reaches this fallback, it
+        // matches the coarsest cell in the loop above. Clamping to the finest cell would
+        // feed an invalid interpolation fraction (< 1) into the resampling graph and
+        // abort tile rendering with an HTTP 500 (`FractionMustBeOneOrLarger`).
+        let &(_, _, cell_size, _, _) = Self::DATA.first().expect("DATA should not be empty");
         SpatialResolution::new_unchecked(cell_size, cell_size)
     }
 }
@@ -984,6 +988,30 @@ mod tests {
         assert_eq!(
             ordered_axes(SpatialReference::web_mercator()).unwrap(),
             vec!["X".to_string(), "Y".to_string()]
+        );
+    }
+
+    /// `WebMercatorQuad` covers a fixed range of resolutions: from the coarsest (zoom 0)
+    /// cell to the finest (zoom 24) cell. A suggested pixel size coarser than the
+    /// coarsest cell (e.g. a global 4326 layer at 2.5 degrees resolution, suggestive of
+    /// ~351,600 m/px) must clamp to the coarsest cell, not the finest. Clamping to the
+    /// finest cell produced an invalid interpolation fraction (< 1) and aborted tile
+    /// rendering with an internal server error.
+    #[test]
+    fn it_clamps_coarser_than_coarsest_resolution_to_the_coarsest_cell() {
+        let resolution = WebMercatorQuadTMS::find_next_best_resolution(
+            SpatialResolution::new_unchecked(351_600.0, 351_600.0),
+        );
+
+        assert!(
+            approx_eq!(f64, resolution.x, 156_543.033_928_041, epsilon = 1e-9),
+            "x resolution should be the coarsest cell, got {}",
+            resolution.x
+        );
+        assert!(
+            approx_eq!(f64, resolution.y, 156_543.033_928_041, epsilon = 1e-9),
+            "y resolution should be the coarsest cell, got {}",
+            resolution.y
         );
     }
 

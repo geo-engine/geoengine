@@ -10,10 +10,10 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// TileMatrix : A tile matrix, usually corresponding to a particular zoom level of a TileMatrixSet.
+/// TileMatrix : A tile matrix, usually corresponding to a particular zoom level of a [`TileMatrixSet`].
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TileMatrix {
-    /// Identifier selecting one of the scales defined in the [TileMatrixSet] and representing the scaleDenominator the tile.
+    /// Identifier selecting one of the scales defined in the [`TileMatrixSet`] and representing the scaleDenominator the tile.
     #[serde(rename = "id")]
     pub id: String,
     /// Title of a tile matrix, normally used for display to a human
@@ -55,7 +55,7 @@ pub struct TileMatrix {
 }
 
 impl TileMatrix {
-    /// A tile matrix, usually corresponding to a particular zoom level of a TileMatrixSet.
+    /// A tile matrix, usually corresponding to a particular zoom level of a [`TileMatrixSet`].
     pub fn new(id: String, scale_denominator: f64, cell_size: f64, point_of_origin: Vec<f64>, tile_width: i32, tile_height: i32, matrix_width: i32, matrix_height: i32) -> TileMatrix {
         TileMatrix {
             id,

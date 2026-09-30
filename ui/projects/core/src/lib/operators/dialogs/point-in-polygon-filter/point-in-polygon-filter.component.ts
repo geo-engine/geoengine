@@ -2,11 +2,12 @@ import {Component, ChangeDetectionStrategy, inject} from '@angular/core';
 import {UntypedFormGroup, UntypedFormBuilder, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 
 import {ProjectService} from '../../../project/project.service';
-import {map, mergeMap} from 'rxjs/operators';
+import {from} from 'rxjs';
+import {mergeMap} from 'rxjs/operators';
 import {
     ClusteredPointSymbology,
     Layer,
-    PointInPolygonFilterDict,
+    NotificationService,
     PointSymbology,
     RandomColorService,
     ResultTypes,
@@ -15,7 +16,7 @@ import {
     geoengineValidators,
     FxLayoutDirective,
 } from '@geoengine/common';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {ProcessingGraph} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -49,6 +50,7 @@ import {MatHint} from '@angular/material/input';
 export class PointInPolygonFilterOperatorComponent {
     private randomColorService = inject(RandomColorService);
     private projectService = inject(ProjectService);
+    private notificationService = inject(NotificationService);
     private formBuilder = inject(UntypedFormBuilder);
 
     ResultTypes = ResultTypes;
@@ -75,57 +77,60 @@ export class PointInPolygonFilterOperatorComponent {
 
         sourceOperators
             .pipe(
-                map(([points, polygons]) => {
-                    const workflow = {
+                mergeMap(([points, polygons]) => {
+                    if (points.type !== 'Vector' || polygons.type !== 'Vector') {
+                        throw new Error('Expected vector workflows for point-in-polygon filter.');
+                    }
+
+                    const workflow: ProcessingGraph = {
                         type: 'Vector',
                         operator: {
                             type: 'PointInPolygonFilter',
                             params: {},
                             sources: {
-                                points,
-                                polygons,
+                                points: points.operator,
+                                polygons: polygons.operator,
                             },
-                        } as PointInPolygonFilterDict,
-                    } as WorkflowDict;
+                        },
+                    };
 
-                    this.projectService
-                        .registerWorkflow(workflow)
-                        .pipe(
-                            mergeMap((workflowId) =>
-                                this.projectService.addLayer(
-                                    new VectorLayer({
-                                        workflowId,
-                                        name,
-                                        symbology: ClusteredPointSymbology.fromPointSymbologyDict({
-                                            type: 'point',
-                                            radius: {
+                    return from(this.projectService.registerWorkflow(workflow)).pipe(
+                        mergeMap((workflowId) =>
+                            this.projectService.addLayer(
+                                new VectorLayer({
+                                    workflowId,
+                                    name,
+                                    symbology: ClusteredPointSymbology.fromPointSymbologyDict({
+                                        type: 'point',
+                                        radius: {
+                                            type: 'static',
+                                            value: PointSymbology.DEFAULT_POINT_RADIUS,
+                                        },
+                                        stroke: {
+                                            width: {
                                                 type: 'static',
-                                                value: PointSymbology.DEFAULT_POINT_RADIUS,
+                                                value: 1,
                                             },
-                                            stroke: {
-                                                width: {
-                                                    type: 'static',
-                                                    value: 1,
-                                                },
-                                                color: {
-                                                    type: 'static',
-                                                    color: [0, 0, 0, 255],
-                                                },
-                                            },
-                                            fillColor: {
+                                            color: {
                                                 type: 'static',
-                                                color: colorToDict(this.randomColorService.getRandomColorRgba()),
+                                                color: [0, 0, 0, 255],
                                             },
-                                        }),
-                                        isLegendVisible: false,
-                                        isVisible: true,
+                                        },
+                                        fillColor: {
+                                            type: 'static',
+                                            color: colorToDict(this.randomColorService.getRandomColorRgba()),
+                                        },
                                     }),
-                                ),
+                                    isLegendVisible: false,
+                                    isVisible: true,
+                                }),
                             ),
-                        )
-                        .subscribe();
+                        ),
+                    );
                 }),
             )
-            .subscribe();
+            .subscribe({
+                error: (error) => this.notificationService.error(error),
+            });
     }
 }

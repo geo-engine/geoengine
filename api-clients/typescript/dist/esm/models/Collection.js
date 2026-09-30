@@ -27,7 +27,7 @@ export function CollectionFromJSONTyped(json, ignoreDiscriminator) {
     if (json == null) {
         return json;
     }
-    return Object.assign(Object.assign({}, json), { 'id': json['id'], 'title': json['title'] == null ? undefined : json['title'], 'description': json['description'] == null ? undefined : json['description'], 'keywords': json['keywords'] == null ? undefined : json['keywords'], 'attribution': json['attribution'] == null ? undefined : json['attribution'], 'extent': json['extent'] == null ? undefined : ExtentFromJSON(json['extent']), 'itemType': json['itemType'] == null ? undefined : json['itemType'], 'crs': json['crs'] == null ? undefined : json['crs'], 'storageCrs': json['storageCrs'] == null ? undefined : json['storageCrs'], 'storageCrsCoordinateEpoch': json['storageCrsCoordinateEpoch'] == null ? undefined : json['storageCrsCoordinateEpoch'], 'links': json['links'] == null ? undefined : (json['links'].map(LinkFromJSON)) });
+    return Object.assign(Object.assign({}, json), { 'id': json['id'], 'title': json['title'] == null ? undefined : json['title'], 'description': json['description'] == null ? undefined : json['description'], 'attribution': json['attribution'] == null ? undefined : json['attribution'], 'extent': json['extent'] == null ? undefined : ExtentFromJSON(json['extent']), 'itemType': json['itemType'] == null ? undefined : json['itemType'], 'crs': json['crs'] == null ? undefined : json['crs'], 'storageCrs': json['storageCrs'] == null ? undefined : json['storageCrs'], 'storageCrsCoordinateEpoch': json['storageCrsCoordinateEpoch'] == null ? undefined : json['storageCrsCoordinateEpoch'], 'links': json['links'] == null ? undefined : (json['links'].map(LinkFromJSON)) });
 }
 export function CollectionToJSON(json) {
     return CollectionToJSONTyped(json, false);
@@ -36,5 +36,5 @@ export function CollectionToJSONTyped(value, ignoreDiscriminator = false) {
     if (value == null) {
         return value;
     }
-    return Object.assign(Object.assign({}, value), { 'id': value['id'], 'title': value['title'], 'description': value['description'], 'keywords': value['keywords'], 'attribution': value['attribution'], 'extent': ExtentToJSON(value['extent']), 'itemType': value['itemType'], 'crs': value['crs'], 'storageCrs': value['storageCrs'], 'storageCrsCoordinateEpoch': value['storageCrsCoordinateEpoch'], 'links': value['links'] == null ? undefined : (value['links'].map(LinkToJSON)) });
+    return Object.assign(Object.assign({}, value), { 'id': value['id'], 'title': value['title'], 'description': value['description'], 'attribution': value['attribution'], 'extent': ExtentToJSON(value['extent']), 'itemType': value['itemType'], 'crs': value['crs'], 'storageCrs': value['storageCrs'], 'storageCrsCoordinateEpoch': value['storageCrsCoordinateEpoch'], 'links': value['links'] == null ? undefined : (value['links'].map(LinkToJSON)) });
 }

@@ -9,14 +9,12 @@ import {
     RasterDataTypes,
     RasterLayer,
     RasterLayerMetadata,
-    RasterStackerDict,
     ResultTypes,
-    RenameBandsDict,
     geoengineValidators,
     NotificationService,
     SpatialGridDefinition,
 } from '@geoengine/common';
-import {Coordinate2D, LegacyTypedOperatorOperator} from '@geoengine/api-client';
+import {Coordinate2D, ProcessingGraph, RasterOperator, RenameBands, TypedRasterOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -31,7 +29,7 @@ import {AsyncPipe} from '@angular/common';
 interface RasterStackerForm {
     rasterLayers: FormControl<Array<RasterLayer> | undefined>;
     name: FormControl<string>;
-    renameBands: FormControl<RenameBands>;
+    renameBands: FormControl<RenameBandsTypes>;
     renameValues: FormArray<FormControl<string>>;
     dataType: FormControl<RasterDataType | undefined>;
     spatialReference: FormControl<string>;
@@ -39,7 +37,7 @@ interface RasterStackerForm {
     // TODO: up/downsampling method for each input?
 }
 
-enum RenameBands {
+enum RenameBandsTypes {
     Default,
     Suffix,
     Rename,
@@ -87,7 +85,7 @@ export class RasterStackerComponent implements AfterViewInit {
     readonly inputTypes = [ResultTypes.RASTER];
     readonly rasterDataTypes = RasterDataTypes.ALL_DATATYPES;
 
-    RenameBands = RenameBands;
+    RenameBands = RenameBandsTypes;
 
     readonly form: FormGroup<RasterStackerForm>;
 
@@ -198,7 +196,7 @@ export class RasterStackerComponent implements AfterViewInit {
     private readonly inputDataTypes = signal<Array<RasterDataType>>([]);
     private readonly layerMetadata = signal<Array<RasterLayerMetadata>>([]);
     private readonly reprojectedLayerMetadata = signal<Array<RasterLayerMetadata>>([]);
-    private readonly workflowOperators = signal<Array<LegacyTypedOperatorOperator>>([]);
+    private readonly workflowOperators = signal<Array<RasterOperator>>([]);
     private readonly rasterLayersSignal!: ReturnType<typeof toSignal<Array<RasterLayer> | undefined>>;
     private readonly spatialReferenceSignal!: ReturnType<typeof toSignal<string | undefined>>;
 
@@ -216,7 +214,7 @@ export class RasterStackerComponent implements AfterViewInit {
                 nonNullable: true,
                 validators: [Validators.required, geoengineValidators.notOnlyWhitespace],
             }),
-            renameBands: new FormControl(RenameBands.Default, {
+            renameBands: new FormControl(RenameBandsTypes.Default, {
                 nonNullable: true,
                 validators: [Validators.required],
             }),
@@ -253,13 +251,13 @@ export class RasterStackerComponent implements AfterViewInit {
             }
 
             const metadataPromises = rasterLayers.map((l) => firstValueFrom(this.projectService.getRasterLayerMetadata(l)));
-            const workflowPromises = rasterLayers.map((l) => firstValueFrom(this.projectService.getWorkflow(l.workflowId)));
+            const workflowPromises = rasterLayers.map((l) => this.projectService.getWorkflow(l.workflowId));
 
             void Promise.all([Promise.all(metadataPromises), Promise.all(workflowPromises)]).then(
-                ([metadata, workflows]: [Array<RasterLayerMetadata>, Array<{operator: LegacyTypedOperatorOperator}>]) => {
+                ([metadata, workflows]: [Array<RasterLayerMetadata>, Array<ProcessingGraph>]) => {
                     this.layerMetadata.set(metadata);
                     this.inputDataTypes.set(metadata.map((layer: RasterLayerMetadata) => layer.dataType));
-                    this.workflowOperators.set(workflows.map((w) => w.operator));
+                    this.workflowOperators.set(workflows.map((w) => w.operator as RasterOperator));
                 },
             );
         });
@@ -346,16 +344,16 @@ export class RasterStackerComponent implements AfterViewInit {
             }
 
             // Get workflows for all layers and create reprojected operators
-            const workflowPromises = rasterLayers.map((layer) => firstValueFrom(this.projectService.getWorkflow(layer.workflowId)));
+            const workflowPromises = rasterLayers.map((layer) => this.projectService.getWorkflow(layer.workflowId));
 
             void Promise.all(workflowPromises).then((workflows) => {
                 // Create reprojected operators
-                const reprojectedOperators = workflows.map((workflow, index) => {
+                const reprojectedOperators: Array<RasterOperator> = workflows.map((workflow, index) => {
                     const layerSref = this.layerMetadata()[index]?.spatialReference.srsString;
 
                     if (layerSref === spatialReference) {
                         // No reprojection needed
-                        return workflow.operator;
+                        return workflow.operator as RasterOperator;
                     } else {
                         // Create reprojection operator
                         return {
@@ -364,7 +362,7 @@ export class RasterStackerComponent implements AfterViewInit {
                                 targetSpatialReference: spatialReference,
                             },
                             sources: {
-                                source: workflow.operator,
+                                source: workflow.operator as RasterOperator,
                             },
                         };
                     }
@@ -372,12 +370,10 @@ export class RasterStackerComponent implements AfterViewInit {
 
                 // Register temporary workflows and fetch their metadata
                 const metadataPromises = reprojectedOperators.map((operator) => {
-                    const workflowPromise = firstValueFrom(
-                        this.projectService.registerWorkflow({
-                            type: 'Raster',
-                            operator,
-                        }),
-                    );
+                    const workflowPromise = this.projectService.registerWorkflow({
+                        type: 'Raster',
+                        operator,
+                    });
 
                     return workflowPromise.then((workflowId) =>
                         firstValueFrom(this.projectService.getWorkflowMetaData(workflowId)).then((descriptor) => {
@@ -418,13 +414,13 @@ export class RasterStackerComponent implements AfterViewInit {
         const renameType = this.form.controls.renameBands.value;
 
         this.layerMetadata().forEach((layer, layerIndex) => {
-            if (renameType === RenameBands.Suffix) {
+            if (renameType === RenameBandsTypes.Suffix) {
                 renameControl.push(
                     new FormControl(`_${layerIndex}`, {
                         nonNullable: true,
                     }),
                 );
-            } else if (renameType === RenameBands.Rename) {
+            } else if (renameType === RenameBandsTypes.Rename) {
                 layer.bands.forEach((band) => {
                     renameControl.push(
                         new FormControl(band.name, {
@@ -465,8 +461,8 @@ export class RasterStackerComponent implements AfterViewInit {
 
         try {
             // Process each layer: reproject, regrid, convert data type
-            const processedOperators: Array<LegacyTypedOperatorOperator> = workflowOperators.map((operator, index) => {
-                let processedOperator: LegacyTypedOperatorOperator = operator;
+            const processedOperators: Array<RasterOperator> = workflowOperators.map((operator, index) => {
+                let processedOperator: RasterOperator = operator;
                 const originalSpatialReference = originalMetadata[index].spatialReference.srsString;
 
                 // Step 1: Reproject to target spatial reference if needed
@@ -555,27 +551,26 @@ export class RasterStackerComponent implements AfterViewInit {
                         sources: {
                             raster: processedOperator,
                         },
-                    };
+                    } as RasterOperator;
                 }
 
                 return processedOperator;
             });
 
             // Register the final stacked workflow
-            const workflowId = await firstValueFrom(
-                this.projectService.registerWorkflow({
-                    type: 'Raster',
-                    operator: {
-                        type: 'RasterStacker',
-                        params: {
-                            renameBands,
-                        },
-                        sources: {
-                            rasters: processedOperators,
-                        },
-                    } as RasterStackerDict,
-                }),
-            );
+            const workflow: TypedRasterOperator = {
+                type: 'Raster',
+                operator: {
+                    type: 'RasterStacker',
+                    params: {
+                        renameBands,
+                    },
+                    sources: {
+                        rasters: processedOperators,
+                    },
+                },
+            };
+            const workflowId = await this.projectService.registerWorkflow(workflow);
 
             // Add the layer to the project
             await firstValueFrom(
@@ -604,27 +599,27 @@ export class RasterStackerComponent implements AfterViewInit {
 
     renameHint(i: number): string {
         switch (this.form.controls.renameBands.value) {
-            case RenameBands.Default:
+            case RenameBandsTypes.Default:
                 return '';
-            case RenameBands.Suffix:
+            case RenameBandsTypes.Suffix:
                 return `Suffix for input ${i}`;
-            case RenameBands.Rename:
+            case RenameBandsTypes.Rename:
                 return `New name for band ${i}`;
         }
     }
 
-    private getRename(): RenameBandsDict {
+    private getRename(): RenameBands {
         switch (this.form.controls.renameBands.value) {
-            case RenameBands.Default:
+            case RenameBandsTypes.Default:
                 return {
                     type: 'default',
                 };
-            case RenameBands.Suffix:
+            case RenameBandsTypes.Suffix:
                 return {
                     type: 'suffix',
                     values: this.form.controls.renameValues.value,
                 };
-            case RenameBands.Rename:
+            case RenameBandsTypes.Rename:
                 return {
                     type: 'rename',
                     values: this.form.controls.renameValues.value,

@@ -1,46 +1,53 @@
 #![allow(clippy::print_stdout)]
 
-use crate::api::handlers::datasets::AddDatasetTile;
-use crate::api::handlers::permissions::{
-    LayerCollectionResource, LayerResource, PermissionRequest,
+use crate::{
+    api::{
+        handlers::{
+            datasets::AddDatasetTile,
+            permissions::{LayerCollectionResource, LayerResource, PermissionRequest},
+        },
+        model::{
+            datatypes::LayerId,
+            operators::{GdalDatasetParameters, GdalMultiBand},
+            responses::IdResponse,
+            services::{
+                AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
+            },
+        },
+    },
+    datasets::{DatasetName, upload::VolumeName},
+    layers::{
+        layer::{AddLayer, AddLayerCollection},
+        listing::LayerCollectionId,
+        storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
+    },
+    permissions::{Permission, Role},
+    workflows::workflow::Workflow,
 };
-use crate::api::model::datatypes::LayerId;
-use crate::api::model::operators::{GdalDatasetParameters, GdalMultiBand};
-use crate::api::model::processing_graphs::{
-    GdalSourceParameters, MultiBandGdalSource, RasterOperator, TypedOperator,
-};
-use crate::api::model::responses::IdResponse;
-use crate::api::model::services::{
-    AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
-};
-use crate::datasets::DatasetName;
-use crate::datasets::upload::VolumeName;
-use crate::layers::layer::{AddLayer, AddLayerCollection};
-use crate::layers::listing::LayerCollectionId;
-use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
-use crate::permissions::{Permission, Role};
-use crate::workflows::workflow::Workflow;
 use anyhow::Context;
 use chrono::{NaiveDate, TimeZone};
 use clap::Parser;
 use gdal::{Dataset as GdalDataset, Metadata};
-use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::{
-    Coordinate2D, DateTime, Measurement, SpatialPartition2D, TimeInstance, TimeInterval,
+use geoengine_datatypes::{
+    dataset::NamedData,
+    primitives::{
+        Coordinate2D, DateTime, Measurement, SpatialPartition2D, TimeInstance, TimeInterval,
+    },
+    raster::GdalGeoTransform,
 };
-use geoengine_datatypes::raster::GdalGeoTransform;
-use geoengine_operators::engine::{RasterBandDescriptor, RasterResultDescriptor};
-use geoengine_operators::source::GdalDatasetGeoTransform;
-use geoengine_operators::util::gdal::{
-    measurement_from_rasterband, raster_descriptor_from_dataset,
+use geoengine_operators::{
+    engine::{RasterBandDescriptor, RasterOperator, RasterResultDescriptor, TypedOperator},
+    source::{GdalDatasetGeoTransform, MultiBandGdalSource, MultiBandGdalSourceParameters},
+    util::gdal::{measurement_from_rasterband, raster_descriptor_from_dataset},
 };
 use regex::Regex;
 use serde::Serialize;
-use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 use uuid::Uuid;
 
 /// Import tiled datasets into a Geo Engine instance via directory scan and using the REST API.
@@ -224,21 +231,20 @@ async fn add_dataset_to_collection(
     let add_layer = AddLayer {
         name: layer_name.to_string(),
         description: String::new(),
-        workflow: Workflow::Typed {
-            operator: TypedOperator::Raster(RasterOperator::MultiBandGdalSource(
+        workflow: Workflow {
+            operator: TypedOperator::Raster(
                 MultiBandGdalSource {
-                    r#type: Default::default(),
-                    params: GdalSourceParameters {
+                    params: MultiBandGdalSourceParameters {
                         data: NamedData {
                             namespace: None,
                             provider: None,
                             name: dataset_name.to_string(),
-                        }
-                        .into(),
+                        },
                         overview_level: None,
                     },
-                },
-            )),
+                }
+                .boxed(),
+            ),
         },
         symbology: None, // TODO: add symbology
         properties: vec![],

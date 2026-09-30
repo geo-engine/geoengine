@@ -1,5 +1,5 @@
 import {map, mergeMap} from 'rxjs/operators';
-import {BehaviorSubject, combineLatest, Observable, of} from 'rxjs';
+import {BehaviorSubject, combineLatest, from, Observable, of} from 'rxjs';
 import {AfterViewInit, ChangeDetectionStrategy, Component, inject, input, viewChild} from '@angular/core';
 import {AbstractControl, FormControl, FormGroup, ValidationErrors, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 
@@ -7,7 +7,6 @@ import {ProjectService} from '../../../project/project.service';
 import {UUID} from '../../../backend/backend.model';
 import {LayoutService, SidenavConfig} from '../../../layout.service';
 import {
-    BandwiseExpressionDict,
     GeoEngineError,
     Layer,
     MeasurementComponent,
@@ -21,9 +20,10 @@ import {
     geoengineValidators,
     CommonModule,
     AsyncValueDefault,
+    errorToText,
 } from '@geoengine/common';
 import {SymbologyCreationType, SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {ProcessingGraph, RasterDataType as ApiRasterDataType} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -208,23 +208,26 @@ export class BandwiseExpressionOperatorComponent implements AfterViewInit {
             return; // checked by form validator
         }
 
-        this.projectService
-            .getWorkflow(rasterLayer.workflowId)
+        from(this.projectService.getWorkflow(rasterLayer.workflowId))
             .pipe(
-                mergeMap((inputWorkflow) => {
-                    const workflow: WorkflowDict = {
+                mergeMap((inputWorkflow: ProcessingGraph) => {
+                    if (inputWorkflow.type !== 'Raster') {
+                        throw new Error('Expected a raster workflow for bandwise expression operator.');
+                    }
+
+                    const workflow: ProcessingGraph = {
                         type: 'Raster',
                         operator: {
                             type: 'BandwiseExpression',
                             params: {
                                 expression,
-                                outputType: dataType.getCode(),
+                                outputType: dataType.getCode() as unknown as ApiRasterDataType,
                                 mapNoData,
                             },
                             sources: {
                                 raster: inputWorkflow.operator,
                             },
-                        } as BandwiseExpressionDict,
+                        },
                     };
 
                     return this.projectService.registerWorkflow(workflow);
@@ -260,9 +263,10 @@ export class BandwiseExpressionOperatorComponent implements AfterViewInit {
                     this.loading$.next(false);
                 },
                 error: (error) => {
-                    const errorMsg = error.error.message;
-                    this.lastError$.next(errorMsg);
-                    this.loading$.next(false);
+                    void errorToText(error, error.error?.message ?? error.message).then((errorMsg) => {
+                        this.lastError$.next(errorMsg);
+                        this.loading$.next(false);
+                    });
                 },
             });
     }

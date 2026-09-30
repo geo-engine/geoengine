@@ -1,6 +1,6 @@
 --- typescript/src/models/VectorOperator.ts
 +++ typescript/src/models/VectorOperator.ts
-@@ -169,3 +169,11 @@
+@@ -180,3 +180,11 @@
      }
  }
  

@@ -1,5 +1,6 @@
 use crate::api::model::datatypes::{Coordinate2D, VectorDataType};
 use anyhow::Context;
+use geoengine_datatypes::primitives::AxisAlignedRectangle;
 use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::BTreeMap;
@@ -417,6 +418,27 @@ impl TryFrom<SpatialBoundsDerive> for geoengine_operators::mock::SpatialBoundsDe
     }
 }
 
+impl From<geoengine_operators::mock::SpatialBoundsDerive> for SpatialBoundsDerive {
+    fn from(value: geoengine_operators::mock::SpatialBoundsDerive) -> Self {
+        match value {
+            geoengine_operators::mock::SpatialBoundsDerive::Derive => {
+                SpatialBoundsDerive::Derive(SpatialBoundsDeriveDerive {
+                    r#type: Default::default(),
+                })
+            }
+            geoengine_operators::mock::SpatialBoundsDerive::Bounds(bounds) => {
+                SpatialBoundsDerive::Bounds(SpatialBoundsDeriveBounds {
+                    r#type: Default::default(),
+                    bounding_box: bounds.into(),
+                })
+            }
+            geoengine_operators::mock::SpatialBoundsDerive::None => {
+                SpatialBoundsDerive::None(SpatialBoundsDeriveNone::default())
+            }
+        }
+    }
+}
+
 /// A bounding box that includes all border points.
 /// Note: may degenerate to a point!
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
@@ -434,6 +456,15 @@ impl TryFrom<BoundingBox2D> for geoengine_datatypes::primitives::BoundingBox2D {
             value.upper_right_coordinate.into(),
         )
         .context("invalid bounding box")
+    }
+}
+
+impl From<geoengine_datatypes::primitives::BoundingBox2D> for BoundingBox2D {
+    fn from(value: geoengine_datatypes::primitives::BoundingBox2D) -> Self {
+        BoundingBox2D {
+            lower_left_coordinate: Coordinate2D::from(value.lower_left()),
+            upper_right_coordinate: Coordinate2D::from(value.upper_right()),
+        }
     }
 }
 

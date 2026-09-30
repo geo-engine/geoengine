@@ -24,7 +24,7 @@ from typing_extensions import Self
 
 class TilesCrsOneOf2(BaseModel):
     """
-    A reference system data structure as defined in the MD_ReferenceSystem of the ISO 19115
+    A reference system data structure as defined in the `MD_ReferenceSystem` of the ISO 19115
     """ # noqa: E501
     reference_system: StrictStr = Field(alias="referenceSystem")
     __properties: ClassVar[List[str]] = ["referenceSystem"]

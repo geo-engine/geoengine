@@ -1,0 +1,26 @@
+[package]
+name = "crs-constants"
+description = "Static metadata for coordinate reference systems (CRS) — bounds, units, and scale factors. Generated from PROJ's EPSG database."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+publish.workspace = true
+license-file.workspace = true
+documentation.workspace = true
+repository.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true
+
+# Which parts of the generated EPSG registry are compiled in:
+# - "code": the numeric EPSG code of each entry
+# - "name": the human readable name of each CRS
+# - "metadata": everything, including code and name. This is the full registry
+#   as consumed by `StaticEpsgMetadataProvider`.
+[features]
+default = ["metadata"]
+code = []
+name = []
+metadata = ["code", "name"]

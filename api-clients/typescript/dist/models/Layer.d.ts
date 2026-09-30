@@ -10,7 +10,7 @@
  */
 import type { Symbology } from './Symbology';
 import type { ProviderLayerId } from './ProviderLayerId';
-import type { Workflow } from './Workflow';
+import type { ProcessingGraph } from './ProcessingGraph';
 /**
  *
  * @export
@@ -37,10 +37,10 @@ export interface Layer {
     description: string;
     /**
      *
-     * @type {Workflow}
+     * @type {ProcessingGraph}
      * @memberof Layer
      */
-    workflow: Workflow;
+    workflow: ProcessingGraph;
     /**
      *
      * @type {Symbology}

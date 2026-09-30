@@ -31,7 +31,7 @@ class PlotTests(unittest.TestCase):
                 "type": "Plot",
                 "operator": {
                     "type": "Histogram",
-                    "params": {"attributeName": "ndvi", "bounds": "data", "buckets": {"type": "number", "value": 20}},
+                    "params": {"columnName": "ndvi", "bounds": "data", "buckets": {"type": "number", "value": 20}},
                     "sources": {
                         "source": ge.workflow_builder.operators.GdalSource("ndvi").to_workflow_dict()["operator"]
                     },
@@ -176,13 +176,11 @@ class PlotTests(unittest.TestCase):
                 "type": "Plot",
                 "operator": {
                     "type": "Histogram",
-                    "params": {"bounds": "data", "buckets": {"type": "number", "value": 20}},
+                    "params": {"columnName": "ndvi", "bounds": "data", "buckets": {"type": "number", "value": 20}},
                     "sources": {
                         "source": {
                             "type": "GdalSource",
-                            "params": {
-                                "data": {"type": "internal", "datasetId": "36574dc3-560a-4b09-9d22-d5945f2b8093"}
-                            },
+                            "params": {"data": "ndvi"},
                         }
                     },
                 },

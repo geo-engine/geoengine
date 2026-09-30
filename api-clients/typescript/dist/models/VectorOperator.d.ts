@@ -16,6 +16,7 @@ import type { PointInPolygonFilter } from './PointInPolygonFilter';
 import type { RasterVectorJoin } from './RasterVectorJoin';
 import type { Reprojection } from './Reprojection';
 import type { TimeProjection } from './TimeProjection';
+import type { TimeShift } from './TimeShift';
 import type { VectorExpression } from './VectorExpression';
 import type { VectorJoin } from './VectorJoin';
 import type { VisualPointClustering } from './VisualPointClustering';
@@ -41,6 +42,8 @@ export type VectorOperator = {
 } & Reprojection | {
     type: 'TimeProjection';
 } & TimeProjection | {
+    type: 'TimeShift';
+} & TimeShift | {
     type: 'VectorExpression';
 } & VectorExpression | {
     type: 'VectorJoin';

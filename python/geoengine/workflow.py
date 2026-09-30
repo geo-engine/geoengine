@@ -240,7 +240,7 @@ class Workflow:
 
         return self.__result_descriptor
 
-    def workflow_definition(self, timeout: int = 60) -> geoc.Workflow:
+    def workflow_definition(self, timeout: int = 60) -> geoc.ProcessingGraph:
         """Return the workflow definition for this workflow"""
 
         session = get_session()
@@ -1010,7 +1010,7 @@ def register_workflow(workflow: dict[str, Any] | WorkflowBuilderOperator, timeou
     if isinstance(workflow, WorkflowBuilderOperator):
         workflow = workflow.to_workflow_dict()
 
-    workflow_model = geoc.Workflow.from_dict(workflow)
+    workflow_model = geoc.ProcessingGraph.from_dict(workflow)
 
     if workflow_model is None:
         raise InputException("Invalid workflow definition")
