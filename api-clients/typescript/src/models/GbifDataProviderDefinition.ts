@@ -61,7 +61,7 @@ export interface GbifDataProviderDefinition {
      * @type {number}
      * @memberof GbifDataProviderDefinition
      */
-    cacheTtl?: number;
+    cacheTtl?: number | null;
     /**
      * 
      * @type {number}

@@ -244,7 +244,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
 
         let bytes =
@@ -293,7 +293,7 @@ mod tests {
             },
             0,
             EmptyGrid2D::<f64>::new([3, 2].into()).into(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
 
         let bytes =

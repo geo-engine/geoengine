@@ -95,7 +95,7 @@ export interface GdalMetaDataRegular {
      * @type {number}
      * @memberof GdalMetaDataRegular
      */
-    cacheTtl?: number;
+    cacheTtl?: number | null;
 }
 
 

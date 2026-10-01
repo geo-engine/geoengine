@@ -53,7 +53,7 @@ export interface PangaeaDataProviderDefinition {
      * @type {number}
      * @memberof PangaeaDataProviderDefinition
      */
-    cacheTtl: number;
+    cacheTtl?: number | null;
 }
 
 
@@ -74,7 +74,6 @@ export function instanceOfPangaeaDataProviderDefinition(value: object): value is
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
     if (!('baseUrl' in value) || value['baseUrl'] === undefined) return false;
-    if (!('cacheTtl' in value) || value['cacheTtl'] === undefined) return false;
     return true;
 }
 
@@ -93,7 +92,7 @@ export function PangaeaDataProviderDefinitionFromJSONTyped(json: any, ignoreDisc
         'description': json['description'],
         'priority': json['priority'] == null ? undefined : json['priority'],
         'baseUrl': json['baseUrl'],
-        'cacheTtl': json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 

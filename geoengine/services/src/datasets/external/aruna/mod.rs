@@ -86,7 +86,7 @@ pub struct ArunaDataProviderDefinition {
     pub api_token: String,
     pub filter_label: String,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 #[async_trait::async_trait]
@@ -190,7 +190,7 @@ pub struct ArunaDataProvider {
     dataset_stub: DatasetServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
     object_stub: ObjectServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
     label_filter: Option<String>,
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl ArunaDataProvider {
@@ -554,7 +554,7 @@ impl ArunaDataProvider {
     fn vector_loading_template(
         vi: &VectorInfo,
         rd: &VectorResultDescriptor,
-        cache_ttl: CacheTtlSeconds,
+        cache_ttl: Option<CacheTtlSeconds>,
     ) -> OgrSourceDataset {
         let data_type = match rd.data_type {
             VectorDataType::Data => None,
@@ -642,7 +642,10 @@ impl ArunaDataProvider {
     /// a concrete url on every call to `MetaData.loading_info()`.
     /// This is required, since download links from the core-storage are only valid
     /// for 15 minutes.
-    fn raster_loading_template(info: &RasterInfo, cache_ttl: CacheTtlSeconds) -> GdalLoadingInfo {
+    fn raster_loading_template(
+        info: &RasterInfo,
+        cache_ttl: Option<CacheTtlSeconds>,
+    ) -> GdalLoadingInfo {
         let part = GdalLoadingInfoTemporalSlice {
             time: info.time_interval,
             params: Some(GdalDatasetParameters {
@@ -2093,7 +2096,7 @@ mod tests {
         let rd = ArunaDataProvider::create_single_vector_file_result_descriptor(md.crs.into(), &vi);
 
         let template =
-            ArunaDataProvider::vector_loading_template(&vi, &rd, CacheTtlSeconds::default());
+            ArunaDataProvider::vector_loading_template(&vi, &rd, Some(CacheTtlSeconds::new(0)));
 
         let url = template
             .new_link("test".to_string())
@@ -2126,7 +2129,8 @@ mod tests {
             super::metadata::DataType::SingleVectorFile(_) => panic!("Expected raster description"),
         };
 
-        let template = ArunaDataProvider::raster_loading_template(&ri, CacheTtlSeconds::default());
+        let template =
+            ArunaDataProvider::raster_loading_template(&ri, Some(CacheTtlSeconds::new(0)));
 
         let url = template
             .new_link("test".to_string())

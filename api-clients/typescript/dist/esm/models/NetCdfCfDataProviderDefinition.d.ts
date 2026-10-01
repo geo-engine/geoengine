@@ -55,7 +55,7 @@ export interface NetCdfCfDataProviderDefinition {
      * @type {number}
      * @memberof NetCdfCfDataProviderDefinition
      */
-    cacheTtl?: number;
+    cacheTtl?: number | null;
 }
 /**
  * @export

@@ -19,8 +19,8 @@ pub struct GdalMetaDataStatic {
     pub time: Option<TimeInterval>,
     pub params: GdalDatasetParameters,
     pub result_descriptor: RasterResultDescriptor,
-    #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 #[async_trait]
@@ -89,8 +89,8 @@ pub struct GdalMetaDataRegular {
     pub time_placeholders: HashMap<String, GdalSourceTimePlaceholder>,
     pub data_time: TimeInterval,
     pub step: TimeStep,
-    #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 #[async_trait]
@@ -177,8 +177,8 @@ pub struct GdalMetadataNetCdfCf {
     /// A band offset specifies the first band index to use for the first point in time.
     /// All other time steps are added to this offset.
     pub band_offset: usize,
-    #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 #[async_trait]
@@ -337,7 +337,7 @@ pub struct DynamicGdalLoadingInfoPartIterator {
     query_time: TimeInterval,
     data_time: TimeInterval,
     state: DynamicGdalLoadingInfoPartIteratorState,
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl: Option<CacheTtlSeconds>,
 }
 
 #[derive(Debug, Clone)]
@@ -355,7 +355,7 @@ impl DynamicGdalLoadingInfoPartIterator {
         step: TimeStep,
         query_time: TimeInterval,
         data_time: TimeInterval,
-        cache_ttl: CacheTtlSeconds,
+        cache_ttl: Option<CacheTtlSeconds>,
     ) -> Result<Self> {
         // TODO: maybe fail on deserialization
         if time_placeholders.is_empty()
@@ -487,7 +487,7 @@ pub struct NetCdfCfGdalLoadingInfoPartIterator {
     dataset_time_start: TimeInstance,
     max_t2: TimeInstance,
     band_offset: usize,
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl NetCdfCfGdalLoadingInfoPartIterator {
@@ -498,7 +498,7 @@ impl NetCdfCfGdalLoadingInfoPartIterator {
         dataset_time_start: TimeInstance,
         max_t2: TimeInstance,
         band_offset: usize,
-        cache_ttl: CacheTtlSeconds,
+        cache_ttl: Option<CacheTtlSeconds>,
     ) -> Self {
         Self {
             time_step_iter,
@@ -636,8 +636,8 @@ impl Iterator for GdalLoadingInfoTemporalSliceIterator {
 pub struct GdalLoadingInfoTemporalSlice {
     pub time: TimeInterval,
     pub params: Option<GdalDatasetParameters>,
-    #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl TimeFilledItem for GdalLoadingInfoTemporalSlice {
@@ -645,7 +645,7 @@ impl TimeFilledItem for GdalLoadingInfoTemporalSlice {
         Self {
             time,
             params: None,
-            cache_ttl: CacheTtlSeconds::max(), // TODO: is this ok?
+            cache_ttl: None,
         }
     }
 
@@ -718,7 +718,7 @@ mod tests {
                 TimeInstance::from_millis_unchecked(33),
             ),
             step: TimeStep::millis(11).unwrap(),
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         }
     }
 
@@ -733,7 +733,7 @@ mod tests {
             time: Some(valid),
             params: regular_metadata.params,
             result_descriptor: regular_metadata.result_descriptor,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let loading_info = metadata
@@ -1012,7 +1012,7 @@ mod tests {
                         allow_alphaband_as_mask: true,
                         retry: None,
                     }),
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::new_unchecked(1, 5),
@@ -1030,7 +1030,7 @@ mod tests {
                         allow_alphaband_as_mask: true,
                         retry: None,
                     }),
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::new_unchecked(5, 6),
@@ -1048,7 +1048,7 @@ mod tests {
                         allow_alphaband_as_mask: true,
                         retry: None,
                     }),
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
             ],
         };
@@ -1132,7 +1132,7 @@ mod tests {
             end: time_end,
             step: time_step,
             band_offset: 0,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let query = RasterQueryRectangle::new(
@@ -1201,7 +1201,7 @@ mod tests {
             end: time_end,
             step: time_step,
             band_offset: 1,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let query = RasterQueryRectangle::new(
@@ -1273,7 +1273,7 @@ mod tests {
             end: time_end,
             step: time_step,
             band_offset: 0,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let query = RasterQueryRectangle::new(
@@ -1363,7 +1363,7 @@ mod tests {
             dataset_time_start: time_start,
             max_t2: time_end,
             band_offset: 0,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let step_1 = iter.next().unwrap().unwrap();
@@ -1446,7 +1446,7 @@ mod tests {
                 dataset_time_start: TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
                 max_t2: TimeInstance::from(DateTime::new_utc(2022, 1, 1, 0, 0, 0)),
                 band_offset: 0,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             }
         }
 

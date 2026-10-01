@@ -2,7 +2,7 @@ use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
 use config::{Config, Environment, File};
-use geoengine_datatypes::primitives::TimeInterval;
+use geoengine_datatypes::primitives::{MAX_CACHE_TTL_SECONDS, TimeInterval};
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use serde::Deserialize;
@@ -41,11 +41,10 @@ fn init_settings() -> RwLock<Config> {
     // for separating groups, for instance double underscores `__`
     settings = settings.add_source(Environment::with_prefix("geoengine").separator("__"));
 
-    RwLock::new(
-        settings
-            .build()
-            .expect("it should crash the program if this fails"),
-    )
+    let config = settings
+        .build()
+        .expect("it should crash the program if this fails");
+    RwLock::new(config)
 }
 
 /// test may run in subdirectory
@@ -585,6 +584,8 @@ pub struct Cache {
     /// Ignored if `enable_new_raster_cache` is `false`, in which case the old cache holds both
     /// vector and raster data and gets the full `size_in_mb`.
     pub raster_cache_size_ratio: f64,
+    /// Default cache lifetime for values without an explicit cache TTL.
+    pub default_ttl_seconds: u32,
 }
 
 impl Cache {
@@ -605,6 +606,14 @@ impl Cache {
     }
 
     pub fn validate(&self) -> Result<()> {
+        if self.default_ttl_seconds > MAX_CACHE_TTL_SECONDS {
+            return Err(crate::error::Error::InvalidConfig {
+                reason: format!(
+                    "default_ttl_seconds must be between 0 and {MAX_CACHE_TTL_SECONDS}, got {}",
+                    self.default_ttl_seconds
+                ),
+            });
+        }
         if !(0.0..=1.0).contains(&self.raster_cache_size_ratio) {
             return Err(crate::error::Error::InvalidConfig {
                 reason: format!(
@@ -625,6 +634,7 @@ impl TestDefault for Cache {
             landing_zone_ratio: 0.1, // 10% of cache size
             enable_new_raster_cache: false,
             raster_cache_size_ratio: 0.5,
+            default_ttl_seconds: 0,
         }
     }
 }

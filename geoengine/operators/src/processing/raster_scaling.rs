@@ -373,7 +373,7 @@ mod tests {
             0,
             raster.into(),
             raster_props,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
 
         let mrs = MockRasterSource {
@@ -485,7 +485,7 @@ mod tests {
             0,
             raster.into(),
             raster_props,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
 
         let mrs = MockRasterSource {

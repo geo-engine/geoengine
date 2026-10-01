@@ -69,7 +69,7 @@ export interface SentinelS2L2ACogsProviderDefinition {
      * @type {number}
      * @memberof SentinelS2L2ACogsProviderDefinition
      */
-    cacheTtl?: number;
+    cacheTtl?: number | null;
     /**
      *
      * @type {StacQueryBuffer}

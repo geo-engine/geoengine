@@ -413,7 +413,7 @@ fn create_raster_tile(
         0,
         geo_transform,
         grid_or_empty,
-        CacheHint::default(),
+        CacheHint::no_cache(),
     ))
 }
 

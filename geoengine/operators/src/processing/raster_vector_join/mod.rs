@@ -506,7 +506,7 @@ mod tests {
                     4
                 ],
                 Default::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap(),
         )
@@ -583,7 +583,7 @@ mod tests {
                     4
                 ],
                 Default::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap(),
         )
@@ -663,7 +663,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::default(); 4],
                 Default::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap(),
         )
@@ -734,7 +734,7 @@ mod tests {
                     .unwrap(),
                     vec![TimeInterval::default(); 4],
                     Default::default(),
-                    CacheHint::default(),
+                    CacheHint::no_cache(),
                 )
                 .unwrap(),
             ],
@@ -786,7 +786,7 @@ mod tests {
                     .unwrap(),
                     vec![TimeInterval::default(); 4],
                     Default::default(),
-                    CacheHint::default(),
+                    CacheHint::no_cache(),
                 )
                 .unwrap(),
             ],

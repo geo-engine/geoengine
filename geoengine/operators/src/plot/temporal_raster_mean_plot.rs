@@ -452,7 +452,7 @@ mod tests {
                 },
                 0,
                 Grid2D::new([3, 2].into(), values).unwrap().into(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ));
         }
 

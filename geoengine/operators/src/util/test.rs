@@ -149,6 +149,6 @@ pub fn raster_tile_from_file<T: Pixel + GdalType>(
         band,
         tiling_geo_transform,
         GridOrEmpty::from(masked_grid),
-        CacheHint::default(),
+        CacheHint::no_cache(),
     ))
 }

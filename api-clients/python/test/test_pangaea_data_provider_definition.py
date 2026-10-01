@@ -48,7 +48,6 @@ class TestPangaeaDataProviderDefinition(unittest.TestCase):
                 name = '',
                 description = '',
                 base_url = '',
-                cache_ttl = 0,
         )
         """
 

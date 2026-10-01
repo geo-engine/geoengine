@@ -127,7 +127,7 @@ impl PangaeaMetaData {
         }
     }
 
-    fn get_ogr_source_ds(&self, url: &str, cache_ttl: CacheTtlSeconds) -> OgrSourceDataset {
+    fn get_ogr_source_ds(&self, url: &str, cache_ttl: Option<CacheTtlSeconds>) -> OgrSourceDataset {
         let default_geometry = match &self.feature_info {
             FeatureInfo::DefaultPolygon(p) => Some(TypedGeometry::MultiPolygon(p.clone())),
             FeatureInfo::DefaultPoint(p) => Some(TypedGeometry::MultiPoint(p.clone())),
@@ -187,7 +187,7 @@ impl PangaeaMetaData {
     pub async fn get_ogr_metadata(
         &self,
         client: &Client,
-        cache_ttl: CacheTtlSeconds,
+        cache_ttl: Option<CacheTtlSeconds>,
     ) -> Result<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>, Error>
     {
         let url = self.get_tsv_file().ok_or(Error::PangaeaNoTsv)?.url.as_str();

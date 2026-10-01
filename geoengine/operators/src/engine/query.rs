@@ -13,7 +13,9 @@ use crate::{
 };
 use crate::{meta::quota::QuotaTracking, util::Result};
 use futures::Stream;
-use geoengine_datatypes::{raster::TilingSpecification, util::test::TestDefault};
+use geoengine_datatypes::{
+    primitives::CacheTtlSeconds, raster::TilingSpecification, util::test::TestDefault,
+};
 use pin_project::pin_project;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -58,6 +60,7 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
     fn chunk_byte_size(&self) -> ChunkByteSize;
     fn tiling_specification(&self) -> TilingSpecification;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
+    fn default_cache_ttl(&self) -> CacheTtlSeconds;
 
     fn quota_tracking(&self) -> Option<&QuotaTracking>;
 
@@ -129,6 +132,7 @@ impl QueryAbortTrigger {
 }
 
 pub struct MockQueryContext {
+    pub default_cache_ttl: CacheTtlSeconds,
     pub chunk_byte_size: ChunkByteSize,
     pub tiling_specification: TilingSpecification,
     pub thread_pool: Arc<ThreadPool>,
@@ -149,11 +153,13 @@ impl MockQueryContext {
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
         gdal_process_pool: Arc<GdalProcessPool>,
+        default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
             chunk_byte_size,
             tiling_specification,
+            default_cache_ttl,
             thread_pool: create_rayon_thread_pool(0),
             cache: None,
             quota_checker: None,
@@ -171,6 +177,7 @@ impl MockQueryContext {
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
         gdal_process_pool: Arc<GdalProcessPool>,
+        default_cache_ttl: CacheTtlSeconds,
         cache: Option<Arc<SharedCache>>,
         quota_tracking: Option<QuotaTracking>,
         quota_checker: Option<QuotaChecker>,
@@ -179,6 +186,7 @@ impl MockQueryContext {
         Self {
             chunk_byte_size,
             tiling_specification,
+            default_cache_ttl,
             thread_pool: create_rayon_thread_pool(0),
             cache,
             quota_checker,
@@ -197,11 +205,13 @@ impl MockQueryContext {
         tiling_specification: TilingSpecification,
         num_threads: usize,
         gdal_process_pool: Arc<GdalProcessPool>,
+        default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
             chunk_byte_size,
             tiling_specification,
+            default_cache_ttl,
             thread_pool: create_rayon_thread_pool(num_threads),
             gdal_process_pool,
             cache: None,
@@ -223,6 +233,10 @@ impl QueryContext for MockQueryContext {
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
+    }
+
+    fn default_cache_ttl(&self) -> CacheTtlSeconds {
+        self.default_cache_ttl
     }
 
     fn abort_registration(&self) -> &QueryAbortRegistration {

@@ -46,7 +46,7 @@ export interface GdalMetaDataStatic {
      * @type {number}
      * @memberof GdalMetaDataStatic
      */
-    cacheTtl?: number;
+    cacheTtl?: number | null;
 }
 /**
  * @export

@@ -44,9 +44,7 @@ mod test_util {
     use futures::StreamExt;
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
     use geoengine_datatypes::hashmap;
-    use geoengine_datatypes::primitives::{
-        BandSelection, CacheHint, CacheTtlSeconds, Coordinate2D,
-    };
+    use geoengine_datatypes::primitives::{BandSelection, CacheHint, Coordinate2D};
     use geoengine_datatypes::primitives::{
         ContinuousMeasurement, DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle,
         TimeGranularity, TimeInstance, TimeInterval, TimeStep,
@@ -186,7 +184,7 @@ mod test_util {
             0,
             raster,
             props,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
 
         MockRasterSource {
@@ -302,7 +300,7 @@ mod test_util {
                 )])
                 .unwrap(),
             },
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
         ctx.add_meta_data(dataset_id, dataset_name.clone(), Box::new(meta));
 

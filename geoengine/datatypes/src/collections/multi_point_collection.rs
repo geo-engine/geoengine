@@ -377,7 +377,7 @@ mod tests {
                 );
                 map
             },
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -408,7 +408,7 @@ mod tests {
                 TimeInterval::new_unchecked(2, 3),
             ],
             HashMap::new(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -518,7 +518,7 @@ mod tests {
                 TimeInterval::new_unchecked(2, 3),
             ],
             HashMap::new(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -548,7 +548,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -568,7 +568,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -752,7 +752,7 @@ mod tests {
                 map.insert("number".into(), FeatureData::Float(vec![0., 1.]));
                 map
             },
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -775,7 +775,7 @@ mod tests {
                 map.insert("number".into(), FeatureData::Float(vec![0., 1.]));
                 map
             },
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -874,7 +874,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -940,7 +940,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -979,7 +979,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1012,7 +1012,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1051,7 +1051,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1088,7 +1088,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1137,7 +1137,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1170,7 +1170,7 @@ mod tests {
                 );
                 map
             },
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1214,7 +1214,7 @@ mod tests {
                 );
                 map
             },
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1239,7 +1239,7 @@ mod tests {
                 );
                 map
             },
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1285,7 +1285,7 @@ mod tests {
                 );
                 map
             },
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1339,7 +1339,7 @@ mod tests {
                 );
                 map
             },
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1402,7 +1402,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
         let mut iter = collection.into_iter();
@@ -1456,7 +1456,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1493,7 +1493,7 @@ mod tests {
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
         let mut iter = collection.geometries();
@@ -1524,7 +1524,7 @@ mod tests {
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
         let mut iter = collection.geometries();
@@ -1560,7 +1560,7 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
