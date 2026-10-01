@@ -9,7 +9,29 @@ import {Extent} from './map.service';
 
 export type TileLoadState = 'idle' | 'loading' | 'error';
 
-export interface TileLoaderOptions {
+/** How often a transient failure is retried before a tile is given up on. */
+const MAX_TILE_ATTEMPTS = 3;
+
+/** Delay before the first retry, multiplied by the attempt number. */
+const RETRY_DELAY = 1000;
+
+/** The statuses OpenLayers recommends retrying; everything else is a broken request. */
+const TRANSIENT_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+
+/** An exception document the server answered instead of a tile. */
+interface ServiceException {
+    /** The variant name of the server-side error, e.g. `QueryCanceled`. */
+    readonly error?: string;
+    readonly message: string;
+}
+
+/** The only exception documents worth another try: the server gave up on the query itself. */
+const TRANSIENT_EXCEPTIONS = new Set(['QueryCanceled', 'QueryingProcessorFailed', 'Io', 'Reqwest']);
+
+/** What a tile got out of the response it was sent. */
+type AssignResult = 'ok' | 'transient' | 'terminal';
+
+interface TileLoaderOptions {
     /** Aborts all pending requests and frees all object URLs. Aborted when the source is replaced or the layer is destroyed. */
     readonly signal?: AbortSignal;
 
@@ -44,6 +66,12 @@ export const tileExtent = (tileGrid: TileGrid, tile: ImageTile): Extent => tileG
 export class TileLoader {
     private readonly controllers = new Set<AbortController>();
     private readonly objectUrls = new Set<string>();
+
+    /** Pending retries, so that an obsolete loader does not request tiles anymore. */
+    private readonly timers = new Set<ReturnType<typeof setTimeout>>();
+
+    /** Failed attempts per tile, so that a transient failure can be retried a few times. */
+    private readonly attempts = new WeakMap<ImageTile, number>();
 
     private pending = 0;
     private failures = 0;
@@ -96,6 +124,10 @@ export class TileLoader {
      */
     readonly jsonUrl = async (url: string, signal: AbortSignal, transform?: (metadata: unknown) => Promise<void>): Promise<string> => {
         const response = await this.fetch(url, signal);
+        if (!response.ok) {
+            throw new Error(`Request failed with status ${response.status}: ${url}`);
+        }
+
         const metadata = (await response.json()) as unknown;
 
         await transform?.(metadata);
@@ -110,13 +142,18 @@ export class TileLoader {
     };
 
     /**
-     * Aborts all pending requests and frees all object URLs of this loader.
+     * Aborts all pending requests and retries, and frees all object URLs of this loader.
      */
     abortAll(): void {
         for (const controller of this.controllers) {
             controller.abort();
         }
         this.controllers.clear();
+
+        for (const timer of this.timers) {
+            clearTimeout(timer);
+        }
+        this.timers.clear();
 
         for (const objectUrl of this.objectUrls) {
             URL.revokeObjectURL(objectUrl);
@@ -127,7 +164,17 @@ export class TileLoader {
     private async request(tile: ImageTile, src: string, signal: AbortSignal): Promise<boolean> {
         try {
             const response = await this.fetch(src, signal);
-            return !(await this.assignImage(tile, await response.blob()));
+            if (!response.ok) {
+                return this.fail(tile, TRANSIENT_STATUSES.has(response.status));
+            }
+
+            const result = await this.assignImage(tile, await response.blob());
+            if (result !== 'ok') {
+                return this.fail(tile, result === 'transient');
+            }
+
+            this.attempts.delete(tile);
+            return false;
         } catch {
             if (signal.aborted) {
                 // The request is obsolete, but the tile may be needed again. OpenLayers only
@@ -138,35 +185,62 @@ export class TileLoader {
                 return false;
             }
 
-            tile.setState(TileState.ERROR);
-            return true;
+            // anything that is not a refused request is a problem of the connection
+            return this.fail(tile, true);
         }
     }
 
-    private fetch(url: string, signal: AbortSignal): Promise<Response> {
-        return fetch(url, {headers: this.options.authHeaders(), signal}).then(async (response) => {
-            if (!response.ok) {
-                await this.reportError(await response.blob());
-                throw new Error(`Request failed with status ${response.status}: ${url}`);
-            }
-            return response;
-        });
+    /**
+     * Marks a tile as failed and returns whether the failure is final. OpenLayers never
+     * re-requests `ERROR` tiles, so a transient failure is retried by this loader after a delay,
+     * up to {@link MAX_TILE_ATTEMPTS} tries.
+     */
+    private fail(tile: ImageTile, transient: boolean): boolean {
+        const attempts = (this.attempts.get(tile) ?? 0) + 1;
+        this.attempts.set(tile, attempts);
+
+        tile.setState(TileState.ERROR);
+
+        if (transient && attempts < MAX_TILE_ATTEMPTS) {
+            // The tile stays in `ERROR` on purpose: OpenLayers re-requests `IDLE` tiles on the
+            // very next frame, which would defeat the delay. A tile that left the viewport is
+            // released as `EMPTY`, so its pending retry does nothing.
+            const timer = setTimeout(() => {
+                this.timers.delete(timer);
+                tile.load();
+            }, attempts * RETRY_DELAY);
+            this.timers.add(timer);
+            return false;
+        }
+
+        return true;
     }
 
-    /** Returns `false` if the tile ended up in an error state and cannot be rendered. */
-    private async assignImage(tile: ImageTile, blob: Blob): Promise<boolean> {
+    /** Fetches with authentication headers and reports the body of a request the server refused. */
+    private async fetch(url: string, signal: AbortSignal): Promise<Response> {
+        const response = await fetch(url, {headers: this.options.authHeaders(), signal});
+
+        if (!response.ok) {
+            this.reportError(await this.readException(await response.blob()));
+        }
+
+        return response;
+    }
+
+    /** Returns how the tile should be treated after it got the given blob. */
+    private async assignImage(tile: ImageTile, blob: Blob): Promise<AssignResult> {
         const image = tile.getImage() as HTMLImageElement | null;
         if (!image) {
             // the tile was dropped from the cache while the request was in flight
-            return true;
+            return 'ok';
         }
 
         if (!blob.type.startsWith('image/')) {
             // The WMS endpoint answers failed requests with HTTP 200 and an exception document,
             // so a successful response is not necessarily a tile.
-            tile.setState(TileState.ERROR);
-            await this.reportError(blob);
-            return false;
+            const exception = await this.readException(blob);
+            this.reportError(exception);
+            return TRANSIENT_EXCEPTIONS.has(exception.error ?? '') ? 'transient' : 'terminal';
         }
 
         this.lastError = undefined;
@@ -179,11 +253,24 @@ export class TileLoader {
         image.addEventListener('load', () => URL.revokeObjectURL(objectUrl), {once: true});
         image.addEventListener('error', () => URL.revokeObjectURL(objectUrl), {once: true});
         image.src = objectUrl;
-        return true;
+        return 'ok';
     }
 
     private state(state: TileLoadState): void {
         this.options.onStateChange?.(state);
+    }
+
+    /** Parses the exception document a server answered instead of a tile. */
+    private async readException(blob: Blob): Promise<ServiceException> {
+        const body = await blob.text();
+
+        try {
+            const {error, message} = JSON.parse(body) as {error?: string; message?: string};
+            return {error, message: message ?? body};
+        } catch {
+            // not an exception document, report the raw body
+            return {message: body};
+        }
     }
 
     /**
@@ -191,18 +278,10 @@ export class TileLoader {
      * endpoint. Repeating the same message for every failing tile would flood the user with
      * notifications, so it is reported once until a tile loads again.
      */
-    private async reportError(blob: Blob): Promise<void> {
-        const body = await blob.text();
-        let message = body;
-        try {
-            message = (JSON.parse(body) as {message?: string}).message ?? body;
-        } catch {
-            // not an exception document, report the raw body
-        }
-
-        if (message !== this.lastError) {
-            this.lastError = message;
-            this.options.onError?.(message);
+    private reportError(exception: ServiceException): void {
+        if (exception.message !== this.lastError) {
+            this.lastError = exception.message;
+            this.options.onError?.(exception.message);
         }
     }
 }

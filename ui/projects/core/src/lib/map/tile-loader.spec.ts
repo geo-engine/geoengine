@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import ImageTile from 'ol/ImageTile';
 import TileState from 'ol/TileState';
 import {Observable, Subject} from 'rxjs';
@@ -10,13 +10,17 @@ import {TileLoadState, TileLoader} from './tile-loader';
 interface FakeTile {
     tile: ImageTile;
     setState: ReturnType<typeof vi.fn>;
+    /** Stands in for `ImageTile.load`, which OpenLayers uses to re-request a tile. */
+    load: ReturnType<typeof vi.fn>;
 }
 
 const makeTile = (image: HTMLImageElement | null = document.createElement('img')): FakeTile => {
     const setState = vi.fn();
+    const load = vi.fn();
     return {
-        tile: {getTileCoord: () => [0, 0, 0], getImage: () => image, setState} as unknown as ImageTile,
+        tile: {getTileCoord: () => [0, 0, 0], getImage: () => image, setState, load} as unknown as ImageTile,
         setState,
+        load,
     };
 };
 
@@ -37,6 +41,32 @@ const stubHangingFetch = (signals: AbortSignal[]): void => {
 
 const authHeaders = {Authorization: 'Bearer token'};
 
+/** The parts of a `Response` the tile loader reads. */
+interface MockResponse {
+    readonly ok: boolean;
+    readonly status: number;
+    readonly blob: () => Promise<Blob>;
+}
+
+const imageResponse: MockResponse = {
+    ok: true,
+    status: 200,
+    blob: (): Promise<Blob> => Promise.resolve(new Blob(['image'], {type: 'image/png'})),
+};
+
+const unavailableResponse: MockResponse = {
+    ok: false,
+    status: 503,
+    blob: (): Promise<Blob> => Promise.resolve(new Blob([])),
+};
+
+/** A response of the WMS endpoint that reports a failed request with HTTP 200 and a JSON body. */
+const exceptionDocument = (error: string, message: string): MockResponse => ({
+    ok: true,
+    status: 200,
+    blob: (): Promise<Blob> => Promise.resolve(new Blob([JSON.stringify({error, message})], {type: 'application/json'})),
+});
+
 describe('TileLoader', () => {
     let revokeObjectUrl: ReturnType<typeof vi.spyOn>;
 
@@ -45,6 +75,10 @@ describe('TileLoader', () => {
         vi.unstubAllGlobals();
         vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:tile');
         revokeObjectUrl = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     it('fetches the tile with the authentication headers and frees the object URL after loading', async () => {
@@ -83,37 +117,181 @@ describe('TileLoader', () => {
         expect(image.src).toBe('');
     });
 
-    it('marks failed requests as tile error', async () => {
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ok: false, status: 500, blob: () => Promise.resolve(new Blob([]))}));
+    it('retries a transient failure after a delay that grows with every attempt', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockResolvedValue({ok: false, status: 503, blob: () => Promise.resolve(new Blob([]))});
+        vi.stubGlobal('fetch', fetchMock);
 
-        const {tile, setState} = makeTile();
-        new TileLoader({authHeaders: (): Record<string, string> => authHeaders}).load(tile, 'https://example.com/tile');
+        const url = 'https://example.com/tile';
+        const {tile, setState, load} = makeTile();
+        const loader = new TileLoader({authHeaders: (): Record<string, string> => authHeaders});
+        // OpenLayers re-requests a tile through `load`, which a retry does on its own
+        load.mockImplementation(() => loader.load(tile, url));
 
-        await vi.waitFor(() => expect(setState).toHaveBeenCalledWith(TileState.ERROR));
+        loader.load(tile, url);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(setState).toHaveBeenCalledWith(TileState.ERROR);
+
+        // no request before the first delay elapsed
+        await vi.advanceTimersByTimeAsync(999);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(1);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+
+        // the second failure waits twice as long
+        await vi.advanceTimersByTimeAsync(1999);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+
+        await vi.advanceTimersByTimeAsync(1);
+        expect(fetchMock).toHaveBeenCalledTimes(3);
     });
 
-    it('marks responses that are not images as tile error', async () => {
-        // the WMS endpoint answers failed requests with HTTP 200 and an exception document
-        const fetchMock = vi.fn().mockResolvedValue({
-            ok: true,
-            status: 200,
-            blob: () => Promise.resolve(new Blob([JSON.stringify({message: 'no such workflow'})], {type: 'application/json'})),
-        });
+    it('does not retry a request that is rejected as broken', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockResolvedValue({ok: false, status: 404, blob: () => Promise.resolve(new Blob([]))});
+        vi.stubGlobal('fetch', fetchMock);
+
+        const url = 'https://example.com/tile';
+        const {tile, setState, load} = makeTile();
+        const loader = new TileLoader({authHeaders: (): Record<string, string> => authHeaders});
+        load.mockImplementation(() => loader.load(tile, url));
+
+        loader.load(tile, url);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(setState).toHaveBeenCalledWith(TileState.ERROR);
+
+        await vi.advanceTimersByTimeAsync(10000);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('gives up on a tile that keeps failing transiently', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockResolvedValue({ok: false, status: 503, blob: () => Promise.resolve(new Blob([]))});
         vi.stubGlobal('fetch', fetchMock);
 
         const states: TileLoadState[] = [];
-        const image = document.createElement('img');
-        const {tile, setState} = makeTile(image);
+        const url = 'https://example.com/tile';
+        const {tile, setState, load} = makeTile();
         const loader = new TileLoader({
             authHeaders: (): Record<string, string> => authHeaders,
             onStateChange: (state): void => {
                 states.push(state);
             },
         });
-        loader.load(tile, 'https://example.com/tile');
+        load.mockImplementation(() => loader.load(tile, url));
 
-        await vi.waitFor(() => expect(states).toEqual(['loading', 'error']));
-        expect(setState).toHaveBeenCalledWith(TileState.ERROR);
+        loader.load(tile, url);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(states).toEqual(['loading', 'idle']);
+
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(states).toEqual(['loading', 'idle', 'loading', 'idle']);
+
+        await vi.advanceTimersByTimeAsync(2000);
+
+        // the last attempt is final, so the tile is not left in a loadable state
+        expect(states).toEqual(['loading', 'idle', 'loading', 'idle', 'loading', 'error']);
+        expect(setState).toHaveBeenLastCalledWith(TileState.ERROR);
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+
+        await vi.advanceTimersByTimeAsync(10000);
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    it('forgets the failed attempts of a tile that loads again', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(unavailableResponse)
+            .mockResolvedValueOnce(unavailableResponse)
+            .mockResolvedValueOnce(imageResponse)
+            .mockResolvedValueOnce(unavailableResponse);
+        vi.stubGlobal('fetch', fetchMock);
+
+        const element = document.createElement('img');
+        const url = 'https://example.com/tile';
+        const {tile, load} = makeTile(element);
+        const loader = new TileLoader({authHeaders: (): Record<string, string> => authHeaders});
+        load.mockImplementation(() => loader.load(tile, url));
+
+        loader.load(tile, url);
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(1000);
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+        expect(element.src).toContain('blob:tile');
+
+        // the budget is fresh again, so a later failure is retried instead of being final
+        loader.load(tile, url);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(fetchMock).toHaveBeenCalledTimes(4);
+
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(fetchMock).toHaveBeenCalledTimes(5);
+    });
+
+    it('does not retry after it is aborted', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockResolvedValue({ok: false, status: 503, blob: () => Promise.resolve(new Blob([]))});
+        vi.stubGlobal('fetch', fetchMock);
+
+        const url = 'https://example.com/tile';
+        const {tile, load} = makeTile();
+        const loader = new TileLoader({authHeaders: (): Record<string, string> => authHeaders});
+        load.mockImplementation(() => loader.load(tile, url));
+
+        loader.load(tile, url);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        loader.abortAll();
+        await vi.advanceTimersByTimeAsync(10000);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries an exception document that reports a cancelled query', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockResolvedValue(exceptionDocument('QueryCanceled', 'query canceled'));
+        vi.stubGlobal('fetch', fetchMock);
+
+        const url = 'https://example.com/tile';
+        const {tile, load} = makeTile();
+        const loader = new TileLoader({authHeaders: (): Record<string, string> => authHeaders});
+        load.mockImplementation(() => loader.load(tile, url));
+
+        loader.load(tile, url);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('marks a response that is not an image as tile error', async () => {
+        vi.useFakeTimers();
+        // a document without a known transient error is not worth another try
+        const fetchMock = vi.fn().mockResolvedValue(exceptionDocument('InvalidChannel', 'requested channel: 7'));
+        vi.stubGlobal('fetch', fetchMock);
+
+        const states: TileLoadState[] = [];
+        const image = document.createElement('img');
+        const url = 'https://example.com/tile';
+        const {tile, setState, load} = makeTile(image);
+        const loader = new TileLoader({
+            authHeaders: (): Record<string, string> => authHeaders,
+            onStateChange: (state): void => {
+                states.push(state);
+            },
+        });
+        load.mockImplementation(() => loader.load(tile, url));
+        loader.load(tile, url);
+
+        await vi.advanceTimersByTimeAsync(10000);
+        expect(states).toEqual(['loading', 'error']);
+        expect(setState).toHaveBeenLastCalledWith(TileState.ERROR);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
         expect(image.src).toBe('');
     });
 
