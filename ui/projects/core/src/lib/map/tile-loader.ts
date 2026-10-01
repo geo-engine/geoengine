@@ -1,4 +1,4 @@
-import {Observable} from 'rxjs';
+import {Observable, Subscription} from 'rxjs';
 
 import ImageTile from 'ol/ImageTile';
 import Tile from 'ol/Tile';
@@ -133,6 +133,12 @@ export class TileLoader {
     /** Pending retry timers per tile, so that an obsolete loader does not request tiles anymore. */
     private readonly retries = new Map<ImageTile, ReturnType<typeof setTimeout>>();
 
+    /**
+     * The obsolescence watch of a tile, kept alive across the retries of one visit. Without it a
+     * tile that leaves the viewport while it waits for its retry would still be requested.
+     */
+    private readonly abortSubscriptions = new Map<ImageTile, Subscription>();
+
     /** Tiles with a request in flight or a retry waiting, which is what makes the loader `loading`. */
     private readonly outstanding = new Set<ImageTile>();
 
@@ -180,14 +186,26 @@ export class TileLoader {
 
         const abortSubscription = this.options.abortWhen?.(tile).subscribe((reason) => {
             this.diagnostic({event: 'aborted', tile: tile.getKey(), reason});
+            // A tile that waits for its retry is not in flight anymore, but it must still be
+            // given up on: its request is over and nothing else would stop the retry.
+            this.cancelRetry(tile);
             controller.abort();
         });
 
+        // The subscription outlives the attempt it was created for, so that a tile which becomes
+        // obsolete while it waits for its retry is not requested again. Each attempt replaces it,
+        // which also keeps the handler pointed at the controller of the running request.
+        if (abortSubscription) {
+            this.abortSubscriptions.get(tile)?.unsubscribe();
+            this.abortSubscriptions.set(tile, abortSubscription);
+        }
+
         void this.request(tile, src, controller.signal).then((outcome) => {
-            abortSubscription?.unsubscribe();
             this.controllers.delete(controller);
 
             if (outcome !== 'retry') {
+                this.abortSubscriptions.get(tile)?.unsubscribe();
+                this.abortSubscriptions.delete(tile);
                 this.settle(tile, outcome === 'failed');
             }
         });
@@ -227,6 +245,11 @@ export class TileLoader {
             controller.abort();
         }
         this.controllers.clear();
+
+        for (const subscription of this.abortSubscriptions.values()) {
+            subscription.unsubscribe();
+        }
+        this.abortSubscriptions.clear();
 
         for (const timer of this.retries.values()) {
             clearTimeout(timer);
@@ -320,6 +343,22 @@ export class TileLoader {
         }, attempts * RETRY_DELAY);
         this.retries.set(tile, timer);
         return 'retry';
+    }
+
+    /**
+     * Drops a retry that is still waiting and finishes the tile. Used when the tile became
+     * obsolete: the request is over and only the timer is left, so nothing else would settle it.
+     */
+    private cancelRetry(tile: ImageTile): void {
+        const timer = this.retries.get(tile);
+        if (timer === undefined) {
+            return;
+        }
+        clearTimeout(timer);
+        this.retries.delete(tile);
+        this.abortSubscriptions.get(tile)?.unsubscribe();
+        this.abortSubscriptions.delete(tile);
+        this.settle(tile, false);
     }
 
     /** Fetches with authentication headers. The body of a refused request is read by its caller. */

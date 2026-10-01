@@ -334,6 +334,31 @@ describe('TileLoader', () => {
         expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
+    it('does not retry a tile that became obsolete while it waited for its retry', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockResolvedValue(unavailableResponse);
+        vi.stubGlobal('fetch', fetchMock);
+
+        const url = 'https://example.com/tile';
+        const obsolete = new Subject<string>();
+        const {tile, load} = makeTile();
+        const loader = new TileLoader({
+            authHeaders: (): Record<string, string> => authHeaders,
+            abortWhen: (): Observable<string> => obsolete,
+        });
+        load.mockImplementation(() => loader.load(tile, url));
+
+        // the first attempt fails transiently, so the retry is now waiting
+        loader.load(tile, url);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        // the tile leaves the viewport while it waits, and the retry is given up on
+        obsolete.next('tile extent left the viewport');
+        await vi.advanceTimersByTimeAsync(10000);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
     it('tells the caller about an aborted tile before the tile goes into ERROR', async () => {
         const signals: AbortSignal[] = [];
         stubHangingFetch(signals);
