@@ -462,7 +462,7 @@ mod tests {
             0,
             geo,
             r1,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
 
         let scaled_r1 = t1.map_elements_parallel(|p: u8| p * 2 + 1);
@@ -486,7 +486,7 @@ mod tests {
             0,
             geo,
             r1,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
 
         let scaled_r1 = t1.map_elements(|p| {

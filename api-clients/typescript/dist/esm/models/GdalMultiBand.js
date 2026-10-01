@@ -37,6 +37,7 @@ export function GdalMultiBandFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'type': json['type'],
         'resultDescriptor': RasterResultDescriptorFromJSON(json['resultDescriptor']),
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 export function GdalMultiBandToJSON(json) {
@@ -49,5 +50,6 @@ export function GdalMultiBandToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'type': value['type'],
         'resultDescriptor': RasterResultDescriptorToJSON(value['resultDescriptor']),
+        'cacheTtl': value['cacheTtl'],
     };
 }

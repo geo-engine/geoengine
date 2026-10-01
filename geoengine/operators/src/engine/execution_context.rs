@@ -20,7 +20,9 @@ use crate::util::{Result, create_rayon_thread_pool};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::machine_learning::MlModelName;
-use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
+use geoengine_datatypes::primitives::{
+    CacheTtlSeconds, RasterQueryRectangle, VectorQueryRectangle,
+};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use rayon::ThreadPool;
@@ -46,6 +48,7 @@ pub trait ExecutionContext: Send
 {
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn tiling_specification(&self) -> TilingSpecification;
+    fn default_cache_ttl(&self) -> CacheTtlSeconds;
 
     fn wrap_initialized_raster_operator(
         &self,
@@ -108,6 +111,7 @@ pub struct MockExecutionContext {
     pub named_data: HashMap<NamedData, DataId>,
     pub ml_models: HashMap<MlModelName, MlModelLoadingInfo>,
     pub tiling_specification: TilingSpecification,
+    pub default_cache_ttl: CacheTtlSeconds,
     pub gdal_process_pool: Arc<GdalProcessPool>,
 }
 
@@ -119,6 +123,7 @@ impl TestDefault for MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification: TilingSpecification::test_default(),
+            default_cache_ttl: CacheTtlSeconds::new(0),
             gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
         }
     }
@@ -135,6 +140,7 @@ impl MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification,
+            default_cache_ttl: CacheTtlSeconds::new(0),
             gdal_process_pool: GdalProcessPool::new_with_tokio_handle(
                 handle,
                 2,
@@ -152,6 +158,7 @@ impl MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification,
+            default_cache_ttl: CacheTtlSeconds::new(0),
             gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
         }
     }
@@ -166,6 +173,7 @@ impl MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification,
+            default_cache_ttl: CacheTtlSeconds::new(0),
             gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
         }
     }
@@ -200,6 +208,7 @@ impl MockExecutionContext {
             ChunkByteSize::test_default(),
             self.tiling_specification,
             self.gdal_process_pool.clone(),
+            self.default_cache_ttl,
         )
     }
 
@@ -208,6 +217,7 @@ impl MockExecutionContext {
             chunk_byte_size,
             self.tiling_specification,
             self.gdal_process_pool.clone(),
+            self.default_cache_ttl,
         )
     }
 
@@ -222,6 +232,7 @@ impl MockExecutionContext {
             chunk_byte_size,
             self.tiling_specification,
             self.gdal_process_pool.clone(),
+            self.default_cache_ttl,
             cache,
             quota_tracking,
             quota_checker,
@@ -238,6 +249,7 @@ impl MockExecutionContext {
             self.tiling_specification,
             num_threads,
             self.gdal_process_pool.clone(),
+            self.default_cache_ttl,
         )
     }
 }
@@ -256,6 +268,10 @@ impl ExecutionContext for MockExecutionContext {
 
     fn tiling_specification(&self) -> TilingSpecification {
         self.tiling_specification
+    }
+
+    fn default_cache_ttl(&self) -> CacheTtlSeconds {
+        self.default_cache_ttl
     }
 
     fn wrap_initialized_raster_operator(
@@ -467,6 +483,10 @@ impl ExecutionContext for StatisticsWrappingMockExecutionContext {
         self.inner.tiling_specification
     }
 
+    fn default_cache_ttl(&self) -> CacheTtlSeconds {
+        self.inner.default_cache_ttl
+    }
+
     fn wrap_initialized_raster_operator(
         &self,
         op: Box<dyn InitializedRasterOperator>,
@@ -523,6 +543,31 @@ mod tests {
     use super::*;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+
+    #[tokio::test]
+    async fn cache_ttl_is_scoped_to_the_execution_context() {
+        let mut first = MockExecutionContext::test_default();
+        let mut second = MockExecutionContext::test_default();
+        first.default_cache_ttl = CacheTtlSeconds::new(17);
+        second.default_cache_ttl = CacheTtlSeconds::new(31);
+
+        assert_eq!(first.default_cache_ttl().seconds(), 17);
+        assert_eq!(second.default_cache_ttl().seconds(), 31);
+        assert_eq!(
+            first
+                .mock_query_context_test_default()
+                .default_cache_ttl
+                .seconds(),
+            17
+        );
+        assert_eq!(
+            second
+                .mock_query_context_test_default()
+                .default_cache_ttl
+                .seconds(),
+            31
+        );
+    }
 
     #[tokio::test]
     async fn test() {

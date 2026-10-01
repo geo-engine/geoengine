@@ -71,6 +71,7 @@ function StacDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminator) {
         'datasets': (json['datasets'].map(StacProviderDataset_1.StacProviderDatasetFromJSON)),
         'queryTimeoutSecs': json['queryTimeoutSecs'] == null ? undefined : json['queryTimeoutSecs'],
         'pageLimit': json['pageLimit'] == null ? undefined : json['pageLimit'],
+        'cacheTtlSecs': json['cacheTtlSecs'] == null ? undefined : json['cacheTtlSecs'],
     };
 }
 function StacDataProviderDefinitionToJSON(json) {
@@ -94,5 +95,6 @@ function StacDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator = fals
         'datasets': (value['datasets'].map(StacProviderDataset_1.StacProviderDatasetToJSON)),
         'queryTimeoutSecs': value['queryTimeoutSecs'],
         'pageLimit': value['pageLimit'],
+        'cacheTtlSecs': value['cacheTtlSecs'],
     };
 }

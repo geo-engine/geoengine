@@ -553,7 +553,7 @@ mod tests {
             MultiPoint::many(coordinates).unwrap(),
             vec![TimeInterval::default(); 10],
             HashMap::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 

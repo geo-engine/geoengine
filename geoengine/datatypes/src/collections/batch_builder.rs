@@ -54,7 +54,7 @@ impl RawFeatureCollectionBuilder {
             num_rings: None,
             output: None,
             output_type,
-            cache_hint: CacheHint::default(),
+            cache_hint: CacheHint::no_cache(),
         }
     }
 
@@ -75,7 +75,7 @@ impl RawFeatureCollectionBuilder {
             num_rings: None,
             output: None,
             output_type: VectorDataType::MultiPoint,
-            cache_hint: CacheHint::default(),
+            cache_hint: CacheHint::no_cache(),
         }
     }
 
@@ -97,7 +97,7 @@ impl RawFeatureCollectionBuilder {
             num_rings: None,
             output: None,
             output_type: VectorDataType::MultiLineString,
-            cache_hint: CacheHint::default(),
+            cache_hint: CacheHint::no_cache(),
         }
     }
 
@@ -120,7 +120,7 @@ impl RawFeatureCollectionBuilder {
             num_rings: Some(num_rings),
             output: None,
             output_type: VectorDataType::MultiPolygon,
-            cache_hint: CacheHint::default(),
+            cache_hint: CacheHint::no_cache(),
         }
     }
 

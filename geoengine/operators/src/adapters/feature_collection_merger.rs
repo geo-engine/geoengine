@@ -201,7 +201,7 @@ mod tests {
             MultiPoint::many(coordinates[0..5].to_vec()).unwrap(),
             vec![TimeInterval::default(); 5],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap()
         .byte_size();
@@ -223,7 +223,7 @@ mod tests {
                     MultiPoint::many(coordinates[0..6].to_vec()).unwrap(),
                     vec![TimeInterval::default(); 6],
                     Default::default(),
-                    CacheHint::default()
+                    CacheHint::no_cache()
                 )
                 .unwrap()
             )
@@ -235,7 +235,7 @@ mod tests {
                     MultiPoint::many(coordinates[6..10].to_vec()).unwrap(),
                     vec![TimeInterval::default(); 4],
                     Default::default(),
-                    CacheHint::default()
+                    CacheHint::no_cache()
                 )
                 .unwrap()
             )
@@ -282,19 +282,19 @@ mod tests {
                 MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
                 vec![TimeInterval::new(0, 1).unwrap()],
                 Default::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             MultiPointCollection::from_data(
                 vec![], // should fail
                 vec![TimeInterval::new(0, 1).unwrap()],
                 Default::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             MultiPointCollection::from_data(
                 MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
                 vec![TimeInterval::new(0, 1).unwrap()],
                 Default::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
         ])
         .map_err(Error::from);
@@ -313,7 +313,7 @@ mod tests {
                         MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
                         vec![TimeInterval::new(0, 1).unwrap()],
                         Default::default(),
-                        CacheHint::default()
+                        CacheHint::no_cache()
                     )
                     .unwrap()
                 )
@@ -328,7 +328,7 @@ mod tests {
                         MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
                         vec![TimeInterval::new(0, 1).unwrap()],
                         Default::default(),
-                        CacheHint::default()
+                        CacheHint::no_cache()
                     )
                     .unwrap()
                 )
@@ -344,7 +344,7 @@ mod tests {
                     MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
                     vec![TimeInterval::new(0, 1).unwrap()],
                     Default::default(),
-                    CacheHint::default(),
+                    CacheHint::no_cache(),
                 )
                 .map_err(Error::from),
             )),
@@ -354,7 +354,7 @@ mod tests {
                     MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
                     vec![TimeInterval::new(0, 1).unwrap()],
                     Default::default(),
-                    CacheHint::default(),
+                    CacheHint::no_cache(),
                 )
                 .map_err(Error::from),
             )),
@@ -385,7 +385,7 @@ mod tests {
                         MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
                         vec![TimeInterval::new(0, 1).unwrap(); 2],
                         Default::default(),
-                        CacheHint::default()
+                        CacheHint::no_cache()
                     )
                     .unwrap()
                 )

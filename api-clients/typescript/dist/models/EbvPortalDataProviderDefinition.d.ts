@@ -61,7 +61,7 @@ export interface EbvPortalDataProviderDefinition {
      * @type {number}
      * @memberof EbvPortalDataProviderDefinition
      */
-    cacheTtl?: number;
+    cacheTtl?: number | null;
 }
 /**
  * @export

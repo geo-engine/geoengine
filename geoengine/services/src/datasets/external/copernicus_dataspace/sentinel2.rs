@@ -128,7 +128,7 @@ impl Sentinel2Metadata {
             let part = GdalLoadingInfoTemporalSlice {
                 time: TimeInterval::new(time_start, time_end).context(InvalidTimeInterval)?,
                 params: Some(self.create_gdal_params(item).await?),
-                cache_ttl: CacheTtlSeconds::new(cache_ttl),
+                cache_ttl: Some(CacheTtlSeconds::new(cache_ttl)),
             };
 
             parts.push(part);
@@ -608,9 +608,9 @@ mod tests {
                     retry: None,
                 },
             ),
-            cache_ttl: CacheTtlSeconds::new(
+            cache_ttl: Some(CacheTtlSeconds::new(
                 86400,
-            ),
+            )),
         };
 
         let mut iter = loading_info.info;

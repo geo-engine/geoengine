@@ -460,7 +460,7 @@ mod tests {
                     .unwrap(),
                 ],
                 Default::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap(),
         );
@@ -531,7 +531,7 @@ mod tests {
                 .unwrap(),
             ],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -564,7 +564,7 @@ mod tests {
                     .unwrap(),
                 ],
                 Default::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap(),
         );
@@ -635,7 +635,7 @@ mod tests {
                 .unwrap(),
             ],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 

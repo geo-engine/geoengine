@@ -230,7 +230,10 @@ where
     T: Pixel,
 {
     let result: Result<(GridOrEmpty<GridBoundingBox2D, T>, CacheHint)> = match (accu, tile) {
-        (Ok((empty_grid, ch)), Ok(tile)) if tile.is_empty() => Ok((empty_grid, ch)),
+        (Ok((empty_grid, mut ch)), Ok(tile)) if tile.is_empty() => {
+            ch.merge_with(&tile.cache_hint);
+            Ok((empty_grid, ch))
+        }
         (Ok((mut grid, mut ch)), Ok(tile)) => {
             ch.merge_with(&tile.cache_hint);
             grid.grid_blit_from(&tile.into_inner_positioned_grid());

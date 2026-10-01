@@ -316,7 +316,7 @@ mod tests {
             0,
             geo,
             r1,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
 
         let scaled_r1 = t1.transform_elements::<CheckedMulThenAddTransformation>(2, 1);
@@ -375,7 +375,7 @@ mod tests {
             0,
             geo,
             r1,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
 
         let scaled_r1 = t1.transform_elements::<CheckedSubThenDivTransformation>(2, 1);

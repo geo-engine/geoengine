@@ -29,7 +29,8 @@ use bb8_postgres::{
     tokio_postgres::{Config, Socket, tls::MakeTlsConnect, tls::TlsConnect},
 };
 use geoengine_datatypes::{
-    machine_learning::MlModelName, raster::TilingSpecification, util::test::TestDefault,
+    machine_learning::MlModelName, primitives::CacheTtlSeconds, raster::TilingSpecification,
+    util::test::TestDefault,
 };
 use geoengine_operators::{
     cache::{new_raster_cache::NewRasterCacheEnum, shared_cache::SharedCache},
@@ -65,6 +66,7 @@ where
     volumes: Volumes,
     tile_cache: Arc<SharedCache>,
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
+    default_cache_ttl: CacheTtlSeconds,
     provider_registry: Arc<DataConnectorRegistry>,
     gdal_process_pool: Arc<GdalProcessPool>,
 }
@@ -122,6 +124,7 @@ where
             volumes: Default::default(),
             tile_cache: Arc::new(SharedCache::test_default()),
             new_raster_cache: None,
+            default_cache_ttl: CacheTtlSeconds::new(0),
             provider_registry,
             gdal_process_pool,
         })
@@ -188,6 +191,7 @@ where
                 .expect("tile cache creation should work because the config is valid"),
             ),
             new_raster_cache,
+            default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
             provider_registry,
             gdal_process_pool,
         })
@@ -262,6 +266,7 @@ where
                 .expect("tile cache creation should work because the config is valid"),
             ),
             new_raster_cache,
+            default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
             provider_registry,
             gdal_process_pool,
         };
@@ -455,6 +460,7 @@ where
             self.context.exe_ctx_tiling_spec,
             self.context.thread_pool.clone(),
             self.context.gdal_process_pool.clone(),
+            self.context.default_cache_ttl,
             Some(self.context.tile_cache.clone()),
             self.context.new_raster_cache.clone(),
             Some(
@@ -473,6 +479,7 @@ where
             self.context.exe_ctx_tiling_spec,
             self.context.gdal_process_pool.clone(),
             self.context.new_raster_cache.clone(),
+            self.context.default_cache_ttl,
         ))
     }
 
@@ -1157,7 +1164,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
@@ -1320,7 +1327,7 @@ mod tests {
             priority: Some(33),
             data: test_data!("netcdf4d/").into(),
             overviews: test_data!("netcdf4d/overviews/").into(),
-            cache_ttl: CacheTtlSeconds::new(0),
+            cache_ttl: Some(CacheTtlSeconds::new(0)),
         };
 
         let provider_id = db.add_layer_provider(provider.into()).await.unwrap();
@@ -1399,7 +1406,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1473,7 +1480,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1525,7 +1532,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1583,7 +1590,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1641,7 +1648,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1750,7 +1757,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: vector_descriptor.clone(),
             phantom: Default::default(),
@@ -1777,7 +1784,7 @@ mod tests {
                 granularity: TimeGranularity::Millis,
                 step: 0,
             },
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let id = db
@@ -1796,7 +1803,7 @@ mod tests {
             time: None,
             params: gdal_params.clone(),
             result_descriptor: raster_descriptor.clone(),
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let id = db
@@ -1838,7 +1845,7 @@ mod tests {
                 step: 0,
             },
             band_offset: 0,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let id = db
@@ -4085,7 +4092,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
@@ -4179,7 +4186,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
@@ -4869,7 +4876,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<

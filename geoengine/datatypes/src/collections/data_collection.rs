@@ -246,7 +246,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -289,7 +289,7 @@ mod tests {
             )]
             .into_iter()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
         let column = pc.data("foo").unwrap();
@@ -321,7 +321,7 @@ mod tests {
             ]
             .into_iter()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -346,7 +346,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
         let mut iter = collection.into_iter();

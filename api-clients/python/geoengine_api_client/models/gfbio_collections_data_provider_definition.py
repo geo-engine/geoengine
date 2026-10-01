@@ -93,6 +93,11 @@ class GfbioCollectionsDataProviderDefinition(BaseModel):
         if self.priority is None and "priority" in self.model_fields_set:
             _dict['priority'] = None
 
+        # set to None if cache_ttl (nullable) is None
+        # and model_fields_set contains the field
+        if self.cache_ttl is None and "cache_ttl" in self.model_fields_set:
+            _dict['cacheTtl'] = None
+
         return _dict
 
     @classmethod

@@ -712,7 +712,7 @@ mod tests {
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                         .unwrap()
                         .into(),
-                    CacheHint::default(),
+                    CacheHint::no_cache(),
                 )],
                 result_descriptor,
             },
@@ -796,7 +796,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                             .unwrap()
                             .into(),
-                        CacheHint::default(),
+                        CacheHint::no_cache(),
                     )],
                     result_descriptor: result_descriptor.clone(),
                 },
@@ -815,7 +815,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
                             .unwrap()
                             .into(),
-                        CacheHint::default(),
+                        CacheHint::no_cache(),
                     )],
                     result_descriptor,
                 },
@@ -908,7 +908,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                             .unwrap()
                             .into(),
-                        CacheHint::default(),
+                        CacheHint::no_cache(),
                     )],
                     result_descriptor: result_descriptor.clone(),
                 },
@@ -927,7 +927,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
                             .unwrap()
                             .into(),
-                        CacheHint::default(),
+                        CacheHint::no_cache(),
                     )],
                     result_descriptor,
                 },
@@ -1019,7 +1019,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                             .unwrap()
                             .into(),
-                        CacheHint::default(),
+                        CacheHint::no_cache(),
                     )],
                     result_descriptor: result_descriptor.clone(),
                 },
@@ -1038,7 +1038,7 @@ mod tests {
                         Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
                             .unwrap()
                             .into(),
-                        CacheHint::default(),
+                        CacheHint::no_cache(),
                     )],
                     result_descriptor,
                 },
@@ -1380,7 +1380,7 @@ mod tests {
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                         .unwrap()
                         .into(),
-                    CacheHint::default(),
+                    CacheHint::no_cache(),
                 )],
                 result_descriptor,
             },

@@ -1005,7 +1005,7 @@ mod tests {
                         },
                         0,
                         EmptyGrid2D::<u8>::new(tile_size_in_pixels).into(),
-                        CacheHint::default(),
+                        CacheHint::no_cache(),
                     )],
                     result_descriptor,
                 },
@@ -1075,7 +1075,7 @@ mod tests {
                         Grid2D::new(tile_size_in_pixels, vec![0, 0, 0, 0, 0, 0])
                             .unwrap()
                             .into(),
-                        CacheHint::default(),
+                        CacheHint::no_cache(),
                     )],
                     result_descriptor,
                 },
@@ -1146,7 +1146,7 @@ mod tests {
                         },
                         0,
                         EmptyGrid2D::<u8>::new(tile_size_in_pixels).into(),
-                        CacheHint::default(),
+                        CacheHint::no_cache(),
                     )],
                     result_descriptor,
                 },
@@ -1215,7 +1215,7 @@ mod tests {
                         },
                         0,
                         Grid2D::new(tile_size_in_pixels, vec![4; 6]).unwrap().into(),
-                        CacheHint::default(),
+                        CacheHint::no_cache(),
                     )],
                     result_descriptor,
                 },
@@ -1295,7 +1295,7 @@ mod tests {
                         )
                         .unwrap()
                         .into(),
-                        CacheHint::default(),
+                        CacheHint::no_cache(),
                     )],
                     result_descriptor,
                 },
@@ -1368,7 +1368,7 @@ mod tests {
                         Grid2D::new(tile_size_in_pixels, vec![1, 2, 0, 4, 0, 6, 7, 0])
                             .unwrap()
                             .into(),
-                        CacheHint::default(),
+                        CacheHint::no_cache(),
                     )],
                     result_descriptor,
                 },
@@ -1444,7 +1444,7 @@ mod tests {
                     )
                     .unwrap()
                     .into(),
-                    CacheHint::default(),
+                    CacheHint::no_cache(),
                 )],
                 result_descriptor,
             },
