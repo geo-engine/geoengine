@@ -527,6 +527,11 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
         });
     }
 
+    /**
+     * The tile matrix set of the requested tile matrix set id, as a URL that the `OGCMapTile`
+     * source can read on its own. OpenLayers reads it without authentication headers, so it has
+     * to be served as an object URL. The same applies to the tiling scheme it links to.
+     */
     private async tmsUrl(loader: TileLoader, signal: AbortSignal): Promise<string> {
         const dataConnectorId = this.dataConnectorId();
         const layerId = this.dataLayerId();

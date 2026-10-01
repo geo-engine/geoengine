@@ -139,7 +139,6 @@ export class TileLoader {
     /** Failed attempts per tile, so that a transient failure can be retried a few times. */
     private readonly attempts = new WeakMap<ImageTile, number>();
 
-    private pending = 0;
     private failures = 0;
     private lastError?: string;
 
