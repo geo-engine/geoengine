@@ -18,7 +18,7 @@ import {Subject, Subscription} from 'rxjs';
 import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol/layer';
 import {ImageTile as OlImageTile} from 'ol';
 import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
-import {get as olGetProj} from 'ol/proj';
+import {get as olGetProj, transformExtent} from 'ol/proj';
 import {CoreConfig} from '../config.service';
 import {ProjectService} from '../project/project.service';
 import {LoadingState} from '../project/loading-state.model';
@@ -27,6 +27,7 @@ import {UUID} from '../backend/backend.model';
 import OlFeature from 'ol/Feature';
 import TileState from 'ol/TileState';
 import {Extent} from './map.service';
+import {AbortableTileLayer} from './abortable-tile-layer';
 import {
     NotificationService,
     RasterColorizer,
@@ -101,7 +102,10 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
      * so it is routed through `ERROR` first, which also lets the source fire the matching
      * `tileloaderror` and keep its in-flight tile bookkeeping balanced.
      */
-    protected resetAbortedTile(tile: OlImageTile): void {
+    protected resetAbortedTile(tile: OlImageTile, source: OS): void {
+        if (this._mapLayer instanceof AbortableTileLayer && this._mapLayer.getSource() === source) {
+            this._mapLayer.invalidateAbortedTile(tile);
+        }
         const previous = this.resettingAbortedTile;
         this.resettingAbortedTile = true;
         try {
@@ -245,7 +249,7 @@ export class OlRasterLayerComponent
                 params: {},
             }),
             (source) =>
-                new OlLayerTile({
+                new AbortableTileLayer({
                     source,
                     opacity: 1,
                 }),
@@ -434,7 +438,7 @@ export class OlRasterLayerComponent
                     if (aborted) {
                         // The tile may be requested again later, so reset it to IDLE
                         // instead of leaving it in ERROR (which OpenLayers never re-fetches).
-                        this.resetAbortedTile(tile);
+                        this.resetAbortedTile(tile, source);
                     } else {
                         tile.setState(TileState.ERROR);
                     }
@@ -478,7 +482,7 @@ export class OlRasterLayerComponent
             if (aborted) {
                 cancelSub.unsubscribe();
                 this.tileAbortClients.delete(client);
-                this.resetAbortedTile(tile);
+                this.resetAbortedTile(tile, source);
             } else {
                 client.send();
             }
@@ -497,7 +501,7 @@ export class OlRasterLayerComponent
         if (this._mapLayer) {
             this._mapLayer.setSource(this.source);
         } else if (symbology) {
-            this._mapLayer = new OlLayerTile({
+            this._mapLayer = new AbortableTileLayer({
                 source: this.source,
                 opacity: symbology.opacity,
             });
@@ -615,8 +619,14 @@ export class OlOgcApiMapTileLayerComponent
                             try {
                                 const tile = olTile as OlImageTile;
                                 const tileCoord = tile.getTileCoord();
-                                const tileGrid = source.getTileGridForProjection(olGetProj(this.spatialReference().srsString)!);
-                                const tileExtent = tileGrid.getTileCoordExtent(tileCoord) as Extent;
+                                const sourceProjection = source.getProjection()!;
+                                const tileGrid = source.getTileGridForProjection(sourceProjection);
+                                const tileExtent = transformExtent(
+                                    tileGrid.getTileCoordExtent(tileCoord),
+                                    sourceProjection,
+                                    olGetProj(this.spatialReference().srsString)!,
+                                    8,
+                                ) as Extent;
 
                                 cancelSub = this.projectService
                                     .createQueryAbortStream(this.layerId(), tileExtent)
@@ -659,7 +669,7 @@ export class OlOgcApiMapTileLayerComponent
                                 if (aborted) {
                                     // The tile may be requested again later, so reset it to IDLE
                                     // instead of leaving it in ERROR (which OpenLayers never re-fetches).
-                                    this.resetAbortedTile(olTile as OlImageTile);
+                                    this.resetAbortedTile(olTile as OlImageTile, source);
                                 } else {
                                     olTile.setState(TileState.ERROR);
                                 }
@@ -688,7 +698,7 @@ export class OlOgcApiMapTileLayerComponent
         super(
             new ImageTile({}), // use as placeholder until the actual source is loaded
             (_source) => {
-                return new OlLayerTile();
+                return new AbortableTileLayer();
             },
         );
 
