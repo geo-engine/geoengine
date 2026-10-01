@@ -7,11 +7,16 @@ use actix_web::{
         Method,
         header::{
             ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS,
-            ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue, VARY,
+            ACCESS_CONTROL_ALLOW_ORIGIN, ACCESS_CONTROL_MAX_AGE, HeaderValue, VARY,
         },
     },
     middleware::Next,
 };
+
+/// How long a browser may remember that a cross-origin request is allowed. Without it the
+/// browser asks again before every tile request, which doubles the number of requests while
+/// panning and shows up as a stream of `OPTIONS` entries in the network tab.
+const PREFLIGHT_MAX_AGE_SECONDS: &str = "3600";
 
 fn ogc_config() -> Result<config::Ogc, Error> {
     config::get_config_element::<config::Ogc>().map_err(Into::into)
@@ -82,6 +87,12 @@ where
             HttpResponse::NoContent().message_body(NoneBody::new())?,
         );
         apply_cors_headers(&mut res, &cors_config)?;
+        // Only a preflight answer is cached, so the header is set here and not in
+        // `apply_cors_headers`, which is also used for the actual tile response.
+        res.headers_mut().insert(
+            ACCESS_CONTROL_MAX_AGE,
+            HeaderValue::from_static(PREFLIGHT_MAX_AGE_SECONDS),
+        );
 
         // Short-circuit preflight: custom 204 response
         return Ok(res.map_into_right_body());
@@ -157,6 +168,13 @@ mod tests {
                 .and_then(|value| value.to_str().ok()),
             Some("Origin"),
         );
+        // Only the preflight answer is worth caching.
+        assert_eq!(
+            res.headers()
+                .get(header::ACCESS_CONTROL_MAX_AGE)
+                .and_then(|value| value.to_str().ok()),
+            None,
+        );
     }
 
     #[actix_web::test]
@@ -205,6 +223,13 @@ mod tests {
                 .get(header::VARY)
                 .and_then(|value| value.to_str().ok()),
             Some("Origin"),
+        );
+        // Without this the browser asks again before every tile request.
+        assert_eq!(
+            res.headers()
+                .get(header::ACCESS_CONTROL_MAX_AGE)
+                .and_then(|value| value.to_str().ok()),
+            Some("3600"),
         );
     }
 }
