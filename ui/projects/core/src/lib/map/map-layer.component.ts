@@ -18,8 +18,7 @@ import {Observable, Subject, Subscription} from 'rxjs';
 import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol/layer';
 import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
 import OlImageTile from 'ol/ImageTile';
-import TileGrid from 'ol/tilegrid/TileGrid';
-import {get as olGetProj, transformExtent, type Projection, equivalent} from 'ol/proj';
+import {get as olGetProj} from 'ol/proj';
 import {CoreConfig} from '../config.service';
 import {NotificationService} from '@geoengine/common';
 import {ProjectService} from '../project/project.service';
@@ -39,8 +38,7 @@ import {
     olExtentToTuple,
 } from '@geoengine/common';
 import {AbortableTileLayer} from './abortable-tile-layer';
-import {TileDiagnostic, TileLoadState, TileLoader, tileExtent} from './tile-loader';
-import {Extent} from './map.service';
+import {TileDiagnostic, TileLoadState, TileLoader, tileExtentInViewProjection} from './tile-loader';
 
 /**
  * The `ol-layer` component represents a single layer object of open layers.
@@ -95,24 +93,6 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
         }
 
         console.warn(`[tiles:${this.layerId()}]`, diagnostic);
-    }
-
-    /**
-     * The extent of a tile in the projection the viewport is in, which is what
-     * {@link ProjectService.createQueryAbortStream} compares against.
-     *
-     * Reading the tile coordinate from the grid of the view projection would be wrong whenever the
-     * layer and the view disagree: `getTileGridForProjection` then hands out a default grid in the
-     * view projection, and the coordinate of the tile means nothing in it. Comparing such an
-     * extent against the viewport makes the abort either fire for tiles that are still on screen
-     * or never fire for tiles that left it.
-     */
-    protected extentInViewProjection(tileGrid: TileGrid, tile: OlImageTile, sourceProjection: Projection, viewSrs: string): Extent {
-        const viewProjection = olGetProj(viewSrs)!;
-        if (equivalent(sourceProjection, viewProjection)) {
-            return tileExtent(tileGrid, tile);
-        }
-        return transformExtent(tileExtent(tileGrid, tile), sourceProjection, viewProjection, 8) as Extent;
     }
 
     /**
@@ -398,7 +378,7 @@ export class OlRasterLayerComponent
             abortWhen: (tile): Observable<string> =>
                 this.projectService.createQueryAbortStream(
                     this.layerId(),
-                    this.extentInViewProjection(tileGrid, tile, sourceProjection, spatialReference.srsString),
+                    tileExtentInViewProjection(tileGrid, tile, sourceProjection, olGetProj(spatialReference.srsString)!),
                 ),
             onTileError: (tile): void => this.invalidateTileReprojection(tile),
             onStateChange: (state): void => this.reportDataStatus(state),
@@ -482,11 +462,21 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
             const loader = new TileLoader({
                 signal: abortSignal,
                 authHeaders: (): Record<string, string> => ({Authorization: `Bearer ${this.sessionToken()}`}),
-                // The source reports its own projection, which the backend picks when it builds the
-                // tile matrix set. Reading the tile coordinate from that grid and transforming it
-                // to the projection of the viewport is what makes the comparison below meaningful.
-                abortWhen: (tile): Observable<string> =>
-                    this.projectService.createQueryAbortStream(this.layerId(), this.ogcTileExtent(source, tile)),
+                abortWhen: (tile): Observable<string> => {
+                    // The source reports its own projection, which the backend picked when it built
+                    // the tile matrix set, so its tile coordinates belong to that grid and not to
+                    // the grid of the projection the viewport is in.
+                    const sourceProjection = source.getProjection()!;
+                    return this.projectService.createQueryAbortStream(
+                        this.layerId(),
+                        tileExtentInViewProjection(
+                            source.getTileGridForProjection(sourceProjection),
+                            tile,
+                            sourceProjection,
+                            olGetProj(this.spatialReference().srsString)!,
+                        ),
+                    );
+                },
                 onTileError: (tile): void => this.invalidateTileReprojection(tile),
                 onStateChange: (state): void => {
                     this.loading.emit(state === 'loading');
@@ -537,28 +527,6 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
         });
     }
 
-    /**
-     * The extent of a tile of an OGC tile source in the projection of the viewport.
-     *
-     * The tile coordinate belongs to the grid of the source projection, which the backend may have
-     * picked freely. Asking for the grid of the view projection instead would silently return a
-     * default grid whenever the two differ, and the resulting extent would not describe the tile.
-     */
-    private ogcTileExtent(source: OGCMapTile, tile: OlImageTile): Extent {
-        const sourceProjection = source.getProjection()!;
-        return this.extentInViewProjection(
-            source.getTileGridForProjection(sourceProjection),
-            tile,
-            sourceProjection,
-            this.spatialReference().srsString,
-        );
-    }
-
-    /**
-     * The tile matrix set of the requested tile matrix set id, as a URL that the `OGCMapTile`
-     * source can read on its own. OpenLayers reads it without authentication headers, so it has
-     * to be served as an object URL. The same applies to the tiling scheme it links to.
-     */
     private async tmsUrl(loader: TileLoader, signal: AbortSignal): Promise<string> {
         const dataConnectorId = this.dataConnectorId();
         const layerId = this.dataLayerId();

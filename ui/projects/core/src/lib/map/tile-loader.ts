@@ -4,6 +4,7 @@ import ImageTile from 'ol/ImageTile';
 import Tile from 'ol/Tile';
 import TileState from 'ol/TileState';
 import TileGrid from 'ol/tilegrid/TileGrid';
+import {equivalent, transformExtent, type Projection} from 'ol/proj';
 
 import {Extent} from './map.service';
 
@@ -25,11 +26,25 @@ interface ServiceException {
     readonly message: string;
 }
 
-/** The only exception documents worth another try: the server gave up on the query itself. */
+/**
+ * The exception documents worth another try. Only `QueryCanceled` is known to be transient: the
+ * server gave up on the query itself, so a new request is a new query. The others are transport
+ * shaped (`Io`, `Reqwest`) or wrap one (`QueryingProcessorFailed`), but they also wrap permanent
+ * failures, so a retry can be wasted. A wasted retry costs one request and a few seconds, while a
+ * wrongly terminal classification leaves the tile blank, which is the bug this set exists to avoid.
+ * The backend has no notion of retryability to ask, so this stays a judgement call.
+ */
 const TRANSIENT_EXCEPTIONS = new Set(['QueryCanceled', 'QueryingProcessorFailed', 'Io', 'Reqwest']);
 
-/** What a tile got out of the response it was sent. */
-type AssignResult = 'ok' | 'transient' | 'terminal';
+/** A request that did not produce a tile, and whether another attempt could still help. */
+interface Failure {
+    readonly transient: boolean;
+    /** The exception document the server sent instead of a tile, if any. */
+    readonly exception?: ServiceException;
+}
+
+/** A tile is done, waiting for its retry, or given up on. */
+type LoadOutcome = 'ok' | 'retry' | 'failed';
 
 /**
  * The two things that go wrong with a tile without any loader noticing.
@@ -83,6 +98,25 @@ interface TileLoaderOptions {
 export const tileExtent = (tileGrid: TileGrid, tile: ImageTile): Extent => tileGrid.getTileCoordExtent(tile.getTileCoord()) as Extent;
 
 /**
+ * The extent of a tile in the projection the viewport is in, which is what
+ * {@link ProjectService.createQueryAbortStream} compares against.
+ *
+ * The tile coordinate has to be read from the grid of the source projection. Asking for the grid of
+ * the view projection silently hands out a default grid whenever the two differ, and the coordinate
+ * means nothing in it: such an extent either aborts tiles that are still on screen or never aborts
+ * tiles that left it.
+ */
+export const tileExtentInViewProjection = (
+    tileGrid: TileGrid,
+    tile: ImageTile,
+    sourceProjection: Projection,
+    viewProjection: Projection,
+): Extent => {
+    const extent = tileExtent(tileGrid, tile);
+    return equivalent(sourceProjection, viewProjection) ? extent : (transformExtent(extent, sourceProjection, viewProjection, 8) as Extent);
+};
+
+/**
  * Loads the tiles of an OpenLayers tile source with `fetch` and serves them as object URLs.
  *
  * OpenLayers would load tiles as plain `<img>` requests, which cannot carry an `Authorization`
@@ -96,8 +130,11 @@ export class TileLoader {
     private readonly controllers = new Set<AbortController>();
     private readonly objectUrls = new Set<string>();
 
-    /** Pending retries, so that an obsolete loader does not request tiles anymore. */
-    private readonly timers = new Set<ReturnType<typeof setTimeout>>();
+    /** Pending retry timers per tile, so that an obsolete loader does not request tiles anymore. */
+    private readonly retries = new Map<ImageTile, ReturnType<typeof setTimeout>>();
+
+    /** Tiles with a request in flight or a retry waiting, which is what makes the loader `loading`. */
+    private readonly outstanding = new Set<ImageTile>();
 
     /** Failed attempts per tile, so that a transient failure can be retried a few times. */
     private readonly attempts = new WeakMap<ImageTile, number>();
@@ -128,7 +165,17 @@ export class TileLoader {
         const controller = new AbortController();
         this.controllers.add(controller);
 
-        if (this.pending++ === 0) {
+        // A tile that is still counted as outstanding is the retry of a request that failed, so it
+        // keeps the attempt budget of the request it follows. Any other call is a fresh visit and
+        // gets a new budget.
+        const retry = this.outstanding.has(tile);
+        if (!retry) {
+            this.attempts.delete(tile);
+        }
+
+        const wasIdle = this.outstanding.size === 0;
+        this.outstanding.add(tile);
+        if (wasIdle) {
             this.state('loading');
         }
 
@@ -137,15 +184,12 @@ export class TileLoader {
             controller.abort();
         });
 
-        void this.request(tile, src, controller.signal).then((failed) => {
+        void this.request(tile, src, controller.signal).then((outcome) => {
             abortSubscription?.unsubscribe();
             this.controllers.delete(controller);
 
-            this.failures += failed ? 1 : 0;
-            if (--this.pending === 0) {
-                const state = this.failures > 0 ? 'error' : 'idle';
-                this.failures = 0;
-                this.state(state);
+            if (outcome !== 'retry') {
+                this.settle(tile, outcome === 'failed');
             }
         });
     };
@@ -158,6 +202,8 @@ export class TileLoader {
     readonly jsonUrl = async (url: string, signal: AbortSignal, transform?: (metadata: unknown) => Promise<void>): Promise<string> => {
         const response = await this.fetch(url, signal);
         if (!response.ok) {
+            // There is no retry for metadata, so the failure is final from the start.
+            this.reportError(await this.readException(await response.blob()));
             throw new Error(`Request failed with status ${response.status}: ${url}`);
         }
 
@@ -183,10 +229,16 @@ export class TileLoader {
         }
         this.controllers.clear();
 
-        for (const timer of this.timers) {
+        for (const timer of this.retries.values()) {
             clearTimeout(timer);
         }
-        this.timers.clear();
+        // A tile that only waits for its retry is done without another request, and one whose
+        // request was aborted is settled by that request. Both keep the loader from staying
+        // `loading` forever.
+        for (const tile of this.retries.keys()) {
+            this.settle(tile, false);
+        }
+        this.retries.clear();
 
         for (const objectUrl of this.objectUrls) {
             URL.revokeObjectURL(objectUrl);
@@ -194,20 +246,23 @@ export class TileLoader {
         this.objectUrls.clear();
     }
 
-    private async request(tile: ImageTile, src: string, signal: AbortSignal): Promise<boolean> {
+    private async request(tile: ImageTile, src: string, signal: AbortSignal): Promise<LoadOutcome> {
         try {
             const response = await this.fetch(src, signal);
             if (!response.ok) {
-                return this.fail(tile, TRANSIENT_STATUSES.has(response.status));
+                return this.fail(tile, {
+                    transient: TRANSIENT_STATUSES.has(response.status),
+                    exception: await this.readException(await response.blob()),
+                });
             }
 
             const result = await this.assignImage(tile, await response.blob());
             if (result !== 'ok') {
-                return this.fail(tile, result === 'transient');
+                return this.fail(tile, result);
             }
 
             this.attempts.delete(tile);
-            return false;
+            return 'ok';
         } catch {
             if (signal.aborted) {
                 // The request is obsolete, but the tile may be needed again. OpenLayers only
@@ -216,58 +271,65 @@ export class TileLoader {
                 this.options.onTileError?.(tile);
                 tile.setState(TileState.ERROR);
                 tile.setState(TileState.IDLE);
-                return false;
+                return 'ok';
             }
 
             // anything that is not a refused request is a problem of the connection
-            return this.fail(tile, true);
+            return this.fail(tile, {transient: true});
         }
     }
 
     /**
-     * Marks a tile as failed and returns whether the failure is final. OpenLayers never
+     * Marks a tile as failed and returns what the caller should do next. OpenLayers never
      * re-requests `ERROR` tiles, so a transient failure is retried by this loader after a delay,
      * up to {@link MAX_TILE_ATTEMPTS} tries.
      */
-    private fail(tile: ImageTile, transient: boolean): boolean {
+    private fail(tile: ImageTile, failure: Failure): LoadOutcome {
         const attempts = (this.attempts.get(tile) ?? 0) + 1;
         this.attempts.set(tile, attempts);
-
-        const final = !transient || attempts >= MAX_TILE_ATTEMPTS;
 
         // Both an abort and a failure put a tile into `ERROR`, which is what makes a parent
         // reprojection give up on it, so both have to invalidate that reprojection.
         this.options.onTileError?.(tile);
         tile.setState(TileState.ERROR);
 
-        if (!final) {
-            // The tile stays in `ERROR` on purpose: OpenLayers re-requests `IDLE` tiles on the
-            // very next frame, which would defeat the delay. A tile that left the viewport is
-            // released as `EMPTY`, so its pending retry does nothing.
-            const timer = setTimeout(() => {
-                this.timers.delete(timer);
-                tile.load();
-            }, attempts * RETRY_DELAY);
-            this.timers.add(timer);
-            return false;
+        // A tile that was released in the meantime is gone from the display, so there is nothing
+        // to finish and nothing to count.
+        if (tile.getState() === TileState.EMPTY) {
+            return 'ok';
         }
 
-        return true;
+        if (!failure.transient || attempts >= MAX_TILE_ATTEMPTS) {
+            // Reporting only once the tile is given up on keeps a failure that a retry fixes from
+            // reaching the user as an error that went away on its own.
+            if (failure.exception) {
+                this.reportError(failure.exception);
+            }
+            return 'failed';
+        }
+
+        // The tile stays in `ERROR` on purpose: OpenLayers re-requests `IDLE` tiles on the
+        // very next frame, which would defeat the delay. A tile that left the viewport is
+        // released as `EMPTY`, so its pending retry does nothing.
+        const timer = setTimeout(() => {
+            this.retries.delete(tile);
+            if (tile.getState() !== TileState.ERROR) {
+                this.settle(tile, false);
+                return;
+            }
+            tile.load();
+        }, attempts * RETRY_DELAY);
+        this.retries.set(tile, timer);
+        return 'retry';
     }
 
-    /** Fetches with authentication headers and reports the body of a request the server refused. */
+    /** Fetches with authentication headers. The body of a refused request is read by its caller. */
     private async fetch(url: string, signal: AbortSignal): Promise<Response> {
-        const response = await fetch(url, {headers: this.options.authHeaders(), signal});
-
-        if (!response.ok) {
-            this.reportError(await this.readException(await response.blob()));
-        }
-
-        return response;
+        return fetch(url, {headers: this.options.authHeaders(), signal});
     }
 
     /** Returns how the tile should be treated after it got the given blob. */
-    private async assignImage(tile: ImageTile, blob: Blob): Promise<AssignResult> {
+    private async assignImage(tile: ImageTile, blob: Blob): Promise<'ok' | Failure> {
         const image = tile.getImage() as HTMLImageElement | null;
         if (!image) {
             // the tile was dropped from the cache while the request was in flight
@@ -278,8 +340,7 @@ export class TileLoader {
             // The WMS endpoint answers failed requests with HTTP 200 and an exception document,
             // so a successful response is not necessarily a tile.
             const exception = await this.readException(blob);
-            this.reportError(exception);
-            return TRANSIENT_EXCEPTIONS.has(exception.error ?? '') ? 'transient' : 'terminal';
+            return {transient: TRANSIENT_EXCEPTIONS.has(exception.error ?? ''), exception};
         }
 
         this.lastError = undefined;
@@ -313,6 +374,22 @@ export class TileLoader {
 
     private state(state: TileLoadState): void {
         this.options.onStateChange?.(state);
+    }
+
+    /**
+     * Records that a tile is done, counts a final failure, and reports the aggregate state once no
+     * tile is left. A tile waiting for its retry is still outstanding, so the loader stays
+     * `loading` across the backoff instead of flickering.
+     */
+    private settle(tile: ImageTile, failed: boolean): void {
+        this.failures += failed ? 1 : 0;
+        this.outstanding.delete(tile);
+
+        if (this.outstanding.size === 0) {
+            const state = this.failures > 0 ? 'error' : 'idle';
+            this.failures = 0;
+            this.state(state);
+        }
     }
 
     private diagnostic(diagnostic: TileDiagnostic): void {

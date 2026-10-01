@@ -3,9 +3,11 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import ImageTile from 'ol/ImageTile';
 import TileState from 'ol/TileState';
+import TileGrid from 'ol/tilegrid/TileGrid';
+import {get as getProjection, transformExtent} from 'ol/proj';
 import {Observable, Subject} from 'rxjs';
 
-import {TileLoadState, TileLoader} from './tile-loader';
+import {TileLoadState, TileLoader, tileExtentInViewProjection} from './tile-loader';
 
 interface FakeTile {
     tile: ImageTile;
@@ -15,14 +17,21 @@ interface FakeTile {
 }
 
 const makeTile = (image: HTMLImageElement | null = document.createElement('img')): FakeTile => {
-    const setState = vi.fn();
+    // The loader reads the tile state to tell a retry from a fresh request and to skip released
+    // tiles, so the double has to keep track of it like OpenLayers does.
+    let state: number = TileState.LOADING;
+    const setState = vi.fn((next: number) => {
+        if (state !== TileState.EMPTY) {
+            state = next;
+        }
+    });
     const load = vi.fn();
     return {
         tile: {
             getTileCoord: () => [0, 0, 0],
             getKey: () => '0/0/0',
             getImage: () => image,
-            getState: () => 1,
+            getState: () => state,
             setState,
             load,
         } as unknown as ImageTile,
@@ -191,15 +200,16 @@ describe('TileLoader', () => {
 
         loader.load(tile, url);
         await vi.advanceTimersByTimeAsync(0);
-        expect(states).toEqual(['loading', 'idle']);
+        // a tile waiting for its retry keeps the layer loading instead of flickering to idle
+        expect(states).toEqual(['loading']);
 
         await vi.advanceTimersByTimeAsync(1000);
-        expect(states).toEqual(['loading', 'idle', 'loading', 'idle']);
+        expect(states).toEqual(['loading']);
 
         await vi.advanceTimersByTimeAsync(2000);
 
         // the last attempt is final, so the tile is not left in a loadable state
-        expect(states).toEqual(['loading', 'idle', 'loading', 'idle', 'loading', 'error']);
+        expect(states).toEqual(['loading', 'error']);
         expect(setState).toHaveBeenLastCalledWith(TileState.ERROR);
         expect(fetchMock).toHaveBeenCalledTimes(3);
 
@@ -237,6 +247,66 @@ describe('TileLoader', () => {
 
         await vi.advanceTimersByTimeAsync(1000);
         expect(fetchMock).toHaveBeenCalledTimes(5);
+    });
+
+    it('starts a fresh attempt budget when a tile is requested again after an abort', async () => {
+        vi.useFakeTimers();
+        const signals: AbortSignal[] = [];
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(unavailableResponse)
+            .mockImplementationOnce((_url: string, init: RequestInit) => hangingRequest(signals, init))
+            .mockResolvedValue(unavailableResponse);
+        vi.stubGlobal('fetch', fetchMock);
+
+        const url = 'https://example.com/tile';
+        const obsolete = new Subject<string>();
+        const {tile, load} = makeTile();
+        const loader = new TileLoader({
+            authHeaders: (): Record<string, string> => authHeaders,
+            abortWhen: (): Observable<string> => obsolete,
+        });
+        load.mockImplementation(() => loader.load(tile, url));
+
+        // fail once, then have the retry aborted while it is in flight
+        loader.load(tile, url);
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        obsolete.next('resolution changed');
+        expect(signals[0].aborted).toBe(true);
+        await vi.advanceTimersByTimeAsync(0);
+
+        // the abort is not a failure of this visit, so the old failures are not carried over
+        loader.load(tile, url);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(fetchMock).toHaveBeenCalledTimes(4);
+    });
+
+    it('reports a failure only once the tile is given up on', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(exceptionDocument('QueryCanceled', 'the query was canceled'))
+            .mockResolvedValueOnce(imageResponse);
+        vi.stubGlobal('fetch', fetchMock);
+
+        const onError = vi.fn();
+        const url = 'https://example.com/tile';
+        const {tile, load} = makeTile();
+        const loader = new TileLoader({authHeaders: (): Record<string, string> => authHeaders, onError});
+        load.mockImplementation(() => loader.load(tile, url));
+
+        loader.load(tile, url);
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+
+        // the retry fixed the tile, so the user never sees an error that went away on its own
+        expect(onError).not.toHaveBeenCalled();
     });
 
     it('does not retry after it is aborted', async () => {
@@ -437,5 +507,23 @@ describe('TileLoader', () => {
         expect(jsonUrl).toBe('blob:metadata');
         expect(signals[0].aborted).toBe(true);
         expect(revokeObjectUrl).toHaveBeenCalledWith('blob:metadata');
+    });
+});
+
+describe('tileExtentInViewProjection', () => {
+    const tileGrid = new TileGrid({origin: [0, 256], resolutions: [1], tileSize: 256});
+    const tile = {getTileCoord: () => [0, 0, 0]} as unknown as ImageTile;
+
+    it('leaves the extent alone when the layer and the view share a projection', () => {
+        const projection = getProjection('EPSG:3857')!;
+        expect(tileExtentInViewProjection(tileGrid, tile, projection, projection)).toEqual([0, 0, 256, 256]);
+    });
+
+    it('moves the extent into the projection the viewport is in', () => {
+        const source = getProjection('EPSG:3857')!;
+        const view = getProjection('EPSG:4326')!;
+        // reading the coordinate from the grid of the view projection would answer in metres
+        // instead of degrees, which is what made the abort fire for tiles still on screen
+        expect(tileExtentInViewProjection(tileGrid, tile, source, view)).toEqual(transformExtent([0, 0, 256, 256], source, view, 8));
     });
 });
