@@ -20,7 +20,6 @@ import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {toSignal} from '@angular/core/rxjs-interop';
-import {Subject, debounce, distinctUntilChanged, timer, startWith, of, type Observable} from 'rxjs';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {MatRadioModule} from '@angular/material/radio';
 import {A11yModule} from '@angular/cdk/a11y';
@@ -28,20 +27,6 @@ import {MeasureDirective, MeasurementType} from './measure.directive';
 import {isActive, Router, RouterModule} from '@angular/router';
 import {addCitationToMapImage} from './map-image-export';
 import {EdvLayersService} from '../layers/layers.service';
-
-/**
- * Shows the loading indicator as soon as a tile starts loading and hides it 150 ms after the last
- * tile finished, so that quickly succeeding loads do not make it flicker.
- *
- * Note: the duration observable must emit for `debounce` to pass the value on, so the `loading`
- * case has to return `of(undefined)` instead of an empty observable.
- */
-export const tileLoadingIndicator = (tileLoading$: Observable<boolean>): Observable<boolean> =>
-    tileLoading$.pipe(
-        distinctUntilChanged(),
-        debounce((loading) => (loading ? of(undefined) : timer(150))),
-        startWith(false),
-    );
 
 @Component({
     selector: 'geoengine-main',
@@ -96,9 +81,7 @@ export class MainComponent {
     readonly currentTime = toSignal(this.projectService.getTimeStream());
 
     readonly mapTileLayer = computed(() => this.edvLayersService.mapTileLayer());
-    private readonly tileLoading$ = new Subject<boolean>();
-
-    readonly tileLoading = toSignal(tileLoadingIndicator(this.tileLoading$), {initialValue: false});
+    readonly tileLoading = signal(false);
     readonly isLoading = computed(() => (this.edvLayersService.mapTileLayerResource.isLoading() ?? false) || this.tileLoading());
 
     readonly isLayersActive = isActive('/map/layers', this.router);
@@ -147,7 +130,7 @@ export class MainComponent {
     }
 
     onTileLoading(loading: boolean): void {
-        this.tileLoading$.next(loading);
+        this.tileLoading.set(loading);
     }
 
     onResize(): void {
