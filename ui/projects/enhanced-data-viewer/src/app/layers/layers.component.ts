@@ -77,11 +77,17 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
         </div>
         <mat-divider></mat-divider>
 
-        @if (legendLayer.value(); as legend) {
+        @if (isLegendVisible()) {
             <div class="legend">
                 <h2>Legend</h2>
-                <span class="legend-layer-name" [matTooltip]="legend.layer.name">{{ legend.layer.name }}</span>
-                <geoengine-raster-legend-view [layer]="legend.layer" [metadata]="legend.metadata"></geoengine-raster-legend-view>
+                @if (legendLayer.isLoading()) {
+                    <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
+                } @else if (legendLayer.status() === 'error') {
+                    <span class="legend-error">Failed to load legend</span>
+                } @else if (legend(); as legend) {
+                    <span class="legend-layer-name" [matTooltip]="legend.layer.name">{{ legend.layer.name }}</span>
+                    <geoengine-raster-legend-view [layer]="legend.layer" [metadata]="legend.metadata"></geoengine-raster-legend-view>
+                }
             </div>
         }
     `,
@@ -243,6 +249,15 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                     overflow: hidden;
                     text-overflow: ellipsis;
                 }
+
+                .legend-error {
+                    font-size: $text2;
+                    color: var(--mat-sys-error);
+                }
+
+                mat-progress-spinner {
+                    margin: 0 auto;
+                }
             }
         `,
     ],
@@ -306,6 +321,14 @@ export class LayersComponent {
             return {layer: rasterLayer, metadata};
         },
     });
+
+    /** `value()` throws when the resource is in error state, so guard it with `hasValue()`. */
+    readonly legend = computed(() => (this.legendLayer.hasValue() ? this.legendLayer.value() : undefined));
+
+    /** Only show the legend if there is a map tile layer and the legend is either loading, in error state, or has a value. */
+    readonly isLegendVisible = computed(
+        () => !!this.mapTileLayer() && (this.legendLayer.isLoading() || this.legendLayer.status() === 'error' || !!this.legend()),
+    );
 
     constructor() {
         afterNextRender(() => {
