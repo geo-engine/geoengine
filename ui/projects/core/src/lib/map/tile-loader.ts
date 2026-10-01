@@ -31,6 +31,26 @@ const TRANSIENT_EXCEPTIONS = new Set(['QueryCanceled', 'QueryingProcessorFailed'
 /** What a tile got out of the response it was sent. */
 type AssignResult = 'ok' | 'transient' | 'terminal';
 
+/**
+ * The two things that go wrong with a tile without any loader noticing.
+ *
+ * Both are emitted only when `onDiagnostic` is given. `aborted` says why a request was given up
+ * on, which is the only way to tell a cancelled tile from a broken one. `decoded` reports the size
+ * the browser actually decoded the image to, because OpenLayers turns an image that loads without
+ * pixels into an `EMPTY` tile and never requests it again.
+ */
+export type TileDiagnostic = {
+    readonly event: 'aborted' | 'decoded';
+    readonly tile: string;
+    /** For `aborted`, the condition that made the request obsolete. */
+    readonly reason?: string;
+    /** For `decoded`, the size of the decoded image. `0` means OpenLayers turns this into an `EMPTY` tile. */
+    readonly naturalWidth?: number;
+    readonly naturalHeight?: number;
+    /** For `decoded`, the tile state after the image settled, see `TileState`. */
+    readonly state?: number;
+};
+
 interface TileLoaderOptions {
     /** Aborts all pending requests and frees all object URLs. Aborted when the source is replaced or the layer is destroyed. */
     readonly signal?: AbortSignal;
@@ -38,14 +58,23 @@ interface TileLoaderOptions {
     /** Headers of every request, e.g. `{Authorization: 'Bearer …'}`. Read per request, so a new session applies to pending loads. */
     readonly authHeaders: () => Record<string, string>;
 
-    /** Emits once the request of the given tile is no longer needed (e.g. the tile left the viewport). */
-    readonly abortWhen?: (tile: ImageTile) => Observable<unknown>;
+    /** Emits, with the condition that made the tile obsolete, when a request should be given up on. */
+    readonly abortWhen?: (tile: ImageTile) => Observable<string>;
+
+    /**
+     * Called right before a tile is put into `ERROR`, both when its request was aborted and when
+     * it failed. Must not change the tile state itself.
+     */
+    readonly onTileError?: (tile: ImageTile) => void;
 
     /** Emits the aggregated state of all tiles of this loader. */
     readonly onStateChange?: (state: TileLoadState) => void;
 
     /** Emits the message of an exception document that the server answered instead of a tile. */
     readonly onError?: (message: string) => void;
+
+    /** Reports the two failures a tile load can hide. Only for debugging, see {@link TileDiagnostic}. */
+    readonly onDiagnostic?: (diagnostic: TileDiagnostic) => void;
 }
 
 /**
@@ -91,6 +120,7 @@ export class TileLoader {
             // This loader is obsolete (the source was replaced or the layer destroyed), but
             // OpenLayers re-requests tiles that end up `IDLE`. Marking it `ERROR` stops that
             // instead of firing a request that nobody would ever abort.
+            this.options.onTileError?.(tile);
             tile.setState(TileState.ERROR);
             return;
         }
@@ -102,7 +132,10 @@ export class TileLoader {
             this.state('loading');
         }
 
-        const abortSubscription = this.options.abortWhen?.(tile).subscribe(() => controller.abort());
+        const abortSubscription = this.options.abortWhen?.(tile).subscribe((reason) => {
+            this.diagnostic({event: 'aborted', tile: tile.getKey(), reason});
+            controller.abort();
+        });
 
         void this.request(tile, src, controller.signal).then((failed) => {
             abortSubscription?.unsubscribe();
@@ -180,6 +213,7 @@ export class TileLoader {
                 // The request is obsolete, but the tile may be needed again. OpenLayers only
                 // re-requests `IDLE` tiles and `setState` rejects `LOADING` to `IDLE`, so the
                 // tile has to pass through `ERROR`.
+                this.options.onTileError?.(tile);
                 tile.setState(TileState.ERROR);
                 tile.setState(TileState.IDLE);
                 return false;
@@ -199,9 +233,14 @@ export class TileLoader {
         const attempts = (this.attempts.get(tile) ?? 0) + 1;
         this.attempts.set(tile, attempts);
 
+        const final = !transient || attempts >= MAX_TILE_ATTEMPTS;
+
+        // Both an abort and a failure put a tile into `ERROR`, which is what makes a parent
+        // reprojection give up on it, so both have to invalidate that reprojection.
+        this.options.onTileError?.(tile);
         tile.setState(TileState.ERROR);
 
-        if (transient && attempts < MAX_TILE_ATTEMPTS) {
+        if (!final) {
             // The tile stays in `ERROR` on purpose: OpenLayers re-requests `IDLE` tiles on the
             // very next frame, which would defeat the delay. A tile that left the viewport is
             // released as `EMPTY`, so its pending retry does nothing.
@@ -253,11 +292,31 @@ export class TileLoader {
         image.addEventListener('load', () => URL.revokeObjectURL(objectUrl), {once: true});
         image.addEventListener('error', () => URL.revokeObjectURL(objectUrl), {once: true});
         image.src = objectUrl;
+
+        // A blob can be a valid image and still decode to nothing, which OpenLayers reports as
+        // `EMPTY` and never requests again. Nothing above can see that, so it is watched here.
+        if (this.options.onDiagnostic) {
+            const decoded = (): void =>
+                this.diagnostic({
+                    event: 'decoded',
+                    tile: tile.getKey(),
+                    naturalWidth: image.naturalWidth,
+                    naturalHeight: image.naturalHeight,
+                    state: tile.getState(),
+                });
+            image.addEventListener('load', decoded, {once: true});
+            image.addEventListener('error', decoded, {once: true});
+        }
+
         return 'ok';
     }
 
     private state(state: TileLoadState): void {
         this.options.onStateChange?.(state);
+    }
+
+    private diagnostic(diagnostic: TileDiagnostic): void {
+        this.options.onDiagnostic?.(diagnostic);
     }
 
     /** Parses the exception document a server answered instead of a tile. */

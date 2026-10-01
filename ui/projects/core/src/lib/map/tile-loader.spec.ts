@@ -18,7 +18,14 @@ const makeTile = (image: HTMLImageElement | null = document.createElement('img')
     const setState = vi.fn();
     const load = vi.fn();
     return {
-        tile: {getTileCoord: () => [0, 0, 0], getImage: () => image, setState, load} as unknown as ImageTile,
+        tile: {
+            getTileCoord: () => [0, 0, 0],
+            getKey: () => '0/0/0',
+            getImage: () => image,
+            getState: () => 1,
+            setState,
+            load,
+        } as unknown as ImageTile,
         setState,
         load,
     };
@@ -343,15 +350,15 @@ describe('TileLoader', () => {
     it('cancels requests once the query of a tile is obsolete', () => {
         const signals: AbortSignal[] = [];
         stubHangingFetch(signals);
-        const obsolete = new Subject<void>();
+        const obsolete = new Subject<string>();
 
-        new TileLoader({authHeaders: (): Record<string, string> => authHeaders, abortWhen: (): Observable<unknown> => obsolete}).load(
+        new TileLoader({authHeaders: (): Record<string, string> => authHeaders, abortWhen: (): Observable<string> => obsolete}).load(
             makeTile().tile,
             'https://example.com/tile',
         );
 
         expect(signals[0].aborted).toBe(false);
-        obsolete.next();
+        obsolete.next('resolution changed');
         expect(signals[0].aborted).toBe(true);
     });
 

@@ -36,7 +36,7 @@ import {
     VectorSymbology,
     olExtentToTuple,
 } from '@geoengine/common';
-import {TileLoadState, TileLoader, tileExtent} from './tile-loader';
+import {TileDiagnostic, TileLoadState, TileLoader, tileExtent} from './tile-loader';
 
 /**
  * The `ol-layer` component represents a single layer object of open layers.
@@ -59,6 +59,8 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
 
     loadedData$ = new Subject<void>();
 
+    protected config = inject(CoreConfig);
+
     protected source: OS;
     protected _mapLayer: OL;
 
@@ -76,6 +78,19 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
      */
     get mapLayer(): OL {
         return this._mapLayer;
+    }
+
+    /**
+     * Writes what a tile request did to the console, if `MAP.DEBUG_TILES` asks for it. Tiles that
+     * never show up are hard to see otherwise, because OpenLayers silently turns a cancelled or
+     * empty image into a tile it never requests again.
+     */
+    protected reportTileDiagnostic(diagnostic: TileDiagnostic): void {
+        if (!this.config.MAP.DEBUG_TILES) {
+            return;
+        }
+
+        console.debug(`[tiles:${this.layerId()}]`, diagnostic);
     }
 
     /**
@@ -186,7 +201,6 @@ export class OlRasterLayerComponent
     implements OnInit, OnDestroy, OnChanges
 {
     protected backend = inject(BackendService);
-    protected config = inject(CoreConfig);
     protected notificationService = inject(NotificationService);
 
     override readonly symbology = input<RasterSymbology>();
@@ -345,12 +359,12 @@ export class OlRasterLayerComponent
 
         this.loader = new TileLoader({
             authHeaders: (): Record<string, string> => ({Authorization: `Bearer ${this.sessionToken()}`}),
-            abortWhen: (tile): Observable<unknown> =>
-                this.projectService.createQueryAbortStream(this.layerId(), tileExtent(tileGrid, tile)),
+            abortWhen: (tile): Observable<string> => this.projectService.createQueryAbortStream(this.layerId(), tileExtent(tileGrid, tile)),
             onStateChange: (state): void => this.reportDataStatus(state),
             onError: (message): void => {
                 this.notificationService.error(message);
             },
+            onDiagnostic: (diagnostic): void => this.reportTileDiagnostic(diagnostic),
         });
         source.setTileLoadFunction(this.loader.load);
 
@@ -427,7 +441,7 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
             const loader = new TileLoader({
                 signal: abortSignal,
                 authHeaders: (): Record<string, string> => ({Authorization: `Bearer ${this.sessionToken()}`}),
-                abortWhen: (tile): Observable<unknown> =>
+                abortWhen: (tile): Observable<string> =>
                     this.projectService.createQueryAbortStream(
                         this.layerId(),
                         tileExtent(source.getTileGridForProjection(olGetProj(this.spatialReference().srsString)!), tile),
@@ -435,6 +449,7 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
                 onStateChange: (state): void => {
                     this.loading.emit(state === 'loading');
                 },
+                onDiagnostic: (diagnostic): void => this.reportTileDiagnostic(diagnostic),
             });
 
             const source = new OGCMapTile({

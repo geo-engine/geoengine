@@ -993,8 +993,11 @@ export class ProjectService implements OnDestroy {
      *
      * If the layer is not registered with the project service (e.g. in the enhanced data viewer), the stream does not
      * emit when the layer is removed, only on the viewing conditions below.
+     *
+     * Emits the condition that made the request obsolete, e.g. `'resolution changed'`, for
+     * diagnostics.
      */
-    createQueryAbortStream(layerId: number, tileExtent: Extent): Observable<void> {
+    createQueryAbortStream(layerId: number, tileExtent: Extent): Observable<string> {
         // create an observable that emits when the layer is removed
         const layerStream = this.layers.get(layerId);
         const layerRemovedSubject = new BehaviorSubject<boolean>(false);
@@ -1024,22 +1027,35 @@ export class ProjectService implements OnDestroy {
 
         return combineLatest(observables).pipe(
             pairwise(),
-            filter(([initial, current]) => {
+            map(([initial, current]) => {
                 const [initialTime, initialViewport, initialSession, initialSref] = initial;
                 const [time, viewportSize, session, sref, layerRemoved] = current;
 
-                return (
-                    !time.isSame(initialTime) ||
-                    viewportSize.resolution !== initialViewport.resolution ||
-                    !olIntersects(tileExtent, viewportSize.extent) ||
-                    session !== initialSession ||
-                    !sref.equals(initialSref) ||
-                    layerRemoved
-                );
+                // The reason is part of the emitted value, so a tile that gets aborted can be told
+                // apart from one that merely looks blank in the logs.
+                if (!time.isSame(initialTime)) {
+                    return 'time changed';
+                }
+                if (viewportSize.resolution !== initialViewport.resolution) {
+                    return 'resolution changed';
+                }
+                if (!olIntersects(tileExtent, viewportSize.extent)) {
+                    return `tile extent ${tileExtent} left the viewport ${viewportSize.extent}`;
+                }
+                if (session !== initialSession) {
+                    return 'session changed';
+                }
+                if (!sref.equals(initialSref)) {
+                    return 'spatial reference changed';
+                }
+                if (layerRemoved) {
+                    return 'layer removed';
+                }
+                return undefined;
             }),
+            filter((reason): reason is string => reason !== undefined),
             finalize(() => layerStreamSub?.unsubscribe()),
             take(1),
-            map(() => undefined),
         );
     }
 
