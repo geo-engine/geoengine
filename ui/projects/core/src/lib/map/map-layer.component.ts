@@ -17,7 +17,9 @@ import {Observable, Subject, Subscription} from 'rxjs';
 
 import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol/layer';
 import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
-import {get as olGetProj} from 'ol/proj';
+import OlImageTile from 'ol/ImageTile';
+import TileGrid from 'ol/tilegrid/TileGrid';
+import {get as olGetProj, transformExtent, type Projection, equivalent} from 'ol/proj';
 import {CoreConfig} from '../config.service';
 import {NotificationService} from '@geoengine/common';
 import {ProjectService} from '../project/project.service';
@@ -36,7 +38,9 @@ import {
     VectorSymbology,
     olExtentToTuple,
 } from '@geoengine/common';
+import {AbortableTileLayer} from './abortable-tile-layer';
 import {TileDiagnostic, TileLoadState, TileLoader, tileExtent} from './tile-loader';
+import {Extent} from './map.service';
 
 /**
  * The `ol-layer` component represents a single layer object of open layers.
@@ -90,7 +94,35 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
             return;
         }
 
-        console.debug(`[tiles:${this.layerId()}]`, diagnostic);
+        console.warn(`[tiles:${this.layerId()}]`, diagnostic);
+    }
+
+    /**
+     * The extent of a tile in the projection the viewport is in, which is what
+     * {@link ProjectService.createQueryAbortStream} compares against.
+     *
+     * Reading the tile coordinate from the grid of the view projection would be wrong whenever the
+     * layer and the view disagree: `getTileGridForProjection` then hands out a default grid in the
+     * view projection, and the coordinate of the tile means nothing in it. Comparing such an
+     * extent against the viewport makes the abort either fire for tiles that are still on screen
+     * or never fire for tiles that left it.
+     */
+    protected extentInViewProjection(tileGrid: TileGrid, tile: OlImageTile, sourceProjection: Projection, viewSrs: string): Extent {
+        const viewProjection = olGetProj(viewSrs)!;
+        if (equivalent(sourceProjection, viewProjection)) {
+            return tileExtent(tileGrid, tile);
+        }
+        return transformExtent(tileExtent(tileGrid, tile), sourceProjection, viewProjection, 8) as Extent;
+    }
+
+    /**
+     * Drops the reprojection that was built from a tile that just turned `ERROR`, so the next
+     * frame builds a fresh one instead of reusing a failed or incomplete one.
+     */
+    protected invalidateTileReprojection(tile: OlImageTile): void {
+        if (this._mapLayer instanceof AbortableTileLayer && this._mapLayer.getSource() === this.source) {
+            this._mapLayer.invalidateAbortedTile(tile);
+        }
     }
 
     /**
@@ -224,7 +256,7 @@ export class OlRasterLayerComponent
                 params: {},
             }),
             (source) =>
-                new OlLayerTile({
+                new AbortableTileLayer({
                     source,
                     opacity: 1,
                 }),
@@ -336,7 +368,8 @@ export class OlRasterLayerComponent
 
     private initializeOrReplaceOlSource(): void {
         const symbology = this.symbology();
-        if (!this.time || !symbology || !this.spatialReference) {
+        const spatialReference = this.spatialReference;
+        if (!this.time || !symbology || !spatialReference) {
             return;
         }
 
@@ -351,15 +384,23 @@ export class OlRasterLayerComponent
                 STYLES: this.stylesFromColorizer(symbology.rasterColorizer),
                 EXCEPTIONS: 'application/json',
             },
-            projection: this.spatialReference.srsString,
+            projection: spatialReference.srsString,
             wrapX: false,
         });
 
-        const tileGrid = source.getTileGridForProjection(olGetProj(this.spatialReference.srsString)!);
+        // The source is created in the layer's own projection, so its tile coordinates have to be
+        // read from that grid and then transformed to the projection the viewport is in.
+        const sourceProjection = source.getProjection()!;
+        const tileGrid = source.getTileGridForProjection(sourceProjection);
 
         this.loader = new TileLoader({
             authHeaders: (): Record<string, string> => ({Authorization: `Bearer ${this.sessionToken()}`}),
-            abortWhen: (tile): Observable<string> => this.projectService.createQueryAbortStream(this.layerId(), tileExtent(tileGrid, tile)),
+            abortWhen: (tile): Observable<string> =>
+                this.projectService.createQueryAbortStream(
+                    this.layerId(),
+                    this.extentInViewProjection(tileGrid, tile, sourceProjection, spatialReference.srsString),
+                ),
+            onTileError: (tile): void => this.invalidateTileReprojection(tile),
             onStateChange: (state): void => this.reportDataStatus(state),
             onError: (message): void => {
                 this.notificationService.error(message);
@@ -386,7 +427,7 @@ export class OlRasterLayerComponent
         if (this._mapLayer) {
             this._mapLayer.setSource(this.source);
         } else if (symbology) {
-            this._mapLayer = new OlLayerTile({
+            this._mapLayer = new AbortableTileLayer({
                 source: this.source,
                 opacity: symbology.opacity,
             });
@@ -441,11 +482,12 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
             const loader = new TileLoader({
                 signal: abortSignal,
                 authHeaders: (): Record<string, string> => ({Authorization: `Bearer ${this.sessionToken()}`}),
+                // The source reports its own projection, which the backend picks when it builds the
+                // tile matrix set. Reading the tile coordinate from that grid and transforming it
+                // to the projection of the viewport is what makes the comparison below meaningful.
                 abortWhen: (tile): Observable<string> =>
-                    this.projectService.createQueryAbortStream(
-                        this.layerId(),
-                        tileExtent(source.getTileGridForProjection(olGetProj(this.spatialReference().srsString)!), tile),
-                    ),
+                    this.projectService.createQueryAbortStream(this.layerId(), this.ogcTileExtent(source, tile)),
+                onTileError: (tile): void => this.invalidateTileReprojection(tile),
                 onStateChange: (state): void => {
                     this.loading.emit(state === 'loading');
                 },
@@ -470,7 +512,7 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
         super(
             new ImageTile({}), // use as placeholder until the actual source is loaded
             (_source) => {
-                return new OlLayerTile();
+                return new AbortableTileLayer();
             },
         );
 
@@ -493,6 +535,23 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
 
             this._mapLayer.setOpacity(symbology.opacity);
         });
+    }
+
+    /**
+     * The extent of a tile of an OGC tile source in the projection of the viewport.
+     *
+     * The tile coordinate belongs to the grid of the source projection, which the backend may have
+     * picked freely. Asking for the grid of the view projection instead would silently return a
+     * default grid whenever the two differ, and the resulting extent would not describe the tile.
+     */
+    private ogcTileExtent(source: OGCMapTile, tile: OlImageTile): Extent {
+        const sourceProjection = source.getProjection()!;
+        return this.extentInViewProjection(
+            source.getTileGridForProjection(sourceProjection),
+            tile,
+            sourceProjection,
+            this.spatialReference().srsString,
+        );
     }
 
     /**

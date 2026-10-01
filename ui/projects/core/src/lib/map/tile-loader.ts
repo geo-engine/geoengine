@@ -39,7 +39,7 @@ type AssignResult = 'ok' | 'transient' | 'terminal';
  * the browser actually decoded the image to, because OpenLayers turns an image that loads without
  * pixels into an `EMPTY` tile and never requests it again.
  */
-export type TileDiagnostic = {
+export interface TileDiagnostic {
     readonly event: 'aborted' | 'decoded';
     readonly tile: string;
     /** For `aborted`, the condition that made the request obsolete. */
@@ -49,7 +49,7 @@ export type TileDiagnostic = {
     readonly naturalHeight?: number;
     /** For `decoded`, the tile state after the image settled, see `TileState`. */
     readonly state?: number;
-};
+}
 
 interface TileLoaderOptions {
     /** Aborts all pending requests and frees all object URLs. Aborted when the source is replaced or the layer is destroyed. */

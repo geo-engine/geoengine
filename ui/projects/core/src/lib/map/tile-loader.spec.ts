@@ -258,6 +258,41 @@ describe('TileLoader', () => {
         expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
+    it('tells the caller about an aborted tile before the tile goes into ERROR', async () => {
+        const signals: AbortSignal[] = [];
+        stubHangingFetch(signals);
+
+        const calls: string[] = [];
+        const {tile, setState} = makeTile();
+        setState.mockImplementation((state: number) => calls.push(`state:${state}`));
+        const loader = new TileLoader({
+            authHeaders: (): Record<string, string> => authHeaders,
+            onTileError: (): void => {
+                calls.push('onTileError');
+            },
+        });
+        loader.load(tile, 'https://example.com/tile');
+        loader.abortAll();
+
+        await vi.waitFor(() => expect(calls).toContain('onTileError'));
+        // The hook must come first: a parent reprojection reacts to the state change synchronously.
+        expect(calls[0]).toBe('onTileError');
+        expect(calls).toContain(`state:${TileState.ERROR}`);
+    });
+
+    it('tells the caller about a tile that failed, not just one that was aborted', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockResolvedValue({ok: false, status: 404, blob: () => Promise.resolve(new Blob([]))});
+        vi.stubGlobal('fetch', fetchMock);
+
+        const onTileError = vi.fn();
+        const loader = new TileLoader({authHeaders: (): Record<string, string> => authHeaders, onTileError});
+        loader.load(makeTile().tile, 'https://example.com/tile');
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(onTileError).toHaveBeenCalled();
+    });
+
     it('retries an exception document that reports a cancelled query', async () => {
         vi.useFakeTimers();
         const fetchMock = vi.fn().mockResolvedValue(exceptionDocument('QueryCanceled', 'query canceled'));

@@ -1040,7 +1040,7 @@ export class ProjectService implements OnDestroy {
                     return 'resolution changed';
                 }
                 if (!olIntersects(tileExtent, viewportSize.extent)) {
-                    return `tile extent ${tileExtent} left the viewport ${viewportSize.extent}`;
+                    return `tile extent [${tileExtent.join(', ')}] left the viewport [${viewportSize.extent.join(', ')}]`;
                 }
                 if (session !== initialSession) {
                     return 'session changed';
