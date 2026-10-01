@@ -57,6 +57,14 @@ const stubHangingFetch = (signals: AbortSignal[]): void => {
 
 const authHeaders = {Authorization: 'Bearer token'};
 
+/**
+ * A stand-in for `Blob`, so that the tests do not depend on how a browser schedules its reads.
+ * The real `Blob.text()` settles on the event loop in Chromium but on a microtask in jsdom, which
+ * makes assertions that follow `advanceTimersByTimeAsync` pass in one and fail in the other.
+ */
+const mockBlob = (content: string, type: string): Blob =>
+    ({type, size: content.length, text: (): Promise<string> => Promise.resolve(content)}) as unknown as Blob;
+
 /** The parts of a `Response` the tile loader reads. */
 interface MockResponse {
     readonly ok: boolean;
@@ -67,20 +75,20 @@ interface MockResponse {
 const imageResponse: MockResponse = {
     ok: true,
     status: 200,
-    blob: (): Promise<Blob> => Promise.resolve(new Blob(['image'], {type: 'image/png'})),
+    blob: (): Promise<Blob> => Promise.resolve(mockBlob('image', 'image/png')),
 };
 
 const unavailableResponse: MockResponse = {
     ok: false,
     status: 503,
-    blob: (): Promise<Blob> => Promise.resolve(new Blob([])),
+    blob: (): Promise<Blob> => Promise.resolve(mockBlob('', '')),
 };
 
 /** A response of the WMS endpoint that reports a failed request with HTTP 200 and a JSON body. */
 const exceptionDocument = (error: string, message: string): MockResponse => ({
     ok: true,
     status: 200,
-    blob: (): Promise<Blob> => Promise.resolve(new Blob([JSON.stringify({error, message})], {type: 'application/json'})),
+    blob: (): Promise<Blob> => Promise.resolve(mockBlob(JSON.stringify({error, message}), 'application/json')),
 });
 
 describe('TileLoader', () => {
@@ -98,9 +106,7 @@ describe('TileLoader', () => {
     });
 
     it('fetches the tile with the authentication headers and frees the object URL after loading', async () => {
-        const fetchMock = vi
-            .fn()
-            .mockResolvedValue({ok: true, status: 200, blob: () => Promise.resolve(new Blob(['image'], {type: 'image/png'}))});
+        const fetchMock = vi.fn().mockResolvedValue({ok: true, status: 200, blob: () => Promise.resolve(mockBlob('image', 'image/png'))});
         vi.stubGlobal('fetch', fetchMock);
 
         const image = document.createElement('img');
@@ -135,7 +141,7 @@ describe('TileLoader', () => {
 
     it('retries a transient failure after a delay that grows with every attempt', async () => {
         vi.useFakeTimers();
-        const fetchMock = vi.fn().mockResolvedValue({ok: false, status: 503, blob: () => Promise.resolve(new Blob([]))});
+        const fetchMock = vi.fn().mockResolvedValue({ok: false, status: 503, blob: () => Promise.resolve(mockBlob('', ''))});
         vi.stubGlobal('fetch', fetchMock);
 
         const url = 'https://example.com/tile';
@@ -166,7 +172,7 @@ describe('TileLoader', () => {
 
     it('does not retry a request that is rejected as broken', async () => {
         vi.useFakeTimers();
-        const fetchMock = vi.fn().mockResolvedValue({ok: false, status: 404, blob: () => Promise.resolve(new Blob([]))});
+        const fetchMock = vi.fn().mockResolvedValue({ok: false, status: 404, blob: () => Promise.resolve(mockBlob('', ''))});
         vi.stubGlobal('fetch', fetchMock);
 
         const url = 'https://example.com/tile';
@@ -184,7 +190,7 @@ describe('TileLoader', () => {
 
     it('gives up on a tile that keeps failing transiently', async () => {
         vi.useFakeTimers();
-        const fetchMock = vi.fn().mockResolvedValue({ok: false, status: 503, blob: () => Promise.resolve(new Blob([]))});
+        const fetchMock = vi.fn().mockResolvedValue({ok: false, status: 503, blob: () => Promise.resolve(mockBlob('', ''))});
         vi.stubGlobal('fetch', fetchMock);
 
         const states: TileLoadState[] = [];
@@ -311,7 +317,7 @@ describe('TileLoader', () => {
 
     it('does not retry after it is aborted', async () => {
         vi.useFakeTimers();
-        const fetchMock = vi.fn().mockResolvedValue({ok: false, status: 503, blob: () => Promise.resolve(new Blob([]))});
+        const fetchMock = vi.fn().mockResolvedValue({ok: false, status: 503, blob: () => Promise.resolve(mockBlob('', ''))});
         vi.stubGlobal('fetch', fetchMock);
 
         const url = 'https://example.com/tile';
@@ -352,7 +358,7 @@ describe('TileLoader', () => {
 
     it('tells the caller about a tile that failed, not just one that was aborted', async () => {
         vi.useFakeTimers();
-        const fetchMock = vi.fn().mockResolvedValue({ok: false, status: 404, blob: () => Promise.resolve(new Blob([]))});
+        const fetchMock = vi.fn().mockResolvedValue({ok: false, status: 404, blob: () => Promise.resolve(mockBlob('', ''))});
         vi.stubGlobal('fetch', fetchMock);
 
         const onTileError = vi.fn();
@@ -412,7 +418,7 @@ describe('TileLoader', () => {
         const fetchMock = vi.fn().mockResolvedValue({
             ok: true,
             status: 200,
-            blob: () => Promise.resolve(new Blob([JSON.stringify({message: 'no such workflow'})], {type: 'application/json'})),
+            blob: () => Promise.resolve(mockBlob(JSON.stringify({message: 'no such workflow'}), 'application/json')),
         });
         vi.stubGlobal('fetch', fetchMock);
 
@@ -431,7 +437,7 @@ describe('TileLoader', () => {
         // a tile that loads again makes the next error visible again
         vi.stubGlobal(
             'fetch',
-            vi.fn().mockResolvedValue({ok: true, status: 200, blob: () => Promise.resolve(new Blob(['image'], {type: 'image/png'}))}),
+            vi.fn().mockResolvedValue({ok: true, status: 200, blob: () => Promise.resolve(mockBlob('image', 'image/png'))}),
         );
         loader.load(makeTile().tile, 'https://example.com/3');
         vi.stubGlobal('fetch', fetchMock);
