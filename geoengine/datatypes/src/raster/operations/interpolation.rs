@@ -189,7 +189,7 @@ mod tests {
             GridOrEmpty::Grid(MaskedGrid::from(
                 Grid2D::new([3, 3].into(), vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).unwrap(),
             )),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
 
         let input_geo_transform = input.geo_transform();
@@ -274,7 +274,7 @@ mod tests {
             GridOrEmpty::Grid(MaskedGrid::from(
                 Grid2D::new([3, 3].into(), vec![1., 2., 3., 4., 5., 6., 7., 8., 9.]).unwrap(),
             )),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
 
         let input_geo_transform = input.geo_transform();

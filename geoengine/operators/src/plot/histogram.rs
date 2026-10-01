@@ -712,11 +712,11 @@ mod tests {
     };
     use crate::test_data;
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, FeatureData, NoGeometry, PlotSeriesSelection,
         TimeInterval, VectorQueryRectangle,
     };
-    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::raster::{
         BoundedGrid, EmptyGrid2D, GeoTransform, Grid2D, GridShape2D, RasterDataType, RasterTile2D,
         TileInformation, TilingSpecification,
@@ -860,7 +860,7 @@ mod tests {
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                         .unwrap()
                         .into(),
-                    CacheHint::default(),
+                    CacheHint::no_cache(),
                 )],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
@@ -1172,7 +1172,7 @@ mod tests {
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
                     attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                    cache_ttl: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1270,7 +1270,7 @@ mod tests {
                         },
                         0,
                         EmptyGrid2D::<u8>::new(tile_size_in_pixels).into(),
-                        CacheHint::default(),
+                        CacheHint::no_cache(),
                     )],
                     result_descriptor,
                 },
@@ -1477,7 +1477,7 @@ mod tests {
                         },
                         0,
                         Grid2D::new(tile_size_in_pixels, vec![4; 6]).unwrap().into(),
-                        CacheHint::default(),
+                        CacheHint::no_cache(),
                     )],
                     result_descriptor,
                 },

@@ -259,7 +259,7 @@ mod tests {
             TimeInterval::default(),
             GeoTransform::test_default(),
             r,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
         let typed_raster = TypedRasterTile2D::U32(t);
 
@@ -280,7 +280,7 @@ mod tests {
             TimeInterval::default(),
             GeoTransform::test_default(),
             r,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
         let typed_raster = TypedRasterTile2D::U32(t);
 
@@ -316,7 +316,7 @@ mod tests {
             )
         }
 
-        let cache_hint = CacheHint::default();
+        let cache_hint = CacheHint::no_cache();
 
         assert_eq!(
             generate_generic_raster_tile_2d!(RasterDataType::U8, generate(cache_hint)),
@@ -342,7 +342,7 @@ mod tests {
             TimeInterval::default(),
             GeoTransform::test_default(),
             r,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
         let typed_raster_a = TypedRasterTile2D::U32(t);
 
@@ -351,7 +351,7 @@ mod tests {
             TimeInterval::default(),
             GeoTransform::test_default(),
             r,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
         let typed_raster_b = TypedRasterTile2D::U16(t);
 
@@ -377,7 +377,7 @@ mod tests {
             TimeInterval::default(),
             GeoTransform::test_default(),
             r,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
         let typed_raster_a = TypedRasterTile2D::U32(t);
 
@@ -386,7 +386,7 @@ mod tests {
             TimeInterval::default(),
             GeoTransform::test_default(),
             r,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
         let typed_raster_b = TypedRasterTile2D::U16(t);
 
@@ -432,7 +432,7 @@ mod tests {
             TimeInterval::default(),
             GeoTransform::test_default(),
             r,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
         let typed_raster_a = TypedRasterTile2D::U32(t);
 
@@ -441,7 +441,7 @@ mod tests {
             TimeInterval::default(),
             GeoTransform::test_default(),
             r,
-            CacheHint::default(),
+            CacheHint::no_cache(),
         );
         let typed_raster_b = TypedRasterTile2D::U16(t);
 
@@ -504,7 +504,7 @@ mod tests {
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         ));
 
         call_generic_raster_tile_2d_ext!(typed_raster_a, Foo, (raster, e) => {

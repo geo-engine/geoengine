@@ -599,6 +599,7 @@ class GdalMultiBandMetaData:
     spatial_reference: str
     time: TimeDescriptor
     spatial_grid: SpatialGridDescriptor
+    cache_ttl: int | None
 
     def __init__(
         self,
@@ -607,6 +608,7 @@ class GdalMultiBandMetaData:
         spatial_reference: str,
         grid_or_geo_transform: SpatialGridDescriptor | GeoTransform,
         time: TimeDescriptor | None = None,
+        cache_ttl: int | None = None,
     ) -> None:
         """
         Create a `GdalMultiBandMetaData` object.
@@ -617,6 +619,8 @@ class GdalMultiBandMetaData:
         when tiles are added to the dataset. The placeholder grid uses the
         given `geo_transform` (or a 1 by 1 unit grid), as the tile files' geo
         transforms must be compatible with the dataset grid's geo transform.
+        `cache_ttl` sets the dataset-level cache lifetime in seconds. `None`
+        uses the server default and `0` disables caching.
         """
         if time is None:
             time = TimeDescriptor(
@@ -642,12 +646,14 @@ class GdalMultiBandMetaData:
         self.data_type = data_type
         self.spatial_reference = spatial_reference
         self.time = time
+        self.cache_ttl = cache_ttl
 
     def to_api_dict(self) -> geoengine_api_client.MetaDataDefinition:
         """Converts the metadata to a `MetaDataDefinition` for the API"""
         return geoengine_api_client.MetaDataDefinition(
             geoengine_api_client.GdalMultiBand(
                 type="GdalMultiBand",
+                cache_ttl=self.cache_ttl,
                 result_descriptor=geoengine_api_client.RasterResultDescriptor(
                     data_type=geoengine_api_client.RasterDataType(self.data_type.value),
                     spatial_reference=self.spatial_reference,
@@ -735,6 +741,7 @@ def add_multiband_gdal_source(
     share_with: list[RoleId] | None = None,
     permission: Permission = Permission.READ,
     timeout: int = 60,
+    cache_ttl: int | None = None,
 ) -> DatasetName:
     """
     Create a `MultiBandGdalSource` dataset, grant optional permissions and add the given files as tiles.
@@ -743,6 +750,9 @@ def add_multiband_gdal_source(
     files (e.g. https or s3 links) when they are queried. A volume name or a
     `Volume` can be given to store the files in a Geo Engine volume. No
     permissions are granted unless `share_with` is given.
+    `cache_ttl` sets the dataset-level cache lifetime in seconds as a fallback
+    for tiles without their own TTL. `None` uses the server default and `0`
+    disables caching.
     """
     # pylint: disable=too-many-arguments,too-many-positional-arguments
 
@@ -779,6 +789,7 @@ def add_multiband_gdal_source(
         spatial_reference=spatial_reference,
         time=time,
         grid_or_geo_transform=grid_or_geo_transform,
+        cache_ttl=cache_ttl,
     ).to_api_dict()
 
     dataset_name = add_dataset(

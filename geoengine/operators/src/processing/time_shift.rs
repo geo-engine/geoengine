@@ -741,7 +741,7 @@ mod tests {
                     .unwrap(),
                 ],
                 Default::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap(),
         );
@@ -801,7 +801,7 @@ mod tests {
                 .unwrap(),
             ],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -834,7 +834,7 @@ mod tests {
                     .unwrap(),
                 ],
                 Default::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap(),
         );
@@ -896,7 +896,7 @@ mod tests {
                 .unwrap(),
             ],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -939,7 +939,7 @@ mod tests {
                 },
                 0,
                 empty_grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -953,7 +953,7 @@ mod tests {
                 },
                 0,
                 empty_grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -967,7 +967,7 @@ mod tests {
                 },
                 0,
                 empty_grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -981,7 +981,7 @@ mod tests {
                 },
                 0,
                 empty_grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -995,7 +995,7 @@ mod tests {
                 },
                 0,
                 empty_grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -1009,7 +1009,7 @@ mod tests {
                 },
                 0,
                 empty_grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
         ];
 
@@ -1121,7 +1121,7 @@ mod tests {
                 },
                 0,
                 empty_grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -1135,7 +1135,7 @@ mod tests {
                 },
                 0,
                 empty_grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -1149,7 +1149,7 @@ mod tests {
                 },
                 0,
                 empty_grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -1163,7 +1163,7 @@ mod tests {
                 },
                 0,
                 empty_grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -1177,7 +1177,7 @@ mod tests {
                 },
                 0,
                 empty_grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -1191,7 +1191,7 @@ mod tests {
                 },
                 0,
                 empty_grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
         ];
 

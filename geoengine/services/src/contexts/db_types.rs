@@ -575,7 +575,7 @@ pub struct GfbioCollectionsDataProviderDefinitionDbType {
     pub collection_api_auth_token: String,
     pub abcd_db_config: DatabaseConnectionConfig,
     pub pangaea_url: String,
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<&GfbioCollectionsDataProviderDefinition>
@@ -623,7 +623,7 @@ pub struct EbvPortalDataProviderDefinitionDbType {
     pub data: String,
     pub base_url: String,
     pub overviews: String,
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<&EbvPortalDataProviderDefinition> for EbvPortalDataProviderDefinitionDbType {
@@ -664,7 +664,7 @@ pub struct NetCdfCfDataProviderDefinitionDbType {
     pub priority: Option<i16>,
     pub data: String,
     pub overviews: String,
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<&NetCdfCfDataProviderDefinition> for NetCdfCfDataProviderDefinitionDbType {
@@ -702,7 +702,7 @@ pub struct PangaeaDataProviderDefinitionDbType {
     pub description: String,
     pub priority: Option<i16>,
     pub base_url: String,
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<&PangaeaDataProviderDefinition> for PangaeaDataProviderDefinitionDbType {
@@ -770,7 +770,7 @@ pub struct EdrDataProviderDefinitionDbType {
     id: DataProviderId,
     base_url: String,
     vector_spec: Option<EdrVectorSpec>,
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl: Option<CacheTtlSeconds>,
     /// List of vertical reference systems with a discrete scale
     discrete_vrs: Vec<String>,
     provenance: Option<Vec<Provenance>>,
@@ -1558,7 +1558,7 @@ mod tests {
                     gdal_retries: GdalRetries {
                         number_of_retries: 3,
                     },
-                    cache_ttl: CacheTtlSeconds::new(60),
+                    cache_ttl: Some(CacheTtlSeconds::new(60)),
                     query_buffer: StacQueryBuffer {
                         start_seconds: 1,
                         end_seconds: 1,
@@ -1616,7 +1616,7 @@ mod tests {
                             gdal_retries: GdalRetries {
                                 number_of_retries: 3,
                             },
-                            cache_ttl: CacheTtlSeconds::new(60),
+                            cache_ttl: Some(CacheTtlSeconds::new(60)),
                             query_buffer: StacQueryBuffer {
                                 start_seconds: 1,
                                 end_seconds: 1,

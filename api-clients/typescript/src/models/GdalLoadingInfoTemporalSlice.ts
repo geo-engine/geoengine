@@ -50,7 +50,7 @@ export interface GdalLoadingInfoTemporalSlice {
      * @type {number}
      * @memberof GdalLoadingInfoTemporalSlice
      */
-    cacheTtl?: number;
+    cacheTtl?: number | null;
 }
 
 /**

@@ -836,7 +836,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
             self.result.push(GdalLoadingInfoTemporalSlice {
                 time: time_interval,
                 params: Some(dataset_parameters),
-                cache_ttl: CacheTtlSeconds::max(), // not relevant for writing tiffs, but required for persistent datasets. Since persistent datasets are constant, we can set this to max (for now)
+                cache_ttl: Some(CacheTtlSeconds::max()), // not relevant for writing tiffs, but required for persistent datasets. Since persistent datasets are constant, we can set this to max (for now)
             });
             self.init_new_intermediate_dataset(
                 time_interval,
@@ -1714,7 +1714,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: *time_intervals.get(1).unwrap(),
@@ -1723,7 +1723,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
         ];
 

@@ -73,7 +73,7 @@ export interface ArunaDataProviderDefinition {
      * @type {number}
      * @memberof ArunaDataProviderDefinition
      */
-    cacheTtl?: number;
+    cacheTtl?: number | null;
 }
 /**
  * @export

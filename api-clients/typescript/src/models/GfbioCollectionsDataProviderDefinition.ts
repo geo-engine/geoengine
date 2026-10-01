@@ -79,7 +79,7 @@ export interface GfbioCollectionsDataProviderDefinition {
      * @type {number}
      * @memberof GfbioCollectionsDataProviderDefinition
      */
-    cacheTtl?: number;
+    cacheTtl?: number | null;
 }
 
 
