@@ -11,18 +11,28 @@ describe('LayersComponent', () => {
     let fixture: ComponentFixture<LayersComponent>;
     let edvLayersService: EdvLayersService;
     const getLayerCollectionItems = vi.fn();
+    const getLayer = vi.fn();
+    const registerAndGetLayerWorkflowId = vi.fn();
+    const getWorkflowIdMetadata = vi.fn();
     const setTime = vi.fn().mockResolvedValue(undefined);
     const setTimeStepDuration = vi.fn();
 
     beforeEach(async () => {
         vi.clearAllMocks();
         getLayerCollectionItems.mockReset().mockResolvedValue({items: []});
+        // no raster symbology, so no legend is loaded
+        getLayer.mockReset().mockResolvedValue({name: 'Layer', symbology: undefined});
+        registerAndGetLayerWorkflowId.mockReset().mockResolvedValue('workflow-id');
+        getWorkflowIdMetadata.mockReset();
 
         await TestBed.configureTestingModule({
             imports: [LayersComponent],
             providers: [
                 provideNativeDateAdapter(),
-                {provide: LayersService, useValue: {getLayerCollectionItems}},
+                {
+                    provide: LayersService,
+                    useValue: {getLayerCollectionItems, getLayer, registerAndGetLayerWorkflowId, getWorkflowIdMetadata},
+                },
                 EdvLayersService,
                 {
                     provide: ProjectService,

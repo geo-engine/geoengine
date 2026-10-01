@@ -1,11 +1,12 @@
-import {BLACK, ColorBreakpoint} from '@geoengine/common';
-import {Measurement} from '@geoengine/api-client';
+import {BLACK, ColorBreakpoint, LinearGradient, MultiBandRasterColorizer, SingleBandRasterColorizer, WHITE} from '@geoengine/common';
+import {Measurement, RasterBandDescriptor} from '@geoengine/api-client';
 import {
     calculateNumberPipeParameters,
     CastMeasurementToClassificationPipe,
     CastMeasurementToContinuousPipe,
+    selectBands,
     unifyDecimals,
-} from './raster-legend.component';
+} from './raster-legend-view.component';
 
 describe('RasterLegend', () => {
     it('calculateNumberPipeParameters', () => {
@@ -144,5 +145,18 @@ describe('RasterLegend', () => {
         transformed = pipe.transform(measurement);
 
         expect(transformed).toBeNull();
+    });
+
+    it('selectBands', () => {
+        const bands: Array<RasterBandDescriptor> = ['a', 'b', 'c', 'd'].map((name) => ({name, measurement: {type: 'unitless'}}));
+
+        const singleBand = new SingleBandRasterColorizer(
+            2,
+            new LinearGradient([new ColorBreakpoint(0, BLACK), new ColorBreakpoint(1, WHITE)], BLACK, BLACK, BLACK),
+        );
+        expect(selectBands(bands, singleBand).map((band) => band.name)).toEqual(['c']);
+
+        const multiBand = new MultiBandRasterColorizer(3, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, BLACK);
+        expect(selectBands(bands, multiBand).map((band) => band.name)).toEqual(['d', 'a', 'b']);
     });
 });

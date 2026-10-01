@@ -53,6 +53,7 @@ import {VectorLegendComponent} from './layers/legend/legend-vector/vector-legend
 import {LayerListComponent} from './layers/layer-list/layer-list.component';
 import {LayerListElementComponent} from './layers/layer-list/layer-list-element/layer-list-element.component';
 import {RasterLegendComponent} from './layers/legend/legend-raster/raster-legend.component';
+import {RasterLegendViewComponent} from './layers/legend/legend-raster/raster-legend-view.component';
 import {SafeStylePipe} from './util/pipes/safe-style.pipe';
 import {SmallTimeInteractionComponent} from './time/small-time-interaction/small-time-interaction.component';
 import {TimeConfigComponent} from './time/time-config/time-config.component';
@@ -271,6 +272,7 @@ const CORE_COMPONENT_IMPORTS = [
     OperatorDialogContainerComponent,
     OperatorOutputNameComponent,
     RasterLegendComponent,
+    RasterLegendViewComponent,
     SidenavHeaderComponent,
     WorkspaceSettingsComponent,
 ];

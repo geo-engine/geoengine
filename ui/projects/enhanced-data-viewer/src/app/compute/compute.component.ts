@@ -10,7 +10,7 @@ import {
     resource,
     signal,
 } from '@angular/core';
-import {BackendService, CoreModule, MapService, ProjectService, UUID} from '@geoengine/core';
+import {CoreModule, MapService, ProjectService, UUID} from '@geoengine/core';
 import {A11yModule} from '@angular/cdk/a11y';
 import {MatButtonModule} from '@angular/material/button';
 import {MatDialog} from '@angular/material/dialog';
@@ -133,7 +133,6 @@ import {PlotDialogComponent} from './plot-dialog.component';
     ],
 })
 export class ComputeComponent {
-    private readonly backendService = inject(BackendService);
     private readonly destroyRef = inject(DestroyRef);
     private readonly dialog = inject(MatDialog);
     private readonly layerService = inject(LayersService);
