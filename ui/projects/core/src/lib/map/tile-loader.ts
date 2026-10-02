@@ -4,6 +4,7 @@ import ImageTile from 'ol/ImageTile';
 import Tile from 'ol/Tile';
 import TileState from 'ol/TileState';
 import TileGrid from 'ol/tilegrid/TileGrid';
+import {createEmpty, getIntersection, isEmpty} from 'ol/extent';
 import {equivalent, transformExtent, type Projection} from 'ol/proj';
 
 import {Extent} from './map.service';
@@ -77,8 +78,8 @@ interface TileLoaderOptions {
     readonly abortWhen?: (tile: ImageTile) => Observable<string>;
 
     /**
-     * Called right before a tile is put into `ERROR`, both when its request was aborted and when
-     * it failed. Must not change the tile state itself.
+     * Called before a tile is put into `ERROR` and before a retry or reset follows an error, so
+     * dependent reprojections can be discarded. Must not change the tile state itself.
      */
     readonly onTileError?: (tile: ImageTile) => void;
 
@@ -98,6 +99,24 @@ interface TileLoaderOptions {
 export const tileExtent = (tileGrid: TileGrid, tile: ImageTile): Extent => tileGrid.getTileCoordExtent(tile.getTileCoord()) as Extent;
 
 /**
+ * Transforms an extent after clipping it to the source projection's valid domain. A geographic
+ * tile grid can extend past the poles, and transforming those coordinates can produce invalid
+ * bounds that cannot be used for viewport intersection tests.
+ */
+export const transformExtentBetweenProjections = (extent: Extent, sourceProjection: Projection, targetProjection: Projection): Extent => {
+    const sourceExtent = sourceProjection.getExtent();
+    if (!sourceExtent) {
+        return transformExtent(extent, sourceProjection, targetProjection, 8) as Extent;
+    }
+
+    const clipped = getIntersection(extent, sourceExtent) as Extent;
+    if (isEmpty(clipped)) {
+        return createEmpty() as Extent;
+    }
+    return transformExtent(clipped, sourceProjection, targetProjection, 8) as Extent;
+};
+
+/**
  * The extent of a tile in the projection the viewport is in, which is what
  * {@link ProjectService.createQueryAbortStream} compares against.
  *
@@ -113,7 +132,9 @@ export const tileExtentInViewProjection = (
     viewProjection: Projection,
 ): Extent => {
     const extent = tileExtent(tileGrid, tile);
-    return equivalent(sourceProjection, viewProjection) ? extent : (transformExtent(extent, sourceProjection, viewProjection, 8) as Extent);
+    return equivalent(sourceProjection, viewProjection)
+        ? extent
+        : transformExtentBetweenProjections(extent, sourceProjection, viewProjection);
 };
 
 /**
@@ -204,8 +225,6 @@ export class TileLoader {
             this.controllers.delete(controller);
 
             if (outcome !== 'retry') {
-                this.abortSubscriptions.get(tile)?.unsubscribe();
-                this.abortSubscriptions.delete(tile);
                 this.settle(tile, outcome === 'failed');
             }
         });
@@ -271,14 +290,22 @@ export class TileLoader {
     private async request(tile: ImageTile, src: string, signal: AbortSignal): Promise<LoadOutcome> {
         try {
             const response = await this.fetch(src, signal);
+            this.throwIfAborted(signal);
             if (!response.ok) {
+                const blob = await response.blob();
+                this.throwIfAborted(signal);
+                const exception = await this.readException(blob);
+                this.throwIfAborted(signal);
                 return this.fail(tile, {
                     transient: TRANSIENT_STATUSES.has(response.status),
-                    exception: await this.readException(await response.blob()),
+                    exception,
                 });
             }
 
-            const result = await this.assignImage(tile, await response.blob());
+            const blob = await response.blob();
+            this.throwIfAborted(signal);
+            const result = await this.assignImage(tile, blob);
+            this.throwIfAborted(signal);
             if (result !== 'ok') {
                 return this.fail(tile, result);
             }
@@ -298,6 +325,13 @@ export class TileLoader {
 
             // anything that is not a refused request is a problem of the connection
             return this.fail(tile, {transient: true});
+        }
+    }
+
+    /** Turns an abort that raced with an asynchronous response read into the normal abort path. */
+    private throwIfAborted(signal: AbortSignal): void {
+        if (signal.aborted) {
+            throw new DOMException('Aborted', 'AbortError');
         }
     }
 
@@ -339,6 +373,9 @@ export class TileLoader {
                 this.settle(tile, false);
                 return;
             }
+            // A display reprojection can be recreated during backoff from the ERROR source tile.
+            // Drop it again before starting the retry so it cannot remain cached after recovery.
+            this.options.onTileError?.(tile);
             tile.load();
         }, attempts * RETRY_DELAY);
         this.retries.set(tile, timer);
@@ -356,8 +393,12 @@ export class TileLoader {
         }
         clearTimeout(timer);
         this.retries.delete(tile);
-        this.abortSubscriptions.get(tile)?.unsubscribe();
-        this.abortSubscriptions.delete(tile);
+        // OpenLayers queues IDLE tiles again when they return to view. ERROR tiles are terminal,
+        // so release this failed visit back to IDLE after cancelling its pending retry.
+        if (tile.getState() === TileState.ERROR) {
+            this.options.onTileError?.(tile);
+            tile.setState(TileState.IDLE);
+        }
         this.settle(tile, false);
     }
 
@@ -422,6 +463,8 @@ export class TileLoader {
     private settle(tile: ImageTile, failed: boolean): void {
         this.failures += failed ? 1 : 0;
         this.outstanding.delete(tile);
+        this.abortSubscriptions.get(tile)?.unsubscribe();
+        this.abortSubscriptions.delete(tile);
 
         if (this.outstanding.size === 0) {
             const state = this.failures > 0 ? 'error' : 'idle';

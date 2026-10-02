@@ -4,9 +4,12 @@ import TileSource from 'ol/source/Tile';
 import ReprojTile from 'ol/reproj/Tile';
 import CanvasTileLayerRenderer from 'ol/renderer/canvas/TileLayer';
 import {intersects} from 'ol/extent';
-import {equivalent, transformExtent} from 'ol/proj';
+import {equivalent} from 'ol/proj';
 import LRUCache from 'ol/structs/LRUCache';
 import Tile from 'ol/Tile';
+
+import {transformExtentBetweenProjections} from './tile-loader';
+import {Extent} from './map.service';
 
 /** Keeps cancelled source tiles from leaving failed or incomplete reprojections in the display cache. */
 class AbortableTileLayerRenderer<L extends TileLayer> extends CanvasTileLayerRenderer<L> {
@@ -41,7 +44,11 @@ class AbortableTileLayerRenderer<L extends TileLayer> extends CanvasTileLayerRen
         }
 
         const sourceGrid = source.getTileGridForProjection(sourceProjection);
-        const extent = transformExtent(sourceGrid.getTileCoordExtent(tile.tileCoord), sourceProjection, projection, 8);
+        const extent = transformExtentBetweenProjections(
+            sourceGrid.getTileCoordExtent(tile.tileCoord) as Extent,
+            sourceProjection,
+            projection,
+        );
         const displayGrid = source.getTileGridForProjection(projection);
 
         // ReprojTile treats the transient ERROR during cancellation as final. Discard its
