@@ -2,12 +2,21 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import ImageTile from 'ol/ImageTile';
+import Tile from 'ol/Tile';
 import TileState from 'ol/TileState';
 import TileGrid from 'ol/tilegrid/TileGrid';
+import TileWMS from 'ol/source/TileWMS';
+import {FrameState} from 'ol/Map';
 import {get as getProjection, transformExtent} from 'ol/proj';
 import {Observable, Subject} from 'rxjs';
 
+import {AbortableTileLayer} from './abortable-tile-layer';
 import {TileLoadState, TileLoader, tileExtentInViewProjection} from './tile-loader';
+
+/** Exposes the renderer's protected tile lookup so tests can exercise its real caches without drawing a map. */
+interface TileRendererAccess {
+    getOrCreateTile(z: number, x: number, y: number, frameState: FrameState): Tile;
+}
 
 interface FakeTile {
     tile: ImageTile;
@@ -359,6 +368,184 @@ describe('TileLoader', () => {
         expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
+    it('makes a real tile loadable again when its pending retry becomes obsolete', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockResolvedValue(unavailableResponse);
+        vi.stubGlobal('fetch', fetchMock);
+
+        const obsolete = new Subject<string>();
+        const loader = new TileLoader({
+            authHeaders: (): Record<string, string> => authHeaders,
+            abortWhen: (): Observable<string> => obsolete,
+        });
+        const tile = new ImageTile([0, 0, 0], TileState.IDLE, 'https://example.com/tile', {}, loader.load);
+
+        tile.load();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(tile.getState()).toBe(TileState.ERROR);
+
+        obsolete.next('tile extent left the viewport');
+        await vi.advanceTimersByTimeAsync(10000);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        // OpenLayers only queues IDLE tiles when the user returns to this part of the map.
+        expect(tile.getState()).toBe(TileState.IDLE);
+    });
+
+    it('releases its obsolescence subscription when a retry tile is evicted', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockResolvedValue(unavailableResponse);
+        vi.stubGlobal('fetch', fetchMock);
+
+        const obsolete = new Subject<string>();
+        const loader = new TileLoader({
+            authHeaders: (): Record<string, string> => authHeaders,
+            abortWhen: (): Observable<string> => obsolete,
+        });
+        const tile = new ImageTile([0, 0, 0], TileState.IDLE, 'https://example.com/tile', {}, loader.load);
+        tile.load();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(tile.getState()).toBe(TileState.ERROR);
+        expect(obsolete.observers).toHaveLength(1);
+
+        tile.release();
+        await vi.advanceTimersByTimeAsync(1000);
+
+        expect(fetchMock).toHaveBeenCalledOnce();
+        expect(obsolete.observers).toHaveLength(0);
+        loader.abortAll();
+    });
+
+    it.each([200, 503])('does not revive a cancelled request while parsing a %s exception', async (status) => {
+        vi.useFakeTimers();
+        let finish!: (body: string) => void;
+        const text = new Promise<string>((resolve) => {
+            finish = resolve;
+        });
+        const readText = vi.fn().mockReturnValue(text);
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: status === 200,
+            status,
+            blob: (): Promise<Blob> => Promise.resolve({type: 'application/json', text: readText} as unknown as Blob),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const obsolete = new Subject<string>();
+        const loader = new TileLoader({
+            authHeaders: (): Record<string, string> => authHeaders,
+            abortWhen: (): Observable<string> => obsolete,
+        });
+        const tile = new ImageTile([0, 0, 0], TileState.IDLE, 'https://example.com/tile', {}, loader.load);
+        tile.load();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(readText).toHaveBeenCalledOnce();
+
+        obsolete.next('resolution changed');
+        finish(JSON.stringify({error: 'QueryCanceled', message: 'canceled'}));
+        await vi.advanceTimersByTimeAsync(10000);
+
+        expect(fetchMock).toHaveBeenCalledOnce();
+        expect(tile.getState()).toBe(TileState.IDLE);
+        loader.abortAll();
+    });
+
+    it('recovers a reprojection cached during backoff after its source tiles successfully retry', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockResolvedValue(unavailableResponse);
+        vi.stubGlobal('fetch', fetchMock);
+
+        const source = new TileWMS({url: 'https://example.com/wms', params: {LAYERS: 'test'}, projection: 'EPSG:3857', wrapX: false});
+        const layer = new AbortableTileLayer({source});
+        const loader = new TileLoader({
+            authHeaders: (): Record<string, string> => authHeaders,
+            onTileError: (tile): void => layer.invalidateAbortedTile(tile),
+        });
+        source.setTileLoadFunction(loader.load);
+
+        const renderer = layer.getRenderer()!;
+        // Tile lookup and prepareFrame only read the projection and pixel ratio from the frame.
+        const frameState = {viewState: {projection: getProjection('EPSG:4326')!}, pixelRatio: 1} as FrameState;
+        renderer.prepareFrame(frameState);
+        const displayTile = (): Tile => (renderer as unknown as TileRendererAccess).getOrCreateTile(1, 1, 0, frameState);
+
+        try {
+            displayTile().load();
+            await vi.advanceTimersByTimeAsync(0);
+            expect(renderer.getTileCache().getCount()).toBe(0);
+
+            // The next frame runs before the one-second retry delay has elapsed.
+            const cachedDuringBackoff = displayTile();
+            cachedDuringBackoff.load();
+            await vi.advanceTimersByTimeAsync(0);
+            expect(cachedDuringBackoff.getState()).toBe(TileState.ERROR);
+
+            const sourceTiles: Array<ImageTile> = [];
+            renderer.getSourceTileCache().forEach((tile: ImageTile) => sourceTiles.push(tile));
+            expect(sourceTiles.length).toBeGreaterThan(0);
+            expect(fetchMock).toHaveBeenCalledTimes(sourceTiles.length);
+
+            fetchMock.mockResolvedValue(imageResponse);
+            await vi.advanceTimersByTimeAsync(1000);
+            expect(fetchMock).toHaveBeenCalledTimes(2 * sourceTiles.length);
+
+            // jsdom does not decode images; deliver the browser's load event to the real ImageTiles.
+            for (const tile of sourceTiles) {
+                expect(tile.getState()).toBe(TileState.LOADING);
+                const image = tile.getImage() as HTMLImageElement;
+                expect(image.src).toContain('blob:tile');
+                Object.defineProperties(image, {naturalWidth: {value: 256}, naturalHeight: {value: 256}});
+                image.dispatchEvent(new Event('load'));
+                expect(tile.getState()).toBe(TileState.LOADED);
+            }
+
+            // The renderer must return a recovered or loadable reprojection, rather than the cached failure.
+            expect(displayTile().getState()).not.toBe(TileState.ERROR);
+        } finally {
+            loader.abortAll();
+            layer.dispose();
+        }
+    });
+
+    it('makes an aborted geographic reprojection loadable again when the source grid crosses the poles', async () => {
+        vi.useFakeTimers();
+        const signals: AbortSignal[] = [];
+        stubHangingFetch(signals);
+
+        const obsolete = new Subject<string>();
+        const source = new TileWMS({url: 'https://example.com/wms', params: {LAYERS: 'test'}, projection: 'EPSG:4326', wrapX: false});
+        const layer = new AbortableTileLayer({source});
+        const loader = new TileLoader({
+            authHeaders: (): Record<string, string> => authHeaders,
+            abortWhen: (): Observable<string> => obsolete,
+            onTileError: (tile): void => layer.invalidateAbortedTile(tile),
+        });
+        source.setTileLoadFunction(loader.load);
+
+        const renderer = layer.getRenderer()!;
+        const frameState = {viewState: {projection: getProjection('EPSG:3857')!}, pixelRatio: 1} as FrameState;
+        renderer.prepareFrame(frameState);
+        const displayTile = (): Tile => (renderer as unknown as TileRendererAccess).getOrCreateTile(0, 0, 0, frameState);
+
+        try {
+            // The standard zoom-zero geographic grid extends below the valid latitude range.
+            const sourceGrid = source.getTileGridForProjection(source.getProjection()!);
+            expect(sourceGrid.getTileCoordExtent([0, 0, 0])).toEqual([-180, -270, 180, 90]);
+            displayTile().load();
+            expect(signals.length).toBeGreaterThan(0);
+
+            obsolete.next('resolution changed');
+            await vi.advanceTimersByTimeAsync(0);
+            expect(signals.every((signal) => signal.aborted)).toBe(true);
+            renderer.getSourceTileCache().forEach((tile: ImageTile) => expect(tile.getState()).toBe(TileState.IDLE));
+
+            // The source is ready to load again, so its display tile must also be queueable.
+            expect(displayTile().getState()).toBe(TileState.IDLE);
+        } finally {
+            loader.abortAll();
+            layer.dispose();
+        }
+    });
+
     it('tells the caller about an aborted tile before the tile goes into ERROR', async () => {
         const signals: AbortSignal[] = [];
         stubHangingFetch(signals);
@@ -556,5 +743,18 @@ describe('tileExtentInViewProjection', () => {
         // reading the coordinate from the grid of the view projection would answer in metres
         // instead of degrees, which is what made the abort fire for tiles still on screen
         expect(tileExtentInViewProjection(tileGrid, tile, source, view)).toEqual(transformExtent([0, 0, 256, 256], source, view, 8));
+    });
+
+    it('clips a geographic tile that crosses the poles before transforming it', () => {
+        const geographicGrid = new TileGrid({origin: [-180, 90], resolutions: [360 / 256], tileSize: 256});
+        const geographicTile = {getTileCoord: () => [0, 0, 0]} as unknown as ImageTile;
+        const source = getProjection('EPSG:4326')!;
+        const view = getProjection('EPSG:3857')!;
+
+        expect(geographicGrid.getTileCoordExtent([0, 0, 0])).toEqual([-180, -270, 180, 90]);
+        const transformed = tileExtentInViewProjection(geographicGrid, geographicTile, source, view);
+        expect(transformed.every(Number.isFinite)).toBe(true);
+        expect(transformed[1]).toBeGreaterThan(-Infinity);
+        expect(transformed[3]).toBeLessThan(Infinity);
     });
 });

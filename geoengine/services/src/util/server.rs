@@ -336,6 +336,17 @@ pub struct SocketFd {
     pub still_open: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
+/// Peeks at a socket without ever waiting for data. The fd can be recycled for a blocking socket
+/// before the per-connection reuse flag is observed, so this probe must remain nonblocking.
+#[cfg(target_os = "linux")]
+fn peek_socket(fd: std::os::unix::prelude::RawFd, data: &mut [u8; 1]) -> nix::Result<usize> {
+    nix::sys::socket::recv(
+        fd,
+        data,
+        nix::sys::socket::MsgFlags::MSG_PEEK | nix::sys::socket::MsgFlags::MSG_DONTWAIT,
+    )
+}
+
 /// Global registry of socket fds that are currently held by connections, mapped to a flag
 /// that is set to `false` as soon as the fd number is claimed by a new connection. See
 /// [`connection_closed`] for the rationale.
@@ -401,7 +412,6 @@ pub fn connection_init(connection: &dyn Any, data: &mut Extensions) {
 pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> BoxFuture<'_, ()> {
     use futures::TryFutureExt;
     use nix::errno::Errno;
-    use nix::sys::socket::MsgFlags;
     use std::time::Instant;
 
     const CONNECTION_MONITOR_INTERVAL_SECONDS: u64 = 1;
@@ -425,7 +435,7 @@ pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> BoxFut
                     return;
                 }
 
-                let r = nix::sys::socket::recv(fd, &mut data, MsgFlags::MSG_PEEK);
+                let r = peek_socket(fd, &mut data);
 
                 match r {
                     Ok(0)
@@ -501,10 +511,40 @@ impl CacheControlHeader for CacheHint {
 mod tests {
     use super::*;
 
+    #[test]
+    fn it_does_not_block_when_peeking_an_idle_blocking_socket() {
+        use nix::errno::Errno;
+        use std::{os::fd::AsRawFd, os::unix::net::UnixStream, sync::mpsc, thread};
+
+        let (socket, peer) = UnixStream::pair().expect("should create a local socket pair");
+        let fd = socket.as_raw_fd();
+        let (sender, receiver) = mpsc::channel();
+        let probe = thread::spawn(move || {
+            let mut data = [0u8; 1];
+            let result = peek_socket(fd, &mut data);
+            let _ = sender.send(result);
+            drop(socket);
+        });
+
+        match receiver.recv_timeout(Duration::from_secs(1)) {
+            Ok(Err(Errno::EAGAIN)) => {}
+            Ok(result) => panic!("idle socket probe should return EAGAIN, got {result:?}"),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                // If the probe regresses to a blocking recv, closing the peer makes it return EOF
+                // so the test can still join the worker instead of leaving a hung test thread.
+                drop(peer);
+                probe
+                    .join()
+                    .expect("probe thread should stop after peer close");
+                panic!("idle blocking socket probe should return promptly");
+            }
+            Err(error) => panic!("probe result channel should stay connected: {error}"),
+        }
+        probe.join().expect("probe thread should finish");
+    }
+
     #[tokio::test]
     async fn it_invalidates_old_fd_flag_on_fd_reuse() {
-        use std::os::unix::io::AsRawFd;
-
         let listener =
             std::net::TcpListener::bind("127.0.0.1:0").expect("should bind to a free port");
         let address = listener
@@ -519,7 +559,6 @@ mod tests {
             .expect("should make connection a non-blocking");
         let connection_a = tokio::net::TcpStream::from_std(accepted_a)
             .expect("should register connection a with the io driver");
-        let fd_a = connection_a.as_raw_fd();
 
         let mut data_a = Extensions::default();
         connection_init(&connection_a, &mut data_a);
@@ -532,28 +571,10 @@ mod tests {
                 .load(std::sync::atomic::Ordering::SeqCst)
         );
 
-        drop(connection_a);
-        drop(client_a);
-
-        let client_b =
-            std::net::TcpStream::connect(address).expect("should connect to the listener");
-        let accepted_b = listener.accept().expect("should accept connection b").0;
-        accepted_b
-            .set_nonblocking(true)
-            .expect("should make connection b non-blocking");
-        let connection_b = tokio::net::TcpStream::from_std(accepted_b)
-            .expect("should register connection b with the io driver");
-
-        // Linux allocates the lowest free fd number, so closing connection_a hands it back and the
-        // new connection reuses it. The test relies on this for determinism.
-        assert_eq!(
-            connection_b.as_raw_fd(),
-            fd_a,
-            "the kernel should have reused the fd of the closed connection"
-        );
-
         let mut data_b = Extensions::default();
-        connection_init(&connection_b, &mut data_b);
+        // Registering this accepted socket again simulates a new connection claiming the same fd,
+        // without relying on the kernel's fd allocation order while tests run in parallel.
+        connection_init(&connection_a, &mut data_b);
 
         // the flag of the old connection must be invalidated so its monitor reports the close
         assert!(
@@ -570,6 +591,6 @@ mod tests {
                 .load(std::sync::atomic::Ordering::SeqCst)
         );
 
-        drop(client_b);
+        drop(client_a);
     }
 }
