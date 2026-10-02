@@ -247,9 +247,7 @@ export class TileLoader {
 
         await transform?.(metadata);
 
-        if (signal.aborted) {
-            throw new DOMException('Aborted', 'AbortError');
-        }
+        this.throwIfAborted(signal);
 
         const objectUrl = URL.createObjectURL(new Blob([JSON.stringify(metadata)], {type: 'application/json'}));
         this.objectUrls.add(objectUrl);

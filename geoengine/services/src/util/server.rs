@@ -593,4 +593,68 @@ mod tests {
 
         drop(client_a);
     }
+
+    /// The premise [`connection_init`] relies on: the kernel hands back the lowest free fd number,
+    /// so a new connection really can land on the fd of a closed one. The deterministic test above
+    /// covers the flag invalidation without depending on this, but only this test proves the
+    /// premise. Ignored because it depends on the fd allocation order, which parallel tests can
+    /// disturb; run it with `--ignored` on an otherwise idle machine.
+    #[tokio::test]
+    #[ignore = "depends on the kernel's fd allocation order, which parallel tests disturb"]
+    async fn it_reuses_the_closed_connections_fd_number() {
+        use std::os::unix::io::AsRawFd;
+
+        let listener =
+            std::net::TcpListener::bind("127.0.0.1:0").expect("should bind to a free port");
+        let address = listener
+            .local_addr()
+            .expect("should return the listener's address");
+
+        let client_a =
+            std::net::TcpStream::connect(address).expect("should connect to the listener");
+        let accepted_a = listener.accept().expect("should accept connection a").0;
+        accepted_a
+            .set_nonblocking(true)
+            .expect("should make connection a non-blocking");
+        let connection_a = tokio::net::TcpStream::from_std(accepted_a)
+            .expect("should register connection a with the io driver");
+        let fd_a = connection_a.as_raw_fd();
+
+        let mut data_a = Extensions::default();
+        connection_init(&connection_a, &mut data_a);
+        let socket_fd_a = data_a
+            .remove::<SocketFd>()
+            .expect("connection_init should insert a SocketFd");
+
+        drop(connection_a);
+        drop(client_a);
+
+        let client_b =
+            std::net::TcpStream::connect(address).expect("should connect to the listener");
+        let accepted_b = listener.accept().expect("should accept connection b").0;
+        accepted_b
+            .set_nonblocking(true)
+            .expect("should make connection b non-blocking");
+        let connection_b = tokio::net::TcpStream::from_std(accepted_b)
+            .expect("should register connection b with the io driver");
+
+        assert_eq!(
+            connection_b.as_raw_fd(),
+            fd_a,
+            "the kernel should have reused the fd of the closed connection"
+        );
+
+        let mut data_b = Extensions::default();
+        connection_init(&connection_b, &mut data_b);
+
+        // the flag of the old connection must be invalidated so its monitor reports the close
+        assert!(
+            !socket_fd_a
+                .still_open
+                .load(std::sync::atomic::Ordering::SeqCst),
+            "re-using the fd number must invalidate the flag of the previous connection"
+        );
+
+        drop(client_b);
+    }
 }
