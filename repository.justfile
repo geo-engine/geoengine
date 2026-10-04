@@ -135,7 +135,7 @@ is-tag-already-published:
     @git show-ref --tags "{{ `just repo print-version-tag` }}" --quiet && echo "true" || echo "false"
 
 # Check repository-wide lints. Usage: `just repo lint`.
-lint: format lint-version-numbers lint-generated-code
+lint: format lint-version-numbers lint-markdown lint-generated-code
 
 # Check that version numbers are consistent across the project. Usage: `just repo lint-version-numbers`.
 [group("lint")]
@@ -148,3 +148,14 @@ lint-version-numbers: common::_clear
 # Check that generated code is up to date and that there are no uncommitted changes in the git repository. Usage: `just repo lint-generated-code`.
 [group('lint')]
 lint-generated-code: common::_clear backend::generate-openapi-spec api-clients::build www::build && common::check-no-changes-in-git-repo
+
+# Check that all Markdown links are valid. Usage: `just repo lint-markdown`.
+lint-markdown: common::_clear
+    npx markdown-link-check \
+    -c .markdown-link-check.json \
+    README.md AGENTS.md \
+    api-clients/README.md api-clients/AGENTS.md \
+    geoengine/README.md geoengine/AGENTS.md \
+    python/README.md python/AGENTS.md \
+    ui/README.md ui/AGENTS.md \
+    www/README.md www/AGENTS.md
