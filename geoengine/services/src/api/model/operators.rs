@@ -1526,6 +1526,10 @@ pub struct GdalMdMetaData {
     /// Dataset-level TTL fallback used when no tile-level TTL is provided.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_ttl: Option<CacheTtlSeconds>,
+    /// Fixed index into each dimension between z and (y, x), so one dataset is one slice of
+    /// a 4D array - `[depth]` for `(time, depth, y, x)`. Empty for 3D.
+    #[serde(default)]
+    pub leading_prefix: Vec<i64>,
 }
 
 /// How the z dimension of an MD array maps to the 2D raster output. Mirrors
@@ -1568,6 +1572,7 @@ impl From<geoengine_operators::source::GdalMdMetaData> for GdalMdMetaData {
             wrap: value.wrap,
             max_z_batch_size: value.max_z_batch_size,
             cache_ttl: value.cache_ttl.map(Into::into),
+            leading_prefix: value.leading_prefix,
         }
     }
 }
@@ -1580,6 +1585,7 @@ impl From<GdalMdMetaData> for geoengine_operators::source::GdalMdMetaData {
             wrap: value.wrap,
             max_z_batch_size: value.max_z_batch_size,
             cache_ttl: value.cache_ttl.map(Into::into),
+            leading_prefix: value.leading_prefix,
         }
     }
 }

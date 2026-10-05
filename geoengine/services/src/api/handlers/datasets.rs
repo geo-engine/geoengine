@@ -511,6 +511,7 @@ pub fn probed_md_dataset(
             loading_info.wrap(),
             max_z_batch_size.and_then(|size| i64::try_from(size).ok()),
             cache_ttl.map(geoengine_datatypes::primitives::CacheTtlSeconds::new),
+            loading_info.leading_prefix().to_vec(),
         )
         .into(),
         tiles,
@@ -808,7 +809,9 @@ fn md_array_z_size(path: &Path, tile: &AddDatasetMdTile) -> Option<usize> {
         .ok()?;
     let dimensions = md_array.dimensions().ok()?;
 
-    (dimensions.len() >= 3).then(|| dimensions[dimensions.len() - 3].size())
+    // z is dimension 0; any dimensions between it and (y, x) are the leading prefix and do
+    // not contribute z slices
+    (dimensions.len() >= 3).then(|| dimensions[0].size())
 }
 
 /// Validates one MD tile at the trust boundary: the file must exist, the named array must

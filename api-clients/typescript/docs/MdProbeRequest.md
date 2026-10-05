@@ -14,6 +14,7 @@ Name | Type
 `variablesAsBands` | boolean
 `maxZBatchSize` | number
 `cacheTtl` | number
+`forceBandRole` | boolean
 
 ## Example
 
@@ -29,6 +30,7 @@ const example = {
   "variablesAsBands": null,
   "maxZBatchSize": null,
   "cacheTtl": null,
+  "forceBandRole": null,
 } satisfies MdProbeRequest
 
 console.log(example)

@@ -738,6 +738,55 @@ mod tests {
         }
     }
 
+    /// The end-to-end check for 4D: `depth` is held fixed while `time` is sliced, and each
+    /// slice must come back with the `depth` offset in its values. A read that dropped or
+    /// mis-set the prefix would return another depth's data, not an error.
+    #[tokio::test]
+    async fn test_query_four_dimensional_array_holds_the_leading_prefix() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+        let name = add_md_dataset(
+            &mut exe_ctx,
+            "md_time_depth",
+            &[test_data!("md/time_depth_4d.nc").to_path_buf()],
+            None,
+            None,
+        );
+
+        // two daily slices at depth 0
+        let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + 2 * DAY);
+        let tiles = query_md_source(
+            &exe_ctx,
+            &query_ctx,
+            name,
+            ts_grid_bounds(),
+            time,
+            BandSelection::first(),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+        assert_eq!(tiles.len(), 2);
+        for (k, tile) in tiles.iter().enumerate() {
+            let t = k as i64;
+            assert_eq!(
+                tile.time,
+                TimeInterval::new_unchecked(EPOCH_2000 + t * DAY, EPOCH_2000 + (t + 1) * DAY)
+            );
+            for (y, x) in [(0, 0), (7, 3), (7, 7)] {
+                // fixture value at (t, depth=0, y, x)
+                let expected = (t * 10_000 + (y as i64) * 10 + x as i64) as f32;
+                assert_eq!(
+                    grid_value(tile, y, x),
+                    expected,
+                    "value at y={y}, x={x} of t={t} must be depth 0's slice"
+                );
+            }
+        }
+    }
+
     #[tokio::test]
     async fn test_query_batched_z_equals_single_batched() {
         let mut exe_ctx = MockExecutionContext::test_default();

@@ -27,6 +27,9 @@ pub struct GdalMdMetaData {
     /// Dataset-level TTL fallback used when no tile-level TTL is provided.
     #[serde(rename = "cacheTtl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub cache_ttl: Option<Option<i32>>,
+    /// Fixed index into each dimension between z and (y, x), so one dataset is one slice of a 4D array - `[depth]` for `(time, depth, y, x)`. Empty for 3D.
+    #[serde(rename = "leadingPrefix", skip_serializing_if = "Option::is_none")]
+    pub leading_prefix: Option<Vec<i64>>,
 }
 
 impl GdalMdMetaData {
@@ -38,6 +41,7 @@ impl GdalMdMetaData {
             wrap,
             max_z_batch_size: None,
             cache_ttl: None,
+            leading_prefix: None,
         }
     }
 }

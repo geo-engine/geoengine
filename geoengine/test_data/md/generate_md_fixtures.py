@@ -60,6 +60,7 @@ FIXTURES = [
     "too_few_dims.nc",
     "projected_crs.nc",
     "projected_no_crs.nc",
+    "time_depth_4d.nc",
     "variables.nc",
     "grouped_variables.nc",
 ]
@@ -294,6 +295,32 @@ def projected_crs(path: Path):
     ds = None
 
 
+def time_depth_4d(path: Path):
+    """(time, depth, y, x): z is the outermost dimension, `depth` is a leading prefix.
+
+    Depth is the leading dimension a `leadingPrefix` selects: the probe reads `time` as the
+    z axis and holds `depth` at a fixed index, so one dataset is one depth. Value at
+    `(t, d, row, col)` is `t * 10_000 + d * 1000 + row * 10 + col`, which makes a wrong
+    prefix or a wrong z mapping obvious.
+    """
+    width, height, ntime, ndepth = 8, 8, 6, 3
+    ds = new_netcdf(path)
+    rg = ds.GetRootGroup()
+    xdim, ydim = add_xy_dims(rg, width, height, 0.0, 0.0, lon_step=30.0)
+    # z first, as the design requires
+    tdim = add_time_dim(rg, ntime, "days since 2000-01-01 00:00:00")
+    ddim, _da = add_coord_var(
+        rg, "depth", "DEPTH", "", np.arange(ndepth, dtype=np.float64) * 10.0
+    )
+    t = np.arange(ntime, dtype=np.int64)[:, None, None, None]
+    d = np.arange(ndepth, dtype=np.int64)[None, :, None, None]
+    r = np.arange(height, dtype=np.int64)[None, None, :, None]
+    c = np.arange(width, dtype=np.int64)[None, None, None, :]
+    vals = (t * 10_000 + d * 1000 + r * 10 + c).astype("float32")
+    write_array(rg, "temperature", [tdim, ddim, ydim, xdim], vals, -9999)
+    ds = None
+
+
 def projected_no_crs(path: Path):
     """Projected grid (metre x units) with **no** CRS attribute.
 
@@ -405,6 +432,7 @@ def main() -> None:
     too_few_dims(OUT_DIR / "too_few_dims.nc")
     projected_crs(OUT_DIR / "projected_crs.nc")
     projected_no_crs(OUT_DIR / "projected_no_crs.nc")
+    time_depth_4d(OUT_DIR / "time_depth_4d.nc")
     variables(OUT_DIR / "variables.nc")
     grouped_variables(OUT_DIR / "grouped_variables.nc")
     print(f"generated fixtures in {OUT_DIR}")

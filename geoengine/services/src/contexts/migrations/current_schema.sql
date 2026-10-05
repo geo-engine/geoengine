@@ -576,7 +576,8 @@ CREATE TYPE "GdalMdMetaData" AS (
     z_role "ZRole",
     wrap boolean,
     max_z_batch_size bigint,
-    cache_ttl int
+    cache_ttl int,
+    leading_prefix bigint[]
 );
 
 CREATE TYPE "MetaDataDefinition" AS (

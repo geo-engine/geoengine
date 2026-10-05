@@ -1,0 +1,16 @@
+-- Store which slice of a 4D array an MD dataset is.
+--
+-- `z` is dimension 0 and the last two dimensions are `(y, x)`. Any dimension in between is
+-- the *leading prefix*: a fixed index that turns a 4D array into a 3D one, so
+-- `(time, depth, y, x)` with `leading_prefix = [2]` is the depth-2 dataset. One prefix per
+-- dataset, not per tile - reading several depths means registering several datasets.
+--
+-- Empty for 3D data, which is the only shape this had before, and `Vec::default()` covers
+-- it on the Rust side via `serde(default)`.
+--
+-- No DEFAULT and no NOT NULL: `ALTER TYPE ... ADD ATTRIBUTE` accepts neither (`NOT NULL`
+-- is a syntax error, and `DEFAULT` is rejected as well), so this has to be a bare
+-- attribute. That is fine because `GdalMdMetaData` was introduced in the previous,
+-- unreleased migration 0034 - there are no rows to back-fill, and every insert from now on
+-- writes the full composite including this field.
+ALTER TYPE "GdalMdMetaData" ADD ATTRIBUTE leading_prefix bigint[];

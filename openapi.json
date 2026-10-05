@@ -8856,6 +8856,14 @@
                 "description": "Dataset-level TTL fallback used when no tile-level TTL is provided."
               }
             ]
+          },
+          "leadingPrefix": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Fixed index into each dimension between z and (y, x), so one dataset is one slice of\na 4D array - `[depth]` for `(time, depth, y, x)`. Empty for 3D."
           }
         }
       },
@@ -10414,6 +10422,10 @@
             "format": "int32",
             "description": "Dataset-level cache TTL in seconds, carried into the dataset metadata and used as\nthe fallback for tiles that carry no TTL of their own. `None` means the server\ndefault.",
             "minimum": 0
+          },
+          "forceBandRole": {
+            "type": "boolean",
+            "description": "Confirm that the z dimension really is a band axis. Without this a z dimension that\nhas no usable CF time units is rejected, because guessing produced the silent\n\"one band per time slice, synthetic millisecond steps\" result once already."
           }
         }
       },

@@ -21,6 +21,7 @@ Name | Type
 `zRole` | [ZRole](ZRole.md)
 `wrap` | boolean
 `maxZBatchSize` | number
+`leadingPrefix` | Array&lt;number&gt;
 
 ## Example
 
@@ -44,6 +45,7 @@ const example = {
   "zRole": null,
   "wrap": null,
   "maxZBatchSize": null,
+  "leadingPrefix": null,
 } satisfies MetaDataDefinition
 
 console.log(example)

@@ -412,6 +412,7 @@ fn read_and_send_md<T: GdalType + Pixel + FromPrimitive>(
         group,
         array_name,
         z_range,
+        leading_prefix,
     } = read_kind
     else {
         return Err(IpcProcessError::IpcOther {
@@ -426,6 +427,7 @@ fn read_and_send_md<T: GdalType + Pixel + FromPrimitive>(
         group.as_deref(),
         &array_name,
         z_range,
+        &leading_prefix,
     );
 
     let byte_payloads = batches.and_then(|payloads| {

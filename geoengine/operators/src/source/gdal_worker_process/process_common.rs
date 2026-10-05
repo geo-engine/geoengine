@@ -78,6 +78,11 @@ pub enum GdalReadKind {
         group: Option<String>,
         array_name: String,
         z_range: std::ops::Range<usize>,
+        /// Fixed index into each dimension between z and (y, x); empty for 3D.
+        ///
+        /// `#[serde(default)]` so a worker from the previous build still reads 3D data.
+        #[serde(default)]
+        leading_prefix: Vec<u64>,
     },
 }
 

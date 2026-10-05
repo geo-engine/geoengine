@@ -341,6 +341,35 @@ impl GdalDatasetHolder {
     }
 }
 
+/// Builds the per-dimension `[start, count]` window of one MD read.
+///
+/// Dimension 0 is `z`, the last two are `(y, x)`, and the dimensions in between are the
+/// dataset's fixed `leading_prefix`. A 3D array therefore has an empty prefix and the
+/// window is `(z, y, x)` exactly as before.
+fn md_read_window(
+    num_dimensions: usize,
+    z_range: &std::ops::Range<usize>,
+    leading_prefix: &[u64],
+    start_y: usize,
+    start_x: usize,
+    size_y: usize,
+    size_x: usize,
+) -> (Vec<u64>, Vec<usize>) {
+    let prefix_len = num_dimensions - 3;
+    let mut start = vec![0u64; num_dimensions];
+    start[0] = z_range.start as u64;
+    start[1..=prefix_len].copy_from_slice(leading_prefix);
+    start[num_dimensions - 2] = start_y as u64;
+    start[num_dimensions - 1] = start_x as u64;
+
+    let mut count = vec![1usize; num_dimensions];
+    count[0] = z_range.len();
+    count[num_dimensions - 2] = size_y;
+    count[num_dimensions - 1] = size_x;
+
+    (start, count)
+}
+
 pub struct GdalHandling;
 
 impl GdalHandling {
@@ -661,6 +690,7 @@ impl GdalHandling {
         group: Option<&str>,
         array_name: &str,
         z_range: std::ops::Range<usize>,
+        leading_prefix: &[u64],
     ) -> Result<Vec<super::process_common::GdalIpcPayload<T>>, IpcProcessError> {
         let is_remote = dataset_params.is_remote();
         let max_retries = dataset_params.max_retries().unwrap_or(0);
@@ -690,6 +720,7 @@ impl GdalHandling {
                     group,
                     array_name,
                     z_range.clone(),
+                    leading_prefix,
                 )
                 .inspect_err(|_e| {
                     if is_remote {
@@ -705,10 +736,12 @@ impl GdalHandling {
     /// Reads a batch of z-slices from a multidim array in one `GDALMDArrayRead` call
     /// and splits the 3D buffer into one `GdalIpcPayload` per z-slice.
     ///
-    /// Layout contract (validated at dataset registration): the last three array
-    /// dimensions are `(z, y, x)` in this order; leading dimensions are singletons.
+    /// Layout contract (validated at dataset registration): dimension 0 is `z`, the last two
+    /// are `(y, x)`, and the dimensions in between are the fixed `leading_prefix`. So 3D is
+    /// `(z, y, x)` with an empty prefix and 4D is `(z, depth, y, x)` with `[depth]`.
     /// The read window is interpreted in raw array index space (the MD operator
     /// converts `gdal_read_widow` to array space before sending).
+    #[allow(clippy::too_many_lines)]
     fn load_md_tile_data<T: Pixel + GdalType + FromPrimitive>(
         dataset: &mut GdalDataset,
         dataset_params: &GdalDatasetParameters,
@@ -716,6 +749,7 @@ impl GdalHandling {
         group: Option<&str>,
         array_name: &str,
         z_range: std::ops::Range<usize>,
+        leading_prefix: &[u64],
     ) -> Result<Vec<super::process_common::GdalIpcPayload<T>>, IpcProcessError> {
         let _span = tracing::debug_span!(
             "gdal_load_md_tile_data",
@@ -755,6 +789,19 @@ impl GdalHandling {
             });
         }
 
+        // a 4D array carries one prefix index per dimension between z and (y, x); a mismatch
+        // means the dataset was registered against a different file shape
+        let expected_prefix = num_dimensions - 3;
+        if leading_prefix.len() != expected_prefix {
+            return Err(IpcProcessError::IpcOther {
+                msg: format!(
+                    "MD array '{array_name}' has {num_dimensions} dimensions, so it needs a \
+                     leading prefix of {expected_prefix}, but the dataset supplies {}",
+                    leading_prefix.len()
+                ),
+            });
+        }
+
         let GdalReadWindow {
             start_x,
             start_y,
@@ -771,16 +818,15 @@ impl GdalHandling {
             })?,
         );
 
-        // array_start_index/count per dimension; leading (singleton) dims offset 0 / count 1
-        let mut array_start_index = vec![0u64; num_dimensions];
-        array_start_index[num_dimensions - 3] = z_range.start as u64;
-        array_start_index[num_dimensions - 2] = start_y as u64;
-        array_start_index[num_dimensions - 1] = start_x as u64;
-
-        let mut array_count = vec![1usize; num_dimensions];
-        array_count[num_dimensions - 3] = z_range.len();
-        array_count[num_dimensions - 2] = size_y;
-        array_count[num_dimensions - 1] = size_x;
+        let (array_start_index, array_count) = md_read_window(
+            num_dimensions,
+            &z_range,
+            leading_prefix,
+            start_y,
+            start_x,
+            size_y,
+            size_x,
+        );
 
         let read_start = Instant::now();
         // one batched 3D read: (z, y, x) row-major, x fastest – same 2D layout per slice

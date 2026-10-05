@@ -19,6 +19,7 @@ pub use crate::contexts::migrations::{
     migration_0032_stac_provider_cache_ttl::Migration0032StacProviderCacheTtl,
     migration_0033_gdal_multiband_cache_ttl::Migration0033GdalMultibandCacheTtl,
     migration_0034_md_dataset_tiles::Migration0034MdDatasetTiles,
+    migration_0035_md_leading_prefix::Migration0035MdLeadingPrefix,
 };
 pub use database_migration::{
     DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
@@ -45,6 +46,7 @@ mod migration_0031_stac_provider_authentication;
 mod migration_0032_stac_provider_cache_ttl;
 mod migration_0033_gdal_multiband_cache_ttl;
 mod migration_0034_md_dataset_tiles;
+mod migration_0035_md_leading_prefix;
 
 #[cfg(test)]
 mod schema_info;
@@ -85,6 +87,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0032StacProviderCacheTtl),
         Box::new(Migration0033GdalMultibandCacheTtl),
         Box::new(Migration0034MdDatasetTiles),
+        Box::new(Migration0035MdLeadingPrefix),
     ]
 }
 

@@ -735,6 +735,7 @@ def probe_md_metadata(
     variables_as_bands: bool = False,
     max_z_batch_size: int | None = None,
     cache_ttl: int | None = None,
+    force_band_role: bool = False,
     timeout: int = 600,
 ) -> geoengine_api_client.MdProbeResponse:
     """Probe multidimensional (netCDF/Zarr) arrays and report how to register them.
@@ -753,6 +754,11 @@ def probe_md_metadata(
 
     `cache_ttl` sets the dataset-level cache lifetime in seconds, used as a fallback for
     tiles that carry no TTL of their own. `None` means the server default.
+
+    `force_band_role` accepts a z axis that carries no usable time units as a band axis
+    instead of failing the probe. Off by default: a non-time z axis is usually a
+    mis-identified time axis, and reading it as bands silently produces one band per slice
+    with invented time steps.
 
     This reads every file, so it costs one GDAL open plus one coordinate-variable read per
     file - for a 65-file yearly series over the network that is minutes, hence the generous
@@ -778,6 +784,7 @@ def probe_md_metadata(
                 variables_as_bands=variables_as_bands,
                 max_z_batch_size=max_z_batch_size,
                 cache_ttl=cache_ttl,
+                force_band_role=force_band_role,
             ),
             _request_timeout=timeout,
         )
@@ -829,7 +836,17 @@ def add_md_gdal_source(
     Probes the files, registers the dataset and posts the per-file rows. See
     `probe_md_metadata` for the meaning of `array_name`, `files` and `max_z_batch_size`.
     """
-    probe = probe_md_metadata(data_store, files, array_name, group, variables_as_bands, max_z_batch_size, timeout)
+    # keyword arguments: this used to pass `timeout` positionally, which silently landed in
+    # `cache_ttl` once that parameter was added
+    probe = probe_md_metadata(
+        data_store,
+        files,
+        array_name=array_name,
+        group=group,
+        variables_as_bands=variables_as_bands,
+        max_z_batch_size=max_z_batch_size,
+        timeout=timeout,
+    )
 
     properties = AddDatasetProperties(
         name=name,
