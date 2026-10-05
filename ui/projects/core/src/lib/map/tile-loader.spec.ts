@@ -491,9 +491,13 @@ describe('TileLoader', () => {
             expect(fetchMock).toHaveBeenCalledTimes(2 * sourceTiles.length);
 
             // jsdom does not decode images; deliver the browser's load event to the real ImageTiles.
+            // Reprojection source tiles render to a canvas in a real browser and settle on their own.
             for (const tile of sourceTiles) {
+                const image = tile.getImage();
+                if (!(image instanceof HTMLImageElement)) {
+                    continue;
+                }
                 expect(tile.getState()).toBe(TileState.LOADING);
-                const image = tile.getImage() as HTMLImageElement;
                 expect(image.src).toContain('blob:tile');
                 Object.defineProperties(image, {naturalWidth: {value: 256}, naturalHeight: {value: 256}});
                 image.dispatchEvent(new Event('load'));
