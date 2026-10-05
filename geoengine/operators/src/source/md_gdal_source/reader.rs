@@ -59,7 +59,17 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
     );
 
     let advises = if loading_info.wrap() {
-        wrapped_splitted_advises(&dataset_params, &tile_spatial_grid)?
+        let advises = wrapped_splitted_advises(&dataset_params, &tile_spatial_grid)?;
+        // Same contract as the non-wrap arm below: a tile that does not reach the presented
+        // extent yields no tile at all. Without this the empty `advises` fell through to the
+        // `EmptyGrid` frames below and emitted a real, fully empty tile, so a query reaching
+        // past the extent (e.g. below the southernmost stored latitude) returned a full
+        // rectangle of empty tiles where `GdalSource` would return none.
+        if advises.is_empty() {
+            trace!("no read advise for tile, skipping.");
+            return Ok(vec![]);
+        }
+        advises
     } else {
         // The read advise is the tile/dataset intersection in the dataset's own frame;
         // the overlap is then read from the stored array.
@@ -135,6 +145,16 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
 /// `[col0 − half_width, col0 + half_width)` (world lon −180..180), where a tile-lattice
 /// column `c` holds stored column `(c − col0) mod width`. A tile crossing the seam column
 /// `col0` (world longitude 0°) is split into two contiguous stored runs.
+///
+/// ponytail: `col0` is always 0 in practice, because `is_0_360_wrap` only accepts a stored
+/// grid whose first cell *edge* sits on longitude 0, so the raw origin is 0 and the tiling
+/// origin (the nearest pixel edge to `(0,0)`) is 0 too. With a 512 px tile the seam is then
+/// always exactly a tile boundary and the two-run split at the bottom is unreachable
+/// end-to-end - `wrap_tile_straddling_seam_splits` covers it with a narrow synthetic tile
+/// instead. The split is kept because it is the correct answer if either the tile size or
+/// `TilingSpecification::tiling_origin_reference` ever stops being a multiple of the seam;
+/// the upgrade path if a wrapped file ever does store a non-zero raw origin is to derive
+/// `col0` from `is_0_360_wrap`'s own edge arithmetic rather than from the geo transform.
 fn wrapped_splitted_advises(
     dataset_params: &crate::source::gdal_worker_process::GdalDatasetParameters,
     tile_spatial_grid: &SpatialGridDefinition,
