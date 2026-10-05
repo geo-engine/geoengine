@@ -4,6 +4,7 @@ use chrono::{NaiveDate, NaiveDateTime};
 use gdal::{
     Dataset, DatasetOptions, GdalOpenFlags,
     raster::{Group, MDArray},
+    spatial_ref::SpatialRef,
 };
 use geoengine_datatypes::{
     primitives::{Measurement, TimeInstance, TimeInterval},
@@ -64,12 +65,14 @@ pub struct MdArraySelection {
 /// three dimensions in the files (the other arrays, e.g. coordinate variables, are ignored).
 pub fn probe_md_loading_info(
     paths: &[PathBuf],
+    group: Option<&str>,
     array_name: Option<&str>,
     max_z_batch_size: Option<usize>,
+    force_band_role: bool,
 ) -> Result<ProbedGdalMdMetaData, MdGdalSourceError> {
     let array_name = match array_name {
         Some(name) => name.to_owned(),
-        None => auto_array_name(&paths[0])?,
+        None => auto_array_name(&paths[0], group)?,
     };
 
     let mut probed_arrays: Vec<ProbedArray> = Vec::with_capacity(paths.len());
@@ -81,16 +84,24 @@ pub fn probe_md_loading_info(
             .map_err(|e| MdGdalSourceError::ProbeError {
                 message: format!("cannot open root group of {}: {e}", path.display()),
             })?;
-        let md_array = root_group
+        // `group` used to be ignored here and only honoured by the variables probe, so a
+        // client setting it alone either got a confusing "cannot open MD array" or silently
+        // read a same-named array in the root group.
+        let md_group = into_group(root_group, group)?;
+        let md_array = md_group
             .open_md_array(&array_name, Default::default())
             .map_err(|e| MdGdalSourceError::ProbeError {
                 message: format!(
-                    "cannot open MD array '{array_name}' in {}: {e}",
+                    "cannot open MD array '{array_name}'{} in {}: {e}",
+                    match group.filter(|g| !g.is_empty()) {
+                        Some(g) => format!(" in group '{g}'"),
+                        None => String::new(),
+                    },
                     path.display()
                 ),
             })?;
 
-        let probed = probed_array(&md_array, path, &array_name)?;
+        let probed = probed_array(&md_array, path, &array_name, force_band_role)?;
 
         if let Some(first) = &first {
             validate_same_grid(first, &probed)?;
@@ -109,14 +120,17 @@ pub fn probe_md_loading_info(
     let mut global_time_steps =
         Vec::with_capacity(probed_arrays.iter().map(|p| p.time_intervals.len()).sum());
     let mut files = Vec::with_capacity(probed_arrays.len());
+    // recorded on every row: the read path opens the array in *this* group, so a hardcoded
+    // `None` would make a grouped probe resolve on read and then fail (or open a same-named
+    // array in the root)
+    let recorded_group = group.filter(|g| !g.is_empty()).map(str::to_owned);
     for p in probed_arrays {
         let z_start = global_time_steps.len();
         global_time_steps.extend(p.time_intervals.iter().copied());
         files.push(MdDatasetFile {
             params: p.dataset_parameters.clone(),
             array_name: array_name.clone(),
-            // the single-array probe only reads from the root group
-            group: None,
+            group: recorded_group.clone(),
             z_start,
             z_end: z_start + p.z_coordinates.len(),
             local_offset: 0,
@@ -156,6 +170,8 @@ struct ProbedArray {
     time_intervals: Vec<TimeInterval>,
     /// pixel size and shape of the stored XY grid
     data_type: RasterDataType,
+    /// the array's declared CRS, or EPSG:4326 justified by degrees x units
+    spatial_reference: SpatialReference,
     x_size: usize,
     y_size: usize,
     height: usize,
@@ -183,6 +199,7 @@ fn probed_array(
     md_array: &MDArray<'_>,
     path: &Path,
     array_name: &str,
+    force_band_role: bool,
 ) -> Result<ProbedArray, MdGdalSourceError> {
     let dimensions = md_array
         .dimensions()
@@ -243,6 +260,7 @@ fn probed_array(
     let z_units = units_of(z_dim);
     let x_units = units_of(x_dim);
     let geographic = is_geographic(md_array, &x_units);
+    let spatial_reference = resolve_spatial_reference(md_array, array_name, path, geographic)?;
 
     let xy = xy_geometry(
         array_name,
@@ -253,7 +271,7 @@ fn probed_array(
         x_size,
     )?;
 
-    let (z_role, time_intervals) = z_role_and_intervals(&z_units, &z_coordinates)?;
+    let (z_role, time_intervals) = z_role_and_intervals(&z_units, &z_coordinates, force_band_role)?;
 
     Ok(ProbedArray {
         path: path.to_path_buf(),
@@ -263,6 +281,7 @@ fn probed_array(
         z_coordinates,
         time_intervals,
         data_type,
+        spatial_reference,
         x_size,
         y_size,
         height: y_size,
@@ -341,54 +360,100 @@ fn xy_geometry(
     })
 }
 
-enum ZRoleAndIntervals {
-    Time(Vec<TimeInterval>),
-    Band,
+/// What the z dimension's CF `units` say it is.
+///
+/// `Time` and `Index` are the two mappable roles; `UnsupportedTimeUnit` is separated out
+/// because it used to be indistinguishable from `Index` and silently became one output band
+/// per z slice.
+#[derive(Debug, Clone, PartialEq)]
+enum ZRoleDecision {
+    /// a supported fixed-width time unit: z becomes the time axis
+    Time(TimeUnitInfo),
+    /// no CF time units at all: a plain index axis, which maps to bands
+    Index,
+    /// CF time units we cannot honour (`years since ...` is variable length, an origin we
+    /// cannot parse, ...)
+    UnsupportedTimeUnit(String),
 }
 
 /// Map the z dimension to either time intervals (CF units) or band indices.
+///
+/// A z axis that is neither is an error unless `force_band_role` says the caller meant
+/// bands: silently guessing is what turned a daily field into 365 bands once already.
 fn z_role_and_intervals(
     z_units: &str,
     z_coordinates: &[f64],
+    force_band_role: bool,
 ) -> Result<(ZRole, Vec<TimeInterval>), MdGdalSourceError> {
-    let zr = match z_role_from_units(z_units) {
-        Some(TimeUnitInfo { factor_ms, origin }) => ZRoleAndIntervals::Time(
+    match z_role_decision(z_units) {
+        ZRoleDecision::Time(TimeUnitInfo { factor_ms, origin }) => Ok((
+            ZRole::Variable,
             times_from_coordinates(z_coordinates, z_units_tag(z_units), factor_ms, origin)?,
-        ),
-        None => ZRoleAndIntervals::Band,
-    };
-    Ok(match zr {
-        ZRoleAndIntervals::Time(intervals) => (ZRole::Variable, intervals),
-        ZRoleAndIntervals::Band => (
-            ZRole::Band,
-            z_coordinates
-                .iter()
-                .enumerate()
-                .map(|(i, _)| {
-                    TimeInterval::new(i as i64, i as i64 + 1).expect("valid unit interval")
-                })
-                .collect(),
-        ),
-    })
+        )),
+        ZRoleDecision::Index if force_band_role => Ok((ZRole::Band, band_intervals(z_coordinates))),
+        ZRoleDecision::Index => Err(MdGdalSourceError::ProbeError {
+            message: format!(
+                "MD array has no CF time units on its z dimension (units: {}); it will be read as \
+                 one band per z slice, which is only correct for a genuinely band-like axis. \
+                 Pass `forceBandRole` to confirm, or use a supported time unit (seconds, minutes, \
+                 hours, days)",
+                if z_units.is_empty() {
+                    "<none>"
+                } else {
+                    z_units
+                }
+            ),
+        }),
+        ZRoleDecision::UnsupportedTimeUnit(units) => Err(MdGdalSourceError::ProbeError {
+            message: format!(
+                "MD array declares unsupported CF time units `{units}` on its z dimension; \
+                 supported units are seconds, minutes, hours and days (variable-length ones such \
+                 as `years since` cannot be converted to a fixed step). Pass `forceBandRole` to \
+                 read it as one band per z slice instead"
+            ),
+        }),
+    }
 }
 
+/// Band-role intervals are synthetic `[k, k+1)` unit steps indexed by band, so there is no
+/// time axis to speak of.
+fn band_intervals(z_coordinates: &[f64]) -> Vec<TimeInterval> {
+    z_coordinates
+        .iter()
+        .enumerate()
+        .map(|(i, _)| TimeInterval::new(i as i64, i as i64 + 1).expect("valid unit interval"))
+        .collect()
+}
+
+#[derive(Debug, Clone, PartialEq)]
 struct TimeUnitInfo {
     factor_ms: f64,
     origin: NaiveDateTime,
 }
 
-fn z_role_from_units(units: &str) -> Option<TimeUnitInfo> {
-    // CF convention: "<unit> since <origin>", e.g. "days since 2000-01-01 00:00:00"
-    let (unit, origin_str) = units.split_once(" since ")?;
-    let factor_ms = match unit {
+fn z_role_decision(units: &str) -> ZRoleDecision {
+    let units = units.trim();
+    // no `units` attribute, or one that is not a CF time unit at all -> a plain index axis
+    let Some((unit, origin_str)) = units.split_once(" since ") else {
+        return ZRoleDecision::Index;
+    };
+    let factor_ms = match unit.trim() {
         "seconds" | "second" => 1_000.0,
         "minutes" | "minute" => 60_000.0,
         "hours" | "hour" => 3_600_000.0,
         "days" | "day" => 86_400_000.0,
-        _ => return None,
+        // it *is* a time unit, just not one we can honour (e.g. "years", "months")
+        _ => return ZRoleDecision::UnsupportedTimeUnit(units.to_owned()),
     };
-    let origin = parse_cf_origin(origin_str)?;
-    Some(TimeUnitInfo { factor_ms, origin })
+    match parse_cf_origin(origin_str) {
+        Some(origin) => ZRoleDecision::Time(TimeUnitInfo { factor_ms, origin }),
+        None => ZRoleDecision::UnsupportedTimeUnit(units.to_owned()),
+    }
+}
+
+/// Whether the z dimension's units describe a time axis this source can read.
+fn z_units_are_supported_time(units: &str) -> bool {
+    matches!(z_role_decision(units), ZRoleDecision::Time(_))
 }
 
 fn parse_cf_origin(input: &str) -> Option<NaiveDateTime> {
@@ -515,6 +580,45 @@ fn is_geographic(md_array: &MDArray<'_>, x_units: &str) -> bool {
     x_units.starts_with("degrees") || x_units.starts_with("degree")
 }
 
+/// The CRS the array declares, read from the CF attributes that carry it.
+///
+/// `md_array.spatial_reference()` cannot be used: it wraps a NULL `GDALMDArrayGetSpatialRef`
+/// in `SpatialRef::from_c_obj`, which dereferences it. The attribute route is pure safe code
+/// and covers how CF actually declares a CRS.
+fn declared_spatial_reference(md_array: &MDArray<'_>) -> Option<SpatialReference> {
+    ["crs", "spatial_ref", "grid_mapping"]
+        .into_iter()
+        .find_map(|name| string_attr(md_array, name))
+        .and_then(|definition| SpatialRef::from_definition(definition.trim()).ok())
+        .and_then(|srs| SpatialReference::try_from(srs).ok())
+}
+
+/// Resolve the array's CRS, or fail rather than mislabel it.
+///
+/// Degrees-based x units justify EPSG:4326 on their own; anything else needs a declared CRS,
+/// because hardcoding 4326 silently relabelled a projected array.
+fn resolve_spatial_reference(
+    md_array: &MDArray<'_>,
+    array_name: &str,
+    path: &Path,
+    geographic: bool,
+) -> Result<SpatialReference, MdGdalSourceError> {
+    if let Some(srs) = declared_spatial_reference(md_array) {
+        return Ok(srs);
+    }
+    if geographic {
+        return Ok(SpatialReference::epsg_4326());
+    }
+    Err(MdGdalSourceError::ProbeError {
+        message: format!(
+            "MD array '{array_name}' in {} has neither degrees x units nor a CRS attribute \
+             (`crs`, `spatial_ref` or `grid_mapping`), so its coordinate reference system \
+             cannot be determined. Add one to the file rather than let the source assume one",
+            path.display()
+        ),
+    })
+}
+
 /// True if the x coordinates describe a 0..360 longitude coverage with constant pixel size
 /// whose extent equals 360° exactly (so `width/2` is a valid column shift).
 fn is_0_360_wrap(x_coordinates: &[f64], delta_x: f64) -> bool {
@@ -587,13 +691,14 @@ fn validate_same_grid(a: &ProbedArray, b: &ProbedArray) -> Result<(), MdGdalSour
     Ok(())
 }
 
-fn auto_array_name(path: &Path) -> Result<String, MdGdalSourceError> {
+fn auto_array_name(path: &Path, group: Option<&str>) -> Result<String, MdGdalSourceError> {
     let dataset = open_md_dataset(path)?;
     let root_group = dataset
         .root_group()
         .map_err(|e| MdGdalSourceError::ProbeError {
             message: format!("cannot open root group of {}: {e}", path.display()),
         })?;
+    let root_group = into_group(root_group, group)?;
     let names = root_group.array_names(Default::default());
     let candidates = names
         .into_iter()
@@ -665,7 +770,7 @@ fn resolve_variable_names(
                 .is_ok_and(|a| {
                     a.dimensions().is_ok_and(|dims| {
                         dims.len() >= 3
-                            && z_role_from_units(&units_of(&dims[dims.len() - 3])).is_some()
+                            && z_units_are_supported_time(&units_of(&dims[dims.len() - 3]))
                     })
                 })
         })
@@ -706,6 +811,7 @@ pub fn probe_md_variables_loading_info(
     paths: &[PathBuf],
     selection: &MdArraySelection,
     max_z_batch_size: Option<usize>,
+    force_band_role: bool,
 ) -> Result<ProbedGdalMdMetaData, MdGdalSourceError> {
     if paths.is_empty() {
         return Err(MdGdalSourceError::ProbeError {
@@ -733,7 +839,7 @@ pub fn probe_md_variables_loading_info(
                     message: format!("cannot open MD array '{name}' in {}: {e}", path.display()),
                 }
             })?;
-            let probed = probed_array(&md_array, path, name)?;
+            let probed = probed_array(&md_array, path, name, force_band_role)?;
             if probed.z_role != ZRole::Variable {
                 return Err(MdGdalSourceError::ProbeError {
                     message: format!(
@@ -883,7 +989,7 @@ fn result_descriptor_with_bands(
 
     RasterResultDescriptor::new(
         probed.data_type,
-        SpatialReference::epsg_4326().into(),
+        probed.spatial_reference.into(),
         time,
         spatial_grid,
         bands,
@@ -918,7 +1024,12 @@ mod tests {
     };
 
     fn expect(path: &str) -> super::ProbedGdalMdMetaData {
-        probe_md_loading_info(&[test_data!(path).to_path_buf()], None, None).unwrap()
+        probe_md_loading_info(&[test_data!(path).to_path_buf()], None, None, None, false).unwrap()
+    }
+
+    /// Probe with `force_band_role`, for fixtures whose z axis is deliberately band-like.
+    fn expect_forced_bands(path: &str) -> super::ProbedGdalMdMetaData {
+        probe_md_loading_info(&[test_data!(path).to_path_buf()], None, None, None, true).unwrap()
     }
 
     #[test]
@@ -1016,6 +1127,8 @@ mod tests {
             ],
             None,
             None,
+            None,
+            false,
         )
         .unwrap();
         let li = &m.loading_info;
@@ -1082,13 +1195,161 @@ mod tests {
 
     #[test]
     fn probe_bands() {
-        let m = expect("md/bands.nc");
+        let m = expect_forced_bands("md/bands.nc");
         let li = &m.loading_info;
         assert_eq!(li.z_role(), ZRole::Band);
         assert_eq!(li.time_steps().len(), 4);
         assert_eq!(li.files()[0].z_start, 0);
         assert_eq!(li.files()[0].z_end, 4);
         assert_eq!(m.result_descriptor.bands.len(), 4);
+    }
+
+    /// A z axis with no CF time units is *rejected* unless the caller says it means bands.
+    ///
+    /// Guessing used to produce `ZRole::Band` with synthetic `[k, k+1)` millisecond steps,
+    /// which is how a daily field turned into 365 bands named "band 0".."band 364".
+    #[test]
+    fn probe_rejects_a_z_axis_without_time_units() {
+        let err = probe_md_loading_info(
+            &[test_data!("md/bands.nc").to_path_buf()],
+            None,
+            Some("reflectance"),
+            None,
+            false,
+        )
+        .unwrap_err();
+        match err {
+            MdGdalSourceError::ProbeError { message } => {
+                assert!(message.contains("no CF time units"), "{message}");
+                assert!(message.contains("forceBandRole"), "{message}");
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+    }
+
+    /// ... and `force_band_role` is the escape hatch that makes it registerable on purpose.
+    #[test]
+    fn probe_force_band_role_accepts_a_band_axis() {
+        let m = probe_md_loading_info(
+            &[test_data!("md/bands.nc").to_path_buf()],
+            None,
+            Some("reflectance"),
+            None,
+            true,
+        )
+        .unwrap();
+        assert_eq!(m.loading_info.z_role(), ZRole::Band);
+        assert_eq!(m.result_descriptor.bands.count(), 4);
+    }
+
+    /// `years since` is a time unit, but not one we can convert to a fixed step, so it must
+    /// be named as unsupported rather than silently degraded into bands.
+    #[test]
+    fn probe_rejects_variable_length_cf_time_units() {
+        let err = probe_md_loading_info(
+            &[test_data!("md/cf_time_units_years.nc").to_path_buf()],
+            None,
+            None,
+            None,
+            false,
+        )
+        .unwrap_err();
+        match err {
+            MdGdalSourceError::ProbeError { message } => {
+                assert!(message.contains("unsupported CF time units"), "{message}");
+                assert!(message.contains("years since"), "{message}");
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+    }
+
+    /// The array's declared CRS must win over the old hardcoded EPSG:4326, so a projected
+    /// grid is no longer silently relabelled as geographic.
+    #[test]
+    fn probe_reports_the_declared_crs() {
+        let m = expect("md/projected_crs.nc");
+        assert_eq!(
+            m.result_descriptor.spatial_reference,
+            geoengine_datatypes::spatial_reference::SpatialReference::new(
+                geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Epsg,
+                32633,
+            )
+            .into()
+        );
+    }
+
+    /// With neither degrees x units nor a CRS attribute there is nothing to go on, so the
+    /// probe must refuse rather than assume EPSG:4326.
+    #[test]
+    fn probe_rejects_an_array_with_no_determinable_crs() {
+        let err = probe_md_loading_info(
+            &[test_data!("md/projected_no_crs.nc").to_path_buf()],
+            None,
+            None,
+            None,
+            false,
+        )
+        .unwrap_err();
+        match err {
+            MdGdalSourceError::ProbeError { message } => {
+                assert!(message.contains("cannot be determined"), "{message}");
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+    }
+
+    /// Fewer than three dimensions cannot be a raster; the deepest layout restriction must
+    /// not go unenforced.
+    #[test]
+    fn probe_rejects_an_array_with_too_few_dimensions() {
+        let err = probe_md_loading_info(
+            &[test_data!("md/too_few_dims.nc").to_path_buf()],
+            None,
+            None,
+            None,
+            true,
+        )
+        .unwrap_err();
+        match err {
+            MdGdalSourceError::ProbeError { message } => {
+                assert!(message.contains("at least 3 dimensions"), "{message}");
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+    }
+
+    /// `group` used to be honoured only by the variables probe, so a client setting it alone
+    /// either got "cannot open MD array" or silently read a same-named array in the root.
+    #[test]
+    fn probe_honours_a_group_without_variables_as_bands() {
+        // the root group of grouped_variables.nc holds no `temperature`, so this must fail
+        // rather than quietly read something else
+        let err = probe_md_loading_info(
+            &[test_data!("md/grouped_variables.nc").to_path_buf()],
+            None,
+            Some("temperature"),
+            None,
+            false,
+        )
+        .unwrap_err();
+        match err {
+            MdGdalSourceError::ProbeError { message } => {
+                assert!(message.contains("cannot open MD array"), "{message}");
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+
+        // ... and with the group it resolves
+        let m = probe_md_loading_info(
+            &[test_data!("md/grouped_variables.nc").to_path_buf()],
+            Some("analysis"),
+            Some("temperature"),
+            None,
+            false,
+        )
+        .unwrap();
+        assert_eq!(m.loading_info.files().len(), 1);
+        assert_eq!(m.loading_info.files()[0].group.as_deref(), Some("analysis"));
     }
 
     /// A CF time origin with no time component (`days since 1850-01-01`, which is what
@@ -1144,6 +1405,8 @@ mod tests {
             &[test_data!("md/time_series.zarr").to_path_buf()],
             None,
             None,
+            None,
+            false,
         )
         .unwrap();
         let li = &m.loading_info;
@@ -1155,8 +1418,10 @@ mod tests {
     fn probe_rejects_wrong_array_name() {
         let err = probe_md_loading_info(
             &[test_data!("md/time_series.nc").to_path_buf()],
+            None,
             Some("nonexistent"),
             None,
+            false,
         )
         .unwrap_err();
         match err {
@@ -1177,6 +1442,7 @@ mod tests {
             &[test_data!("md/variables.nc").to_path_buf()],
             &MdArraySelection::default(),
             None,
+            false,
         )
         .unwrap();
         let li = &m.loading_info;
@@ -1215,6 +1481,7 @@ mod tests {
             &[test_data!("md/variables.nc").to_path_buf()],
             &selection,
             None,
+            false,
         )
         .unwrap();
         let li = &m.loading_info;
@@ -1242,6 +1509,7 @@ mod tests {
             &[test_data!("md/grouped_variables.nc").to_path_buf()],
             &selection,
             None,
+            false,
         )
         .unwrap();
         assert_eq!(m.loading_info.files().len(), 3);
@@ -1255,6 +1523,7 @@ mod tests {
             &[test_data!("md/grouped_variables.nc").to_path_buf()],
             &MdArraySelection::default(),
             None,
+            false,
         )
         .unwrap_err();
         match err {

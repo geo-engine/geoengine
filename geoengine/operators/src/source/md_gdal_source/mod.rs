@@ -609,7 +609,7 @@ mod tests {
     ) -> NamedData {
         let id: DataId = DatasetId::new().into();
         let named = NamedData::with_system_name(name);
-        let probed = probe_md_loading_info(paths, array_name, max_z_batch_size)
+        let probed = probe_md_loading_info(paths, None, array_name, max_z_batch_size, true)
             .expect("probe should succeed");
         ctx.add_meta_data(
             id,
@@ -632,7 +632,7 @@ mod tests {
     ) -> NamedData {
         let id: DataId = DatasetId::new().into();
         let named = NamedData::with_system_name(name);
-        let probed = probe_md_variables_loading_info(paths, selection, max_z_batch_size)
+        let probed = probe_md_variables_loading_info(paths, selection, max_z_batch_size, true)
             .expect("probe should succeed");
         ctx.add_meta_data(
             id,

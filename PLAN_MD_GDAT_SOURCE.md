@@ -433,3 +433,93 @@ frozen `CacheHint`, and `MdGdalSourceProcessor` holds `default_cache_ttl` from
 `ExecutionContext::default_cache_ttl()` — the exact chain multi-band uses, including
 `cache_hint(default)` resolving dataset TTL then context default. `MdProbeRequest` accepts
 it so the notebook/CLI can set it at registration.
+
+## Review round 4 - "can this replace the old netCDF handling?"
+
+**No, and the premise needs correcting.** `datasets/external/netcdfcf` (7756 lines) is an
+EBV-portal adapter, not a general netCDF reader. It hardcodes the EBV convention throughout:
+
+```rust
+let gdal_path = format!("NETCDF:{path}:/{group_path}/ebv_cube");  // array name fixed
+const LON_DIMENSION_INDEX: usize = 3;                              // (entity,time,lat,lon)
+const LAT_DIMENSION_INDEX: usize = 2;
+const TIME_DIMENSION_INDEX: usize = 1;
+let unix_offset_millis = TimeInstance::from(DateTime::new_utc(1860, 1, 1, ...));
+```
+
+A 3D `(time, lat, lon)` array is **not supported** there: dimension 3 does not exist, so
+`width = unwrap_or_default() = 0` and it silently degrades. `MustBe4DDataset` is declared
+but never constructed anywhere. There is no `depth` string in the module.
+
+Where the two genuinely overlap is the data axis, and the new code is strictly better:
+
+```rust
+// old: flatten (entity, time) into a 2D band index on a NETCDF: subdataset string
+channel: dataset_id.entity * dimensions_time + i + 1
+```
+
+That is the 2D raster API, and it *assumes* how GDAL's netCDF classic view flattens leading
+dims. Nothing validates `band_count() == entities x time`, so a wrong assumption surfaces as
+a silently wrong band. It is exactly the assumption that breaks on NEX-GDDP-CMIP6.
+`MdGdalSource` reads a per-dimension index window instead, so the mapping is read, not assumed.
+
+Blockers to full replacement: no overviews (old has per-slice COG via `multi_dim_translate`
+plus `OverviewLevel` and four HTTP task endpoints; `mod.rs:560` records that GDAL cannot
+build overviews for MD arrays), no 4D/entity, no dataset discovery, no metadata harvesting
+(exactly `long_name` + `standard_name` are read), no `calendar` support. The reverse reuse is
+the interesting one: netcdfcf's COG overview pipeline could give `MdGdalSource` its
+overviews back.
+
+Gaps `MdGdalSource` has itself, to be closed by the plan below: CRS forced to EPSG:4326 and
+never read, a non-time z axis silently degrading into bands, `group` ignored when
+`variables_as_bands` is false, no one-call creation, and the deepest layout rejections
+untested.
+
+## Plan A - closing the review gaps
+
+Ordered by "will bite next". Items A1 and A2 are the same failure class as the date-only CF
+origin bug: silently wrong instead of erroring.
+
+### A1. A non-time z axis must error, not become bands
+
+`z_role_from_units` returning `None` currently means `ZRole::Band` with synthetic `[k,k+1)`
+**millisecond** intervals. That is how a daily field became 365 bands named "band 0".."band
+364". `years since` / `months since` still return `None` by design, so the trap is armed.
+
+- Return a decision (`Time` / `Band` / `NotTime(units)`) instead of `Option`.
+- Probe: `NotTime` is a **probe error** naming the units and the two ways forward.
+- `MdProbeRequest.force_band_role: bool` is the escape hatch, so genuinely band-like data can
+  still be registered deliberately rather than by accident.
+- Gate: a fixture with `years since 2000-01-01` must error, not produce bands.
+
+### A2. Report the real CRS instead of assuming EPSG:4326
+
+`is_geographic` carries a `ponytail:` note that `spatial_reference()` panics in gdal 0.19 for
+netCDF MD arrays, so the descriptor hardcodes `epsg_4326()`. A projected MD array is
+therefore silently mislabelled.
+
+- Read the CRS the safe way: `crs` / `spatial_ref` / `grid_mapping` attributes via the
+  existing `string_attr`, preferring a non-panicking path.
+- Use the real CRS when found. When genuinely unavailable, keep 4326 but say so: the probe
+  response gains `crs_source: "attribute" | "assumed_epsg4326"`.
+- Gate: a fixture with a `crs` attribute reports that CRS.
+
+### A3. Honour `group` when `variables_as_bands` is false
+
+`group` is passed only on the variables branch (`datasets.rs:742-757`);
+`probe_md_loading_info` hardcodes the root group and `group: None`. A client setting `group`
+alone gets a confusing "cannot open MD array" or silently reads a same-named root array.
+
+- Pass `group` on both branches; error with the searched path if it resolves to nothing.
+
+### A4. Cover the untested rejections
+
+The `<3 dims` and non-singleton-leading-dims rejections have **no test**, so the deepest
+layout restrictions are unenforced by CI. Add fixtures for a 2D array (and, once B lands, a
+4D array), plus `auto_array_name` with 0 and >1 candidates, descending-x rejection, and a
+non-numeric datatype.
+
+### A5. One-call server-side creation - deferred
+
+probe -> `POST /dataset` -> md-tiles is three round trips; only the Python helper bundles
+them. Convenience, not correctness, and strictly less valuable than A1-A4.

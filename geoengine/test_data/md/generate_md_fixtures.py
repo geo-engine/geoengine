@@ -56,6 +56,10 @@ FIXTURES = [
     "bands.nc",
     "cf_time_units_minutes.nc",
     "cf_time_units_date_only.nc",
+    "cf_time_units_years.nc",
+    "too_few_dims.nc",
+    "projected_crs.nc",
+    "projected_no_crs.nc",
     "variables.nc",
     "grouped_variables.nc",
 ]
@@ -241,6 +245,96 @@ def bands(path: Path):
     ds = None
 
 
+def cf_time_units_years(path: Path):
+    """(time, y, x) array whose CF units are a variable-length `years since`.
+
+    The probe cannot convert a calendar year to a fixed millisecond step, so it must reject
+    this rather than silently fall back to bands. It used to: the array was registered as
+    `ZRole::Band`, one band per slice with synthetic `[k, k+1)` ms steps.
+    """
+    width, height, ntime = 8, 8, 4
+    ds = new_netcdf(path)
+    rg = ds.GetRootGroup()
+    xdim, ydim = add_xy_dims(rg, width, height, 0.0, 0.0, lon_step=30.0)
+    tdim = add_time_dim(rg, ntime, "years since 2000-01-01 00:00:00")
+    ts = np.arange(ntime, dtype=np.int64)
+    vals = (np.arange(height)[:, None] * 10 + np.arange(width)[None, :])[None, :, :]
+    vals = ts[:, None, None] * 1000 + vals.astype("float32")
+    write_array(rg, "temperature", [tdim, ydim, xdim], vals, -9999)
+    ds = None
+
+
+def projected_crs(path: Path):
+    """(time, y, x) array in a projected CRS, declaring it via the CF `crs` attribute.
+
+    The probe used to hardcode EPSG:4326 for every array, so this was silently mislabelled
+    as geographic. It also carries no degrees x units, which is what forces the probe to
+    actually resolve the CRS instead of inferring it.
+    """
+    width, height, ntime = 8, 8, 4
+    ds = new_netcdf(path)
+    rg = ds.GetRootGroup()
+    # metres, not degrees: a projected grid
+    xdim, xa = add_coord_var(
+        rg, "x", "HORIZONTAL_X", "", 500_000.0 + np.arange(width, dtype=np.float64) * 1000.0
+    )
+    ydim, ya = add_coord_var(
+        rg, "y", "HORIZONTAL_Y", "", 5_000_000.0 - np.arange(height, dtype=np.float64) * 1000.0
+    )
+    xa.CreateAttribute("units", [1], gdal.ExtendedDataType.CreateString(), []).WriteString("m")
+    ya.CreateAttribute("units", [1], gdal.ExtendedDataType.CreateString(), []).WriteString("m")
+    tdim = add_time_dim(rg, ntime, "days since 2000-01-01 00:00:00")
+    ts = np.arange(ntime, dtype=np.int64)
+    vals = (np.arange(height)[:, None] * 10 + np.arange(width)[None, :])[None, :, :]
+    vals = ts[:, None, None] * 1000 + vals.astype("float32")
+    arr = write_array(rg, "elevation", [tdim, ydim, xdim], vals, -9999)
+    arr.CreateAttribute("crs", [1], gdal.ExtendedDataType.CreateString(), []).WriteString(
+        "EPSG:32633"
+    )
+    ds = None
+
+
+def projected_no_crs(path: Path):
+    """Projected grid (metre x units) with **no** CRS attribute.
+
+    There is nothing left to infer a coordinate reference system from, so the probe has to
+    refuse rather than fall back to EPSG:4326.
+    """
+    width, height, ntime = 8, 8, 4
+    ds = new_netcdf(path)
+    rg = ds.GetRootGroup()
+    xdim, xa = add_coord_var(
+        rg, "x", "HORIZONTAL_X", "", 500_000.0 + np.arange(width, dtype=np.float64) * 1000.0
+    )
+    ydim, ya = add_coord_var(
+        rg, "y", "HORIZONTAL_Y", "", 5_000_000.0 - np.arange(height, dtype=np.float64) * 1000.0
+    )
+    xa.CreateAttribute("units", [1], gdal.ExtendedDataType.CreateString(), []).WriteString("m")
+    ya.CreateAttribute("units", [1], gdal.ExtendedDataType.CreateString(), []).WriteString("m")
+    tdim = add_time_dim(rg, ntime, "days since 2000-01-01 00:00:00")
+    ts = np.arange(ntime, dtype=np.int64)
+    vals = (np.arange(height)[:, None] * 10 + np.arange(width)[None, :])[None, :, :]
+    vals = ts[:, None, None] * 1000 + vals.astype("float32")
+    write_array(rg, "elevation", [tdim, ydim, xdim], vals, -9999)
+    ds = None
+
+
+def too_few_dims(path: Path):
+    """(y, x) array -- one dimension short of a raster, so the probe must reject it.
+
+    Rejection coverage for the *non-numeric datatype* path is intentionally absent: writing a
+    GDAL string MD array through the python bindings is not worth the fight for a plain
+    `try_into()` on the numeric datatype.
+    """
+    width, height = 8, 8
+    ds = new_netcdf(path)
+    rg = ds.GetRootGroup()
+    xdim, ydim = add_xy_dims(rg, width, height, 0.0, 0.0, lon_step=30.0)
+    vals = np.arange(height, dtype="float32")[:, None] * 10 + np.arange(width)[None, :]
+    write_array(rg, "grid_2d", [ydim, xdim], vals, -9999)
+    ds = None
+
+
 def cf_time_units_minutes(path: Path):
     """Same as time_series but time units `minutes since 1900-01-01 00:00:00Z` and
     ASCENDING latitudes (row 0 = south), so the read path must flip y."""
@@ -307,6 +401,10 @@ def main() -> None:
     cf_time_units_minutes(OUT_DIR / "cf_time_units_minutes.nc")
     wrap_0_360_multitile(OUT_DIR / "wrap_0_360_multitile.nc")
     cf_time_units_date_only(OUT_DIR / "cf_time_units_date_only.nc")
+    cf_time_units_years(OUT_DIR / "cf_time_units_years.nc")
+    too_few_dims(OUT_DIR / "too_few_dims.nc")
+    projected_crs(OUT_DIR / "projected_crs.nc")
+    projected_no_crs(OUT_DIR / "projected_no_crs.nc")
     variables(OUT_DIR / "variables.nc")
     grouped_variables(OUT_DIR / "grouped_variables.nc")
     print(f"generated fixtures in {OUT_DIR}")
