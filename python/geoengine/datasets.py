@@ -829,9 +829,7 @@ def add_md_gdal_source(
     Probes the files, registers the dataset and posts the per-file rows. See
     `probe_md_metadata` for the meaning of `array_name`, `files` and `max_z_batch_size`.
     """
-    probe = probe_md_metadata(
-        data_store, files, array_name, group, variables_as_bands, max_z_batch_size, timeout
-    )
+    probe = probe_md_metadata(data_store, files, array_name, group, variables_as_bands, max_z_batch_size, timeout)
 
     properties = AddDatasetProperties(
         name=name,
