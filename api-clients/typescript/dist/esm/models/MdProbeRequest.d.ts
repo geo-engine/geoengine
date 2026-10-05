@@ -64,6 +64,14 @@ export interface MdProbeRequest {
      * @memberof MdProbeRequest
      */
     cacheTtl?: number | null;
+    /**
+     * Confirm that the z dimension really is a band axis. Without this a z dimension that
+     * has no usable CF time units is rejected, because guessing produced the silent
+     * "one band per time slice, synthetic millisecond steps" result once already.
+     * @type {boolean}
+     * @memberof MdProbeRequest
+     */
+    forceBandRole?: boolean;
 }
 /**
  * Check if a given object implements the MdProbeRequest interface.

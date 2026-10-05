@@ -71,6 +71,13 @@ export interface GdalMdMetaData {
      * @memberof GdalMdMetaData
      */
     cacheTtl?: number | null;
+    /**
+     * Fixed index into each dimension between z and (y, x), so one dataset is one slice of
+     * a 4D array - `[depth]` for `(time, depth, y, x)`. Empty for 3D.
+     * @type {Array<number>}
+     * @memberof GdalMdMetaData
+     */
+    leadingPrefix?: Array<number>;
 }
 
 
@@ -110,6 +117,7 @@ export function GdalMdMetaDataFromJSONTyped(json: any, ignoreDiscriminator: bool
         'wrap': json['wrap'],
         'maxZBatchSize': json['maxZBatchSize'] == null ? undefined : json['maxZBatchSize'],
         'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'leadingPrefix': json['leadingPrefix'] == null ? undefined : json['leadingPrefix'],
     };
 }
 
@@ -130,6 +138,7 @@ export function GdalMdMetaDataToJSONTyped(value?: GdalMdMetaData | null, ignoreD
         'wrap': value['wrap'],
         'maxZBatchSize': value['maxZBatchSize'],
         'cacheTtl': value['cacheTtl'],
+        'leadingPrefix': value['leadingPrefix'],
     };
 }
 

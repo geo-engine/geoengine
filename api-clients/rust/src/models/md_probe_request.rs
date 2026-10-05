@@ -33,6 +33,9 @@ pub struct MdProbeRequest {
     /// Dataset-level cache TTL in seconds, carried into the dataset metadata and used as the fallback for tiles that carry no TTL of their own. `None` means the server default.
     #[serde(rename = "cacheTtl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub cache_ttl: Option<Option<i32>>,
+    /// Confirm that the z dimension really is a band axis. Without this a z dimension that has no usable CF time units is rejected, because guessing produced the silent \"one band per time slice, synthetic millisecond steps\" result once already.
+    #[serde(rename = "forceBandRole", skip_serializing_if = "Option::is_none")]
+    pub force_band_role: Option<bool>,
 }
 
 impl MdProbeRequest {
@@ -46,6 +49,7 @@ impl MdProbeRequest {
             variables_as_bands: None,
             max_z_batch_size: None,
             cache_ttl: None,
+            force_band_role: None,
         }
     }
 }

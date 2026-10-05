@@ -576,7 +576,8 @@ CREATE TYPE "GdalMdMetaData" AS (
     z_role "ZRole",
     wrap boolean,
     max_z_batch_size bigint,
-    cache_ttl int
+    cache_ttl int,
+    leading_prefix bigint[]
 );
 
 CREATE TYPE "MetaDataDefinition" AS (
@@ -1438,7 +1439,7 @@ CREATE TYPE "TileEntry" AS (
 );
 
 -- one row per MD array file of an MdGdalSource dataset;
--- see migration_0034_md_dataset_tiles
+-- see migration_0035_md_dataset_tiles
 CREATE TABLE dataset_md_tiles (
     id uuid NOT NULL PRIMARY KEY,
     dataset_id uuid NOT NULL,

@@ -43,7 +43,8 @@ class TestMdProbeRequest(unittest.TestCase):
                 group = '',
                 variables_as_bands = True,
                 max_z_batch_size = 0,
-                cache_ttl = 0
+                cache_ttl = 0,
+                force_band_role = True
             )
         else:
             return MdProbeRequest(

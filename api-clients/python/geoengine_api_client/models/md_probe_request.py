@@ -35,7 +35,8 @@ class MdProbeRequest(BaseModel):
     variables_as_bands: Optional[StrictBool] = Field(default=None, description="Probe several data variables as separate Geo Engine bands instead of one. Each variable must be a time series.", alias="variablesAsBands")
     max_z_batch_size: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, description="Upper bound on how many consecutive z slices one GDAL read may request. Carried into the dataset metadata, because a batch is sized against the slice size of the data and not against the workflow that reads it. `None` means the operator's default.", alias="maxZBatchSize")
     cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, description="Dataset-level cache TTL in seconds, carried into the dataset metadata and used as the fallback for tiles that carry no TTL of their own. `None` means the server default.", alias="cacheTtl")
-    __properties: ClassVar[List[str]] = ["dataPath", "files", "arrayName", "group", "variablesAsBands", "maxZBatchSize", "cacheTtl"]
+    force_band_role: Optional[StrictBool] = Field(default=None, description="Confirm that the z dimension really is a band axis. Without this a z dimension that has no usable CF time units is rejected, because guessing produced the silent \"one band per time slice, synthetic millisecond steps\" result once already.", alias="forceBandRole")
+    __properties: ClassVar[List[str]] = ["dataPath", "files", "arrayName", "group", "variablesAsBands", "maxZBatchSize", "cacheTtl", "forceBandRole"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -117,7 +118,8 @@ class MdProbeRequest(BaseModel):
             "group": obj.get("group"),
             "variablesAsBands": obj.get("variablesAsBands"),
             "maxZBatchSize": obj.get("maxZBatchSize"),
-            "cacheTtl": obj.get("cacheTtl")
+            "cacheTtl": obj.get("cacheTtl"),
+            "forceBandRole": obj.get("forceBandRole")
         })
         return _obj
 

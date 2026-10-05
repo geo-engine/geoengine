@@ -56,6 +56,13 @@ pub struct GdalMdMetaData {
     /// `GdalMultiBand::cache_ttl`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_ttl: Option<CacheTtlSeconds>,
+    /// Fixed index into each dimension between z and (y, x), so one dataset is one slice of
+    /// a 4D array - `[depth]` for `(time, depth, y, x)`.
+    ///
+    /// Empty for 3D, which is why it carries `serde(default)`: rows written before 4D
+    /// support have nothing to select.
+    #[serde(default)]
+    pub leading_prefix: Vec<i64>,
 }
 
 impl GdalMdMetaData {
@@ -66,6 +73,7 @@ impl GdalMdMetaData {
         wrap: bool,
         max_z_batch_size: Option<i64>,
         cache_ttl: Option<CacheTtlSeconds>,
+        leading_prefix: Vec<i64>,
     ) -> Self {
         Self {
             result_descriptor,
@@ -73,6 +81,7 @@ impl GdalMdMetaData {
             wrap,
             max_z_batch_size,
             cache_ttl,
+            leading_prefix,
         }
     }
 }
@@ -298,6 +307,9 @@ pub struct MdLoadingInfo {
     /// upper bound on how many consecutive z slices one worker request may return; a
     /// dataset-level knob, since a batch is sized against the data's slice size
     max_z_batch_size: Option<usize>,
+    /// fixed index into each dimension between z and (y, x); empty for 3D
+    #[serde(default)]
+    leading_prefix: Vec<i64>,
 }
 
 impl MdLoadingInfo {
@@ -309,6 +321,7 @@ impl MdLoadingInfo {
         z_role: ZRole,
         wrap: bool,
         max_z_batch_size: Option<usize>,
+        leading_prefix: Vec<i64>,
     ) -> Self {
         debug_assert!(!time_steps.is_empty(), "time_steps must not be empty");
         debug_assert!(
@@ -341,6 +354,12 @@ impl MdLoadingInfo {
             max_z_batch_size.is_none_or(|size| size > 0),
             "a z batch must hold at least one slice"
         );
+        debug_assert!(
+            files
+                .iter()
+                .all(|f| f.params.width > 0 && f.params.height > 0),
+            "a tile must have a non-empty footprint"
+        );
 
         Self {
             time_steps,
@@ -349,6 +368,7 @@ impl MdLoadingInfo {
             z_role,
             wrap,
             max_z_batch_size,
+            leading_prefix,
         }
     }
 
@@ -382,6 +402,12 @@ impl MdLoadingInfo {
     #[must_use]
     pub fn wrap(&self) -> bool {
         self.wrap
+    }
+
+    /// Fixed index into each dimension between z and (y, x); empty for 3D.
+    #[must_use]
+    pub fn leading_prefix(&self) -> &[i64] {
+        &self.leading_prefix
     }
 
     /// The cache TTL for a tile of this dataset, falling back to the context default.
@@ -585,6 +611,7 @@ mod tests {
             ZRole::Variable,
             false,
             None,
+            Vec::new(),
         );
         let all_z = (0..8).collect::<Vec<_>>();
 
@@ -626,6 +653,7 @@ mod tests {
             ZRole::Variable,
             false,
             None,
+            Vec::new(),
         );
 
         let (batches, missing) = loading_info.z_batches(&(0..8).collect::<Vec<_>>(), Some(0), 2);

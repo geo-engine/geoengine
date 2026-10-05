@@ -150,6 +150,7 @@ impl GdalPoolReader {
         group: Option<&str>,
         array_name: &str,
         z_range: std::ops::Range<usize>,
+        leading_prefix: &[u64],
     ) -> Result<GdalProcessMdReadResult<T>, GdalProcessPoolError> {
         let file_not_found_as_no_data =
             dataset_params.file_not_found_handling == FileNotFoundHandling::NoData;
@@ -181,6 +182,7 @@ impl GdalPoolReader {
                 group: group.map(str::to_string),
                 array_name: array_name.to_string(),
                 z_range,
+                leading_prefix: leading_prefix.to_vec(),
             },
         });
 

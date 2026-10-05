@@ -146,6 +146,7 @@ pub fn probe_md_loading_info(
         first.z_role,
         first.wrap,
         max_z_batch_size,
+        first.leading_prefix.clone(),
     );
 
     let result_descriptor = result_descriptor(&first, &loading_info);
@@ -168,6 +169,8 @@ struct ProbedArray {
     z_coordinates: Vec<f64>,
     /// one `TimeInterval` per z slice
     time_intervals: Vec<TimeInterval>,
+    /// fixed index into each dimension between z and (y, x), e.g. `[depth]`
+    leading_prefix: Vec<i64>,
     /// pixel size and shape of the stored XY grid
     data_type: RasterDataType,
     /// the array's declared CRS, or EPSG:4326 justified by degrees x units
@@ -219,21 +222,17 @@ fn probed_array(
             ),
         });
     }
-    let leading = &dimensions[..dimensions.len() - 3];
-    if leading.iter().any(|d| d.size() != 1) {
-        return Err(MdGdalSourceError::ProbeError {
-            message: format!(
-                "MD array '{array_name}' has non-singleton leading dimensions (unsupported layout): {}",
-                path.display()
-            ),
-        });
-    }
-
-    let z_dim = &dimensions[dimensions.len() - 3];
+    // z is the outermost dimension; the dimensions between it and (y, x) are the leading
+    // prefix, fixed per dataset. For 3D the prefix is empty, so this is the previous layout.
+    let z_dim = &dimensions[0];
     let y_dim = &dimensions[dimensions.len() - 2];
     let x_dim = &dimensions[dimensions.len() - 1];
     let x_size = x_dim.size();
     let y_size = y_dim.size();
+    // `len >= 3` is checked above, so this never underflows; for 3D `prefix_len == 0` and
+    // the range is empty
+    let prefix_len = dimensions.len() - 3;
+    let leading_prefix = leading_prefix(&dimensions[1..=prefix_len], array_name, path)?;
 
     let z_coordinates = read_coordinates(z_dim, array_name, path, "z")?;
     let x_coordinates = read_coordinates(x_dim, array_name, path, "x")?;
@@ -280,6 +279,7 @@ fn probed_array(
         wrap: xy.wrap,
         z_coordinates,
         time_intervals,
+        leading_prefix,
         data_type,
         spatial_reference,
         x_size,
@@ -380,6 +380,35 @@ enum ZRoleDecision {
 ///
 /// A z axis that is neither is an error unless `force_band_role` says the caller meant
 /// bands: silently guessing is what turned a daily field into 365 bands once already.
+/// The indices into the dimensions between z and (y, x) - `[depth]` for
+/// `(time, depth, y, x)`.
+///
+/// They are coordinates, but they are used as `[start, count]` window indices at read time,
+/// so anything non-integral would silently truncate to the wrong slice.
+fn leading_prefix(
+    dimensions: &[gdal::raster::Dimension<'_>],
+    array_name: &str,
+    path: &Path,
+) -> Result<Vec<i64>, MdGdalSourceError> {
+    dimensions
+        .iter()
+        .map(|dimension| {
+            let name = dimension.name();
+            let coordinates = read_coordinates(dimension, array_name, path, &name)?;
+            if coordinates.iter().any(|c| *c < 0.0 || c.fract() != 0.0) {
+                return Err(MdGdalSourceError::ProbeError {
+                    message: format!(
+                        "MD array '{array_name}' in {} has non-integral '{name}' coordinates \
+                         ({coordinates:?}); a leading dimension must be selectable by index",
+                        path.display()
+                    ),
+                });
+            }
+            Ok(coordinates[0] as i64)
+        })
+        .collect()
+}
+
 fn z_role_and_intervals(
     z_units: &str,
     z_coordinates: &[f64],
@@ -920,6 +949,7 @@ pub fn probe_md_variables_loading_info(
         ZRole::Variable,
         reference.wrap,
         max_z_batch_size,
+        reference.leading_prefix.clone(),
     );
     let bands = RasterBandDescriptors::new(bands).map_err(|e| MdGdalSourceError::ProbeError {
         message: format!("invalid band descriptors: {e}"),
@@ -1015,7 +1045,11 @@ fn result_descriptor(probed: &ProbedArray, loading_info: &MdLoadingInfo) -> Rast
 #[cfg(test)]
 #[allow(clippy::float_cmp)] // exact values: half-pixel offsets are exactly representable f64
 mod tests {
-    use geoengine_datatypes::{primitives::Measurement, raster::RasterDataType, test_data};
+    use geoengine_datatypes::{
+        primitives::{Measurement, TimeInstance, TimeInterval},
+        raster::RasterDataType,
+        test_data,
+    };
 
     use super::MdArraySelection;
 
@@ -1261,6 +1295,35 @@ mod tests {
             }
             other => panic!("unexpected error: {other}"),
         }
+    }
+
+    /// `(time, depth, y, x)` probes as 6 daily z-slices with `depth` held as the leading
+    /// prefix, not as 3 band-like slices or an error.
+    #[test]
+    fn probe_reads_a_four_dimensional_array_as_time_with_a_leading_prefix() {
+        let m = expect("md/time_depth_4d.nc");
+        let time = m.result_descriptor.time;
+        assert!(time.is_regular());
+        assert_eq!(
+            time.dimension.unwrap_regular().unwrap().step,
+            geoengine_datatypes::primitives::TimeStep::days(1).unwrap()
+        );
+        assert_eq!(
+            time.bounds.unwrap(),
+            TimeInterval::new_unchecked(
+                TimeInstance::from_millis_unchecked(946_684_800_000),
+                TimeInstance::from_millis_unchecked(946_684_800_000 + 6 * 86_400_000),
+            ),
+            "2000-01-01 .. 2000-01-07, i.e. 6 daily slices"
+        );
+        assert_eq!(m.loading_info.z_role(), ZRole::Variable);
+        assert_eq!(m.loading_info.leading_prefix(), &[0]);
+        assert_eq!(m.loading_info.files().len(), 1);
+        assert_eq!(
+            m.loading_info.files()[0].times.intervals().len(),
+            6,
+            "the time axis must span every time slice, not the depth slices"
+        );
     }
 
     /// The array's declared CRS must win over the old hardcoded EPSG:4326, so a projected

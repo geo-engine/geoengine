@@ -49,6 +49,20 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
     let z_range = request.local_z.clone();
     let dataset_params = file.params.clone();
     let array_name = file.array_name.clone();
+    // `i64` in the dataset, `u64` in the read window: the probe rejects negatives, but a
+    // hand-edited row could still carry one, so refuse rather than wrap to a huge index.
+    let leading_prefix: Vec<u64> = loading_info
+        .leading_prefix()
+        .iter()
+        .map(|index| u64::try_from(*index))
+        .collect::<Result<_, _>>()
+        .map_err(|_| MdGdalSourceError::ProbeError {
+            message: format!(
+                "MD dataset has a negative leading prefix index: {:?}",
+                loading_info.leading_prefix()
+            ),
+        })?;
+    let leading_prefix = leading_prefix.as_slice();
     let ds_spatial_grid = dataset_params.spatial_grid_definition();
     let tile_spatial_grid = tile_information.spatial_grid_definition();
 
@@ -101,6 +115,7 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
                 file.group.as_deref(),
                 &array_name,
                 z_range.clone(),
+                leading_prefix,
             )
             .await?
         {
