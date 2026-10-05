@@ -22,8 +22,6 @@ import type {
   DatasetListing,
   DatasetNameResponse,
   ErrorResponse,
-  MdProbeRequest,
-  MdProbeResponse,
   MetaDataDefinition,
   MetaDataSuggestion,
   OrderBy,
@@ -51,10 +49,6 @@ import {
     DatasetNameResponseToJSON,
     ErrorResponseFromJSON,
     ErrorResponseToJSON,
-    MdProbeRequestFromJSON,
-    MdProbeRequestToJSON,
-    MdProbeResponseFromJSON,
-    MdProbeResponseToJSON,
     MetaDataDefinitionFromJSON,
     MetaDataDefinitionToJSON,
     MetaDataSuggestionFromJSON,
@@ -116,10 +110,6 @@ export interface ListDatasetsHandlerRequest {
 export interface ListVolumeFileLayersHandlerRequest {
     volumeName: string;
     fileName: string;
-}
-
-export interface ProbeMdMetaDataHandlerRequest {
-    mdProbeRequest: MdProbeRequest;
 }
 
 export interface SuggestMetaDataHandlerRequest {
@@ -734,63 +724,6 @@ export class DatasetsApi extends runtime.BaseAPI {
      */
     async listVolumesHandler(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<Volume>> {
         const response = await this.listVolumesHandlerRaw(initOverrides);
-        return await response.value();
-    }
-
-    /**
-     * Creates request options for probeMdMetaDataHandler without sending the request
-     */
-    async probeMdMetaDataHandlerRequestOpts(requestParameters: ProbeMdMetaDataHandlerRequest): Promise<runtime.RequestOpts> {
-        if (requestParameters['mdProbeRequest'] == null) {
-            throw new runtime.RequiredError(
-                'mdProbeRequest',
-                'Required parameter "mdProbeRequest" was null or undefined when calling probeMdMetaDataHandler().'
-            );
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        headerParameters['Content-Type'] = 'application/json';
-
-        if (this.configuration && this.configuration.accessToken) {
-            const token = this.configuration.accessToken;
-            const tokenString = await token("session_token", []);
-
-            if (tokenString) {
-                headerParameters["Authorization"] = `Bearer ${tokenString}`;
-            }
-        }
-
-        let urlPath = `/dataset/probe-md`;
-
-        return {
-            path: urlPath,
-            method: 'POST',
-            headers: headerParameters,
-            query: queryParameters,
-            body: MdProbeRequestToJSON(requestParameters['mdProbeRequest']),
-        };
-    }
-
-    /**
-     * This reads the files, so it costs one GDAL open plus one coordinate-variable read per file; for a 65-file yearly series over the network that is minutes, not seconds.
-     * Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.
-     */
-    async probeMdMetaDataHandlerRaw(requestParameters: ProbeMdMetaDataHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<MdProbeResponse>> {
-        const requestOptions = await this.probeMdMetaDataHandlerRequestOpts(requestParameters);
-        const response = await this.request(requestOptions, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => MdProbeResponseFromJSON(jsonValue));
-    }
-
-    /**
-     * This reads the files, so it costs one GDAL open plus one coordinate-variable read per file; for a 65-file yearly series over the network that is minutes, not seconds.
-     * Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.
-     */
-    async probeMdMetaDataHandler(requestParameters: ProbeMdMetaDataHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<MdProbeResponse> {
-        const response = await this.probeMdMetaDataHandlerRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

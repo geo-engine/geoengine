@@ -96,13 +96,6 @@ class TestDatasetsApi(unittest.TestCase):
         """
         pass
 
-    def test_probe_md_meta_data_handler(self) -> None:
-        """Test case for probe_md_meta_data_handler
-
-        Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.
-        """
-        pass
-
     def test_suggest_meta_data_handler(self) -> None:
         """Test case for suggest_meta_data_handler
 

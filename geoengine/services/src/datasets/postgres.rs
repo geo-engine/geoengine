@@ -745,7 +745,6 @@ where
             wrap,
             max_z_batch_size,
             cache_ttl,
-            leading_prefix,
         } = m;
         // `bigint` -> `usize`; a negative or absurd value can only come from a hand-edited
         // row, and a batch size that does not fit in memory is no better than none
@@ -759,7 +758,6 @@ where
             z_role,
             wrap,
             max_z_batch_size,
-            leading_prefix,
             dataset_cache_ttl: cache_ttl,
             data_path,
             db: self.clone(),
@@ -780,8 +778,6 @@ where
     z_role: ZRole,
     wrap: bool,
     max_z_batch_size: Option<usize>,
-    /// fixed index into each dimension between z and (y, x); empty for 3D
-    leading_prefix: Vec<i64>,
     dataset_cache_ttl: Option<geoengine_datatypes::primitives::CacheTtlSeconds>,
     data_path: DataPath,
     db: PostgresDb<Tls>,
@@ -1262,7 +1258,8 @@ where
             conn.query(
                 "
             SELECT
-                z_index, band, array_name, array_group, time_descriptor, time_steps, gdal_params
+                z_index, band, array_name, array_group, time_descriptor, time_steps, gdal_params,
+                leading_prefix
             FROM
                 dataset_md_tiles
             WHERE
@@ -1277,7 +1274,8 @@ where
             conn.query(
                 "
             SELECT
-                z_index, band, array_name, array_group, time_descriptor, time_steps, gdal_params
+                z_index, band, array_name, array_group, time_descriptor, time_steps, gdal_params,
+                leading_prefix
             FROM
                 dataset_md_tiles
             WHERE
@@ -1314,7 +1312,6 @@ where
             self.z_role,
             self.wrap,
             self.max_z_batch_size,
-            self.leading_prefix.clone(),
         ))
     }
 
@@ -1458,6 +1455,7 @@ fn md_loading_info_from_rows(
             local_offset: 0,
             times,
             output_band: row_band,
+            leading_prefix: row.get(7),
         });
         slices_per_band += slices;
     }

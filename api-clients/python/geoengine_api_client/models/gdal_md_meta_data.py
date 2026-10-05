@@ -35,8 +35,7 @@ class GdalMdMetaData(BaseModel):
     wrap: StrictBool = Field(description="whether the stored 0..360 degree coverage is re-presented as -180..180")
     max_z_batch_size: Optional[StrictInt] = Field(default=None, description="upper bound on the z slices a single worker read may request; `None` means the operator's default. A dataset property, since a batch is sized against the slice size of the data itself.", alias="maxZBatchSize")
     cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, description="Dataset-level TTL fallback used when no tile-level TTL is provided.", alias="cacheTtl")
-    leading_prefix: Optional[List[StrictInt]] = Field(default=None, description="Fixed index into each dimension between z and (y, x), so one dataset is one slice of a 4D array - `[depth]` for `(time, depth, y, x)`. Empty for 3D.", alias="leadingPrefix")
-    __properties: ClassVar[List[str]] = ["type", "resultDescriptor", "zRole", "wrap", "maxZBatchSize", "cacheTtl", "leadingPrefix"]
+    __properties: ClassVar[List[str]] = ["type", "resultDescriptor", "zRole", "wrap", "maxZBatchSize", "cacheTtl"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -114,8 +113,7 @@ class GdalMdMetaData(BaseModel):
             "zRole": obj.get("zRole"),
             "wrap": obj.get("wrap"),
             "maxZBatchSize": obj.get("maxZBatchSize"),
-            "cacheTtl": obj.get("cacheTtl"),
-            "leadingPrefix": obj.get("leadingPrefix")
+            "cacheTtl": obj.get("cacheTtl")
         })
         return _obj
 

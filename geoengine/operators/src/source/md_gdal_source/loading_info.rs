@@ -4,12 +4,42 @@ use geoengine_datatypes::primitives::{
     CacheHint, CacheTtlSeconds, RegularTimeDimension, TimeDimension, TimeGranularity, TimeInstance,
     TimeInterval, TimeStep,
 };
+use geoengine_datatypes::raster::GeoTransform;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
 use super::error::MdGdalSourceError;
 use crate::engine::{RasterResultDescriptor, TimeDescriptor};
-use crate::source::gdal_worker_process::GdalDatasetParameters;
+use crate::source::gdal_worker_process::{GdalDatasetGeoTransform, GdalDatasetParameters};
+
+/// The transform a tile's stored grid is *presented* as.
+///
+/// A stored MD array can be south-up (ascending `lat`) and/or store longitudes as 0..360,
+/// while a Geo Engine raster is always north-up and presents -180..180. The read advise
+/// compensates the y direction via `flip_y`; the longitude shift is this function.
+///
+/// It lives here rather than next to the probe because dataset registration needs it to
+/// check a declared transform against the dataset's, which has nothing to do with probing.
+pub fn presented_geo_transform(
+    raw: GdalDatasetGeoTransform,
+    height: usize,
+    wrap: bool,
+) -> GeoTransform {
+    let abs_y = raw.y_pixel_size.abs();
+    let origin_x = if wrap {
+        raw.origin_coordinate.x - 180.0
+    } else {
+        raw.origin_coordinate.x
+    };
+    // the north edge is the stored origin for a descending y axis, the south edge otherwise
+    let origin_y = if raw.y_pixel_size < 0.0 {
+        raw.origin_coordinate.y
+    } else {
+        raw.origin_coordinate.y + height as f64 * abs_y
+    };
+
+    GeoTransform::new((origin_x, origin_y).into(), raw.x_pixel_size, -abs_y)
+}
 
 /// How the z (leading) dimension of an MD array maps onto the 2D raster output.
 ///
@@ -56,13 +86,6 @@ pub struct GdalMdMetaData {
     /// `GdalMultiBand::cache_ttl`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_ttl: Option<CacheTtlSeconds>,
-    /// Fixed index into each dimension between z and (y, x), so one dataset is one slice of
-    /// a 4D array - `[depth]` for `(time, depth, y, x)`.
-    ///
-    /// Empty for 3D, which is why it carries `serde(default)`: rows written before 4D
-    /// support have nothing to select.
-    #[serde(default)]
-    pub leading_prefix: Vec<i64>,
 }
 
 impl GdalMdMetaData {
@@ -73,7 +96,6 @@ impl GdalMdMetaData {
         wrap: bool,
         max_z_batch_size: Option<i64>,
         cache_ttl: Option<CacheTtlSeconds>,
-        leading_prefix: Vec<i64>,
     ) -> Self {
         Self {
             result_descriptor,
@@ -81,7 +103,6 @@ impl GdalMdMetaData {
             wrap,
             max_z_batch_size,
             cache_ttl,
-            leading_prefix,
         }
     }
 }
@@ -280,6 +301,14 @@ pub struct MdDatasetFile {
     pub times: MdFileTimes,
     #[serde(default)]
     pub output_band: u32,
+    /// Fixed index into each dimension between z and (y, x), so one row is one slice of a
+    /// 4D array - `[depth]` for `(time, depth, y, x)`.
+    ///
+    /// Empty for 3D, and per row rather than per dataset so that bands of one dataset can
+    /// each select a different slice: a `(time, depth, y, x)` file registered with
+    /// `variables_as_bands` becomes one dataset whose band `b` is depth `b`.
+    #[serde(default)]
+    pub leading_prefix: Vec<i64>,
 }
 
 /// A contiguous chunk of z-slices from a single file.
@@ -307,9 +336,6 @@ pub struct MdLoadingInfo {
     /// upper bound on how many consecutive z slices one worker request may return; a
     /// dataset-level knob, since a batch is sized against the data's slice size
     max_z_batch_size: Option<usize>,
-    /// fixed index into each dimension between z and (y, x); empty for 3D
-    #[serde(default)]
-    leading_prefix: Vec<i64>,
 }
 
 impl MdLoadingInfo {
@@ -321,7 +347,6 @@ impl MdLoadingInfo {
         z_role: ZRole,
         wrap: bool,
         max_z_batch_size: Option<usize>,
-        leading_prefix: Vec<i64>,
     ) -> Self {
         debug_assert!(!time_steps.is_empty(), "time_steps must not be empty");
         debug_assert!(
@@ -368,7 +393,6 @@ impl MdLoadingInfo {
             z_role,
             wrap,
             max_z_batch_size,
-            leading_prefix,
         }
     }
 
@@ -402,12 +426,6 @@ impl MdLoadingInfo {
     #[must_use]
     pub fn wrap(&self) -> bool {
         self.wrap
-    }
-
-    /// Fixed index into each dimension between z and (y, x); empty for 3D.
-    #[must_use]
-    pub fn leading_prefix(&self) -> &[i64] {
-        &self.leading_prefix
     }
 
     /// The cache TTL for a tile of this dataset, falling back to the context default.
@@ -598,6 +616,7 @@ mod tests {
             local_offset: 0,
             times: MdFileTimes::from_intervals(intervals),
             output_band: band,
+            leading_prefix: Vec::new(),
         }
     }
 
@@ -611,7 +630,6 @@ mod tests {
             ZRole::Variable,
             false,
             None,
-            Vec::new(),
         );
         let all_z = (0..8).collect::<Vec<_>>();
 
@@ -653,7 +671,6 @@ mod tests {
             ZRole::Variable,
             false,
             None,
-            Vec::new(),
         );
 
         let (batches, missing) = loading_info.z_batches(&(0..8).collect::<Vec<_>>(), Some(0), 2);

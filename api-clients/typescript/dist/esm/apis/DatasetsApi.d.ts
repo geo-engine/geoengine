@@ -9,7 +9,7 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { AddDatasetMdTile, AddDatasetTile, AutoCreateDataset, CreateDataset, Dataset, DatasetListing, DatasetNameResponse, MdProbeRequest, MdProbeResponse, MetaDataDefinition, MetaDataSuggestion, OrderBy, Provenances, SuggestMetaData, Symbology, UpdateDataset, Volume, VolumeFileLayersResponse } from '../models/index';
+import type { AddDatasetMdTile, AddDatasetTile, AutoCreateDataset, CreateDataset, Dataset, DatasetListing, DatasetNameResponse, MetaDataDefinition, MetaDataSuggestion, OrderBy, Provenances, SuggestMetaData, Symbology, UpdateDataset, Volume, VolumeFileLayersResponse } from '../models/index';
 export interface AddDatasetTilesHandlerRequest {
     dataset: string;
     addDatasetTile: Array<AddDatasetTile>;
@@ -43,9 +43,6 @@ export interface ListDatasetsHandlerRequest {
 export interface ListVolumeFileLayersHandlerRequest {
     volumeName: string;
     fileName: string;
-}
-export interface ProbeMdMetaDataHandlerRequest {
-    mdProbeRequest: MdProbeRequest;
 }
 export interface SuggestMetaDataHandlerRequest {
     suggestMetaData: SuggestMetaData;
@@ -192,20 +189,6 @@ export declare class DatasetsApi extends runtime.BaseAPI {
      * Lists available volumes.
      */
     listVolumesHandler(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<Volume>>;
-    /**
-     * Creates request options for probeMdMetaDataHandler without sending the request
-     */
-    probeMdMetaDataHandlerRequestOpts(requestParameters: ProbeMdMetaDataHandlerRequest): Promise<runtime.RequestOpts>;
-    /**
-     * This reads the files, so it costs one GDAL open plus one coordinate-variable read per file; for a 65-file yearly series over the network that is minutes, not seconds.
-     * Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.
-     */
-    probeMdMetaDataHandlerRaw(requestParameters: ProbeMdMetaDataHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<MdProbeResponse>>;
-    /**
-     * This reads the files, so it costs one GDAL open plus one coordinate-variable read per file; for a 65-file yearly series over the network that is minutes, not seconds.
-     * Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.
-     */
-    probeMdMetaDataHandler(requestParameters: ProbeMdMetaDataHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<MdProbeResponse>;
     /**
      * Creates request options for suggestMetaDataHandler without sending the request
      */

@@ -19,9 +19,8 @@ pub use self::gdal_worker_process::{
     GdalSourceTimePlaceholder, TimeReference,
 };
 pub use self::md_gdal_source::{
-    GdalMdMetaData, MdArraySelection, MdDatasetFile, MdFileTimes, MdGdalSource, MdGdalSourceError,
-    MdGdalSourceParameters, MdGdalSourceProcessor, MdLoadingInfo, ProbedGdalMdMetaData, ZRole,
-    presented_geo_transform, probe_md_loading_info, probe_md_variables_loading_info,
+    GdalMdMetaData, MdDatasetFile, MdFileTimes, MdGdalSource, MdGdalSourceError,
+    MdGdalSourceParameters, MdGdalSourceProcessor, MdLoadingInfo, ZRole, presented_geo_transform,
 };
 pub use self::multi_band_gdal_source::{
     GdalMultiBand, GdalSourceError as MultiBandGdalSourceError,

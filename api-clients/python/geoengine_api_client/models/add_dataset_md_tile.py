@@ -39,7 +39,8 @@ class AddDatasetMdTile(BaseModel):
     time_descriptor: TimeDescriptor
     time_steps: List[TimeInterval] = Field(description="One interval per z slice, always required.  Both forms are stored on purpose: `time_descriptor` is the compact form the API advertises, `time_steps` says which slices exist and is what the read path derives the file's slice count from. Omitting it would make the file contribute zero slices and every later file come back at the wrong time.")
     params: GdalDatasetParameters
-    __properties: ClassVar[List[str]] = ["spatial_partition", "band", "z_index", "array_name", "array_group", "time_descriptor", "time_steps", "params"]
+    leading_prefix: Optional[List[StrictInt]] = Field(default=None, description="Fixed index into each dimension between z and (y, x), so one row is one slice of a 4D array - `[depth]` for `(time, depth, y, x)`. Empty for 3D.  Per row rather than per dataset, so the bands of one dataset can each select a different slice: a `(time, depth, y, x)` file with one row per depth becomes one dataset whose band `b` is depth `b`.")
+    __properties: ClassVar[List[str]] = ["spatial_partition", "band", "z_index", "array_name", "array_group", "time_descriptor", "time_steps", "params", "leading_prefix"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -120,7 +121,8 @@ class AddDatasetMdTile(BaseModel):
             "array_group": obj.get("array_group"),
             "time_descriptor": TimeDescriptor.from_dict(obj["time_descriptor"]) if obj.get("time_descriptor") is not None else None,
             "time_steps": [TimeInterval.from_dict(_item) for _item in obj["time_steps"]] if obj.get("time_steps") is not None else None,
-            "params": GdalDatasetParameters.from_dict(obj["params"]) if obj.get("params") is not None else None
+            "params": GdalDatasetParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
+            "leading_prefix": obj.get("leading_prefix")
         })
         return _obj
 

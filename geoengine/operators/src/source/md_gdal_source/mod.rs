@@ -28,14 +28,11 @@ use std::marker::PhantomData;
 
 mod error;
 mod loading_info;
-mod probe;
 mod reader;
 
 pub use error::MdGdalSourceError;
-pub use loading_info::{GdalMdMetaData, MdDatasetFile, MdFileTimes, MdLoadingInfo, ZRole};
-pub use probe::{
-    MdArraySelection, ProbedGdalMdMetaData, presented_geo_transform, probe_md_loading_info,
-    probe_md_variables_loading_info,
+pub use loading_info::{
+    GdalMdMetaData, MdDatasetFile, MdFileTimes, MdLoadingInfo, ZRole, presented_geo_transform,
 };
 
 /// Parameters for the MD GDAL Source Operator.
@@ -586,60 +583,308 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
 mod tests {
     use super::*;
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, SourceOperator, StaticMetaData,
-        WorkflowOperatorPath,
+        MockExecutionContext, MockQueryContext, RasterBandDescriptor, RasterBandDescriptors,
+        SourceOperator, SpatialGridDescriptor, StaticMetaData, WorkflowOperatorPath,
     };
     use crate::test_data;
     use geoengine_datatypes::{
         dataset::{DataId, DatasetId, NamedData},
-        primitives::{BandSelection, TimeInterval},
+        primitives::{BandSelection, Measurement, TimeInterval},
         raster::{GridBoundingBox2D, GridBounds, GridOrEmpty, RasterTile2D},
         util::Identifier,
         util::test::TestDefault,
     };
     use std::marker::PhantomData;
-    use std::path::PathBuf;
 
-    fn add_md_dataset(
-        ctx: &mut MockExecutionContext,
-        name: &str,
-        paths: &[PathBuf],
-        array_name: Option<&str>,
-        max_z_batch_size: Option<usize>,
-    ) -> NamedData {
-        let id: DataId = DatasetId::new().into();
-        let named = NamedData::with_system_name(name);
-        let probed = probe_md_loading_info(paths, None, array_name, max_z_batch_size, true)
-            .expect("probe should succeed");
-        ctx.add_meta_data(
-            id,
-            named.clone(),
-            Box::new(StaticMetaData {
-                loading_info: probed.loading_info,
-                result_descriptor: probed.result_descriptor,
-                phantom: PhantomData::<RasterQueryRectangle>,
-            }),
-        );
-        named
+    /// One MD array file, declared the way an importer declares it.
+    ///
+    /// Nothing here is read from the file: the probe lives on a stacked branch, so a
+    /// read-path test builds its metadata by hand - the same construction that production
+    /// and `python/examples/md_gdal_source_dataset.ipynb` perform. Every constant is
+    /// transcribed from the fixture manifest in `test_data/md/generate_md_fixtures.py`,
+    /// which stays the single source of truth.
+    #[derive(Clone)]
+    struct MdFile {
+        path: &'static str,
+        array_name: &'static str,
+        group: Option<&'static str>,
+        band: u32,
+        /// first z slice of this file in the dataset's concatenated z axis
+        z_start: usize,
+        slices: usize,
+        /// fixed index into each dimension between z and (y, x)
+        leading_prefix: Vec<i64>,
     }
 
-    fn add_md_variables_dataset(
-        ctx: &mut MockExecutionContext,
-        name: &str,
-        paths: &[PathBuf],
-        selection: &MdArraySelection,
+    impl MdFile {
+        fn of(path: &'static str, array_name: &'static str, z_start: usize, slices: usize) -> Self {
+            Self {
+                path,
+                array_name,
+                group: None,
+                band: 0,
+                z_start,
+                slices,
+                leading_prefix: Vec::new(),
+            }
+        }
+    }
+
+    /// A whole MD dataset, declared the way an importer notebook declares one.
+    struct MdDataset {
+        files: Vec<MdFile>,
+        /// the *stored* grid, as it is in the file: `(origin x, origin y, x pixel, y pixel)`
+        grid: (f64, f64, f64, f64),
+        width: usize,
+        height: usize,
+        wrap: bool,
+        z_role: ZRole,
+        /// the global time axis as `origin + i * step`, or `None` for a band axis, which has
+        /// synthetic `[k, k+1)` unit steps indexed by band instead
+        time: Option<(i64, i64)>,
+        bands: Vec<&'static str>,
         max_z_batch_size: Option<usize>,
-    ) -> NamedData {
+    }
+
+    impl MdDataset {
+        /// The 8x8 `time_series` grid: edges lon 0..240 (30 degree pixels), lat 0..-8,
+        /// daily slices from 2000-01-01. Shared by `time_series.nc`, its ZARR twin and its
+        /// split halves.
+        fn daily_series(path: &'static str, slices: usize) -> Self {
+            Self {
+                files: vec![MdFile::of(path, "temperature", 0, slices)],
+                grid: (0.0, 0.0, 30.0, -1.0),
+                width: 8,
+                height: 8,
+                wrap: false,
+                z_role: ZRole::Variable,
+                time: Some((EPOCH_2000, DAY)),
+                bands: vec!["temperature"],
+                max_z_batch_size: None,
+            }
+        }
+
+        /// `(time, depth, y, x)`: 6 daily slices with `depth` held at index 0 by the prefix.
+        fn four_dimensional() -> Self {
+            let mut dataset = Self::daily_series("md/time_depth_4d.nc", 6);
+            dataset.files[0].leading_prefix = vec![0];
+            dataset
+        }
+
+        /// Two files of 4 slices each, concatenated to one 8-slice axis: file `a` covers
+        /// global z 0..4, file `b` covers 4..8.
+        fn split_series() -> Self {
+            let mut dataset = Self::daily_series("md/time_series_split_a.nc", 4);
+            dataset
+                .files
+                .push(MdFile::of("md/time_series_split_b.nc", "temperature", 4, 4));
+            dataset
+        }
+
+        /// A 0..360 stored longitude grid, re-presented as -180..180.
+        fn wrapped(
+            path: &'static str,
+            width: usize,
+            height: usize,
+            grid: (f64, f64, f64, f64),
+            slices: usize,
+        ) -> Self {
+            Self {
+                files: vec![MdFile::of(path, "temperature", 0, slices)],
+                grid,
+                width,
+                height,
+                wrap: true,
+                z_role: ZRole::Variable,
+                time: Some((EPOCH_2000, DAY)),
+                bands: vec!["temperature"],
+                max_z_batch_size: None,
+            }
+        }
+
+        /// Ascending latitudes (row 0 = south) with `minutes since 1900-01-01`, so the read
+        /// path has to flip y and the times are minute steps from 1900.
+        fn ascending_lat_minutes() -> Self {
+            Self {
+                files: vec![MdFile::of(
+                    "md/cf_time_units_minutes.nc",
+                    "temperature",
+                    0,
+                    8,
+                )],
+                grid: (0.0, -8.0, 30.0, 1.0),
+                width: 8,
+                height: 8,
+                wrap: false,
+                z_role: ZRole::Variable,
+                time: Some((-2_208_988_800_000, 60_000)),
+                bands: vec!["temperature"],
+                max_z_batch_size: None,
+            }
+        }
+
+        /// `(band, y, x)` with no CF time units on z: each z slice is an output band and the
+        /// "time" axis is the synthetic `[k, k+1)` unit step.
+        fn band_axis() -> Self {
+            Self {
+                files: vec![MdFile::of("md/bands.nc", "reflectance", 0, 4)],
+                grid: (0.0, 0.0, 30.0, -1.0),
+                width: 8,
+                height: 8,
+                wrap: false,
+                z_role: ZRole::Band,
+                time: None,
+                bands: vec!["band 0", "band 1", "band 2", "band 3"],
+                max_z_batch_size: None,
+            }
+        }
+
+        /// One file holding several `(time, y, x)` arrays: one band per array, in the given
+        /// order, all sharing the file's time axis. `group` addresses a subgroup.
+        fn one_array_per_band(
+            path: &'static str,
+            group: Option<&'static str>,
+            arrays: &[(&'static str, u32)],
+        ) -> Self {
+            Self {
+                files: arrays
+                    .iter()
+                    .map(|(array_name, band)| MdFile {
+                        path,
+                        array_name,
+                        group,
+                        band: *band,
+                        z_start: 0,
+                        slices: 8,
+                        leading_prefix: Vec::new(),
+                    })
+                    .collect(),
+                grid: (0.0, 0.0, 30.0, -1.0),
+                width: 8,
+                height: 8,
+                wrap: false,
+                z_role: ZRole::Variable,
+                time: Some((EPOCH_2000, DAY)),
+                bands: vec!["temperature", "precipitation", "cloud_area_fraction"],
+                max_z_batch_size: None,
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn add_md_dataset(ctx: &mut MockExecutionContext, name: &str, spec: MdDataset) -> NamedData {
+        let MdDataset {
+            files,
+            grid,
+            width,
+            height,
+            wrap,
+            z_role,
+            time,
+            bands,
+            max_z_batch_size,
+        } = spec;
+
+        // the global axis, from which each file's own slices are carved
+        let time_steps: Vec<TimeInterval> = match time {
+            Some((origin, step)) => (0..files.iter().map(|f| f.z_start + f.slices).max().unwrap())
+                .map(|i| {
+                    TimeInterval::new_unchecked(
+                        origin + i as i64 * step,
+                        origin + (i as i64 + 1) * step,
+                    )
+                })
+                .collect(),
+            // a band axis has no time: each slice is the unit interval `[k, k+1)`
+            None => (0..files.iter().map(|f| f.z_start + f.slices).max().unwrap())
+                .map(|i| TimeInterval::new(i as i64, i as i64 + 1).unwrap())
+                .collect(),
+        };
+
+        let md_files = files
+            .iter()
+            .map(|f| MdDatasetFile {
+                params: crate::source::gdal_worker_process::GdalDatasetParameters {
+                    file_path: test_data!(f.path).to_path_buf(),
+                    rasterband_channel: 1,
+                    geo_transform: crate::source::gdal_worker_process::GdalDatasetGeoTransform {
+                        origin_coordinate: (grid.0, grid.1).into(),
+                        x_pixel_size: grid.2,
+                        y_pixel_size: grid.3,
+                    },
+                    width,
+                    height,
+                    file_not_found_handling:
+                        crate::source::gdal_worker_process::FileNotFoundHandling::NoData,
+                    no_data_value: Some(-9999.0),
+                    properties_mapping: None,
+                    gdal_open_options: None,
+                    gdal_config_options: None,
+                    allow_alphaband_as_mask: false,
+                    retry: None,
+                },
+                array_name: f.array_name.to_owned(),
+                group: f.group.map(str::to_string),
+                z_start: f.z_start,
+                z_end: f.z_start + f.slices,
+                local_offset: 0,
+                times: MdFileTimes::from_intervals(
+                    time_steps[f.z_start..f.z_start + f.slices].to_vec(),
+                ),
+                output_band: f.band,
+                leading_prefix: f.leading_prefix.clone(),
+            })
+            .collect::<Vec<_>>();
+
+        let presented = presented_geo_transform(
+            crate::source::gdal_worker_process::GdalDatasetGeoTransform {
+                origin_coordinate: (grid.0, grid.1).into(),
+                x_pixel_size: grid.2,
+                y_pixel_size: grid.3,
+            },
+            height,
+            wrap,
+        );
+        let result_descriptor = RasterResultDescriptor::new(
+            RasterDataType::F32,
+            geoengine_datatypes::spatial_reference::SpatialReference::epsg_4326().into(),
+            MdLoadingInfo::new(
+                time_steps.clone(),
+                md_files.clone(),
+                None,
+                z_role,
+                wrap,
+                max_z_batch_size,
+            )
+            .time_descriptor(),
+            SpatialGridDescriptor::source_from_parts(
+                presented,
+                GridBoundingBox2D::new_unchecked([0, 0], [height as isize - 1, width as isize - 1]),
+            ),
+            RasterBandDescriptors::new(
+                bands
+                    .iter()
+                    .map(|name| RasterBandDescriptor::new(name.to_string(), Measurement::Unitless))
+                    .collect(),
+            )
+            .unwrap(),
+        );
+
         let id: DataId = DatasetId::new().into();
         let named = NamedData::with_system_name(name);
-        let probed = probe_md_variables_loading_info(paths, selection, max_z_batch_size, true)
-            .expect("probe should succeed");
         ctx.add_meta_data(
             id,
             named.clone(),
             Box::new(StaticMetaData {
-                loading_info: probed.loading_info,
-                result_descriptor: probed.result_descriptor,
+                loading_info: MdLoadingInfo::new(
+                    time_steps,
+                    md_files,
+                    None,
+                    z_role,
+                    wrap,
+                    max_z_batch_size,
+                ),
+                result_descriptor,
                 phantom: PhantomData::<RasterQueryRectangle>,
             }),
         );
@@ -700,9 +945,7 @@ mod tests {
         let name = add_md_dataset(
             &mut exe_ctx,
             "md_time_series",
-            &[test_data!("md/time_series.nc").to_path_buf()],
-            None,
-            None,
+            MdDataset::daily_series("md/time_series.nc", 8),
         );
 
         // window over z-slices 2..6 (4 slices), batched one slice at a time
@@ -745,13 +988,7 @@ mod tests {
     async fn test_query_four_dimensional_array_holds_the_leading_prefix() {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = exe_ctx.mock_query_context_test_default();
-        let name = add_md_dataset(
-            &mut exe_ctx,
-            "md_time_depth",
-            &[test_data!("md/time_depth_4d.nc").to_path_buf()],
-            None,
-            None,
-        );
+        let name = add_md_dataset(&mut exe_ctx, "md_time_depth", MdDataset::four_dimensional());
 
         // two daily slices at depth 0
         let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + 2 * DAY);
@@ -794,20 +1031,12 @@ mod tests {
         let time = TimeInterval::new_unchecked(EPOCH_2000 + 2 * DAY, EPOCH_2000 + 6 * DAY);
 
         // the batch bound is a dataset property, so comparing two bounds means two datasets
-        let batched_name = add_md_dataset(
-            &mut exe_ctx,
-            "md_batched_8",
-            &[test_data!("md/time_series.nc").to_path_buf()],
-            None,
-            Some(8),
-        );
-        let single_name = add_md_dataset(
-            &mut exe_ctx,
-            "md_batched_1",
-            &[test_data!("md/time_series.nc").to_path_buf()],
-            None,
-            Some(1),
-        );
+        let mut batched_of_8 = MdDataset::daily_series("md/time_series.nc", 8);
+        batched_of_8.max_z_batch_size = Some(8);
+        let mut batched_of_1 = MdDataset::daily_series("md/time_series.nc", 8);
+        batched_of_1.max_z_batch_size = Some(1);
+        let batched_name = add_md_dataset(&mut exe_ctx, "md_batched_8", batched_of_8);
+        let single_name = add_md_dataset(&mut exe_ctx, "md_batched_1", batched_of_1);
 
         let batched = query_md_source(
             &exe_ctx,
@@ -855,9 +1084,7 @@ mod tests {
         let name = add_md_dataset(
             &mut exe_ctx,
             "md_time_series_full",
-            &[test_data!("md/time_series.nc").to_path_buf()],
-            None,
-            None,
+            MdDataset::daily_series("md/time_series.nc", 8),
         );
 
         let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + 8 * DAY);
@@ -883,16 +1110,7 @@ mod tests {
     async fn test_query_split_files_crossing_boundary() {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = exe_ctx.mock_query_context_test_default();
-        let name = add_md_dataset(
-            &mut exe_ctx,
-            "md_split",
-            &[
-                test_data!("md/time_series_split_b.nc").to_path_buf(),
-                test_data!("md/time_series_split_a.nc").to_path_buf(),
-            ],
-            None,
-            None,
-        );
+        let name = add_md_dataset(&mut exe_ctx, "md_split", MdDataset::split_series());
 
         // window [d3, d6): slice 3 (file a) and slices 4..6 (file b), crossing the file boundary
         let time = TimeInterval::new_unchecked(EPOCH_2000 + 3 * DAY, EPOCH_2000 + 6 * DAY);
@@ -935,9 +1153,7 @@ mod tests {
         let name = add_md_dataset(
             &mut exe_ctx,
             "md_zarr",
-            &[test_data!("md/time_series.zarr").to_path_buf()],
-            None,
-            None,
+            MdDataset::daily_series("md/time_series.zarr", 8),
         );
 
         let time = TimeInterval::new_unchecked(EPOCH_2000 + 2 * DAY, EPOCH_2000 + 6 * DAY);
@@ -976,9 +1192,14 @@ mod tests {
         let name = add_md_dataset(
             &mut exe_ctx,
             "md_wrap_outside",
-            &[test_data!("md/wrap_0_360_multitile.nc").to_path_buf()],
-            None,
-            None,
+            // edges lon 0..360 at 0.25 degree (1440 cols), lat 1..0
+            MdDataset::wrapped(
+                "md/wrap_0_360_multitile.nc",
+                1440,
+                4,
+                (0.0, 1.0, 0.25, -0.25),
+                2,
+            ),
         );
 
         // The stored rows are -4..-1 in the tiling frame, i.e. inside tile row -1 (y -512..-1).
@@ -1022,9 +1243,13 @@ mod tests {
         let name = add_md_dataset(
             &mut exe_ctx,
             "md_wrap_multitile",
-            &[test_data!("md/wrap_0_360_multitile.nc").to_path_buf()],
-            None,
-            None,
+            MdDataset::wrapped(
+                "md/wrap_0_360_multitile.nc",
+                1440,
+                4,
+                (0.0, 1.0, 0.25, -0.25),
+                2,
+            ),
         );
 
         // presented grid: world lon -180..180 (1440 columns at 0.25 deg), lat 0..-1 (4 rows)
@@ -1088,9 +1313,8 @@ mod tests {
         let name = add_md_dataset(
             &mut exe_ctx,
             "md_wrap",
-            &[test_data!("md/wrap_0_360.nc").to_path_buf()],
-            None,
-            None,
+            // edges lon 0..360 at 1 degree (360 cols), lat 45..35
+            MdDataset::wrapped("md/wrap_0_360.nc", 360, 10, (0.0, 45.0, 1.0, -1.0), 4),
         );
 
         // presented grid: world lon -180..180 (global cols -180..179), lat 45..35
@@ -1149,9 +1373,7 @@ mod tests {
         let name = add_md_dataset(
             &mut exe_ctx,
             "md_cf_minutes",
-            &[test_data!("md/cf_time_units_minutes.nc").to_path_buf()],
-            None,
-            None,
+            MdDataset::ascending_lat_minutes(),
         );
 
         // the cf fixture stores latitudes ASCENDING (array row 0 = south); the tile must
@@ -1183,13 +1405,7 @@ mod tests {
     async fn test_query_bands() {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = exe_ctx.mock_query_context_test_default();
-        let name = add_md_dataset(
-            &mut exe_ctx,
-            "md_bands",
-            &[test_data!("md/bands.nc").to_path_buf()],
-            None,
-            None,
-        );
+        let name = add_md_dataset(&mut exe_ctx, "md_bands", MdDataset::band_axis());
 
         // band 2 of a ZRole::Band dataset
         let time = TimeInterval::new_instant(0).unwrap();
@@ -1229,15 +1445,14 @@ mod tests {
         // explicit variable order -> band order: 0 = temperature (x1), 1 = precipitation (x2)
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = exe_ctx.mock_query_context_test_default();
-        let name = add_md_variables_dataset(
+        let name = add_md_dataset(
             &mut exe_ctx,
             "md_variables",
-            &[test_data!("md/variables.nc").to_path_buf()],
-            &MdArraySelection {
-                group: None,
-                arrays: vec!["temperature".to_string(), "precipitation".to_string()],
-            },
-            None,
+            MdDataset::one_array_per_band(
+                "md/variables.nc",
+                None,
+                &[("temperature", 0), ("precipitation", 1)],
+            ),
         );
 
         // slices t = 1, 2 (2 time steps) x bands [0, 1] x one spatial tile = 4 tiles
@@ -1286,15 +1501,14 @@ mod tests {
         // auto-selected -> band 0 = cloud_area_fraction (x1), band 1 = precipitation (x2)
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = exe_ctx.mock_query_context_test_default();
-        let name = add_md_variables_dataset(
+        let name = add_md_dataset(
             &mut exe_ctx,
             "md_grouped",
-            &[test_data!("md/grouped_variables.nc").to_path_buf()],
-            &MdArraySelection {
-                group: Some("analysis".to_string()),
-                arrays: vec![],
-            },
-            None,
+            MdDataset::one_array_per_band(
+                "md/grouped_variables.nc",
+                Some("analysis"),
+                &[("cloud_area_fraction", 0), ("precipitation", 1)],
+            ),
         );
 
         let time = TimeInterval::new_unchecked(EPOCH_2000 + DAY, EPOCH_2000 + 2 * DAY);

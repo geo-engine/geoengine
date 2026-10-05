@@ -1,16 +1,17 @@
--- Store which slice of a 4D array an MD dataset is.
+-- Store which slice of a 4D array an MD dataset row is.
 --
 -- `z` is dimension 0 and the last two dimensions are `(y, x)`. Any dimension in between is
 -- the *leading prefix*: a fixed index that turns a 4D array into a 3D one, so
--- `(time, depth, y, x)` with `leading_prefix = [2]` is the depth-2 dataset. One prefix per
--- dataset, not per tile - reading several depths means registering several datasets.
+-- `(time, depth, y, x)` with `leading_prefix = [2]` is the depth-2 row.
 --
--- Empty for 3D data, which is the only shape this had before, and `Vec::default()` covers
--- it on the Rust side via `serde(default)`.
+-- It is per row, not per dataset, so the bands of one dataset can each select a different
+-- slice: one `(time, depth, y, x)` file with one row per depth becomes a single dataset whose
+-- band `b` is depth `b`, sharing one time axis. A dataset-level prefix could only express
+-- "one dataset = one depth", which then needed one dataset per depth plus a stacker.
 --
--- No DEFAULT and no NOT NULL: `ALTER TYPE ... ADD ATTRIBUTE` accepts neither (`NOT NULL`
--- is a syntax error, and `DEFAULT` is rejected as well), so this has to be a bare
--- attribute. That is fine because `GdalMdMetaData` was introduced in the previous,
--- unreleased migration 0034 - there are no rows to back-fill, and every insert from now on
--- writes the full composite including this field.
-ALTER TYPE "GdalMdMetaData" ADD ATTRIBUTE leading_prefix bigint[];
+-- `NOT NULL DEFAULT '{}'` covers every row written before this migration, which is all of
+-- them, since 0034 (which created the table) is unreleased. Unlike `ALTER TYPE ... ADD
+-- ATTRIBUTE`, `ALTER TABLE` does accept both, so a NULL cannot creep in and fail
+-- deserialization into `Vec<i64>` later.
+ALTER TABLE dataset_md_tiles
+ADD COLUMN leading_prefix bigint[] NOT NULL DEFAULT '{}';

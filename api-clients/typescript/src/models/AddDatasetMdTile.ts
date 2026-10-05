@@ -100,6 +100,17 @@ export interface AddDatasetMdTile {
      * @memberof AddDatasetMdTile
      */
     params: GdalDatasetParameters;
+    /**
+     * Fixed index into each dimension between z and (y, x), so one row is one slice of a
+     * 4D array - `[depth]` for `(time, depth, y, x)`. Empty for 3D.
+     * 
+     * Per row rather than per dataset, so the bands of one dataset can each select a
+     * different slice: a `(time, depth, y, x)` file with one row per depth becomes one
+     * dataset whose band `b` is depth `b`.
+     * @type {Array<number>}
+     * @memberof AddDatasetMdTile
+     */
+    leadingPrefix?: Array<number>;
 }
 
 /**
@@ -134,6 +145,7 @@ export function AddDatasetMdTileFromJSONTyped(json: any, ignoreDiscriminator: bo
         'timeDescriptor': TimeDescriptorFromJSON(json['time_descriptor']),
         'timeSteps': ((json['time_steps'] as Array<any>).map(TimeIntervalFromJSON)),
         'params': GdalDatasetParametersFromJSON(json['params']),
+        'leadingPrefix': json['leading_prefix'] == null ? undefined : json['leading_prefix'],
     };
 }
 
@@ -156,6 +168,7 @@ export function AddDatasetMdTileToJSONTyped(value?: AddDatasetMdTile | null, ign
         'time_descriptor': TimeDescriptorToJSON(value['timeDescriptor']),
         'time_steps': ((value['timeSteps'] as Array<any>).map(TimeIntervalToJSON)),
         'params': GdalDatasetParametersToJSON(value['params']),
+        'leading_prefix': value['leadingPrefix'],
     };
 }
 

@@ -103,10 +103,7 @@ class TestMetaDataDefinition(unittest.TestCase):
                 band_offset = 0,
                 z_role = 'band',
                 wrap = True,
-                max_z_batch_size = 56,
-                leading_prefix = [
-                    56
-                    ]
+                max_z_batch_size = 56
             )
         else:
             return MetaDataDefinition(

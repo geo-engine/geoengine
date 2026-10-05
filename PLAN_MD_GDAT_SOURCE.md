@@ -523,3 +523,56 @@ non-numeric datatype.
 
 probe -> `POST /dataset` -> md-tiles is three round trips; only the Python helper bundles
 them. Convenience, not correctness, and strictly less valuable than A1-A4.
+
+---
+
+## Split: what this branch carries, and what the probe branch will
+
+The probe - the part that *derives* metadata by opening the files - is deliberately **not**
+in this branch. Deriving is a convenience; stating is the contract. What ships here is the
+half that has to be right either way: the reader, the storage layout, the trust boundary, and
+a runnable example that declares every field by hand
+(`python/examples/md_gdal_source_dataset.ipynb`).
+
+The probe code is not lost: it lives in this branch's history (`cc9aa2e87`, `c93560ac9`) and
+can be restored onto a stacked branch with `git show`, so the reviewers can decide separately
+whether a raster importer needs an HTTP probe.
+
+### Stays here, because production uses it
+
+| item | why |
+|---|---|
+| `presented_geo_transform` | the tile trust boundary presents a file's stored transform and compares it with the dataset's; not a probe concern, and it was moved to `loading_info.rs` so that deleting the probe cannot take it |
+| `validate_md_tile` + `check_md_tile_against_array` | the only thing that can catch a wrong `arrayName`, `leadingPrefix`, grid, slice count or CRS - now on every data path, see below |
+| `AddDatasetMdTilesError` | the failure modes of the above |
+| `dataset_md_tiles` incl. `leading_prefix` | per-row leading prefix, so one `(time, depth, y, x)` file becomes one dataset with depth bands |
+| the read path | unchanged in behaviour; 3D takes an empty prefix and the same window as before |
+
+### Moves to the probe branch
+
+`probe.rs` in full, the `MdProbeRequest`/`MdProbeResponse` endpoint and `probed_md_dataset`
+splitter, `MdArraySelection`, the Python `probe_md_metadata` + `add_md_gdal_source` wrapper,
+the generated client models, and the 22 probe tests.
+
+### Consequences accepted
+
+- The probe's *guard rails* travel with it: the non-time-z-axis error, real CRS resolution,
+  group auto-detection, and `force_band_role`. A hand-declared `zRole` is trusted, so the
+  example's absolute-time read-back is the check that a wrong axis does not pass unnoticed.
+- **A dataset-level leading prefix would have been wrong.** `(time, depth, y, x)` needs one
+  prefix per *band* to become depth bands; a single dataset-level prefix can only express "one
+  dataset = one depth", i.e. one dataset per depth plus a `RasterStacker`.
+- External registration used to trust the caller completely. `validate_md_tile` returned
+  before opening the array for `DataPath::External`, so for a `/vsicurl` dataset nothing
+  verified the array name, grid, slice count, prefix length or CRS - and a wrong CRS is
+  silent forever. It now checks **one file per distinct `(array_name, array_group)`** for
+  external data (one `/vsicurl` round trip per array instead of one per file) and every file
+  for local data. A per-file divergence still fails loudly at read time, because the read
+  window then exceeds the array.
+
+### Registering by hand
+
+`AddDatasetMdTile` per file (all of a file's z slices), `GdalMdMetaData` for the dataset.
+Two traps the example shows: a tile's `geoTransform` is the grid **as stored** while the
+descriptor's `spatialGrid` is the grid **as presented** (north-up, `-180..180` when `wrap`),
+and `timeSteps` is one interval **per z slice**, not one for the file.

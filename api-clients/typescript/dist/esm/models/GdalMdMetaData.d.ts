@@ -54,13 +54,6 @@ export interface GdalMdMetaData {
      * @memberof GdalMdMetaData
      */
     cacheTtl?: number | null;
-    /**
-     * Fixed index into each dimension between z and (y, x), so one dataset is one slice of
-     * a 4D array - `[depth]` for `(time, depth, y, x)`. Empty for 3D.
-     * @type {Array<number>}
-     * @memberof GdalMdMetaData
-     */
-    leadingPrefix?: Array<number>;
 }
 /**
  * @export
