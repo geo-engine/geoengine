@@ -912,6 +912,126 @@ mod tests {
         }
     }
 
+    /// A query that reaches past a wrapped dataset's presented extent must return no tiles
+    /// for the non-overlapping part, exactly as the non-wrap path already does.
+    ///
+    /// `wrapped_splitted_advises` returning an empty `advises` used to fall through to the
+    /// `EmptyGrid` frames, which emitted a real (fully empty) tile. So a query extending below
+    /// the southernmost stored latitude got a full rectangle of empty tiles back where
+    /// `GdalSource` returns none. This fixture stores lat 1..0 only, so rows below -1 in the
+    /// tiling frame are outside the data.
+    #[tokio::test]
+    async fn test_query_wrap_beyond_extent_returns_no_tiles() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+        let name = add_md_dataset(
+            &mut exe_ctx,
+            "md_wrap_outside",
+            &[test_data!("md/wrap_0_360_multitile.nc").to_path_buf()],
+            None,
+            None,
+        );
+
+        // The stored rows are -4..-1 in the tiling frame, i.e. inside tile row -1 (y -512..-1).
+        // Rows -1000..-600 snap to tile row -2 (y -1024..-513) alone, which cannot reach the
+        // data at all -- so every requested tile must be dropped.
+        let spatial = GridBoundingBox2D::new_unchecked([-1000, -720], [-600, 719]);
+        let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + DAY);
+        let tiles = query_md_source(
+            &exe_ctx,
+            &query_ctx,
+            name,
+            spatial,
+            time,
+            BandSelection::first(),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+        assert!(
+            tiles.is_empty(),
+            "a query entirely outside the wrapped extent must return no tiles, got {}",
+            tiles.len()
+        );
+    }
+
+    /// A wrapped dataset whose longitude axis is wider than one 512 px tile column.
+    ///
+    /// `wrap_0_360.nc` is 360 columns at 1 deg, so the whole world fits inside a single tile
+    /// column and it cannot exercise the per-column stored<->presented mapping. At 0.25 deg
+    /// the 1440 columns span three tile columns, which is the layout NEX-GDDP-CMIP6 has --
+    /// and the one that turned out to matter in practice.
+    ///
+    /// Checks that every presented column maps back to the right stored column across all
+    /// three tile columns, including the seam at world longitude 0.
+    #[tokio::test]
+    async fn test_query_wrap_across_multiple_tile_columns() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+        let name = add_md_dataset(
+            &mut exe_ctx,
+            "md_wrap_multitile",
+            &[test_data!("md/wrap_0_360_multitile.nc").to_path_buf()],
+            None,
+            None,
+        );
+
+        // presented grid: world lon -180..180 (1440 columns at 0.25 deg), lat 0..-1 (4 rows)
+        let spatial = GridBoundingBox2D::new_unchecked([-4, -720], [-1, 719]);
+        let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + DAY);
+        let tiles = query_md_source(
+            &exe_ctx,
+            &query_ctx,
+            name,
+            spatial,
+            time,
+            BandSelection::first(),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+        // 1440 presented columns span the seam at world lon 0, so they need four 512 px tile
+        // columns: -2 and -1 for lon -180..-0.25, 0 and 1 for lon 0..180
+        let mut xs: Vec<_> = tiles
+            .iter()
+            .map(|t| t.tile_information().global_tile_position().x())
+            .collect();
+        xs.sort_unstable();
+        xs.dedup();
+        assert_eq!(xs, [-2, -1, 0, 1], "expected four tile columns");
+
+        // value at presented (col) = t * 100_000 + row * 10 + (col mod 1440)
+        // sample both hemispheres and the seam column itself
+        for (row, col) in [
+            (-4_isize, -720_isize),
+            (-4, -1),
+            (-4, 0),
+            (-4, 1),
+            (-4, 359),
+            (-4, 360),
+            (-4, 719),
+        ] {
+            let tile = tiles
+                .iter()
+                .find(|t| {
+                    let b = t.tile_information().global_pixel_bounds();
+                    b.y_min() <= row && row <= b.y_max() && b.x_min() <= col && col <= b.x_max()
+                })
+                .unwrap_or_else(|| panic!("no tile covers world ({row}, {col})"));
+            let local = tile.tile_information().global_pixel_bounds().min_index();
+            let stored_col = col.rem_euclid(1440);
+            assert_eq!(
+                grid_value(tile, (row - local.y()) as usize, (col - local.x()) as usize),
+                stored_col as f32,
+                "world col {col}"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn test_query_wrap_seam() {
         let mut exe_ctx = MockExecutionContext::test_default();

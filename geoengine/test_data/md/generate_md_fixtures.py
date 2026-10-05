@@ -13,6 +13,7 @@ Fixtures
 - time_series_gap_a.nc    first 4 slices (t 0..4) of a series with a hole
 - time_series_gap_b.nc    last 4 slices (t 8..12) of a series with a hole; t 4..8 is absent
 - wrap_0_360.nc           ZRole::Time, edges lon 0..360 (step 1), lat 45..35 (wrap-around)
+- wrap_0_360_multitile.nc same but 0.25 deg lon (1440 cols, spans 3 tile columns)
 - bands.nc                ZRole::Band, dims (band, y, x), no CF time units
 - cf_time_units_minutes.nc ZRole::Time, CF units `minutes since 1900-01-01`, ASCENDING lat
 - variables.nc            ZRole::Variable: 3 CF data variables (temperature/precipitation/
@@ -51,6 +52,7 @@ FIXTURES = [
     "time_series_gap_a.nc",
     "time_series_gap_b.nc",
     "wrap_0_360.nc",
+    "wrap_0_360_multitile.nc",
     "bands.nc",
     "cf_time_units_minutes.nc",
     "cf_time_units_date_only.nc",
@@ -147,6 +149,32 @@ def time_series(nt: int, ntime: int, path: Path, t_start: int = 0):
     vals = (np.arange(height)[:, None] * 10 + np.arange(width)[None, :])[None, :, :]
     vals = ts[:, None, None] * 1000 + vals.astype("float32")
     write_array(rg, "temperature", [tdim, ydim, xdim], vals, -9999)
+    ds = None
+
+
+def wrap_0_360_multitile(path: Path):
+    """0..360 deg longitude at 0.25 deg, so the world spans several 512 px tile columns.
+
+    `wrap_0_360.nc` is 360 columns at 1 deg, i.e. the whole world fits inside one tile
+    column, so it cannot exercise the per-column stored<->presented mapping or the clip of a
+    tile column against the presented extent. At 0.25 deg the 1440 columns need three tile
+    columns, which is the layout NEX-GDDP-CMIP6 actually has.
+
+    Latitude is kept to 4 rows and time to 2 slices so the fixture stays small (~46 kB);
+    only the longitude axis needs to be wide.
+    """
+    width, height, ntime = 1440, 4, 2
+    ds = new_netcdf(path)
+    rg = ds.GetRootGroup()
+    # 0.25 deg cells centred, first cell edge on lon 0 and last edge on lon 360, so
+    # `is_0_360_wrap` accepts it
+    xdim, ydim = add_xy_dims(rg, width, height, 0.0, 1.0, lon_step=0.25, lat_step=0.25)
+    tdim = add_time_dim(rg, ntime, "days since 2000-01-01 00:00:00")
+    ts = np.arange(ntime, dtype=np.int64)
+    rows = np.arange(height) * 10
+    cols = np.arange(width)
+    vals = ts[:, None, None] * 100_000 + rows[None, :, None] + cols[None, None, :]
+    write_array(rg, "temperature", [tdim, ydim, xdim], vals.astype("float32"), -9999)
     ds = None
 
 
@@ -277,6 +305,7 @@ def main() -> None:
     wrap_0_360(OUT_DIR / "wrap_0_360.nc")
     bands(OUT_DIR / "bands.nc")
     cf_time_units_minutes(OUT_DIR / "cf_time_units_minutes.nc")
+    wrap_0_360_multitile(OUT_DIR / "wrap_0_360_multitile.nc")
     cf_time_units_date_only(OUT_DIR / "cf_time_units_date_only.nc")
     variables(OUT_DIR / "variables.nc")
     grouped_variables(OUT_DIR / "grouped_variables.nc")
