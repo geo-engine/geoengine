@@ -94,6 +94,7 @@ All URIs are relative to *https://geoengine.io/api*
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
 *DatasetsApi* | [**add_dataset_tiles_handler**](docs/DatasetsApi.md#add_dataset_tiles_handler) | **POST** /dataset/{dataset}/tiles | Add a tile to a gdal dataset.
+*DatasetsApi* | [**add_md_dataset_tiles_handler**](docs/DatasetsApi.md#add_md_dataset_tiles_handler) | **POST** /dataset/{dataset}/md-tiles | Adds MD array files to an &#x60;MdGdalSource&#x60; dataset.
 *DatasetsApi* | [**auto_create_dataset_handler**](docs/DatasetsApi.md#auto_create_dataset_handler) | **POST** /dataset/auto | Creates a new dataset using previously uploaded files. The format of the files will be automatically detected when possible.
 *DatasetsApi* | [**create_dataset_handler**](docs/DatasetsApi.md#create_dataset_handler) | **POST** /dataset | Creates a new dataset referencing files. Users can reference previously uploaded files. Admins can reference files from a volume.
 *DatasetsApi* | [**delete_dataset_handler**](docs/DatasetsApi.md#delete_dataset_handler) | **DELETE** /dataset/{dataset} | Delete a dataset
@@ -102,6 +103,7 @@ Class | Method | HTTP request | Description
 *DatasetsApi* | [**list_datasets_handler**](docs/DatasetsApi.md#list_datasets_handler) | **GET** /datasets | Lists available datasets.
 *DatasetsApi* | [**list_volume_file_layers_handler**](docs/DatasetsApi.md#list_volume_file_layers_handler) | **GET** /dataset/volumes/{volume_name}/files/{file_name}/layers | List the layers of a file in a volume.
 *DatasetsApi* | [**list_volumes_handler**](docs/DatasetsApi.md#list_volumes_handler) | **GET** /dataset/volumes | Lists available volumes.
+*DatasetsApi* | [**probe_md_meta_data_handler**](docs/DatasetsApi.md#probe_md_meta_data_handler) | **POST** /dataset/probe-md | Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.
 *DatasetsApi* | [**suggest_meta_data_handler**](docs/DatasetsApi.md#suggest_meta_data_handler) | **POST** /dataset/suggest | Inspects an upload and suggests metadata that can be used when creating a new dataset based on it. Tries to automatically detect the main file and layer name if not specified.
 *DatasetsApi* | [**update_dataset_handler**](docs/DatasetsApi.md#update_dataset_handler) | **POST** /dataset/{dataset} | Update details about a dataset using the internal name.
 *DatasetsApi* | [**update_dataset_provenance_handler**](docs/DatasetsApi.md#update_dataset_provenance_handler) | **PUT** /dataset/{dataset}/provenance | 
@@ -200,6 +202,7 @@ Class | Method | HTTP request | Description
 
  - [AccessConstraints](docs/AccessConstraints.md)
  - [AddDataset](docs/AddDataset.md)
+ - [AddDatasetMdTile](docs/AddDatasetMdTile.md)
  - [AddDatasetTile](docs/AddDatasetTile.md)
  - [AddLayer](docs/AddLayer.md)
  - [AddLayerCollection](docs/AddLayerCollection.md)
@@ -303,6 +306,7 @@ Class | Method | HTTP request | Description
  - [GbifDataProviderDefinition](docs/GbifDataProviderDefinition.md)
  - [GdalDatasetParameters](docs/GdalDatasetParameters.md)
  - [GdalLoadingInfoTemporalSlice](docs/GdalLoadingInfoTemporalSlice.md)
+ - [GdalMdMetaData](docs/GdalMdMetaData.md)
  - [GdalMetaDataList](docs/GdalMetaDataList.md)
  - [GdalMetaDataRegular](docs/GdalMetaDataRegular.md)
  - [GdalMetaDataStatic](docs/GdalMetaDataStatic.md)
@@ -357,6 +361,10 @@ Class | Method | HTTP request | Description
  - [LinearGradient](docs/LinearGradient.md)
  - [Link](docs/Link.md)
  - [LogarithmicGradient](docs/LogarithmicGradient.md)
+ - [MdGdalSource](docs/MdGdalSource.md)
+ - [MdGdalSourceParameters](docs/MdGdalSourceParameters.md)
+ - [MdProbeRequest](docs/MdProbeRequest.md)
+ - [MdProbeResponse](docs/MdProbeResponse.md)
  - [MeanRasterPixelValuesOverTime](docs/MeanRasterPixelValuesOverTime.md)
  - [MeanRasterPixelValuesOverTimeParameters](docs/MeanRasterPixelValuesOverTimeParameters.md)
  - [MeanRasterPixelValuesOverTimePosition](docs/MeanRasterPixelValuesOverTimePosition.md)
@@ -631,6 +639,7 @@ Class | Method | HTTP request | Description
  - [WmsService](docs/WmsService.md)
  - [WmsVersion](docs/WmsVersion.md)
  - [WrappedPlotOutput](docs/WrappedPlotOutput.md)
+ - [ZRole](docs/ZRole.md)
 
 
 <a id="documentation-for-authorization"></a>

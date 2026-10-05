@@ -57,6 +57,7 @@ All URIs are relative to *https://geoengine.io/api*
 | Class | Method | HTTP request | Description
 | ----- | ------ | ------------ | -------------
 *DatasetsApi* | [**addDatasetTilesHandler**](docs/DatasetsApi.md#adddatasettileshandler) | **POST** /dataset/{dataset}/tiles | Add a tile to a gdal dataset.
+*DatasetsApi* | [**addMdDatasetTilesHandler**](docs/DatasetsApi.md#addmddatasettileshandler) | **POST** /dataset/{dataset}/md-tiles | Adds MD array files to an &#x60;MdGdalSource&#x60; dataset.
 *DatasetsApi* | [**autoCreateDatasetHandler**](docs/DatasetsApi.md#autocreatedatasethandler) | **POST** /dataset/auto | Creates a new dataset using previously uploaded files. The format of the files will be automatically detected when possible.
 *DatasetsApi* | [**createDatasetHandler**](docs/DatasetsApi.md#createdatasethandler) | **POST** /dataset | Creates a new dataset referencing files. Users can reference previously uploaded files. Admins can reference files from a volume.
 *DatasetsApi* | [**deleteDatasetHandler**](docs/DatasetsApi.md#deletedatasethandler) | **DELETE** /dataset/{dataset} | Delete a dataset
@@ -65,6 +66,7 @@ All URIs are relative to *https://geoengine.io/api*
 *DatasetsApi* | [**listDatasetsHandler**](docs/DatasetsApi.md#listdatasetshandler) | **GET** /datasets | Lists available datasets.
 *DatasetsApi* | [**listVolumeFileLayersHandler**](docs/DatasetsApi.md#listvolumefilelayershandler) | **GET** /dataset/volumes/{volume_name}/files/{file_name}/layers | List the layers of a file in a volume.
 *DatasetsApi* | [**listVolumesHandler**](docs/DatasetsApi.md#listvolumeshandler) | **GET** /dataset/volumes | Lists available volumes.
+*DatasetsApi* | [**probeMdMetaDataHandler**](docs/DatasetsApi.md#probemdmetadatahandler) | **POST** /dataset/probe-md | Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.
 *DatasetsApi* | [**suggestMetaDataHandler**](docs/DatasetsApi.md#suggestmetadatahandler) | **POST** /dataset/suggest | Inspects an upload and suggests metadata that can be used when creating a new dataset based on it. Tries to automatically detect the main file and layer name if not specified.
 *DatasetsApi* | [**updateDatasetHandler**](docs/DatasetsApi.md#updatedatasethandler) | **POST** /dataset/{dataset} | Update details about a dataset using the internal name.
 *DatasetsApi* | [**updateDatasetProvenanceHandler**](docs/DatasetsApi.md#updatedatasetprovenancehandler) | **PUT** /dataset/{dataset}/provenance | 
@@ -163,6 +165,7 @@ All URIs are relative to *https://geoengine.io/api*
 
 - [AccessConstraints](docs/AccessConstraints.md)
 - [AddDataset](docs/AddDataset.md)
+- [AddDatasetMdTile](docs/AddDatasetMdTile.md)
 - [AddDatasetTile](docs/AddDatasetTile.md)
 - [AddLayer](docs/AddLayer.md)
 - [AddLayerCollection](docs/AddLayerCollection.md)
@@ -266,6 +269,7 @@ All URIs are relative to *https://geoengine.io/api*
 - [GbifDataProviderDefinition](docs/GbifDataProviderDefinition.md)
 - [GdalDatasetParameters](docs/GdalDatasetParameters.md)
 - [GdalLoadingInfoTemporalSlice](docs/GdalLoadingInfoTemporalSlice.md)
+- [GdalMdMetaData](docs/GdalMdMetaData.md)
 - [GdalMetaDataList](docs/GdalMetaDataList.md)
 - [GdalMetaDataRegular](docs/GdalMetaDataRegular.md)
 - [GdalMetaDataStatic](docs/GdalMetaDataStatic.md)
@@ -320,6 +324,10 @@ All URIs are relative to *https://geoengine.io/api*
 - [LinearGradient](docs/LinearGradient.md)
 - [Link](docs/Link.md)
 - [LogarithmicGradient](docs/LogarithmicGradient.md)
+- [MdGdalSource](docs/MdGdalSource.md)
+- [MdGdalSourceParameters](docs/MdGdalSourceParameters.md)
+- [MdProbeRequest](docs/MdProbeRequest.md)
+- [MdProbeResponse](docs/MdProbeResponse.md)
 - [MeanRasterPixelValuesOverTime](docs/MeanRasterPixelValuesOverTime.md)
 - [MeanRasterPixelValuesOverTimeParameters](docs/MeanRasterPixelValuesOverTimeParameters.md)
 - [MeanRasterPixelValuesOverTimePosition](docs/MeanRasterPixelValuesOverTimePosition.md)
@@ -594,6 +602,7 @@ All URIs are relative to *https://geoengine.io/api*
 - [WmsService](docs/WmsService.md)
 - [WmsVersion](docs/WmsVersion.md)
 - [WrappedPlotOutput](docs/WrappedPlotOutput.md)
+- [ZRole](docs/ZRole.md)
 
 ### Authorization
 

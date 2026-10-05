@@ -20,6 +20,16 @@ pub use process_pool::{GdalPoolDispatcher, GdalProcessPool, GdalProcessPoolError
 pub use reader::{GdalPoolReader, GdalProcessMdReadResult, GdalProcessReadResult};
 pub use reader_mode::{GdalReaderMode, OverviewReaderState, ReaderState};
 
+/// How many tile reads a GDAL source keeps in flight against the worker pool.
+///
+/// Shared by the two sources that fan out over a tile x band grid. It is deliberately
+/// conservative for multidimensional sources: an `MdGdalSource` read returns one payload per
+/// z slice in the batch (a single 1440x600 float32 slice is already 3.4 MB), so the same
+/// bound represents far more bytes here than for a plain 2D tile.
+///
+/// `GdalSource` does not use this: it streams temporal slices with its own, smaller bound.
+pub const TILE_READ_CONCURRENCY: usize = 16;
+
 /// Computes a reduced-resolution spatial grid for a given overview level.
 ///
 /// Returns `None` if the overview level is 0 (original resolution).

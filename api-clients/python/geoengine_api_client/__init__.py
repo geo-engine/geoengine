@@ -46,6 +46,7 @@ __all__ = [
     "ApiException",
     "AccessConstraints",
     "AddDataset",
+    "AddDatasetMdTile",
     "AddDatasetTile",
     "AddLayer",
     "AddLayerCollection",
@@ -149,6 +150,7 @@ __all__ = [
     "GbifDataProviderDefinition",
     "GdalDatasetParameters",
     "GdalLoadingInfoTemporalSlice",
+    "GdalMdMetaData",
     "GdalMetaDataList",
     "GdalMetaDataRegular",
     "GdalMetaDataStatic",
@@ -203,6 +205,10 @@ __all__ = [
     "LinearGradient",
     "Link",
     "LogarithmicGradient",
+    "MdGdalSource",
+    "MdGdalSourceParameters",
+    "MdProbeRequest",
+    "MdProbeResponse",
     "MeanRasterPixelValuesOverTime",
     "MeanRasterPixelValuesOverTimeParameters",
     "MeanRasterPixelValuesOverTimePosition",
@@ -477,6 +483,7 @@ __all__ = [
     "WmsService",
     "WmsVersion",
     "WrappedPlotOutput",
+    "ZRole",
 ]
 
 # import apis into sdk package
@@ -512,6 +519,7 @@ from geoengine_api_client.exceptions import ApiException as ApiException
 # import models into sdk package
 from geoengine_api_client.models.access_constraints import AccessConstraints as AccessConstraints
 from geoengine_api_client.models.add_dataset import AddDataset as AddDataset
+from geoengine_api_client.models.add_dataset_md_tile import AddDatasetMdTile as AddDatasetMdTile
 from geoengine_api_client.models.add_dataset_tile import AddDatasetTile as AddDatasetTile
 from geoengine_api_client.models.add_layer import AddLayer as AddLayer
 from geoengine_api_client.models.add_layer_collection import AddLayerCollection as AddLayerCollection
@@ -615,6 +623,7 @@ from geoengine_api_client.models.format_specifics_csv import FormatSpecificsCsv 
 from geoengine_api_client.models.gbif_data_provider_definition import GbifDataProviderDefinition as GbifDataProviderDefinition
 from geoengine_api_client.models.gdal_dataset_parameters import GdalDatasetParameters as GdalDatasetParameters
 from geoengine_api_client.models.gdal_loading_info_temporal_slice import GdalLoadingInfoTemporalSlice as GdalLoadingInfoTemporalSlice
+from geoengine_api_client.models.gdal_md_meta_data import GdalMdMetaData as GdalMdMetaData
 from geoengine_api_client.models.gdal_meta_data_list import GdalMetaDataList as GdalMetaDataList
 from geoengine_api_client.models.gdal_meta_data_regular import GdalMetaDataRegular as GdalMetaDataRegular
 from geoengine_api_client.models.gdal_meta_data_static import GdalMetaDataStatic as GdalMetaDataStatic
@@ -669,6 +678,10 @@ from geoengine_api_client.models.line_symbology import LineSymbology as LineSymb
 from geoengine_api_client.models.linear_gradient import LinearGradient as LinearGradient
 from geoengine_api_client.models.link import Link as Link
 from geoengine_api_client.models.logarithmic_gradient import LogarithmicGradient as LogarithmicGradient
+from geoengine_api_client.models.md_gdal_source import MdGdalSource as MdGdalSource
+from geoengine_api_client.models.md_gdal_source_parameters import MdGdalSourceParameters as MdGdalSourceParameters
+from geoengine_api_client.models.md_probe_request import MdProbeRequest as MdProbeRequest
+from geoengine_api_client.models.md_probe_response import MdProbeResponse as MdProbeResponse
 from geoengine_api_client.models.mean_raster_pixel_values_over_time import MeanRasterPixelValuesOverTime as MeanRasterPixelValuesOverTime
 from geoengine_api_client.models.mean_raster_pixel_values_over_time_parameters import MeanRasterPixelValuesOverTimeParameters as MeanRasterPixelValuesOverTimeParameters
 from geoengine_api_client.models.mean_raster_pixel_values_over_time_position import MeanRasterPixelValuesOverTimePosition as MeanRasterPixelValuesOverTimePosition
@@ -943,4 +956,5 @@ from geoengine_api_client.models.wms_response_format import WmsResponseFormat as
 from geoengine_api_client.models.wms_service import WmsService as WmsService
 from geoengine_api_client.models.wms_version import WmsVersion as WmsVersion
 from geoengine_api_client.models.wrapped_plot_output import WrappedPlotOutput as WrappedPlotOutput
+from geoengine_api_client.models.z_role import ZRole as ZRole
 

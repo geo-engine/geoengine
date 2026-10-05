@@ -21,6 +21,15 @@ pub enum AddDatasetTilesHandlerError {
     UnknownValue(serde_json::Value),
 }
 
+/// struct for typed errors of method [`add_md_dataset_tiles_handler`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum AddMdDatasetTilesHandlerError {
+    Status400(models::ErrorResponse),
+    Status401(models::ErrorResponse),
+    UnknownValue(serde_json::Value),
+}
+
 /// struct for typed errors of method [`auto_create_dataset_handler`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -84,6 +93,15 @@ pub enum ListVolumeFileLayersHandlerError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ListVolumesHandlerError {
+    Status401(models::ErrorResponse),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`probe_md_meta_data_handler`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ProbeMdMetaDataHandlerError {
+    Status400(models::ErrorResponse),
     Status401(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
@@ -160,6 +178,37 @@ pub async fn add_dataset_tiles_handler(configuration: &configuration::Configurat
     } else {
         let content = resp.text().await?;
         let entity: Option<AddDatasetTilesHandlerError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
+
+/// One row per file, covering all of that file's z slices. The per-slice times live in `timeDescriptor` plus `timeSteps`, and the file's overall bounds are derived from them when the row is stored, so a request cannot describe a row as covering a window it does not.
+pub async fn add_md_dataset_tiles_handler(configuration: &configuration::Configuration, dataset: &str, add_dataset_md_tile: Vec<models::AddDatasetMdTile>) -> Result<(), Error<AddMdDatasetTilesHandlerError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_path_dataset = dataset;
+    let p_body_add_dataset_md_tile = add_dataset_md_tile;
+
+    let uri_str = format!("{}/dataset/{dataset}/md-tiles", configuration.base_path, dataset=crate::apis::urlencode(p_path_dataset));
+    let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    if let Some(ref token) = configuration.bearer_access_token {
+        req_builder = req_builder.bearer_auth(token.to_owned());
+    };
+    req_builder = req_builder.json(&p_body_add_dataset_md_tile);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+
+    if !status.is_client_error() && !status.is_server_error() {
+        Ok(())
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<AddMdDatasetTilesHandlerError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent { status, content, entity }))
     }
 }
@@ -478,6 +527,47 @@ pub async fn list_volumes_handler(configuration: &configuration::Configuration, 
     } else {
         let content = resp.text().await?;
         let entity: Option<ListVolumesHandlerError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
+
+/// This reads the files, so it costs one GDAL open plus one coordinate-variable read per file; for a 65-file yearly series over the network that is minutes, not seconds.
+pub async fn probe_md_meta_data_handler(configuration: &configuration::Configuration, md_probe_request: models::MdProbeRequest) -> Result<models::MdProbeResponse, Error<ProbeMdMetaDataHandlerError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_body_md_probe_request = md_probe_request;
+
+    let uri_str = format!("{}/dataset/probe-md", configuration.base_path);
+    let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    if let Some(ref token) = configuration.bearer_access_token {
+        req_builder = req_builder.bearer_auth(token.to_owned());
+    };
+    req_builder = req_builder.json(&p_body_md_probe_request);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text().await?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::MdProbeResponse`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::MdProbeResponse`")))),
+        }
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<ProbeMdMetaDataHandlerError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent { status, content, entity }))
     }
 }

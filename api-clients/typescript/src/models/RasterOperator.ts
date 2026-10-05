@@ -60,6 +60,13 @@ import {
     InterpolationFromJSONTyped,
     InterpolationToJSON,
 } from './Interpolation';
+import type { MdGdalSource } from './MdGdalSource';
+import {
+    instanceOfMdGdalSource,
+    MdGdalSourceFromJSON,
+    MdGdalSourceFromJSONTyped,
+    MdGdalSourceToJSON,
+} from './MdGdalSource';
 import type { MultiBandGdalSource } from './MultiBandGdalSource';
 import {
     instanceOfMultiBandGdalSource,
@@ -157,7 +164,7 @@ import {
  * An operator that produces raster data.
  * @export
  */
-export type RasterOperator = { type: 'BandFilter' } & BandFilter | { type: 'BandNeighborhoodAggregate' } & BandNeighborhoodAggregate | { type: 'BandwiseExpression' } & BandwiseExpression | { type: 'Downsampling' } & Downsampling | { type: 'Expression' } & Expression | { type: 'GdalSource' } & GdalSource | { type: 'Interpolation' } & Interpolation | { type: 'MultiBandGdalSource' } & MultiBandGdalSource | { type: 'NeighborhoodAggregate' } & NeighborhoodAggregate | { type: 'Onnx' } & Onnx | { type: 'Radiance' } & Radiance | { type: 'RasterScaling' } & RasterScaling | { type: 'RasterStacker' } & RasterStacker | { type: 'RasterTypeConversion' } & RasterTypeConversion | { type: 'Rasterization' } & Rasterization | { type: 'Reflectance' } & Reflectance | { type: 'Reprojection' } & Reprojection | { type: 'Temperature' } & Temperature | { type: 'TemporalRasterAggregation' } & TemporalRasterAggregation | { type: 'TimeShift' } & TimeShift;
+export type RasterOperator = { type: 'BandFilter' } & BandFilter | { type: 'BandNeighborhoodAggregate' } & BandNeighborhoodAggregate | { type: 'BandwiseExpression' } & BandwiseExpression | { type: 'Downsampling' } & Downsampling | { type: 'Expression' } & Expression | { type: 'GdalSource' } & GdalSource | { type: 'Interpolation' } & Interpolation | { type: 'MdGdalSource' } & MdGdalSource | { type: 'MultiBandGdalSource' } & MultiBandGdalSource | { type: 'NeighborhoodAggregate' } & NeighborhoodAggregate | { type: 'Onnx' } & Onnx | { type: 'Radiance' } & Radiance | { type: 'RasterScaling' } & RasterScaling | { type: 'RasterStacker' } & RasterStacker | { type: 'RasterTypeConversion' } & RasterTypeConversion | { type: 'Rasterization' } & Rasterization | { type: 'Reflectance' } & Reflectance | { type: 'Reprojection' } & Reprojection | { type: 'Temperature' } & Temperature | { type: 'TemporalRasterAggregation' } & TemporalRasterAggregation | { type: 'TimeShift' } & TimeShift;
 
 export function RasterOperatorFromJSON(json: any): RasterOperator {
     return RasterOperatorFromJSONTyped(json, false);
@@ -182,6 +189,8 @@ export function RasterOperatorFromJSONTyped(json: any, ignoreDiscriminator: bool
             return Object.assign({}, GdalSourceFromJSONTyped(json, true), { type: 'GdalSource' } as const);
         case 'Interpolation':
             return Object.assign({}, InterpolationFromJSONTyped(json, true), { type: 'Interpolation' } as const);
+        case 'MdGdalSource':
+            return Object.assign({}, MdGdalSourceFromJSONTyped(json, true), { type: 'MdGdalSource' } as const);
         case 'MultiBandGdalSource':
             return Object.assign({}, MultiBandGdalSourceFromJSONTyped(json, true), { type: 'MultiBandGdalSource' } as const);
         case 'NeighborhoodAggregate':
@@ -236,6 +245,8 @@ export function RasterOperatorToJSONTyped(value?: RasterOperator | null, ignoreD
             return Object.assign({}, GdalSourceToJSON(value), { type: 'GdalSource' } as const);
         case 'Interpolation':
             return Object.assign({}, InterpolationToJSON(value), { type: 'Interpolation' } as const);
+        case 'MdGdalSource':
+            return Object.assign({}, MdGdalSourceToJSON(value), { type: 'MdGdalSource' } as const);
         case 'MultiBandGdalSource':
             return Object.assign({}, MultiBandGdalSourceToJSON(value), { type: 'MultiBandGdalSource' } as const);
         case 'NeighborhoodAggregate':

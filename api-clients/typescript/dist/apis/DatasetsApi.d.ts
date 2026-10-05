@@ -9,10 +9,14 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { AddDatasetTile, AutoCreateDataset, CreateDataset, Dataset, DatasetListing, DatasetNameResponse, MetaDataDefinition, MetaDataSuggestion, OrderBy, Provenances, SuggestMetaData, Symbology, UpdateDataset, Volume, VolumeFileLayersResponse } from '../models/index';
+import type { AddDatasetMdTile, AddDatasetTile, AutoCreateDataset, CreateDataset, Dataset, DatasetListing, DatasetNameResponse, MdProbeRequest, MdProbeResponse, MetaDataDefinition, MetaDataSuggestion, OrderBy, Provenances, SuggestMetaData, Symbology, UpdateDataset, Volume, VolumeFileLayersResponse } from '../models/index';
 export interface AddDatasetTilesHandlerRequest {
     dataset: string;
     addDatasetTile: Array<AddDatasetTile>;
+}
+export interface AddMdDatasetTilesHandlerRequest {
+    dataset: string;
+    addDatasetMdTile: Array<AddDatasetMdTile>;
 }
 export interface AutoCreateDatasetHandlerRequest {
     autoCreateDataset: AutoCreateDataset;
@@ -39,6 +43,9 @@ export interface ListDatasetsHandlerRequest {
 export interface ListVolumeFileLayersHandlerRequest {
     volumeName: string;
     fileName: string;
+}
+export interface ProbeMdMetaDataHandlerRequest {
+    mdProbeRequest: MdProbeRequest;
 }
 export interface SuggestMetaDataHandlerRequest {
     suggestMetaData: SuggestMetaData;
@@ -75,6 +82,20 @@ export declare class DatasetsApi extends runtime.BaseAPI {
      * Add a tile to a gdal dataset.
      */
     addDatasetTilesHandler(requestParameters: AddDatasetTilesHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void>;
+    /**
+     * Creates request options for addMdDatasetTilesHandler without sending the request
+     */
+    addMdDatasetTilesHandlerRequestOpts(requestParameters: AddMdDatasetTilesHandlerRequest): Promise<runtime.RequestOpts>;
+    /**
+     * One row per file, covering all of that file\'s z slices. The per-slice times live in `timeDescriptor` plus `timeSteps`, and the file\'s overall bounds are derived from them when the row is stored, so a request cannot describe a row as covering a window it does not.
+     * Adds MD array files to an `MdGdalSource` dataset.
+     */
+    addMdDatasetTilesHandlerRaw(requestParameters: AddMdDatasetTilesHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>>;
+    /**
+     * One row per file, covering all of that file\'s z slices. The per-slice times live in `timeDescriptor` plus `timeSteps`, and the file\'s overall bounds are derived from them when the row is stored, so a request cannot describe a row as covering a window it does not.
+     * Adds MD array files to an `MdGdalSource` dataset.
+     */
+    addMdDatasetTilesHandler(requestParameters: AddMdDatasetTilesHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void>;
     /**
      * Creates request options for autoCreateDatasetHandler without sending the request
      */
@@ -171,6 +192,20 @@ export declare class DatasetsApi extends runtime.BaseAPI {
      * Lists available volumes.
      */
     listVolumesHandler(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<Volume>>;
+    /**
+     * Creates request options for probeMdMetaDataHandler without sending the request
+     */
+    probeMdMetaDataHandlerRequestOpts(requestParameters: ProbeMdMetaDataHandlerRequest): Promise<runtime.RequestOpts>;
+    /**
+     * This reads the files, so it costs one GDAL open plus one coordinate-variable read per file; for a 65-file yearly series over the network that is minutes, not seconds.
+     * Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.
+     */
+    probeMdMetaDataHandlerRaw(requestParameters: ProbeMdMetaDataHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<MdProbeResponse>>;
+    /**
+     * This reads the files, so it costs one GDAL open plus one coordinate-variable read per file; for a 65-file yearly series over the network that is minutes, not seconds.
+     * Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.
+     */
+    probeMdMetaDataHandler(requestParameters: ProbeMdMetaDataHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<MdProbeResponse>;
     /**
      * Creates request options for suggestMetaDataHandler without sending the request
      */

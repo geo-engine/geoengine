@@ -1511,55 +1511,70 @@ impl From<GdalMultiBand> for geoengine_operators::source::GdalMultiBand {
     }
 }
 
-use geoengine_datatypes::primitives::RasterQueryRectangle;
-use geoengine_operators::engine::StaticMetaData;
-use geoengine_operators::source::MdLoadingInfo;
-
-#[type_tag(value = "MdGdalMetaData")]
+#[type_tag(value = "GdalMdMetaData")]
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct MdGdalMetaData {
-    #[schema(value_type = serde_json::Value)]
-    pub loading_info: MdLoadingInfo,
+pub struct GdalMdMetaData {
     pub result_descriptor: RasterResultDescriptor,
+    pub z_role: ZRole,
+    /// whether the stored 0..360 degree coverage is re-presented as -180..180
+    pub wrap: bool,
+    /// upper bound on the z slices a single worker read may request; `None` means the
+    /// operator's default. A dataset property, since a batch is sized against the slice
+    /// size of the data itself.
+    pub max_z_batch_size: Option<i64>,
 }
 
-impl
-    From<
-        StaticMetaData<
-            MdLoadingInfo,
-            geoengine_operators::engine::RasterResultDescriptor,
-            RasterQueryRectangle,
-        >,
-    > for MdGdalMetaData
-{
-    fn from(
-        value: StaticMetaData<
-            MdLoadingInfo,
-            geoengine_operators::engine::RasterResultDescriptor,
-            RasterQueryRectangle,
-        >,
-    ) -> Self {
-        Self {
-            r#type: Default::default(),
-            loading_info: value.loading_info,
-            result_descriptor: value.result_descriptor.into(),
+/// How the z dimension of an MD array maps to the 2D raster output. Mirrors
+/// `geoengine_operators::source::ZRole`, which cannot derive a schema of its own.
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, Copy, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ZRole {
+    /// Each z slice is a raster band of a single time step.
+    Band,
+    /// Each selected variable is a raster band; within a variable the z slices are time
+    /// steps and the time axis is shared by all variables. A single-variable dataset
+    /// (previously `Time`) is just one band.
+    Variable,
+}
+
+impl From<geoengine_operators::source::ZRole> for ZRole {
+    fn from(value: geoengine_operators::source::ZRole) -> Self {
+        match value {
+            geoengine_operators::source::ZRole::Band => ZRole::Band,
+            geoengine_operators::source::ZRole::Variable => ZRole::Variable,
         }
     }
 }
 
-impl From<MdGdalMetaData>
-    for StaticMetaData<
-        MdLoadingInfo,
-        geoengine_operators::engine::RasterResultDescriptor,
-        RasterQueryRectangle,
-    >
-{
-    fn from(value: MdGdalMetaData) -> Self {
+impl From<ZRole> for geoengine_operators::source::ZRole {
+    fn from(value: ZRole) -> Self {
+        match value {
+            ZRole::Band => geoengine_operators::source::ZRole::Band,
+            ZRole::Variable => geoengine_operators::source::ZRole::Variable,
+        }
+    }
+}
+
+impl From<geoengine_operators::source::GdalMdMetaData> for GdalMdMetaData {
+    fn from(value: geoengine_operators::source::GdalMdMetaData) -> Self {
         Self {
-            loading_info: value.loading_info,
+            r#type: Default::default(),
             result_descriptor: value.result_descriptor.into(),
-            phantom: Default::default(),
+            z_role: value.z_role.into(),
+            wrap: value.wrap,
+            max_z_batch_size: value.max_z_batch_size,
+        }
+    }
+}
+
+impl From<GdalMdMetaData> for geoengine_operators::source::GdalMdMetaData {
+    fn from(value: GdalMdMetaData) -> Self {
+        Self {
+            result_descriptor: value.result_descriptor.into(),
+            z_role: value.z_role.into(),
+            wrap: value.wrap,
+            max_z_batch_size: value.max_z_batch_size,
         }
     }
 }

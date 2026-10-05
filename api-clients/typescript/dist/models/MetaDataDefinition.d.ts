@@ -8,6 +8,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import type { GdalMdMetaData } from './GdalMdMetaData';
 import type { GdalMetaDataList } from './GdalMetaDataList';
 import type { GdalMetaDataRegular } from './GdalMetaDataRegular';
 import type { GdalMetaDataStatic } from './GdalMetaDataStatic';
@@ -21,6 +22,8 @@ import type { OgrMetaData } from './OgrMetaData';
  * @export
  */
 export type MetaDataDefinition = {
+    type: 'GdalMdMetaData';
+} & GdalMdMetaData | {
     type: 'GdalMetaDataList';
 } & GdalMetaDataList | {
     type: 'GdalMetaDataNetCdfCf';

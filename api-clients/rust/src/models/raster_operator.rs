@@ -28,6 +28,8 @@ pub enum RasterOperator {
     GdalSource(Box<models::GdalSource>),
     #[serde(rename="Interpolation")]
     Interpolation(Box<models::Interpolation>),
+    #[serde(rename="MdGdalSource")]
+    MdGdalSource(Box<models::MdGdalSource>),
     #[serde(rename="MultiBandGdalSource")]
     MultiBandGdalSource(Box<models::MultiBandGdalSource>),
     #[serde(rename="NeighborhoodAggregate")]

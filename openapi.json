@@ -210,6 +210,56 @@
         ]
       }
     },
+    "/dataset/probe-md": {
+      "post": {
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.",
+        "description": "This reads the files, so it costs one GDAL open plus one coordinate-variable read per\nfile; for a 65-file yearly series over the network that is minutes, not seconds.",
+        "operationId": "probe_md_meta_data_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MdProbeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MdProbeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedUserResponse"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
     "/dataset/suggest": {
       "post": {
         "tags": [
@@ -678,6 +728,63 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedUserResponse"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/dataset/{dataset}/md-tiles": {
+      "post": {
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "Adds MD array files to an `MdGdalSource` dataset.",
+        "description": "One row per file, covering all of that file's z slices. The per-slice times live in\n`timeDescriptor` plus `timeSteps`, and the file's overall bounds are derived from them\nwhen the row is stored, so a request cannot describe a row as covering a window it does\nnot.",
+        "operationId": "add_md_dataset_tiles_handler",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "path",
+            "description": "Dataset Name",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DatasetName"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AddDatasetMdTile"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
           },
           "400": {
             "description": "Bad request",
@@ -5864,6 +5971,58 @@
           }
         }
       },
+      "AddDatasetMdTile": {
+        "type": "object",
+        "description": "One MD array file of an `MdGdalSource` dataset, covering all of that file's z slices.",
+        "required": [
+          "spatial_partition",
+          "band",
+          "z_index",
+          "array_name",
+          "time_descriptor",
+          "time_steps",
+          "params"
+        ],
+        "properties": {
+          "spatial_partition": {
+            "$ref": "#/components/schemas/SpatialPartition2D",
+            "description": "the presented footprint (wrap-around aware)"
+          },
+          "band": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "z_index": {
+            "type": "integer",
+            "format": "int64",
+            "description": "position of this file in the concatenated z axis of `band`"
+          },
+          "array_name": {
+            "type": "string"
+          },
+          "array_group": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "\"/\"-separated path to the MD group below the root group; `None` = root group"
+          },
+          "time_descriptor": {
+            "$ref": "#/components/schemas/TimeDescriptor"
+          },
+          "time_steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimeInterval"
+            },
+            "description": "One interval per z slice, always required.\n\nBoth forms are stored on purpose: `time_descriptor` is the compact form the API\nadvertises, `time_steps` says which slices exist and is what the read path derives\nthe file's slice count from. Omitting it would make the file contribute zero slices\nand every later file come back at the wrong time."
+          },
+          "params": {
+            "$ref": "#/components/schemas/GdalDatasetParameters"
+          }
+        }
+      },
       "AddDatasetTile": {
         "type": "object",
         "required": [
@@ -8654,6 +8813,41 @@
           }
         }
       },
+      "GdalMdMetaData": {
+        "type": "object",
+        "required": [
+          "type",
+          "resultDescriptor",
+          "zRole",
+          "wrap"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "GdalMdMetaData"
+            ]
+          },
+          "resultDescriptor": {
+            "$ref": "#/components/schemas/RasterResultDescriptor"
+          },
+          "zRole": {
+            "$ref": "#/components/schemas/ZRole"
+          },
+          "wrap": {
+            "type": "boolean",
+            "description": "whether the stored 0..360 degree coverage is re-presented as -180..180"
+          },
+          "maxZBatchSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "upper bound on the z slices a single worker read may request; `None` means the\noperator's default. A dataset property, since a batch is sized against the slice\nsize of the data itself."
+          }
+        }
+      },
       "GdalMetaDataList": {
         "type": "object",
         "required": [
@@ -10113,6 +10307,115 @@
           }
         }
       },
+      "MdGdalSource": {
+        "type": "object",
+        "title": "Multidimensional GDAL Source",
+        "description": "The [`MdGdalSource`] is a source operator that reads multidimensional (netCDF/Zarr) arrays\nthrough GDAL, emitting one 2D raster tile per z slice.\n\n## Errors\n\nIf the given dataset does not exist, is not readable, or the requested bands are not\npart of the dataset, an error is thrown.\n",
+        "required": [
+          "type",
+          "params"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "MdGdalSource"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/MdGdalSourceParameters"
+          }
+        },
+        "examples": [
+          {
+            "type": "MdGdalSource",
+            "params": {
+              "data": "era5-timeseries"
+            }
+          }
+        ]
+      },
+      "MdGdalSourceParameters": {
+        "type": "object",
+        "description": "Parameters for the [`MdGdalSource`] operator.",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "string",
+            "description": "Dataset name or identifier to be loaded.",
+            "examples": [
+              "era5-timeseries"
+            ]
+          }
+        }
+      },
+      "MdProbeRequest": {
+        "type": "object",
+        "description": "Which MD arrays of a file (or file set) to probe.",
+        "required": [
+          "dataPath",
+          "files"
+        ],
+        "properties": {
+          "dataPath": {
+            "$ref": "#/components/schemas/DataPath"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The files to probe, relative to `data_path` (or absolute GDAL VSI paths when\n`data_path` is `External`)."
+          },
+          "arrayName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The MD array to read. Required when a file has more than one array with at least\nthree dimensions, which is the normal case for netCDF."
+          },
+          "group": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "\"/\"-separated path to the MD group below the root group; `None` = root group."
+          },
+          "variablesAsBands": {
+            "type": "boolean",
+            "description": "Probe several data variables as separate Geo Engine bands instead of one. Each\nvariable must be a time series."
+          },
+          "maxZBatchSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Upper bound on how many consecutive z slices one GDAL read may request. Carried into\nthe dataset metadata, because a batch is sized against the slice size of the data\nand not against the workflow that reads it. `None` means the operator's default.",
+            "minimum": 0
+          }
+        }
+      },
+      "MdProbeResponse": {
+        "type": "object",
+        "description": "What a client needs to create an `MdGdalSource` dataset from the probed files: the\ndataset-level metadata for `POST /dataset`, plus the rows for\n`POST /dataset/{dataset}/md-tiles`.",
+        "required": [
+          "metaData",
+          "tiles"
+        ],
+        "properties": {
+          "metaData": {
+            "$ref": "#/components/schemas/MetaDataDefinition"
+          },
+          "tiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AddDatasetMdTile"
+            }
+          }
+        }
+      },
       "MeanRasterPixelValuesOverTime": {
         "type": "object",
         "title": "MeanRasterPixelValuesOverTime",
@@ -10225,11 +10528,15 @@
           },
           {
             "$ref": "#/components/schemas/GdalMultiBand"
+          },
+          {
+            "$ref": "#/components/schemas/GdalMdMetaData"
           }
         ],
         "discriminator": {
           "propertyName": "type",
           "mapping": {
+            "GdalMdMetaData": "#/components/schemas/GdalMdMetaData",
             "GdalMetaDataList": "#/components/schemas/GdalMetaDataList",
             "GdalMetaDataNetCdfCf": "#/components/schemas/GdalMetadataNetCdfCf",
             "GdalMetaDataRegular": "#/components/schemas/GdalMetaDataRegular",
@@ -12611,6 +12918,9 @@
             "$ref": "#/components/schemas/Interpolation"
           },
           {
+            "$ref": "#/components/schemas/MdGdalSource"
+          },
+          {
             "$ref": "#/components/schemas/MultiBandGdalSource"
           },
           {
@@ -12661,6 +12971,7 @@
             "Expression": "#/components/schemas/Expression",
             "GdalSource": "#/components/schemas/GdalSource",
             "Interpolation": "#/components/schemas/Interpolation",
+            "MdGdalSource": "#/components/schemas/MdGdalSource",
             "MultiBandGdalSource": "#/components/schemas/MultiBandGdalSource",
             "NeighborhoodAggregate": "#/components/schemas/NeighborhoodAggregate",
             "Onnx": "#/components/schemas/Onnx",
@@ -17268,6 +17579,14 @@
             "type": "object"
           }
         }
+      },
+      "ZRole": {
+        "type": "string",
+        "description": "How the z dimension of an MD array maps to the 2D raster output. Mirrors\n`geoengine_operators::source::ZRole`, which cannot derive a schema of its own.",
+        "enum": [
+          "band",
+          "variable"
+        ]
       }
     },
     "responses": {

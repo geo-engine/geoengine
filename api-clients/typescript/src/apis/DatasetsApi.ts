@@ -14,6 +14,7 @@
 
 import * as runtime from '../runtime';
 import type {
+  AddDatasetMdTile,
   AddDatasetTile,
   AutoCreateDataset,
   CreateDataset,
@@ -21,6 +22,8 @@ import type {
   DatasetListing,
   DatasetNameResponse,
   ErrorResponse,
+  MdProbeRequest,
+  MdProbeResponse,
   MetaDataDefinition,
   MetaDataSuggestion,
   OrderBy,
@@ -32,6 +35,8 @@ import type {
   VolumeFileLayersResponse,
 } from '../models/index';
 import {
+    AddDatasetMdTileFromJSON,
+    AddDatasetMdTileToJSON,
     AddDatasetTileFromJSON,
     AddDatasetTileToJSON,
     AutoCreateDatasetFromJSON,
@@ -46,6 +51,10 @@ import {
     DatasetNameResponseToJSON,
     ErrorResponseFromJSON,
     ErrorResponseToJSON,
+    MdProbeRequestFromJSON,
+    MdProbeRequestToJSON,
+    MdProbeResponseFromJSON,
+    MdProbeResponseToJSON,
     MetaDataDefinitionFromJSON,
     MetaDataDefinitionToJSON,
     MetaDataSuggestionFromJSON,
@@ -69,6 +78,11 @@ import {
 export interface AddDatasetTilesHandlerRequest {
     dataset: string;
     addDatasetTile: Array<AddDatasetTile>;
+}
+
+export interface AddMdDatasetTilesHandlerRequest {
+    dataset: string;
+    addDatasetMdTile: Array<AddDatasetMdTile>;
 }
 
 export interface AutoCreateDatasetHandlerRequest {
@@ -102,6 +116,10 @@ export interface ListDatasetsHandlerRequest {
 export interface ListVolumeFileLayersHandlerRequest {
     volumeName: string;
     fileName: string;
+}
+
+export interface ProbeMdMetaDataHandlerRequest {
+    mdProbeRequest: MdProbeRequest;
 }
 
 export interface SuggestMetaDataHandlerRequest {
@@ -193,6 +211,70 @@ export class DatasetsApi extends runtime.BaseAPI {
      */
     async addDatasetTilesHandler(requestParameters: AddDatasetTilesHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
         await this.addDatasetTilesHandlerRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for addMdDatasetTilesHandler without sending the request
+     */
+    async addMdDatasetTilesHandlerRequestOpts(requestParameters: AddMdDatasetTilesHandlerRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['dataset'] == null) {
+            throw new runtime.RequiredError(
+                'dataset',
+                'Required parameter "dataset" was null or undefined when calling addMdDatasetTilesHandler().'
+            );
+        }
+
+        if (requestParameters['addDatasetMdTile'] == null) {
+            throw new runtime.RequiredError(
+                'addDatasetMdTile',
+                'Required parameter "addDatasetMdTile" was null or undefined when calling addMdDatasetTilesHandler().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("session_token", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/dataset/{dataset}/md-tiles`;
+        urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+
+        return {
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: requestParameters['addDatasetMdTile']!.map(AddDatasetMdTileToJSON),
+        };
+    }
+
+    /**
+     * One row per file, covering all of that file\'s z slices. The per-slice times live in `timeDescriptor` plus `timeSteps`, and the file\'s overall bounds are derived from them when the row is stored, so a request cannot describe a row as covering a window it does not.
+     * Adds MD array files to an `MdGdalSource` dataset.
+     */
+    async addMdDatasetTilesHandlerRaw(requestParameters: AddMdDatasetTilesHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
+        const requestOptions = await this.addMdDatasetTilesHandlerRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     * One row per file, covering all of that file\'s z slices. The per-slice times live in `timeDescriptor` plus `timeSteps`, and the file\'s overall bounds are derived from them when the row is stored, so a request cannot describe a row as covering a window it does not.
+     * Adds MD array files to an `MdGdalSource` dataset.
+     */
+    async addMdDatasetTilesHandler(requestParameters: AddMdDatasetTilesHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
+        await this.addMdDatasetTilesHandlerRaw(requestParameters, initOverrides);
     }
 
     /**
@@ -652,6 +734,63 @@ export class DatasetsApi extends runtime.BaseAPI {
      */
     async listVolumesHandler(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<Volume>> {
         const response = await this.listVolumesHandlerRaw(initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for probeMdMetaDataHandler without sending the request
+     */
+    async probeMdMetaDataHandlerRequestOpts(requestParameters: ProbeMdMetaDataHandlerRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['mdProbeRequest'] == null) {
+            throw new runtime.RequiredError(
+                'mdProbeRequest',
+                'Required parameter "mdProbeRequest" was null or undefined when calling probeMdMetaDataHandler().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("session_token", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/dataset/probe-md`;
+
+        return {
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: MdProbeRequestToJSON(requestParameters['mdProbeRequest']),
+        };
+    }
+
+    /**
+     * This reads the files, so it costs one GDAL open plus one coordinate-variable read per file; for a 65-file yearly series over the network that is minutes, not seconds.
+     * Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.
+     */
+    async probeMdMetaDataHandlerRaw(requestParameters: ProbeMdMetaDataHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<MdProbeResponse>> {
+        const requestOptions = await this.probeMdMetaDataHandlerRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => MdProbeResponseFromJSON(jsonValue));
+    }
+
+    /**
+     * This reads the files, so it costs one GDAL open plus one coordinate-variable read per file; for a 65-file yearly series over the network that is minutes, not seconds.
+     * Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.
+     */
+    async probeMdMetaDataHandler(requestParameters: ProbeMdMetaDataHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<MdProbeResponse> {
+        const response = await this.probeMdMetaDataHandlerRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

@@ -36,7 +36,7 @@ use url::Url;
 use utoipa::ToSchema;
 use validator::{Validate, ValidationErrors};
 
-use super::operators::{GdalMultiBand, MdGdalMetaData};
+use super::operators::{GdalMdMetaData, GdalMultiBand};
 pub const SECRET_REPLACEMENT: &str = "*****";
 
 #[allow(clippy::large_enum_variant)]
@@ -51,7 +51,7 @@ pub enum MetaDataDefinition {
     GdalMetadataNetCdfCf(GdalMetadataNetCdfCf),
     GdalMetaDataList(GdalMetaDataList),
     GdalMultiBand(GdalMultiBand),
-    MdGdalMetaData(MdGdalMetaData),
+    GdalMdMetaData(GdalMdMetaData),
 }
 
 impl From<crate::datasets::storage::MetaDataDefinition> for MetaDataDefinition {
@@ -86,8 +86,8 @@ impl From<crate::datasets::storage::MetaDataDefinition> for MetaDataDefinition {
             crate::datasets::storage::MetaDataDefinition::GdalMultiBand(x) => {
                 Self::GdalMultiBand(x.into())
             }
-            crate::datasets::storage::MetaDataDefinition::MdGdalMetaData(x) => {
-                Self::MdGdalMetaData(x.into())
+            crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(x) => {
+                Self::GdalMdMetaData(x.into())
             }
         }
     }
@@ -103,7 +103,7 @@ impl From<MetaDataDefinition> for crate::datasets::storage::MetaDataDefinition {
             MetaDataDefinition::GdalMetadataNetCdfCf(x) => Self::GdalMetadataNetCdfCf(x.into()),
             MetaDataDefinition::GdalMetaDataList(x) => Self::GdalMetaDataList(x.into()),
             MetaDataDefinition::GdalMultiBand(x) => Self::GdalMultiBand(x.into()),
-            MetaDataDefinition::MdGdalMetaData(x) => Self::MdGdalMetaData(x.into()),
+            MetaDataDefinition::GdalMdMetaData(x) => Self::GdalMdMetaData(x.into()),
         }
     }
 }
@@ -241,7 +241,11 @@ impl DataPath {
                 let is_url = path_str.starts_with("http://")
                     || path_str.starts_with("https://")
                     || path_str.starts_with("s3://");
-                if !is_url {
+                // ponytail: any /vsi prefix is accepted, so /vsizip/ can still reach
+                // inside a local archive; accept only the remote handlers
+                // (/vsicurl/, /vsis3/, ...) if that matters
+                let is_vsi = path_str.starts_with("/vsi");
+                if !is_url && !is_vsi {
                     return Err(Error::InvalidPath);
                 }
                 Ok(())
