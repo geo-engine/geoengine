@@ -134,8 +134,9 @@ is-container-already-published repository tag organization="geoengine":
 is-tag-already-published:
     @git show-ref --tags "{{ `just repo print-version-tag` }}" --quiet && echo "true" || echo "false"
 
-# Check repository-wide lints. Usage: `just repo lint`.
-lint: format lint-version-numbers lint-generated-code
+# Check repository-wide lints. Usage: `just repo lint`. Automatically fix issues where possible with `--fix`.
+[arg("fix", long="fix", value="true", help="Automatically apply fixes where possible.")]
+lint fix="false": (format fix) lint-version-numbers lint-generated-code
 
 # Check that version numbers are consistent across the project. Usage: `just repo lint-version-numbers`.
 [group("lint")]

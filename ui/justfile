@@ -22,10 +22,10 @@ format write="false": common::_clear
     npm run prettier -- {{ if write != "true" { "--check" } else { "--write" } }} .
 
 [arg("project", long="project", help="Whether to only lint a specific project, e.g. `--project=gis`.")]
-[arg("fix", long="fix", value="--fix", help="Whether to automatically fix linting errors.")]
+[arg("fix", long="fix", value="true", help="Whether to automatically fix linting errors.")]
 [arg("only-errors", long="only-errors", value="--quiet", help="Whether to only print errors and warnings, without the full linting output.")]
-lint only-errors="" fix="" project="": common::_clear (format (if fix == "--fix" { "true" } else { "false" }))
-    npm run lint -- {{ only-errors }} {{ fix }} {{ project }}
+lint fix="false" only-errors="" project="": common::_clear (format fix)
+    npm run lint -- {{ only-errors }} {{ if fix == "true" { "--fix" } else { "" } }} {{ project }}
 
 build project="gis": common::_clear
     npm run build-prod:{{ project }}
@@ -45,7 +45,7 @@ test ci="false" app="" include="" filter="": common::_clear
         {{ if filter == "" { "" } else { '--filter="' + filter + '"' } }}
 
 [group("update")]
-update-step1-angular: common::_clear && (lint "--quiet" "--fix" "gis")
+update-step1-angular: common::_clear && (lint "true" "--quiet" "gis")
     #!/usr/bin/env bash
     LATEST_ANGULAR_VERSION=$(npx @angular/cli@latest version --json | jq -r '.cli.version')
     echo "Updating Angular to version $LATEST_ANGULAR_VERSION"

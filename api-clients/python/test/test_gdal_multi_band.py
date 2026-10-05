@@ -62,7 +62,8 @@ class TestGdalMultiBand(unittest.TestCase):
                         geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
                             name = '', 
                             measurement = null, )
-                        ], )
+                        ], ),
+                cache_ttl = 0
             )
         else:
             return GdalMultiBand(

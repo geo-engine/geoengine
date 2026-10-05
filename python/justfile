@@ -45,14 +45,16 @@ install-dependencies features module_resolution="": common::_clear _venv-is-inst
     {{ PIP }} install {{ module_resolution }} -e .[{{ features }}]
 
 # Check if Python code is formatted correctly, check for linting errors and type errors.
+[arg("fix", long="fix", value="true", help="Automatically apply fixes where possible.")]
 [group("lint")]
-lint: lint-code lint-tests
+lint fix="false": (lint-code fix) lint-tests
 
 # Check if Python code is formatted correctly, check for linting errors and type errors.
+[arg("fix", long="fix", value="true", help="Automatically apply fixes where possible.")]
 [group("lint")]
-lint-code: common::_clear _venv-is-installed
-    {{ PYTHON }} -m ruff format --check
-    {{ PYTHON }} -m ruff check
+lint-code fix="false": common::_clear _venv-is-installed
+    {{ PYTHON }} -m ruff format {{ if fix == "true" { "" } else { "--check" } }}
+    {{ PYTHON }} -m ruff check {{ if fix == "true" { "--fix" } else { "" } }}
     {{ PYTHON }} -m mypy geoengine
 
 # Check if Python code is formatted correctly, check for linting errors and type errors.

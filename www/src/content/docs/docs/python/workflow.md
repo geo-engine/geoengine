@@ -84,7 +84,7 @@ Return the metadata of the workflow result
 #### workflow\_definition
 
 ```python
-def workflow_definition(timeout: int = 60) -> geoc.Workflow
+def workflow_definition(timeout: int = 60) -> geoc.ProcessingGraph
 ```
 
 Return the workflow definition for this workflow
