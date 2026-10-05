@@ -16,6 +16,7 @@ pub struct GdalMultiBand {
     pub r#type: Type,
     #[serde(rename = "resultDescriptor")]
     pub result_descriptor: Box<models::RasterResultDescriptor>,
+    /// Dataset-level TTL fallback used when no tile-level TTL is provided.
     #[serde(rename = "cacheTtl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub cache_ttl: Option<Option<i32>>,
 }
