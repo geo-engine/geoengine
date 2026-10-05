@@ -1523,6 +1523,9 @@ pub struct GdalMdMetaData {
     /// operator's default. A dataset property, since a batch is sized against the slice
     /// size of the data itself.
     pub max_z_batch_size: Option<i64>,
+    /// Dataset-level TTL fallback used when no tile-level TTL is provided.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 /// How the z dimension of an MD array maps to the 2D raster output. Mirrors
@@ -1564,6 +1567,7 @@ impl From<geoengine_operators::source::GdalMdMetaData> for GdalMdMetaData {
             z_role: value.z_role.into(),
             wrap: value.wrap,
             max_z_batch_size: value.max_z_batch_size,
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -1575,6 +1579,7 @@ impl From<GdalMdMetaData> for geoengine_operators::source::GdalMdMetaData {
             z_role: value.z_role.into(),
             wrap: value.wrap,
             max_z_batch_size: value.max_z_batch_size,
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }

@@ -24,6 +24,9 @@ pub struct GdalMdMetaData {
     /// upper bound on the z slices a single worker read may request; `None` means the operator's default. A dataset property, since a batch is sized against the slice size of the data itself.
     #[serde(rename = "maxZBatchSize", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub max_z_batch_size: Option<Option<i64>>,
+    /// Dataset-level TTL fallback used when no tile-level TTL is provided.
+    #[serde(rename = "cacheTtl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<Option<i32>>,
 }
 
 impl GdalMdMetaData {
@@ -34,6 +37,7 @@ impl GdalMdMetaData {
             z_role,
             wrap,
             max_z_batch_size: None,
+            cache_ttl: None,
         }
     }
 }

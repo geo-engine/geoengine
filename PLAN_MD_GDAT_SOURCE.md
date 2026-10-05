@@ -17,26 +17,27 @@
 
 | File | Cause | Resolution |
 |---|---|---|
-| `services/src/contexts/migrations/mod.rs` | both branches claim `0030` | keep ge/main's `0030_stac_provider_band_name`; ours becomes `0031_md_dataset_tiles` |
+| `services/src/contexts/migrations/mod.rs` | both branches claim `0030` | keep ge/main's `0030_stac_provider_band_name`; ours becomes a number above ge/main's latest (see *Rebase onto the real ge/main*) |
 | `services/src/datasets/postgres.rs` | same `use geoengine_operators::source::{…}` line | merge both import sets; keep ge/main's `extend_spatial_bounds`/`extend_time_bounds` |
 | `openapi.json` | both regenerated | discard, regenerate at the end |
 
 Auto-merges: `operators/src/error.rs`, `api/handlers/datasets.rs`, `api/model/operators.rs`,
 `api/model/services.rs`, `contexts/mod.rs`, `current_schema.sql`.
 
-## Migration 0031 (replaces 0030)
+## Migration 0034 (renumbered from 0031; see *Rebase onto the real ge/main*)
 
 `current_schema.sql` is hand-maintained; `migrations_lead_to_ground_truth_schema` compares it
 against the migrated schema including `ordinal_position`, so `.sql` and `current_schema.sql`
 move in lockstep.
 
 ```sql
-CREATE TYPE "ZRole" AS ENUM ('Time', 'Band', 'Variable');
+CREATE TYPE "ZRole" AS ENUM ('Band', 'Variable');
 CREATE TYPE "GdalMdMetaData" AS (
     result_descriptor "RasterResultDescriptor",
     z_role "ZRole",
     wrap boolean,
-    max_z_batch_size bigint
+    max_z_batch_size bigint,
+    cache_ttl int
 );
 ALTER TYPE "MetaDataDefinition" ADD ATTRIBUTE gdal_md_meta_data "GdalMdMetaData";
 
@@ -403,3 +404,32 @@ CF time units, and `z_role_and_intervals` returns Time for CF units). Collapsed 
 `Band` remains distinct (z→band, synthetic unit intervals, no time axis).
 `ZRole` enum in both crates + API model + migration SQL + `current_schema.sql` updated;
 OpenAPI and all three API clients regenerated.
+
+## Rebase onto the real ge/main
+
+The first rebase ran against a stale `ge/main`. After `git fetch`, upstream had moved 6
+commits and claimed migration numbers **0031-0033** (`stac_provider_authentication`,
+`stac_provider_cache_ttl`, `gdal_multiband_cache_ttl`), so ours was renumbered.
+
+| Item | Before | After |
+|---|---|---|
+| migration | `0031_md_dataset_tiles` | `0034_md_dataset_tiles` |
+| `prev_version()` | `Migration0030StacProviderBandName` | `Migration0033GdalMultibandCacheTtl` |
+| `all_migrations()` order | after 0030 | after `0033_gdal_multiband_cache_ttl` |
+
+The three upstream migrations touch disjoint objects (`StacProviderAuthentication`, STAC
+cache TTL, `GdalMultiBand`), so renumbering was mechanical. The `.sql` body needed no
+change. `current_schema.sql` was re-based on upstream's version with our two additions
+re-applied on top, so upstream's `GdalMultiBand.cache_ttl`, `StacProviderAuthentication` and
+the `StacProviderS3Config` encryption columns all survive.
+
+Restore point: `backup/pre-rebase-real-ge-main` (before the rebase, 3 commits).
+
+### Dataset-level cache_ttl for MD
+
+Upstream's 0033 added `GdalMultiBand.cache_ttl`, so MD got the same. `GdalMdMetaData`
+gained `cache_ttl int`, `MdLoadingInfo` carries `Option<CacheTtlSeconds>` instead of a
+frozen `CacheHint`, and `MdGdalSourceProcessor` holds `default_cache_ttl` from
+`ExecutionContext::default_cache_ttl()` — the exact chain multi-band uses, including
+`cache_hint(default)` resolving dataset TTL then context default. `MdProbeRequest` accepts
+it so the notebook/CLI can set it at registration.

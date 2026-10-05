@@ -35,6 +35,7 @@ export function MdProbeRequestFromJSONTyped(json, ignoreDiscriminator) {
         'group': json['group'] == null ? undefined : json['group'],
         'variablesAsBands': json['variablesAsBands'] == null ? undefined : json['variablesAsBands'],
         'maxZBatchSize': json['maxZBatchSize'] == null ? undefined : json['maxZBatchSize'],
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 export function MdProbeRequestToJSON(json) {
@@ -51,5 +52,6 @@ export function MdProbeRequestToJSONTyped(value, ignoreDiscriminator = false) {
         'group': value['group'],
         'variablesAsBands': value['variablesAsBands'],
         'maxZBatchSize': value['maxZBatchSize'],
+        'cacheTtl': value['cacheTtl'],
     };
 }

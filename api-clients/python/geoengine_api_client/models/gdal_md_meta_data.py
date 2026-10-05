@@ -19,6 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
+from typing_extensions import Annotated
 from geoengine_api_client.models.raster_result_descriptor import RasterResultDescriptor
 from geoengine_api_client.models.z_role import ZRole
 from typing import Optional, Set
@@ -33,7 +34,8 @@ class GdalMdMetaData(BaseModel):
     z_role: ZRole = Field(alias="zRole")
     wrap: StrictBool = Field(description="whether the stored 0..360 degree coverage is re-presented as -180..180")
     max_z_batch_size: Optional[StrictInt] = Field(default=None, description="upper bound on the z slices a single worker read may request; `None` means the operator's default. A dataset property, since a batch is sized against the slice size of the data itself.", alias="maxZBatchSize")
-    __properties: ClassVar[List[str]] = ["type", "resultDescriptor", "zRole", "wrap", "maxZBatchSize"]
+    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, description="Dataset-level TTL fallback used when no tile-level TTL is provided.", alias="cacheTtl")
+    __properties: ClassVar[List[str]] = ["type", "resultDescriptor", "zRole", "wrap", "maxZBatchSize", "cacheTtl"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -89,6 +91,11 @@ class GdalMdMetaData(BaseModel):
         if self.max_z_batch_size is None and "max_z_batch_size" in self.model_fields_set:
             _dict['maxZBatchSize'] = None
 
+        # set to None if cache_ttl (nullable) is None
+        # and model_fields_set contains the field
+        if self.cache_ttl is None and "cache_ttl" in self.model_fields_set:
+            _dict['cacheTtl'] = None
+
         return _dict
 
     @classmethod
@@ -105,7 +112,8 @@ class GdalMdMetaData(BaseModel):
             "resultDescriptor": RasterResultDescriptor.from_dict(obj["resultDescriptor"]) if obj.get("resultDescriptor") is not None else None,
             "zRole": obj.get("zRole"),
             "wrap": obj.get("wrap"),
-            "maxZBatchSize": obj.get("maxZBatchSize")
+            "maxZBatchSize": obj.get("maxZBatchSize"),
+            "cacheTtl": obj.get("cacheTtl")
         })
         return _obj
 

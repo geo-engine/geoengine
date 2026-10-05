@@ -56,6 +56,14 @@ export interface MdProbeRequest {
      * @memberof MdProbeRequest
      */
     maxZBatchSize?: number | null;
+    /**
+     * Dataset-level cache TTL in seconds, carried into the dataset metadata and used as
+     * the fallback for tiles that carry no TTL of their own. `None` means the server
+     * default.
+     * @type {number}
+     * @memberof MdProbeRequest
+     */
+    cacheTtl?: number | null;
 }
 /**
  * Check if a given object implements the MdProbeRequest interface.

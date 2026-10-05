@@ -734,6 +734,7 @@ def probe_md_metadata(
     group: str | None = None,
     variables_as_bands: bool = False,
     max_z_batch_size: int | None = None,
+    cache_ttl: int | None = None,
     timeout: int = 600,
 ) -> geoengine_api_client.MdProbeResponse:
     """Probe multidimensional (netCDF/Zarr) arrays and report how to register them.
@@ -749,6 +750,9 @@ def probe_md_metadata(
     `max_z_batch_size` caps how many consecutive z slices one GDAL read requests; it is
     stored on the dataset, not on the workflow, because a batch is sized against the slice
     size of the data. `None` means the operator's default.
+
+    `cache_ttl` sets the dataset-level cache lifetime in seconds, used as a fallback for
+    tiles that carry no TTL of their own. `None` means the server default.
 
     This reads every file, so it costs one GDAL open plus one coordinate-variable read per
     file - for a 65-file yearly series over the network that is minutes, hence the generous
@@ -773,6 +777,7 @@ def probe_md_metadata(
                 group=group,
                 variables_as_bands=variables_as_bands,
                 max_z_batch_size=max_z_batch_size,
+                cache_ttl=cache_ttl,
             ),
             _request_timeout=timeout,
         )

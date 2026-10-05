@@ -45,6 +45,7 @@ export function GdalMdMetaDataFromJSONTyped(json, ignoreDiscriminator) {
         'zRole': ZRoleFromJSON(json['zRole']),
         'wrap': json['wrap'],
         'maxZBatchSize': json['maxZBatchSize'] == null ? undefined : json['maxZBatchSize'],
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 export function GdalMdMetaDataToJSON(json) {
@@ -60,5 +61,6 @@ export function GdalMdMetaDataToJSONTyped(value, ignoreDiscriminator = false) {
         'zRole': ZRoleToJSON(value['zRole']),
         'wrap': value['wrap'],
         'maxZBatchSize': value['maxZBatchSize'],
+        'cacheTtl': value['cacheTtl'],
     };
 }

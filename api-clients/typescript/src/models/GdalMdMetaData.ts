@@ -65,6 +65,12 @@ export interface GdalMdMetaData {
      * @memberof GdalMdMetaData
      */
     maxZBatchSize?: number | null;
+    /**
+     * Dataset-level TTL fallback used when no tile-level TTL is provided.
+     * @type {number}
+     * @memberof GdalMdMetaData
+     */
+    cacheTtl?: number | null;
 }
 
 
@@ -103,6 +109,7 @@ export function GdalMdMetaDataFromJSONTyped(json: any, ignoreDiscriminator: bool
         'zRole': ZRoleFromJSON(json['zRole']),
         'wrap': json['wrap'],
         'maxZBatchSize': json['maxZBatchSize'] == null ? undefined : json['maxZBatchSize'],
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 
@@ -122,6 +129,7 @@ export function GdalMdMetaDataToJSONTyped(value?: GdalMdMetaData | null, ignoreD
         'zRole': ZRoleToJSON(value['zRole']),
         'wrap': value['wrap'],
         'maxZBatchSize': value['maxZBatchSize'],
+        'cacheTtl': value['cacheTtl'],
     };
 }
 

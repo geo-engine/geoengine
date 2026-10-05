@@ -30,6 +30,9 @@ pub struct MdProbeRequest {
     /// Upper bound on how many consecutive z slices one GDAL read may request. Carried into the dataset metadata, because a batch is sized against the slice size of the data and not against the workflow that reads it. `None` means the operator's default.
     #[serde(rename = "maxZBatchSize", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub max_z_batch_size: Option<Option<i32>>,
+    /// Dataset-level cache TTL in seconds, carried into the dataset metadata and used as the fallback for tiles that carry no TTL of their own. `None` means the server default.
+    #[serde(rename = "cacheTtl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<Option<i32>>,
 }
 
 impl MdProbeRequest {
@@ -42,6 +45,7 @@ impl MdProbeRequest {
             group: None,
             variables_as_bands: None,
             max_z_batch_size: None,
+            cache_ttl: None,
         }
     }
 }

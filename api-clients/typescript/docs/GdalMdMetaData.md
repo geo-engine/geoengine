@@ -11,6 +11,7 @@ Name | Type
 `zRole` | [ZRole](ZRole.md)
 `wrap` | boolean
 `maxZBatchSize` | number
+`cacheTtl` | number
 
 ## Example
 
@@ -24,6 +25,7 @@ const example = {
   "zRole": null,
   "wrap": null,
   "maxZBatchSize": null,
+  "cacheTtl": null,
 } satisfies GdalMdMetaData
 
 console.log(example)

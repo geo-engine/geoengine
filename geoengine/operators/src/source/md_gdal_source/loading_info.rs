@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use geoengine_datatypes::primitives::{
-    CacheHint, RegularTimeDimension, TimeDimension, TimeGranularity, TimeInstance, TimeInterval,
-    TimeStep,
+    CacheHint, CacheTtlSeconds, RegularTimeDimension, TimeDimension, TimeGranularity, TimeInstance,
+    TimeInterval, TimeStep,
 };
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -52,6 +52,10 @@ pub struct GdalMdMetaData {
     /// `i64` rather than `usize` because this is a `bigint` column and postgres has no
     /// `usize` codec; callers get the bounds check for free from `try_from`.
     pub max_z_batch_size: Option<i64>,
+    /// Dataset-level TTL fallback used when no tile-level TTL is provided, mirroring
+    /// `GdalMultiBand::cache_ttl`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl GdalMdMetaData {
@@ -61,12 +65,14 @@ impl GdalMdMetaData {
         z_role: ZRole,
         wrap: bool,
         max_z_batch_size: Option<i64>,
+        cache_ttl: Option<CacheTtlSeconds>,
     ) -> Self {
         Self {
             result_descriptor,
             z_role,
             wrap,
             max_z_batch_size,
+            cache_ttl,
         }
     }
 }
@@ -283,7 +289,9 @@ pub struct MdLoadingInfo {
     time_steps: Vec<TimeInterval>,
     /// the files in z order; their z ranges are disjoint and cover `[0, time_steps.len())`
     files: Vec<MdDatasetFile>,
-    cache_hint: CacheHint,
+    /// Fallback TTL used when the dataset does not provide its own.
+    #[serde(default)]
+    cache_ttl: Option<CacheTtlSeconds>,
     z_role: ZRole,
     /// re-apply the stored 0..360° coverage onto -180..180° (one-way wrap-around)
     wrap: bool,
@@ -297,7 +305,7 @@ impl MdLoadingInfo {
     pub fn new(
         time_steps: Vec<TimeInterval>,
         files: Vec<MdDatasetFile>,
-        cache_hint: CacheHint,
+        cache_ttl: Option<CacheTtlSeconds>,
         z_role: ZRole,
         wrap: bool,
         max_z_batch_size: Option<usize>,
@@ -337,7 +345,7 @@ impl MdLoadingInfo {
         Self {
             time_steps,
             files,
-            cache_hint,
+            cache_ttl,
             z_role,
             wrap,
             max_z_batch_size,
@@ -367,11 +375,6 @@ impl MdLoadingInfo {
     }
 
     #[must_use]
-    pub fn cache_hint(&self) -> CacheHint {
-        self.cache_hint
-    }
-
-    #[must_use]
     pub fn z_role(&self) -> ZRole {
         self.z_role
     }
@@ -379,6 +382,12 @@ impl MdLoadingInfo {
     #[must_use]
     pub fn wrap(&self) -> bool {
         self.wrap
+    }
+
+    /// The cache TTL for a tile of this dataset, falling back to the context default.
+    #[must_use]
+    pub fn cache_hint(&self, default_ttl: CacheTtlSeconds) -> CacheHint {
+        self.cache_ttl.unwrap_or(default_ttl).into()
     }
 
     /// How many consecutive z slices one worker request may return.
@@ -572,7 +581,7 @@ mod tests {
         let loading_info = MdLoadingInfo::new(
             (0..8).map(|i| interval(i, i + 1)).collect(),
             files,
-            CacheHint::default(),
+            None,
             ZRole::Variable,
             false,
             None,
@@ -613,7 +622,7 @@ mod tests {
         let loading_info = MdLoadingInfo::new(
             (0..8).map(|i| interval(i, i + 1)).collect(),
             files,
-            CacheHint::default(),
+            None,
             ZRole::Variable,
             false,
             None,

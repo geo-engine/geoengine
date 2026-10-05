@@ -13,6 +13,7 @@ Name | Type
 `group` | string
 `variablesAsBands` | boolean
 `maxZBatchSize` | number
+`cacheTtl` | number
 
 ## Example
 
@@ -27,6 +28,7 @@ const example = {
   "group": null,
   "variablesAsBands": null,
   "maxZBatchSize": null,
+  "cacheTtl": null,
 } satisfies MdProbeRequest
 
 console.log(example)

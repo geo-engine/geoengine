@@ -457,6 +457,7 @@ pub struct AddDatasetMdTile {
 /// The probe only ever produces source descriptors.
 pub fn probed_md_dataset(
     probed: geoengine_operators::source::ProbedGdalMdMetaData,
+    cache_ttl: Option<u32>,
 ) -> (
     crate::datasets::storage::MetaDataDefinition,
     Vec<AddDatasetMdTile>,
@@ -509,6 +510,7 @@ pub fn probed_md_dataset(
             loading_info.z_role(),
             loading_info.wrap(),
             max_z_batch_size.and_then(|size| i64::try_from(size).ok()),
+            cache_ttl.map(geoengine_datatypes::primitives::CacheTtlSeconds::new),
         )
         .into(),
         tiles,
@@ -657,6 +659,11 @@ pub struct MdProbeRequest {
     /// and not against the workflow that reads it. `None` means the operator's default.
     #[serde(default)]
     pub max_z_batch_size: Option<usize>,
+    /// Dataset-level cache TTL in seconds, carried into the dataset metadata and used as
+    /// the fallback for tiles that carry no TTL of their own. `None` means the server
+    /// default.
+    #[serde(default)]
+    pub cache_ttl: Option<u32>,
 }
 
 /// What a client needs to create an `MdGdalSource` dataset from the probed files: the
@@ -752,7 +759,7 @@ pub async fn probe_md_meta_data_handler<C: ApplicationContext>(
         message: e.to_string(),
     })?;
 
-    let (meta_data, tiles) = probed_md_dataset(probed);
+    let (meta_data, tiles) = probed_md_dataset(probed, probe.cache_ttl);
 
     Ok(web::Json(MdProbeResponse {
         meta_data: meta_data.into(),
@@ -6317,7 +6324,7 @@ mod tests {
             None,
         )
         .expect("probe should succeed");
-        let (meta_data, tiles) = probed_md_dataset(probed);
+        let (meta_data, tiles) = probed_md_dataset(probed, None);
 
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
@@ -6486,7 +6493,7 @@ mod tests {
             None,
         )
         .expect("probe should succeed");
-        let (meta_data, tiles) = probed_md_dataset(probed);
+        let (meta_data, tiles) = probed_md_dataset(probed, None);
 
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session);
@@ -6552,6 +6559,105 @@ mod tests {
         Ok(())
     }
 
+    /// A dataset's `cache_ttl` must survive the round trip through the database and reach
+    /// the loading info, mirroring `MultiBandGdalSource`. A dataset without one must fall
+    /// back to the caller's context default instead of a frozen hint.
+    #[ge_context::test]
+    async fn it_carries_a_dataset_cache_ttl_onto_md_tiles(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session);
+        let db = ctx.db();
+        let volume = VolumeName("test_data".to_string());
+
+        // `ProbedGdalMdMetaData` is not `Clone`, so probe per case rather than sharing one
+        let rel = |f: &AddDatasetMdTile| {
+            let mut f = f.clone();
+            f.params.file_path = Path::new("md").join(f.params.file_path.file_name().unwrap());
+            f
+        };
+
+        for (label, cache_ttl) in [("with ttl", Some(1234_u32)), ("without ttl", None)] {
+            let probed = geoengine_operators::source::probe_md_loading_info(
+                &[test_data!("md/time_series_gap_a.nc").to_path_buf()],
+                None,
+                None,
+            )
+            .expect("probe should succeed");
+            let (meta_data, tiles) = probed_md_dataset(probed, cache_ttl);
+
+            let id_and_name = db
+                .add_dataset(
+                    AddDataset {
+                        name: None,
+                        display_name: format!("md ttl {label}"),
+                        description: format!("md ttl {label}"),
+                        source_operator: "MdGdalSource".to_string(),
+                        symbology: None,
+                        provenance: None,
+                        tags: None,
+                    }
+                    .into(),
+                    meta_data,
+                    Some(DataPath::Volume(volume.clone())),
+                )
+                .await?;
+            db.add_md_dataset_tiles(id_and_name.id, tiles.iter().map(rel).collect())
+                .await?;
+
+            let provider: Box<
+                dyn MetaData<
+                        geoengine_operators::source::MdLoadingInfo,
+                        geoengine_operators::engine::RasterResultDescriptor,
+                        RasterQueryRectangle,
+                    >,
+            > = db
+                .meta_data(
+                    &DataId::Internal(InternalDataId {
+                        dataset_id: id_and_name.id.into(),
+                        r#type:
+                            crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
+                    })
+                    .into(),
+                )
+                .await?;
+
+            let loading_info = provider
+                .loading_info(RasterQueryRectangle::new(
+                    geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]),
+                    TimeInterval::new_unchecked(
+                        TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
+                        TimeInstance::from_str("2000-01-05T00:00:00Z").unwrap(),
+                    ),
+                    BandSelection::first(),
+                ))
+                .await?;
+            assert!(
+                !loading_info.files().is_empty(),
+                "a dataset {label} must match its stored rows"
+            );
+
+            // a `CacheHint` embeds its own creation time, so compare the expiry the TTL
+            // yields rather than two hints built microseconds apart
+            let context_ttl = geoengine_datatypes::primitives::CacheTtlSeconds::new(7);
+            let expected_ttl = cache_ttl.map_or(context_ttl, |secs| {
+                geoengine_datatypes::primitives::CacheTtlSeconds::new(secs)
+            });
+            let expires_in = loading_info
+                .cache_hint(context_ttl)
+                .expires()
+                .seconds_to_expiration();
+            let expected_in = expected_ttl.seconds();
+            assert!(
+                expires_in.abs_diff(expected_in) <= 2,
+                "a dataset {label} cached for {expires_in}s, expected ~{expected_in}s"
+            );
+        }
+
+        Ok(())
+    }
+
     /// A `ZRole::Variable` dataset stores one row per `(file, variable)`, so the row reader
     /// sees every band's copy of the same intervals. The axis must be built from one band's
     /// rows only: concatenating all of them yields N copies of the timeline, which
@@ -6571,7 +6677,7 @@ mod tests {
             None,
         )
         .expect("probe should succeed");
-        let (meta_data, tiles) = probed_md_dataset(probed);
+        let (meta_data, tiles) = probed_md_dataset(probed, None);
 
         // two rows: one per (file, variable)
         assert_eq!(tiles.len(), 2);
@@ -6668,7 +6774,7 @@ mod tests {
             None,
         )
         .expect("probe should succeed");
-        let (meta_data, tiles) = probed_md_dataset(probed);
+        let (meta_data, tiles) = probed_md_dataset(probed, None);
 
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session);
@@ -6782,7 +6888,7 @@ mod tests {
             None,
         )
         .expect("probe should succeed");
-        let (meta_data, tiles) = probed_md_dataset(probed);
+        let (meta_data, tiles) = probed_md_dataset(probed, None);
         let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md) = meta_data else {
             panic!("a probe produces MD metadata");
         };
