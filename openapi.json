@@ -210,56 +210,6 @@
         ]
       }
     },
-    "/dataset/probe-md": {
-      "post": {
-        "tags": [
-          "Datasets"
-        ],
-        "summary": "Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.",
-        "description": "This reads the files, so it costs one GDAL open plus one coordinate-variable read per\nfile; for a 65-file yearly series over the network that is minutes, not seconds.",
-        "operationId": "probe_md_meta_data_handler",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MdProbeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MdProbeResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/UnauthorizedUserResponse"
-          }
-        },
-        "security": [
-          {
-            "session_token": []
-          }
-        ]
-      }
-    },
     "/dataset/suggest": {
       "post": {
         "tags": [
@@ -6020,6 +5970,14 @@
           },
           "params": {
             "$ref": "#/components/schemas/GdalDatasetParameters"
+          },
+          "leading_prefix": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Fixed index into each dimension between z and (y, x), so one row is one slice of a\n4D array - `[depth]` for `(time, depth, y, x)`. Empty for 3D.\n\nPer row rather than per dataset, so the bands of one dataset can each select a\ndifferent slice: a `(time, depth, y, x)` file with one row per depth becomes one\ndataset whose band `b` is depth `b`."
           }
         }
       },
@@ -8856,14 +8814,6 @@
                 "description": "Dataset-level TTL fallback used when no tile-level TTL is provided."
               }
             ]
-          },
-          "leadingPrefix": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "description": "Fixed index into each dimension between z and (y, x), so one dataset is one slice of\na 4D array - `[depth]` for `(time, depth, y, x)`. Empty for 3D."
           }
         }
       },
@@ -10367,84 +10317,6 @@
             "examples": [
               "era5-timeseries"
             ]
-          }
-        }
-      },
-      "MdProbeRequest": {
-        "type": "object",
-        "description": "Which MD arrays of a file (or file set) to probe.",
-        "required": [
-          "dataPath",
-          "files"
-        ],
-        "properties": {
-          "dataPath": {
-            "$ref": "#/components/schemas/DataPath"
-          },
-          "files": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "The files to probe, relative to `data_path` (or absolute GDAL VSI paths when\n`data_path` is `External`)."
-          },
-          "arrayName": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "The MD array to read. Required when a file has more than one array with at least\nthree dimensions, which is the normal case for netCDF."
-          },
-          "group": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "\"/\"-separated path to the MD group below the root group; `None` = root group."
-          },
-          "variablesAsBands": {
-            "type": "boolean",
-            "description": "Probe several data variables as separate Geo Engine bands instead of one. Each\nvariable must be a time series."
-          },
-          "maxZBatchSize": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "description": "Upper bound on how many consecutive z slices one GDAL read may request. Carried into\nthe dataset metadata, because a batch is sized against the slice size of the data\nand not against the workflow that reads it. `None` means the operator's default.",
-            "minimum": 0
-          },
-          "cacheTtl": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int32",
-            "description": "Dataset-level cache TTL in seconds, carried into the dataset metadata and used as\nthe fallback for tiles that carry no TTL of their own. `None` means the server\ndefault.",
-            "minimum": 0
-          },
-          "forceBandRole": {
-            "type": "boolean",
-            "description": "Confirm that the z dimension really is a band axis. Without this a z dimension that\nhas no usable CF time units is rejected, because guessing produced the silent\n\"one band per time slice, synthetic millisecond steps\" result once already."
-          }
-        }
-      },
-      "MdProbeResponse": {
-        "type": "object",
-        "description": "What a client needs to create an `MdGdalSource` dataset from the probed files: the\ndataset-level metadata for `POST /dataset`, plus the rows for\n`POST /dataset/{dataset}/md-tiles`.",
-        "required": [
-          "metaData",
-          "tiles"
-        ],
-        "properties": {
-          "metaData": {
-            "$ref": "#/components/schemas/MetaDataDefinition"
-          },
-          "tiles": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AddDatasetMdTile"
-            }
           }
         }
       },

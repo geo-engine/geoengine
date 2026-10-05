@@ -50,6 +50,7 @@ export function AddDatasetMdTileFromJSONTyped(json, ignoreDiscriminator) {
         'timeDescriptor': TimeDescriptorFromJSON(json['time_descriptor']),
         'timeSteps': (json['time_steps'].map(TimeIntervalFromJSON)),
         'params': GdalDatasetParametersFromJSON(json['params']),
+        'leadingPrefix': json['leading_prefix'] == null ? undefined : json['leading_prefix'],
     };
 }
 export function AddDatasetMdTileToJSON(json) {
@@ -68,5 +69,6 @@ export function AddDatasetMdTileToJSONTyped(value, ignoreDiscriminator = false) 
         'time_descriptor': TimeDescriptorToJSON(value['timeDescriptor']),
         'time_steps': (value['timeSteps'].map(TimeIntervalToJSON)),
         'params': GdalDatasetParametersToJSON(value['params']),
+        'leading_prefix': value['leadingPrefix'],
     };
 }

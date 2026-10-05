@@ -183,38 +183,6 @@ impl fmt::Debug for AddDatasetTilesError {
 #[derive(Snafu, IntoStaticStr)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
-pub enum MdProbeError {
-    #[snafu(display("No files to probe"))]
-    NoFilesToProbe,
-    #[snafu(display("Cannot resolve the data path: {message}"))]
-    CannotResolveDataPath { message: String },
-    #[snafu(display("Cannot probe the MD arrays: {message}"))]
-    ProbeFailed { message: String },
-    #[snafu(display("A z batch must hold at least one slice"))]
-    InvalidMaxZBatchSize,
-    #[snafu(display("Invalid probe file path '{file_path}': {message}"))]
-    InvalidProbeFilePath { file_path: String, message: String },
-}
-
-impl ResponseError for MdProbeError {
-    fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
-    }
-
-    fn status_code(&self) -> StatusCode {
-        StatusCode::BAD_REQUEST
-    }
-}
-
-impl fmt::Debug for MdProbeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", ge_report(self))
-    }
-}
-
-#[derive(Snafu, IntoStaticStr)]
-#[snafu(visibility(pub(crate)))]
-#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum AddDatasetMdTilesError {
     #[snafu(display("Cannot load dataset for adding MD tiles"))]
     CannotLoadDatasetForAddingMdTiles { source: error::Error },
@@ -247,6 +215,25 @@ pub enum AddDatasetMdTilesError {
     MdTileSliceCountMismatch {
         expected: usize,
         found: usize,
+        file_path: String,
+    },
+    /// the array has a different number of dimensions between z and (y, x) than the row
+    /// declares a leading prefix for
+    MdTileLeadingPrefixMismatch {
+        expected: usize,
+        found: usize,
+        file_path: String,
+    },
+    /// the array's (x, y) size disagrees with the row's declared grid
+    MdTileArraySizeMismatch {
+        declared: (usize, usize),
+        found: (usize, usize),
+        file_path: String,
+    },
+    /// the array declares a CRS that contradicts the dataset's
+    MdTileCrsMismatch {
+        declared: String,
+        found: String,
         file_path: String,
     },
     #[snafu(display(

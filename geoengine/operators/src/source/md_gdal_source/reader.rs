@@ -49,17 +49,17 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
     let z_range = request.local_z.clone();
     let dataset_params = file.params.clone();
     let array_name = file.array_name.clone();
-    // `i64` in the dataset, `u64` in the read window: the probe rejects negatives, but a
-    // hand-edited row could still carry one, so refuse rather than wrap to a huge index.
-    let leading_prefix: Vec<u64> = loading_info
-        .leading_prefix()
+    // `i64` in the dataset, `u64` in the read window: a hand-edited row could carry a
+    // negative index, so refuse rather than wrap it to a huge offset.
+    let leading_prefix: Vec<u64> = file
+        .leading_prefix
         .iter()
         .map(|index| u64::try_from(*index))
         .collect::<Result<_, _>>()
         .map_err(|_| MdGdalSourceError::ProbeError {
             message: format!(
-                "MD dataset has a negative leading prefix index: {:?}",
-                loading_info.leading_prefix()
+                "MD array '{array_name}' has a negative leading prefix index: {:?}",
+                file.leading_prefix
             ),
         })?;
     let leading_prefix = leading_prefix.as_slice();
@@ -161,15 +161,15 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
 /// column `c` holds stored column `(c − col0) mod width`. A tile crossing the seam column
 /// `col0` (world longitude 0°) is split into two contiguous stored runs.
 ///
-/// ponytail: `col0` is always 0 in practice, because `is_0_360_wrap` only accepts a stored
-/// grid whose first cell *edge* sits on longitude 0, so the raw origin is 0 and the tiling
-/// origin (the nearest pixel edge to `(0,0)`) is 0 too. With a 512 px tile the seam is then
-/// always exactly a tile boundary and the two-run split at the bottom is unreachable
+/// ponytail: `col0` is always 0 in practice, because a dataset only sets `wrap` when its
+/// stored grid's first cell *edge* sits on longitude 0, so the raw origin is 0 and the
+/// tiling origin (the nearest pixel edge to `(0,0)`) is 0 too. With a 512 px tile the seam
+/// is then always exactly a tile boundary and the two-run split at the bottom is unreachable
 /// end-to-end - `wrap_tile_straddling_seam_splits` covers it with a narrow synthetic tile
 /// instead. The split is kept because it is the correct answer if either the tile size or
 /// `TilingSpecification::tiling_origin_reference` ever stops being a multiple of the seam;
-/// the upgrade path if a wrapped file ever does store a non-zero raw origin is to derive
-/// `col0` from `is_0_360_wrap`'s own edge arithmetic rather than from the geo transform.
+/// the upgrade path if a wrapped file ever does store a non-zero raw origin is to detect the
+/// coverage from the array's own coordinates rather than from the geo transform.
 fn wrapped_splitted_advises(
     dataset_params: &crate::source::gdal_worker_process::GdalDatasetParameters,
     tile_spatial_grid: &SpatialGridDefinition,

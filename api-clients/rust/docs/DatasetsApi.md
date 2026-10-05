@@ -14,7 +14,6 @@ Method | HTTP request | Description
 [**list_datasets_handler**](DatasetsApi.md#list_datasets_handler) | **GET** /datasets | Lists available datasets.
 [**list_volume_file_layers_handler**](DatasetsApi.md#list_volume_file_layers_handler) | **GET** /dataset/volumes/{volume_name}/files/{file_name}/layers | List the layers of a file in a volume.
 [**list_volumes_handler**](DatasetsApi.md#list_volumes_handler) | **GET** /dataset/volumes | Lists available volumes.
-[**probe_md_meta_data_handler**](DatasetsApi.md#probe_md_meta_data_handler) | **POST** /dataset/probe-md | Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.
 [**suggest_meta_data_handler**](DatasetsApi.md#suggest_meta_data_handler) | **POST** /dataset/suggest | Inspects an upload and suggests metadata that can be used when creating a new dataset based on it. Tries to automatically detect the main file and layer name if not specified.
 [**update_dataset_handler**](DatasetsApi.md#update_dataset_handler) | **POST** /dataset/{dataset} | Update details about a dataset using the internal name.
 [**update_dataset_provenance_handler**](DatasetsApi.md#update_dataset_provenance_handler) | **PUT** /dataset/{dataset}/provenance | 
@@ -304,36 +303,6 @@ This endpoint does not need any parameter.
 ### HTTP request headers
 
 - **Content-Type**: Not defined
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
-
-
-## probe_md_meta_data_handler
-
-> models::MdProbeResponse probe_md_meta_data_handler(md_probe_request)
-Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.
-
-This reads the files, so it costs one GDAL open plus one coordinate-variable read per file; for a 65-file yearly series over the network that is minutes, not seconds.
-
-### Parameters
-
-
-Name | Type | Description  | Required | Notes
-------------- | ------------- | ------------- | ------------- | -------------
-**md_probe_request** | [**MdProbeRequest**](MdProbeRequest.md) |  | [required] |
-
-### Return type
-
-[**models::MdProbeResponse**](MdProbeResponse.md)
-
-### Authorization
-
-[session_token](../README.md#session_token)
-
-### HTTP request headers
-
-- **Content-Type**: application/json
 - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)

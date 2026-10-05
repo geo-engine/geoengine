@@ -19,6 +19,12 @@ Fixtures
 - variables.nc            ZRole::Variable: 3 CF data variables (temperature/precipitation/
                           cloud_area_fraction) sharing (time, lat, lon), with long_name/units
 - grouped_variables.nc    same arrays as variables.nc but inside the `analysis` subgroup
+- projected_crs.nc        (time, y, x) in a projected CRS, declaring it via the CF `crs`
+                          attribute (metre x units, so EPSG:4326 would be a mislabel)
+
+It also writes one copy of `time_series.nc` to `python/examples/data/md_example.nc`, which is
+the fixture `python/examples/md_gdal_source_dataset.ipynb` registers. Same bytes, so the
+example's documented values and the tests' expected values cannot drift apart.
 
 netCDF/CF convention: coordinate variables are cell *centers* (offset half a
 pixel from the grid edges), so the probes can derive a correct geo transform.
@@ -402,6 +408,11 @@ def grouped_variables(path: Path):
     _fill_variables(ds.GetRootGroup().CreateGroup("analysis"), 8, 8, 8)
 
 
+# where the example notebook's copy of `time_series.nc` goes; the notebook reads it from
+# next to itself, so the example does not depend on a configured `test_data` volume
+EXAMPLE_COPY = OUT_DIR.parents[2] / "python" / "examples" / "data" / "md_example.nc"
+
+
 def main() -> None:
     # remove only the fixture files, keep this script itself (zarr is a directory)
     zarr_dir = OUT_DIR / "time_series.zarr"
@@ -435,6 +446,9 @@ def main() -> None:
     time_depth_4d(OUT_DIR / "time_depth_4d.nc")
     variables(OUT_DIR / "variables.nc")
     grouped_variables(OUT_DIR / "grouped_variables.nc")
+
+    EXAMPLE_COPY.parent.mkdir(parents=True, exist_ok=True)
+    time_series(8, 8, EXAMPLE_COPY)
     print(f"generated fixtures in {OUT_DIR}")
 
 

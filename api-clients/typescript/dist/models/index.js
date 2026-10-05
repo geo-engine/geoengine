@@ -179,8 +179,6 @@ __exportStar(require("./Link"), exports);
 __exportStar(require("./LogarithmicGradient"), exports);
 __exportStar(require("./MdGdalSource"), exports);
 __exportStar(require("./MdGdalSourceParameters"), exports);
-__exportStar(require("./MdProbeRequest"), exports);
-__exportStar(require("./MdProbeResponse"), exports);
 __exportStar(require("./MeanRasterPixelValuesOverTime"), exports);
 __exportStar(require("./MeanRasterPixelValuesOverTimeParameters"), exports);
 __exportStar(require("./MeanRasterPixelValuesOverTimePosition"), exports);

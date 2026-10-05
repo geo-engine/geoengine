@@ -6,8 +6,8 @@ use crate::{
 use async_trait::async_trait;
 use tokio_postgres::Transaction;
 
-/// Adds the leading prefix to an MD dataset's meta data, which is what makes a 4D array
-/// `(time, depth, y, x)` readable as one depth.
+/// Adds the leading prefix to an MD dataset's per-file rows, which is what makes a 4D array
+/// `(time, depth, y, x)` readable as a set of depth bands in one dataset.
 pub struct Migration0035MdLeadingPrefix;
 
 #[async_trait]

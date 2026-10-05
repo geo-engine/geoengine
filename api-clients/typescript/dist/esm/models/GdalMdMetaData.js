@@ -46,7 +46,6 @@ export function GdalMdMetaDataFromJSONTyped(json, ignoreDiscriminator) {
         'wrap': json['wrap'],
         'maxZBatchSize': json['maxZBatchSize'] == null ? undefined : json['maxZBatchSize'],
         'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
-        'leadingPrefix': json['leadingPrefix'] == null ? undefined : json['leadingPrefix'],
     };
 }
 export function GdalMdMetaDataToJSON(json) {
@@ -63,6 +62,5 @@ export function GdalMdMetaDataToJSONTyped(value, ignoreDiscriminator = false) {
         'wrap': value['wrap'],
         'maxZBatchSize': value['maxZBatchSize'],
         'cacheTtl': value['cacheTtl'],
-        'leadingPrefix': value['leadingPrefix'],
     };
 }

@@ -121,7 +121,6 @@ use utoipa::{
         handlers::datasets::update_loading_info_handler,
         handlers::datasets::add_dataset_tiles_handler,
         handlers::datasets::add_md_dataset_tiles_handler,
-        handlers::datasets::probe_md_meta_data_handler,
         handlers::layers::add_collection,
         handlers::layers::add_existing_collection_to_collection,
         handlers::layers::add_existing_layer_to_collection,

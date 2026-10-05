@@ -727,69 +727,6 @@ def add_dataset_tiles(dataset: DatasetName | str, tiles: list[MultiBandGdalFileS
         )
 
 
-def probe_md_metadata(
-    data_store: Volume | UploadId | Literal["external"],
-    files: list[str],
-    array_name: str | None = None,
-    group: str | None = None,
-    variables_as_bands: bool = False,
-    max_z_batch_size: int | None = None,
-    cache_ttl: int | None = None,
-    force_band_role: bool = False,
-    timeout: int = 600,
-) -> geoengine_api_client.MdProbeResponse:
-    """Probe multidimensional (netCDF/Zarr) arrays and report how to register them.
-
-    Returns the dataset-level `meta_data` for `add_or_replace_dataset_with_permissions`
-    together with one row per file for `add_md_dataset_tiles`.
-
-    `array_name` is required whenever a file holds more than one array with at least three
-    dimensions, which is the normal case for netCDF. For `data_store="external"` the files
-    are absolute GDAL VSI paths (e.g. `/vsicurl/https://bucket/key.nc`); otherwise they are
-    relative to the volume or upload root.
-
-    `max_z_batch_size` caps how many consecutive z slices one GDAL read requests; it is
-    stored on the dataset, not on the workflow, because a batch is sized against the slice
-    size of the data. `None` means the operator's default.
-
-    `cache_ttl` sets the dataset-level cache lifetime in seconds, used as a fallback for
-    tiles that carry no TTL of their own. `None` means the server default.
-
-    `force_band_role` accepts a z axis that carries no usable time units as a band axis
-    instead of failing the probe. Off by default: a non-time z axis is usually a
-    mis-identified time axis, and reading it as bands silently produces one band per slice
-    with invented time steps.
-
-    This reads every file, so it costs one GDAL open plus one coordinate-variable read per
-    file - for a 65-file yearly series over the network that is minutes, hence the generous
-    default timeout.
-    """
-    if isinstance(data_store, Volume):
-        data_path = geoengine_api_client.DataPath(geoengine_api_client.DataPathVolume(volume=data_store.name))
-    elif isinstance(data_store, str) and data_store == "external":
-        data_path = geoengine_api_client.DataPath(data_store)
-    else:
-        data_path = geoengine_api_client.DataPath(geoengine_api_client.DataPathUpload(upload=str(data_store)))
-
-    session = get_session()
-
-    with geoengine_api_client.ApiClient(session.configuration) as api_client:
-        datasets_api = geoengine_api_client.DatasetsApi(api_client)
-        return datasets_api.probe_md_meta_data_handler(
-            geoengine_api_client.MdProbeRequest(
-                data_path=data_path,
-                files=files,
-                array_name=array_name,
-                group=group,
-                variables_as_bands=variables_as_bands,
-                max_z_batch_size=max_z_batch_size,
-                cache_ttl=cache_ttl,
-                force_band_role=force_band_role,
-            ),
-            _request_timeout=timeout,
-        )
-
-
 def add_md_dataset_tiles(
     dataset: DatasetName | str,
     tiles: list[geoengine_api_client.AddDatasetMdTile],
@@ -797,9 +734,13 @@ def add_md_dataset_tiles(
 ) -> None:
     """Add MD array files to an existing `MdGdalSource` dataset.
 
-    One row per file, covering all of that file's z slices. `tiles` is what
-    `probe_md_metadata(...).tiles` returns; set `params.gdal_config_options` on each row for
-    remote data, e.g. `[["CPL_VSIL_CURL_ALLOWED_EXTENSIONS", "...,.nc"]]`.
+    One row per file, covering all of that file's z slices - see
+    `python/examples/md_gdal_source_dataset.ipynb` for how a row is built by hand. Set
+    `params.gdal_config_options` on each row for remote data, e.g.
+    `[["CPL_VSIL_CURL_ALLOWED_EXTENSIONS", "...,.nc"]]`.
+
+    `leading_prefix` selects a slice of a 4D array: `[2]` reads depth 2 of a
+    `(time, depth, y, x)` file, and leaving it empty reads a 3D array.
     """
     if not isinstance(dataset, DatasetName):
         dataset = DatasetName(dataset)
@@ -813,63 +754,6 @@ def add_md_dataset_tiles(
             tiles,
             _request_timeout=timeout,
         )
-
-
-def add_md_gdal_source(
-    data_store: Volume | UploadId | Literal["external"],
-    name: str,
-    display_name: str,
-    description: str,
-    files: list[str],
-    array_name: str | None = None,
-    group: str | None = None,
-    variables_as_bands: bool = False,
-    max_z_batch_size: int | None = None,
-    symbology: RasterSymbology | None = None,
-    permission_tuples: list[tuple[RoleId, Permission]] | None = None,
-    tags: list[str] | None = None,
-    provenance: list[Provenance] | None = None,
-    timeout: int = 600,
-) -> DatasetName:
-    """Create an `MdGdalSource` dataset from multidimensional (netCDF/Zarr) files.
-
-    Probes the files, registers the dataset and posts the per-file rows. See
-    `probe_md_metadata` for the meaning of `array_name`, `files` and `max_z_batch_size`.
-    """
-    # keyword arguments: this used to pass `timeout` positionally, which silently landed in
-    # `cache_ttl` once that parameter was added
-    probe = probe_md_metadata(
-        data_store,
-        files,
-        array_name=array_name,
-        group=group,
-        variables_as_bands=variables_as_bands,
-        max_z_batch_size=max_z_batch_size,
-        timeout=timeout,
-    )
-
-    properties = AddDatasetProperties(
-        name=name,
-        display_name=display_name,
-        description=description,
-        source_operator="MdGdalSource",
-        symbology=symbology,
-        tags=tags,
-        provenance=provenance,
-    )
-
-    dataset = add_or_replace_dataset_with_permissions(
-        data_store,
-        properties,
-        probe.meta_data,
-        permission_tuples=permission_tuples,
-        replace_existing=True,
-        timeout=timeout,
-    )
-
-    add_md_dataset_tiles(dataset, probe.tiles, timeout=timeout)
-
-    return dataset
 
 
 def add_multiband_gdal_source(

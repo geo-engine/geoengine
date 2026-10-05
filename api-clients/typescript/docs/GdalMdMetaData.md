@@ -12,7 +12,6 @@ Name | Type
 `wrap` | boolean
 `maxZBatchSize` | number
 `cacheTtl` | number
-`leadingPrefix` | Array&lt;number&gt;
 
 ## Example
 
@@ -27,7 +26,6 @@ const example = {
   "wrap": null,
   "maxZBatchSize": null,
   "cacheTtl": null,
-  "leadingPrefix": null,
 } satisfies GdalMdMetaData
 
 console.log(example)

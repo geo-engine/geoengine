@@ -14,7 +14,6 @@ All URIs are relative to *https://geoengine.io/api*
 | [**listDatasetsHandler**](DatasetsApi.md#listdatasetshandler) | **GET** /datasets | Lists available datasets. |
 | [**listVolumeFileLayersHandler**](DatasetsApi.md#listvolumefilelayershandler) | **GET** /dataset/volumes/{volume_name}/files/{file_name}/layers | List the layers of a file in a volume. |
 | [**listVolumesHandler**](DatasetsApi.md#listvolumeshandler) | **GET** /dataset/volumes | Lists available volumes. |
-| [**probeMdMetaDataHandler**](DatasetsApi.md#probemdmetadatahandler) | **POST** /dataset/probe-md | Probes multidimensional (netCDF/Zarr) arrays and reports how to register them. |
 | [**suggestMetaDataHandler**](DatasetsApi.md#suggestmetadatahandler) | **POST** /dataset/suggest | Inspects an upload and suggests metadata that can be used when creating a new dataset based on it. Tries to automatically detect the main file and layer name if not specified. |
 | [**updateDatasetHandler**](DatasetsApi.md#updatedatasethandler) | **POST** /dataset/{dataset} | Update details about a dataset using the internal name. |
 | [**updateDatasetProvenanceHandler**](DatasetsApi.md#updatedatasetprovenancehandler) | **PUT** /dataset/{dataset}/provenance |  |
@@ -736,79 +735,6 @@ This endpoint does not need any parameter.
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 | **200** | OK |  -  |
-| **401** | Authorization failed |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-
-
-## probeMdMetaDataHandler
-
-> MdProbeResponse probeMdMetaDataHandler(mdProbeRequest)
-
-Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.
-
-This reads the files, so it costs one GDAL open plus one coordinate-variable read per file; for a 65-file yearly series over the network that is minutes, not seconds.
-
-### Example
-
-```ts
-import {
-  Configuration,
-  DatasetsApi,
-} from '@geoengine/api-client';
-import type { ProbeMdMetaDataHandlerRequest } from '@geoengine/api-client';
-
-async function example() {
-  console.log("🚀 Testing @geoengine/api-client SDK...");
-  const config = new Configuration({ 
-    // Configure HTTP bearer authorization: session_token
-    accessToken: "YOUR BEARER TOKEN",
-  });
-  const api = new DatasetsApi(config);
-
-  const body = {
-    // MdProbeRequest
-    mdProbeRequest: ...,
-  } satisfies ProbeMdMetaDataHandlerRequest;
-
-  try {
-    const data = await api.probeMdMetaDataHandler(body);
-    console.log(data);
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-// Run the test
-example().catch(console.error);
-```
-
-### Parameters
-
-
-| Name | Type | Description  | Notes |
-|------------- | ------------- | ------------- | -------------|
-| **mdProbeRequest** | [MdProbeRequest](MdProbeRequest.md) |  | |
-
-### Return type
-
-[**MdProbeResponse**](MdProbeResponse.md)
-
-### Authorization
-
-[session_token](../README.md#session_token)
-
-### HTTP request headers
-
-- **Content-Type**: `application/json`
-- **Accept**: `application/json`
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-| **200** | OK |  -  |
-| **400** | Bad request |  -  |
 | **401** | Authorization failed |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)

@@ -71,6 +71,17 @@ export interface AddDatasetMdTile {
      * @memberof AddDatasetMdTile
      */
     params: GdalDatasetParameters;
+    /**
+     * Fixed index into each dimension between z and (y, x), so one row is one slice of a
+     * 4D array - `[depth]` for `(time, depth, y, x)`. Empty for 3D.
+     *
+     * Per row rather than per dataset, so the bands of one dataset can each select a
+     * different slice: a `(time, depth, y, x)` file with one row per depth becomes one
+     * dataset whose band `b` is depth `b`.
+     * @type {Array<number>}
+     * @memberof AddDatasetMdTile
+     */
+    leadingPrefix?: Array<number>;
 }
 /**
  * Check if a given object implements the AddDatasetMdTile interface.

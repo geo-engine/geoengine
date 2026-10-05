@@ -33,6 +33,9 @@ pub struct AddDatasetMdTile {
     pub time_steps: Vec<models::TimeInterval>,
     #[serde(rename = "params")]
     pub params: Box<models::GdalDatasetParameters>,
+    /// Fixed index into each dimension between z and (y, x), so one row is one slice of a 4D array - `[depth]` for `(time, depth, y, x)`. Empty for 3D.  Per row rather than per dataset, so the bands of one dataset can each select a different slice: a `(time, depth, y, x)` file with one row per depth becomes one dataset whose band `b` is depth `b`.
+    #[serde(rename = "leading_prefix", skip_serializing_if = "Option::is_none")]
+    pub leading_prefix: Option<Vec<i64>>,
 }
 
 impl AddDatasetMdTile {
@@ -47,6 +50,7 @@ impl AddDatasetMdTile {
             time_descriptor: Box::new(time_descriptor),
             time_steps,
             params: Box::new(params),
+            leading_prefix: None,
         }
     }
 }
