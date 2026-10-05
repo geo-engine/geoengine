@@ -664,6 +664,11 @@ pub struct MdProbeRequest {
     /// default.
     #[serde(default)]
     pub cache_ttl: Option<u32>,
+    /// Confirm that the z dimension really is a band axis. Without this a z dimension that
+    /// has no usable CF time units is rejected, because guessing produced the silent
+    /// "one band per time slice, synthetic millisecond steps" result once already.
+    #[serde(default)]
+    pub force_band_role: bool,
 }
 
 /// What a client needs to create an `MdGdalSource` dataset from the probed files: the
@@ -747,12 +752,15 @@ pub async fn probe_md_meta_data_handler<C: ApplicationContext>(
                 arrays: probe.array_name.iter().cloned().collect(),
             },
             probe.max_z_batch_size,
+            probe.force_band_role,
         )
     } else {
         geoengine_operators::source::probe_md_loading_info(
             &paths,
+            probe.group.as_deref(),
             probe.array_name.as_deref(),
             probe.max_z_batch_size,
+            probe.force_band_role,
         )
     }
     .map_err(|e| MdProbeError::ProbeFailed {
@@ -6322,6 +6330,8 @@ mod tests {
             ],
             None,
             None,
+            None,
+            false,
         )
         .expect("probe should succeed");
         let (meta_data, tiles) = probed_md_dataset(probed, None);
@@ -6491,6 +6501,8 @@ mod tests {
             ],
             None,
             None,
+            None,
+            false,
         )
         .expect("probe should succeed");
         let (meta_data, tiles) = probed_md_dataset(probed, None);
@@ -6583,6 +6595,8 @@ mod tests {
                 &[test_data!("md/time_series_gap_a.nc").to_path_buf()],
                 None,
                 None,
+                None,
+                false,
             )
             .expect("probe should succeed");
             let (meta_data, tiles) = probed_md_dataset(probed, cache_ttl);
@@ -6675,6 +6689,7 @@ mod tests {
                 arrays: vec!["temperature".to_string(), "precipitation".to_string()],
             },
             None,
+            false,
         )
         .expect("probe should succeed");
         let (meta_data, tiles) = probed_md_dataset(probed, None);
@@ -6771,7 +6786,9 @@ mod tests {
         let probed = geoengine_operators::source::probe_md_loading_info(
             &[test_data!("md/bands.nc").to_path_buf()],
             None,
+            Some("reflectance"),
             None,
+            true,
         )
         .expect("probe should succeed");
         let (meta_data, tiles) = probed_md_dataset(probed, None);
@@ -6886,6 +6903,7 @@ mod tests {
                 arrays: vec!["temperature".to_string()],
             },
             None,
+            false,
         )
         .expect("probe should succeed");
         let (meta_data, tiles) = probed_md_dataset(probed, None);
