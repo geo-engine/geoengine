@@ -48,6 +48,12 @@ export interface GdalMdMetaData {
      * @memberof GdalMdMetaData
      */
     maxZBatchSize?: number | null;
+    /**
+     * Dataset-level TTL fallback used when no tile-level TTL is provided.
+     * @type {number}
+     * @memberof GdalMdMetaData
+     */
+    cacheTtl?: number | null;
 }
 /**
  * @export

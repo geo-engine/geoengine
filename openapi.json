@@ -8845,6 +8845,17 @@
             ],
             "format": "int64",
             "description": "upper bound on the z slices a single worker read may request; `None` means the\noperator's default. A dataset property, since a batch is sized against the slice\nsize of the data itself."
+          },
+          "cacheTtl": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CacheTtlSeconds",
+                "description": "Dataset-level TTL fallback used when no tile-level TTL is provided."
+              }
+            ]
           }
         }
       },
@@ -10393,6 +10404,15 @@
               "null"
             ],
             "description": "Upper bound on how many consecutive z slices one GDAL read may request. Carried into\nthe dataset metadata, because a batch is sized against the slice size of the data\nand not against the workflow that reads it. `None` means the operator's default.",
+            "minimum": 0
+          },
+          "cacheTtl": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Dataset-level cache TTL in seconds, carried into the dataset metadata and used as\nthe fallback for tiles that carry no TTL of their own. `None` means the server\ndefault.",
             "minimum": 0
           }
         }

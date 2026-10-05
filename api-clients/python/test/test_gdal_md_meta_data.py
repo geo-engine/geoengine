@@ -65,7 +65,8 @@ class TestGdalMdMetaData(unittest.TestCase):
                         ], ),
                 z_role = 'band',
                 wrap = True,
-                max_z_batch_size = 56
+                max_z_batch_size = 56,
+                cache_ttl = 0
             )
         else:
             return GdalMdMetaData(

@@ -6,7 +6,7 @@ use gdal::{
     raster::{Group, MDArray},
 };
 use geoengine_datatypes::{
-    primitives::{CacheHint, Measurement, TimeInstance, TimeInterval},
+    primitives::{Measurement, TimeInstance, TimeInterval},
     raster::{GeoTransform, GridBoundingBox2D, RasterDataType},
     spatial_reference::SpatialReference,
 };
@@ -128,7 +128,7 @@ pub fn probe_md_loading_info(
     let loading_info = MdLoadingInfo::new(
         global_time_steps,
         files,
-        CacheHint::default(),
+        None,
         first.z_role,
         first.wrap,
         max_z_batch_size,
@@ -799,7 +799,7 @@ pub fn probe_md_variables_loading_info(
     let loading_info = MdLoadingInfo::new(
         time_steps,
         files,
-        CacheHint::default(),
+        None,
         ZRole::Variable,
         reference.wrap,
         max_z_batch_size,

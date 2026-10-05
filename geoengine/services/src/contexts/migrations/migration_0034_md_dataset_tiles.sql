@@ -24,7 +24,9 @@ CREATE TYPE "GdalMdMetaData" AS (
     z_role "ZRole",
     wrap boolean,
     -- upper bound on how many z slices one GDAL read may request at once
-    max_z_batch_size bigint
+    max_z_batch_size bigint,
+    -- dataset-level TTL fallback, mirroring `GdalMultiBand.cache_ttl`
+    cache_ttl int
 );
 
 ALTER TYPE "MetaDataDefinition"

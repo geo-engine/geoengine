@@ -34,7 +34,8 @@ class MdProbeRequest(BaseModel):
     group: Optional[StrictStr] = Field(default=None, description="\"/\"-separated path to the MD group below the root group; `None` = root group.")
     variables_as_bands: Optional[StrictBool] = Field(default=None, description="Probe several data variables as separate Geo Engine bands instead of one. Each variable must be a time series.", alias="variablesAsBands")
     max_z_batch_size: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, description="Upper bound on how many consecutive z slices one GDAL read may request. Carried into the dataset metadata, because a batch is sized against the slice size of the data and not against the workflow that reads it. `None` means the operator's default.", alias="maxZBatchSize")
-    __properties: ClassVar[List[str]] = ["dataPath", "files", "arrayName", "group", "variablesAsBands", "maxZBatchSize"]
+    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, description="Dataset-level cache TTL in seconds, carried into the dataset metadata and used as the fallback for tiles that carry no TTL of their own. `None` means the server default.", alias="cacheTtl")
+    __properties: ClassVar[List[str]] = ["dataPath", "files", "arrayName", "group", "variablesAsBands", "maxZBatchSize", "cacheTtl"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -93,6 +94,11 @@ class MdProbeRequest(BaseModel):
         if self.max_z_batch_size is None and "max_z_batch_size" in self.model_fields_set:
             _dict['maxZBatchSize'] = None
 
+        # set to None if cache_ttl (nullable) is None
+        # and model_fields_set contains the field
+        if self.cache_ttl is None and "cache_ttl" in self.model_fields_set:
+            _dict['cacheTtl'] = None
+
         return _dict
 
     @classmethod
@@ -110,7 +116,8 @@ class MdProbeRequest(BaseModel):
             "arrayName": obj.get("arrayName"),
             "group": obj.get("group"),
             "variablesAsBands": obj.get("variablesAsBands"),
-            "maxZBatchSize": obj.get("maxZBatchSize")
+            "maxZBatchSize": obj.get("maxZBatchSize"),
+            "cacheTtl": obj.get("cacheTtl")
         })
         return _obj
 

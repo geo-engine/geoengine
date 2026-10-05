@@ -744,6 +744,7 @@ where
             z_role,
             wrap,
             max_z_batch_size,
+            cache_ttl,
         } = m;
         // `bigint` -> `usize`; a negative or absurd value can only come from a hand-edited
         // row, and a batch size that does not fit in memory is no better than none
@@ -757,6 +758,7 @@ where
             z_role,
             wrap,
             max_z_batch_size,
+            dataset_cache_ttl: cache_ttl,
             data_path,
             db: self.clone(),
         }))
@@ -776,6 +778,7 @@ where
     z_role: ZRole,
     wrap: bool,
     max_z_batch_size: Option<usize>,
+    dataset_cache_ttl: Option<geoengine_datatypes::primitives::CacheTtlSeconds>,
     data_path: DataPath,
     db: PostgresDb<Tls>,
 }
@@ -1303,7 +1306,7 @@ where
         Ok(MdLoadingInfo::new(
             time_steps,
             files,
-            CacheHint::default(), // TODO: implement cache hint, same question as for `MultiBandGdalLoadingInfoProvider`
+            self.dataset_cache_ttl, // fall back to the dataset TTL, then the context default
             self.z_role,
             self.wrap,
             self.max_z_batch_size,

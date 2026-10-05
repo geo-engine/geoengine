@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use gdal::raster::GdalType;
 use geoengine_datatypes::{
-    primitives::{CacheHint, TimeInterval},
+    primitives::{CacheHint, CacheTtlSeconds, TimeInterval},
     raster::{
         ChangeGridBounds, EmptyGrid, GridBoundingBox2D, GridBounds, GridOrEmpty, Pixel,
         RasterProperties, RasterTile2D, SpatialGridDefinition, TileInformation,
@@ -43,6 +43,7 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
     reader_mode: GdalReaderMode,
     tile_information: TileInformation,
     gdal_worker: &GdalPoolDispatcher,
+    default_cache_ttl: CacheTtlSeconds,
 ) -> Result<Vec<RasterTile2D<T>>, MdGdalSourceError> {
     let file: &MdDatasetFile = &loading_info.files()[request.file_idx];
     let z_range = request.local_z.clone();
@@ -105,7 +106,7 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
         }
     }
 
-    let cache_hint = loading_info.cache_hint();
+    let cache_hint = loading_info.cache_hint(default_cache_ttl);
 
     Ok(frames
         .into_iter()

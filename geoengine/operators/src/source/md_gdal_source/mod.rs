@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::{
     dataset::NamedData,
-    primitives::{BandSelection, RasterQueryRectangle, TimeInterval},
+    primitives::{BandSelection, CacheTtlSeconds, RasterQueryRectangle, TimeInterval},
     raster::{
         ChangeGridBounds, EmptyGrid, GridOrEmpty, Pixel, RasterDataType, RasterProperties,
         RasterTile2D, TileInformation, TilingSpecification,
@@ -84,6 +84,7 @@ where
     pub produced_result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
     pub meta_data: MdMetaData,
+    pub default_cache_ttl: CacheTtlSeconds,
     pub _phantom_data: PhantomData<T>,
 }
 
@@ -129,6 +130,7 @@ where
         let loading_info = self.meta_data.loading_info(query.clone()).await?;
         let z_role = loading_info.z_role();
         let gdal_worker = ctx.get_gdal_worker();
+        let default_cache_ttl = self.default_cache_ttl;
 
         // resolve the requested z-slices: time steps for `ZRole::Variable`,
         // bands as z-indices for `ZRole::Band`
@@ -222,10 +224,16 @@ where
                             reader_mode,
                             tile_info,
                             &gdal_worker,
+                            default_cache_ttl,
                         )
                         .await
                         .map_err(Error::from),
-                        MdRequest::Gap(gap) => Ok(vec![empty_tile(&loading_info, gap, tile_info)]),
+                        MdRequest::Gap(gap) => Ok(vec![empty_tile(
+                            &loading_info,
+                            gap,
+                            tile_info,
+                            default_cache_ttl,
+                        )]),
                     }
                 }
             })
@@ -265,6 +273,7 @@ fn empty_tile<P: Pixel>(
     loading_info: &MdLoadingInfo,
     gap: MdGapRequest,
     tile_info: TileInformation,
+    default_cache_ttl: CacheTtlSeconds,
 ) -> RasterTile2D<P> {
     let time_steps = loading_info.time_steps();
     let band = match loading_info.z_role() {
@@ -284,7 +293,7 @@ fn empty_tile<P: Pixel>(
         tile_info.global_geo_transform,
         GridOrEmpty::from(EmptyGrid::new(tile_info.global_pixel_bounds())).unbounded(),
         RasterProperties::default(),
-        loading_info.cache_hint(),
+        loading_info.cache_hint(default_cache_ttl),
     )
 }
 
@@ -389,6 +398,7 @@ impl RasterOperator for MdGdalSource {
             meta_data,
             produced_result_descriptor: meta_data_result_descriptor,
             tiling_specification: context.tiling_specification(),
+            default_cache_ttl: context.default_cache_ttl(),
         };
 
         Ok(op.boxed())
@@ -405,6 +415,8 @@ pub struct InitializedMdGdalSourceOperator {
     pub meta_data: MdMetaData,
     pub produced_result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
+    /// Fallback TTL for tiles of a dataset that does not carry its own.
+    pub default_cache_ttl: CacheTtlSeconds,
 }
 
 impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
@@ -420,6 +432,7 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -429,6 +442,7 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -438,6 +452,7 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -447,6 +462,7 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -456,6 +472,7 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -465,6 +482,7 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -474,6 +492,7 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -483,6 +502,7 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -492,6 +512,7 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -501,6 +522,7 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
+                    default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),

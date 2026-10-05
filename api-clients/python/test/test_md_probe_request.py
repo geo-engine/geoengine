@@ -42,7 +42,8 @@ class TestMdProbeRequest(unittest.TestCase):
                 array_name = '',
                 group = '',
                 variables_as_bands = True,
-                max_z_batch_size = 0
+                max_z_batch_size = 0,
+                cache_ttl = 0
             )
         else:
             return MdProbeRequest(

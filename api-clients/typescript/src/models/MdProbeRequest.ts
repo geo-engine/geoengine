@@ -67,6 +67,14 @@ export interface MdProbeRequest {
      * @memberof MdProbeRequest
      */
     maxZBatchSize?: number | null;
+    /**
+     * Dataset-level cache TTL in seconds, carried into the dataset metadata and used as
+     * the fallback for tiles that carry no TTL of their own. `None` means the server
+     * default.
+     * @type {number}
+     * @memberof MdProbeRequest
+     */
+    cacheTtl?: number | null;
 }
 
 /**
@@ -94,6 +102,7 @@ export function MdProbeRequestFromJSONTyped(json: any, ignoreDiscriminator: bool
         'group': json['group'] == null ? undefined : json['group'],
         'variablesAsBands': json['variablesAsBands'] == null ? undefined : json['variablesAsBands'],
         'maxZBatchSize': json['maxZBatchSize'] == null ? undefined : json['maxZBatchSize'],
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 
@@ -114,6 +123,7 @@ export function MdProbeRequestToJSONTyped(value?: MdProbeRequest | null, ignoreD
         'group': value['group'],
         'variablesAsBands': value['variablesAsBands'],
         'maxZBatchSize': value['maxZBatchSize'],
+        'cacheTtl': value['cacheTtl'],
     };
 }
 
