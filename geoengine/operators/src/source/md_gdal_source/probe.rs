@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use chrono::NaiveDateTime;
+use chrono::{NaiveDate, NaiveDateTime};
 use gdal::{
     Dataset, DatasetOptions, GdalOpenFlags,
     raster::{Group, MDArray},
@@ -398,12 +398,23 @@ fn parse_cf_origin(input: &str) -> Option<NaiveDateTime> {
         "%Y-%m-%d %H:%M",
         "%Y-%m-%dT%H:%M:%S%.f",
         "%Y-%m-%dT%H:%M:%S",
-        "%Y-%m-%d",
     ];
     let input = input.trim().trim_end_matches(['Z', 'z']);
-    FORMATS
+    if let Some(parsed) = FORMATS
         .iter()
         .find_map(|fmt| NaiveDateTime::parse_from_str(input, fmt).ok())
+    {
+        return Some(parsed);
+    }
+    // A date-only origin means midnight, and it has to go through `NaiveDate` rather than
+    // `NaiveDateTime`: the latter needs a time component, so a bare `%Y-%m-%d` always fails
+    // with `NotEnough`. Keeping `%Y-%m-%d` in `FORMATS` therefore only looked supported --
+    // it could never match -- and every date-only origin silently fell through to
+    // `ZRole::Band`, i.e. one output band per time slice with synthetic `[k, k+1)` ms steps
+    // and the real dates lost. NEX-GDDP-CMIP6 writes exactly `days since 1850-01-01`.
+    NaiveDate::parse_from_str(input, "%Y-%m-%d")
+        .ok()
+        .and_then(|date| date.and_hms_opt(0, 0, 0))
 }
 
 fn times_from_coordinates(
@@ -901,6 +912,7 @@ mod tests {
     use geoengine_datatypes::{primitives::Measurement, raster::RasterDataType, test_data};
 
     use super::MdArraySelection;
+
     use crate::source::{
         MdGdalSourceError, ZRole, probe_md_loading_info, probe_md_variables_loading_info,
     };
@@ -1077,6 +1089,29 @@ mod tests {
         assert_eq!(li.files()[0].z_start, 0);
         assert_eq!(li.files()[0].z_end, 4);
         assert_eq!(m.result_descriptor.bands.len(), 4);
+    }
+
+    /// A CF time origin with no time component (`days since 1850-01-01`, which is what
+    /// NEX-GDDP-CMIP6 writes) used to fail to parse, so the time axis was silently thrown
+    /// away and the array was registered as `ZRole::Band` - one output band per time slice
+    /// with synthetic `[k, k+1)` ms steps. Found by probing the real bucket, not by tests:
+    /// every fixture here had a full timestamp, which is why it went unnoticed.
+    #[test]
+    fn probe_reads_a_date_only_cf_time_origin() {
+        let m = expect("md/cf_time_units_date_only.nc");
+        let li = &m.loading_info;
+        // a date-only origin is midnight, so the array keeps a real time axis ...
+        assert_eq!(li.z_role(), ZRole::Variable);
+        assert_eq!(m.result_descriptor.bands.len(), 1);
+        assert_eq!(li.files().len(), 1);
+        // ... one step per slice, a day apart, dated from the origin
+        assert_eq!(li.time_steps().len(), 8);
+        // 1850-01-01T00:00:00Z = -3_786_825_600_000 ms
+        assert_eq!(li.time_steps()[0].start().inner(), -3_786_825_600_000);
+        assert_eq!(
+            li.time_steps()[1].start().inner(),
+            -3_786_825_600_000 + 86_400_000
+        );
     }
 
     #[test]

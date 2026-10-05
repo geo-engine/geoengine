@@ -53,6 +53,7 @@ FIXTURES = [
     "wrap_0_360.nc",
     "bands.nc",
     "cf_time_units_minutes.nc",
+    "cf_time_units_date_only.nc",
     "variables.nc",
     "grouped_variables.nc",
 ]
@@ -143,6 +144,28 @@ def time_series(nt: int, ntime: int, path: Path, t_start: int = 0):
     xdim, ydim = add_xy_dims(rg, width, height, 0.0, 0.0, lon_step=30.0)
     tdim = add_time_dim(rg, ntime, "days since 2000-01-01 00:00:00", t_start)
     ts = t_start + np.arange(ntime, dtype=np.int64)
+    vals = (np.arange(height)[:, None] * 10 + np.arange(width)[None, :])[None, :, :]
+    vals = ts[:, None, None] * 1000 + vals.astype("float32")
+    write_array(rg, "temperature", [tdim, ydim, xdim], vals, -9999)
+    ds = None
+
+
+def cf_time_units_date_only(path: Path):
+    """(time, y, x) array whose CF units carry a *date-only* origin.
+
+    NEX-GDDP-CMIP6 writes `days since 1850-01-01`. The probe used to keep `"%Y-%m-%d"` in its
+    origin format list, but `NaiveDateTime::parse_from_str` needs a time component, so that
+    entry could never match: the origin failed to parse, the time axis was discarded, and the
+    array was registered as `ZRole::Band` - one output band per time slice with synthetic
+    `[k, k+1)` ms steps instead of real dates.
+    """
+    width, height, ntime = 8, 8, 8
+    ds = new_netcdf(path)
+    rg = ds.GetRootGroup()
+    xdim, ydim = add_xy_dims(rg, width, height, 0.0, 0.0, lon_step=30.0)
+    # no time component in the origin - this is the whole point
+    tdim = add_time_dim(rg, ntime, "days since 1850-01-01")
+    ts = np.arange(ntime, dtype=np.int64)
     vals = (np.arange(height)[:, None] * 10 + np.arange(width)[None, :])[None, :, :]
     vals = ts[:, None, None] * 1000 + vals.astype("float32")
     write_array(rg, "temperature", [tdim, ydim, xdim], vals, -9999)
@@ -254,6 +277,7 @@ def main() -> None:
     wrap_0_360(OUT_DIR / "wrap_0_360.nc")
     bands(OUT_DIR / "bands.nc")
     cf_time_units_minutes(OUT_DIR / "cf_time_units_minutes.nc")
+    cf_time_units_date_only(OUT_DIR / "cf_time_units_date_only.nc")
     variables(OUT_DIR / "variables.nc")
     grouped_variables(OUT_DIR / "grouped_variables.nc")
     print(f"generated fixtures in {OUT_DIR}")
