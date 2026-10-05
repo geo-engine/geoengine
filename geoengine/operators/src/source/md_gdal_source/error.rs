@@ -25,6 +25,16 @@ pub enum MdGdalSourceError {
     ProbeError {
         message: String,
     },
+
+    #[snafu(display(
+        "Stored MD time axis is inconsistent: the time descriptor does not describe the stored time steps"
+    ))]
+    InconsistentTimeAxis,
+
+    #[snafu(display(
+        "Stored MD time axis is not ordered: time steps do not run in non-decreasing start order"
+    ))]
+    UnorderedTimeAxis,
 }
 
 impl From<GdalProcessPoolError> for MdGdalSourceError {

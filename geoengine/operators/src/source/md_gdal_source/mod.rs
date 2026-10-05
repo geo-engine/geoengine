@@ -1,19 +1,22 @@
+use crate::engine::SingleRasterSource;
 use crate::engine::{
     CanonicOperatorName, InitializedRasterOperator, MetaData, OperatorData, OperatorName,
     QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
     SourceOperator, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::Error;
-use crate::optimization::OptimizationError;
-use crate::source::gdal_worker_process::{GdalReaderMode, ReaderState};
-use crate::source::md_gdal_source::reader::load_md_tile_from_files_async;
+use crate::optimization::{OptimizableOperator, OptimizationError};
+use crate::processing::{
+    Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
+};
+use crate::source::gdal_worker_process::{GdalReaderMode, ReaderState, TILE_READ_CONCURRENCY};
+use crate::source::md_gdal_source::reader::{MdTileRequest, load_md_tile_from_files_async};
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::TryFutureExt;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::{
     dataset::NamedData,
-    primitives::{BandSelection, CacheHint, RasterQueryRectangle, TimeInterval},
+    primitives::{BandSelection, RasterQueryRectangle, TimeInterval},
     raster::{
         ChangeGridBounds, EmptyGrid, GridOrEmpty, Pixel, RasterDataType, RasterProperties,
         RasterTile2D, TileInformation, TilingSpecification,
@@ -29,37 +32,36 @@ mod probe;
 mod reader;
 
 pub use error::MdGdalSourceError;
-pub use loading_info::{MdDatasetFile, MdLoadingInfo, ZRole};
-pub use probe::{MdArraySelection, probe_md_loading_info, probe_md_variables_loading_info};
+pub use loading_info::{GdalMdMetaData, MdDatasetFile, MdFileTimes, MdLoadingInfo, ZRole};
+pub use probe::{
+    MdArraySelection, ProbedGdalMdMetaData, presented_geo_transform, probe_md_loading_info,
+    probe_md_variables_loading_info,
+};
 
 /// Parameters for the MD GDAL Source Operator.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MdGdalSourceParameters {
     pub data: NamedData,
-    /// number of consecutive z-slices read per worker request (and per file batch)
-    #[serde(default = "default_z_batch_size")]
-    pub z_batch_size: usize,
 }
 
-#[must_use]
-fn default_z_batch_size() -> usize {
-    16
-}
+/// The default bound on how many consecutive z slices one worker request may return.
+///
+/// This is a property of the *data*, not of a workflow, so it lives on the dataset meta data
+/// (`max_z_batch_size`) rather than on these parameters; this is the fallback for datasets
+/// that do not set it.
+///
+/// ponytail: 4 rather than more because a batch is one IPC message and one slice of a
+/// 1440x600 float32 array is already 3.4 MB - a batch of 16 is a 55 MB message that takes
+/// ~22 s cold over the network, while 4 is 14 MB / ~6 s. It is an upper bound: a query for a
+/// single time step still reads exactly one slice. Raise it when reading more per round trip
+/// measurably beats the per-request overhead.
+pub const DEFAULT_MAX_Z_BATCH_SIZE: usize = 4;
 
 impl MdGdalSourceParameters {
     #[must_use]
     pub fn new(data: NamedData) -> Self {
-        Self {
-            data,
-            z_batch_size: default_z_batch_size(),
-        }
-    }
-
-    #[must_use]
-    pub fn with_z_batch_size(mut self, z_batch_size: usize) -> Self {
-        self.z_batch_size = z_batch_size;
-        self
+        Self { data }
     }
 }
 
@@ -69,8 +71,7 @@ impl OperatorData for MdGdalSourceParameters {
     }
 }
 
-type MdGdalMetaData =
-    Box<dyn MetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>;
+type MdMetaData = Box<dyn MetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>;
 
 /// A `RasterOperator` that reads n-dimensional GDAL arrays (netCDF/Zarr) and emits one 2D
 /// raster tile per z-slice.
@@ -82,8 +83,7 @@ where
 {
     pub produced_result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
-    pub meta_data: MdGdalMetaData,
-    pub z_batch_size: usize,
+    pub meta_data: MdMetaData,
     pub _phantom_data: PhantomData<T>,
 }
 
@@ -130,20 +130,9 @@ where
         let z_role = loading_info.z_role();
         let gdal_worker = ctx.get_gdal_worker();
 
-        // resolve the requested z-slices: time steps for `ZRole::Time`/`ZRole::Variable`,
+        // resolve the requested z-slices: time steps for `ZRole::Variable`,
         // bands as z-indices for `ZRole::Band`
         let global_z = match z_role {
-            ZRole::Time => {
-                if query.attributes().as_vec() != [0] {
-                    return Err(Error::from(MdGdalSourceError::UnsupportedBandRequest {
-                        message: format!(
-                            "z=time requires requesting the first band, got {:?}",
-                            query.attributes().as_vec()
-                        ),
-                    }));
-                }
-                loading_info.z_indices_in_time(query.time_interval())
-            }
             ZRole::Band => query
                 .attributes()
                 .as_vec()
@@ -153,10 +142,11 @@ where
             ZRole::Variable => loading_info.z_indices_in_time(query.time_interval()),
         };
 
-        // `ZRole::Variable`: every selected band (variable) reads its own set of files;
-        // the other roles have a single implicit band group (None = all files)
+        // `ZRole::Variable`: each selected variable becomes its own output band and reads
+        // only the files of that variable; the other roles have one implicit group covering
+        // all files
         let band_groups =
-            selected_band_groups(z_role, result_descriptor.bands.count(), query.attributes())?;
+            output_band_groups(z_role, result_descriptor.bands.count(), query.attributes())?;
 
         let spatial_tiles = tiling_strategy
             .tile_information_iterator_from_pixel_bounds(query.spatial_bounds())
@@ -168,61 +158,85 @@ where
             spatial_tiles.len(),
         );
 
-        let wrap = loading_info.wrap();
-        let cache_hint = loading_info.cache_hint();
-        let time_steps = loading_info.time_steps().to_vec();
-        let all_files = loading_info.files().to_vec();
-
-        let mut band_streams: Vec<_> = Vec::with_capacity(band_groups.len());
+        // Build one request list per band, then interleave by z so the stream is
+        // time-major: for each z step emit every band before moving to the next z step.
+        // This matches the (time, space, band) order downstream consumers expect.
+        let mut per_band: Vec<Vec<(usize, MdRequest)>> = Vec::with_capacity(band_groups.len());
         for sel_band in band_groups {
-            let gdal_worker = gdal_worker.clone();
-            let (batches, missing) = loading_info.z_batches(&global_z, sel_band, self.z_batch_size);
-
-            // load the covered z-slices, batched per file
-            let batch_files = batches
-                .into_iter()
-                .map(|batch| {
-                    let file = all_files[batch.file_idx].clone();
-                    (batch, file)
-                })
-                .collect::<Vec<_>>();
-            let batch_tile_iter = itertools::iproduct!(batch_files, spatial_tiles.clone());
-            let times = time_steps.clone();
-            let batches_stream = stream::iter(batch_tile_iter)
-                .map(move |((batch, file), tile_info)| {
-                    load_md_tile_from_files_async::<P>(
-                        file,
-                        wrap,
-                        cache_hint,
-                        reader_mode,
-                        tile_info,
-                        batch.local_z,
-                        times.clone(),
-                        gdal_worker.clone(),
-                        z_role,
-                    )
-                    .map_err(Error::from)
-                })
-                .buffered(16) // TODO: make configurable
-                .flat_map(|res: Result<Vec<RasterTile2D<P>>>| match res {
-                    Ok(tiles) => stream::iter(tiles.into_iter().map(Ok)).boxed(),
-                    Err(err) => stream::once(futures::future::ready(Err(err))).boxed(),
-                });
-
-            // fill z-slices that no file covers with empty tiles
-            let gaps_stream = empty_band_tiles_stream(
-                time_steps.clone(),
-                missing,
-                spatial_tiles.clone(),
-                z_role,
-                sel_band,
-                cache_hint,
-            );
-
-            band_streams.push(batches_stream.chain(gaps_stream).boxed());
+            let (batches, missing) =
+                loading_info.z_batches(&global_z, sel_band, loading_info.max_z_batch_size());
+            let mut reqs = Vec::with_capacity(batches.len() + missing.len());
+            for batch in batches {
+                reqs.push((
+                    batch.local_z.start,
+                    MdRequest::Batch(MdTileRequest {
+                        file_idx: batch.file_idx,
+                        local_z: batch.local_z,
+                    }),
+                ));
+            }
+            for gz in missing {
+                reqs.push((
+                    gz,
+                    MdRequest::Gap(MdGapRequest {
+                        global_z: gz,
+                        output_band: sel_band.unwrap_or(0),
+                    }),
+                ));
+            }
+            per_band.push(reqs);
         }
 
-        Ok(futures::stream::select_all(band_streams).boxed())
+        // merge-sort the per-band lists by first_z (stable, preserving band order within a z)
+        let mut requests: Vec<MdRequest> = Vec::new();
+        let mut cursors = vec![0usize; per_band.len()];
+        loop {
+            let mut best_band: Option<usize> = None;
+            let mut best_z = usize::MAX;
+            for (bi, reqs) in per_band.iter().enumerate() {
+                if let Some((first_z, _)) = reqs.get(cursors[bi])
+                    && *first_z < best_z
+                {
+                    best_z = *first_z;
+                    best_band = Some(bi);
+                }
+            }
+            match best_band {
+                Some(bi) => {
+                    requests.push(per_band[bi][cursors[bi]].1.clone());
+                    cursors[bi] += 1;
+                }
+                None => break,
+            }
+        }
+
+        let stream = stream::iter(itertools::iproduct!(requests, spatial_tiles.into_iter()))
+            .map(move |(request, tile_info)| {
+                let gdal_worker = gdal_worker.clone();
+                let loading_info = loading_info.clone();
+                async move {
+                    match request {
+                        MdRequest::Batch(batch) => load_md_tile_from_files_async::<P>(
+                            &loading_info,
+                            &batch,
+                            reader_mode,
+                            tile_info,
+                            &gdal_worker,
+                        )
+                        .await
+                        .map_err(Error::from),
+                        MdRequest::Gap(gap) => Ok(vec![empty_tile(&loading_info, gap, tile_info)]),
+                    }
+                }
+            })
+            .buffered(TILE_READ_CONCURRENCY)
+            .flat_map(|res: Result<Vec<RasterTile2D<P>>>| match res {
+                Ok(tiles) => stream::iter(tiles.into_iter().map(Ok)).boxed(),
+                Err(err) => stream::once(futures::future::ready(Err(err))).boxed(),
+            })
+            .boxed();
+
+        Ok(stream)
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
@@ -230,39 +244,53 @@ where
     }
 }
 
-/// One empty (no-data) tile per missing z-slice and spatial tile, stamped with the
-/// Geo Engine band for the given z role.
-fn empty_band_tiles_stream<P: Pixel>(
-    times: Vec<TimeInterval>,
-    missing: Vec<usize>,
-    spatial_tiles: Vec<TileInformation>,
-    z_role: ZRole,
-    sel_band: Option<u32>,
-    cache_hint: CacheHint,
-) -> BoxStream<'static, Result<RasterTile2D<P>>> {
-    stream::iter(itertools::iproduct!(missing, spatial_tiles))
-        .map(move |(gz, tile_info)| {
-            let band = match z_role {
-                ZRole::Time => 0,
-                ZRole::Band => gz as u32,
-                ZRole::Variable => sel_band.unwrap_or(0),
-            };
-            Ok(RasterTile2D::new_with_properties(
-                times[gz],
-                tile_info.global_tile_position,
-                band,
-                tile_info.global_geo_transform,
-                GridOrEmpty::from(EmptyGrid::new(tile_info.global_pixel_bounds())).unbounded(),
-                RasterProperties::default(),
-                cache_hint,
-            ))
-        })
-        .boxed()
+/// One unit of work in the query stream: either a real read or a z slice that no file
+/// covers and therefore becomes an empty tile.
+#[derive(Debug, Clone)]
+enum MdRequest {
+    Batch(MdTileRequest),
+    Gap(MdGapRequest),
 }
 
-/// The band groups to query: one per selected band for `ZRole::Variable` (each variable
-/// reads only its own files), or a single `None` group (all files) otherwise.
-fn selected_band_groups(
+/// A z slice that no file covers; it still needs a tile so that the temporal axis is
+/// gap-free.
+#[derive(Debug, Clone, Copy)]
+struct MdGapRequest {
+    global_z: usize,
+    /// the Geo Engine output band this tile belongs to
+    output_band: u32,
+}
+
+fn empty_tile<P: Pixel>(
+    loading_info: &MdLoadingInfo,
+    gap: MdGapRequest,
+    tile_info: TileInformation,
+) -> RasterTile2D<P> {
+    let time_steps = loading_info.time_steps();
+    let band = match loading_info.z_role() {
+        ZRole::Band => gap.global_z as u32,
+        ZRole::Variable => gap.output_band,
+    };
+
+    // `global_z` is validated against the band count before it reaches here, but a gap
+    // index outside `time_steps` would panic; an empty tile with a degenerate interval is
+    // recoverable, a panic in a query task is not
+    let time = time_steps.get(gap.global_z).copied().unwrap_or_default();
+
+    RasterTile2D::new_with_properties(
+        time,
+        tile_info.global_tile_position,
+        band,
+        tile_info.global_geo_transform,
+        GridOrEmpty::from(EmptyGrid::new(tile_info.global_pixel_bounds())).unbounded(),
+        RasterProperties::default(),
+        loading_info.cache_hint(),
+    )
+}
+
+/// The output-band groups to query: one per selected band for `ZRole::Variable` (each
+/// variable reads only its own files), or a single `None` group (all files) otherwise.
+fn output_band_groups(
     z_role: ZRole,
     band_count: u32,
     attributes: &BandSelection,
@@ -278,7 +306,19 @@ fn selected_band_groups(
             }
             Ok(attributes.as_vec().into_iter().map(Some).collect())
         }
-        _ => Ok(vec![None]),
+        // `ZRole::Band` maps a band index straight to a z index, so an out-of-range band
+        // would otherwise reach `empty_tile`/`z_batches` as a missing index and panic on
+        // `time_steps[global_z]`.
+        ZRole::Band => {
+            for &b in attributes.as_slice() {
+                if b >= band_count {
+                    return Err(Error::from(MdGdalSourceError::UnsupportedBandRequest {
+                        message: format!("band {b} does not exist, there are {band_count} bands"),
+                    }));
+                }
+            }
+            Ok(vec![None])
+        }
     }
 }
 
@@ -294,28 +334,27 @@ where
         query: TimeInterval,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
-        let result_descriptor = self.result_descriptor();
-        let tiling_specification = ctx.tiling_specification();
-
-        let produced_tiling_grid = result_descriptor
-            .spatial_grid
-            .tiling_grid_definition(tiling_specification);
-
-        let time_query = query;
-        let query = RasterQueryRectangle::new(
-            produced_tiling_grid.tiling_grid_bounds(),
-            time_query,
-            BandSelection::first(),
-        );
-
-        let loading_info = self.meta_data.loading_info(query).await?;
-        let time_steps = loading_info
-            .time_steps()
-            .iter()
-            .copied()
-            // like `GdalSource`, only report the steps the query actually covers
-            .filter(|t| t.intersects(&time_query))
-            .collect::<Vec<_>>();
+        // The time axis is stored per file, so it can be answered from the meta data alone.
+        // Sources whose axis is not separately answerable (`time_axis` returns `None`) fall
+        // back to reading it off a loading info, which is what `GdalSource` does.
+        let time_steps = match self.meta_data.time_axis(query).await? {
+            Some(time_steps) => time_steps,
+            None => {
+                let q_bounds = self
+                    .result_descriptor()
+                    .tiling_grid_definition(ctx.tiling_specification())
+                    .tiling_grid_bounds();
+                self.meta_data
+                    .loading_info(RasterQueryRectangle::new(
+                        q_bounds,
+                        query,
+                        BandSelection::first(),
+                    ))
+                    .await?
+                    .time_steps()
+                    .to_vec()
+            }
+        };
 
         Ok(stream::iter(time_steps).map(Result::Ok).boxed())
     }
@@ -334,7 +373,7 @@ impl RasterOperator for MdGdalSource {
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let data_id = context.resolve_named_data(&self.params.data).await?;
-        let meta_data: MdGdalMetaData = context.meta_data(&data_id).await?;
+        let meta_data: MdMetaData = context.meta_data(&data_id).await?;
 
         tracing::debug!("Initializing MdGdalSource for {:?}.", &self.params.data);
         tracing::debug!("MdGdalSource path: {:?}", path);
@@ -350,7 +389,6 @@ impl RasterOperator for MdGdalSource {
             meta_data,
             produced_result_descriptor: meta_data_result_descriptor,
             tiling_specification: context.tiling_specification(),
-            z_batch_size: self.params.z_batch_size,
         };
 
         Ok(op.boxed())
@@ -364,10 +402,9 @@ pub struct InitializedMdGdalSourceOperator {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
     data_name: NamedData,
-    pub meta_data: MdGdalMetaData,
+    pub meta_data: MdMetaData,
     pub produced_result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
-    pub z_batch_size: usize,
 }
 
 impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
@@ -383,7 +420,6 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    z_batch_size: self.z_batch_size,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -393,7 +429,6 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    z_batch_size: self.z_batch_size,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -403,7 +438,6 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    z_batch_size: self.z_batch_size,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -413,7 +447,6 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    z_batch_size: self.z_batch_size,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -423,7 +456,6 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    z_batch_size: self.z_batch_size,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -433,7 +465,6 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    z_batch_size: self.z_batch_size,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -443,7 +474,6 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    z_batch_size: self.z_batch_size,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -453,7 +483,6 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    z_batch_size: self.z_batch_size,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -463,7 +492,6 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    z_batch_size: self.z_batch_size,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -473,7 +501,6 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    z_batch_size: self.z_batch_size,
                     _phantom_data: PhantomData,
                 }
                 .boxed(),
@@ -499,14 +526,36 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
 
     fn optimize(
         &self,
-        _target_resolution: geoengine_datatypes::primitives::SpatialResolution,
+        target_resolution: geoengine_datatypes::primitives::SpatialResolution,
     ) -> crate::util::Result<Box<dyn RasterOperator>, OptimizationError> {
-        // MD sources have no overviews yet, therefore we can't optimize them
-        Err(
-            crate::optimization::OptimizationError::OptimizationNotYetImplementedForOperator {
-                operator: MdGdalSource::TYPE_NAME.to_string(),
-            },
-        )
+        self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
+
+        let source = MdGdalSource {
+            params: MdGdalSourceParameters::new(self.data_name.clone()),
+        }
+        .boxed();
+
+        // GDAL cannot build or read overviews for a multidimensional array, so there is
+        // nothing to lower the resolution at the source. Downsample in front instead, the
+        // same way `MockRasterSource` does.
+        if target_resolution
+            > self
+                .produced_result_descriptor
+                .spatial_grid
+                .spatial_resolution()
+        {
+            return Ok(Downsampling {
+                params: DownsamplingParams {
+                    sampling_method: DownsamplingMethod::NearestNeighbor,
+                    output_resolution: DownsamplingResolution::Resolution(target_resolution),
+                    output_origin_reference: None,
+                },
+                sources: SingleRasterSource { raster: source },
+            }
+            .boxed());
+        }
+
+        Ok(source)
     }
 }
 
@@ -534,10 +583,12 @@ mod tests {
         name: &str,
         paths: &[PathBuf],
         array_name: Option<&str>,
+        max_z_batch_size: Option<usize>,
     ) -> NamedData {
         let id: DataId = DatasetId::new().into();
         let named = NamedData::with_system_name(name);
-        let probed = probe_md_loading_info(paths, array_name).expect("probe should succeed");
+        let probed = probe_md_loading_info(paths, array_name, max_z_batch_size)
+            .expect("probe should succeed");
         ctx.add_meta_data(
             id,
             named.clone(),
@@ -555,11 +606,12 @@ mod tests {
         name: &str,
         paths: &[PathBuf],
         selection: &MdArraySelection,
+        max_z_batch_size: Option<usize>,
     ) -> NamedData {
         let id: DataId = DatasetId::new().into();
         let named = NamedData::with_system_name(name);
-        let probed =
-            probe_md_variables_loading_info(paths, selection).expect("probe should succeed");
+        let probed = probe_md_variables_loading_info(paths, selection, max_z_batch_size)
+            .expect("probe should succeed");
         ctx.add_meta_data(
             id,
             named.clone(),
@@ -580,29 +632,8 @@ mod tests {
         time_interval: TimeInterval,
         attributes: BandSelection,
     ) -> Vec<Result<RasterTile2D<f32>>> {
-        query_md_source_with_batch(
-            exe_ctx,
-            query_ctx,
-            name,
-            spatial_query,
-            time_interval,
-            attributes,
-            1,
-        )
-        .await
-    }
-
-    async fn query_md_source_with_batch(
-        exe_ctx: &MockExecutionContext,
-        query_ctx: &MockQueryContext,
-        name: NamedData,
-        spatial_query: GridBoundingBox2D,
-        time_interval: TimeInterval,
-        attributes: BandSelection,
-        z_batch_size: usize,
-    ) -> Vec<Result<RasterTile2D<f32>>> {
         let op: MdGdalSource = SourceOperator {
-            params: MdGdalSourceParameters::new(name.clone()).with_z_batch_size(z_batch_size),
+            params: MdGdalSourceParameters::new(name.clone()),
         };
         let o = op
             .boxed()
@@ -649,6 +680,7 @@ mod tests {
             "md_time_series",
             &[test_data!("md/time_series.nc").to_path_buf()],
             None,
+            None,
         );
 
         // window over z-slices 2..6 (4 slices), batched one slice at a time
@@ -688,21 +720,31 @@ mod tests {
     async fn test_query_batched_z_equals_single_batched() {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = exe_ctx.mock_query_context_test_default();
-        let name = add_md_dataset(
+        let time = TimeInterval::new_unchecked(EPOCH_2000 + 2 * DAY, EPOCH_2000 + 6 * DAY);
+
+        // the batch bound is a dataset property, so comparing two bounds means two datasets
+        let batched_name = add_md_dataset(
             &mut exe_ctx,
-            "md_batched",
+            "md_batched_8",
             &[test_data!("md/time_series.nc").to_path_buf()],
             None,
+            Some(8),
         );
-        let time = TimeInterval::new_unchecked(EPOCH_2000 + 2 * DAY, EPOCH_2000 + 6 * DAY);
-        let batched = query_md_source_with_batch(
+        let single_name = add_md_dataset(
+            &mut exe_ctx,
+            "md_batched_1",
+            &[test_data!("md/time_series.nc").to_path_buf()],
+            None,
+            Some(1),
+        );
+
+        let batched = query_md_source(
             &exe_ctx,
             &query_ctx,
-            name.clone(),
+            batched_name,
             ts_grid_bounds(),
             time,
             BandSelection::first(),
-            8,
         )
         .await
         .into_iter()
@@ -711,7 +753,7 @@ mod tests {
         let single = query_md_source(
             &exe_ctx,
             &query_ctx,
-            name,
+            single_name,
             ts_grid_bounds(),
             time,
             BandSelection::first(),
@@ -743,6 +785,7 @@ mod tests {
             &mut exe_ctx,
             "md_time_series_full",
             &[test_data!("md/time_series.nc").to_path_buf()],
+            None,
             None,
         );
 
@@ -776,6 +819,7 @@ mod tests {
                 test_data!("md/time_series_split_b.nc").to_path_buf(),
                 test_data!("md/time_series_split_a.nc").to_path_buf(),
             ],
+            None,
             None,
         );
 
@@ -822,6 +866,7 @@ mod tests {
             "md_zarr",
             &[test_data!("md/time_series.zarr").to_path_buf()],
             None,
+            None,
         );
 
         let time = TimeInterval::new_unchecked(EPOCH_2000 + 2 * DAY, EPOCH_2000 + 6 * DAY);
@@ -853,6 +898,7 @@ mod tests {
             &mut exe_ctx,
             "md_wrap",
             &[test_data!("md/wrap_0_360.nc").to_path_buf()],
+            None,
             None,
         );
 
@@ -914,6 +960,7 @@ mod tests {
             "md_cf_minutes",
             &[test_data!("md/cf_time_units_minutes.nc").to_path_buf()],
             None,
+            None,
         );
 
         // the cf fixture stores latitudes ASCENDING (array row 0 = south); the tile must
@@ -950,6 +997,7 @@ mod tests {
             "md_bands",
             &[test_data!("md/bands.nc").to_path_buf()],
             None,
+            None,
         );
 
         // band 2 of a ZRole::Band dataset
@@ -974,6 +1022,17 @@ mod tests {
         assert_eq!(grid_value(tile, 7, 7), 200.0 + (7 * 10 + 7) as f32);
     }
 
+    #[test]
+    fn out_of_range_band_is_rejected_for_band_role() {
+        // `ZRole::Band` maps a band index straight to a z index, so an index past the end
+        // would reach `empty_tile` and panic on `time_steps[global_z]`
+        assert!(
+            output_band_groups(ZRole::Band, 4, &BandSelection::new_single(5)).is_err(),
+            "band 5 of a 4-band dataset must be rejected"
+        );
+        assert!(output_band_groups(ZRole::Band, 4, &BandSelection::new_single(3)).is_ok());
+    }
+
     #[tokio::test]
     async fn test_query_variables_bands() {
         // explicit variable order -> band order: 0 = temperature (x1), 1 = precipitation (x2)
@@ -987,6 +1046,7 @@ mod tests {
                 group: None,
                 arrays: vec!["temperature".to_string(), "precipitation".to_string()],
             },
+            None,
         );
 
         // slices t = 1, 2 (2 time steps) x bands [0, 1] x one spatial tile = 4 tiles
@@ -1043,6 +1103,7 @@ mod tests {
                 group: Some("analysis".to_string()),
                 arrays: vec![],
             },
+            None,
         );
 
         let time = TimeInterval::new_unchecked(EPOCH_2000 + DAY, EPOCH_2000 + 2 * DAY);
@@ -1079,11 +1140,14 @@ mod tests {
     }
 
     #[test]
-    fn params_serde_default_z_batch_size() {
+    fn params_serde_has_no_batch_size() {
+        // the z batch bound is a dataset property, so it must not appear in the operator
+        // parameters at all
         let params: MdGdalSourceParameters = serde_json::from_str(r#"{"data": "ns:ds"}"#).unwrap();
-        assert_eq!(params.z_batch_size, default_z_batch_size());
-        let params = params.with_z_batch_size(1);
-        assert_eq!(params.z_batch_size, 1);
+        assert_eq!(
+            params,
+            MdGdalSourceParameters::new(NamedData::with_namespaced_name("ns", "ds"))
+        );
         assert!(serde_json::to_value(params).is_ok());
     }
 }

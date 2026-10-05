@@ -1,7 +1,7 @@
 use super::listing::Provenance;
 use super::postgres::DatasetMetaData;
 use super::{DatasetIdAndName, DatasetName};
-use crate::api::handlers::datasets::AddDatasetTile;
+use crate::api::handlers::datasets::{AddDatasetMdTile, AddDatasetTile};
 use crate::api::model::services::{DataPath, UpdateDataset};
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
@@ -10,10 +10,10 @@ use crate::error::Result;
 use crate::projects::Symbology;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
-use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
-use geoengine_operators::engine::{MetaData, RasterResultDescriptor, TypedResultDescriptor};
+use geoengine_datatypes::primitives::VectorQueryRectangle;
+use geoengine_operators::engine::{MetaData, TypedResultDescriptor};
 use geoengine_operators::source::{
-    GdalMetaDataList, GdalMetadataNetCdfCf, GdalMultiBand, MdLoadingInfo,
+    GdalMdMetaData, GdalMetaDataList, GdalMetadataNetCdfCf, GdalMultiBand,
 };
 use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
 use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRegular};
@@ -150,7 +150,7 @@ pub enum MetaDataDefinition {
     GdalMetadataNetCdfCf(GdalMetadataNetCdfCf),
     GdalMetaDataList(GdalMetaDataList),
     GdalMultiBand(GdalMultiBand),
-    MdGdalMetaData(StaticMetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>),
+    GdalMdMetaData(GdalMdMetaData),
 }
 
 impl From<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>
@@ -193,13 +193,9 @@ impl From<GdalMultiBand> for MetaDataDefinition {
     }
 }
 
-impl From<StaticMetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>
-    for MetaDataDefinition
-{
-    fn from(
-        meta_data: StaticMetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
-    ) -> Self {
-        MetaDataDefinition::MdGdalMetaData(meta_data)
+impl From<GdalMdMetaData> for MetaDataDefinition {
+    fn from(meta_data: GdalMdMetaData) -> Self {
+        MetaDataDefinition::GdalMdMetaData(meta_data)
     }
 }
 
@@ -213,7 +209,7 @@ impl MetaDataDefinition {
             | MetaDataDefinition::GdalMetadataNetCdfCf(_)
             | MetaDataDefinition::GdalMetaDataList(_) => "GdalSource",
             MetaDataDefinition::GdalMultiBand(_) => "MultiBandGdalSource",
-            MetaDataDefinition::MdGdalMetaData(_) => "MdGdalSource",
+            MetaDataDefinition::GdalMdMetaData(_) => "MdGdalSource",
         }
     }
 
@@ -226,7 +222,7 @@ impl MetaDataDefinition {
             MetaDataDefinition::GdalMetadataNetCdfCf(_) => "GdalMetadataNetCdfCf",
             MetaDataDefinition::GdalMetaDataList(_) => "GdalMetaDataList",
             MetaDataDefinition::GdalMultiBand(_) => "GdalMultiBand",
-            MetaDataDefinition::MdGdalMetaData(_) => "MdGdalMetaData",
+            MetaDataDefinition::GdalMdMetaData(_) => "GdalMdMetaData",
         }
     }
 
@@ -263,11 +259,7 @@ impl MetaDataDefinition {
                 .map(Into::into)
                 .map_err(Into::into),
             MetaDataDefinition::GdalMultiBand(m) => Ok(m.result_descriptor.clone().into()),
-            MetaDataDefinition::MdGdalMetaData(m) => m
-                .result_descriptor()
-                .await
-                .map(Into::into)
-                .map_err(Into::into),
+            MetaDataDefinition::GdalMdMetaData(m) => Ok(m.result_descriptor.clone().into()),
         }
     }
 
@@ -301,7 +293,7 @@ impl MetaDataDefinition {
                 meta_data: self,
                 result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
             },
-            MetaDataDefinition::MdGdalMetaData(d) => DatasetMetaData {
+            MetaDataDefinition::GdalMdMetaData(d) => DatasetMetaData {
                 meta_data: self,
                 result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
             },
@@ -347,4 +339,12 @@ pub trait DatasetStore {
 
     async fn add_dataset_tiles(&self, dataset: DatasetId, tiles: Vec<AddDatasetTile>)
     -> Result<()>;
+
+    /// Adds MD array files to an `MdGdalSource` dataset. One row per file, covering all of
+    /// that file's z slices.
+    async fn add_md_dataset_tiles(
+        &self,
+        dataset: DatasetId,
+        tiles: Vec<AddDatasetMdTile>,
+    ) -> Result<()>;
 }

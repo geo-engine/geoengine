@@ -11,6 +11,13 @@
  * Do not edit the class manually.
  */
 
+import type { GdalMdMetaData } from './GdalMdMetaData';
+import {
+    instanceOfGdalMdMetaData,
+    GdalMdMetaDataFromJSON,
+    GdalMdMetaDataFromJSONTyped,
+    GdalMdMetaDataToJSON,
+} from './GdalMdMetaData';
 import type { GdalMetaDataList } from './GdalMetaDataList';
 import {
     instanceOfGdalMetaDataList,
@@ -66,7 +73,7 @@ import {
  * 
  * @export
  */
-export type MetaDataDefinition = { type: 'GdalMetaDataList' } & GdalMetaDataList | { type: 'GdalMetaDataNetCdfCf' } & GdalMetadataNetCdfCf | { type: 'GdalMetaDataRegular' } & GdalMetaDataRegular | { type: 'GdalMultiBand' } & GdalMultiBand | { type: 'GdalStatic' } & GdalMetaDataStatic | { type: 'MockMetaData' } & MockMetaData | { type: 'OgrMetaData' } & OgrMetaData;
+export type MetaDataDefinition = { type: 'GdalMdMetaData' } & GdalMdMetaData | { type: 'GdalMetaDataList' } & GdalMetaDataList | { type: 'GdalMetaDataNetCdfCf' } & GdalMetadataNetCdfCf | { type: 'GdalMetaDataRegular' } & GdalMetaDataRegular | { type: 'GdalMultiBand' } & GdalMultiBand | { type: 'GdalStatic' } & GdalMetaDataStatic | { type: 'MockMetaData' } & MockMetaData | { type: 'OgrMetaData' } & OgrMetaData;
 
 export function MetaDataDefinitionFromJSON(json: any): MetaDataDefinition {
     return MetaDataDefinitionFromJSONTyped(json, false);
@@ -77,6 +84,8 @@ export function MetaDataDefinitionFromJSONTyped(json: any, ignoreDiscriminator: 
         return json;
     }
     switch (json['type']) {
+        case 'GdalMdMetaData':
+            return Object.assign({}, GdalMdMetaDataFromJSONTyped(json, true), { type: 'GdalMdMetaData' } as const);
         case 'GdalMetaDataList':
             return Object.assign({}, GdalMetaDataListFromJSONTyped(json, true), { type: 'GdalMetaDataList' } as const);
         case 'GdalMetaDataNetCdfCf':
@@ -105,6 +114,8 @@ export function MetaDataDefinitionToJSONTyped(value?: MetaDataDefinition | null,
         return value;
     }
     switch (value['type']) {
+        case 'GdalMdMetaData':
+            return Object.assign({}, GdalMdMetaDataToJSON(value), { type: 'GdalMdMetaData' } as const);
         case 'GdalMetaDataList':
             return Object.assign({}, GdalMetaDataListToJSON(value), { type: 'GdalMetaDataList' } as const);
         case 'GdalMetaDataNetCdfCf':

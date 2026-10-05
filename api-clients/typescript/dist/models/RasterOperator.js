@@ -24,6 +24,7 @@ const Downsampling_1 = require("./Downsampling");
 const Expression_1 = require("./Expression");
 const GdalSource_1 = require("./GdalSource");
 const Interpolation_1 = require("./Interpolation");
+const MdGdalSource_1 = require("./MdGdalSource");
 const MultiBandGdalSource_1 = require("./MultiBandGdalSource");
 const NeighborhoodAggregate_1 = require("./NeighborhoodAggregate");
 const Onnx_1 = require("./Onnx");
@@ -59,6 +60,8 @@ function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, (0, GdalSource_1.GdalSourceFromJSONTyped)(json, true), { type: 'GdalSource' });
         case 'Interpolation':
             return Object.assign({}, (0, Interpolation_1.InterpolationFromJSONTyped)(json, true), { type: 'Interpolation' });
+        case 'MdGdalSource':
+            return Object.assign({}, (0, MdGdalSource_1.MdGdalSourceFromJSONTyped)(json, true), { type: 'MdGdalSource' });
         case 'MultiBandGdalSource':
             return Object.assign({}, (0, MultiBandGdalSource_1.MultiBandGdalSourceFromJSONTyped)(json, true), { type: 'MultiBandGdalSource' });
         case 'NeighborhoodAggregate':
@@ -111,6 +114,8 @@ function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, (0, GdalSource_1.GdalSourceToJSON)(value), { type: 'GdalSource' });
         case 'Interpolation':
             return Object.assign({}, (0, Interpolation_1.InterpolationToJSON)(value), { type: 'Interpolation' });
+        case 'MdGdalSource':
+            return Object.assign({}, (0, MdGdalSource_1.MdGdalSourceToJSON)(value), { type: 'MdGdalSource' });
         case 'MultiBandGdalSource':
             return Object.assign({}, (0, MultiBandGdalSource_1.MultiBandGdalSourceToJSON)(value), { type: 'MultiBandGdalSource' });
         case 'NeighborhoodAggregate':

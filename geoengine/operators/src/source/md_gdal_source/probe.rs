@@ -18,13 +18,27 @@ use crate::engine::{
 use crate::source::gdal_worker_process::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
 };
-use crate::source::md_gdal_source::{MdDatasetFile, MdGdalSourceError, MdLoadingInfo, ZRole};
+use crate::source::md_gdal_source::{
+    MdDatasetFile, MdFileTimes, MdGdalSourceError, MdLoadingInfo, ZRole,
+};
 
 /// The outcome of probing one or more MD arrays: ready-to-use metadata plus result descriptor.
+///
+/// ponytail: this is the last GDAL entry point that runs outside the worker pool - it opens
+/// datasets and reads coordinate variables on the caller's thread. The goal is *no* GDAL
+/// calls outside the pool, so probing belongs behind a pool request (an IPC
+/// `ProbeMdArray` message alongside `GdalReadKind::MdArray` reads) once the pool can carry
+/// back arrays and dimension metadata rather than just raster payloads. Until then the probe
+/// is the only place a netCDF/Zarr file is touched directly, which also means it cannot
+/// reuse the pool's dataset cache, its VSI-cache clearing or its retry/backoff - a remote
+/// 244 MB yearly file over `/vsicurl` is opened once per call and never retried.
 #[derive(Debug)]
-pub struct ProbedMdGdalMetaData {
+pub struct ProbedGdalMdMetaData {
     pub loading_info: MdLoadingInfo,
     pub result_descriptor: RasterResultDescriptor,
+    /// Optional upper bound on the z slices per worker request; carried into the loading info
+    /// so the read path can pick it up.
+    pub max_z_batch_size: Option<usize>,
 }
 
 /// Selects which multidimensional arrays (CF data variables) of a file/group become
@@ -51,7 +65,8 @@ pub struct MdArraySelection {
 pub fn probe_md_loading_info(
     paths: &[PathBuf],
     array_name: Option<&str>,
-) -> Result<ProbedMdGdalMetaData, MdGdalSourceError> {
+    max_z_batch_size: Option<usize>,
+) -> Result<ProbedGdalMdMetaData, MdGdalSourceError> {
     let array_name = match array_name {
         Some(name) => name.to_owned(),
         None => auto_array_name(&paths[0])?,
@@ -104,8 +119,9 @@ pub fn probe_md_loading_info(
             group: None,
             z_start,
             z_end: z_start + p.z_coordinates.len(),
-            time: global_time_steps[z_start],
-            band: 0,
+            local_offset: 0,
+            times: MdFileTimes::from_intervals(p.time_intervals.clone()),
+            output_band: 0,
         });
     }
 
@@ -115,13 +131,15 @@ pub fn probe_md_loading_info(
         CacheHint::default(),
         first.z_role,
         first.wrap,
+        max_z_batch_size,
     );
 
     let result_descriptor = result_descriptor(&first, &loading_info);
 
-    Ok(ProbedMdGdalMetaData {
+    Ok(ProbedGdalMdMetaData {
         loading_info,
         result_descriptor,
+        max_z_batch_size,
     })
 }
 
@@ -140,10 +158,7 @@ struct ProbedArray {
     data_type: RasterDataType,
     x_size: usize,
     y_size: usize,
-    /// world latitude of the top pixel edge of the grid (north-up presentation)
-    top_edge_y: f64,
-    /// absolute y pixel size (the descriptor always presents north-up)
-    y_pixel_size_abs: f64,
+    height: usize,
     /// CF display name: `long_name` attr, else `standard_name`, else the variable name
     display_name: String,
     /// CF `unit` of the array (empty if unset)
@@ -250,8 +265,7 @@ fn probed_array(
         data_type,
         x_size,
         y_size,
-        top_edge_y: xy.top_edge_y,
-        y_pixel_size_abs: xy.y_pixel_size_abs,
+        height: y_size,
         display_name: string_attr(md_array, "long_name")
             .or_else(|| string_attr(md_array, "standard_name"))
             .unwrap_or_else(|| array_name.to_owned()),
@@ -276,9 +290,6 @@ fn probed_array(
 /// XY geometry derived from the x/y coordinate values (cell centers).
 struct XyGeometry {
     geo_transform: GdalDatasetGeoTransform,
-    /// world latitude of the north (top) pixel edge
-    top_edge_y: f64,
-    y_pixel_size_abs: f64,
     wrap: bool,
 }
 
@@ -320,24 +331,12 @@ fn xy_geometry(
     } else {
         (y_coordinates[0] - y_pixel_size_abs / 2.0, y_pixel_size_abs)
     };
-    // north-up top edge of the grid (world latitude of the first presented row)
-    let top_edge_y = if delta_y < 0.0 {
-        y_coordinates[0] + y_pixel_size_abs / 2.0
-    } else {
-        *y_coordinates
-            .last()
-            .expect("checked uniform, at least two values")
-            + y_pixel_size_abs / 2.0
-    };
-
     Ok(XyGeometry {
         geo_transform: GdalDatasetGeoTransform {
             origin_coordinate: (origin_x, origin_y).into(),
             x_pixel_size: delta_x,
             y_pixel_size,
         },
-        top_edge_y,
-        y_pixel_size_abs,
         wrap,
     })
 }
@@ -359,7 +358,7 @@ fn z_role_and_intervals(
         None => ZRoleAndIntervals::Band,
     };
     Ok(match zr {
-        ZRoleAndIntervals::Time(intervals) => (ZRole::Time, intervals),
+        ZRoleAndIntervals::Time(intervals) => (ZRole::Variable, intervals),
         ZRoleAndIntervals::Band => (
             ZRole::Band,
             z_coordinates
@@ -382,10 +381,10 @@ fn z_role_from_units(units: &str) -> Option<TimeUnitInfo> {
     // CF convention: "<unit> since <origin>", e.g. "days since 2000-01-01 00:00:00"
     let (unit, origin_str) = units.split_once(" since ")?;
     let factor_ms = match unit {
-        "seconds" => 1_000.0,
-        "minutes" => 60_000.0,
-        "hours" => 3_600_000.0,
-        "days" => 86_400_000.0,
+        "seconds" | "second" => 1_000.0,
+        "minutes" | "minute" => 60_000.0,
+        "hours" | "hour" => 3_600_000.0,
+        "days" | "day" => 86_400_000.0,
         _ => return None,
     };
     let origin = parse_cf_origin(origin_str)?;
@@ -695,7 +694,8 @@ fn band_descriptor(probed: &ProbedArray) -> RasterBandDescriptor {
 pub fn probe_md_variables_loading_info(
     paths: &[PathBuf],
     selection: &MdArraySelection,
-) -> Result<ProbedMdGdalMetaData, MdGdalSourceError> {
+    max_z_batch_size: Option<usize>,
+) -> Result<ProbedGdalMdMetaData, MdGdalSourceError> {
     if paths.is_empty() {
         return Err(MdGdalSourceError::ProbeError {
             message: "no files to probe".to_owned(),
@@ -723,7 +723,7 @@ pub fn probe_md_variables_loading_info(
                 }
             })?;
             let probed = probed_array(&md_array, path, name)?;
-            if probed.z_role != ZRole::Time {
+            if probed.z_role != ZRole::Variable {
                 return Err(MdGdalSourceError::ProbeError {
                     message: format!(
                         "variable '{name}' in {} has no CF time dimension; only time-series variables can map to bands",
@@ -768,8 +768,9 @@ pub fn probe_md_variables_loading_info(
                 group: selection.group.clone(),
                 z_start,
                 z_end: z_start + p.z_coordinates.len(),
-                time: times[z_start],
-                band: b as u32,
+                local_offset: 0,
+                times: MdFileTimes::from_intervals(p.time_intervals.clone()),
+                output_band: b as u32,
             });
         }
 
@@ -801,16 +802,48 @@ pub fn probe_md_variables_loading_info(
         CacheHint::default(),
         ZRole::Variable,
         reference.wrap,
+        max_z_batch_size,
     );
     let bands = RasterBandDescriptors::new(bands).map_err(|e| MdGdalSourceError::ProbeError {
         message: format!("invalid band descriptors: {e}"),
     })?;
-    let result_descriptor = result_descriptor_with_bands(&reference, bands);
+    let result_descriptor =
+        result_descriptor_with_bands(&reference, bands, loading_info.time_descriptor());
 
-    Ok(ProbedMdGdalMetaData {
+    Ok(ProbedGdalMdMetaData {
         loading_info,
         result_descriptor,
+        max_z_batch_size,
     })
+}
+
+/// The north-up, wrap-aware world transform that an MD file is presented with.
+///
+/// MD files store their rows in raw array order, which may run south-up (ascending CF
+/// latitude) and may span 0..360 instead of -180..180 degrees. Geo Engine always presents
+/// north-up over -180..180, and the read advise flips the rows back, so every grid
+/// comparison has to go through this function. The probe and the dataset import validation
+/// share it so the two cannot drift apart.
+#[must_use]
+pub fn presented_geo_transform(
+    raw: GdalDatasetGeoTransform,
+    height: usize,
+    wrap: bool,
+) -> GeoTransform {
+    let abs_y = raw.y_pixel_size.abs();
+    let origin_x = if wrap {
+        raw.origin_coordinate.x - 180.0
+    } else {
+        raw.origin_coordinate.x
+    };
+    // the north edge is the stored origin for a descending y axis, the south edge otherwise
+    let origin_y = if raw.y_pixel_size < 0.0 {
+        raw.origin_coordinate.y
+    } else {
+        raw.origin_coordinate.y + height as f64 * abs_y
+    };
+
+    GeoTransform::new((origin_x, origin_y).into(), raw.x_pixel_size, -abs_y)
 }
 
 /// Builds the north-up `RasterResultDescriptor` for the probed grid with the given bands.
@@ -822,16 +855,12 @@ pub fn probe_md_variables_loading_info(
 fn result_descriptor_with_bands(
     probed: &ProbedArray,
     bands: RasterBandDescriptors,
+    time: TimeDescriptor,
 ) -> RasterResultDescriptor {
-    let origin_x = if probed.wrap {
-        probed.dataset_parameters.geo_transform.origin_coordinate.x - 180.0
-    } else {
-        probed.dataset_parameters.geo_transform.origin_coordinate.x
-    };
-    let geo_transform = GeoTransform::new(
-        (origin_x, probed.top_edge_y).into(),
-        probed.dataset_parameters.geo_transform.x_pixel_size,
-        -probed.y_pixel_size_abs,
+    let geo_transform = presented_geo_transform(
+        probed.dataset_parameters.geo_transform,
+        probed.height,
+        probed.wrap,
     );
     let spatial_grid = SpatialGridDescriptor::source_from_parts(
         geo_transform,
@@ -840,8 +869,6 @@ fn result_descriptor_with_bands(
             [probed.y_size as isize - 1, probed.x_size as isize - 1],
         ),
     );
-
-    let time = TimeDescriptor::new_irregular(probed.time_intervals.first().copied());
 
     RasterResultDescriptor::new(
         probed.data_type,
@@ -855,16 +882,17 @@ fn result_descriptor_with_bands(
 /// The default band descriptors for a single-variable (`Time`/`Band`) MD array.
 fn default_bands(probed: &ProbedArray) -> RasterBandDescriptors {
     match probed.z_role {
-        ZRole::Time | ZRole::Variable => RasterBandDescriptors::new_single_band(),
+        ZRole::Variable => RasterBandDescriptors::new_single_band(),
         ZRole::Band => RasterBandDescriptors::new_multiple_bands(probed.z_coordinates.len() as u32),
     }
 }
 
-fn result_descriptor(
-    probed: &ProbedArray,
-    _loading_info: &MdLoadingInfo,
-) -> RasterResultDescriptor {
-    result_descriptor_with_bands(probed, default_bands(probed))
+fn result_descriptor(probed: &ProbedArray, loading_info: &MdLoadingInfo) -> RasterResultDescriptor {
+    result_descriptor_with_bands(
+        probed,
+        default_bands(probed),
+        loading_info.time_descriptor(),
+    )
 }
 
 #[cfg(test)]
@@ -877,15 +905,15 @@ mod tests {
         MdGdalSourceError, ZRole, probe_md_loading_info, probe_md_variables_loading_info,
     };
 
-    fn expect(path: &str) -> super::ProbedMdGdalMetaData {
-        probe_md_loading_info(&[test_data!(path).to_path_buf()], None).unwrap()
+    fn expect(path: &str) -> super::ProbedGdalMdMetaData {
+        probe_md_loading_info(&[test_data!(path).to_path_buf()], None, None).unwrap()
     }
 
     #[test]
     fn probe_time_series_nc() {
         let m = expect("md/time_series.nc");
         let li = &m.loading_info;
-        assert_eq!(li.z_role(), ZRole::Time);
+        assert_eq!(li.z_role(), ZRole::Variable);
         assert!(!li.wrap());
         assert_eq!(li.time_steps().len(), 8);
         assert_eq!(li.files().len(), 1);
@@ -930,10 +958,36 @@ mod tests {
     }
 
     #[test]
+    fn probe_advertises_a_regular_daily_time_axis_over_the_whole_range() {
+        // 8 daily slices: the descriptor must span all of them and report a regular axis,
+        // not just the first slice
+        let m = expect("md/time_series.nc");
+        let time = m.result_descriptor.time;
+
+        assert!(time.is_regular());
+        assert_eq!(
+            time.dimension.unwrap_regular().unwrap().step,
+            geoengine_datatypes::primitives::TimeStep::days(1).unwrap()
+        );
+        // 2000-01-01 .. 2000-01-09 (the 8th slice ends one day later)
+        assert_eq!(
+            time.bounds.unwrap(),
+            geoengine_datatypes::primitives::TimeInterval::new_unchecked(
+                geoengine_datatypes::primitives::TimeInstance::from_millis_unchecked(
+                    946_684_800_000
+                ),
+                geoengine_datatypes::primitives::TimeInstance::from_millis_unchecked(
+                    946_684_800_000 + 8 * 86_400_000
+                ),
+            )
+        );
+    }
+
+    #[test]
     fn probe_time_series_zarr() {
         let m = expect("md/time_series.zarr");
         let li = &m.loading_info;
-        assert_eq!(li.z_role(), ZRole::Time);
+        assert_eq!(li.z_role(), ZRole::Variable);
         assert_eq!(li.time_steps().len(), 8);
         assert_eq!(li.files().len(), 1);
         assert_eq!(li.files()[0].z_start, 0);
@@ -948,6 +1002,7 @@ mod tests {
                 test_data!("md/time_series_split_b.nc").to_path_buf(),
                 test_data!("md/time_series_split_a.nc").to_path_buf(),
             ],
+            None,
             None,
         )
         .unwrap();
@@ -983,7 +1038,7 @@ mod tests {
         let m = expect("md/wrap_0_360.nc");
         let li = &m.loading_info;
         assert!(li.wrap());
-        assert_eq!(li.z_role(), ZRole::Time);
+        assert_eq!(li.z_role(), ZRole::Variable);
         assert_eq!(li.time_steps().len(), 4);
         assert_eq!(li.files().len(), 1);
         assert_eq!(li.files()[0].z_start, 0);
@@ -1028,7 +1083,7 @@ mod tests {
     fn probe_cf_time_units_minutes() {
         let m = expect("md/cf_time_units_minutes.nc");
         let li = &m.loading_info;
-        assert_eq!(li.z_role(), ZRole::Time);
+        assert_eq!(li.z_role(), ZRole::Variable);
         assert_eq!(li.time_steps().len(), 8);
         // 1900-01-01T00:00:00Z = -2_208_988_800_000 ms
         assert_eq!(li.time_steps()[0].start().inner(), -2_208_988_800_000);
@@ -1050,10 +1105,14 @@ mod tests {
 
     #[test]
     fn probe_zarr() {
-        let m = probe_md_loading_info(&[test_data!("md/time_series.zarr").to_path_buf()], None)
-            .unwrap();
+        let m = probe_md_loading_info(
+            &[test_data!("md/time_series.zarr").to_path_buf()],
+            None,
+            None,
+        )
+        .unwrap();
         let li = &m.loading_info;
-        assert_eq!(li.z_role(), ZRole::Time);
+        assert_eq!(li.z_role(), ZRole::Variable);
         assert_eq!(li.time_steps().len(), 8);
     }
 
@@ -1062,6 +1121,7 @@ mod tests {
         let err = probe_md_loading_info(
             &[test_data!("md/time_series.nc").to_path_buf()],
             Some("nonexistent"),
+            None,
         )
         .unwrap_err();
         match err {
@@ -1081,6 +1141,7 @@ mod tests {
         let m = probe_md_variables_loading_info(
             &[test_data!("md/variables.nc").to_path_buf()],
             &MdArraySelection::default(),
+            None,
         )
         .unwrap();
         let li = &m.loading_info;
@@ -1092,7 +1153,7 @@ mod tests {
         assert_eq!(li.files()[1].array_name, "precipitation");
         assert_eq!(li.files()[2].array_name, "temperature");
         for (b, f) in li.files().iter().enumerate() {
-            assert_eq!(f.band, b as u32);
+            assert_eq!(f.output_band, b as u32);
             assert_eq!((f.z_start, f.z_end), (0, 8));
         }
         let names: Vec<_> = m
@@ -1118,14 +1179,15 @@ mod tests {
         let m = probe_md_variables_loading_info(
             &[test_data!("md/variables.nc").to_path_buf()],
             &selection,
+            None,
         )
         .unwrap();
         let li = &m.loading_info;
         assert_eq!(li.files().len(), 2);
         assert_eq!(li.files()[0].array_name, "temperature");
-        assert_eq!(li.files()[0].band, 0);
+        assert_eq!(li.files()[0].output_band, 0);
         assert_eq!(li.files()[1].array_name, "precipitation");
-        assert_eq!(li.files()[1].band, 1);
+        assert_eq!(li.files()[1].output_band, 1);
         let bands = m.result_descriptor.bands.bands();
         assert_eq!(bands[0].name, "air temperature");
         assert_eq!(bands[1].name, "precipitation");
@@ -1144,6 +1206,7 @@ mod tests {
         let m = probe_md_variables_loading_info(
             &[test_data!("md/grouped_variables.nc").to_path_buf()],
             &selection,
+            None,
         )
         .unwrap();
         assert_eq!(m.loading_info.files().len(), 3);
@@ -1156,6 +1219,7 @@ mod tests {
         let err = probe_md_variables_loading_info(
             &[test_data!("md/grouped_variables.nc").to_path_buf()],
             &MdArraySelection::default(),
+            None,
         )
         .unwrap_err();
         match err {

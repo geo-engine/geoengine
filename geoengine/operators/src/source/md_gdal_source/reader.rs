@@ -15,27 +15,37 @@ use crate::source::gdal_worker_process::{
     GdalPoolDispatcher, GdalReaderMode,
     process_common::{GdalReadAdvise, GdalReadWindow},
 };
-use crate::source::md_gdal_source::{MdGdalSourceError, ZRole, loading_info::MdDatasetFile};
+use crate::source::md_gdal_source::{MdDatasetFile, MdGdalSourceError, MdLoadingInfo, ZRole};
 
-/// Loads a batch of z-slices of one MD array file for one query tile and returns
-/// one `RasterTile2D` per requested z slice.
+/// One z-slice batch request: which file, and which local z range within it.
+/// The Geo Engine band follows from the file (`MdDatasetFile::output_band`).
+#[derive(Debug, Clone)]
+pub struct MdTileRequest {
+    /// index into [`MdLoadingInfo::files`]
+    pub file_idx: usize,
+    /// slice range within that file, file-local and end-exclusive
+    pub local_z: Range<usize>,
+}
+
+/// Reads one z-slice batch of one MD array file for one query tile and returns one
+/// `RasterTile2D` per requested slice.
 ///
-/// For wrapped (0..360° stored, −180..180° presented) datasets the read window is
-/// computed directly in the tile lattice, because the presented frame relabels the
-/// stored longitudes (see [`wrapped_splitted_advises`]).
+/// For wrapped (0..360° stored, −180..180° presented) datasets the read window is computed
+/// directly in the tile lattice, because the presented frame relabels the stored longitudes
+/// (see [`wrapped_splitted_advises`]).
+///
+/// # Errors
+/// Returns a `MdGdalSourceError` if the read window cannot be computed or the pool read fails.
 #[allow(clippy::too_many_arguments)]
 pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
-    file: MdDatasetFile,
-    wrap: bool,
-    cache_hint: CacheHint,
+    loading_info: &MdLoadingInfo,
+    request: &MdTileRequest,
     reader_mode: GdalReaderMode,
     tile_information: TileInformation,
-    z_range: Range<usize>,
-    time_steps: Vec<TimeInterval>,
-    gdal_worker: GdalPoolDispatcher,
-    z_role: ZRole,
+    gdal_worker: &GdalPoolDispatcher,
 ) -> Result<Vec<RasterTile2D<T>>, MdGdalSourceError> {
-    let file: &MdDatasetFile = &file;
+    let file: &MdDatasetFile = &loading_info.files()[request.file_idx];
+    let z_range = request.local_z.clone();
     let dataset_params = file.params.clone();
     let array_name = file.array_name.clone();
     let ds_spatial_grid = dataset_params.spatial_grid_definition();
@@ -47,7 +57,7 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
         z_range,
     );
 
-    let advises = if wrap {
+    let advises = if loading_info.wrap() {
         wrapped_splitted_advises(&dataset_params, &tile_spatial_grid)?
     } else {
         // The read advise is the tile/dataset intersection in the dataset's own frame;
@@ -69,7 +79,8 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
         ];
     let mut properties = RasterProperties::default();
 
-    let reader = crate::source::gdal_worker_process::reader::GdalPoolReader::from(gdal_worker);
+    let reader =
+        crate::source::gdal_worker_process::reader::GdalPoolReader::from(gdal_worker.clone());
 
     for advise in advises {
         match reader
@@ -94,11 +105,13 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
         }
     }
 
+    let cache_hint = loading_info.cache_hint();
+
     Ok(frames
         .into_iter()
         .enumerate()
         .map(|(k, frame)| {
-            let global_z = file.z_start + z_range.start + k;
+            let global_z = file.z_start + (z_range.start - file.local_offset) + k;
             raster_tile_from_frame(
                 file,
                 tile_information,
@@ -106,8 +119,8 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
                 frame,
                 properties.clone(),
                 cache_hint,
-                z_role,
-                &time_steps,
+                loading_info.z_role(),
+                loading_info.time_steps(),
             )
         })
         .collect())
@@ -198,9 +211,11 @@ fn raster_tile_from_frame<T: Pixel>(
     time_steps: &[TimeInterval],
 ) -> RasterTile2D<T> {
     let (time, band) = match z_role {
-        ZRole::Time => (time_steps[global_z], 0),
-        ZRole::Band => (file.time, global_z as u32),
-        ZRole::Variable => (time_steps[global_z], file.band),
+        // Band-role intervals are synthetic `[k, k+1)` unit steps indexed by band, so the
+        // tile stamp is `time_steps[global_z]` -- the same rule `empty_tile` uses, which is
+        // what keeps gap tiles and data tiles in one query consistent
+        ZRole::Band => (time_steps[global_z], global_z as u32),
+        ZRole::Variable => (time_steps[global_z], file.output_band),
     };
 
     RasterTile2D::new_with_properties(

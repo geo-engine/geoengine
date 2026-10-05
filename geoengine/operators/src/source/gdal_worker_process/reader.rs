@@ -116,26 +116,18 @@ impl GdalPoolReader {
             .instrument(span)
             .await;
 
-        match res {
-            Ok(t) => {
-                // First, convert response to GridAndProperties
-                let GridAndProperties { grid, properties } = t.into();
-                // Second, flip y-axis if necessary
-                let grid = flip_grid_y_if_needed(grid, read_advise.flip_y);
-                Ok(GdalProcessReadResult::Grid(Box::new(GridAndProperties {
-                    grid,
-                    properties,
-                })))
-            }
-            Err(GdalProcessPoolError::IpcProcessError {
-                source:
-                    IpcProcessError::GdalError {
-                        kind: IpcProcessGdalErrorKind::FileNotFound,
-                        details: _details,
-                    },
-            }) if file_not_found_as_no_data => Ok(GdalProcessReadResult::FileNotFoundAsNoData),
-            Err(other_err) => Err(other_err),
-        }
+        let Some(t) = read_result_or_no_data(res, file_not_found_as_no_data)? else {
+            return Ok(GdalProcessReadResult::FileNotFoundAsNoData);
+        };
+
+        // First, convert response to GridAndProperties
+        let GridAndProperties { grid, properties } = t.into();
+        // Second, flip y-axis if necessary
+        let grid = flip_grid_y_if_needed(grid, read_advise.flip_y);
+        Ok(GdalProcessReadResult::Grid(Box::new(GridAndProperties {
+            grid,
+            properties,
+        })))
     }
 
     /// Reads a batch of z-slices from a multidim array via the worker process in a
@@ -198,26 +190,37 @@ impl GdalPoolReader {
             .instrument(span)
             .await;
 
-        match res {
-            Ok(payloads) => {
-                let grids = payloads
-                    .into_iter()
-                    .map(|p| {
-                        let GridAndProperties { grid, properties } = p.into();
-                        let grid = flip_grid_y_if_needed(grid, read_advise.flip_y);
-                        GridAndProperties { grid, properties }
-                    })
-                    .collect();
-                Ok(GdalProcessMdReadResult::Grids(grids))
-            }
-            Err(GdalProcessPoolError::IpcProcessError {
-                source:
-                    IpcProcessError::GdalError {
-                        kind: IpcProcessGdalErrorKind::FileNotFound,
-                        details: _details,
-                    },
-            }) if file_not_found_as_no_data => Ok(GdalProcessMdReadResult::FileNotFoundAsNoData),
-            Err(other_err) => Err(other_err),
-        }
+        let Some(payloads) = read_result_or_no_data(res, file_not_found_as_no_data)? else {
+            return Ok(GdalProcessMdReadResult::FileNotFoundAsNoData);
+        };
+
+        let grids = payloads
+            .into_iter()
+            .map(|p| {
+                let GridAndProperties { grid, properties } = p.into();
+                let grid = flip_grid_y_if_needed(grid, read_advise.flip_y);
+                GridAndProperties { grid, properties }
+            })
+            .collect();
+        Ok(GdalProcessMdReadResult::Grids(grids))
+    }
+}
+
+/// Unwraps a worker read result, turning a `FileNotFound` error into `None` when the
+/// dataset is configured to treat a missing file as no-data.
+fn read_result_or_no_data<T>(
+    res: Result<T, GdalProcessPoolError>,
+    file_not_found_as_no_data: bool,
+) -> Result<Option<T>, GdalProcessPoolError> {
+    match res {
+        Ok(value) => Ok(Some(value)),
+        Err(GdalProcessPoolError::IpcProcessError {
+            source:
+                IpcProcessError::GdalError {
+                    kind: IpcProcessGdalErrorKind::FileNotFound,
+                    details: _details,
+                },
+        }) if file_not_found_as_no_data => Ok(None),
+        Err(other_err) => Err(other_err),
     }
 }

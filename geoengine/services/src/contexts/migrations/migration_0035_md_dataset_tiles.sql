@@ -1,30 +1,34 @@
--- Persist the per-file data of an `MdGdalSource` the same way `MultiBandGdalSource`
--- persists its tiles: in a table of rows, not inside the dataset's meta data.
+-- Persist the per-file data of an `MdGdalSource` the same way
+-- `MultiBandGdalSource` persists its tiles: in a table of rows, not inside the
+-- dataset's meta data.
 --
--- One row = one MD array file. The z dimension is *not* stored per slice; instead the
--- file's whole time axis lives in `time_descriptor` (regular: origin + step, count
--- implied by the bounds) plus a `time_steps` array that is only populated for
--- irregular axes. `time` holds the file's overall bounds so that row filtering can
--- keep using `time_interval_intersects`.
+-- One row = one MD array file. The file's time axis is stored twice on purpose:
+-- `time_steps` holds one interval per z slice and is what the read path uses,
+-- while `time_descriptor` is the compact form the API advertises. Storing both
+-- keeps a regular axis readable with a single row lookup and lets the DB keep
+-- serving the descriptor even when the slice intervals are not needed.
+-- `time` holds the file's overall bounds so that row filtering can keep using
+-- `time_interval_intersects`.
 
 -- `ZRole` is derived as `ToSql`/`FromSql` in the operators crate, so it needs a
 -- matching enum type now that it is no longer hidden inside a jsonb blob.
 CREATE TYPE "ZRole" AS ENUM (
-    'Time',
     'Band',
     'Variable'
 );
 
--- Dataset level description of an MD dataset: the result descriptor plus the two
--- properties that are constant across all of its files.
-CREATE TYPE "MdGdalMetaData" AS (
+-- Dataset level description of an MD dataset: the result descriptor plus
+-- the two properties that are constant across all of its files.
+CREATE TYPE "GdalMdMetaData" AS (
     result_descriptor "RasterResultDescriptor",
     z_role "ZRole",
-    wrap boolean
+    wrap boolean,
+    -- upper bound on how many z slices one GDAL read may request at once
+    max_z_batch_size bigint
 );
 
 ALTER TYPE "MetaDataDefinition"
-ADD ATTRIBUTE md_gdal_meta_data "MdGdalMetaData";
+ADD ATTRIBUTE gdal_md_meta_data "GdalMdMetaData";
 
 CREATE TABLE dataset_md_tiles (
     id uuid NOT NULL PRIMARY KEY,
@@ -33,13 +37,14 @@ CREATE TABLE dataset_md_tiles (
     -- the *presented* footprint (wrap-around aware), like every other bbox here
     bbox "SpatialPartition2D" NOT NULL,
     band oid NOT NULL,
-    -- position of this file in the concatenated z axis of its band
+    -- position in the concatenated z axis of its band
     z_index bigint NOT NULL,
     array_name text NOT NULL,
     array_group text,
+    -- the compact form of `time_steps`, what the API advertises
     time_descriptor "TimeDescriptor" NOT NULL,
-    -- one interval per z slice, only for TimeDimension::Irregular
-    time_steps "TimeInterval" [],
+    -- one interval per z slice, always populated
+    time_steps "TimeInterval" [] NOT NULL,
     gdal_params "GdalDatasetParameters" NOT NULL
 );
 
