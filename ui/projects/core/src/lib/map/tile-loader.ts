@@ -4,8 +4,10 @@ import ImageTile from 'ol/ImageTile';
 import Tile from 'ol/Tile';
 import TileState from 'ol/TileState';
 import TileGrid from 'ol/tilegrid/TileGrid';
-import {createEmpty, getIntersection, isEmpty} from 'ol/extent';
+import {createEmpty, extend, getIntersection, intersects as olIntersects, isEmpty} from 'ol/extent';
 import {equivalent, transformExtent, type Projection} from 'ol/proj';
+import type {NearestDirectionFunction} from 'ol/array';
+import {olExtentToTuple} from '@geoengine/common';
 
 import {Extent} from './map.service';
 
@@ -91,6 +93,24 @@ interface TileLoaderOptions {
 
     /** Reports the two failures a tile load can hide. Only for debugging, see {@link TileDiagnostic}. */
     readonly onDiagnostic?: (diagnostic: TileDiagnostic) => void;
+
+    /**
+     * The extent of a tile in the projection the viewport is in, and its zoom level if it can be
+     * compared to the zoom level of the viewport. Only needed for {@link cancelUnwanted}.
+     */
+    readonly tileExtentInView?: (tile: ImageTile) => TileInView;
+}
+
+/**
+ * Where a tile sits in the view, as far as {@link TileLoader.cancelUnwanted} can tell.
+ *
+ * `zoom` is the tile's zoom level in the grid its coordinates belong to. Whether that level is
+ * comparable to the viewport's zoom is decided by {@link currentViewport}, which reports `undefined`
+ * for the viewport zoom when the grids differ.
+ */
+export interface TileInView {
+    readonly extent: Extent;
+    readonly zoom?: number;
 }
 
 /**
@@ -138,6 +158,53 @@ export const tileExtentInViewProjection = (
 };
 
 /**
+ * The members of an image tile source that the viewport computation reads. `ol/source/TileImage`
+ * is deprecated and its replacement `ol/source/ImageTile` is a different class tree, so neither
+ * type fits all actual sources (WMS, OGC); this duck type describes only the members they share.
+ */
+export interface TileImageLike {
+    readonly zDirection?: number | NearestDirectionFunction;
+    getTileGridForProjection(projection: Projection): TileGrid;
+}
+
+/**
+ * The frame data the viewport computation reads, a subset of OpenLayers' `FrameState`.
+ * Duck-typed so the `MapEvent`'s `frameState` passes without a cast.
+ */
+export interface TileFrame {
+    extent: Array<number>;
+    nextExtent?: Array<number> | undefined;
+    viewState: {
+        resolution: number;
+        nextResolution?: number | undefined;
+        projection: Projection;
+    };
+}
+
+/**
+ * The viewport as OpenLayers sees it in the frame it is about to queue the tiles of.
+ *
+ * `zoom` is `undefined` unless the grid OpenLayers measures the view resolution in is the grid the
+ * tile coordinates belong to, which a reprojected source does not guarantee. It is a zoom level and
+ * never a resolution, so a movement within one zoom level does not cancel anything.
+ *
+ * While an animation runs, `nextExtent` and `nextResolution` describe the destination the frame is
+ * heading to. The extent is widened to cover both, and the zoom threshold is the coarser of current
+ * and target, so the tiles OpenLayers pre-queues for the next level of a zoom-out are never cancelled.
+ */
+export const currentViewport = (source: TileImageLike, frame: TileFrame, tileGrid: TileGrid): {extent: Extent; zoom?: number} => {
+    const {viewState} = frame;
+    const next = viewState.nextResolution;
+    const threshold = next !== undefined && Number.isFinite(next) ? Math.max(viewState.resolution, next) : viewState.resolution;
+    const viewGrid = source.getTileGridForProjection(viewState.projection);
+    const wanted = frame.nextExtent ? extend([...frame.extent], frame.nextExtent) : frame.extent;
+    return {
+        extent: olExtentToTuple(wanted),
+        zoom: viewGrid === tileGrid ? viewGrid.getZForResolution(threshold, source.zDirection) : undefined,
+    };
+};
+
+/**
  * Loads the tiles of an OpenLayers tile source with `fetch` and serves them as object URLs.
  *
  * OpenLayers would load tiles as plain `<img>` requests, which cannot carry an `Authorization`
@@ -148,7 +215,12 @@ export const tileExtentInViewProjection = (
  * replaced and abort the previous one.
  */
 export class TileLoader {
-    private readonly controllers = new Set<AbortController>();
+    /**
+     * The requests in flight per tile, so that a single one can be given up on without touching the
+     * others. OpenLayers never loads a tile twice at a time, so one entry per tile is enough.
+     */
+    private readonly inFlight = new Map<ImageTile, {tileInView?: TileInView; controller: AbortController}>();
+
     private readonly objectUrls = new Set<string>();
 
     /** Pending retry timers per tile, so that an obsolete loader does not request tiles anymore. */
@@ -189,7 +261,7 @@ export class TileLoader {
         }
 
         const controller = new AbortController();
-        this.controllers.add(controller);
+        this.inFlight.set(tile, {tileInView: this.options.tileExtentInView?.(tile), controller});
 
         // A tile that is still counted as outstanding is the retry of a request that failed, so it
         // keeps the attempt budget of the request it follows. Any other call is a fresh visit and
@@ -222,7 +294,10 @@ export class TileLoader {
         }
 
         void this.request(tile, src, controller.signal).then((outcome) => {
-            this.controllers.delete(controller);
+            // a tile that was loaded again in the meantime owns its entry now, so it must not be removed
+            if (this.inFlight.get(tile)?.controller === controller) {
+                this.inFlight.delete(tile);
+            }
 
             if (outcome !== 'retry') {
                 this.settle(tile, outcome === 'failed');
@@ -258,10 +333,10 @@ export class TileLoader {
      * Aborts all pending requests and retries, and frees all object URLs of this loader.
      */
     abortAll(): void {
-        for (const controller of this.controllers) {
+        for (const {controller} of this.inFlight.values()) {
             controller.abort();
         }
-        this.controllers.clear();
+        this.inFlight.clear();
 
         for (const subscription of this.abortSubscriptions.values()) {
             subscription.unsubscribe();
@@ -283,6 +358,44 @@ export class TileLoader {
             URL.revokeObjectURL(objectUrl);
         }
         this.objectUrls.clear();
+    }
+
+    /**
+     * Cancels the work of the tiles the viewport does not want anymore, so that an interaction does
+     * not pay for queries nobody will look at. Call this once per rendered frame while loading.
+     *
+     * `viewportExtent` is the extent the frame wants to draw and `currentZoom` the coarsest zoom
+     * level it needs, both in the projection of the viewport. `currentZoom` is `undefined` when it
+     * cannot be compared to the zoom levels of the tiles, see {@link TileInView}.
+     *
+     * A tile is unwanted when it left the viewport or when the view zoomed past its zoom level.
+     * Finer tiles survive zooming out and so do the tiles OpenLayers pre-queues for the next zoom
+     * level of an animation, so a wanted tile is never cancelled because of a level it does not
+     * belong to. An empty extent means the tile cannot be placed in the viewport, so it is kept.
+     */
+    cancelUnwanted(viewportExtent: Extent, currentZoom: number | undefined): void {
+        for (const [tile, request] of this.inFlight) {
+            const {extent, zoom} = request.tileInView ?? {};
+            if (extent && !isEmpty(extent) && !olIntersects(extent, viewportExtent)) {
+                this.cancel(tile, 'tile extent left the viewport');
+            } else if (currentZoom !== undefined && zoom !== undefined && zoom < currentZoom) {
+                this.cancel(tile, 'zoom level was zoomed in');
+            }
+        }
+        // A tile that waits for its retry has no request left to abort, and its zoom level is the
+        // only thing that can be told without the extent it was requested for.
+        for (const tile of this.retries.keys()) {
+            if (currentZoom !== undefined && tile.getTileCoord()[0] < currentZoom) {
+                this.cancel(tile, 'zoom level was zoomed in');
+            }
+        }
+    }
+
+    /** Gives up on one tile, reporting the condition the way a request that became obsolete does. */
+    private cancel(tile: ImageTile, reason: string): void {
+        this.diagnostic({event: 'aborted', tile: tile.getKey(), reason});
+        this.cancelRetry(tile);
+        this.inFlight.get(tile)?.controller.abort();
     }
 
     private async request(tile: ImageTile, src: string, signal: AbortSignal): Promise<LoadOutcome> {

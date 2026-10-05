@@ -19,6 +19,9 @@ import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol
 import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
 import OlImageTile from 'ol/ImageTile';
 import {get as olGetProj} from 'ol/proj';
+import TileGrid from 'ol/tilegrid/TileGrid';
+import type {EventsKey} from 'ol/events';
+import {unByKey} from 'ol/Observable';
 import {CoreConfig} from '../config.service';
 import {NotificationService} from '@geoengine/common';
 import {ProjectService} from '../project/project.service';
@@ -38,7 +41,16 @@ import {
     olExtentToTuple,
 } from '@geoengine/common';
 import {AbortableTileLayer} from './abortable-tile-layer';
-import {TileDiagnostic, TileLoadState, TileLoader, tileExtentInViewProjection} from './tile-loader';
+import {
+    TileDiagnostic,
+    TileImageLike,
+    TileInView,
+    TileFrame,
+    TileLoadState,
+    TileLoader,
+    currentViewport,
+    tileExtentInViewProjection,
+} from './tile-loader';
 
 /**
  * The `ol-layer` component represents a single layer object of open layers.
@@ -65,6 +77,10 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
 
     protected source: OS;
     protected _mapLayer: OL;
+
+    /** The loader whose requests are watched per rendered frame, see {@link watchViewport}. */
+    private watchedLoader?: TileLoader;
+    private unwatchViewport?: EventsKey | EventsKey[];
 
     /**
      * Setup of DI
@@ -103,6 +119,47 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
         if (this._mapLayer instanceof AbortableTileLayer && this._mapLayer.getSource() === this.source) {
             this._mapLayer.invalidateAbortedTile(tile);
         }
+    }
+
+    /**
+     * Cancels the tile requests of tiles the viewport does not want anymore, once per rendered
+     * frame, as long as the given loader has requests in flight. Without a frame to run on there is
+     * nothing to watch, so the loader gets its tiles cancelled when the movement ends.
+     *
+     * OpenLayers dispatches `postrender` after the renderer queued the frame's tiles and after
+     * `moveend`, but before `handlePostRender` starts their requests, so an abort here is cheap.
+     */
+    protected watchViewport(loader: TileLoader, tileGrid: TileGrid): void {
+        const map = this._mapLayer.getMapInternal();
+        const source = this.source as unknown as TileImageLike; // only the raster components call this, and both use tile sources
+        if (!map) {
+            return;
+        }
+        if (this.watchedLoader === loader) {
+            return;
+        }
+        this.unwatchViewportFrames();
+        this.watchedLoader = loader;
+        this.unwatchViewport = map.on('postrender', (event) => {
+            const frame = event.frameState;
+            if (!frame) {
+                return;
+            }
+            const {extent, zoom} = currentViewport(source, frame as unknown as TileFrame, tileGrid);
+            loader.cancelUnwanted(extent, zoom);
+        });
+    }
+
+    /** Stops watching rendered frames. Pass the loader to only stop if it is the one being watched. */
+    protected unwatchViewportFrames(loader?: TileLoader): void {
+        if (loader !== undefined && this.watchedLoader !== loader) {
+            return;
+        }
+        if (this.unwatchViewport) {
+            unByKey(this.unwatchViewport);
+        }
+        this.unwatchViewport = undefined;
+        this.watchedLoader = undefined;
     }
 
     /**
@@ -284,6 +341,7 @@ export class OlRasterLayerComponent
         }
 
         // abort all WMS tile requests that are still in flight
+        this.unwatchViewportFrames();
         this.loader?.abortAll();
     }
 
@@ -354,6 +412,7 @@ export class OlRasterLayerComponent
         }
 
         // the tiles of the replaced source are not displayed anymore, so their requests can be dropped
+        this.unwatchViewportFrames();
         this.loader?.abortAll();
 
         const source = new OlTileWmsSource({
@@ -373,21 +432,29 @@ export class OlRasterLayerComponent
         const sourceProjection = source.getProjection()!;
         const tileGrid = source.getTileGridForProjection(sourceProjection);
 
-        this.loader = new TileLoader({
+        const loader: TileLoader = new TileLoader({
             authHeaders: (): Record<string, string> => ({Authorization: `Bearer ${this.sessionToken()}`}),
-            abortWhen: (tile): Observable<string> =>
-                this.projectService.createQueryAbortStream(
-                    this.layerId(),
-                    tileExtentInViewProjection(tileGrid, tile, sourceProjection, olGetProj(spatialReference.srsString)!),
-                ),
+            abortWhen: (): Observable<string> => this.projectService.createQueryAbortStream(this.layerId()),
             onTileError: (tile): void => this.invalidateTileReprojection(tile),
-            onStateChange: (state): void => this.reportDataStatus(state),
+            onStateChange: (state): void => {
+                if (state === 'loading') {
+                    this.watchViewport(loader, tileGrid);
+                } else {
+                    this.unwatchViewportFrames(loader);
+                }
+                this.reportDataStatus(state);
+            },
             onError: (message): void => {
                 this.notificationService.error(message);
             },
             onDiagnostic: (diagnostic): void => this.reportTileDiagnostic(diagnostic),
+            tileExtentInView: (tile): TileInView => ({
+                extent: tileExtentInViewProjection(tileGrid, tile, sourceProjection, olGetProj(spatialReference.srsString)!),
+                zoom: tile.getTileCoord()[0],
+            }),
         });
-        source.setTileLoadFunction(this.loader.load);
+        this.loader = loader;
+        source.setTileLoadFunction(loader.load);
 
         this.source = source;
         this.initializeOrUpdateOlMapLayer();
@@ -429,11 +496,10 @@ export type TMSId = 'Custom' | 'CustomWebMercator' | 'WebMercatorQuad';
     providers: [{provide: MapLayerComponent, useExisting: OlOgcApiMapTileLayerComponent}],
     changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
-    OlLayerTile<OGCMapTile | TileDebug>,
-    OGCMapTile | TileDebug | ImageTile,
-    RasterSymbology
-> {
+export class OlOgcApiMapTileLayerComponent
+    extends MapLayerComponent<OlLayerTile<OGCMapTile | TileDebug>, OGCMapTile | TileDebug | ImageTile, RasterSymbology>
+    implements OnDestroy
+{
     protected readonly backend = inject(BackendService);
 
     readonly dataConnectorId = input.required<UUID>();
@@ -449,6 +515,9 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
     /** Emits `true` while any tile in this layer is loading, `false` when all tiles are loaded. */
     readonly loading = output<boolean>();
 
+    /** Loads the tiles of the current source. The resource signal already aborts it, this keeps teardown local. */
+    private loader?: TileLoader;
+
     readonly tileSource = resource({
         params: () => ({
             dataConnectorId: this.dataConnectorId(),
@@ -458,33 +527,44 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
             time: this.time(), // no way to just update `context` field in OGCMapTile…
         }),
         loader: async ({abortSignal}): Promise<OGCMapTile> => {
+            // `source` is assigned after the await below, so the closures that read it must only
+            // run once the source exists. Hoisting avoids a temporal-dead-zone reference.
+            // eslint-disable-next-line prefer-const -- assigned after the await; `const` would move it before the closures that need it
+            let source: OGCMapTile;
+
+            // The source reports its own projection, which the backend picked when it built the tile
+            // matrix set, so its tile coordinates belong to that grid and not to the grid of the
+            // projection the viewport is in.
+            const sourceGrid = (): TileGrid => source.getTileGridForProjection(source.getProjection()!);
+
             // the abort signal covers both a changed set of params and the destruction of the layer
-            const loader = new TileLoader({
+            const loader: TileLoader = new TileLoader({
                 signal: abortSignal,
                 authHeaders: (): Record<string, string> => ({Authorization: `Bearer ${this.sessionToken()}`}),
-                abortWhen: (tile): Observable<string> => {
-                    // The source reports its own projection, which the backend picked when it built
-                    // the tile matrix set, so its tile coordinates belong to that grid and not to
-                    // the grid of the projection the viewport is in.
-                    const sourceProjection = source.getProjection()!;
-                    return this.projectService.createQueryAbortStream(
-                        this.layerId(),
-                        tileExtentInViewProjection(
-                            source.getTileGridForProjection(sourceProjection),
-                            tile,
-                            sourceProjection,
-                            olGetProj(this.spatialReference().srsString)!,
-                        ),
-                    );
-                },
+                abortWhen: (): Observable<string> => this.projectService.createQueryAbortStream(this.layerId()),
                 onTileError: (tile): void => this.invalidateTileReprojection(tile),
                 onStateChange: (state): void => {
+                    if (state === 'loading') {
+                        this.watchViewport(loader, sourceGrid());
+                    } else {
+                        this.unwatchViewportFrames(loader);
+                    }
                     this.loading.emit(state === 'loading');
                 },
                 onDiagnostic: (diagnostic): void => this.reportTileDiagnostic(diagnostic),
+                tileExtentInView: (tile): TileInView => ({
+                    extent: tileExtentInViewProjection(
+                        sourceGrid(),
+                        tile,
+                        source.getProjection()!,
+                        olGetProj(this.spatialReference().srsString)!,
+                    ),
+                    zoom: tile.getTileCoord()[0],
+                }),
             });
+            this.loader = loader;
 
-            const source = new OGCMapTile({
+            source = new OGCMapTile({
                 url: await this.tmsUrl(loader, abortSignal),
                 context: {
                     datetime: this.time().asRequestString(),
@@ -551,5 +631,12 @@ export class OlOgcApiMapTileLayerComponent extends MapLayerComponent<
 
     getExtent(): [number, number, number, number] {
         return olExtentToTuple(this._mapLayer.getExtent() ?? [0, 0, 0, 0]);
+    }
+
+    ngOnDestroy(): void {
+        // the resource signal aborts the loader as well, but doing it here keeps the teardown of
+        // the in-flight tile requests in the component that started them
+        this.unwatchViewportFrames();
+        this.loader?.abortAll();
     }
 }

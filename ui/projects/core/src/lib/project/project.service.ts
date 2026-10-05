@@ -22,11 +22,10 @@ import {LoadingState} from './loading-state.model';
 import {HttpErrorResponse} from '@angular/common/http';
 import {BackendService} from '../backend/backend.service';
 import {BBoxDict, PlotDict, ProvenanceEntryDict, ToDict, UUID} from '../backend/backend.model';
-import {Extent, MapService, ViewportSize} from '../map/map.service';
+import {MapService, ViewportSize} from '../map/map.service';
 import {Session} from '../users/session.model';
 import OlFeature from 'ol/Feature';
 import OlGeometry from 'ol/geom/Geometry';
-import {intersects as olIntersects} from 'ol/extent';
 import {getProjectionTarget} from '../util/spatial_reference';
 import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
 import {
@@ -988,16 +987,18 @@ export class ProjectService implements OnDestroy {
 
     /**
      * Create a stream that signals whether a running query should be aborted because the results are no longer needed.
-     * It takes the layerId and the extent of the queried tile at the time of querying as a parameter in order to
-     * determine whether a change in the layer list or on the map view makes the results obsolete.
+     * It takes the layerId as a parameter and emits when a condition that invalidates every running query of that
+     * layer changes, i.e. the time, the session, the spatial reference or the layer list.
+     *
+     * Viewport changes are not part of this: a tile that left the viewport or a zoom level that was zoomed past
+     * depends on the tile, not on the project, and is watched per rendered frame by `TileLoader.cancelUnwanted`.
      *
      * If the layer is not registered with the project service (e.g. in the enhanced data viewer), the stream does not
      * emit when the layer is removed, only on the viewing conditions below.
      *
-     * Emits the condition that made the request obsolete, e.g. `'resolution changed'`, for
-     * diagnostics.
+     * Emits the condition that made the request obsolete, e.g. `'time changed'`, for diagnostics.
      */
-    createQueryAbortStream(layerId: number, tileExtent: Extent): Observable<string> {
+    createQueryAbortStream(layerId: number): Observable<string> {
         // create an observable that emits when the layer is removed
         const layerStream = this.layers.get(layerId);
         const layerRemovedSubject = new BehaviorSubject<boolean>(false);
@@ -1011,15 +1012,8 @@ export class ProjectService implements OnDestroy {
         // All sources emit synchronously on subscription, so `pairwise` compares every new
         // combined emission against the previous one and cancels once it deviates from the
         // conditions the request was issued under.
-        const observables: [
-            Observable<Time>,
-            Observable<ViewportSize>,
-            Observable<string>,
-            Observable<SpatialReference>,
-            Observable<boolean>,
-        ] = [
+        const observables: [Observable<Time>, Observable<string>, Observable<SpatialReference>, Observable<boolean>] = [
             this.getTimeStream(),
-            this.mapService.getViewportSizeStream(),
             this.userService.getSessionTokenStream(),
             this.getSpatialReferenceStream(),
             layerRemovedSubject,
@@ -1027,20 +1021,14 @@ export class ProjectService implements OnDestroy {
 
         return combineLatest(observables).pipe(
             pairwise(),
-            map(([initial, current]) => {
-                const [initialTime, initialViewport, initialSession, initialSref] = initial;
-                const [time, viewportSize, session, sref, layerRemoved] = current;
+            map(([initial, current]): string | undefined => {
+                const [initialTime, initialSession, initialSref] = initial;
+                const [time, session, sref, layerRemoved] = current;
 
                 // The reason is part of the emitted value, so a tile that gets aborted can be told
                 // apart from one that merely looks blank in the logs.
                 if (!time.isSame(initialTime)) {
                     return 'time changed';
-                }
-                if (viewportSize.resolution !== initialViewport.resolution) {
-                    return 'resolution changed';
-                }
-                if (!olIntersects(tileExtent, viewportSize.extent)) {
-                    return `tile extent [${tileExtent.join(', ')}] left the viewport [${viewportSize.extent.join(', ')}]`;
                 }
                 if (session !== initialSession) {
                     return 'session changed';

@@ -7,7 +7,7 @@ import {User} from '../users/user.model';
 import {firstValueFrom, NEVER, of, BehaviorSubject} from 'rxjs';
 import {CoreConfig, DEFAULT_CORE_CONFIG} from '../config.service';
 import {CreateProjectResponseDict, TimeStepDict, UUID} from '../backend/backend.model';
-import {MapService, ViewportSize, Extent} from '../map/map.service';
+import {MapService, ViewportSize} from '../map/map.service';
 import {BackendService} from '../backend/backend.service';
 import {SpatialReferenceService, WGS_84} from '../spatial-references/spatial-reference.service';
 import {first, mergeMap, tap} from 'rxjs/operators';
@@ -412,8 +412,6 @@ describe('test project methods in projectService', () => {
     });
 
     describe('#createQueryAbortStream', () => {
-        const tileExtent: Extent = [0, 0, 10, 10];
-
         let viewportSize$: BehaviorSubject<ViewportSize>;
 
         const makeProject = (time: Time, layers: Array<RasterLayer> = []): Project =>
@@ -456,45 +454,22 @@ describe('test project methods in projectService', () => {
             projectService.setProject(makeProject(new Time(moment.utc('2014-04-01 12:00:00'))));
         });
 
-        it('does not abort while the tile stays in the viewport', () => {
+        it('does not abort on a viewport change, which is watched per rendered frame instead', () => {
             let aborted = false;
-            const subscription = projectService.createQueryAbortStream(1, tileExtent).subscribe(() => (aborted = true));
+            const subscription = projectService.createQueryAbortStream(1).subscribe(() => (aborted = true));
 
-            // a pan that keeps the tile visible must not cancel the request
-            viewportSize$.next({extent: [5, 5, 105, 105], resolution: 10});
-
-            expect(aborted).toBe(false);
-            subscription.unsubscribe();
-        });
-
-        it('aborts once a pan moves the tile out of the viewport', () => {
-            let aborted = false;
-            const subscription = projectService.createQueryAbortStream(1, tileExtent).subscribe(() => (aborted = true));
-
-            // harmless pan first
-            viewportSize$.next({extent: [5, 5, 105, 105], resolution: 10});
-            expect(aborted).toBe(false);
-
-            // then a pan that fully removes the tile
+            // neither a pan that moves the tile away nor a zoom may abort here: `TileLoader.cancelUnwanted`
+            // decides that per tile, because the viewport alone cannot tell whether a tile is still wanted
             viewportSize$.next({extent: [100, 100, 200, 200], resolution: 10});
+            viewportSize$.next({extent: [100, 100, 200, 200], resolution: 20});
 
-            expect(aborted).toBe(true);
-            subscription.unsubscribe();
-        });
-
-        it('aborts on zoom', () => {
-            let aborted = false;
-            const subscription = projectService.createQueryAbortStream(1, tileExtent).subscribe(() => (aborted = true));
-
-            viewportSize$.next({extent: [0, 0, 100, 100], resolution: 20});
-
-            expect(aborted).toBe(true);
+            expect(aborted).toBe(false);
             subscription.unsubscribe();
         });
 
         it('aborts when the project time changes', () => {
             let aborted = false;
-            const subscription = projectService.createQueryAbortStream(1, tileExtent).subscribe(() => (aborted = true));
+            const subscription = projectService.createQueryAbortStream(1).subscribe(() => (aborted = true));
 
             projectService.setProject(makeProject(new Time(moment.utc('2014-04-02 12:00:00'))));
 
@@ -506,7 +481,7 @@ describe('test project methods in projectService', () => {
             projectService.setProject(makeProject(new Time(moment.utc('2014-04-01 12:00:00')), [makeLayer()]));
 
             let aborted = false;
-            const subscription = projectService.createQueryAbortStream(1, tileExtent).subscribe(() => (aborted = true));
+            const subscription = projectService.createQueryAbortStream(1).subscribe(() => (aborted = true));
 
             // setting a project without the layer completes its layer stream
             projectService.setProject(makeProject(new Time(moment.utc('2014-04-01 12:00:00'))));

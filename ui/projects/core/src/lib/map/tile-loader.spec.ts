@@ -7,11 +7,13 @@ import TileState from 'ol/TileState';
 import TileGrid from 'ol/tilegrid/TileGrid';
 import TileWMS from 'ol/source/TileWMS';
 import {FrameState} from 'ol/Map';
+import View from 'ol/View';
 import {get as getProjection, transformExtent} from 'ol/proj';
 import {Observable, Subject} from 'rxjs';
+import {olExtentToTuple} from '@geoengine/common';
 
 import {AbortableTileLayer} from './abortable-tile-layer';
-import {TileLoadState, TileLoader, tileExtentInViewProjection} from './tile-loader';
+import {TileFrame, TileInView, TileLoadState, TileLoader, currentViewport, tileExtentInViewProjection} from './tile-loader';
 
 /** Exposes the renderer's protected tile lookup so tests can exercise its real caches without drawing a map. */
 interface TileRendererAccess {
@@ -25,7 +27,7 @@ interface FakeTile {
     load: ReturnType<typeof vi.fn>;
 }
 
-const makeTile = (image: HTMLImageElement | null = document.createElement('img')): FakeTile => {
+const makeTile = (image: HTMLImageElement | null = document.createElement('img'), tileCoord: number[] = [0, 0, 0]): FakeTile => {
     // The loader reads the tile state to tell a retry from a fresh request and to skip released
     // tiles, so the double has to keep track of it like OpenLayers does.
     let state: number = TileState.LOADING;
@@ -37,8 +39,8 @@ const makeTile = (image: HTMLImageElement | null = document.createElement('img')
     const load = vi.fn();
     return {
         tile: {
-            getTileCoord: () => [0, 0, 0],
-            getKey: () => '0/0/0',
+            getTileCoord: () => tileCoord,
+            getKey: () => tileCoord.join('/'),
             getImage: () => image,
             getState: () => state,
             setState,
@@ -726,6 +728,191 @@ describe('TileLoader', () => {
         expect(signals[0].aborted).toBe(true);
         expect(revokeObjectUrl).toHaveBeenCalledWith('blob:metadata');
     });
+
+    describe('cancelUnwanted', () => {
+        /** A tile that is in view at `[0, 0, 10, 10]` and of the given zoom level. */
+        const visibleTile = (zoom: number): FakeTile => makeTile(undefined, [zoom, 0, 0]);
+
+        it('cancels the requests of tiles that left the viewport', async () => {
+            const signals: AbortSignal[] = [];
+            stubHangingFetch(signals);
+
+            const {tile, setState} = makeTile();
+            const loader = new TileLoader({
+                authHeaders: (): Record<string, string> => authHeaders,
+                tileExtentInView: (): TileInView => ({extent: [0, 0, 10, 10], zoom: 3}),
+            });
+            loader.load(tile, 'https://example.com/tile');
+
+            loader.cancelUnwanted([100, 100, 200, 200], 3);
+
+            await vi.waitFor(() => expect(signals[0].aborted).toBe(true));
+            await vi.waitFor(() => expect(setState).toHaveBeenCalledWith(TileState.IDLE));
+        });
+
+        it('keeps the requests of tiles that are still in the viewport', () => {
+            const signals: AbortSignal[] = [];
+            stubHangingFetch(signals);
+
+            const loader = new TileLoader({
+                authHeaders: (): Record<string, string> => authHeaders,
+                tileExtentInView: (): TileInView => ({extent: [0, 0, 10, 10], zoom: 3}),
+            });
+            loader.load(makeTile().tile, 'https://example.com/tile');
+
+            loader.cancelUnwanted([0, 0, 100, 100], 3);
+            loader.cancelUnwanted([-100, -100, 100, 100], undefined);
+
+            expect(signals[0].aborted).toBe(false);
+        });
+
+        it('cancels the requests of tiles whose zoom level was zoomed in', async () => {
+            const signals: AbortSignal[] = [];
+            stubHangingFetch(signals);
+
+            const loader = new TileLoader({
+                authHeaders: (): Record<string, string> => authHeaders,
+                tileExtentInView: (): TileInView => ({extent: [0, 0, 10, 10], zoom: 1}),
+            });
+            loader.load(makeTile().tile, 'https://example.com/tile');
+
+            loader.cancelUnwanted([0, 0, 100, 100], 2);
+
+            await vi.waitFor(() => expect(signals[0].aborted).toBe(true));
+        });
+
+        it('keeps the requests of tiles of the current and the next zoom level', () => {
+            const signals: AbortSignal[] = [];
+            stubHangingFetch(signals);
+
+            const loader = new TileLoader({
+                authHeaders: (): Record<string, string> => authHeaders,
+                tileExtentInView: (tile): TileInView => ({extent: [0, 0, 10, 10], zoom: tile.getTileCoord()[0]}),
+            });
+            loader.load(makeTile(undefined, [2, 0, 0]).tile, 'https://example.com/current');
+            loader.load(makeTile(undefined, [3, 0, 0]).tile, 'https://example.com/next');
+
+            loader.cancelUnwanted([0, 0, 100, 100], 2);
+
+            expect(signals.map((signal) => signal.aborted)).toEqual([false, false]);
+        });
+
+        it('does not cancel by zoom level when the zoom levels cannot be compared', () => {
+            const signals: AbortSignal[] = [];
+            stubHangingFetch(signals);
+
+            const loader = new TileLoader({
+                authHeaders: (): Record<string, string> => authHeaders,
+                tileExtentInView: (): TileInView => ({extent: [0, 0, 10, 10]}),
+            });
+            loader.load(makeTile().tile, 'https://example.com/tile');
+
+            loader.cancelUnwanted([0, 0, 100, 100], 5);
+
+            expect(signals[0].aborted).toBe(false);
+        });
+
+        it('does not cancel a tile whose extent is unknown', () => {
+            const signals: AbortSignal[] = [];
+            stubHangingFetch(signals);
+
+            const loader = new TileLoader({authHeaders: (): Record<string, string> => authHeaders});
+            loader.load(makeTile().tile, 'https://example.com/tile');
+
+            loader.cancelUnwanted([100, 100, 200, 200], 0);
+
+            expect(signals[0].aborted).toBe(false);
+        });
+
+        it('keeps a tile whose extent cannot be placed in the viewport', () => {
+            const signals: AbortSignal[] = [];
+            stubHangingFetch(signals);
+
+            const loader = new TileLoader({
+                authHeaders: (): Record<string, string> => authHeaders,
+                tileExtentInView: (): TileInView => ({extent: [Infinity, Infinity, -Infinity, -Infinity], zoom: 5}),
+            });
+            loader.load(makeTile().tile, 'https://example.com/tile');
+
+            loader.cancelUnwanted([0, 0, 100, 100], 5);
+
+            expect(signals[0].aborted).toBe(false);
+        });
+
+        it('gives up on a pending retry of a zoom level that was zoomed in', async () => {
+            vi.useFakeTimers();
+            const fetchMock = vi.fn().mockResolvedValue(unavailableResponse);
+            vi.stubGlobal('fetch', fetchMock);
+
+            const url = 'https://example.com/tile';
+            const {tile, load, setState} = visibleTile(1);
+            const loader = new TileLoader({
+                authHeaders: (): Record<string, string> => authHeaders,
+                tileExtentInView: (): TileInView => ({extent: [0, 0, 10, 10], zoom: 1}),
+            });
+            load.mockImplementation(() => loader.load(tile, url));
+
+            // the first attempt fails transiently, so the retry is now waiting
+            loader.load(tile, url);
+            await vi.advanceTimersByTimeAsync(0);
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+
+            loader.cancelUnwanted([0, 0, 100, 100], 2);
+
+            expect(setState).toHaveBeenCalledWith(TileState.IDLE);
+            await vi.advanceTimersByTimeAsync(10000);
+            expect(load).not.toHaveBeenCalled();
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+        });
+
+        it('keeps a pending retry of the current zoom level', async () => {
+            vi.useFakeTimers();
+            const fetchMock = vi.fn().mockResolvedValue(unavailableResponse);
+            vi.stubGlobal('fetch', fetchMock);
+
+            const url = 'https://example.com/tile';
+            const {tile, load} = visibleTile(2);
+            const loader = new TileLoader({
+                authHeaders: (): Record<string, string> => authHeaders,
+                tileExtentInView: (): TileInView => ({extent: [0, 0, 10, 10], zoom: 2}),
+            });
+            load.mockImplementation(() => loader.load(tile, url));
+
+            loader.load(tile, url);
+            await vi.advanceTimersByTimeAsync(0);
+
+            loader.cancelUnwanted([0, 0, 100, 100], 2);
+
+            // the retry is not given up on, so it goes on retrying until the attempt budget runs out
+            await vi.advanceTimersByTimeAsync(10000);
+            expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+        });
+
+        it('reports the condition a request was cancelled for', () => {
+            const signals: AbortSignal[] = [];
+            stubHangingFetch(signals);
+
+            const onDiagnostic = vi.fn();
+            const loader = new TileLoader({
+                authHeaders: (): Record<string, string> => authHeaders,
+                // the tile at x=0 is still in the viewport, the one at x=1 left it
+                tileExtentInView: (tile): TileInView => ({
+                    extent: tile.getTileCoord()[1] === 0 ? [0, 0, 10, 10] : [1000, 1000, 1010, 1010],
+                    zoom: 1,
+                }),
+                onDiagnostic,
+            });
+            loader.load(makeTile(undefined, [1, 0, 0]).tile, 'https://example.com/zoomed');
+            loader.load(makeTile(undefined, [1, 1, 0]).tile, 'https://example.com/panned');
+
+            loader.cancelUnwanted([0, 0, 100, 100], 3);
+
+            expect(onDiagnostic.mock.calls.map(([diagnostic]) => diagnostic.reason)).toEqual([
+                'zoom level was zoomed in',
+                'tile extent left the viewport',
+            ]);
+        });
+    });
 });
 
 describe('tileExtentInViewProjection', () => {
@@ -756,5 +943,93 @@ describe('tileExtentInViewProjection', () => {
         expect(transformed.every(Number.isFinite)).toBe(true);
         expect(transformed[1]).toBeGreaterThan(-Infinity);
         expect(transformed[3]).toBeLessThan(Infinity);
+    });
+});
+
+describe('currentViewport', () => {
+    const size = [800, 600];
+    /** A Web Mercator source with the default grid, and a view in its own projection. */
+    const setup = (): {source: TileWMS; grid: TileGrid} => {
+        const source = new TileWMS({
+            url: 'https://example.com/wms',
+            params: {LAYERS: 'test'},
+            projection: 'EPSG:3857',
+        });
+        const grid = source.getTileGridForProjection(source.getProjection()!);
+        return {source, grid};
+    };
+
+    /** Builds the frame data `currentViewport` reads from a real view. */
+    const frameOf = (view: View): TileFrame => ({
+        extent: view.calculateExtent(size),
+        viewState: view.getState(),
+    });
+
+    it('reports the extent of the view', () => {
+        const {source, grid} = setup();
+        const view = new View({projection: 'EPSG:3857', center: [0, 0], resolution: 156543.03392804097});
+
+        const {extent} = currentViewport(source, frameOf(view), grid);
+
+        // the same extent the view measures itself with, not an approximation of it
+        expect(extent).toEqual(olExtentToTuple(view.calculateExtent(size)));
+        expect(extent[0]).toBeLessThan(-60000000);
+    });
+
+    it('reports the zoom level of the view instead of its resolution', () => {
+        const {source, grid} = setup();
+        const view = new View({projection: 'EPSG:3857', center: [0, 0], resolution: 156543.03392804097});
+
+        expect(currentViewport(source, frameOf(view), grid).zoom).toBe(0);
+    });
+
+    it('keeps the zoom level while the view moves within it', () => {
+        const {source, grid} = setup();
+        // a pinch produces a long series of resolutions inside one zoom level, and cancelling on
+        // every one of them would abort the tiles the frame is about to ask for
+        const view = new View({projection: 'EPSG:3857', center: [0, 0], resolution: 156543.03392804097});
+        const zoomAt = (factor: number): number | undefined => {
+            view.setResolution(156543.03392804097 * factor);
+            return currentViewport(source, frameOf(view), grid).zoom;
+        };
+
+        const withinOneLevel = [1, 0.95, 0.9, 0.85, 0.8].map(zoomAt);
+
+        expect(withinOneLevel.every((zoom) => Number.isInteger(zoom))).toBe(true);
+        expect(new Set(withinOneLevel).size).toBe(1);
+        // OpenLevels splits a level at the arithmetic mean of two resolutions, so leaving one
+        // needs a resolution below 0.75 of it. Without such a change nothing is ever cancelled.
+        expect(zoomAt(0.7)).not.toBe(withinOneLevel[0]);
+    });
+
+    it('leaves the zoom level out when the tile coordinates belong to another grid', () => {
+        const {source, grid} = setup();
+        // a view in another projection gets a default grid, whose zoom levels are not the ones of
+        // the tile coordinates, so comparing them would cancel tiles that are on screen
+        const view = new View({projection: 'EPSG:4326', center: [0, 0], resolution: 1});
+
+        expect(currentViewport(source, frameOf(view), grid).zoom).toBeUndefined();
+        expect(currentViewport(source, frameOf(view), grid).extent).toEqual(olExtentToTuple(view.calculateExtent(size)));
+    });
+
+    it('reports the coarser zoom level during a zoom-out animation', () => {
+        const {source, grid} = setup();
+        // z1 → z0: OpenLayers pre-queues z0 tiles for the destination extent, and they must not
+        // be cancelled while the gesture is still heading there
+        const view = new View({projection: 'EPSG:3857', center: [0, 0], resolution: 78271.51696402048});
+        view.animate({resolution: 156543.03392804097, duration: 100});
+
+        expect(currentViewport(source, frameOf(view), grid).zoom).toBe(0);
+    });
+
+    it('widens the extent to cover the destination of an animation', () => {
+        const {source, grid} = setup();
+        const frame: TileFrame = {
+            extent: [0, 0, 10, 10],
+            nextExtent: [0, 0, 20, 20],
+            viewState: {resolution: 1, projection: source.getProjection()!},
+        };
+
+        expect(currentViewport(source, frame, grid).extent).toEqual([0, 0, 20, 20]);
     });
 });
