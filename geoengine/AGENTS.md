@@ -23,11 +23,27 @@ Tests that touch the database need a local Postgres user/db `geoengine`/`geoengi
 Test config lives in `Settings-test.toml`, and each test gets its own temporary schema.
 Test fixtures (rasters, vectors, provider and layer definitions, mocked HTTP responses) are in `test_data/` in this directory, not the repo-root `test-data/`.
 Runtime config is `Settings-default.toml`, overridden by `Settings.toml` and `GEOENGINE__SECTION__KEY` env vars.
-If you hit `OS Error 12` / `WouldBlock`, raise `vm.max_map_count`.
+If you hit `OS Error 12` / `WouldBlock`, propose to the user to increase `vm.max_map_count`.
+
+## Running a clean instance for manual testing
+
+`just backend run` starts a server on `localhost:3030` (API under `/api`, initial user `admin@localhost`/`adminadmin`).
+The server always reads `Settings-default.toml` and `Settings.toml` from this directory; there is no option to pick another file.
+`Settings-test.toml` is only used by `cargo test`.
+To get a fresh instance in its own schema that does not touch the user's data, override the settings with env vars:
+
+```bash
+GEOENGINE__POSTGRES__SCHEMA=agent GEOENGINE__POSTGRES__CLEAR_DATABASE_ON_START=true just backend run
+```
+
+Every start drops and recreates the `agent` schema, so restart the server before each test run and do not rely on data from earlier runs.
+The server refuses to start if `clear_database_on_start` is `true` for a schema that was created with `false`, so never point it at the user's schema.
+If port 3030 is taken, also set `GEOENGINE__WEB__BIND_ADDRESS=127.0.0.1:3031` (the UI's `local` proxy expects 3030).
 
 ## Crate architecture
 
-Dependency direction: `datatypes` → `operators` → `services`. The others support them.
+Core layering: `services` depends on `operators`, which depends on `datatypes`; lower crates never depend on higher ones.
+Supporting crates: `expression` (used by `operators` and `services`), `macros` (used by `services`) and `crs-constants` (used by `datatypes`).
 
 - **`datatypes`**: primitives (time intervals, bounding boxes, spatial references), feature collections (Arrow-backed), raster tiles/grids, plots.
 - **`operators`**: the processing engine. `engine/` defines the operator lifecycle: serializable operator definitions (`RasterOperator`/`VectorOperator`/`PlotOperator`, combined in `TypedOperator`) are initialized against an `ExecutionContext` (which yields result descriptors) and then produce query processors that return async streams of tiles or feature chunks. Implementations live in `source/` (GDAL, OGR, CSV), `processing/`, `plot/` and `adapters/` (stream combinators). There is also `cache/` and `machine_learning/` (ONNX via `ort`). GDAL reads can run out-of-process through the `gdalsource-process` binary (`src/bin/`), managed by a process pool (`[gdal_process_pool]` settings).
@@ -38,6 +54,7 @@ Dependency direction: `datatypes` → `operators` → `services`. The others sup
   - `contexts/`: `PostgresContext`/session handling and `migrations/`.
   - `datasets/` (internal datasets, uploads, `external/` data providers such as STAC, GBIF, Pangaea, NetCDF-CF, Aruna, Copernicus, Wildlive), `layers/` (layer collections, provider registry), `workflows/`, `projects/`, `permissions/`, `users/` (incl. OIDC), `quota/`, `tasks/`, `machine_learning/`.
 - **`macros`** (`geoengine-macros`): `#[ge_context::test]` spins up a DB-backed app/context for service tests, with options like `user = "admin"`, `test_execution = "serial"`, `tiling_spec = …`. Also `#[api_operator]` and `#[type_tag]` for OpenAPI-friendly tagged types.
+- **`crs-constants`**: zero-dependency static CRS metadata (EPSG bounds), generated from PROJ's EPSG database.
 
 ## Database migrations
 
