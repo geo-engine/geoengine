@@ -43,6 +43,7 @@ use geoengine_datatypes::{
     primitives::{FeatureDataType, Measurement, TimeInterval, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
+use geoengine_operators::util::GdalConfigOptions;
 use geoengine_operators::{
     engine::{
         OperatorName, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
@@ -612,6 +613,14 @@ struct MdArrayShape {
 }
 
 fn md_array_shape(path: &Path, tile: &AddDatasetMdTile) -> Option<MdArrayShape> {
+    // The tile's config options are what lets GDAL read `.nc` over `/vsicurl` at all, so a
+    // check that opens the file has to run in the same GDAL environment as the read does.
+    // Without this guard every remote row was rejected as unopenable while reading it worked.
+    let params: geoengine_operators::source::GdalDatasetParameters = tile.params.clone().into();
+    let _configs = params
+        .gdal_config_options_for_request()
+        .map(|configs| GdalConfigOptions::new(&configs).expect("GDAL config options are valid"));
+
     let dataset = gdal_open_dataset_ex(
         path,
         DatasetOptions {
@@ -657,19 +666,38 @@ fn md_array_shape(path: &Path, tile: &AddDatasetMdTile) -> Option<MdArrayShape> 
     })
 }
 
+/// The path an MD row's array is opened with.
+///
+/// [`validate_tile_file_path`] resolves volume/upload rows against the data path root and
+/// returns an **empty** path for external data, whose rows carry their own absolute
+/// `/vsicurl` URL in `params.file_path` - which is what the read path opens. Using the
+/// resolved path unconditionally opened `""` and rejected every remote row as unopenable
+/// while reading it worked.
+fn md_tile_open_path(
+    tile: &AddDatasetMdTile,
+    data_path: &DataPath,
+    absolute_path: &Path,
+) -> PathBuf {
+    if matches!(data_path, DataPath::External) {
+        tile.params.file_path.clone()
+    } else {
+        absolute_path.to_path_buf()
+    }
+}
+
 /// Checks a tile's declared metadata against the array it names.
 ///
 /// This is the only place a wrong `arrayName`, `leadingPrefix`, grid, slice count or CRS can
 /// be caught, so it runs even for external data - where the file is not opened elsewhere.
 fn check_md_tile_against_array(
     tile: &AddDatasetMdTile,
-    absolute_path: &Path,
+    open_path: &Path,
     dataset_descriptor: &RasterResultDescriptor,
 ) -> Result<(), AddDatasetMdTilesError> {
     let file_path = tile.params.file_path.to_string_lossy().to_string();
 
-    let shape = md_array_shape(absolute_path, tile).ok_or(
-        AddDatasetMdTilesError::CannotOpenMdTileFile {
+    let shape =
+        md_array_shape(open_path, tile).ok_or(AddDatasetMdTilesError::CannotOpenMdTileFile {
             source: geoengine_operators::error::Error::InvalidOperatorSpec {
                 reason: format!(
                     "MD array '{}{}' could not be opened",
@@ -681,8 +709,7 @@ fn check_md_tile_against_array(
                 ),
             },
             file_path: file_path.clone(),
-        },
-    )?;
+        })?;
 
     let slices = tile.time_steps.len();
     if shape.z != slices {
@@ -801,7 +828,11 @@ fn validate_md_tile(
     );
 
     if check_against_array {
-        check_md_tile_against_array(tile, &absolute_path, dataset_descriptor)?;
+        check_md_tile_against_array(
+            tile,
+            &md_tile_open_path(tile, data_path, &absolute_path),
+            dataset_descriptor,
+        )?;
     }
 
     Ok(())
@@ -6938,6 +6969,37 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    /// The path an MD row's array is opened with. Getting this wrong opened `""` for every
+    /// remote row and rejected it as unopenable, while reading the same row worked.
+    #[test]
+    fn it_opens_an_external_md_row_at_its_own_url() {
+        let (_, tiles) = md_dataset_meta(
+            &[MdRow::of("md/time_series.nc", "temperature", 0, 8)],
+            vec![api_band("temperature")],
+        );
+        let mut tile = tiles[0].clone();
+        tile.params.file_path = "/vsicurl/https://example.invalid/temperature.nc".into();
+
+        // `validate_tile_file_path` hands back an empty path for external data
+        let resolved =
+            validate_tile_file_path(&tile.params.file_path, &DataPath::External, Path::new(""))
+                .expect("a /vsicurl URL is a valid external path");
+        assert!(resolved.as_os_str().is_empty(), "{resolved:?}");
+
+        assert_eq!(
+            md_tile_open_path(&tile, &DataPath::External, &resolved),
+            Path::new("/vsicurl/https://example.invalid/temperature.nc"),
+            "an external row is opened at its own URL, not at the empty resolved path"
+        );
+
+        // a volume row is opened at the path resolved against the volume root
+        let volume = DataPath::Volume(VolumeName("test_data".to_string()));
+        assert_eq!(
+            md_tile_open_path(&tile, &volume, Path::new("/data/temperature.nc")),
+            Path::new("/data/temperature.nc"),
+        );
     }
 
     /// The array check is the only thing standing between a wrong `arrayName` and a dataset
