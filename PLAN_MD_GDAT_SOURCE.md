@@ -576,3 +576,30 @@ the generated client models, and the 22 probe tests.
 Two traps the example shows: a tile's `geoTransform` is the grid **as stored** while the
 descriptor's `spatialGrid` is the grid **as presented** (north-up, `-180..180` when `wrap`),
 and `timeSteps` is one interval **per z slice**, not one for the file.
+
+### Proven: the metadata is stateable without the probe
+
+`../BioIS/notebooks/nexgddp_cmip6_ingest_manual.ipynb` is the probe notebook with
+`probe_md_metadata` replaced by `declare_md_dataset`, which writes every field out from
+knowledge of the dataset. It ran green against real NEX-GDDP-CMIP6 on S3 (3 files per
+scenario, `historical` and `ssp245`):
+
+* 1096 daily slices per dataset, `1950-01-01 .. 1952-12-31`, every tile stamped at the
+  stated **noon** - the exact-stamp assert pins the interval construction, so a midnight
+  drift would fail.
+* The read-back matches the probe run **exactly**: 30.7% of the dataset area carries data,
+  12.6% of returned pixels are values, 41.2% structural coverage, 8 tiles per day, values
+  216-319 K. Same grid, same time axis, same file concatenation.
+* The one difference is the band name: the probe emits `band` (its single-array path calls
+  `new_single_band()`), the clone states `Daily Maximum Near-Surface Air Temperature` plus
+  its unit. That is the band-name gap above, and the probe branch should adopt it.
+
+What the importer has to know to state it: the grid (0.25 degree, 1440x600, lon 0..360,
+lat ascending), the two geo transforms (stored south-up vs presented north-up, both origins
+being cell *edges*), and that CF `time` is `days since 1850-01-01` stamped at **noon** with
+one file per calendar year. Everything else follows.
+
+Two defects in the array check surfaced here and are fixed: it opened `""` for external rows
+(`validate_tile_file_path` returns an empty path for `DataPath::External`) and opened the
+file without the tile's `gdal_config_options`, so every remote row was rejected as
+unopenable while reading it worked.
