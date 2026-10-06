@@ -43,7 +43,7 @@ The Rust server is the single source of truth for the API:
 
 CI (`just repo lint-generated-code`) regenerates the spec, clients and www, then fails on any git diff. **After any API-visible backend change, regenerate `openapi.json` and the API clients and commit them.** Never hand-edit `openapi.json` or the files in `api-clients/*/`.
 
-Versions are kept consistent across Cargo, `python/pyproject.toml`, `api-clients/.generation/config.ini` and `ui/package.json`. Bump them all with `just repo increase-version-number`.
+Versions are kept consistent across Cargo, `python/pyproject.toml`, `api-clients/.generation/config.ini` and `ui/package.json`. You can bump them all with `just repo increase-version-number`.
 
 ## Repo-wide lint
 
