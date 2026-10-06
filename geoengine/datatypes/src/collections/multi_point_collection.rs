@@ -377,7 +377,7 @@ mod tests {
                 );
                 map
             },
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -408,7 +408,7 @@ mod tests {
                 TimeInterval::new_unchecked(2, 3),
             ],
             HashMap::new(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -518,7 +518,7 @@ mod tests {
                 TimeInterval::new_unchecked(2, 3),
             ],
             HashMap::new(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -548,7 +548,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -568,7 +568,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -752,7 +752,7 @@ mod tests {
                 map.insert("number".into(), FeatureData::Float(vec![0., 1.]));
                 map
             },
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -775,7 +775,7 @@ mod tests {
                 map.insert("number".into(), FeatureData::Float(vec![0., 1.]));
                 map
             },
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -874,7 +874,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -940,7 +940,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -979,7 +979,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1012,7 +1012,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1051,7 +1051,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1088,7 +1088,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1137,7 +1137,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1170,7 +1170,7 @@ mod tests {
                 );
                 map
             },
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1214,7 +1214,7 @@ mod tests {
                 );
                 map
             },
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1239,7 +1239,7 @@ mod tests {
                 );
                 map
             },
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1253,17 +1253,18 @@ mod tests {
 
     #[test]
     fn reproject_epsg4326_epsg900913() {
-        use crate::operations::reproject::{CoordinateProjection, CoordinateProjector};
-        use crate::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
+        use crate::spatial_reference::{
+            DefaultCoordinateProjector, SpatialReference, SpatialReferenceAuthority,
+        };
 
         use crate::util::well_known_data::{
-            COLOGNE_EPSG_900_913, COLOGNE_EPSG_4326, HAMBURG_EPSG_900_913, HAMBURG_EPSG_4326,
-            MARBURG_EPSG_900_913, MARBURG_EPSG_4326,
+            COLOGNE_EPSG_3857, COLOGNE_EPSG_4326, HAMBURG_EPSG_3857, HAMBURG_EPSG_4326,
+            MARBURG_EPSG_3857, MARBURG_EPSG_4326,
         };
 
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let projector = CoordinateProjector::from_known_srs(from, to).unwrap();
+        let projector = DefaultCoordinateProjector::new(from, to).unwrap();
 
         let pc = MultiPointCollection::from_data(
             MultiPoint::many(vec![
@@ -1284,7 +1285,7 @@ mod tests {
                 );
                 map
             },
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1292,12 +1293,12 @@ mod tests {
 
         let coords = proj_pc.coordinates();
         assert_eq!(coords.len(), 3);
-        assert!(approx_eq!(f64, coords[0].x, MARBURG_EPSG_900_913.x));
-        assert!(approx_eq!(f64, coords[0].y, MARBURG_EPSG_900_913.y));
-        assert!(approx_eq!(f64, coords[1].x, COLOGNE_EPSG_900_913.x));
-        assert!(approx_eq!(f64, coords[1].y, COLOGNE_EPSG_900_913.y));
-        assert!(approx_eq!(f64, coords[2].x, HAMBURG_EPSG_900_913.x));
-        assert!(approx_eq!(f64, coords[2].y, HAMBURG_EPSG_900_913.y));
+        assert!(approx_eq!(f64, coords[0].x, MARBURG_EPSG_3857.x));
+        assert!(approx_eq!(f64, coords[0].y, MARBURG_EPSG_3857.y));
+        assert!(approx_eq!(f64, coords[1].x, COLOGNE_EPSG_3857.x));
+        assert!(approx_eq!(f64, coords[1].y, COLOGNE_EPSG_3857.y));
+        assert!(approx_eq!(f64, coords[2].x, HAMBURG_EPSG_3857.x));
+        assert!(approx_eq!(f64, coords[2].y, HAMBURG_EPSG_3857.y));
 
         let offsets = proj_pc.feature_offsets();
         assert_eq!(offsets.len(), 3);
@@ -1306,17 +1307,18 @@ mod tests {
 
     #[test]
     fn reproject_epsg4326_epsg900913_collections_equal() {
-        use crate::operations::reproject::{CoordinateProjection, CoordinateProjector};
-        use crate::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
+        use crate::spatial_reference::{
+            DefaultCoordinateProjector, SpatialReference, SpatialReferenceAuthority,
+        };
 
         use crate::util::well_known_data::{
-            COLOGNE_EPSG_900_913, COLOGNE_EPSG_4326, HAMBURG_EPSG_900_913, HAMBURG_EPSG_4326,
-            MARBURG_EPSG_900_913, MARBURG_EPSG_4326,
+            COLOGNE_EPSG_3857, COLOGNE_EPSG_4326, HAMBURG_EPSG_3857, HAMBURG_EPSG_4326,
+            MARBURG_EPSG_3857, MARBURG_EPSG_4326,
         };
 
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let projector = CoordinateProjector::from_known_srs(from, to).unwrap();
+        let projector = DefaultCoordinateProjector::new(from, to).unwrap();
 
         let pc = MultiPointCollection::from_data(
             MultiPoint::many(vec![
@@ -1337,13 +1339,13 @@ mod tests {
                 );
                 map
             },
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
         let expected_points = MultiPoint::many(vec![
-            vec![MARBURG_EPSG_900_913, COLOGNE_EPSG_900_913],
-            vec![HAMBURG_EPSG_900_913],
+            vec![MARBURG_EPSG_3857, COLOGNE_EPSG_3857],
+            vec![HAMBURG_EPSG_3857],
         ])
         .unwrap();
 
@@ -1400,7 +1402,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
         let mut iter = collection.into_iter();
@@ -1454,7 +1456,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1491,7 +1493,7 @@ mod tests {
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
         let mut iter = collection.geometries();
@@ -1522,7 +1524,7 @@ mod tests {
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
         let mut iter = collection.geometries();
@@ -1558,7 +1560,7 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 

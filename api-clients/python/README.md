@@ -350,8 +350,6 @@ Class | Method | HTTP request | Description
  - [LayerProviderListing](docs/LayerProviderListing.md)
  - [LayerResource](docs/LayerResource.md)
  - [LayerVisibility](docs/LayerVisibility.md)
- - [LegacyTypedOperator](docs/LegacyTypedOperator.md)
- - [LegacyTypedOperatorOperator](docs/LegacyTypedOperatorOperator.md)
  - [LineSimplification](docs/LineSimplification.md)
  - [LineSimplificationAlgorithm](docs/LineSimplificationAlgorithm.md)
  - [LineSimplificationParameters](docs/LineSimplificationParameters.md)
@@ -438,6 +436,7 @@ Class | Method | HTTP request | Description
  - [PointInPolygonFilterSource](docs/PointInPolygonFilterSource.md)
  - [PointSymbology](docs/PointSymbology.md)
  - [PolygonSymbology](docs/PolygonSymbology.md)
+ - [ProcessingGraph](docs/ProcessingGraph.md)
  - [Project](docs/Project.md)
  - [ProjectLayer](docs/ProjectLayer.md)
  - [ProjectListing](docs/ProjectListing.md)
@@ -519,6 +518,7 @@ Class | Method | HTTP request | Description
  - [StacApiRetries](docs/StacApiRetries.md)
  - [StacAssetBand](docs/StacAssetBand.md)
  - [StacDataProviderDefinition](docs/StacDataProviderDefinition.md)
+ - [StacProviderAuthentication](docs/StacProviderAuthentication.md)
  - [StacProviderDataset](docs/StacProviderDataset.md)
  - [StacProviderDatasetBand](docs/StacProviderDatasetBand.md)
  - [StacProviderS3Config](docs/StacProviderS3Config.md)
@@ -630,7 +630,6 @@ Class | Method | HTTP request | Description
  - [WmsResponseFormat](docs/WmsResponseFormat.md)
  - [WmsService](docs/WmsService.md)
  - [WmsVersion](docs/WmsVersion.md)
- - [Workflow](docs/Workflow.md)
  - [WrappedPlotOutput](docs/WrappedPlotOutput.md)
 
 

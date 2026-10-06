@@ -1,29 +1,37 @@
-use super::datatypes::{
-    CacheTtlSeconds, DataId, DataProviderId, DatasetId, GdalConfigOption, RasterDataType,
-    SpatialReference, SpatialResolution, TimeGranularity,
+use crate::{
+    api::model::{
+        datatypes::{
+            CacheTtlSeconds, DataId, DataProviderId, DatasetId, GdalConfigOption, LayerId,
+            MlModelName, RasterDataType, SpatialReference, SpatialResolution, TimeGranularity,
+        },
+        operators::{
+            GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
+            MlModelMetadata, MockMetaData, OgrMetaData, SpatialGridDescriptor, TimeDimension,
+            TypedResultDescriptor,
+        },
+        processing_graphs::ProcessingGraph,
+    },
+    datasets::{
+        DatasetName,
+        external::{GdalRetries, WildliveDataConnectorAuth},
+        storage::validate_tags,
+        upload::{UploadId, UploadRootPath, VolumeName, Volumes},
+    },
+    error::{self, Error, Result},
+    layers::layer::{Property, ProviderLayerId},
+    projects::Symbology,
+    quota::ComputationId,
+    util::{Secret, oidc::RefreshToken, parsing::deserialize_base_url},
 };
-use super::operators::TypedResultDescriptor;
-use crate::api::model::datatypes::MlModelName;
-use crate::api::model::operators::{
-    GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
-    MlModelMetadata, MockMetaData, OgrMetaData, SpatialGridDescriptor, TimeDimension,
-};
-use crate::datasets::DatasetName;
-use crate::datasets::external::{GdalRetries, WildliveDataConnectorAuth};
-use crate::datasets::storage::validate_tags;
-use crate::datasets::upload::{UploadId, UploadRootPath, VolumeName, Volumes};
-use crate::error::{Error, Result};
-use crate::projects::Symbology;
-use crate::quota::ComputationId;
-use crate::util::Secret;
-use crate::util::oidc::RefreshToken;
-use crate::util::parsing::deserialize_base_url;
 use actix_http::header::{HeaderName, HeaderValue, InvalidHeaderValue, TryIntoHeaderPair};
-use geoengine_datatypes::primitives::DateTime;
-use geoengine_datatypes::util::test::TestDefault;
+use geoengine_datatypes::{primitives::DateTime, util::test::TestDefault};
 use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use snafu::ResultExt;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 use url::Url;
 use utoipa::ToSchema;
 use validator::{Validate, ValidationErrors};
@@ -340,7 +348,7 @@ pub struct ArunaDataProviderDefinition {
     pub api_token: String,
     pub filter_label: String,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<ArunaDataProviderDefinition>
@@ -356,7 +364,7 @@ impl From<ArunaDataProviderDefinition>
             project_id: value.project_id,
             api_token: value.api_token,
             filter_label: value.filter_label,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -375,7 +383,7 @@ impl From<crate::datasets::external::aruna::ArunaDataProviderDefinition>
             project_id: value.project_id,
             api_token: SECRET_REPLACEMENT.to_string(),
             filter_label: value.filter_label,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -450,7 +458,7 @@ pub struct EbvPortalDataProviderDefinition {
     #[schema(value_type = String)]
     pub overviews: PathBuf,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<EbvPortalDataProviderDefinition>
@@ -464,7 +472,7 @@ impl From<EbvPortalDataProviderDefinition>
             base_url: value.base_url,
             data: value.data,
             overviews: value.overviews,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -481,7 +489,7 @@ impl From<crate::datasets::external::netcdfcf::EbvPortalDataProviderDefinition>
             base_url: value.base_url,
             data: value.data,
             overviews: value.overviews,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -500,7 +508,7 @@ pub struct NetCdfCfDataProviderDefinition {
     #[schema(value_type = String)]
     pub overviews: PathBuf,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<NetCdfCfDataProviderDefinition>
@@ -513,7 +521,7 @@ impl From<NetCdfCfDataProviderDefinition>
             priority: value.priority,
             data: value.data,
             overviews: value.overviews,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -529,7 +537,7 @@ impl From<crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition>
             priority: value.priority,
             data: value.data,
             overviews: value.overviews,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -542,7 +550,7 @@ pub struct PangaeaDataProviderDefinition {
     pub description: String,
     pub priority: Option<i16>,
     pub base_url: Url,
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<PangaeaDataProviderDefinition>
@@ -554,7 +562,7 @@ impl From<PangaeaDataProviderDefinition>
             description: value.description,
             priority: value.priority,
             base_url: value.base_url,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -569,7 +577,7 @@ impl From<crate::datasets::external::pangaea::PangaeaDataProviderDefinition>
             description: value.description,
             priority: value.priority,
             base_url: value.base_url,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -586,7 +594,7 @@ pub struct EdrDataProviderDefinition {
     pub base_url: Url,
     pub vector_spec: Option<EdrVectorSpec>,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
     #[serde(default)]
     /// List of vertical reference systems with a discrete scale
     pub discrete_vrs: Vec<String>,
@@ -629,7 +637,7 @@ impl From<EdrDataProviderDefinition> for crate::datasets::external::edr::EdrData
             id: value.id.into(),
             base_url: value.base_url,
             vector_spec: value.vector_spec.map(Into::into),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
             discrete_vrs: value.discrete_vrs,
             provenance: value
                 .provenance
@@ -648,7 +656,7 @@ impl From<crate::datasets::external::edr::EdrDataProviderDefinition> for EdrData
             id: value.id.into(),
             base_url: value.base_url,
             vector_spec: value.vector_spec.map(Into::into),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
             discrete_vrs: value.discrete_vrs,
             provenance: value
                 .provenance
@@ -666,7 +674,7 @@ pub struct GbifDataProviderDefinition {
     pub priority: Option<i16>,
     pub db_config: DatabaseConnectionConfig,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
     pub autocomplete_timeout: i32,
     pub columns: Vec<String>,
 }
@@ -716,7 +724,7 @@ impl From<GbifDataProviderDefinition>
             description: value.description,
             priority: value.priority,
             db_config: value.db_config.into(),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
             autocomplete_timeout: value.autocomplete_timeout,
             columns: value.columns,
         }
@@ -733,7 +741,7 @@ impl From<crate::datasets::external::gbif::GbifDataProviderDefinition>
             description: value.description,
             priority: value.priority,
             db_config: value.db_config.into(),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
             autocomplete_timeout: value.autocomplete_timeout,
             columns: value.columns,
         }
@@ -749,7 +757,7 @@ pub struct GfbioAbcdDataProviderDefinition {
     pub priority: Option<i16>,
     pub db_config: DatabaseConnectionConfig,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<GfbioAbcdDataProviderDefinition>
@@ -761,7 +769,7 @@ impl From<GfbioAbcdDataProviderDefinition>
             description: value.description,
             priority: value.priority,
             db_config: value.db_config.into(),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -776,7 +784,7 @@ impl From<crate::datasets::external::gfbio_abcd::GfbioAbcdDataProviderDefinition
             description: value.description,
             priority: value.priority,
             db_config: value.db_config.into(),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -793,7 +801,7 @@ pub struct GfbioCollectionsDataProviderDefinition {
     pub abcd_db_config: DatabaseConnectionConfig,
     pub pangaea_url: Url,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 impl From<GfbioCollectionsDataProviderDefinition>
@@ -808,7 +816,7 @@ impl From<GfbioCollectionsDataProviderDefinition>
             collection_api_auth_token: value.collection_api_auth_token,
             abcd_db_config: value.abcd_db_config.into(),
             pangaea_url: value.pangaea_url,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -828,7 +836,7 @@ impl From<crate::datasets::external::gfbio_collections::GfbioCollectionsDataProv
             collection_api_auth_token: value.collection_api_auth_token,
             abcd_db_config: value.abcd_db_config.into(),
             pangaea_url: value.pangaea_url,
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
         }
     }
 }
@@ -847,7 +855,7 @@ pub struct SentinelS2L2ACogsProviderDefinition {
     #[serde(default)]
     pub gdal_retries: usize,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
     #[serde(default)]
     pub query_buffer: StacQueryBuffer,
 }
@@ -933,7 +941,7 @@ impl From<SentinelS2L2ACogsProviderDefinition>
             api_url: value.api_url,
             stac_api_retries: value.stac_api_retries.into(),
             gdal_retries: value.gdal_retries.into(),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
             query_buffer: value.query_buffer.into(),
         }
     }
@@ -954,7 +962,7 @@ impl From<crate::datasets::external::sentinel_s2_l2a_cogs::SentinelS2L2ACogsProv
             api_url: value.api_url,
             stac_api_retries: value.stac_api_retries.into(),
             gdal_retries: value.gdal_retries.into(),
-            cache_ttl: value.cache_ttl.into(),
+            cache_ttl: value.cache_ttl.map(Into::into),
             query_buffer: value.query_buffer.into(),
         }
     }
@@ -984,6 +992,41 @@ impl From<crate::datasets::external::stac::StacProviderS3Config> for StacProvide
             endpoint: value.endpoint,
             access_key: value.access_key.map(Secret),
             secret_key: value.secret_key.map(Secret),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StacProviderAuthentication {
+    pub endpoint: String,
+    pub client_id: String,
+    pub username: String,
+    pub password: Secret<String>,
+}
+
+impl From<StacProviderAuthentication>
+    for crate::datasets::external::stac::StacProviderAuthentication
+{
+    fn from(value: StacProviderAuthentication) -> Self {
+        Self {
+            endpoint: value.endpoint,
+            client_id: value.client_id,
+            username: value.username,
+            password: value.password.0,
+        }
+    }
+}
+
+impl From<crate::datasets::external::stac::StacProviderAuthentication>
+    for StacProviderAuthentication
+{
+    fn from(value: crate::datasets::external::stac::StacProviderAuthentication) -> Self {
+        Self {
+            endpoint: value.endpoint,
+            client_id: value.client_id,
+            username: value.username,
+            password: Secret(value.password),
         }
     }
 }
@@ -1118,6 +1161,7 @@ pub struct StacDataProviderDefinition {
     pub api_url: String,
     pub collection_name: String,
     pub s3_config: Option<StacProviderS3Config>,
+    pub authentication: Option<StacProviderAuthentication>,
     pub time_dimension: TimeDimension,
     pub datasets: Vec<StacProviderDataset>,
     /// Timeout in seconds for outgoing STAC API HTTP requests.
@@ -1125,6 +1169,8 @@ pub struct StacDataProviderDefinition {
     pub query_timeout_secs: i64,
     #[serde(default = "default_page_limit")]
     pub page_limit: i64,
+    /// Optional output cache lifetime; omitted values use the global cache default.
+    pub cache_ttl_secs: Option<CacheTtlSeconds>,
 }
 
 fn default_query_timeout() -> i64 {
@@ -1147,10 +1193,12 @@ impl From<StacDataProviderDefinition>
             api_url: value.api_url,
             collection_name: value.collection_name,
             s3_config: value.s3_config.map(Into::into),
+            authentication: value.authentication.map(Into::into),
             time_dimension: value.time_dimension.into(),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
             page_limit: value.page_limit,
             query_timeout_secs: value.query_timeout_secs,
+            cache_ttl_secs: value.cache_ttl_secs.map(Into::into),
         }
     }
 }
@@ -1168,10 +1216,12 @@ impl From<crate::datasets::external::stac::StacDataProviderDefinition>
             api_url: value.api_url,
             collection_name: value.collection_name,
             s3_config: value.s3_config.map(Into::into),
+            authentication: value.authentication.map(Into::into),
             time_dimension: value.time_dimension.into(),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
             page_limit: value.page_limit,
             query_timeout_secs: value.query_timeout_secs,
+            cache_ttl_secs: value.cache_ttl_secs.map(Into::into),
         }
     }
 }
@@ -1480,11 +1530,138 @@ impl TryIntoHeaderPair for ComputationId {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+pub struct Layer {
+    pub id: ProviderLayerId,
+    pub name: String,
+    pub description: String,
+    pub workflow: ProcessingGraph,
+    pub symbology: Option<Symbology>,
+    /// properties, for instance, to be rendered in the UI
+    #[serde(default)]
+    pub properties: Vec<Property>,
+    /// metadata used for loading the data
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+// TODO: validate user input
+pub struct AddLayer {
+    #[schema(example = "Example Layer")]
+    pub name: String,
+    #[schema(example = "Example layer description")]
+    pub description: String,
+    pub workflow: ProcessingGraph,
+    pub symbology: Option<Symbology>,
+    /// properties, for instance, to be rendered in the UI
+    #[serde(default)]
+    pub properties: Vec<Property>,
+    /// metadata used for loading the data
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Validate, ToSchema)]
+pub struct UpdateLayer {
+    #[schema(example = "Example Layer")]
+    #[validate(length(min = 1))]
+    pub name: String,
+    #[schema(example = "Example layer description")]
+    pub description: String,
+    pub workflow: ProcessingGraph,
+    #[serde(default)]
+    pub symbology: Option<Symbology>,
+    /// properties, for instance, to be rendered in the UI
+    #[serde(default)]
+    pub properties: Vec<Property>,
+    /// metadata used for loading the data
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+pub struct LayerDefinition {
+    pub id: LayerId,
+    pub name: String,
+    pub description: String,
+    pub workflow: ProcessingGraph,
+    pub symbology: Option<Symbology>,
+    /// properties, for instance, to be rendered in the UI
+    #[serde(default)]
+    pub properties: Vec<Property>,
+    /// metadata used for loading the data
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
+}
+
+impl TryFrom<Layer> for crate::layers::layer::Layer {
+    type Error = Error;
+
+    fn try_from(value: Layer) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: value.id,
+            name: value.name,
+            description: value.description,
+            workflow: value.workflow.try_into().context(error::Api)?,
+            symbology: value.symbology,
+            properties: value.properties,
+            metadata: value.metadata,
+        })
+    }
+}
+
+impl TryFrom<AddLayer> for crate::layers::layer::AddLayer {
+    type Error = Error;
+
+    fn try_from(value: AddLayer) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: value.name,
+            description: value.description,
+            workflow: value.workflow.try_into().context(error::Api)?,
+            symbology: value.symbology,
+            properties: value.properties,
+            metadata: value.metadata,
+        })
+    }
+}
+
+impl TryFrom<UpdateLayer> for crate::layers::layer::UpdateLayer {
+    type Error = Error;
+
+    fn try_from(value: UpdateLayer) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: value.name,
+            description: value.description,
+            workflow: value.workflow.try_into().context(error::Api)?,
+            symbology: value.symbology,
+            properties: value.properties,
+            metadata: value.metadata,
+        })
+    }
+}
+
+impl TryFrom<LayerDefinition> for crate::layers::layer::LayerDefinition {
+    type Error = Error;
+
+    fn try_from(value: LayerDefinition) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: value.id.into(),
+            name: value.name,
+            description: value.description,
+            workflow: value.workflow.try_into().context(error::Api)?,
+            symbology: value.symbology,
+            properties: value.properties,
+            metadata: value.metadata,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        SpatialResolution, StacDataProviderDefinition, StacProviderS3Config,
-        TypedDataProviderDefinition,
+        SpatialResolution, StacDataProviderDefinition, StacProviderAuthentication,
+        StacProviderS3Config, TypedDataProviderDefinition,
     };
     use crate::api::model::services::SECRET_REPLACEMENT;
     use geoengine_datatypes::test_data;
@@ -1537,6 +1714,29 @@ mod tests {
                 "endpoint":"https://example-s3.local",
                 "accessKey": SECRET_REPLACEMENT,
                 "secretKey": SECRET_REPLACEMENT
+            })
+        );
+    }
+
+    #[test]
+    fn stac_authentication_password_is_redacted_in_api_conversion() {
+        let internal = crate::datasets::external::stac::StacProviderAuthentication {
+            endpoint: "https://identity.example/token".to_owned(),
+            client_id: "code-de3-public".to_owned(),
+            username: "test-user".to_owned(),
+            password: "test-password".to_owned(),
+        };
+
+        let api: StacProviderAuthentication = internal.into();
+        let api_json = serde_json::to_value(&api).expect("api config must serialize to json");
+
+        assert_eq!(
+            api_json,
+            serde_json::json!({
+                "endpoint": "https://identity.example/token",
+                "clientId": "code-de3-public",
+                "username": "test-user",
+                "password": SECRET_REPLACEMENT,
             })
         );
     }

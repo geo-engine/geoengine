@@ -97,7 +97,7 @@ pub struct NetCdfCfDataProviderDefinition {
     /// Path were overview files are stored
     pub overviews: PathBuf,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
 #[derive(Debug)]
@@ -107,7 +107,7 @@ pub struct NetCdfCfDataProvider<D: GeoEngineDb> {
     pub description: String,
     pub data: PathBuf,
     pub overviews: PathBuf,
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
     pub db: Arc<D>,
 }
 
@@ -428,7 +428,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
         provider_id: DataProviderId,
         path: &Path,
         id: &DataId,
-        cache_ttl: CacheTtlSeconds,
+        cache_ttl: Option<CacheTtlSeconds>,
     ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
     {
         let DataId::External(dataset) = id else {
@@ -469,7 +469,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
     fn meta_data_from_netcdf(
         base_path: &Path,
         dataset_id: &NetCdfCf4DDatasetId,
-        cache_ttl: CacheTtlSeconds,
+        cache_ttl: Option<CacheTtlSeconds>,
     ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
     {
         const LON_DIMENSION_INDEX: usize = 3;
@@ -2064,7 +2064,7 @@ mod tests {
                     allow_alphaband_as_mask: true,
                     retry: None,
                 },),
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             }
         );
     }
@@ -2194,7 +2194,7 @@ mod tests {
                     allow_alphaband_as_mask: true,
                     retry: None,
                 }),
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             }
         );
     }

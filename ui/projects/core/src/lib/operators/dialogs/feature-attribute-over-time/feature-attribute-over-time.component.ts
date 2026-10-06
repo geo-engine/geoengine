@@ -2,11 +2,10 @@ import {Component, ChangeDetectionStrategy, AfterViewInit, OnDestroy, inject} fr
 import {UntypedFormGroup, UntypedFormBuilder, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 
 import {ProjectService} from '../../../project/project.service';
-import {of, ReplaySubject, Subscription} from 'rxjs';
+import {from, of, ReplaySubject, Subscription} from 'rxjs';
 import {map, mergeMap, tap} from 'rxjs/operators';
 
 import {
-    FeatureAttributeOverTimeDict,
     geoengineValidators,
     Layer,
     NotificationService,
@@ -16,7 +15,7 @@ import {
     VectorLayer,
     VectorLayerMetadata,
 } from '@geoengine/common';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {ProcessingGraph} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -126,11 +125,14 @@ export class FeatureAttributeOvertimeComponent implements AfterViewInit, OnDestr
 
         const outputName: string = this.form.controls['name'].value;
 
-        this.projectService
-            .getWorkflow(inputLayer.workflowId)
+        from(this.projectService.getWorkflow(inputLayer.workflowId))
             .pipe(
-                mergeMap((inputWorkflow: WorkflowDict) =>
-                    this.projectService.registerWorkflow({
+                mergeMap((inputWorkflow: ProcessingGraph) => {
+                    if (inputWorkflow.type !== 'Vector') {
+                        throw new Error('Expected a vector workflow for feature attribute over time.');
+                    }
+
+                    return this.projectService.registerWorkflow({
                         type: 'Plot',
                         operator: {
                             type: 'FeatureAttributeValuesOverTime',
@@ -141,9 +143,9 @@ export class FeatureAttributeOvertimeComponent implements AfterViewInit, OnDestr
                             sources: {
                                 vector: inputWorkflow.operator,
                             },
-                        } as FeatureAttributeOverTimeDict,
-                    }),
-                ),
+                        },
+                    });
+                }),
                 mergeMap((workflowId) =>
                     this.projectService.addPlot(
                         new Plot({

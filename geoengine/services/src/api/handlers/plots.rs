@@ -16,7 +16,7 @@ use geoengine_datatypes::{
     operations::reproject::reproject_spatial_query,
     plots::PlotOutputFormat,
     primitives::{BoundingBox2D, PlotQueryRectangle, PlotSeriesSelection, SpatialResolution},
-    spatial_reference::SpatialReference,
+    spatial_reference::{DefaultCoordinateProjector, SpatialReference},
     util::Identifier,
 };
 use geoengine_operators::{
@@ -115,7 +115,7 @@ async fn get_plot_handler<C: ApplicationContext>(
     let workflow_id = WorkflowId(id.into_inner());
     let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
-    let operator = workflow.operator()?.get_plot()?;
+    let operator = workflow.operator.get_plot()?;
 
     let execution_context = ctx.execution_context()?;
 
@@ -140,7 +140,7 @@ async fn get_plot_handler<C: ApplicationContext>(
     let query_rect = if request_spatial_ref == workflow_spatial_ref {
         Some(query_rect)
     } else {
-        let repr_spatial_query = reproject_spatial_query(
+        let repr_spatial_query = reproject_spatial_query::<_, DefaultCoordinateProjector>(
             query_rect.spatial_bounds(),
             workflow_spatial_ref,
             request_spatial_ref,
@@ -261,7 +261,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow::Typed {
+        let workflow = Workflow {
             operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
                 r#type: Default::default(),
                 params: StatisticsParameters {
@@ -279,7 +279,9 @@ mod tests {
                         }),
                     ]),
                 },
-            })),
+            }))
+            .try_into()
+            .unwrap(),
         };
 
         let id = app_ctx
@@ -348,7 +350,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow::Typed {
+        let workflow = Workflow {
             operator: TypedOperator::Plot(PlotOperator::Histogram(Histogram {
                 r#type: Default::default(),
                 params: HistogramParameters {
@@ -374,7 +376,9 @@ mod tests {
                         },
                     )),
                 },
-            })),
+            }))
+            .try_into()
+            .unwrap(),
         };
 
         let id = app_ctx
@@ -500,7 +504,7 @@ mod tests {
 
             let session_id = session.id();
 
-            let workflow = Workflow::Typed {
+            let workflow = Workflow {
                 operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
                     r#type: Default::default(),
                     params: StatisticsParameters {
@@ -510,7 +514,9 @@ mod tests {
                     sources: MultipleRasterOrSingleVectorSource {
                         source: MultipleRasterOrSingleVectorOperator::Raster(vec![]),
                     },
-                })),
+                }))
+                .try_into()
+                .unwrap(),
             };
 
             let id = ctx.db().register_workflow(workflow).await.unwrap();

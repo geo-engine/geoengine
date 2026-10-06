@@ -33,7 +33,7 @@ use crate::util::arrow::{ArrowTyped, downcast_array};
 use crate::util::helpers::SomeIter;
 use crate::{
     collections::{FeatureCollectionError, IntoGeometryOptionsIterator},
-    operations::reproject::CoordinateProjection,
+    spatial_reference::CoordinateProjection,
 };
 use crate::{
     collections::{IntoGeometryIterator, VectorDataType, VectorDataTyped, error},
@@ -1147,7 +1147,7 @@ where
     /// ```
     #[allow(clippy::missing_panics_doc)]
     pub fn empty() -> Self {
-        Self::from_data(vec![], vec![], Default::default(), CacheHint::default())
+        Self::from_data(vec![], vec![], Default::default(), CacheHint::no_cache())
             .expect("should not fail because no data is given")
     }
 
@@ -1168,7 +1168,7 @@ where
     ///         map.insert("float".into(), FeatureData::Float(vec![0., 1.]));
     ///         map
     ///     },
-    ///     CacheHint::default(),
+    ///     CacheHint::no_cache(),
     /// ).unwrap();
     ///
     /// assert_eq!(pc.len(), 2);
@@ -1267,7 +1267,7 @@ where
             data.iter()
                 .map(|(k, v)| (k.clone().into(), v.clone().into()))
                 .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
     }
 
@@ -1794,7 +1794,7 @@ mod tests {
                 vec![],
                 vec![TimeInterval::new(0, 1).unwrap(); length],
                 Default::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap()
         }
@@ -1847,7 +1847,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 
@@ -1871,7 +1871,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 

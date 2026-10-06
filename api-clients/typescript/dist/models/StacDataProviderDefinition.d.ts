@@ -10,6 +10,7 @@
  */
 import type { StacProviderS3Config } from './StacProviderS3Config';
 import type { StacProviderDataset } from './StacProviderDataset';
+import type { StacProviderAuthentication } from './StacProviderAuthentication';
 import type { TimeDimension } from './TimeDimension';
 /**
  *
@@ -67,6 +68,12 @@ export interface StacDataProviderDefinition {
     s3Config?: StacProviderS3Config | null;
     /**
      *
+     * @type {StacProviderAuthentication}
+     * @memberof StacDataProviderDefinition
+     */
+    authentication?: StacProviderAuthentication | null;
+    /**
+     *
      * @type {TimeDimension}
      * @memberof StacDataProviderDefinition
      */
@@ -89,6 +96,12 @@ export interface StacDataProviderDefinition {
      * @memberof StacDataProviderDefinition
      */
     pageLimit?: number;
+    /**
+     * Optional output cache lifetime; omitted values use the global cache default.
+     * @type {number}
+     * @memberof StacDataProviderDefinition
+     */
+    cacheTtlSecs?: number | null;
 }
 /**
  * @export

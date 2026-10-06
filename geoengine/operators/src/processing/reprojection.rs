@@ -28,16 +28,13 @@ use futures::{StreamExt, stream};
 use geoengine_datatypes::{
     collections::FeatureCollection,
     error::BoxedResultExt,
-    operations::reproject::{
-        CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
-        reproject_spatial_query,
-    },
+    operations::reproject::{Reproject, ReprojectClipped, reproject_spatial_query},
     primitives::{
         BandSelection, BoundingBox2D, ColumnSelection, Geometry, RasterQueryRectangle,
         SpatialPartition2D, SpatialResolution, VectorQueryRectangle,
     },
     raster::{GridBoundingBox2D, Pixel, RasterTile2D, TilingSpecification},
-    spatial_reference::SpatialReference,
+    spatial_reference::{CoordinateProjection, DefaultCoordinateProjector, SpatialReference},
     util::arrow::ArrowTyped,
 };
 use serde::{Deserialize, Serialize};
@@ -108,8 +105,10 @@ impl InitializedVectorReprojection {
             .ok_or(Error::AllSourcesMustHaveSameSpatialReference)?;
 
         let bbox = if let Some(bbox) = in_desc.bbox {
-            let projector =
-                CoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
+            let projector = DefaultCoordinateProjector::from_known_srs(
+                in_srs,
+                params.target_spatial_reference,
+            )?;
 
             bbox.reproject_clipped(&projector)? // TODO: if this is none then we could skip the whole reprojection similar to raster?
         } else {
@@ -150,7 +149,7 @@ impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
 
         // calculate the intersection of input and output srs in both coordinate systems
         let proj_from_to =
-            CoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
+            DefaultCoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
 
         let out_spatial_grid = match params.derive_out_spec {
             DeriveOutRasterSpecsSource::DataBounds => in_desc
@@ -212,7 +211,7 @@ fn compute_output_spatial_grid(
     params: ReprojectionParams,
 ) -> Result<SpatialGridDescriptor> {
     let proj_from_to =
-        CoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
+        DefaultCoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
     let out_spatial_grid = match params.derive_out_spec {
         DeriveOutRasterSpecsSource::DataBounds => {
             in_spatial_grid_descriptor.reproject_clipped(&proj_from_to)?
@@ -279,17 +278,18 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
         match self.source.query_processor()? {
             TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
                 MapQueryProcessor::new(source, move |query: VectorQueryRectangle| {
-                    reproject_spatial_query(query.spatial_bounds(), source_srs, target_srs, false)
-                        .map(|sqr| {
-                            sqr.map(|x| {
-                                VectorQueryRectangle::new(
-                                    x,
-                                    query.time_interval(),
-                                    *query.attributes(),
-                                )
-                            })
+                    reproject_spatial_query::<_, DefaultCoordinateProjector>(
+                        query.spatial_bounds(),
+                        source_srs,
+                        target_srs,
+                        false,
+                    ) // NOTE: this uses the `DefaultCoordinateProjector`, which may change.
+                    .map(|sqr| {
+                        sqr.map(|x| {
+                            VectorQueryRectangle::new(x, query.time_interval(), *query.attributes())
                         })
-                        .map_err(From::from)
+                    })
+                    .map_err(From::from)
                 })
                 .boxed(),
             )),
@@ -396,7 +396,7 @@ where
             Selection = ColumnSelection,
             ResultDescription = VectorResultDescriptor,
         >,
-    FeatureCollection<G>: Reproject<CoordinateProjector, Out = FeatureCollection<G>>,
+    FeatureCollection<G>: Reproject<DefaultCoordinateProjector, Out = FeatureCollection<G>>, // NOTE: this uses the `DefaultCoordinateProjector`, which may change.
     G: Geometry + ArrowTyped,
 {
     type Output = FeatureCollection<G>;
@@ -409,8 +409,12 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let rewritten_spatial_query =
-            reproject_spatial_query(query.spatial_bounds(), self.from, self.to, false)?;
+        let rewritten_spatial_query = reproject_spatial_query::<_, DefaultCoordinateProjector>(
+            query.spatial_bounds(),
+            self.from,
+            self.to,
+            false,
+        )?;
 
         let rewritten_query = rewritten_spatial_query.map(|rwq| query.select_spatial_bounds(rwq));
 
@@ -421,8 +425,8 @@ where
                 .await?
                 .map(move |collection_result| {
                     collection_result.and_then(|collection| {
-                        CoordinateProjector::from_known_srs(self.from, self.to)
-                            .and_then(|projector| collection.reproject(projector.as_ref()))
+                        DefaultCoordinateProjector::from_known_srs(self.from, self.to)
+                            .and_then(|projector| collection.reproject(&projector))
                             .map_err(Into::into)
                     })
                 })
@@ -848,8 +852,7 @@ mod tests {
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::{
-        CacheHint, CacheTtlSeconds, DateTimeParseFormat, SpatialResolution, TimeGranularity,
-        TimeInstance,
+        CacheHint, DateTimeParseFormat, SpatialResolution, TimeGranularity, TimeInstance,
     };
     use geoengine_datatypes::primitives::{Coordinate2D, TimeStep};
     use geoengine_datatypes::raster::{
@@ -868,8 +871,8 @@ mod tests {
             Identifier,
             test::TestDefault,
             well_known_data::{
-                COLOGNE_EPSG_900_913, COLOGNE_EPSG_4326, HAMBURG_EPSG_900_913, HAMBURG_EPSG_4326,
-                MARBURG_EPSG_900_913, MARBURG_EPSG_4326,
+                COLOGNE_EPSG_3857, COLOGNE_EPSG_4326, HAMBURG_EPSG_3857, HAMBURG_EPSG_4326,
+                MARBURG_EPSG_3857, MARBURG_EPSG_4326,
             },
         },
     };
@@ -888,13 +891,13 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )?;
 
         let expected = MultiPoint::many(vec![
-            MARBURG_EPSG_900_913,
-            COLOGNE_EPSG_900_913,
-            HAMBURG_EPSG_900_913,
+            MARBURG_EPSG_3857,
+            COLOGNE_EPSG_3857,
+            HAMBURG_EPSG_3857,
         ])
         .unwrap();
 
@@ -964,13 +967,13 @@ mod tests {
             ],
             vec![TimeInterval::new_unchecked(0, 1); 1],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )?;
 
         let expected = [MultiLineString::new(vec![vec![
-            MARBURG_EPSG_900_913,
-            COLOGNE_EPSG_900_913,
-            HAMBURG_EPSG_900_913,
+            MARBURG_EPSG_3857,
+            COLOGNE_EPSG_3857,
+            HAMBURG_EPSG_3857,
         ]])
         .unwrap()];
 
@@ -1046,14 +1049,14 @@ mod tests {
             ],
             vec![TimeInterval::new_unchecked(0, 1); 1],
             Default::default(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )?;
 
         let expected = [MultiPolygon::new(vec![vec![vec![
-            MARBURG_EPSG_900_913,
-            COLOGNE_EPSG_900_913,
-            HAMBURG_EPSG_900_913,
-            MARBURG_EPSG_900_913,
+            MARBURG_EPSG_3857,
+            COLOGNE_EPSG_3857,
+            HAMBURG_EPSG_3857,
+            MARBURG_EPSG_3857,
         ]]])
         .unwrap()];
 
@@ -1125,7 +1128,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1134,7 +1137,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1145,7 +1148,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1154,7 +1157,7 @@ mod tests {
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -1165,7 +1168,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -1176,7 +1179,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -1187,7 +1190,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -1198,7 +1201,7 @@ mod tests {
                     .unwrap()
                     .into(),
                 properties: Default::default(),
-                cache_hint: CacheHint::default(),
+                cache_hint: CacheHint::no_cache(),
             },
         ];
 
@@ -1399,7 +1402,8 @@ mod tests {
             (20_037_508.342_789_244, 20_048_966.104_014_594).into(),
         );
 
-        let reprojected = reproject_spatial_query(
+        // NOTE: this uses the `DefaultCoordinateProjector`, which may change.
+        let reprojected = reproject_spatial_query::<_, DefaultCoordinateProjector>(
             query.spatial_bounds(),
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
             SpatialReference::epsg_4326(),
@@ -1477,7 +1481,7 @@ mod tests {
                 retry: None,
             },
             result_descriptor: result_descriptor.clone(),
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
@@ -1582,7 +1586,7 @@ mod tests {
                 retry: None,
             },
             result_descriptor: result_descriptor.clone(),
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
@@ -1657,7 +1661,7 @@ mod tests {
                 .unwrap(),
                 vec![TimeInterval::default(); 3],
                 HashMap::default(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap(),
         )
@@ -1709,13 +1713,15 @@ mod tests {
 
         let points = &points[0];
 
-        assert_eq!(
+        assert_approx_eq!(
+            &[Coordinate2D],
             points.coordinates(),
             &[
                 (166_021.443_080_538_42, 0.0).into(),
                 (534_994.655_061_136_1, 9_329_005.182_447_437).into(),
-                (499_999.999_999_999_5, 4_649_776.224_819_178).into()
-            ]
+                (499_999.999_999_999_5, 4_649_776.224_819_178).into(),
+            ],
+            epsilon = 0.001 // in m...
         );
     }
 
@@ -1735,7 +1741,7 @@ mod tests {
                     .unwrap(),
                     vec![TimeInterval::default(); 3],
                     HashMap::default(),
-                    CacheHint::default(),
+                    CacheHint::no_cache(),
                 )
                 .unwrap(),
             ],
@@ -1789,15 +1795,16 @@ mod tests {
 
         let points = &points[0];
 
-        assert!(approx_eq!(
+        assert_approx_eq!(
             &[Coordinate2D],
             points.coordinates(),
             &[
                 (30.0, 0.0).into(), // lower left of utm36n area of use
                 (36.0, 84.0).into(),
                 (33.0, 42.0).into(), // upper right of utm36n area of use
-            ]
-        ));
+            ],
+            epsilon = 0.000_000_01 // ~ 0.001 m
+        );
     }
 
     #[tokio::test]
@@ -1818,7 +1825,7 @@ mod tests {
                     .unwrap(),
                     vec![TimeInterval::default(); 1],
                     HashMap::default(),
-                    CacheHint::default(),
+                    CacheHint::no_cache(),
                 )
                 .unwrap(),
             ],
@@ -1887,16 +1894,20 @@ mod tests {
         let grid_bounds = GridBoundingBox2D::new_min_max(-850, 849, -1800, 1799).unwrap();
         let spatial_grid = SpatialGridDefinition::new(geo_transform, grid_bounds);
 
-        let projector = CoordinateProjector::from_known_srs(in_proj, out_proj).unwrap();
+        // NOTE: this uses the `DefaultCoordinateProjector`, which may change.
+        let projector = DefaultCoordinateProjector::from_known_srs(in_proj, out_proj).unwrap();
 
         let out_spatial_grid = spatial_grid.reproject(&projector).unwrap();
 
-        assert_eq!(
+        assert_approx_eq!(
+            Coordinate2D,
             out_spatial_grid.geo_transform.origin_coordinate(),
-            Coordinate2D::new(0., 0.)
+            Coordinate2D::new(0., 0.),
+            epsilon = 0.000_000_01
         );
 
-        assert_eq!(
+        assert_approx_eq!(
+            SpatialResolution,
             out_spatial_grid.geo_transform.spatial_resolution(),
             SpatialResolution::new_unchecked(14_212.246_793_017_477, 14_212.246_793_017_477)
         );

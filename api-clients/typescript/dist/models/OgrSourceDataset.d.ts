@@ -90,7 +90,7 @@ export interface OgrSourceDataset {
      * @type {number}
      * @memberof OgrSourceDataset
      */
-    cacheTtl?: number;
+    cacheTtl?: number | null;
 }
 /**
  * Check if a given object implements the OgrSourceDataset interface.

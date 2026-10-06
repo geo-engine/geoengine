@@ -112,6 +112,11 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                     endpoint = '', 
                     access_key = null, 
                     secret_key = null, ),
+                authentication = geoengine_api_client.models.stac_provider_authentication.StacProviderAuthentication(
+                    endpoint = '', 
+                    client_id = '', 
+                    username = '', 
+                    password = '', ),
                 time_dimension = None,
                 datasets = [
                     geoengine_api_client.models.stac_provider_dataset.StacProviderDataset(
@@ -146,6 +151,7 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                     ],
                 query_timeout_secs = 56,
                 page_limit = 56,
+                cache_ttl_secs = 0,
                 user = '',
                 refresh_token = '',
                 expiry_date = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f')
@@ -160,7 +166,6 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                 project_id = '',
                 api_token = '',
                 filter_label = '',
-                cache_ttl = 0,
                 stac_url = '',
                 s3_url = '',
                 s3_access_key = '',

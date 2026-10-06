@@ -165,7 +165,7 @@ mod tests {
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(1, 2).unwrap(),
@@ -174,7 +174,7 @@ mod tests {
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(2, 3).unwrap(),
@@ -183,7 +183,7 @@ mod tests {
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
         ];
         let stream = stream::iter(
@@ -232,7 +232,7 @@ mod tests {
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(1, 2).unwrap(),
@@ -241,7 +241,7 @@ mod tests {
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(1, 2).unwrap(),
@@ -250,7 +250,7 @@ mod tests {
                 Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                     .unwrap()
                     .into(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(2, 3).unwrap(),
@@ -259,7 +259,7 @@ mod tests {
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
         ];
         let stream = stream::iter(

@@ -71,7 +71,7 @@ fn random_points<T: Rng>(rng: &mut T, num_points: usize) -> MultiPointCollection
         MultiPoint::many(coordinates).unwrap(),
         time,
         Default::default(),
-        CacheHint::default(),
+        CacheHint::no_cache(),
     )
     .unwrap()
 }

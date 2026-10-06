@@ -221,21 +221,24 @@ class WfsTests(unittest.TestCase):
                 "type": "Vector",
                 "operator": {
                     "type": "RasterVectorJoin",
-                    "params": {"names": ["NDVI"], "featureAggregation": "first", "temporalAggregation": "none"},
+                    "params": {
+                        "names": {"type": "names", "values": ["NDVI"]},
+                        "featureAggregation": "first",
+                        "temporalAggregation": "none",
+                    },
                     "sources": {
                         "vector": {
                             "type": "OgrSource",
                             "params": {
-                                "data": {"type": "internal", "datasetId": "a9623a5b-b6c5-404b-bc5a-313ff72e4e75"},
+                                "data": "ne_10m_ports",
                                 "attributeProjection": None,
+                                "attributeFilters": None,
                             },
                         },
                         "rasters": [
                             {
                                 "type": "GdalSource",
-                                "params": {
-                                    "data": {"type": "internal", "datasetId": "36574dc3-560a-4b09-9d22-d5945f2b8093"}
-                                },
+                                "params": {"data": "ndvi", "overviewLevel": None},
                             }
                         ],
                     },
@@ -387,21 +390,24 @@ class WfsTests(unittest.TestCase):
                 "type": "Vector",
                 "operator": {
                     "type": "RasterVectorJoin",
-                    "params": {"names": ["NDVI"], "featureAggregation": "first", "temporalAggregation": "none"},
+                    "params": {
+                        "names": {"type": "names", "values": ["NDVI"]},
+                        "featureAggregation": "first",
+                        "temporalAggregation": "none",
+                    },
                     "sources": {
                         "vector": {
                             "type": "OgrSource",
                             "params": {
-                                "data": {"type": "internal", "datasetId": "a9623a5b-b6c5-404b-bc5a-313ff72e4e75"},
+                                "data": "ne_10m_ports",
                                 "attributeProjection": None,
+                                "attributeFilters": None,
                             },
                         },
                         "rasters": [
                             {
                                 "type": "GdalSource",
-                                "params": {
-                                    "data": {"type": "internal", "datasetId": "36574dc3-560a-4b09-9d22-d5945f2b8093"}
-                                },
+                                "params": {"data": "ndvi", "overviewLevel": None},
                             }
                         ],
                     },
@@ -596,21 +602,24 @@ class WfsTests(unittest.TestCase):
             "type": "Vector",
             "operator": {
                 "type": "RasterVectorJoin",
-                "params": {"names": ["NDVI"], "featureAggregation": "first", "temporalAggregation": "none"},
+                "params": {
+                    "names": {"type": "names", "values": ["NDVI"]},
+                    "featureAggregation": "first",
+                    "temporalAggregation": "none",
+                },
                 "sources": {
                     "vector": {
                         "type": "OgrSource",
                         "params": {
-                            "data": {"type": "internal", "datasetId": "a9623a5b-b6c5-404b-bc5a-313ff72e4e75"},
+                            "data": "ne_10m_ports",
                             "attributeProjection": None,
+                            "attributeFilters": None,
                         },
                     },
                     "rasters": [
                         {
                             "type": "GdalSource",
-                            "params": {
-                                "data": {"type": "internal", "datasetId": "36574dc3-560a-4b09-9d22-d5945f2b8093"}
-                            },
+                            "params": {"data": "ndvi", "overviewLevel": None},
                         }
                     ],
                 },
@@ -746,8 +755,7 @@ class WfsTests(unittest.TestCase):
                 "operator": {
                     "type": "OgrSource",
                     "params": {
-                        "data": {"type": "internal", "datasetId": "a9623a5b-b6c5-404b-bc5a-313ff72e4e75"},
-                        "attributeProjection": None,
+                        "data": "ne_10m_ports",
                     },
                 },
             }

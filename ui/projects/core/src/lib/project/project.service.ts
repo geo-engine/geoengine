@@ -2,6 +2,7 @@ import {
     BehaviorSubject,
     combineLatest,
     firstValueFrom,
+    from,
     merge,
     Observable,
     Observer,
@@ -11,9 +12,9 @@ import {
     Subscription,
     zip,
 } from 'rxjs';
-import {debounceTime, distinctUntilChanged, filter, first, map, mergeMap, skip, switchMap, take, tap} from 'rxjs/operators';
+import {debounceTime, distinctUntilChanged, filter, finalize, first, map, mergeMap, pairwise, switchMap, take, tap} from 'rxjs/operators';
 
-import {Injectable, OnDestroy, inject} from '@angular/core';
+import {Injectable, OnDestroy, computed, inject} from '@angular/core';
 
 import {Project} from './project.model';
 import {CoreConfig} from '../config.service';
@@ -21,11 +22,10 @@ import {LoadingState} from './loading-state.model';
 import {HttpErrorResponse} from '@angular/common/http';
 import {BackendService} from '../backend/backend.service';
 import {BBoxDict, PlotDict, ProvenanceEntryDict, ToDict, UUID} from '../backend/backend.model';
-import {Extent, MapService, ViewportSize} from '../map/map.service';
+import {MapService, ViewportSize} from '../map/map.service';
 import {Session} from '../users/session.model';
 import OlFeature from 'ol/Feature';
 import OlGeometry from 'ol/geom/Geometry';
-import {intersects as olIntersects} from 'ol/extent';
 import {getProjectionTarget} from '../util/spatial_reference';
 import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
 import {
@@ -42,7 +42,6 @@ import {
     LayerData,
     LayerMetadata,
     LayersService,
-    LineSimplificationDict,
     LineSymbology,
     NotificationService,
     Plot,
@@ -71,12 +70,18 @@ import {
     CollectionItem,
     GeoJson,
     OGCWFSApi,
+    PlotOperator,
     ProjectLayer as ProjectLayerDict,
     ProviderLayerId,
-    LegacyTypedOperatorOperator,
+    ProcessingGraph,
+    RasterOperator,
     TypedResultDescriptor,
-    Workflow as WorkflowDict,
+    VectorOperator,
+    WorkflowsApi,
+    LineSimplification,
+    TypedOperator,
 } from '@geoengine/api-client';
+import {toSignal} from '@angular/core/rxjs-interop';
 
 export type FeatureId = string | number;
 
@@ -122,7 +127,13 @@ export class ProjectService implements OnDestroy {
 
     private readonly selectedFeature$ = new BehaviorSubject<FeatureSelection>({feature: undefined});
 
+    private readonly sessionToken = toSignal(this.userService.getSessionTokenStream());
     private readonly ogcWfsApi = new ReplaySubject<OGCWFSApi>(1);
+    private readonly processingGraphAPI = computed<WorkflowsApi>(() => {
+        const sessionToken = this.sessionToken();
+        if (!sessionToken) return new WorkflowsApi();
+        return new WorkflowsApi(apiConfigurationWithAccessKey(sessionToken));
+    });
 
     constructor() {
         const config = this.config;
@@ -443,17 +454,13 @@ export class ProjectService implements OnDestroy {
         );
     }
 
-    registerWorkflow(workflow: WorkflowDict): Observable<UUID> {
-        return this.userService.getSessionTokenForRequest().pipe(
-            mergeMap((sessionToken) => this.backend.registerWorkflow(workflow, sessionToken)),
-            map((response) => response.id),
-        );
+    async registerWorkflow(processingGraph: ProcessingGraph): Promise<UUID> {
+        const response = await this.processingGraphAPI().registerWorkflowHandler({processingGraph});
+        return response.id;
     }
 
-    getWorkflow(workflowId: UUID): Observable<WorkflowDict> {
-        return this.userService
-            .getSessionTokenForRequest()
-            .pipe(mergeMap((sessionToken) => this.backend.getWorkflow(workflowId, sessionToken)));
+    async getWorkflow(processingGraphId: UUID): Promise<ProcessingGraph> {
+        return await this.processingGraphAPI().loadWorkflowHandler({id: processingGraphId});
     }
 
     getWorkflowMetaData(workflowId: UUID): Observable<TypedResultDescriptor> {
@@ -469,9 +476,9 @@ export class ProjectService implements OnDestroy {
     }
 
     /**
-     * Determines a common projection for all layers and return their operator with an added a propjection if necessary
+     * Determines a common projection for all layers and return their operator with an added a projection if necessary
      */
-    getAutomaticallyProjectedOperatorsFromLayers(layers: Array<Layer>): Observable<Array<LegacyTypedOperatorOperator>> {
+    getAutomaticallyProjectedOperatorsFromLayers(layers: Array<Layer>): Observable<Array<TypedOperator>> {
         const meta: Array<Observable<TypedResultDescriptor>> = layers.map((l) => this.getWorkflowMetaData(l.workflowId));
 
         return combineLatest(meta).pipe(
@@ -479,26 +486,30 @@ export class ProjectService implements OnDestroy {
                 const srefs = descriptors.map((l) => SpatialReference.fromSrsString(l.spatialReference));
                 const targetSref = getProjectionTarget(srefs);
 
-                const workflowsObservable = layers.map((l) => this.getWorkflow(l.workflowId));
+                const workflowsObservable = layers.map((l) => from(this.getWorkflow(l.workflowId)));
 
                 return combineLatest(workflowsObservable).pipe(
-                    map((workflows: Array<WorkflowDict>) => {
-                        const projectedOperators: Array<LegacyTypedOperatorOperator> = [];
+                    map((workflows: Array<ProcessingGraph>) => {
+                        const projectedOperators: Array<TypedOperator> = [];
 
                         for (let i = 0; i < workflows.length; i++) {
                             const sref: SpatialReference = srefs[i];
                             const workflow = workflows[i];
-                            const operator: LegacyTypedOperatorOperator = workflow.operator;
+                            if (workflow.type === 'Plot') continue;
+                            const operator: RasterOperator | VectorOperator = workflow.operator;
                             if (sref.srsString === targetSref.srsString) {
-                                projectedOperators.push(operator);
+                                projectedOperators.push(workflow);
                             } else {
                                 projectedOperators.push({
-                                    type: 'Reprojection',
-                                    params: {
-                                        targetSpatialReference: targetSref.srsString,
-                                    },
-                                    sources: {
-                                        source: operator,
+                                    type: workflow.type,
+                                    operator: {
+                                        type: 'Reprojection',
+                                        params: {
+                                            targetSpatialReference: targetSref.srsString,
+                                        },
+                                        sources: {
+                                            source: operator,
+                                        },
                                     },
                                 });
                             }
@@ -976,64 +987,63 @@ export class ProjectService implements OnDestroy {
 
     /**
      * Create a stream that signals whether a running query should be aborted because the results are no longer needed.
-     * It takes the layerId, current zoomLevel and extent of a tile at the time of querying as a parameter in order to
-     * determine whether a change in the layer list or on the map view makes the results obsolete.
+     * It takes the layerId as a parameter and emits when a condition that invalidates every running query of that
+     * layer changes, i.e. the time, the session, the spatial reference or the layer list.
+     *
+     * Viewport changes are not part of this: a tile that left the viewport or a zoom level that was zoomed past
+     * depends on the tile, not on the project, and is watched per rendered frame by `TileLoader.cancelUnwanted`.
+     *
+     * If the layer is not registered with the project service (e.g. in the enhanced data viewer), the stream does not
+     * emit when the layer is removed, only on the viewing conditions below.
+     *
+     * Emits the condition that made the request obsolete, e.g. `'time changed'`, for diagnostics.
      */
-    createQueryAbortStream(layerId: number, tileZoomLevel: number, tileExtent: Extent): Observable<void> {
-        const tileResolution = this.mapService.getView().getResolutionForZoom(tileZoomLevel);
-
+    createQueryAbortStream(layerId: number): Observable<string> {
         // create an observable that emits when the layer is removed
         const layerStream = this.layers.get(layerId);
-        if (!layerStream) {
-            throw Error(`No layer stream found for layer id ${layerId}`);
-        }
         const layerRemovedSubject = new BehaviorSubject<boolean>(false);
-        const layerStreamSub = layerStream.subscribe({
+        const layerStreamSub = layerStream?.subscribe({
             complete: () => {
                 layerRemovedSubject.next(true);
                 layerRemovedSubject.complete();
             },
         });
 
-        const observables: [
-            Observable<Time>,
-            Observable<ViewportSize>,
-            Observable<string>,
-            Observable<SpatialReference>,
-            Observable<boolean>,
-        ] = [
+        // All sources emit synchronously on subscription, so `pairwise` compares every new
+        // combined emission against the previous one and cancels once it deviates from the
+        // conditions the request was issued under.
+        const observables: [Observable<Time>, Observable<string>, Observable<SpatialReference>, Observable<boolean>] = [
             this.getTimeStream(),
-            this.mapService.getViewportSizeStream(),
-            this.userService.getSessionTokenForRequest(),
+            this.userService.getSessionTokenStream(),
             this.getSpatialReferenceStream(),
             layerRemovedSubject,
         ];
 
-        let initialTime: Time | undefined;
-        let initialSref: SpatialReference | undefined;
-        let initialSession: string | undefined;
-
         return combineLatest(observables).pipe(
-            tap(([time, _viewportSize, session, sref, _layerRemoved]) => {
-                // capture the initial values at the start of the query
-                // s.t. we can detect a change later
-                initialTime ??= time;
-                initialSref ??= sref;
-                initialSession ??= session;
+            pairwise(),
+            map(([initial, current]): string | undefined => {
+                const [initialTime, initialSession, initialSref] = initial;
+                const [time, session, sref, layerRemoved] = current;
+
+                // The reason is part of the emitted value, so a tile that gets aborted can be told
+                // apart from one that merely looks blank in the logs.
+                if (!time.isSame(initialTime)) {
+                    return 'time changed';
+                }
+                if (session !== initialSession) {
+                    return 'session changed';
+                }
+                if (!sref.equals(initialSref)) {
+                    return 'spatial reference changed';
+                }
+                if (layerRemoved) {
+                    return 'layer removed';
+                }
+                return undefined;
             }),
-            skip(1),
-            filter(
-                ([time, viewportSize, session, sref, layerRemoved]) =>
-                    !time.isSame(initialTime!) ||
-                    viewportSize.resolution !== tileResolution ||
-                    !olIntersects(tileExtent, viewportSize.extent) ||
-                    session !== initialSession ||
-                    sref !== initialSref ||
-                    layerRemoved,
-            ),
-            tap((_) => layerStreamSub.unsubscribe()),
+            filter((reason): reason is string => reason !== undefined),
+            finalize(() => layerStreamSub?.unsubscribe()),
             take(1),
-            map(() => undefined),
         );
     }
 
@@ -1041,10 +1051,10 @@ export class ProjectService implements OnDestroy {
      * Creates a projected operator if the layer has not the target spatial reference.
      */
     createProjectedOperator(
-        inputOperator: LegacyTypedOperatorOperator,
+        inputOperator: RasterOperator | VectorOperator | PlotOperator,
         metadata: LayerMetadata,
         targetSpatialReference: SpatialReference,
-    ): LegacyTypedOperatorOperator {
+    ): RasterOperator | VectorOperator | PlotOperator {
         if (metadata.spatialReference.equals(targetSpatialReference)) {
             return inputOperator;
         }
@@ -1057,7 +1067,7 @@ export class ProjectService implements OnDestroy {
             sources: {
                 source: inputOperator,
             },
-        };
+        } as RasterOperator | VectorOperator | PlotOperator;
     }
 
     protected async createTemporaryProject(sessionToken: string): Promise<Project> {
@@ -1587,11 +1597,15 @@ function addTimeToProperties(x: GeoJson): void {
  * This puts a new operator on top of the actual workflow.
  */
 function createClusteredPointLayerQueryWorkflow(
-    workflow: WorkflowDict,
+    workflow: ProcessingGraph,
     metadata: VectorLayerMetadata,
     mapSpatialReference: SpatialReference,
     resolution: number,
-): WorkflowDict {
+): ProcessingGraph {
+    if (workflow.type !== 'Vector') {
+        throw new Error('Cannot create clustered point layer for a non-Vector workflow.');
+    }
+
     const columnAggregates: Record<
         string,
         {
@@ -1645,13 +1659,16 @@ function createClusteredPointLayerQueryWorkflow(
  * In order to visualize simplified lines and polygons, we need to create a temporary workflow.
  * This puts a new operator on top of the actual workflow.
  */
-// eslint-disable-next-line prefer-arrow/prefer-arrow-functions
 function createSimplifiedLinesOrPolygonsLayerQueryWorkflow(
-    workflow: WorkflowDict,
+    workflow: ProcessingGraph,
     metadata: VectorLayerMetadata,
     mapSpatialReference: SpatialReference,
     resolution: number,
-): WorkflowDict {
+): ProcessingGraph {
+    if (workflow.type === 'Plot') {
+        throw new Error('Cannot create simplified lines or polygons layer for a Plot workflow.');
+    }
+
     return {
         type: 'Vector',
         operator: {
@@ -1663,18 +1680,18 @@ function createSimplifiedLinesOrPolygonsLayerQueryWorkflow(
             sources: {
                 vector: createProjectedOperator(workflow.operator, metadata, mapSpatialReference),
             },
-        } as LineSimplificationDict,
+        } as LineSimplification,
     };
 }
 
 /**
  * Creates a projected operator if the layer has not the target spatial reference.
  */
-function createProjectedOperator(
-    inputOperator: LegacyTypedOperatorOperator,
+function createProjectedOperator<Operator extends RasterOperator | VectorOperator>(
+    inputOperator: Operator,
     metadata: LayerMetadata,
     targetSpatialReference: SpatialReference,
-): LegacyTypedOperatorOperator {
+): Operator {
     if (metadata.spatialReference.equals(targetSpatialReference)) {
         return inputOperator;
     }
@@ -1687,5 +1704,5 @@ function createProjectedOperator(
         sources: {
             source: inputOperator,
         },
-    };
+    } as Operator;
 }

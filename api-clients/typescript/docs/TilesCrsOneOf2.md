@@ -1,7 +1,7 @@
 
 # TilesCrsOneOf2
 
-A reference system data structure as defined in the MD_ReferenceSystem of the ISO 19115
+A reference system data structure as defined in the `MD_ReferenceSystem` of the ISO 19115
 
 ## Properties
 

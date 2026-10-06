@@ -46,6 +46,11 @@ class TestStacDataProviderDefinition(unittest.TestCase):
                     endpoint = '', 
                     access_key = null, 
                     secret_key = null, ),
+                authentication = geoengine_api_client.models.stac_provider_authentication.StacProviderAuthentication(
+                    endpoint = '', 
+                    client_id = '', 
+                    username = '', 
+                    password = '', ),
                 time_dimension = None,
                 datasets = [
                     geoengine_api_client.models.stac_provider_dataset.StacProviderDataset(
@@ -79,7 +84,8 @@ class TestStacDataProviderDefinition(unittest.TestCase):
                             ], )
                     ],
                 query_timeout_secs = 56,
-                page_limit = 56
+                page_limit = 56,
+                cache_ttl_secs = 0
             )
         else:
             return StacDataProviderDefinition(

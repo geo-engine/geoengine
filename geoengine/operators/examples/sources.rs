@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in benchmarks
 
 use futures::StreamExt;
-use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+use geoengine_datatypes::primitives::{BandSelection, CacheHint, CacheTtlSeconds};
 use geoengine_datatypes::raster::{
     BoundedGrid, GridBoundingBox2D, GridShapeAccess, RasterDataType,
 };
@@ -33,6 +33,7 @@ fn setup_gdal_source(
         overview_level: 0,
         meta_data: Box::new(meta_data),
         original_resolution_spatial_grid: None,
+        default_cache_ttl: CacheTtlSeconds::new(0),
         _phantom_data: PhantomData,
     }
 }
@@ -76,7 +77,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
                 0,
                 geo_transform,
                 grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new(
                 time,
@@ -84,7 +85,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
                 0,
                 geo_transform,
                 grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new(
                 time,
@@ -92,7 +93,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
                 0,
                 geo_transform,
                 grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new(
                 time,
@@ -100,7 +101,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
                 0,
                 geo_transform,
                 grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new(
                 time,
@@ -108,7 +109,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
                 0,
                 geo_transform,
                 grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new(
                 time,
@@ -116,7 +117,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
                 0,
                 geo_transform,
                 grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new(
                 time,
@@ -124,7 +125,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
                 0,
                 geo_transform,
                 grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new(
                 time,
@@ -132,7 +133,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
                 0,
                 geo_transform,
                 grid.clone(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
             RasterTile2D::new(
                 time,
@@ -140,7 +141,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
                 0,
                 geo_transform,
                 grid,
-                CacheHint::default(),
+                CacheHint::no_cache(),
             ),
         ],
         tiling_specification: tiling_spec,

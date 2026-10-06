@@ -24,8 +24,8 @@ pub struct GdalMetaDataRegular {
     pub data_time: Box<models::TimeInterval>,
     #[serde(rename = "step")]
     pub step: Box<models::TimeStep>,
-    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
-    pub cache_ttl: Option<i32>,
+    #[serde(rename = "cacheTtl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<Option<i32>>,
 }
 
 impl GdalMetaDataRegular {

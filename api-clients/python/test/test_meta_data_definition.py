@@ -48,7 +48,7 @@ class TestMetaDataDefinition(unittest.TestCase):
                     on_error = 'ignore', 
                     sql_query = '', 
                     attribute_query = '', 
-                    cache_ttl = 0, ),
+                    cache_ttl = null, ),
                 result_descriptor = geoengine_api_client.models.raster_result_descriptor.RasterResultDescriptor(
                     data_type = 'U8', 
                     spatial_reference = '', 
@@ -81,7 +81,7 @@ class TestMetaDataDefinition(unittest.TestCase):
                         time = geoengine_api_client.models.time_interval.TimeInterval(
                             start = 56, 
                             end = 56, ), 
-                        cache_ttl = 0, )
+                        cache_ttl = null, )
                     ],
                 time_placeholders = {
                     'key' : geoengine_api_client.models.gdal_source_time_placeholder.GdalSourceTimePlaceholder(
@@ -117,7 +117,7 @@ class TestMetaDataDefinition(unittest.TestCase):
                     on_error = 'ignore', 
                     sql_query = '', 
                     attribute_query = '', 
-                    cache_ttl = 0, ),
+                    cache_ttl = null, ),
                 result_descriptor = geoengine_api_client.models.raster_result_descriptor.RasterResultDescriptor(
                     data_type = 'U8', 
                     spatial_reference = '', 
@@ -150,7 +150,7 @@ class TestMetaDataDefinition(unittest.TestCase):
                         time = geoengine_api_client.models.time_interval.TimeInterval(
                             start = 56, 
                             end = 56, ), 
-                        cache_ttl = 0, )
+                        cache_ttl = null, )
                     ],
                 time_placeholders = {
                     'key' : geoengine_api_client.models.gdal_source_time_placeholder.GdalSourceTimePlaceholder(

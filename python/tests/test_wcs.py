@@ -67,7 +67,7 @@ class WcsTests(unittest.TestCase):
                 "type": "Raster",
                 "operator": {
                     "type": "GdalSource",
-                    "params": {"data": {"type": "internal", "datasetId": "36574dc3-560a-4b09-9d22-d5945f2b8093"}},
+                    "params": {"data": "ndvi"},
                 },
             }
 
@@ -217,7 +217,7 @@ class WcsTests(unittest.TestCase):
                 "type": "Raster",
                 "operator": {
                     "type": "GdalSource",
-                    "params": {"data": {"type": "internal", "datasetId": "36574dc3-560a-4b09-9d22-d5945f2b8093"}},
+                    "params": {"data": "ndvi"},
                 },
             }
 
@@ -365,7 +365,7 @@ class WcsTests(unittest.TestCase):
                 "type": "Raster",
                 "operator": {
                     "type": "GdalSource",
-                    "params": {"data": {"type": "internal", "datasetId": "36574dc3-560a-4b09-9d22-d5945f2b8093"}},
+                    "params": {"data": "ndvi"},
                 },
             }
 

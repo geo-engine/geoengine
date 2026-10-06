@@ -1,7 +1,7 @@
 
 # TileMatrixLimits
 
-A resource describing useful to create an array that describes the limits for a tile set [super::TileMatrixSet] based on the OGC TileSet Metadata Standard
+A resource describing useful to create an array that describes the limits for a tile set [`super::TileMatrixSet`] based on the OGC Two Dimensional Tile Matrix Set and Tile Set Metadata Standard
 
 ## Properties
 

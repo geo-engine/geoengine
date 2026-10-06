@@ -276,7 +276,7 @@ mod tests {
     #[test]
     #[allow(clippy::too_many_lines)]
     fn serde() {
-        let cache_hint = CacheHint::default();
+        let cache_hint = CacheHint::no_cache();
         let collection = MultiPointCollection::from_data(
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
@@ -410,7 +410,7 @@ mod tests {
             .iter()
             .cloned()
             .collect(),
-            CacheHint::default(),
+            CacheHint::no_cache(),
         )
         .unwrap();
 

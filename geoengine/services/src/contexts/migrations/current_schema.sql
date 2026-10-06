@@ -562,7 +562,8 @@ CREATE TYPE "GdalMetaDataList" AS (
 );
 
 CREATE TYPE "GdalMultiBand" AS (
-    result_descriptor "RasterResultDescriptor"
+    result_descriptor "RasterResultDescriptor",
+    cache_ttl int
 );
 
 CREATE TYPE "MetaDataDefinition" AS (
@@ -878,8 +879,21 @@ CREATE TYPE "WildliveDataConnectorDefinition" AS (
 
 CREATE TYPE "StacProviderS3Config" AS (
     endpoint text,
-    access_key text,
-    secret_key text
+    access_key bytea,
+    secret_key bytea
+);
+
+ALTER TYPE "StacProviderS3Config"
+ADD ATTRIBUTE access_key_encryption_nonce bytea;
+ALTER TYPE "StacProviderS3Config"
+ADD ATTRIBUTE secret_key_encryption_nonce bytea;
+
+CREATE TYPE "StacProviderAuthentication" AS (
+    endpoint text,
+    client_id text,
+    username text,
+    password bytea,
+    password_encryption_nonce bytea
 );
 
 CREATE TYPE "StacAssetBand" AS (
@@ -913,7 +927,9 @@ CREATE TYPE "StacDataProviderDefinition" AS (
     time_dimension "TimeDimension",
     datasets "StacProviderDataset" [],
     query_timeout_secs bigint,
-    page_limit bigint
+    page_limit bigint,
+    authentication "StacProviderAuthentication",
+    cache_ttl_secs int
 );
 
 CREATE TYPE "DataProviderDefinition" AS (

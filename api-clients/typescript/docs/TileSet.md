@@ -1,7 +1,7 @@
 
 # TileSet
 
-A resource describing a tileset based on the OGC TileSet Metadata Standard. At least one of the \'TileMatrixSet\',  or a link with \'rel\' tiling-scheme\"
+A resource describing a tileset based on the OGC Two Dimensional Tile Matrix Set and Tile Set Metadata. At least one of the [`TileMatrixSet`], or a link with \'rel\' tiling-scheme\"
 
 ## Properties
 

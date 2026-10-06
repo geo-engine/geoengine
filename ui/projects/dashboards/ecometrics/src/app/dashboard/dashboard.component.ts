@@ -34,7 +34,6 @@ import {
     Color,
     ColorMapSelectorComponent,
     extentToBboxDict,
-    HistogramDict,
     LinearGradient,
     NotificationService,
     PaletteColorizer,
@@ -50,7 +49,7 @@ import {
 import {utc} from 'moment';
 import {DataRange, DataSelectionService} from '../data-selection.service';
 import {MatSelectChange} from '@angular/material/select';
-import {Workflow} from '@geoengine/api-client';
+import {ProcessingGraph, RasterOperator, TypedPlotOperator} from '@geoengine/api-client';
 import {createBox} from 'ol/interaction/Draw';
 import OlFormatGeoJson from 'ol/format/GeoJSON';
 import {HttpResponse} from '@angular/common/http';
@@ -61,7 +60,7 @@ import {toSignal} from '@angular/core/rxjs-interop';
 interface Indicator {
     name: string;
     description: string;
-    workflow: Workflow;
+    workflow: ProcessingGraph;
     symbology: RasterSymbology;
     dataRange: DataRange;
     measurement: 'continuous' | 'classification';
@@ -124,7 +123,7 @@ export class DashboardComponent implements AfterViewInit {
         const indicator = event.value as Indicator;
         this.selectedIndicator.set(indicator);
 
-        const workflowId = await firstValueFrom(this.projectService.registerWorkflow(indicator.workflow));
+        const workflowId = await this.projectService.registerWorkflow(indicator.workflow);
 
         const rasterLayer = new RasterLayer({
             name: 'EBV',
@@ -176,17 +175,15 @@ export class DashboardComponent implements AfterViewInit {
 
                 const dataset = await firstValueFrom(this.datasetService.autoCreateDataset(create));
 
-                const workflowId = await firstValueFrom(
-                    this.projectService.registerWorkflow({
-                        type: 'Vector',
-                        operator: {
-                            type: 'OgrSource',
-                            params: {
-                                data: dataset.datasetName,
-                            },
+                const workflowId = await this.projectService.registerWorkflow({
+                    type: 'Vector',
+                    operator: {
+                        type: 'OgrSource',
+                        params: {
+                            data: dataset.datasetName,
                         },
-                    }),
-                );
+                    },
+                });
 
                 const observable = this.dataSelectionService.setPolygonLayer(
                     new VectorLayer({
@@ -230,7 +227,7 @@ export class DashboardComponent implements AfterViewInit {
     }
 
     private computePlotSize(): void {
-        const cardWidth = this.analyzeCard()?.nativeElement.clientWidth ?? 100;
+        const cardWidth = (this.analyzeCard()?.nativeElement as HTMLElement).clientWidth ?? 100;
 
         let plotWidth: number;
 
@@ -264,7 +261,7 @@ export class DashboardComponent implements AfterViewInit {
 
         this.computePlotSize();
 
-        let workflow: Workflow;
+        let workflow: TypedPlotOperator;
         if (indicator.measurement === 'classification') {
             workflow = {
                 type: 'Plot',
@@ -274,7 +271,7 @@ export class DashboardComponent implements AfterViewInit {
                         columnName: null,
                     },
                     sources: {
-                        source: indicator.workflow.operator,
+                        source: indicator.workflow.operator as RasterOperator,
                     },
                 },
             };
@@ -284,7 +281,7 @@ export class DashboardComponent implements AfterViewInit {
                 operator: {
                     type: 'Histogram',
                     params: {
-                        attributeName: 'NDVI',
+                        columnName: 'NDVI',
                         bounds: {
                             min: -1.0,
                             max: 1.0,
@@ -296,9 +293,9 @@ export class DashboardComponent implements AfterViewInit {
                         interactive: false,
                     },
                     sources: {
-                        source: indicator.workflow.operator,
+                        source: indicator.workflow.operator as RasterOperator,
                     },
-                } as HistogramDict,
+                },
             };
         } else {
             this.notificationService.error('Invalid measurement for plotting');
@@ -307,7 +304,7 @@ export class DashboardComponent implements AfterViewInit {
 
         this.plotLoading.set(true);
 
-        const workflowId = await firstValueFrom(this.projectService.registerWorkflow(workflow));
+        const workflowId = await this.projectService.registerWorkflow(workflow);
         const sessionId = await firstValueFrom(this.userService.getSessionTokenForRequest());
 
         const time = await this.projectService.getTimeOnce();
@@ -396,7 +393,6 @@ const INDICATORS: Array<Indicator> = [
                     aggregation: {
                         type: 'mean',
                         ignoreNoData: true,
-                        percentile: null,
                     },
                     window: {
                         granularity: 'years',

@@ -1,0 +1,659 @@
+use crate::{
+    error::{self},
+    operations::reproject::Reproject,
+    primitives::AxisAlignedRectangle,
+    util::Result,
+};
+use gdal::spatial_ref::SpatialRef;
+
+use postgres_types::private::BytesMut;
+
+use postgres_types::{FromSql, IsNull, ToSql, Type};
+use serde::de::Visitor;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use snafu::Error;
+use snafu::ResultExt;
+use std::str::FromStr;
+use std::{convert::TryFrom, fmt::Formatter};
+
+mod crs_metadata_provider;
+pub use crs_metadata_provider::CrsMetadataProvider;
+
+mod proj_projector;
+pub use proj_projector::{ProjCoordinateProjector, ProjMetadataProvider};
+
+mod geodesy_projector;
+pub use geodesy_projector::{Error as GeodesyProjectorError, GeodesyCoordinateProjector};
+
+mod static_epsg_metadata_provider;
+pub use static_epsg_metadata_provider::StaticEpsgMetadataProvider;
+
+mod projection_provider;
+pub use projection_provider::CoordinateProjection;
+
+mod mixed_metadata_provider;
+pub use mixed_metadata_provider::MixedMetadataProvider;
+
+mod mixed_projector;
+use mixed_projector::MixedCoordinateProjector;
+
+pub type DefaultCoordinateProjector = MixedCoordinateProjector;
+pub type DefaultMetadataProvider = MixedMetadataProvider;
+
+/// A spatial reference authority that is part of a spatial reference definition
+#[derive(
+    Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, ToSql, FromSql,
+)]
+#[serde(rename_all = "SCREAMING-KEBAB-CASE")]
+pub enum SpatialReferenceAuthority {
+    Epsg,
+    SrOrg,
+    Iau2000,
+    Esri,
+}
+
+impl std::fmt::Display for SpatialReferenceAuthority {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                SpatialReferenceAuthority::Epsg => "EPSG",
+                SpatialReferenceAuthority::SrOrg => "SR-ORG",
+                SpatialReferenceAuthority::Iau2000 => "IAU2000",
+                SpatialReferenceAuthority::Esri => "ESRI",
+            }
+        )
+    }
+}
+
+/// A spatial reference consists of an authority and a code
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ToSql, FromSql)]
+pub struct SpatialReference {
+    authority: SpatialReferenceAuthority,
+    code: u32,
+}
+
+impl SpatialReference {
+    pub fn new(authority: SpatialReferenceAuthority, code: u32) -> Self {
+        Self { authority, code }
+    }
+
+    pub fn authority(&self) -> &SpatialReferenceAuthority {
+        &self.authority
+    }
+
+    pub fn code(self) -> u32 {
+        self.code
+    }
+
+    /// the WGS 84 spatial reference system
+    pub fn epsg_4326() -> Self {
+        Self::new(SpatialReferenceAuthority::Epsg, 4326)
+    }
+
+    pub fn web_mercator() -> Self {
+        Self::new(SpatialReferenceAuthority::Epsg, 3857)
+    }
+
+    pub fn proj_string(self) -> Result<String> {
+        match self.authority {
+            SpatialReferenceAuthority::Epsg | SpatialReferenceAuthority::Iau2000 | SpatialReferenceAuthority::Esri => {
+                Ok(self.srs_string())
+            }
+            // poor-mans integration of Meteosat Second Generation 
+            SpatialReferenceAuthority::SrOrg if self.code == 81 => Ok("+proj=geos +lon_0=0 +h=35785831 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs +type=crs".to_owned()),
+            SpatialReferenceAuthority::SrOrg => {
+                Err(error::Error::ProjStringUnresolvable { spatial_ref: self })
+                //TODO: we might need to look them up somehow! Best solution would be a registry where we can store user definexd srs strings.
+            }
+        }
+    }
+
+    /// Return the area of use in EPSG:4326 projection
+    pub fn area_of_use<A: AxisAlignedRectangle>(self) -> Result<A> {
+        let provider = DefaultMetadataProvider::new_known_crs(self)?;
+        provider.area_of_use()
+    }
+
+    /// Return the area of use in current projection
+    pub fn area_of_use_projected<A: AxisAlignedRectangle>(self) -> Result<A> {
+        if self == Self::epsg_4326() {
+            return self.area_of_use();
+        }
+        let provider = DefaultMetadataProvider::new_known_crs(self)?;
+        provider.area_of_use_projected()
+    }
+
+    /// Return the srs-string "authority:code"
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn srs_string(&self) -> String {
+        format!("{}:{}", self.authority, self.code)
+    }
+
+    /// Compute the bounding box of this spatial reference that is also valid in the `other` spatial reference. Might be None.
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn area_of_use_intersection<T>(&self, other: &SpatialReference) -> Result<Option<T>>
+    where
+        T: AxisAlignedRectangle,
+    {
+        // generate a projector which transforms wgs84 into the projection we want to produce.
+        let valid_bounds_proj =
+            DefaultCoordinateProjector::from_known_srs(SpatialReference::epsg_4326(), *self)?;
+
+        // transform the bounds of the input srs (coordinates are in wgs84) into the output projection.
+        // TODO check if  there is a better / smarter way to check if the coordinates are valid.
+        let area_out = self.area_of_use::<T>()?;
+        let area_other = other.area_of_use::<T>()?;
+
+        area_out
+            .intersection(&area_other)
+            .map(|x| x.reproject(&valid_bounds_proj))
+            .transpose()
+    }
+
+    /// Computes the meters per unit for this spatial reference.
+    ///
+    /// Projected CRS: meters per the CRS's linear unit (e.g. 1.0 for meter, 0.3048 for foot).
+    /// Geographic CRS: meters per degree (equatorial arc length).
+    pub fn meters_per_unit(self) -> Result<f64> {
+        DefaultMetadataProvider::new_known_crs(self)?.meters_per_unit()
+    }
+
+    /// Checks if the spatial reference uses meters as its unit of measurement.
+    pub fn uses_meters(self) -> Result<bool> {
+        DefaultMetadataProvider::new_known_crs(self)?.uses_meters()
+    }
+}
+
+impl std::fmt::Display for SpatialReference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.authority, self.code)
+    }
+}
+
+impl Serialize for SpatialReference {
+    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+/// Helper struct for deserializing a `SpatialReferencce`
+struct SpatialReferenceDeserializeVisitor;
+
+impl Visitor<'_> for SpatialReferenceDeserializeVisitor {
+    type Value = SpatialReference;
+
+    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        formatter.write_str("a spatial reference in the form authority:code")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        v.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+impl<'de> Deserialize<'de> for SpatialReference {
+    fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(SpatialReferenceDeserializeVisitor)
+    }
+}
+
+impl FromStr for SpatialReferenceAuthority {
+    type Err = error::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "EPSG" => SpatialReferenceAuthority::Epsg,
+            "SR-ORG" => SpatialReferenceAuthority::SrOrg,
+            "IAU2000" => SpatialReferenceAuthority::Iau2000,
+            "ESRI" => SpatialReferenceAuthority::Esri,
+            _ => {
+                return Err(error::Error::InvalidSpatialReferenceString {
+                    spatial_reference_string: s.into(),
+                });
+            }
+        })
+    }
+}
+
+impl FromStr for SpatialReference {
+    type Err = error::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut split = s.split(':');
+
+        match (split.next(), split.next(), split.next()) {
+            (Some(authority), Some(code), None) => Ok(Self::new(
+                authority.parse()?,
+                code.parse::<u32>().context(error::ParseU32)?,
+            )),
+            _ => Err(error::Error::InvalidSpatialReferenceString {
+                spatial_reference_string: s.into(),
+            }),
+        }
+    }
+}
+
+impl TryFrom<SpatialRef> for SpatialReference {
+    type Error = error::Error;
+
+    fn try_from(value: SpatialRef) -> Result<Self, Self::Error> {
+        let auth_name = value.auth_name().map_or_else(|| value.authority(), Ok)?;
+        Ok(SpatialReference::new(
+            SpatialReferenceAuthority::from_str(&auth_name)?,
+            value.auth_code()? as u32,
+        ))
+    }
+}
+
+impl TryFrom<SpatialReference> for SpatialRef {
+    type Error = error::Error;
+
+    fn try_from(value: SpatialReference) -> Result<Self, Self::Error> {
+        if value.authority == SpatialReferenceAuthority::Epsg {
+            return SpatialRef::from_epsg(value.code).context(error::Gdal);
+        }
+
+        // TODO: support other projections reliably
+
+        SpatialRef::from_proj4(&value.proj_string()?).context(error::Gdal)
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum SpatialReferenceOption {
+    SpatialReference(SpatialReference),
+    Unreferenced,
+}
+
+impl SpatialReferenceOption {
+    pub fn is_spatial_ref(self) -> bool {
+        match self {
+            SpatialReferenceOption::SpatialReference(_) => true,
+            SpatialReferenceOption::Unreferenced => false,
+        }
+    }
+
+    pub fn is_unreferenced(self) -> bool {
+        !self.is_spatial_ref()
+    }
+
+    pub fn as_option(self) -> Option<SpatialReference> {
+        self.into()
+    }
+}
+
+impl ToSql for SpatialReferenceOption {
+    fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>>
+    where
+        Self: Sized,
+    {
+        match self {
+            SpatialReferenceOption::SpatialReference(sref) => sref.to_sql(ty, out),
+            SpatialReferenceOption::Unreferenced => Ok(IsNull::Yes),
+        }
+    }
+
+    fn accepts(ty: &Type) -> bool
+    where
+        Self: Sized,
+    {
+        <SpatialReference as ToSql>::accepts(ty)
+    }
+
+    fn to_sql_checked(
+        &self,
+        ty: &Type,
+        out: &mut BytesMut,
+    ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+        match self {
+            SpatialReferenceOption::SpatialReference(sref) => sref.to_sql_checked(ty, out),
+            SpatialReferenceOption::Unreferenced => Ok(IsNull::Yes),
+        }
+    }
+}
+
+impl<'a> FromSql<'a> for SpatialReferenceOption {
+    fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
+        Ok(SpatialReferenceOption::SpatialReference(
+            SpatialReference::from_sql(ty, raw)?,
+        ))
+    }
+
+    fn from_sql_null(_: &Type) -> Result<Self, Box<dyn Error + Sync + Send>> {
+        Ok(SpatialReferenceOption::Unreferenced)
+    }
+
+    fn accepts(ty: &Type) -> bool {
+        <SpatialReference as FromSql>::accepts(ty)
+    }
+}
+
+impl std::fmt::Display for SpatialReferenceOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SpatialReferenceOption::SpatialReference(p) => write!(f, "{p}"),
+            SpatialReferenceOption::Unreferenced => Ok(()),
+        }
+    }
+}
+
+impl From<SpatialReference> for SpatialReferenceOption {
+    fn from(spatial_reference: SpatialReference) -> Self {
+        Self::SpatialReference(spatial_reference)
+    }
+}
+
+impl From<Option<SpatialReference>> for SpatialReferenceOption {
+    fn from(option: Option<SpatialReference>) -> Self {
+        match option {
+            Some(p) => SpatialReferenceOption::SpatialReference(p),
+            None => SpatialReferenceOption::Unreferenced,
+        }
+    }
+}
+
+impl Serialize for SpatialReferenceOption {
+    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl From<SpatialReferenceOption> for Option<SpatialReference> {
+    fn from(s_ref: SpatialReferenceOption) -> Self {
+        match s_ref {
+            SpatialReferenceOption::SpatialReference(s) => Some(s),
+            SpatialReferenceOption::Unreferenced => None,
+        }
+    }
+}
+
+/// Helper struct for deserializing a `SpatialReferenceOption`
+struct SpatialReferenceOptionDeserializeVisitor;
+
+impl Visitor<'_> for SpatialReferenceOptionDeserializeVisitor {
+    type Value = SpatialReferenceOption;
+
+    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        formatter.write_str("a spatial reference in the form authority:code")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        if v.is_empty() {
+            return Ok(SpatialReferenceOption::Unreferenced);
+        }
+
+        let spatial_reference: SpatialReference = v.parse().map_err(serde::de::Error::custom)?;
+
+        Ok(spatial_reference.into())
+    }
+}
+
+impl<'de> Deserialize<'de> for SpatialReferenceOption {
+    fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(SpatialReferenceOptionDeserializeVisitor)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::f64;
+    use std::convert::TryInto;
+
+    #[test]
+    fn display() {
+        assert_eq!(SpatialReferenceAuthority::Epsg.to_string(), "EPSG");
+        assert_eq!(SpatialReferenceAuthority::SrOrg.to_string(), "SR-ORG");
+        assert_eq!(SpatialReferenceAuthority::Iau2000.to_string(), "IAU2000");
+        assert_eq!(SpatialReferenceAuthority::Esri.to_string(), "ESRI");
+
+        assert_eq!(
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326).to_string(),
+            "EPSG:4326"
+        );
+        assert_eq!(
+            SpatialReference::new(SpatialReferenceAuthority::SrOrg, 1).to_string(),
+            "SR-ORG:1"
+        );
+        assert_eq!(
+            SpatialReference::new(SpatialReferenceAuthority::Iau2000, 4711).to_string(),
+            "IAU2000:4711"
+        );
+        assert_eq!(
+            SpatialReference::new(SpatialReferenceAuthority::Esri, 42).to_string(),
+            "ESRI:42"
+        );
+    }
+
+    #[test]
+    fn serialize_json() {
+        assert_eq!(
+            serde_json::to_string(&SpatialReference::new(
+                SpatialReferenceAuthority::Epsg,
+                4326
+            ))
+            .unwrap(),
+            "\"EPSG:4326\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SpatialReference::new(SpatialReferenceAuthority::SrOrg, 1))
+                .unwrap(),
+            "\"SR-ORG:1\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SpatialReference::new(
+                SpatialReferenceAuthority::Iau2000,
+                4711
+            ))
+            .unwrap(),
+            "\"IAU2000:4711\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SpatialReference::new(SpatialReferenceAuthority::Esri, 42))
+                .unwrap(),
+            "\"ESRI:42\""
+        );
+    }
+
+    #[test]
+    fn deserialize_json() {
+        assert_eq!(
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326),
+            serde_json::from_str("\"EPSG:4326\"").unwrap()
+        );
+        assert_eq!(
+            SpatialReference::new(SpatialReferenceAuthority::SrOrg, 1),
+            serde_json::from_str("\"SR-ORG:1\"").unwrap()
+        );
+        assert_eq!(
+            SpatialReference::new(SpatialReferenceAuthority::Iau2000, 4711),
+            serde_json::from_str("\"IAU2000:4711\"").unwrap()
+        );
+        assert_eq!(
+            SpatialReference::new(SpatialReferenceAuthority::Esri, 42),
+            serde_json::from_str("\"ESRI:42\"").unwrap()
+        );
+
+        assert!(serde_json::from_str::<SpatialReference>("\"foo:bar\"").is_err());
+    }
+
+    #[test]
+    fn spatial_reference_option_serde() {
+        assert_eq!(
+            serde_json::to_string(&SpatialReferenceOption::SpatialReference(
+                SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326)
+            ))
+            .unwrap(),
+            "\"EPSG:4326\""
+        );
+
+        assert_eq!(
+            serde_json::to_string(&SpatialReferenceOption::Unreferenced).unwrap(),
+            "\"\""
+        );
+
+        assert_eq!(
+            SpatialReferenceOption::SpatialReference(SpatialReference::new(
+                SpatialReferenceAuthority::Epsg,
+                4326
+            )),
+            serde_json::from_str("\"EPSG:4326\"").unwrap()
+        );
+
+        assert_eq!(
+            SpatialReferenceOption::Unreferenced,
+            serde_json::from_str("\"\"").unwrap()
+        );
+
+        assert!(serde_json::from_str::<SpatialReferenceOption>("\"foo:bar\"").is_err());
+    }
+
+    #[test]
+    fn is_spatial_ref() {
+        let s_ref = SpatialReferenceOption::from(SpatialReference::epsg_4326());
+        assert!(s_ref.is_spatial_ref());
+        assert!(!s_ref.is_unreferenced());
+    }
+
+    #[test]
+    fn is_unreferenced() {
+        let s_ref = SpatialReferenceOption::Unreferenced;
+        assert!(s_ref.is_unreferenced());
+        assert!(!s_ref.is_spatial_ref());
+    }
+
+    #[test]
+    fn from_option_some() {
+        let s_ref: SpatialReferenceOption = Some(SpatialReference::epsg_4326()).into();
+        assert_eq!(
+            s_ref,
+            SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326())
+        );
+    }
+
+    #[test]
+    fn from_option_none() {
+        let s_ref: SpatialReferenceOption = None.into();
+        assert_eq!(s_ref, SpatialReferenceOption::Unreferenced);
+    }
+
+    #[test]
+    fn into_option_some() {
+        let s_ref: Option<SpatialReference> =
+            SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326()).into();
+        assert_eq!(s_ref, Some(SpatialReference::epsg_4326()));
+    }
+
+    #[test]
+    fn into_option_none() {
+        let s_ref: Option<SpatialReference> = SpatialReferenceOption::Unreferenced.into();
+        assert_eq!(s_ref, None);
+    }
+
+    #[test]
+    fn proj_string() {
+        assert_eq!(
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326)
+                .proj_string()
+                .unwrap(),
+            "EPSG:4326"
+        );
+        assert_eq!(
+            SpatialReference::new(SpatialReferenceAuthority::SrOrg, 81)
+                .proj_string()
+                .unwrap(),
+            "+proj=geos +lon_0=0 +h=35785831 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs +type=crs"
+        );
+        assert_eq!(
+            SpatialReference::new(SpatialReferenceAuthority::Iau2000, 4711)
+                .proj_string()
+                .unwrap(),
+            "IAU2000:4711"
+        );
+        assert_eq!(
+            SpatialReference::new(SpatialReferenceAuthority::Esri, 42)
+                .proj_string()
+                .unwrap(),
+            "ESRI:42"
+        );
+        assert!(
+            SpatialReference::new(SpatialReferenceAuthority::SrOrg, 1)
+                .proj_string()
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn spatial_reference_to_gdal_spatial_ref_epsg() {
+        let spatial_reference = SpatialReference::epsg_4326();
+        let gdal_sref: SpatialRef = spatial_reference.try_into().unwrap();
+
+        assert_eq!(gdal_sref.auth_name().unwrap(), "EPSG");
+        assert_eq!(gdal_sref.auth_code().unwrap(), 4326);
+    }
+
+    #[test]
+    fn it_knows_if_it_is_in_meters() {
+        for (epsg, should_be_in_meters) in &[
+            (4326, false), // WGS 84
+            (3857, true),  // Web Mercator
+            (25832, true), // ETRS89 / UTM zone 32N
+            (4258, false), // ETRS89
+        ] {
+            let spatial_ref = SpatialReference::new(SpatialReferenceAuthority::Epsg, *epsg);
+            assert_eq!(
+                spatial_ref.uses_meters().unwrap(),
+                *should_be_in_meters,
+                "EPSG:{epsg} should be in meters: {should_be_in_meters}",
+            );
+        }
+    }
+
+    #[test]
+    fn it_calculates_the_perimeter_in_meters() {
+        use float_cmp::assert_approx_eq;
+
+        let wgs84 = SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326);
+        let web_mercator = SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857);
+
+        // cf. <https://docs.ogc.org/is/17-083r4/17-083r4.html#6-1-1-1-%C2%A0-tile-matrix-in-a-two-dimensional-space>
+        assert_approx_eq!(
+            f64,
+            wgs84.meters_per_unit().unwrap(),
+            111_319.490_8,
+            epsilon = 0.000_1
+        );
+
+        assert_approx_eq!(f64, web_mercator.meters_per_unit().unwrap(), 1.0);
+
+        assert_approx_eq!(
+            f64,
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 4258) // ETRS89
+                .meters_per_unit()
+                .unwrap(),
+            111_319.490_8,
+            epsilon = 0.000_1
+        );
+    }
+}

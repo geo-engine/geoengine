@@ -29,7 +29,8 @@ use bb8_postgres::{
     tokio_postgres::{Config, Socket, tls::MakeTlsConnect, tls::TlsConnect},
 };
 use geoengine_datatypes::{
-    machine_learning::MlModelName, raster::TilingSpecification, util::test::TestDefault,
+    machine_learning::MlModelName, primitives::CacheTtlSeconds, raster::TilingSpecification,
+    util::test::TestDefault,
 };
 use geoengine_operators::{
     cache::{new_raster_cache::NewRasterCacheEnum, shared_cache::SharedCache},
@@ -65,6 +66,7 @@ where
     volumes: Volumes,
     tile_cache: Arc<SharedCache>,
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
+    default_cache_ttl: CacheTtlSeconds,
     provider_registry: Arc<DataConnectorRegistry>,
     gdal_process_pool: Arc<GdalProcessPool>,
 }
@@ -122,6 +124,7 @@ where
             volumes: Default::default(),
             tile_cache: Arc::new(SharedCache::test_default()),
             new_raster_cache: None,
+            default_cache_ttl: CacheTtlSeconds::new(0),
             provider_registry,
             gdal_process_pool,
         })
@@ -188,6 +191,7 @@ where
                 .expect("tile cache creation should work because the config is valid"),
             ),
             new_raster_cache,
+            default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
             provider_registry,
             gdal_process_pool,
         })
@@ -262,6 +266,7 @@ where
                 .expect("tile cache creation should work because the config is valid"),
             ),
             new_raster_cache,
+            default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
             provider_registry,
             gdal_process_pool,
         };
@@ -455,6 +460,7 @@ where
             self.context.exe_ctx_tiling_spec,
             self.context.thread_pool.clone(),
             self.context.gdal_process_pool.clone(),
+            self.context.default_cache_ttl,
             Some(self.context.tile_cache.clone()),
             self.context.new_raster_cache.clone(),
             Some(
@@ -473,6 +479,7 @@ where
             self.context.exe_ctx_tiling_spec,
             self.context.gdal_process_pool.clone(),
             self.context.new_raster_cache.clone(),
+            self.context.default_cache_ttl,
         ))
     }
 
@@ -641,7 +648,7 @@ mod tests {
             VectorResultDescriptor,
         },
         machine_learning::MlModelMetadata,
-        mock::{MockPointSource, MockPointSourceParams},
+        mock::{MockPointSource, MockPointSourceParams, SpatialBoundsDerive},
         plot::{Statistics, StatisticsParams},
         source::{
             CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
@@ -841,7 +848,7 @@ mod tests {
             .unwrap();
 
         let layer_workflow_id = db
-            .register_workflow(Workflow::Legacy {
+            .register_workflow(Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
                         params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -855,7 +862,7 @@ mod tests {
         assert!(db.load_workflow(&layer_workflow_id).await.is_ok());
 
         let plot_workflow_id = db
-            .register_workflow(Workflow::Legacy {
+            .register_workflow(Workflow {
                 operator: Statistics {
                     params: StatisticsParams {
                         column_names: vec![],
@@ -1085,7 +1092,7 @@ mod tests {
 
     #[ge_context::test]
     async fn it_persists_workflows(app_ctx: PostgresContext<NoTls>) {
-        let workflow = Workflow::Legacy {
+        let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -1116,7 +1123,10 @@ mod tests {
                             {"x":1.0,"y":2.0},
                             {"x":1.0,"y":2.0},
                             {"x":1.0,"y":2.0}
-                        ]
+                        ],
+                        "spatialBounds": {
+                            "type": "none",
+                        }
                     }
                 }
             })
@@ -1154,7 +1164,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
@@ -1317,7 +1327,7 @@ mod tests {
             priority: Some(33),
             data: test_data!("netcdf4d/").into(),
             overviews: test_data!("netcdf4d/overviews/").into(),
-            cache_ttl: CacheTtlSeconds::new(0),
+            cache_ttl: Some(CacheTtlSeconds::new(0)),
         };
 
         let provider_id = db.add_layer_provider(provider.into()).await.unwrap();
@@ -1396,7 +1406,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1470,7 +1480,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1522,7 +1532,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1580,7 +1590,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1638,7 +1648,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -1747,7 +1757,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: vector_descriptor.clone(),
             phantom: Default::default(),
@@ -1774,7 +1784,7 @@ mod tests {
                 granularity: TimeGranularity::Millis,
                 step: 0,
             },
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let id = db
@@ -1793,7 +1803,7 @@ mod tests {
             time: None,
             params: gdal_params.clone(),
             result_descriptor: raster_descriptor.clone(),
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let id = db
@@ -1835,7 +1845,7 @@ mod tests {
                 step: 0,
             },
             band_offset: 0,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let id = db
@@ -1880,26 +1890,20 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
     async fn it_collects_layers(app_ctx: PostgresContext<NoTls>) {
-        use crate::api::model::processing_graphs::{
-            MockPointSource as ApiMockPointSource,
-            MockPointSourceParameters as ApiMockPointSourceParameters, SpatialBoundsDerive,
-            TypedOperator as ApiTypedOperator, VectorOperator as ApiVectorOperator,
-        };
-
         let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
 
-        let workflow = Workflow::Typed {
-            operator: ApiTypedOperator::Vector(ApiVectorOperator::MockPointSource(
-                ApiMockPointSource {
-                    r#type: Default::default(),
-                    params: ApiMockPointSourceParameters {
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(
+                MockPointSource {
+                    params: MockPointSourceParams {
                         points: vec![(1., 2.).into(); 3],
-                        spatial_bounds: SpatialBoundsDerive::None(Default::default()),
+                        spatial_bounds: SpatialBoundsDerive::None,
                     },
-                },
-            )),
+                }
+                .boxed(),
+            ),
         };
 
         let root_collection_id = layer_db.get_root_layer_collection_id().await.unwrap();
@@ -2091,7 +2095,7 @@ mod tests {
 
         let layer_db = app_ctx.session_context(session).db();
 
-        let workflow = Workflow::Legacy {
+        let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -2447,7 +2451,7 @@ mod tests {
         let user_session = app_ctx.create_anonymous_session().await.unwrap();
         let user_layer_db = app_ctx.session_context(user_session.clone()).db();
 
-        let workflow = Workflow::Legacy {
+        let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams {
@@ -2970,7 +2974,7 @@ mod tests {
 
         let layer_db = app_ctx.session_context(session).db();
 
-        let workflow = Workflow::Legacy {
+        let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -3150,7 +3154,7 @@ mod tests {
         let user_session = app_ctx.create_anonymous_session().await.unwrap();
         let user_layer_db = app_ctx.session_context(user_session.clone()).db();
 
-        let workflow = Workflow::Legacy {
+        let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams {
@@ -3689,7 +3693,7 @@ mod tests {
         let layer = AddLayer {
             name: "layer".to_string(),
             description: "description".to_string(),
-            workflow: Workflow::Legacy {
+            workflow: Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
                         params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -3885,7 +3889,7 @@ mod tests {
                 AddLayer {
                     name: "layer".to_string(),
                     description: "description".to_string(),
-                    workflow: Workflow::Legacy {
+                    workflow: Workflow {
                         operator: TypedOperator::Vector(
                             MockPointSource {
                                 params: MockPointSourceParams::new(vec![
@@ -3955,7 +3959,7 @@ mod tests {
                 AddLayer {
                     name: "layer 1".to_string(),
                     description: "description".to_string(),
-                    workflow: Workflow::Legacy {
+                    workflow: Workflow {
                         operator: TypedOperator::Vector(
                             MockPointSource {
                                 params: MockPointSourceParams::new(vec![
@@ -3980,7 +3984,7 @@ mod tests {
                 AddLayer {
                     name: "layer 2".to_string(),
                     description: "description".to_string(),
-                    workflow: Workflow::Legacy {
+                    workflow: Workflow {
                         operator: TypedOperator::Vector(
                             MockPointSource {
                                 params: MockPointSourceParams::new(vec![
@@ -4088,7 +4092,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
@@ -4182,7 +4186,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
@@ -4872,7 +4876,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Ignore,
             sql_query: None,
             attribute_query: None,
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<

@@ -29,8 +29,8 @@ pub struct GdalMetadataNetCdfCf {
     /// A band offset specifies the first band index to use for the first point in time. All other time steps are added to this offset.
     #[serde(rename = "bandOffset")]
     pub band_offset: i32,
-    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
-    pub cache_ttl: Option<i32>,
+    #[serde(rename = "cacheTtl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<Option<i32>>,
 }
 
 impl GdalMetadataNetCdfCf {

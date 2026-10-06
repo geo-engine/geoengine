@@ -1,7 +1,7 @@
 
 # TileMatrixSetId
 
-Identifier for a supported TileMatrixSet
+Identifier for a supported [`TileMatrixSet`]
 
 ## Properties
 

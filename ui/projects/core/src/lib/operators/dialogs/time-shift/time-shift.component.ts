@@ -3,18 +3,15 @@ import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} fr
 import {ProjectService} from '../../../project/project.service';
 import {map, mergeMap} from 'rxjs/operators';
 import {TimeStepGranularityDict} from '../../../backend/backend.model';
-import {BehaviorSubject, Observable} from 'rxjs';
+import {BehaviorSubject, Observable, from} from 'rxjs';
 import moment from 'moment';
 import {
-    AbsoluteTimeShiftDictParams,
     Layer,
     NotificationService,
     RasterLayer,
     RasterSymbology,
-    RelativeTimeShiftDictParams,
     ResultTypes,
     Time,
-    TimeShiftDict,
     VectorLayer,
     VectorSymbology,
     geoengineValidators,
@@ -22,7 +19,7 @@ import {
     CommonModule,
     AsyncValueDefault,
 } from '@geoengine/common';
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {ProcessingGraph, RasterOperator, VectorOperator, TimeShiftParameters} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -164,7 +161,7 @@ export class TimeShiftComponent implements AfterViewInit {
         const outputName: string = this.form.controls['name'].value;
         const type: TimeShiftFormType = this.form.controls['type'].value;
 
-        let params: AbsoluteTimeShiftDictParams | RelativeTimeShiftDictParams;
+        let params: TimeShiftParameters;
 
         if (type === 'absolute') {
             const timeInput = this.form.controls['timeInterval'].value;
@@ -203,22 +200,46 @@ export class TimeShiftComponent implements AfterViewInit {
 
         this.loading$.next(true);
 
-        this.projectService
-            .getWorkflow(sourceLayer.workflowId)
+        from(this.projectService.getWorkflow(sourceLayer.workflowId))
             .pipe(
-                mergeMap((inputWorkflow: WorkflowDict) =>
-                    this.projectService.registerWorkflow({
-                        type: layerType,
-                        operator: {
-                            type: 'TimeShift',
-                            params,
-                            sources: {
-                                source: inputWorkflow.operator,
-                            },
-                        } as TimeShiftDict,
-                    }),
-                ),
-                mergeMap((workflowId) => {
+                mergeMap((inputWorkflow: ProcessingGraph) => {
+                    if (inputWorkflow.type === 'Raster') {
+                        const sourceOperator: RasterOperator = inputWorkflow.operator;
+
+                        return from(
+                            this.projectService.registerWorkflow({
+                                type: 'Raster',
+                                operator: {
+                                    type: 'TimeShift',
+                                    params,
+                                    sources: {
+                                        source: sourceOperator,
+                                    },
+                                },
+                            }),
+                        );
+                    }
+
+                    if (inputWorkflow.type === 'Vector') {
+                        const sourceOperator: VectorOperator = inputWorkflow.operator;
+
+                        return from(
+                            this.projectService.registerWorkflow({
+                                type: 'Vector',
+                                operator: {
+                                    type: 'TimeShift',
+                                    params,
+                                    sources: {
+                                        source: sourceOperator,
+                                    },
+                                },
+                            }),
+                        );
+                    }
+
+                    throw new Error(`Invalid workflow type ${inputWorkflow.type}.`);
+                }),
+                mergeMap((workflowId: string) => {
                     if (layerType === 'Vector') {
                         return this.projectService.addLayer(
                             new VectorLayer({

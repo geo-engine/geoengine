@@ -12,6 +12,9 @@ describe('LayersComponent', () => {
     let fixture: ComponentFixture<LayersComponent>;
     let edvLayersService: EdvLayersService;
     const getLayerCollectionItems = vi.fn<(_provider: string, collection: string) => Promise<{items: unknown[]}>>();
+    const getLayer = vi.fn();
+    const registerAndGetLayerWorkflowId = vi.fn();
+    const getWorkflowIdMetadata = vi.fn();
     const setTime = vi.fn().mockResolvedValue(undefined);
     const setTimeStepDuration = vi.fn();
     const listings: Record<string, {items: unknown[]}> = {
@@ -75,14 +78,20 @@ describe('LayersComponent', () => {
 
     beforeEach(async () => {
         vi.clearAllMocks();
-        getLayerCollectionItems.mockImplementation((_provider, collection) => Promise.resolve(listings[collection] ?? {items: []}));
+        getLayerCollectionItems
+            .mockReset()
+            .mockImplementation((_provider, collection) => Promise.resolve(listings[collection] ?? {items: []}));
+        // no raster symbology, so no legend is loaded
+        getLayer.mockReset().mockResolvedValue({name: 'Layer', symbology: undefined});
+        registerAndGetLayerWorkflowId.mockReset().mockResolvedValue('workflow-id');
+        getWorkflowIdMetadata.mockReset();
         await TestBed.configureTestingModule({
             imports: [LayersComponent],
             providers: [
                 provideNativeDateAdapter(),
                 {
                     provide: LayersService,
-                    useValue: {getLayerCollectionItems},
+                    useValue: {getLayerCollectionItems, getLayer, registerAndGetLayerWorkflowId, getWorkflowIdMetadata},
                 },
                 {provide: AppConfig, useValue: {EDV: {CATEGORY: 'adHoc'}}},
                 EdvLayersService,
@@ -145,9 +154,7 @@ describe('LayersComponent', () => {
         await fixture.whenStable();
         fixture.detectChanges();
         const element = fixture.nativeElement as HTMLElement;
-        const button = [...element.querySelectorAll('button')].find((candidate) =>
-            candidate.textContent?.includes('Apply visualization'),
-        ) as HTMLButtonElement;
+        const button = [...element.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('Apply visualization'))!;
         expect(fixture.componentInstance.dataSources().map((source) => source.key)).toEqual(['sentinel']);
         expect(fixture.componentInstance.currentPresets()[0].category).toBe('adHoc');
         expect(fixture.componentInstance.mapTileLayer()).toBeUndefined();
@@ -171,6 +178,36 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         expect(fixture.componentInstance.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'alternate'});
         expect(button.disabled).toBe(true);
+    });
+
+    it('loads the legend only after applying a preset and handles a failed request', async () => {
+        getLayer.mockRejectedValue(new Error('Layer unavailable'));
+        fixture.detectChanges();
+        await fixture.whenStable();
+        const component = fixture.componentInstance;
+        const element = fixture.nativeElement as HTMLElement;
+        component.selectPreset(component.currentPresets()[0]);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(getLayer).not.toHaveBeenCalled();
+        expect(element.querySelector('.legend')).toBeNull();
+
+        component.applySelectedPreset();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(getLayer).toHaveBeenCalledWith('provider', 'vv');
+        expect(element.querySelector('.legend-error')?.textContent).toContain('Failed to load legend');
+        expect(component.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
+
+        component.selectPreset(component.currentPresets()[1]);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(getLayer).toHaveBeenCalledTimes(1);
+        component.applySelectedPreset();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(getLayer).toHaveBeenLastCalledWith('provider', 'alternate');
     });
 
     it('loads all configured categories when debug mode is enabled', async () => {

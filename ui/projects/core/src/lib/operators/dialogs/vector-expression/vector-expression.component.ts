@@ -11,11 +11,9 @@ import {
     ReactiveFormsModule,
 } from '@angular/forms';
 import {ProjectService} from '../../../project/project.service';
-import {BehaviorSubject, combineLatest, firstValueFrom, Observable, of, ReplaySubject, Subscription} from 'rxjs';
+import {BehaviorSubject, combineLatest, firstValueFrom, from, Observable, of, ReplaySubject, Subscription} from 'rxjs';
 import {map, mergeMap, startWith} from 'rxjs/operators';
 import {
-    ColumnOutputColumn,
-    GeometryOutputColumn,
     Measurement,
     RandomColorService,
     ResultTypes,
@@ -23,8 +21,6 @@ import {
     UnitlessMeasurement,
     VectorColumnDataType,
     VectorColumnDataTypes,
-    VectorExpressionDict,
-    VectorExpressionParams,
     VectorLayer,
     VectorLayerMetadata,
     VectorSymbology,
@@ -36,9 +32,10 @@ import {
     CommonModule,
     AsyncStringSanitizer,
     AsyncValueDefault,
+    errorToText,
 } from '@geoengine/common';
 
-import {Workflow as WorkflowDict} from '@geoengine/api-client';
+import {ProcessingGraph, VectorOperator, OutputColumn, VectorExpressionParameters} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -306,11 +303,11 @@ export class VectorExpressionComponent implements AfterViewInit, OnDestroy {
 
         const sourceLayer = this.form.controls.source.value!;
 
-        const inputColumns = this.columnNames.controls.map((fc) => (fc ? fc.value?.toString() : ''));
+        const inputColumns = this.columnNames.controls.map((fc) => fc?.value?.toString() ?? '');
 
         const outputColumnType = this.form.controls.outputColumnType.value;
         const outputGeometryType = this.form.controls.outputGeometryType.value;
-        let outputColumn: ColumnOutputColumn | GeometryOutputColumn;
+        let outputColumn: OutputColumn;
         if (outputColumnType === 'column') {
             outputColumn = {
                 type: 'column',
@@ -329,26 +326,27 @@ export class VectorExpressionComponent implements AfterViewInit, OnDestroy {
 
         const layerName = this.form.controls.layerName.value;
 
-        this.projectService
-            .getWorkflow(sourceLayer.workflowId)
+        from(this.projectService.getWorkflow(sourceLayer.workflowId))
             .pipe(
-                mergeMap(({operator: vector}: WorkflowDict) =>
-                    this.projectService.registerWorkflow({
-                        type: 'Vector',
-                        operator: {
-                            type: 'VectorExpression',
-                            params: {
-                                inputColumns,
-                                outputColumn,
-                                expression,
-                                geometryColumnName,
-                                outputMeasurement,
-                            } as VectorExpressionParams,
-                            sources: {
-                                vector,
+                mergeMap((inputWorkflow: ProcessingGraph) =>
+                    from(
+                        this.projectService.registerWorkflow({
+                            type: 'Vector',
+                            operator: {
+                                type: 'VectorExpression',
+                                params: {
+                                    inputColumns,
+                                    outputColumn,
+                                    expression,
+                                    geometryColumnName,
+                                    outputMeasurement,
+                                } satisfies VectorExpressionParameters,
+                                sources: {
+                                    vector: inputWorkflow.operator as VectorOperator,
+                                },
                             },
-                        } as VectorExpressionDict,
-                    }),
+                        }),
+                    ),
                 ),
                 mergeMap((workflowId) =>
                     this.projectService.addLayer(
@@ -374,9 +372,10 @@ export class VectorExpressionComponent implements AfterViewInit, OnDestroy {
                     this.loading$.next(false);
                 },
                 error: (error) => {
-                    const errorMsg = error.error.message;
-                    this.lastError$.next(errorMsg);
-                    this.loading$.next(false);
+                    void errorToText(error, error.error?.message ?? error.message).then((errorMsg) => {
+                        this.lastError$.next(errorMsg);
+                        this.loading$.next(false);
+                    });
                 },
             });
     }

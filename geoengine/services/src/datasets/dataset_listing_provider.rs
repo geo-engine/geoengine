@@ -277,7 +277,7 @@ where
             },
             name: dataset.display_name,
             description: dataset.description,
-            workflow: Workflow::Legacy { operator },
+            workflow: Workflow { operator },
             symbology: dataset.symbology,
             properties: vec![],
             metadata: HashMap::new(),
@@ -493,7 +493,7 @@ mod tests {
     };
     use geoengine_datatypes::{
         collections::VectorDataType,
-        primitives::{CacheTtlSeconds, TimeGranularity, TimeStep},
+        primitives::{TimeGranularity, TimeStep},
         raster::{GeoTransform, GridBoundingBox, RasterDataType},
         spatial_reference::SpatialReferenceOption,
     };
@@ -801,7 +801,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             },
             result_descriptor: vector_descriptor.clone(),
             phantom: Default::default(),
@@ -816,7 +816,7 @@ mod tests {
                 granularity: TimeGranularity::Millis,
                 step: 0,
             },
-            cache_ttl: CacheTtlSeconds::default(),
+            cache_ttl: None,
         };
 
         let _ = db

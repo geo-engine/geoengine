@@ -12,7 +12,7 @@
  */
 import { SymbologyFromJSON, SymbologyToJSON, } from './Symbology';
 import { ProviderLayerIdFromJSON, ProviderLayerIdToJSON, } from './ProviderLayerId';
-import { WorkflowFromJSON, WorkflowToJSON, } from './Workflow';
+import { ProcessingGraphFromJSON, ProcessingGraphToJSON, } from './ProcessingGraph';
 /**
  * Check if a given object implements the Layer interface.
  */
@@ -38,7 +38,7 @@ export function LayerFromJSONTyped(json, ignoreDiscriminator) {
         'id': ProviderLayerIdFromJSON(json['id']),
         'name': json['name'],
         'description': json['description'],
-        'workflow': WorkflowFromJSON(json['workflow']),
+        'workflow': ProcessingGraphFromJSON(json['workflow']),
         'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
         'properties': json['properties'] == null ? undefined : json['properties'],
         'metadata': json['metadata'] == null ? undefined : json['metadata'],
@@ -55,7 +55,7 @@ export function LayerToJSONTyped(value, ignoreDiscriminator = false) {
         'id': ProviderLayerIdToJSON(value['id']),
         'name': value['name'],
         'description': value['description'],
-        'workflow': WorkflowToJSON(value['workflow']),
+        'workflow': ProcessingGraphToJSON(value['workflow']),
         'symbology': SymbologyToJSON(value['symbology']),
         'properties': value['properties'],
         'metadata': value['metadata'],

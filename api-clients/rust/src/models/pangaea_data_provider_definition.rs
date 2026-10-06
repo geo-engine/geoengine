@@ -22,19 +22,19 @@ pub struct PangaeaDataProviderDefinition {
     pub priority: Option<Option<i32>>,
     #[serde(rename = "baseUrl")]
     pub base_url: String,
-    #[serde(rename = "cacheTtl")]
-    pub cache_ttl: i32,
+    #[serde(rename = "cacheTtl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<Option<i32>>,
 }
 
 impl PangaeaDataProviderDefinition {
-    pub fn new(r#type: Type, name: String, description: String, base_url: String, cache_ttl: i32) -> PangaeaDataProviderDefinition {
+    pub fn new(r#type: Type, name: String, description: String, base_url: String) -> PangaeaDataProviderDefinition {
         PangaeaDataProviderDefinition {
             r#type,
             name,
             description,
             priority: None,
             base_url,
-            cache_ttl,
+            cache_ttl: None,
         }
     }
 }

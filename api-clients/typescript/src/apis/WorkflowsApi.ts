@@ -15,17 +15,19 @@
 import * as runtime from '../runtime';
 import type {
   IdResponse,
+  ProcessingGraph,
   ProvenanceEntry,
   RasterDatasetFromWorkflow,
   RasterStreamWebsocketResultType,
   SpatialPartition2D,
   TaskResponse,
   TypedResultDescriptor,
-  Workflow,
 } from '../models/index';
 import {
     IdResponseFromJSON,
     IdResponseToJSON,
+    ProcessingGraphFromJSON,
+    ProcessingGraphToJSON,
     ProvenanceEntryFromJSON,
     ProvenanceEntryToJSON,
     RasterDatasetFromWorkflowFromJSON,
@@ -38,8 +40,6 @@ import {
     TaskResponseToJSON,
     TypedResultDescriptorFromJSON,
     TypedResultDescriptorToJSON,
-    WorkflowFromJSON,
-    WorkflowToJSON,
 } from '../models/index';
 
 export interface DatasetFromWorkflowHandlerRequest {
@@ -72,7 +72,7 @@ export interface RasterStreamWebsocketRequest {
 }
 
 export interface RegisterWorkflowHandlerRequest {
-    workflow: Workflow;
+    processingGraph: ProcessingGraph;
 }
 
 /**
@@ -340,17 +340,17 @@ export class WorkflowsApi extends runtime.BaseAPI {
     /**
      * Retrieves an existing Workflow.
      */
-    async loadWorkflowHandlerRaw(requestParameters: LoadWorkflowHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Workflow>> {
+    async loadWorkflowHandlerRaw(requestParameters: LoadWorkflowHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProcessingGraph>> {
         const requestOptions = await this.loadWorkflowHandlerRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
-        return new runtime.JSONApiResponse(response, (jsonValue) => WorkflowFromJSON(jsonValue));
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProcessingGraphFromJSON(jsonValue));
     }
 
     /**
      * Retrieves an existing Workflow.
      */
-    async loadWorkflowHandler(requestParameters: LoadWorkflowHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Workflow> {
+    async loadWorkflowHandler(requestParameters: LoadWorkflowHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProcessingGraph> {
         const response = await this.loadWorkflowHandlerRaw(requestParameters, initOverrides);
         return await response.value();
     }
@@ -455,10 +455,10 @@ export class WorkflowsApi extends runtime.BaseAPI {
      * Creates request options for registerWorkflowHandler without sending the request
      */
     async registerWorkflowHandlerRequestOpts(requestParameters: RegisterWorkflowHandlerRequest): Promise<runtime.RequestOpts> {
-        if (requestParameters['workflow'] == null) {
+        if (requestParameters['processingGraph'] == null) {
             throw new runtime.RequiredError(
-                'workflow',
-                'Required parameter "workflow" was null or undefined when calling registerWorkflowHandler().'
+                'processingGraph',
+                'Required parameter "processingGraph" was null or undefined when calling registerWorkflowHandler().'
             );
         }
 
@@ -484,7 +484,7 @@ export class WorkflowsApi extends runtime.BaseAPI {
             method: 'POST',
             headers: headerParameters,
             query: queryParameters,
-            body: WorkflowToJSON(requestParameters['workflow']),
+            body: ProcessingGraphToJSON(requestParameters['processingGraph']),
         };
     }
 

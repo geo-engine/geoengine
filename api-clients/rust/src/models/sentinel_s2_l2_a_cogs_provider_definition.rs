@@ -28,8 +28,8 @@ pub struct SentinelS2L2ACogsProviderDefinition {
     pub stac_api_retries: Option<Box<models::StacApiRetries>>,
     #[serde(rename = "gdalRetries", skip_serializing_if = "Option::is_none")]
     pub gdal_retries: Option<i32>,
-    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
-    pub cache_ttl: Option<i32>,
+    #[serde(rename = "cacheTtl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<Option<i32>>,
     #[serde(rename = "queryBuffer", skip_serializing_if = "Option::is_none")]
     pub query_buffer: Option<Box<models::StacQueryBuffer>>,
 }

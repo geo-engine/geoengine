@@ -66,7 +66,7 @@ pub struct EdrDataProviderDefinition {
     pub base_url: Url,
     pub vector_spec: Option<EdrVectorSpec>,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
     #[serde(default)]
     /// List of vertical reference systems with a discrete scale
     pub discrete_vrs: Vec<String>,
@@ -121,7 +121,7 @@ pub struct EdrDataProvider {
     base_url: Url,
     vector_spec: Option<EdrVectorSpec>,
     client: Client,
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl: Option<CacheTtlSeconds>,
     /// List of vertical reference systems with a discrete scale
     discrete_vrs: Vec<String>,
     provenance: Option<Vec<Provenance>>,
@@ -641,7 +641,7 @@ impl EdrCollectionMetaData {
         download_url: String,
         layer_name: String,
         vector_spec: EdrVectorSpec,
-        cache_ttl: CacheTtlSeconds,
+        cache_ttl: Option<CacheTtlSeconds>,
     ) -> OgrSourceDataset {
         OgrSourceDataset {
             file_name: download_url.into(),
@@ -668,7 +668,7 @@ impl EdrCollectionMetaData {
         base_url: &Url,
         height: &str,
         vector_spec: EdrVectorSpec,
-        cache_ttl: CacheTtlSeconds,
+        cache_ttl: Option<CacheTtlSeconds>,
         discrete_vrs: &[String],
     ) -> Result<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>
     {
@@ -1037,7 +1037,7 @@ impl LayerCollectionProvider for EdrDataProvider {
             },
             name: collection.title.unwrap_or(collection.id),
             description: String::new(),
-            workflow: Workflow::Legacy { operator },
+            workflow: Workflow { operator },
             symbology: None, // TODO
             properties: vec![],
             metadata: HashMap::new(),

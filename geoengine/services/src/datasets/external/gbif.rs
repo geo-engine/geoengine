@@ -54,7 +54,7 @@ pub struct GbifDataProviderDefinition {
     pub priority: Option<i16>,
     pub db_config: DatabaseConnectionConfig,
     #[serde(default)]
-    pub cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: Option<CacheTtlSeconds>,
     pub autocomplete_timeout: i32,
     pub columns: Vec<String>,
 }
@@ -113,7 +113,7 @@ pub struct GbifDataProvider {
     description: String,
     db_config: DatabaseConnectionConfig,
     pool: Pool<PostgresConnectionManager<NoTls>>,
-    cache_ttl: CacheTtlSeconds,
+    cache_ttl: Option<CacheTtlSeconds>,
     autocomplete_timeout: u64,
     columns: Vec<String>,
     occurrence_table: String,
@@ -190,7 +190,7 @@ impl GbifDataProvider {
         name: String,
         description: String,
         db_config: DatabaseConnectionConfig,
-        cache_ttl: CacheTtlSeconds,
+        cache_ttl: Option<CacheTtlSeconds>,
         autocomplete_timeout: i32,
         columns: Vec<String>,
     ) -> Result<Self> {
@@ -788,7 +788,7 @@ impl LayerCollectionProvider for GbifDataProvider {
             },
             name: canonicalname.to_string(),
             description: format!("All occurrences with a {taxonrank} of {canonicalname}"),
-            workflow: Workflow::Legacy {
+            workflow: Workflow {
                 operator: TypedOperator::Vector(
                     OgrSource {
                         params: OgrSourceParameters {
@@ -2363,7 +2363,7 @@ mod tests {
                     db_config.schema
                 )),
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             };
 
             if loading_info != expected {
@@ -2503,7 +2503,7 @@ mod tests {
                     db_config.schema
                 )),
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             };
 
             if loading_info != expected {
@@ -2637,7 +2637,7 @@ mod tests {
                     db_config.schema
                 )),
                 attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                cache_ttl: None,
             };
 
             if loading_info != expected {
@@ -2997,7 +2997,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap();
 
@@ -3117,7 +3117,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap();
 
@@ -3232,7 +3232,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap();
 
@@ -3330,7 +3330,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap();
 
@@ -3371,7 +3371,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap();
 
@@ -3472,7 +3472,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap();
 
@@ -3532,7 +3532,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect(),
-                CacheHint::default(),
+                CacheHint::no_cache(),
             )
             .unwrap();
 
@@ -3641,7 +3641,7 @@ mod tests {
                 },
                 name: "Rhipidia willistoniana".to_string(),
                 description: "All occurrences with a species of Rhipidia willistoniana".to_string(),
-                workflow: Workflow::Legacy {
+                workflow: Workflow {
                     operator: TypedOperator::Vector(
                         OgrSource {
                             params: OgrSourceParameters {

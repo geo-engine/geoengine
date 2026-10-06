@@ -251,7 +251,7 @@ class WorkflowsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.loadWorkflowHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.WorkflowFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.ProcessingGraphFromJSON)(jsonValue));
         });
     }
     /**
@@ -337,8 +337,8 @@ class WorkflowsApi extends runtime.BaseAPI {
      */
     registerWorkflowHandlerRequestOpts(requestParameters) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (requestParameters['workflow'] == null) {
-                throw new runtime.RequiredError('workflow', 'Required parameter "workflow" was null or undefined when calling registerWorkflowHandler().');
+            if (requestParameters['processingGraph'] == null) {
+                throw new runtime.RequiredError('processingGraph', 'Required parameter "processingGraph" was null or undefined when calling registerWorkflowHandler().');
             }
             const queryParameters = {};
             const headerParameters = {};
@@ -356,7 +356,7 @@ class WorkflowsApi extends runtime.BaseAPI {
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.WorkflowToJSON)(requestParameters['workflow']),
+                body: (0, index_1.ProcessingGraphToJSON)(requestParameters['processingGraph']),
             };
         });
     }

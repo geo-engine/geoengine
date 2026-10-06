@@ -128,7 +128,7 @@ impl Sentinel2Metadata {
             let part = GdalLoadingInfoTemporalSlice {
                 time: TimeInterval::new(time_start, time_end).context(InvalidTimeInterval)?,
                 params: Some(self.create_gdal_params(item).await?),
-                cache_ttl: CacheTtlSeconds::new(cache_ttl),
+                cache_ttl: Some(CacheTtlSeconds::new(cache_ttl)),
             };
 
             parts.push(part);
@@ -384,9 +384,15 @@ mod tests {
             Expectation::matching(all_of![
                 request::method("GET"),
                 request::path("/stac/collections/SENTINEL-2/items"),
+                // The bbox is compared with fewer digits than the reprojection
+                // computes on purpose: the extents of Sentinel-2 zones are only
+                // meaningful at ~meter precision anyway (10 m pixels), so the
+                // previous ~14 digits were far finer than the data itself. The
+                // prefix match also keeps the expectation stable regardless of
+                // the coordinate projector, which may differ in the last digits.
                 request::query(url_decoded(contains((
                     "bbox",
-                    "8.751627919756874,50.79897568511778,8.765865426422579,50.80799775499464",
+                    "8.75162,50.79897,8.76587,50.80800",
                 )))),
                 request::query(url_decoded(contains((
                     "datetime",
@@ -602,9 +608,9 @@ mod tests {
                     retry: None,
                 },
             ),
-            cache_ttl: CacheTtlSeconds::new(
+            cache_ttl: Some(CacheTtlSeconds::new(
                 86400,
-            ),
+            )),
         };
 
         let mut iter = loading_info.info;

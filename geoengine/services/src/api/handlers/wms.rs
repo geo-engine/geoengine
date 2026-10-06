@@ -222,7 +222,7 @@ where
     let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
     let operator = workflow
-        .operator()?
+        .operator
         .get_raster()?
         .initialize(workflow_operator_path_root, &exe_ctx)
         .await?;
@@ -352,7 +352,7 @@ async fn wms_get_map<C: ApplicationContext>(
         let workflow_id = WorkflowId::from_str(&request.layers)?;
         let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
-        let operator = workflow.operator()?.get_raster()?;
+        let operator = workflow.operator.get_raster()?;
 
         let execution_context = ctx.execution_context()?;
 
@@ -453,7 +453,11 @@ async fn wms_get_map<C: ApplicationContext>(
                     raster_colorizer.no_data_color(),
                 )?;
 
-            return Ok((empty_image, CacheHint::max_duration(), computation_id));
+            return Ok((
+                empty_image,
+                execution_context.default_cache_ttl().into(),
+                computation_id,
+            ));
         }
 
         debug!("WMS re-scale-project: {:?}", query_tiling_pixel_grid);

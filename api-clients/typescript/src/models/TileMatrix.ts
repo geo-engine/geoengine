@@ -29,13 +29,13 @@ import {
 
 /**
  * A tile matrix, usually corresponding to a particular zoom level of a
- * TileMatrixSet.
+ * [`TileMatrixSet`].
  * @export
  * @interface TileMatrix
  */
 export interface TileMatrix {
     /**
-     * Identifier selecting one of the scales defined in the [TileMatrixSet]
+     * Identifier selecting one of the scales defined in the [`TileMatrixSet`]
      * and representing the scaleDenominator the tile.
      * @type {string}
      * @memberof TileMatrix

@@ -1,7 +1,7 @@
 
 # TileMatrix
 
-A tile matrix, usually corresponding to a particular zoom level of a TileMatrixSet.
+A tile matrix, usually corresponding to a particular zoom level of a [`TileMatrixSet`].
 
 ## Properties
 

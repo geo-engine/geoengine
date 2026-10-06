@@ -27,9 +27,9 @@ from typing_extensions import Self
 
 class TileMatrix(BaseModel):
     """
-    A tile matrix, usually corresponding to a particular zoom level of a TileMatrixSet.
+    A tile matrix, usually corresponding to a particular zoom level of a [`TileMatrixSet`].
     """ # noqa: E501
-    id: StrictStr = Field(description="Identifier selecting one of the scales defined in the [TileMatrixSet] and representing the scaleDenominator the tile.")
+    id: StrictStr = Field(description="Identifier selecting one of the scales defined in the [`TileMatrixSet`] and representing the scaleDenominator the tile.")
     title: Optional[StrictStr] = Field(default=None, description="Title of a tile matrix, normally used for display to a human")
     description: Optional[StrictStr] = Field(default=None, description="Brief narrative description of a tile matrix, normally available for display to a human")
     keywords: Optional[List[StrictStr]] = Field(default=None, description="Unordered list of one or more commonly used or formalized word(s) or phrase(s) used to describe this tile set")

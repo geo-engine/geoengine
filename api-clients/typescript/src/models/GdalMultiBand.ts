@@ -38,6 +38,11 @@ export interface GdalMultiBand {
      * @memberof GdalMultiBand
      */
     resultDescriptor: RasterResultDescriptor;
+    /**
+     * Dataset-level cache TTL used when no tile-level TTL is set.
+     * @type {number}
+     */
+    cacheTtl?: number | null;
 }
 
 
@@ -71,6 +76,7 @@ export function GdalMultiBandFromJSONTyped(json: any, ignoreDiscriminator: boole
         
         'type': json['type'],
         'resultDescriptor': RasterResultDescriptorFromJSON(json['resultDescriptor']),
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 
@@ -87,6 +93,7 @@ export function GdalMultiBandToJSONTyped(value?: GdalMultiBand | null, ignoreDis
         
         'type': value['type'],
         'resultDescriptor': RasterResultDescriptorToJSON(value['resultDescriptor']),
+        'cacheTtl': value['cacheTtl'],
     };
 }
 

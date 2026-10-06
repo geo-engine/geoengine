@@ -400,7 +400,10 @@ pub enum Error {
         sub_path: PathBuf,
     },
 
-    InvalidDataProviderConfig,
+    #[snafu(display("Invalid data provider configuration: {reason}"))]
+    InvalidDataProviderConfig {
+        reason: String,
+    },
 
     #[snafu(context(false), display("PieChart error: {}", source))]
     PieChart {

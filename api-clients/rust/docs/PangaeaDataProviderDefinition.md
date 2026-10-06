@@ -9,7 +9,7 @@ Name | Type | Description | Notes
 **description** | **String** |  | 
 **priority** | Option<**i32**> |  | [optional]
 **base_url** | **String** |  | 
-**cache_ttl** | **i32** |  | 
+**cache_ttl** | Option<**i32**> |  | [optional]
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

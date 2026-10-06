@@ -674,14 +674,16 @@ mod tests {
         let layer = AddLayer {
             name: "layer".to_string(),
             description: "description".to_string(),
-            workflow: Workflow::Typed {
+            workflow: Workflow {
                 operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                     r#type: Default::default(),
                     params: MockPointSourceParameters {
                         points: vec![Coordinate2D::new(1., 2.).into(); 3],
                         spatial_bounds: SpatialBoundsDerive::Derive(Default::default()),
                     },
-                })),
+                }))
+                .try_into()
+                .unwrap(),
             },
             symbology: None,
             metadata: Default::default(),

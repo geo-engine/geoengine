@@ -10,7 +10,6 @@ Name | Type
 `id` | string
 `title` | string
 `description` | string
-`keywords` | Array&lt;string&gt;
 `attribution` | string
 `extent` | [Extent](Extent.md)
 `itemType` | string
@@ -29,7 +28,6 @@ const example = {
   "id": null,
   "title": null,
   "description": null,
-  "keywords": null,
   "attribution": null,
   "extent": null,
   "itemType": null,

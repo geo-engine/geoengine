@@ -36,6 +36,8 @@ increment_quota_buffer_timeout_seconds = 60 # number of seconds after which the 
 
 [cache]
 enabled = false
+# Default cache lifetime in seconds for values without an explicit TTL (0 disables caching).
+default_ttl_seconds = 0
 # storage limit for the cache
 size_in_mb = 1_000 # 1 GB
 # storage limit for collecting query results before insertion into the cache in
@@ -52,3 +54,7 @@ raster_cache_size_ratio = 0.5
 number_of_processes = 2
 max_active_processes = 2
 max_dataset_processes = 2
+
+[dataprovider]
+# Test-only encryption key; never use this key in a deployment.
+password_encryption_key = "stac-password-encryption-test-key"

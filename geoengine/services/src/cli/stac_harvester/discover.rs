@@ -201,10 +201,12 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         api_url: params.stac_url.clone(),
         collection_name: params.stac_collection.clone(),
         s3_config,
+        authentication: None,
         time_dimension,
         datasets,
         page_limit: params.page_limit as i64,
         query_timeout_secs: 60,
+        cache_ttl_secs: None,
     };
 
     write_discovered_mapping(provider_def, params.output.as_ref())?;

@@ -1,11 +1,11 @@
-import {ChangeDetectionStrategy, Component, computed, effect, inject, signal} from '@angular/core';
-import {CoreModule, ProjectService} from '@geoengine/core';
+import {ChangeDetectionStrategy, Component, computed, effect, inject, resource, signal} from '@angular/core';
+import {CoreModule, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
 import {A11yModule} from '@angular/cdk/a11y';
 import {EdvLayersService} from './layers.service';
 import {MatCheckboxModule} from '@angular/material/checkbox';
 import {MatListModule} from '@angular/material/list';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
-import {Time} from '@geoengine/common';
+import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, RasterSymbology, Time} from '@geoengine/common';
 import {toSignal} from '@angular/core/rxjs-interop';
 import type {DataSourceDefinition} from './data-sources';
 import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
@@ -128,6 +128,20 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
             </div>
         </div>
         <mat-divider></mat-divider>
+
+        @if (isLegendVisible()) {
+            <div class="legend">
+                <h2>Legend</h2>
+                @if (legendLayer.isLoading()) {
+                    <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
+                } @else if (legendLayer.status() === 'error') {
+                    <span class="legend-error">Failed to load legend</span>
+                } @else if (legend(); as legend) {
+                    <span class="legend-layer-name" [matTooltip]="legend.layer.name">{{ legend.layer.name }}</span>
+                    <geoengine-raster-legend-view [layer]="legend.layer" [metadata]="legend.metadata"></geoengine-raster-legend-view>
+                }
+            </div>
+        }
     `,
     styles: [
         `
@@ -302,13 +316,43 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
             .time-selection {
                 --mat-button-text-label-text-size: #{$text2};
             }
+
+            .legend {
+                .legend-layer-name {
+                    display: block;
+                    margin-bottom: 0.5rem;
+                    font-size: $text2;
+                    color: var(--mat-sys-on-surface-variant);
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+
+                .legend-error {
+                    font-size: $text2;
+                    color: var(--mat-sys-error);
+                }
+
+                mat-progress-spinner {
+                    margin: 0 auto;
+                }
+            }
         `,
     ],
-    imports: [A11yModule, CoreModule, MatDatepickerModule, MatCheckboxModule, MatListModule, MatProgressSpinnerModule],
+    imports: [
+        A11yModule,
+        CoreModule,
+        MatDatepickerModule,
+        MatCheckboxModule,
+        MatListModule,
+        MatProgressSpinnerModule,
+        RasterLegendViewComponent,
+    ],
 })
 export class LayersComponent {
     readonly projectService = inject(ProjectService);
     readonly edvLayersService = inject(EdvLayersService);
+    private readonly layerService = inject(LayersService);
 
     readonly debug = this.edvLayersService.debug;
 
@@ -341,6 +385,43 @@ export class LayersComponent {
     readonly selectedPreset = this.edvLayersService.selectedPreset;
     readonly canApplyPreset = this.edvLayersService.canApplyPreset;
     readonly mapTileLayer = this.edvLayersService.mapTileLayer;
+
+    readonly legendLayer = resource({
+        params: () => ({layerId: this.edvLayersService.mapTileLayer()}),
+        loader: async ({params: {layerId}}): Promise<{layer: RasterLayer; metadata: RasterLayerMetadata} | undefined> => {
+            if (!layerId) return undefined;
+
+            const layer = await this.layerService.getLayer(layerId.dataConnectorId, layerId.layerId);
+
+            const processingGraphId = await this.layerService.registerAndGetLayerWorkflowId(layerId.dataConnectorId, layerId.layerId);
+
+            if (layer.symbology?.type !== 'raster') return undefined;
+
+            const metadata = await this.layerService.getWorkflowIdMetadata(processingGraphId);
+
+            if (!(metadata instanceof RasterLayerMetadata)) return undefined;
+
+            const rasterSymbology = layer.symbology;
+
+            const rasterLayer = new RasterLayer({
+                name: layer.name,
+                workflowId: processingGraphId,
+                isVisible: true,
+                isLegendVisible: true,
+                symbology: new RasterSymbology(rasterSymbology.opacity, RasterColorizer.fromDict(rasterSymbology.rasterColorizer)),
+            });
+
+            return {layer: rasterLayer, metadata};
+        },
+    });
+
+    /** `value()` throws when the resource is in error state, so guard it with `hasValue()`. */
+    readonly legend = computed(() => (this.legendLayer.hasValue() ? this.legendLayer.value() : undefined));
+
+    /** Only show the legend if there is a map tile layer and the legend is either loading, in error state, or has a value. */
+    readonly isLegendVisible = computed(
+        () => !!this.mapTileLayer() && (this.legendLayer.isLoading() || this.legendLayer.status() === 'error' || !!this.legend()),
+    );
 
     constructor() {
         effect(() => {

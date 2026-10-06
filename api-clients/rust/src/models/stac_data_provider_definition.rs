@@ -28,6 +28,8 @@ pub struct StacDataProviderDefinition {
     pub collection_name: String,
     #[serde(rename = "s3Config", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub s3_config: Option<Option<Box<models::StacProviderS3Config>>>,
+    #[serde(rename = "authentication", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub authentication: Option<Option<Box<models::StacProviderAuthentication>>>,
     #[serde(rename = "timeDimension")]
     pub time_dimension: Box<models::TimeDimension>,
     #[serde(rename = "datasets")]
@@ -37,6 +39,9 @@ pub struct StacDataProviderDefinition {
     pub query_timeout_secs: Option<i64>,
     #[serde(rename = "pageLimit", skip_serializing_if = "Option::is_none")]
     pub page_limit: Option<i64>,
+    /// Optional output cache lifetime; omitted values use the global cache default.
+    #[serde(rename = "cacheTtlSecs", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl_secs: Option<Option<i32>>,
 }
 
 impl StacDataProviderDefinition {
@@ -50,10 +55,12 @@ impl StacDataProviderDefinition {
             api_url,
             collection_name,
             s3_config: None,
+            authentication: None,
             time_dimension: Box::new(time_dimension),
             datasets,
             query_timeout_secs: None,
             page_limit: None,
+            cache_ttl_secs: None,
         }
     }
 }

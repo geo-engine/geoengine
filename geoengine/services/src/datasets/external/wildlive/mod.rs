@@ -364,7 +364,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                 id: self.layer_id(WildliveLayerId::Projects)?,
                 name: "Projects".to_string(),
                 description: "Overview of all projects".to_string(),
-                workflow: Workflow::Legacy {
+                workflow: Workflow {
                     operator: VectorExpression {
                         params: VectorExpressionParams {
                             expression: "centroid(geom)".into(),
@@ -432,7 +432,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                 id: self.layer_id(WildliveLayerId::ProjectBounds)?,
                 name: "Project Bounds".to_string(),
                 description: "Overview of all project bounds".to_string(),
-                workflow: Workflow::Legacy {
+                workflow: Workflow {
                     operator: OgrSource {
                         params: OgrSourceParameters {
                             data: self.named_data(WildliveLayerId::ProjectBounds)?,
@@ -462,7 +462,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                     })?,
                     name: format!("Stations for project {project_name}"),
                     description: format!("Overview of all stations within project {project_id}"),
-                    workflow: Workflow::Legacy {
+                    workflow: Workflow {
                         operator: OgrSource {
                             params: OgrSourceParameters {
                                 data: self.named_data(WildliveLayerId::Stations { project_id })?,
@@ -493,7 +493,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                     })?,
                     name: format!("Captures for project {project_name}"),
                     description: format!("Overview of all captures within project {project_id}"),
-                    workflow: Workflow::Legacy {
+                    workflow: Workflow {
                         operator: OgrSource {
                             params: OgrSourceParameters {
                                 data: self.named_data(WildliveLayerId::Captures { project_id })?,
@@ -795,7 +795,7 @@ async fn project_metadata<D: GeoEngineDb>(
                 "cache_date = current_date AND provider_id = {}",
                 escape_literal(&definition.id.to_string())
             )),
-            cache_ttl: CacheTtlSeconds::new(60 * 60),
+            cache_ttl: Some(CacheTtlSeconds::new(60 * 60)),
         },
         result_descriptor: VectorResultDescriptor {
             data_type: VectorDataType::MultiPolygon,
@@ -874,7 +874,7 @@ async fn stations_metadata<D: GeoEngineDb>(
                 escape_literal(&definition.id.to_string()),
                 escape_literal(project_id)
             )),
-            cache_ttl: CacheTtlSeconds::new(60 * 60),
+            cache_ttl: Some(CacheTtlSeconds::new(60 * 60)),
         },
         result_descriptor: VectorResultDescriptor {
             data_type: VectorDataType::MultiPoint,
@@ -979,7 +979,7 @@ async fn captures_metadata<D: GeoEngineDb>(
                 escape_literal(&definition.id.to_string()),
                 escape_literal(&project_id)
             )),
-            cache_ttl: CacheTtlSeconds::new(60 * 60),
+            cache_ttl: Some(CacheTtlSeconds::new(60 * 60)),
         },
         result_descriptor: VectorResultDescriptor {
             data_type: VectorDataType::MultiPoint,
@@ -1232,7 +1232,7 @@ mod tests {
                 },
                 name: "Project Bounds".to_string(),
                 description: "Overview of all project bounds".to_string(),
-                workflow: Workflow::Legacy {
+                workflow: Workflow {
                     operator: OgrSource {
                         params: OgrSourceParameters {
                             data: connector
@@ -1264,7 +1264,7 @@ mod tests {
                 },
                 name: "Projects".to_string(),
                 description: "Overview of all projects".to_string(),
-                workflow: Workflow::Legacy {
+                workflow: Workflow {
                     operator: VectorExpression {
                         params: VectorExpressionParams {
                             expression: "centroid(geom)".into(),
@@ -1390,7 +1390,7 @@ mod tests {
                 attribute_query: Some(
                     "cache_date = current_date AND provider_id = '0000009b-d30a-3c64-5943-dd1690a03a14'".to_string()
                 ),
-                cache_ttl: CacheTtlSeconds::new(3600),
+                cache_ttl: Some(CacheTtlSeconds::new(3600)),
             }
         );
 
@@ -1603,7 +1603,7 @@ mod tests {
                 },
                 name: format!("Captures for project {project_name}"),
                 description: format!("Overview of all captures within project {project_id}"),
-                workflow: Workflow::Legacy {
+                workflow: Workflow {
                     operator: OgrSource {
                         params: OgrSourceParameters {
                             data: connector
@@ -1698,7 +1698,7 @@ mod tests {
                 attribute_query: Some(format!(
                     "cache_date = current_date AND provider_id = '0000009b-d30a-3c64-5943-dd1690a03a14' AND project_id = '{project_id}'"
                 )),
-                cache_ttl: CacheTtlSeconds::new(3600),
+                cache_ttl: Some(CacheTtlSeconds::new(3600)),
             }
         );
 
