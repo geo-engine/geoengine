@@ -12,7 +12,7 @@ import {
     Subscription,
     zip,
 } from 'rxjs';
-import {debounceTime, distinctUntilChanged, filter, first, map, mergeMap, skip, switchMap, take, tap} from 'rxjs/operators';
+import {debounceTime, distinctUntilChanged, filter, finalize, first, map, mergeMap, pairwise, switchMap, take, tap} from 'rxjs/operators';
 
 import {Injectable, OnDestroy, computed, inject} from '@angular/core';
 
@@ -22,11 +22,10 @@ import {LoadingState} from './loading-state.model';
 import {HttpErrorResponse} from '@angular/common/http';
 import {BackendService} from '../backend/backend.service';
 import {BBoxDict, PlotDict, ProvenanceEntryDict, ToDict, UUID} from '../backend/backend.model';
-import {Extent, MapService, ViewportSize} from '../map/map.service';
+import {MapService, ViewportSize} from '../map/map.service';
 import {Session} from '../users/session.model';
 import OlFeature from 'ol/Feature';
 import OlGeometry from 'ol/geom/Geometry';
-import {intersects as olIntersects} from 'ol/extent';
 import {getProjectionTarget} from '../util/spatial_reference';
 import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
 import {
@@ -988,64 +987,63 @@ export class ProjectService implements OnDestroy {
 
     /**
      * Create a stream that signals whether a running query should be aborted because the results are no longer needed.
-     * It takes the layerId, current zoomLevel and extent of a tile at the time of querying as a parameter in order to
-     * determine whether a change in the layer list or on the map view makes the results obsolete.
+     * It takes the layerId as a parameter and emits when a condition that invalidates every running query of that
+     * layer changes, i.e. the time, the session, the spatial reference or the layer list.
+     *
+     * Viewport changes are not part of this: a tile that left the viewport or a zoom level that was zoomed past
+     * depends on the tile, not on the project, and is watched per rendered frame by `TileLoader.cancelUnwanted`.
+     *
+     * If the layer is not registered with the project service (e.g. in the enhanced data viewer), the stream does not
+     * emit when the layer is removed, only on the viewing conditions below.
+     *
+     * Emits the condition that made the request obsolete, e.g. `'time changed'`, for diagnostics.
      */
-    createQueryAbortStream(layerId: number, tileZoomLevel: number, tileExtent: Extent): Observable<void> {
-        const tileResolution = this.mapService.getView().getResolutionForZoom(tileZoomLevel);
-
+    createQueryAbortStream(layerId: number): Observable<string> {
         // create an observable that emits when the layer is removed
         const layerStream = this.layers.get(layerId);
-        if (!layerStream) {
-            throw Error(`No layer stream found for layer id ${layerId}`);
-        }
         const layerRemovedSubject = new BehaviorSubject<boolean>(false);
-        const layerStreamSub = layerStream.subscribe({
+        const layerStreamSub = layerStream?.subscribe({
             complete: () => {
                 layerRemovedSubject.next(true);
                 layerRemovedSubject.complete();
             },
         });
 
-        const observables: [
-            Observable<Time>,
-            Observable<ViewportSize>,
-            Observable<string>,
-            Observable<SpatialReference>,
-            Observable<boolean>,
-        ] = [
+        // All sources emit synchronously on subscription, so `pairwise` compares every new
+        // combined emission against the previous one and cancels once it deviates from the
+        // conditions the request was issued under.
+        const observables: [Observable<Time>, Observable<string>, Observable<SpatialReference>, Observable<boolean>] = [
             this.getTimeStream(),
-            this.mapService.getViewportSizeStream(),
-            this.userService.getSessionTokenForRequest(),
+            this.userService.getSessionTokenStream(),
             this.getSpatialReferenceStream(),
             layerRemovedSubject,
         ];
 
-        let initialTime: Time | undefined;
-        let initialSref: SpatialReference | undefined;
-        let initialSession: string | undefined;
-
         return combineLatest(observables).pipe(
-            tap(([time, _viewportSize, session, sref, _layerRemoved]) => {
-                // capture the initial values at the start of the query
-                // s.t. we can detect a change later
-                initialTime ??= time;
-                initialSref ??= sref;
-                initialSession ??= session;
+            pairwise(),
+            map(([initial, current]): string | undefined => {
+                const [initialTime, initialSession, initialSref] = initial;
+                const [time, session, sref, layerRemoved] = current;
+
+                // The reason is part of the emitted value, so a tile that gets aborted can be told
+                // apart from one that merely looks blank in the logs.
+                if (!time.isSame(initialTime)) {
+                    return 'time changed';
+                }
+                if (session !== initialSession) {
+                    return 'session changed';
+                }
+                if (!sref.equals(initialSref)) {
+                    return 'spatial reference changed';
+                }
+                if (layerRemoved) {
+                    return 'layer removed';
+                }
+                return undefined;
             }),
-            skip(1),
-            filter(
-                ([time, viewportSize, session, sref, layerRemoved]) =>
-                    !time.isSame(initialTime!) ||
-                    viewportSize.resolution !== tileResolution ||
-                    !olIntersects(tileExtent, viewportSize.extent) ||
-                    session !== initialSession ||
-                    sref !== initialSref ||
-                    layerRemoved,
-            ),
-            tap((_) => layerStreamSub.unsubscribe()),
+            filter((reason): reason is string => reason !== undefined),
+            finalize(() => layerStreamSub?.unsubscribe()),
             take(1),
-            map(() => undefined),
         );
     }
 
