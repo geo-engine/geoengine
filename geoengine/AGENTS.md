@@ -56,6 +56,13 @@ Supporting crates: `expression` (used by `operators` and `services`), `macros` (
 - **`macros`** (`geoengine-macros`): `#[ge_context::test]` spins up a DB-backed app/context for service tests, with options like `user = "admin"`, `test_execution = "serial"`, `tiling_spec = …`. Also `#[api_operator]` and `#[type_tag]` for OpenAPI-friendly tagged types.
 - **`crs-constants`**: zero-dependency static CRS metadata (EPSG bounds), generated from PROJ's EPSG database.
 
+## Processing internals
+
+- **Sub-queries**: raster operators that need a different input region per output tile (reprojection, interpolation, downsampling, neighborhood aggregate) are built on `RasterSubQueryAdapter` (`operators/src/adapters/raster_subquery/`). For each output tile it issues a sub-query to the source and folds the results with a `SubQueryTileAggregator`. Reuse it rather than writing your own tile loop.
+- **Cache**: when `[cache] enabled` is set, `services` wraps every initialized operator in a cache operator (`services/src/contexts/mod.rs`, `operators/src/cache/`). So the cache sits between every pair of operators in a graph, not only at the output. Results must therefore be deterministic for a given query, and operators must propagate the `cache_hint` of their input tiles and chunks.
+- **Threads**: CPU-heavy work runs on the shared Rayon thread pool from `ctx.thread_pool()`, via `spawn_blocking_with_thread_pool`. Never block the async runtime, and do not create your own thread pools.
+- **GDAL**: GDAL opens and reads run in separate `gdalsource-process` worker processes (see `operators` above), limited by `[gdal_process_pool]`. GDAL state such as config options does not carry over from the server process; pass it with the dataset parameters (`gdal_config_options`).
+
 ## Database migrations
 
 Migrations are in `services/src/contexts/migrations/` as `migration_NNNN_<name>.rs` (+ `.sql`). A new migration must:

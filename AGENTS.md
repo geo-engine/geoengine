@@ -4,7 +4,7 @@ This file provides guidance to AI coding agents (Claude Code, Codex, OpenCode & 
 
 ## What Geo Engine is
 
-A server for processing and visualizing geospatial data, with native time support and stream processing for large datasets.
+A server for processing and visualizing geospatial data, with native time-series support and stream processing for large datasets.
 
 - **Users and interfaces**: data scientists use the `geoengine` Python library (often in Jupyter). Domain users use the UI apps: `gis` for exploring and analysing data, `eodyssey`, and the domain-specific `dashboards/*`. Admins use `manager`. External GIS clients use OGC services (OGC API Tiles, WMS, WFS, WCS). All of these go through the REST API.
 - **Data**: raster and vector data, read through GDAL/OGR. It comes from internal datasets, user uploads and external data providers (STAC, GBIF, Pangaea, NetCDF-CF/EBV, …). Layers and layer collections organize it for browsing.
@@ -14,12 +14,12 @@ A server for processing and visualizing geospatial data, with native time suppor
   - Data must never be loaded into memory as a whole. Operators work on streams.
   - Operators with several inputs require the same spatial reference. Reprojection is an explicit operator, not an implicit conversion.
   - The processing graph id is a UUID v5 hash of the processing graph, so registering the same processing graph twice yields the same id. A workflow is never changed in place.
-  - Access is controlled by `Read`/`Owner` permissions on layers, collections, projects, datasets, ML models and providers. Quotas are optional (`[quota]` in `geoengine/Settings-default.toml`).
+  - Access is controlled by `Read`/`Owner` permissions on layers, collections, projects, datasets, ML models and providers. Besides registered and OIDC users there are anonymous users (`POST /anonymous`, enabled by default via `[session] anonymous_access`), so features must not assume a user with an email or password. Quotas are optional (`[quota]` in `geoengine/Settings-default.toml`).
   - Types are persisted in PostgreSQL (processing graphs, provider and dataset definitions, symbologies). Changing them requires a migration (see the `new-migration` skill).
 
 ## Repository layout
 
-A monorepo with five projects. Each has its own `justfile`, which the root `justfile` mounts as a just module:
+A monorepo with five projects. Each has its own `justfile`, which the root `justfile` mounts as a `just` module:
 
 | Directory      | just module   | What it is                                                                                     |
 | -------------- | ------------- | ---------------------------------------------------------------------------------------------- |
