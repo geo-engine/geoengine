@@ -16,10 +16,12 @@ use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::{
     dataset::NamedData,
-    primitives::{BandSelection, CacheTtlSeconds, RasterQueryRectangle, TimeInterval},
+    primitives::{
+        AxisAlignedRectangle, BandSelection, CacheTtlSeconds, RasterQueryRectangle, TimeInterval,
+    },
     raster::{
         ChangeGridBounds, EmptyGrid, GridOrEmpty, Pixel, RasterDataType, RasterProperties,
-        RasterTile2D, TileInformation, TilingSpecification,
+        RasterTile2D, SpatialGridDefinition, TileInformation, TilingSpecification,
     },
 };
 use num::FromPrimitive;
@@ -124,7 +126,23 @@ where
             dataset_spatial_grid: produced_source,
         });
 
-        let loading_info = self.meta_data.loading_info(query.clone()).await?;
+        // `query.spatial_bounds` are pixels of the tiling lattice, which is anchored at the
+        // World Mercator-style origin (0, 0), while the dataset metadata looks up files in the
+        // source grid's own pixel space. Translate the query into that space first, otherwise a
+        // source grid that does not start at (0, 0) would filter out every stored tile.
+        let query_in_source_grid = query.select_spatial_bounds(
+            produced_source
+                .geo_transform()
+                .bounding_box_2d_to_intersecting_grid_bounds(
+                    &SpatialGridDefinition::new(
+                        produced_tiling_grid.tiling_geo_transform(),
+                        query.spatial_bounds(),
+                    )
+                    .spatial_partition()
+                    .as_bbox(),
+                ),
+        );
+        let loading_info = self.meta_data.loading_info(query_in_source_grid).await?;
         let z_role = loading_info.z_role();
         let gdal_worker = ctx.get_gdal_worker();
         let default_cache_ttl = self.default_cache_ttl;
@@ -1302,6 +1320,68 @@ mod tests {
                 grid_value(tile, (row - local.y()) as usize, (col - local.x()) as usize),
                 stored_col as f32,
                 "world col {col}"
+            );
+        }
+    }
+
+    /// A wrapped dataset that stores latitudes ASCENDING (south-up) and is queried with a
+    /// PARTIAL cell window inside one tile, i.e. a read advise whose `read_window_bounds`
+    /// no longer covers a full tile. NEX-GDDP-CMIP6 has exactly this shape: south-up 0..360
+    /// stored, a query that touches one tile column and one cell row.
+    #[tokio::test]
+    async fn test_query_wrap_south_up_partial_window() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+        let name = add_md_dataset(
+            &mut exe_ctx,
+            "md_wrap_south_up_partial",
+            // stored lon 0..360 at 0.25 deg (1440 cols), lat -1..0 ascending (stored row 0 = south)
+            MdDataset::wrapped(
+                "md/wrap_0_360_multitile.nc",
+                1440,
+                4,
+                (0.0, -1.0, 0.25, 0.25),
+                2,
+            ),
+        );
+
+        // partial window: one row block (rows 0..3 = the full 4 stored row-equivalents) and a
+        // cell column strip 100..257 entirely inside tile column 0
+        let spatial = GridBoundingBox2D::new_unchecked([0, 100], [3, 257]);
+        let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + DAY);
+        let tiles = query_md_source(
+            &exe_ctx,
+            &query_ctx,
+            name,
+            spatial,
+            time,
+            BandSelection::first(),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+        assert_eq!(
+            tiles.len(),
+            1,
+            "expected a single tile for the partial window"
+        );
+        for (R, C) in [(0, 100), (1, 157), (3, 257), (2, 200)] {
+            let local = tiles[0]
+                .tile_information()
+                .global_pixel_bounds()
+                .min_index();
+            // stored row r = 3 - R (stored row 0 is the south edge), value = t*100000 + r*10 + C
+            let expected = ((3 - R) * 10 + C) as f32;
+            assert_eq!(
+                grid_value(
+                    &tiles[0],
+                    (R - local.y()) as usize,
+                    (C - local.x()) as usize
+                ),
+                expected,
+                "value at tiling cell ({R}, {C})"
             );
         }
     }
