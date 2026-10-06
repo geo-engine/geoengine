@@ -163,6 +163,8 @@ export * from './Link';
 export * from './LogarithmicGradient';
 export * from './MdGdalSource';
 export * from './MdGdalSourceParameters';
+export * from './MdProbeRequest';
+export * from './MdProbeResponse';
 export * from './MeanRasterPixelValuesOverTime';
 export * from './MeanRasterPixelValuesOverTimeParameters';
 export * from './MeanRasterPixelValuesOverTimePosition';

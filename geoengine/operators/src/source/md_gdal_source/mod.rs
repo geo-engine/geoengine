@@ -28,11 +28,15 @@ use std::marker::PhantomData;
 
 mod error;
 mod loading_info;
+mod probe;
 mod reader;
 
 pub use error::MdGdalSourceError;
 pub use loading_info::{
     GdalMdMetaData, MdDatasetFile, MdFileTimes, MdLoadingInfo, ZRole, presented_geo_transform,
+};
+pub use probe::{
+    MdArraySelection, ProbedGdalMdMetaData, probe_md_loading_info, probe_md_variables_loading_info,
 };
 
 /// Parameters for the MD GDAL Source Operator.

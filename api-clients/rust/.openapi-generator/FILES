@@ -168,6 +168,8 @@ docs/Link.md
 docs/LogarithmicGradient.md
 docs/MdGdalSource.md
 docs/MdGdalSourceParameters.md
+docs/MdProbeRequest.md
+docs/MdProbeResponse.md
 docs/MeanRasterPixelValuesOverTime.md
 docs/MeanRasterPixelValuesOverTimeParameters.md
 docs/MeanRasterPixelValuesOverTimePosition.md
@@ -641,6 +643,8 @@ src/models/link.rs
 src/models/logarithmic_gradient.rs
 src/models/md_gdal_source.rs
 src/models/md_gdal_source_parameters.rs
+src/models/md_probe_request.rs
+src/models/md_probe_response.rs
 src/models/mean_raster_pixel_values_over_time.rs
 src/models/mean_raster_pixel_values_over_time_parameters.rs
 src/models/mean_raster_pixel_values_over_time_position.rs

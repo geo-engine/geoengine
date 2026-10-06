@@ -111,6 +111,9 @@ where
                     .route(web::post().to(add_md_dataset_tiles_handler::<C>)),
             )
             .service(
+                web::resource("/probe-md").route(web::post().to(probe_md_meta_data_handler::<C>)),
+            )
+            .service(
                 web::resource("/{dataset}")
                     .route(web::get().to(get_dataset_handler::<C>))
                     .route(web::post().to(update_dataset_handler::<C>))
@@ -453,6 +456,78 @@ pub struct AddDatasetMdTile {
     pub leading_prefix: Vec<i64>,
 }
 
+/// Splits a probed MD dataset into the two things a client has to POST: the dataset-level
+/// metadata and one row per file.
+///
+/// This is the inverse of [`MdGdalLoadingInfoProvider`](crate::datasets::postgres), so the
+/// probe response and the stored rows describe the same dataset by construction.
+///
+/// # Panics
+/// If `result_descriptor` is not a source descriptor and therefore has no source grid.
+/// The probe only ever produces source descriptors.
+pub fn probed_md_dataset(
+    probed: geoengine_operators::source::ProbedGdalMdMetaData,
+    cache_ttl: Option<u32>,
+) -> (
+    crate::datasets::storage::MetaDataDefinition,
+    Vec<AddDatasetMdTile>,
+) {
+    let geoengine_operators::source::ProbedGdalMdMetaData {
+        loading_info,
+        result_descriptor,
+        max_z_batch_size,
+    } = probed;
+
+    // the presented (north-up, wrap-corrected) footprint; `update_md_dataset_extents`
+    // derives the dataset extents from exactly this box, and the read advise clamps the
+    // tile intersection against it
+    let presented = result_descriptor
+        .spatial_grid_descriptor()
+        .source_spatial_grid_definition()
+        .expect("a source result descriptor has a source grid");
+    let spatial_partition = presented
+        .geo_transform()
+        .grid_to_spatial_bounds(&presented.grid_bounds())
+        .into();
+
+    let mut tiles = Vec::with_capacity(loading_info.files().len());
+    let mut files_per_band: u32 = 0;
+    let mut band: Option<u32> = None;
+
+    for file in loading_info.files() {
+        if band != Some(file.output_band) {
+            band = Some(file.output_band);
+            files_per_band = 0;
+        }
+
+        tiles.push(AddDatasetMdTile {
+            spatial_partition,
+            band: file.output_band,
+            // ordering key within the band, not the position on the time axis
+            z_index: i64::from(files_per_band),
+            array_name: file.array_name.clone(),
+            array_group: file.group.clone(),
+            time_descriptor: file.times.descriptor.into(),
+            time_steps: file.times.steps.iter().copied().map(Into::into).collect(),
+            params: file.params.clone().into(),
+            leading_prefix: file.leading_prefix.clone(),
+        });
+        files_per_band += 1;
+    }
+
+    (
+        geoengine_operators::source::GdalMdMetaData::new(
+            result_descriptor,
+            loading_info.z_role(),
+            loading_info.wrap(),
+            max_z_batch_size.and_then(|size| i64::try_from(size).ok()),
+            cache_ttl.map(geoengine_datatypes::primitives::CacheTtlSeconds::new),
+        )
+        .into(),
+        tiles,
+    )
+}
+
 impl AddDatasetMdTile {
     /// The file's overall time bounds, derived from the declared steps.
     ///
@@ -598,6 +673,147 @@ pub async fn add_md_dataset_tiles_handler<C: ApplicationContext>(
 ///
 /// ponytail: GDAL on the caller's thread, not in the worker pool - see the note on
 /// `ProbedGdalMdMetaData`. Fold this into the probe endpoint once probing is pooled.
+/// Which MD arrays of a file (or file set) to probe.
+#[derive(Clone, Serialize, Deserialize, Debug, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MdProbeRequest {
+    pub data_path: DataPath,
+    /// The files to probe, relative to `data_path` (or absolute GDAL VSI paths when
+    /// `data_path` is `External`).
+    #[schema(value_type = Vec<String>)]
+    pub files: Vec<PathBuf>,
+    /// The MD array to read. Required when a file has more than one array with at least
+    /// three dimensions, which is the normal case for netCDF.
+    #[serde(default)]
+    pub array_name: Option<String>,
+    /// "/"-separated path to the MD group below the root group; `None` = root group.
+    #[serde(default)]
+    pub group: Option<String>,
+    /// Probe several data variables as separate Geo Engine bands instead of one. Each
+    /// variable must be a time series.
+    #[serde(default)]
+    pub variables_as_bands: bool,
+    /// Upper bound on how many consecutive z slices one GDAL read may request. Carried into
+    /// the dataset metadata, because a batch is sized against the slice size of the data
+    /// and not against the workflow that reads it. `None` means the operator's default.
+    #[serde(default)]
+    pub max_z_batch_size: Option<usize>,
+    /// Dataset-level cache TTL in seconds, carried into the dataset metadata and used as
+    /// the fallback for tiles that carry no TTL of their own. `None` means the server
+    /// default.
+    #[serde(default)]
+    pub cache_ttl: Option<u32>,
+    /// Confirm that the z dimension really is a band axis. Without this a z dimension that
+    /// has no usable CF time units is rejected, because guessing produced the silent
+    /// "one band per time slice, synthetic millisecond steps" result once already.
+    #[serde(default)]
+    pub force_band_role: bool,
+}
+
+/// What a client needs to create an `MdGdalSource` dataset from the probed files: the
+/// dataset-level metadata for `POST /dataset`, plus the rows for
+/// `POST /dataset/{dataset}/md-tiles`.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MdProbeResponse {
+    pub meta_data: crate::api::model::services::MetaDataDefinition,
+    pub tiles: Vec<AddDatasetMdTile>,
+}
+
+/// Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.
+///
+/// This reads the files, so it costs one GDAL open plus one coordinate-variable read per
+/// file; for a 65-file yearly series over the network that is minutes, not seconds.
+#[utoipa::path(
+    tag = "Datasets",
+    post,
+    path = "/dataset/probe-md",
+    request_body = MdProbeRequest,
+    responses(
+        (status = 200, description = "OK", body = MdProbeResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn probe_md_meta_data_handler<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    probe: web::Json<MdProbeRequest>,
+) -> Result<web::Json<MdProbeResponse>, MdProbeError> {
+    let probe = probe.into_inner();
+    let session_context = app_ctx.session_context(session);
+
+    if probe.files.is_empty() {
+        return Err(MdProbeError::NoFilesToProbe);
+    }
+
+    let root = match probe.data_path {
+        DataPath::External => PathBuf::new(),
+        ref data_path => file_path_from_data_path(data_path, &session_context).map_err(|e| {
+            MdProbeError::CannotResolveDataPath {
+                message: e.to_string(),
+            }
+        })?,
+    };
+
+    // Constrain every file before GDAL sees it: Volume/Upload paths must stay relative
+    // (no `..`), External paths must be remote. `Path::join` lets an absolute path or a
+    // `../` escape the root, and the probe then hands the result straight to GDAL.
+    for file in &probe.files {
+        probe.data_path.validate_file_path(file).map_err(|e| {
+            MdProbeError::InvalidProbeFilePath {
+                file_path: file.to_string_lossy().into_owned(),
+                message: e.to_string(),
+            }
+        })?;
+    }
+
+    let paths = probe
+        .files
+        .iter()
+        .map(|file| root.join(file))
+        .collect::<Vec<_>>();
+
+    // A batch must hold at least one slice; `None` means "let the operator decide", but a
+    // zero would silently produce empty reads instead of an error.
+    if probe.max_z_batch_size == Some(0) {
+        return Err(MdProbeError::InvalidMaxZBatchSize);
+    }
+
+    let probed = if probe.variables_as_bands {
+        geoengine_operators::source::probe_md_variables_loading_info(
+            &paths,
+            &geoengine_operators::source::MdArraySelection {
+                group: probe.group.clone(),
+                arrays: probe.array_name.iter().cloned().collect(),
+            },
+            probe.max_z_batch_size,
+            probe.force_band_role,
+        )
+    } else {
+        geoengine_operators::source::probe_md_loading_info(
+            &paths,
+            probe.group.as_deref(),
+            probe.array_name.as_deref(),
+            probe.max_z_batch_size,
+            probe.force_band_role,
+        )
+    }
+    .map_err(|e| MdProbeError::ProbeFailed {
+        message: e.to_string(),
+    })?;
+
+    let (meta_data, tiles) = probed_md_dataset(probed, probe.cache_ttl);
+
+    Ok(web::Json(MdProbeResponse {
+        meta_data: meta_data.into(),
+        tiles,
+    }))
+}
+
 /// The shape and declared CRS of the tile's MD array.
 ///
 /// Returns `None` if the file, group or array cannot be opened, and otherwise the z size,
@@ -7111,6 +7327,36 @@ mod tests {
             ),
             Err(AddDatasetMdTilesError::MdTileCrsMismatch { .. })
         ));
+    }
+
+    /// `/dataset/probe-md` hands every listed path to GDAL, so a path that escapes the data
+    /// root would make the server open an arbitrary local file and report its metadata.
+    #[ge_context::test]
+    async fn it_rejects_probe_md_paths_that_escape_the_data_path(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let session = admin_login(&app_ctx).await;
+
+        let probe = serde_json::json!({
+            "dataPath": {"type": "Volume", "volume": "test_data"},
+            "files": ["../secrets.nc"],
+        });
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset/probe-md")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&probe)?);
+        let res = send_test_request(req, app_ctx).await;
+
+        assert_eq!(
+            res.status(),
+            400,
+            "a path escaping the data root must be rejected"
+        );
+
+        Ok(())
     }
 
     /// External data is never opened while a row is validated, so the declared axis is the

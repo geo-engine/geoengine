@@ -20,7 +20,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { AddDatasetMdTileToJSON, AddDatasetTileToJSON, AutoCreateDatasetToJSON, CreateDatasetToJSON, DatasetFromJSON, DatasetListingFromJSON, DatasetNameResponseFromJSON, MetaDataDefinitionFromJSON, MetaDataDefinitionToJSON, MetaDataSuggestionFromJSON, ProvenancesToJSON, SuggestMetaDataToJSON, SymbologyToJSON, UpdateDatasetToJSON, VolumeFromJSON, VolumeFileLayersResponseFromJSON, } from '../models/index';
+import { AddDatasetMdTileToJSON, AddDatasetTileToJSON, AutoCreateDatasetToJSON, CreateDatasetToJSON, DatasetFromJSON, DatasetListingFromJSON, DatasetNameResponseFromJSON, MdProbeRequestToJSON, MdProbeResponseFromJSON, MetaDataDefinitionFromJSON, MetaDataDefinitionToJSON, MetaDataSuggestionFromJSON, ProvenancesToJSON, SuggestMetaDataToJSON, SymbologyToJSON, UpdateDatasetToJSON, VolumeFromJSON, VolumeFileLayersResponseFromJSON, } from '../models/index';
 /**
  *
  */
@@ -513,6 +513,55 @@ export class DatasetsApi extends runtime.BaseAPI {
     listVolumesHandler(initOverrides) {
         return __awaiter(this, void 0, void 0, function* () {
             const response = yield this.listVolumesHandlerRaw(initOverrides);
+            return yield response.value();
+        });
+    }
+    /**
+     * Creates request options for probeMdMetaDataHandler without sending the request
+     */
+    probeMdMetaDataHandlerRequestOpts(requestParameters) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (requestParameters['mdProbeRequest'] == null) {
+                throw new runtime.RequiredError('mdProbeRequest', 'Required parameter "mdProbeRequest" was null or undefined when calling probeMdMetaDataHandler().');
+            }
+            const queryParameters = {};
+            const headerParameters = {};
+            headerParameters['Content-Type'] = 'application/json';
+            if (this.configuration && this.configuration.accessToken) {
+                const token = this.configuration.accessToken;
+                const tokenString = yield token("session_token", []);
+                if (tokenString) {
+                    headerParameters["Authorization"] = `Bearer ${tokenString}`;
+                }
+            }
+            let urlPath = `/dataset/probe-md`;
+            return {
+                path: urlPath,
+                method: 'POST',
+                headers: headerParameters,
+                query: queryParameters,
+                body: MdProbeRequestToJSON(requestParameters['mdProbeRequest']),
+            };
+        });
+    }
+    /**
+     * This reads the files, so it costs one GDAL open plus one coordinate-variable read per file; for a 65-file yearly series over the network that is minutes, not seconds.
+     * Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.
+     */
+    probeMdMetaDataHandlerRaw(requestParameters, initOverrides) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const requestOptions = yield this.probeMdMetaDataHandlerRequestOpts(requestParameters);
+            const response = yield this.request(requestOptions, initOverrides);
+            return new runtime.JSONApiResponse(response, (jsonValue) => MdProbeResponseFromJSON(jsonValue));
+        });
+    }
+    /**
+     * This reads the files, so it costs one GDAL open plus one coordinate-variable read per file; for a 65-file yearly series over the network that is minutes, not seconds.
+     * Probes multidimensional (netCDF/Zarr) arrays and reports how to register them.
+     */
+    probeMdMetaDataHandler(requestParameters, initOverrides) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const response = yield this.probeMdMetaDataHandlerRaw(requestParameters, initOverrides);
             return yield response.value();
         });
     }

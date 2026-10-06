@@ -183,6 +183,38 @@ impl fmt::Debug for AddDatasetTilesError {
 #[derive(Snafu, IntoStaticStr)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
+pub enum MdProbeError {
+    #[snafu(display("No files to probe"))]
+    NoFilesToProbe,
+    #[snafu(display("Cannot resolve the data path: {message}"))]
+    CannotResolveDataPath { message: String },
+    #[snafu(display("Cannot probe the MD arrays: {message}"))]
+    ProbeFailed { message: String },
+    #[snafu(display("A z batch must hold at least one slice"))]
+    InvalidMaxZBatchSize,
+    #[snafu(display("Invalid probe file path '{file_path}': {message}"))]
+    InvalidProbeFilePath { file_path: String, message: String },
+}
+
+impl ResponseError for MdProbeError {
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
+    }
+
+    fn status_code(&self) -> StatusCode {
+        StatusCode::BAD_REQUEST
+    }
+}
+
+impl fmt::Debug for MdProbeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", ge_report(self))
+    }
+}
+
+#[derive(Snafu, IntoStaticStr)]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum AddDatasetMdTilesError {
     #[snafu(display("Cannot load dataset for adding MD tiles"))]
     CannotLoadDatasetForAddingMdTiles { source: error::Error },

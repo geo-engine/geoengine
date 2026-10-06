@@ -170,6 +170,8 @@ docs/LogarithmicGradient.md
 docs/MLApi.md
 docs/MdGdalSource.md
 docs/MdGdalSourceParameters.md
+docs/MdProbeRequest.md
+docs/MdProbeResponse.md
 docs/MeanRasterPixelValuesOverTime.md
 docs/MeanRasterPixelValuesOverTimeParameters.md
 docs/MeanRasterPixelValuesOverTimePosition.md
@@ -645,6 +647,8 @@ geoengine_api_client/models/link.py
 geoengine_api_client/models/logarithmic_gradient.py
 geoengine_api_client/models/md_gdal_source.py
 geoengine_api_client/models/md_gdal_source_parameters.py
+geoengine_api_client/models/md_probe_request.py
+geoengine_api_client/models/md_probe_response.py
 geoengine_api_client/models/mean_raster_pixel_values_over_time.py
 geoengine_api_client/models/mean_raster_pixel_values_over_time_parameters.py
 geoengine_api_client/models/mean_raster_pixel_values_over_time_position.py
@@ -1095,6 +1099,8 @@ test/test_link.py
 test/test_logarithmic_gradient.py
 test/test_md_gdal_source.py
 test/test_md_gdal_source_parameters.py
+test/test_md_probe_request.py
+test/test_md_probe_response.py
 test/test_mean_raster_pixel_values_over_time.py
 test/test_mean_raster_pixel_values_over_time_parameters.py
 test/test_mean_raster_pixel_values_over_time_position.py

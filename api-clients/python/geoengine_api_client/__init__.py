@@ -207,6 +207,8 @@ __all__ = [
     "LogarithmicGradient",
     "MdGdalSource",
     "MdGdalSourceParameters",
+    "MdProbeRequest",
+    "MdProbeResponse",
     "MeanRasterPixelValuesOverTime",
     "MeanRasterPixelValuesOverTimeParameters",
     "MeanRasterPixelValuesOverTimePosition",
@@ -678,6 +680,8 @@ from geoengine_api_client.models.link import Link as Link
 from geoengine_api_client.models.logarithmic_gradient import LogarithmicGradient as LogarithmicGradient
 from geoengine_api_client.models.md_gdal_source import MdGdalSource as MdGdalSource
 from geoengine_api_client.models.md_gdal_source_parameters import MdGdalSourceParameters as MdGdalSourceParameters
+from geoengine_api_client.models.md_probe_request import MdProbeRequest as MdProbeRequest
+from geoengine_api_client.models.md_probe_response import MdProbeResponse as MdProbeResponse
 from geoengine_api_client.models.mean_raster_pixel_values_over_time import MeanRasterPixelValuesOverTime as MeanRasterPixelValuesOverTime
 from geoengine_api_client.models.mean_raster_pixel_values_over_time_parameters import MeanRasterPixelValuesOverTimeParameters as MeanRasterPixelValuesOverTimeParameters
 from geoengine_api_client.models.mean_raster_pixel_values_over_time_position import MeanRasterPixelValuesOverTimePosition as MeanRasterPixelValuesOverTimePosition
