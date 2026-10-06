@@ -22,7 +22,9 @@ export class EdvLayersService {
     readonly selectedVariantKey = signal<string | undefined>(undefined);
     readonly selectedPresetKey = signal<string | undefined>(undefined);
     readonly selectedPresetIndex = signal(0);
-    private readonly appliedPreset = signal<VisualizationPreset | undefined>(undefined);
+    /** Snapshot of the visualization on the map, independent of the pending catalogue selection. */
+    private readonly appliedVisualization = signal<{source: DataSourceDefinition; preset: VisualizationPreset} | undefined>(undefined);
+    readonly appliedDataSource = computed(() => this.appliedVisualization()?.source);
     private readonly variantPresetCache = signal(new Map<string, VisualizationPreset[]>());
     private variantLoadGeneration = 0;
     private readonly variantLoadEpochs = new Map<string, number>();
@@ -102,11 +104,11 @@ export class EdvLayersService {
     });
     readonly canApplyPreset = computed(() => {
         const selected = this.selectedPreset();
-        const applied = this.appliedPreset();
+        const applied = this.appliedVisualization()?.preset;
         return !!selected && (selected.connectorId !== applied?.connectorId || selected.layerId !== applied?.layerId);
     });
     readonly mapTileLayer = computed<DataSourceLayer | undefined>(() => {
-        const preset = this.appliedPreset();
+        const preset = this.appliedVisualization()?.preset;
         if (!preset) {
             return undefined;
         }
@@ -117,7 +119,6 @@ export class EdvLayersService {
         effect(() => {
             if (this.catalogueLoading()) {
                 this.invalidateVariantPresets();
-                this.clearAppliedPreset();
                 return;
             }
             const sources = this.dataSources();
@@ -126,7 +127,6 @@ export class EdvLayersService {
                 this.selectedVariantKey.set(undefined);
                 this.selectedPresetKey.set(undefined);
                 this.selectedPresetIndex.set(0);
-                this.clearAppliedPreset();
                 return;
             }
 
@@ -134,9 +134,6 @@ export class EdvLayersService {
             const next = current ? sources.find((source) => source.key === current.key) : undefined;
             const selected = next ?? sources[0];
             const sourceChanged = current?.key !== selected.key;
-            if (sourceChanged) {
-                this.clearAppliedPreset();
-            }
             this.selectedDataSource.set(selected);
 
             const wantedVariantKey = sourceChanged ? undefined : this.selectedVariantKey();
@@ -175,7 +172,6 @@ export class EdvLayersService {
             return;
         }
         this.selectedDataSource.set(dataSource);
-        this.clearAppliedPreset();
         this.selectedVariantKey.set(undefined);
         this.selectedPresetKey.set(undefined);
         this.selectedPresetIndex.set(0);
@@ -187,7 +183,6 @@ export class EdvLayersService {
             return;
         }
         if (this.selectedVariantKey() !== variant.key) {
-            this.clearAppliedPreset();
             this.selectedPresetKey.set(undefined);
         }
         this.selectedVariantKey.set(variant.key);
@@ -204,13 +199,11 @@ export class EdvLayersService {
     }
 
     applySelectedPreset(): void {
-        if (this.canApplyPreset()) {
-            this.appliedPreset.set(this.selectedPreset());
+        const source = this.selectedDataSource();
+        const preset = this.selectedPreset();
+        if (source && preset && this.canApplyPreset()) {
+            this.appliedVisualization.set({source, preset});
         }
-    }
-
-    private clearAppliedPreset(): void {
-        this.appliedPreset.set(undefined);
     }
 
     /** Discover datasets in the EDV -> category -> dataset -> variant -> preset hierarchy. */

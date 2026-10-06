@@ -159,8 +159,8 @@ describe('LayersComponent', () => {
         expect(fixture.componentInstance.currentPresets()[0].category).toBe('adHoc');
         expect(fixture.componentInstance.mapTileLayer()).toBeUndefined();
         expect(button.disabled).toBe(true);
-        expect(setTime).toHaveBeenCalledWith(new Time(new Date(1775001600000)));
-        expect(setTimeStepDuration).toHaveBeenCalledWith({durationAmount: 1, durationUnit: 'day'});
+        expect(setTime).not.toHaveBeenCalled();
+        expect(setTimeStepDuration).not.toHaveBeenCalled();
 
         fixture.componentInstance.selectPreset(fixture.componentInstance.currentPresets()[0]);
         fixture.detectChanges();
@@ -169,6 +169,9 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         expect(fixture.componentInstance.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
         expect(button.disabled).toBe(true);
+        await fixture.whenStable();
+        expect(setTime).toHaveBeenCalledWith(new Time(new Date(1775001600000)));
+        expect(setTimeStepDuration).toHaveBeenCalledWith({durationAmount: 1, durationUnit: 'day'});
 
         fixture.componentInstance.selectPreset(fixture.componentInstance.currentPresets()[1]);
         fixture.detectChanges();
@@ -178,6 +181,120 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         expect(fixture.componentInstance.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'alternate'});
         expect(button.disabled).toBe(true);
+        await fixture.whenStable();
+        expect(setTime).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the applied layer and time while selecting another source until apply is clicked', async () => {
+        const pages: Record<string, {items: unknown[]}> = {
+            ...listings,
+            adhoc: {
+                items: [
+                    ...listings.adhoc.items,
+                    {
+                        type: 'collection',
+                        name: 'Z Other source',
+                        id: {providerId: 'provider', collectionId: 'otherDataset'},
+                        description: '',
+                        properties: [
+                            ['edv:type', 'dataset'],
+                            ['edv:dataset', 'other'],
+                            ['edv:defaultTime', '1775088000000'],
+                            ['edv:timeStep', '{"step":2,"granularity":"days"}'],
+                        ],
+                    },
+                ],
+            },
+            otherDataset: {
+                items: [
+                    {
+                        type: 'layer',
+                        name: 'Other visualization',
+                        id: {providerId: 'provider', layerId: 'other'},
+                        description: '',
+                        properties: [
+                            ['edv:type', 'preset'],
+                            ['edv:preset', 'Other'],
+                        ],
+                    },
+                ],
+            },
+        };
+        getLayerCollectionItems.mockImplementation((_provider, collection) => Promise.resolve(pages[collection] ?? {items: []}));
+        fixture.detectChanges();
+        await fixture.whenStable();
+        const component = fixture.componentInstance;
+        component.selectPreset(component.currentPresets()[0]);
+        component.applySelectedPreset();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        const appliedLayer = component.mapTileLayer();
+        const appliedSource = edvLayersService.appliedDataSource();
+        expect(appliedLayer).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
+        expect(setTime).toHaveBeenCalledWith(new Time(new Date(1775001600000)));
+        setTime.mockClear();
+        setTimeStepDuration.mockClear();
+        getLayer.mockClear();
+
+        component.setSelectedDataSource('other');
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.selectedDataSource()?.key).toBe('other');
+        expect(component.mapTileLayer()).toBe(appliedLayer);
+        expect(edvLayersService.appliedDataSource()).toBe(appliedSource);
+        expect(component.selectedPreset()).toBeUndefined();
+        expect(component.canApplyPreset()).toBe(false);
+        component.selectPreset(component.currentPresets()[0]);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.canApplyPreset()).toBe(true);
+        expect(component.mapTileLayer()).toBe(appliedLayer);
+        expect(setTime).not.toHaveBeenCalled();
+        expect(setTimeStepDuration).not.toHaveBeenCalled();
+        expect(getLayer).not.toHaveBeenCalled();
+
+        component.applySelectedPreset();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'other'});
+        expect(edvLayersService.appliedDataSource()?.key).toBe('other');
+        expect(setTime).toHaveBeenCalledWith(new Time(new Date(1775088000000)));
+        expect(setTimeStepDuration).toHaveBeenCalledWith({durationAmount: 2, durationUnit: 'days'});
+        expect(getLayer).toHaveBeenCalledWith('provider', 'other');
+
+        setTime.mockClear();
+        component.autoSelectTime.set(false);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        component.setSelectedDataSource('sentinel');
+        fixture.detectChanges();
+        await fixture.whenStable();
+        component.selectPreset(component.currentPresets()[0]);
+        component.applySelectedPreset();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(component.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
+        expect(setTime).not.toHaveBeenCalled();
+    });
+
+    it('preserves the applied layer and time when returning to the layers panel', async () => {
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.componentInstance.selectPreset(fixture.componentInstance.currentPresets()[0]);
+        fixture.componentInstance.applySelectedPreset();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        const appliedLayer = edvLayersService.mapTileLayer();
+        setTime.mockClear();
+        setTimeStepDuration.mockClear();
+
+        fixture.destroy();
+        fixture = TestBed.createComponent(LayersComponent);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(fixture.componentInstance.mapTileLayer()).toBe(appliedLayer);
+        expect(setTime).not.toHaveBeenCalled();
+        expect(setTimeStepDuration).not.toHaveBeenCalled();
     });
 
     it('loads the legend only after applying a preset and handles a failed request', async () => {
@@ -402,7 +519,7 @@ describe('LayersComponent', () => {
         await fixture.whenStable();
         fixture.detectChanges();
         expect(edvLayersService.selectedVariant()?.key).toBe('epsg32633');
-        expect(edvLayersService.mapTileLayer()).toBeUndefined();
+        expect(edvLayersService.mapTileLayer()).toEqual({dataConnectorId: 'data0', layerId: 'red33-0'});
         expect(edvLayersService.selectedPresetKey()).toBeUndefined();
     });
 
@@ -671,16 +788,17 @@ describe('LayersComponent', () => {
         expect(edvLayersService.canApplyPreset()).toBe(true);
         edvLayersService.applySelectedPreset();
         expect(edvLayersService.mapTileLayer()?.layerId).toBe('ndvi32');
+        const appliedLayer = edvLayersService.mapTileLayer();
         edvLayersService.setSelectedVariant('epsg32633');
         fixture.detectChanges();
-        expect(edvLayersService.mapTileLayer()).toBeUndefined();
+        expect(edvLayersService.mapTileLayer()).toBe(appliedLayer);
         await vi.waitFor(() => expect(edvLayersService.currentPresets().length).toBe(1));
         edvLayersService.setSelectedPreset('red_band');
         edvLayersService.applySelectedPreset();
         expect(edvLayersService.mapTileLayer()?.layerId).toBe('red33');
         edvLayersService.setSelectedVariant('epsg32632');
         fixture.detectChanges();
-        expect(edvLayersService.mapTileLayer()).toBeUndefined();
+        expect(edvLayersService.mapTileLayer()?.layerId).toBe('red33');
         edvLayersService.setSelectedVariant('epsg32633');
         fixture.detectChanges();
         expect(edvLayersService.selectedPresetKey()).toBeUndefined();
@@ -756,9 +874,9 @@ describe('LayersComponent', () => {
         expect(edvLayersService.mapTileLayer()?.layerId).toBe('red-b');
         edvLayersService.setSelectedVariant('a');
         fixture.detectChanges();
-        expect(edvLayersService.mapTileLayer()).toBeUndefined();
+        expect(edvLayersService.mapTileLayer()?.layerId).toBe('red-b');
         resolveA({items: [layer('red-a')]});
         await vi.waitFor(() => expect(edvLayersService.currentPresets().length).toBe(1));
-        expect(edvLayersService.mapTileLayer()).toBeUndefined();
+        expect(edvLayersService.mapTileLayer()?.layerId).toBe('red-b');
     });
 });

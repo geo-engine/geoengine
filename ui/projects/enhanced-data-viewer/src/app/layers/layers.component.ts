@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, Component, computed, effect, inject, resource, signal} from '@angular/core';
+import {ChangeDetectionStrategy, Component, computed, inject, resource, signal} from '@angular/core';
 import {CoreModule, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
 import {A11yModule} from '@angular/cdk/a11y';
 import {EdvLayersService} from './layers.service';
@@ -423,13 +423,6 @@ export class LayersComponent {
         () => !!this.mapTileLayer() && (this.legendLayer.isLoading() || this.legendLayer.status() === 'error' || !!this.legend()),
     );
 
-    constructor() {
-        effect(() => {
-            const source = this.selectedDataSource();
-            if (source) void this.applyDataSourceTime(source);
-        });
-    }
-
     readonly retryCatalogue = (): void => this.edvLayersService.retryCatalogue();
     readonly retryVariant = (): void => this.edvLayersService.retryVariant();
 
@@ -464,7 +457,12 @@ export class LayersComponent {
     }
 
     applySelectedPreset(): void {
+        if (!this.canApplyPreset()) return;
+
+        const source = this.selectedDataSource();
+        const sourceChanged = source !== this.edvLayersService.appliedDataSource();
         this.edvLayersService.applySelectedPreset();
+        if (source && sourceChanged) void this.applyDataSourceTime(source);
     }
 
     async timeForward(): Promise<void> {
