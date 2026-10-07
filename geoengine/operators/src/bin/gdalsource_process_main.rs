@@ -92,6 +92,9 @@ fn set_gdal_process_global_options(options: &[(String, String)]) {
             tracing::warn!("Failed to set GDAL config option {key}={value}: {err}");
         }
     }
+    // Log what was applied: several of these are frozen at first /vsicurl/ use, so the only
+    // way to tell a tuning change took effect is to see it here rather than assume it.
+    tracing::info!(?options, "GDAL worker config options applied");
 }
 
 /// Initializes a tracing subscriber. Writes to stderr (filtered by `log_spec`) and,
