@@ -10,6 +10,9 @@ import {coverageContains, parseCoverage} from './coverage';
 import type {GeographicCenter} from './coverage';
 import {DataSourceDefinition, DataSourceLayer, DataSourceVariant, VisualizationPreset} from './data-sources';
 
+/**
+ * Service for managing layers in the EOdyssey.
+ */
 @Service()
 export class EdvLayersService {
     readonly layerService = inject(LayersService);

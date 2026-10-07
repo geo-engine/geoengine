@@ -5,56 +5,58 @@
 @include mat.elevation-classes();
 @include mat.app-background();
 
-// Base: #14387F / R 20 G 56 B 127
-$code-de-darkblue: (
-    50: #dce1ec,
-    100: #b9c3d9,
-    200: #8a9cbf,
-    300: #5b74a5,
-    400: #375692,
-    500: #14387f,
-    600: #11306c,
-    700: #0e2759,
-    800: #0a1c40,
-    900: #07142c,
-    A100: #0048fa,
-    A200: #003fdd,
-    A400: #0037bf,
-    A700: #002ea2,
+// EOdyssey brand colors: #FF8225, #05203E, #105FBC, #157EFB, #73B3FD, #FFFFFF
+
+// Base: #105FBC / R 16 G 95 B 188 (darkest: #05203E)
+$eodyssey-blue: (
+    50: #e2edf9,
+    100: #b8d3f6,
+    200: #73b3fd,
+    300: #4596fc,
+    400: #157efb,
+    500: #105fbc,
+    600: #0d519f,
+    700: #0b4382,
+    800: #083260,
+    900: #05203e,
+    A100: #a8ccff,
+    A200: #75b0ff,
+    A400: #2f86ff,
+    A700: #157efb,
     contrast: (
         50: #000000,
         100: #000000,
         200: #000000,
-        300: #ffffff,
+        300: #000000,
         400: #ffffff,
         500: #ffffff,
         600: #ffffff,
         700: #ffffff,
         800: #ffffff,
         900: #ffffff,
-        A100: #ffffff,
-        A200: #ffffff,
+        A100: #000000,
+        A200: #000000,
         A400: #ffffff,
         A700: #ffffff,
     ),
 );
 
-// Base: #3EA3DC / R 62 G 163 B 220
-$code-de-lightblue: (
-    50: #e2f1fa,
-    100: #c5e3f5,
-    200: #9fd1ee,
-    300: #78bfe7,
-    400: #5bb1e1,
-    500: #3ea3dc,
-    600: #358bbb,
-    700: #2b729a,
-    800: #1f526e,
-    900: #16394d,
-    A100: #e0f2ff,
-    A200: #a8dbff,
-    A400: #70c4ff,
-    A700: #37adff,
+// Base: #FF8225 / R 255 G 130 B 37
+$eodyssey-orange: (
+    50: #fff0e5,
+    100: #ffdabe,
+    200: #ffc192,
+    300: #ffa866,
+    400: #ff9546,
+    500: #ff8225,
+    600: #ef7015,
+    700: #d45f0e,
+    800: #b04e0b,
+    900: #7a3507,
+    A100: #ffe3cf,
+    A200: #ffbf8f,
+    A400: #ff9c52,
+    A700: #ff7a12,
     contrast: (
         50: #000000,
         100: #000000,
@@ -62,8 +64,8 @@ $code-de-lightblue: (
         300: #000000,
         400: #000000,
         500: #000000,
-        600: #ffffff,
-        700: #ffffff,
+        600: #000000,
+        700: #000000,
         800: #ffffff,
         900: #ffffff,
         A100: #000000,
@@ -74,8 +76,8 @@ $code-de-lightblue: (
 );
 
 // Define App Theme
-$geoengine-primary: mat.m2-define-palette($code-de-darkblue, 500, 300, 900);
-$geoengine-accent: mat.m2-define-palette($code-de-lightblue, 700, 300, 900);
+$geoengine-primary: mat.m2-define-palette($eodyssey-blue, 500, 300, 900);
+$geoengine-accent: mat.m2-define-palette($eodyssey-orange, 500, 300, 800);
 $geoengine-warn: mat.m2-define-palette(mat.$m2-red-palette);
 
 $geoengine-typography: mat.m2-define-typography-config(

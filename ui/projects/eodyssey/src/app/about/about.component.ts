@@ -6,11 +6,11 @@ import {MatDividerModule} from '@angular/material/divider';
     imports: [MatDividerModule],
     template: `
         <section>
-            <!-- <span class="eyebrow">About the Enhanced Data Viewer</span> -->
+            <!-- <span class="eyebrow">About EOdyssey</span> -->
             <h2>What this viewer does</h2>
             <p>
-                The <em>Enhanced Data Viewer</em> brings Earth Observation and geospatial datasets into a focused workspace for fast, visual
-                exploration. Browse and inspect layers, and compare their spatial context without losing track of the map.
+                <em>EOdyssey</em> brings Earth Observation and geospatial datasets into a focused workspace for fast, visual exploration.
+                Browse and inspect layers, and compare their spatial context without losing track of the map.
             </p>
         </section>
 
@@ -29,7 +29,20 @@ import {MatDividerModule} from '@angular/material/divider';
         <mat-divider></mat-divider>
 
         <section>
+            <h2>CODE-DE Lab</h2>
+            <a href="https://code-de.org/" target="_blank" rel="noreferrer" class="partner-logo">
+                <img src="assets/CODE-DE-Lab_RGB.svg" alt="CODE-DE Lab" />
+            </a>
+            <p>EOdyssey is part of the CODE-DE Lab, the platform for Earth Observation data and services in Germany.</p>
+        </section>
+
+        <mat-divider></mat-divider>
+
+        <section>
             <h2>Geo Engine</h2>
+            <a href="https://geoengine.io/" target="_blank" rel="noreferrer" class="partner-logo">
+                <img src="assets/geoengine.svg" alt="Geo Engine" class="clear-space" />
+            </a>
             <p>
                 Geo Engine is the underlying geospatial platform that provides data access, processing, and visualization capabilities for
                 this viewer. It combines raster and vector workflows, cloud-ready processing, and map-based exploration.
@@ -55,7 +68,7 @@ import {MatDividerModule} from '@angular/material/divider';
             }
 
             mat-divider {
-                margin: 0.5rem 0;
+                margin: 1rem 0;
             }
 
             h2 {
@@ -79,6 +92,20 @@ import {MatDividerModule} from '@angular/material/divider';
 
             li + li {
                 margin-top: 0.25rem;
+            }
+
+            .partner-logo {
+                display: block;
+
+                img {
+                    width: 100%;
+                    height: auto;
+                    box-sizing: border-box;
+
+                    &.clear-space {
+                        padding: 1.5rem 1rem;
+                    }
+                }
             }
         `,
     ],

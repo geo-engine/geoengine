@@ -133,7 +133,7 @@ export class MainComponent {
         if (this.mapImageLoading()) return;
 
         const [currentDate] = (this.currentTime()?.toString() ?? new Date().toISOString()).split('T');
-        const currentLayer = this.layersReverse().at(-1)?.name ?? 'enhanced-data-viewer-map';
+        const currentLayer = this.layersReverse().at(-1)?.name ?? 'eodyssey-map';
         const citation = replaceCitationPlaceholders(
             this.edvLayersService.appliedDataSource()?.citation ?? '',
             this.currentTime() ?? new Date(),

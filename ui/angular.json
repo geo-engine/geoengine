@@ -62,7 +62,7 @@
                 }
             }
         },
-        "enhanced-data-viewer": {
+        "eodyssey": {
             "projectType": "application",
             "schematics": {
                 "@schematics/angular:component": {
@@ -76,8 +76,8 @@
                     "prefix": "geoengine"
                 }
             },
-            "root": "projects/enhanced-data-viewer",
-            "sourceRoot": "projects/enhanced-data-viewer/src",
+            "root": "projects/eodyssey",
+            "sourceRoot": "projects/eodyssey/src",
             "prefix": "geoengine",
             "architect": {
                 "build": {
@@ -92,14 +92,14 @@
                             "xml-utils"
                         ],
                         "outputPath": {
-                            "base": "dist/enhanced-data-viewer"
+                            "base": "dist/eodyssey"
                         },
-                        "index": "projects/enhanced-data-viewer/src/index.html",
+                        "index": "projects/eodyssey/src/index.html",
                         "polyfills": [],
-                        "tsConfig": "projects/enhanced-data-viewer/tsconfig.app.json",
+                        "tsConfig": "projects/eodyssey/tsconfig.app.json",
                         "assets": [
-                            "projects/enhanced-data-viewer/src/favicon.ico",
-                            "projects/enhanced-data-viewer/src/assets",
+                            "projects/eodyssey/src/favicon.ico",
+                            "projects/eodyssey/src/assets",
                             {
                                 "glob": "**/*",
                                 "input": "projects/common/assets",
@@ -108,7 +108,7 @@
                         ],
                         "inlineStyleLanguage": "scss",
                         "styles": [
-                            "projects/enhanced-data-viewer/src/styles.scss",
+                            "projects/eodyssey/src/styles.scss",
                             "projects/common/assets/fonts/poppins/poppins.css",
                             "projects/common/assets/fonts/pacifico/pacifico.css",
                             "projects/common/assets/fonts/material-design-icons/material-icons.css",
@@ -120,7 +120,7 @@
                         "sourceMap": true,
                         "optimization": false,
                         "namedChunks": true,
-                        "browser": "projects/enhanced-data-viewer/src/main.ts"
+                        "browser": "projects/eodyssey/src/main.ts"
                     },
                     "configurations": {
                         "production": {
@@ -151,10 +151,10 @@
                     "options": {},
                     "configurations": {
                         "production": {
-                            "buildTarget": "enhanced-data-viewer:build:production"
+                            "buildTarget": "eodyssey:build:production"
                         },
                         "development": {
-                            "buildTarget": "enhanced-data-viewer:build:development"
+                            "buildTarget": "eodyssey:build:development"
                         }
                     },
                     "defaultConfiguration": "development"
@@ -162,7 +162,7 @@
                 "extract-i18n": {
                     "builder": "@angular/build:dev-server:extract-i18n",
                     "options": {
-                        "buildTarget": "enhanced-data-viewer:build"
+                        "buildTarget": "eodyssey:build"
                     }
                 },
                 "test": {
@@ -176,17 +176,17 @@
                 "lint": {
                     "builder": "@angular-eslint/builder:lint",
                     "options": {
-                        "lintFilePatterns": ["projects/enhanced-data-viewer/**/*.ts", "projects/enhanced-data-viewer/**/*.html"]
+                        "lintFilePatterns": ["projects/eodyssey/**/*.ts", "projects/eodyssey/**/*.html"]
                     }
                 },
                 "e2e": {
                     "builder": "playwright-ng-schematics:playwright",
                     "options": {
-                        "devServerTarget": "enhanced-data-viewer:serve"
+                        "devServerTarget": "eodyssey:serve"
                     },
                     "configurations": {
                         "production": {
-                            "devServerTarget": "enhanced-data-viewer:serve:production"
+                            "devServerTarget": "eodyssey:serve:production"
                         }
                     }
                 }
