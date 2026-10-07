@@ -58,10 +58,18 @@ Supporting crates: `expression` (used by `operators` and `services`), `macros` (
 
 ## Processing internals
 
-- **Sub-queries**: raster operators that need a different input region per output tile (reprojection, interpolation, downsampling, neighborhood aggregate) are built on `RasterSubQueryAdapter` (`operators/src/adapters/raster_subquery/`). For each output tile it issues a sub-query to the source and folds the results with a `SubQueryTileAggregator`. Reuse it rather than writing your own tile loop.
-- **Cache**: when `[cache] enabled` is set, `services` wraps every initialized operator in a cache operator (`services/src/contexts/mod.rs`, `operators/src/cache/`). So the cache sits between every pair of operators in a graph, not only at the output. Results must therefore be deterministic for a given query, and operators must propagate the `cache_hint` of their input tiles and chunks.
-- **Threads**: CPU-heavy work runs on the shared Rayon thread pool from `ctx.thread_pool()`, via `spawn_blocking_with_thread_pool`. Never block the async runtime, and do not create your own thread pools.
-- **GDAL**: GDAL opens and reads run in separate `gdalsource-process` worker processes (see `operators` above), limited by `[gdal_process_pool]`. GDAL state such as config options does not carry over from the server process; pass it with the dataset parameters (`gdal_config_options`).
+- **Raster tile order**: every raster stream has the same fixed order and no gaps. Operators must expect this order from their inputs and produce it themselves.
+  Tiles are ordered by time first, then by tile position, then by band. So the stream delivers all tiles of one time slice before the next one starts, and all bands of one tile position before the next position starts:
+  1. **Time**: ascending, without gaps (the end of one slice is the start of the next). Sources fill gaps with no-data slices.
+  2. **Tile position**: all tiles that intersect the query's spatial bounds, row by row from the upper-left tile (x runs fastest, then y). Tiles without data are emitted as empty tiles.
+  3. **Band**: one tile per selected band, in the order of the query's band selection (not necessarily sorted).
+
+  Example with 2 time slices, 2×2 tiles and bands `[0, 1]`: `t0 (0,0) b0`, `t0 (0,0) b1`, `t0 (0,1) b0`, `t0 (0,1) b1`, `t0 (1,0) b0`, …, `t1 (1,1) b1`.
+
+- **Sub-queries**: raster operators that need a different input region per output tile (reprojection, interpolation, downsampling, neighborhood aggregate) use `RasterSubQueryAdapter`, which issues one sub-query per output tile and folds the results. Reuse it rather than writing your own tile loop.
+- **Cache**: when `[cache] enabled` is set, every operator in a graph is wrapped in a cache operator, not only the output. Results must therefore be deterministic for a given query, and operators must propagate the `cache_hint` of their input tiles and chunks.
+- **Threads**: run CPU-heavy work on the shared thread pool from `ctx.thread_pool()`. Never block the async runtime, and do not create your own thread pools.
+- **GDAL**: GDAL runs in separate `gdalsource-process` worker processes, so GDAL state such as config options does not carry over from the server process. Pass it with the dataset parameters (`gdal_config_options`).
 
 ## Database migrations
 
