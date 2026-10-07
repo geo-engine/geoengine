@@ -1056,6 +1056,7 @@ mod tests {
     use super::*;
     use float_cmp::assert_approx_eq;
     use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
+    use std::path::PathBuf;
 
     /// Creates a window from min/max `[row, col]` indices.
     fn window(min: [isize; 2], max: [isize; 2]) -> GridBoundingBox2D {
@@ -1089,6 +1090,129 @@ mod tests {
         let a = window([0, 0], [7, 7]);
         let b = window([50, 0], [57, 7]);
         assert_approx_eq!(f64, calculate_grid_distance(&a, &b), 50.0);
+    }
+
+    // --- routing is z-blind, sharing is z-aware ---
+
+    fn md_message(z_range: std::ops::Range<usize>) -> IpcChannelMessage {
+        IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
+            dataset_params: GdalDatasetParameters {
+                file_path: PathBuf::from("/vsicurl/https://example.invalid/tasmax.nc"),
+                rasterband_channel: 1,
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: (0.0, 0.0).into(),
+                    x_pixel_size: 0.25,
+                    y_pixel_size: 0.25,
+                },
+                width: 1440,
+                height: 600,
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value: None,
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: Some(vec![(
+                    "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_string(),
+                    ".nc".to_string(),
+                )]),
+                allow_alphaband_as_mask: false,
+                retry: None,
+            },
+            read_advise: GdalReadAdvise {
+                gdal_read_widow: GdalReadWindow {
+                    start_x: 0,
+                    start_y: 0,
+                    size_x: 512,
+                    size_y: 360,
+                },
+                read_window_bounds: window([0, 0], [359, 511]),
+                bounds_of_target: window([0, 0], [599, 1439]),
+                flip_y: true,
+            },
+            data_type: geoengine_datatypes::raster::RasterDataType::F32,
+            read_id: None,
+            read_kind: GdalReadKind::MdArray {
+                group: None,
+                array_name: "tasmax".to_string(),
+                z_range,
+                leading_prefix: Vec::new(),
+            },
+        })
+    }
+
+    fn hash_of(msg: &IpcChannelMessage, full: bool) -> u64 {
+        let mut h = rustc_hash::FxHasher::default();
+        if full {
+            msg.full_hash(&mut h);
+        } else {
+            msg.0.dataset_params.partial_hash(&mut h);
+        }
+        h.finish()
+    }
+
+    /// Requests for the same file but different z slices must land in the same worker queue,
+    /// so the worker can reuse the GDAL dataset it already has open. The routing key is
+    /// `dataset_params.partial_hash`, which must not contain the z range.
+    #[test]
+    fn routing_is_blind_to_the_z_range() {
+        let a = md_message(0..4);
+        let b = md_message(48..52);
+        assert_eq!(
+            hash_of(&a, false),
+            hash_of(&b, false),
+            "different z slices of one file must be routed together, or each slice re-opens \
+             the dataset and the 4.8s round trip is paid again"
+        );
+    }
+
+    /// ...while the *dedup* key must not collapse them: two different z ranges are two
+    /// different batches and must not share a result.
+    #[test]
+    fn sharing_is_not_blind_to_the_z_range() {
+        let a = md_message(0..4);
+        let b = md_message(48..52);
+        assert_ne!(
+            hash_of(&a, true),
+            hash_of(&b, true),
+            "collapsing different z ranges would return the wrong slices"
+        );
+    }
+
+    /// A different array of the *same file* must also route together - the open handle is
+    /// per file, and GDAL can resolve several arrays from it. Only the dedup key has to
+    /// tell them apart, since they return different data.
+    #[test]
+    fn routing_is_blind_to_the_array_but_sharing_is_not() {
+        let a = md_message(0..4);
+        let mut b = md_message(0..4);
+        let IpcChannelMessage(p) = &mut b;
+        let IpcChannelMessagePayload { read_kind, .. } = p;
+        *read_kind = GdalReadKind::MdArray {
+            group: None,
+            array_name: "tasmin".to_string(),
+            z_range: 0..4,
+            leading_prefix: Vec::new(),
+        };
+        assert_eq!(
+            hash_of(&a, false),
+            hash_of(&b, false),
+            "two arrays of one file share the open GDAL dataset"
+        );
+        assert_ne!(
+            hash_of(&a, true),
+            hash_of(&b, true),
+            "but they must not share a read result"
+        );
+    }
+
+    /// The same array at the same z in a *different* file is a different read.
+    #[test]
+    fn routing_separates_different_files() {
+        let a = md_message(0..4);
+        let mut b = md_message(0..4);
+        let IpcChannelMessage(p) = &mut b;
+        p.dataset_params.file_path = PathBuf::from("/vsicurl/https://example.invalid/tasmin.nc");
+        assert_ne!(hash_of(&a, false), hash_of(&b, false));
+        assert_ne!(hash_of(&a, true), hash_of(&b, true));
     }
 
     // --- WorkerAffinity::calculate_score ---
