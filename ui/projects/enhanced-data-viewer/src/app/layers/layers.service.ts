@@ -7,7 +7,7 @@ import {AppConfig} from '../app-config.service';
 import {toLonLat} from 'ol/proj';
 import {unByKey} from 'ol/Observable';
 import type {EventsKey} from 'ol/events';
-import {coverageContains, normalizeLongitude, parseCoverage} from './coverage';
+import {coverageContains, parseCoverage} from './coverage';
 import type {GeographicCenter} from './coverage';
 import {
     DataSourceDefinition,
@@ -528,7 +528,7 @@ export class EdvLayersService {
             this.mapCenter.set(undefined);
             return;
         }
-        const geographicCenter = {longitude: normalizeLongitude(longitude), latitude};
+        const geographicCenter = {longitude, latitude};
         this.mapCenter.set(geographicCenter);
         const source = this.selectedDataSource();
         if (this.pendingCenterSelection && source) {
