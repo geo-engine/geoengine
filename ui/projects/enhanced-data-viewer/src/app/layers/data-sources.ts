@@ -1,27 +1,21 @@
 import type {TimeStepDuration} from '@geoengine/common';
 import type {GeographicCoverage} from './coverage';
 
-export const PRESET_CATEGORIES = ['static', 'harvested', 'adHoc'] as const;
-export type PresetCategory = (typeof PRESET_CATEGORIES)[number];
 export interface VisualizationPreset {
     key: string;
     displayName: string;
     backgroundImage: string;
     connectorId: string;
     layerId: string;
-    category: PresetCategory;
     order: number;
-    variantKey: string;
 }
 export interface DataSourceVariant {
     key: string;
     name: string;
-    crs?: string;
+    crs: string;
     coverage?: GeographicCoverage;
-    explicit: boolean;
-    presets: VisualizationPreset[];
-    /** Runtime collection references used only to load this variant's presets. */
-    collectionRefs?: Array<{collectionId: string; category: PresetCategory}>;
+    /** The region collection containing this variant's preset layers. */
+    collectionId: string;
 }
 export interface DataSourceDefinition {
     key: string;
@@ -35,8 +29,3 @@ export interface DataSourceLayer {
     dataConnectorId: string;
     layerId: string;
 }
-export const PRESET_CATEGORY_LABELS: Record<PresetCategory, string> = {
-    static: 'Static',
-    harvested: 'Harvested',
-    adHoc: 'Ad-hoc (Data Provider)',
-};

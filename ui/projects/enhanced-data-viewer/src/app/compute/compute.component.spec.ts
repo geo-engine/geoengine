@@ -29,7 +29,6 @@ import {PlotOutputFormat, WrappedPlotOutput} from '@geoengine/api-client';
 import {ComputeComponent} from './compute.component';
 import {EdvLayersService} from '../layers/layers.service';
 import {DataSourceLayer} from '../layers/data-sources';
-import {AppConfig} from '../app-config.service';
 
 describe('ComputeComponent', () => {
     let fixture: ComponentFixture<ComputeComponent>;
@@ -96,7 +95,6 @@ describe('ComputeComponent', () => {
             providers: [
                 provideZonelessChangeDetection(),
                 {provide: BackendService, useValue: {}},
-                {provide: AppConfig, useValue: {EDV: {CATEGORY: 'adHoc'}}},
                 {provide: LayersService, useValue: layersService},
                 {provide: EdvLayersService, useValue: {mapTileLayer: selectedLayerSignal}},
                 {

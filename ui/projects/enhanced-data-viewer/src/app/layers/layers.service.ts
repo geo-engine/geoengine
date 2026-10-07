@@ -3,27 +3,16 @@ import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {CollectionItem, TimeStepFromJSON} from '@geoengine/api-client';
 import {MapService} from '@geoengine/core';
 import {LAYER_DB_PROVIDER_ID, LAYER_DB_ROOT_COLLECTION_ID, LayersService, timeStepDictTotimeStepDuration} from '@geoengine/common';
-import {AppConfig} from '../app-config.service';
 import {toLonLat} from 'ol/proj';
 import {unByKey} from 'ol/Observable';
 import type {EventsKey} from 'ol/events';
 import {coverageContains, parseCoverage} from './coverage';
 import type {GeographicCenter} from './coverage';
-import {
-    DataSourceDefinition,
-    DataSourceLayer,
-    DataSourceVariant,
-    PRESET_CATEGORIES,
-    PRESET_CATEGORY_LABELS,
-    PresetCategory,
-    VisualizationPreset,
-} from './data-sources';
+import {DataSourceDefinition, DataSourceLayer, DataSourceVariant, VisualizationPreset} from './data-sources';
 
 @Service()
 export class EdvLayersService {
-    readonly debug = signal(false);
     readonly layerService = inject(LayersService);
-    private readonly appConfig = inject(AppConfig);
     private readonly mapService = inject(MapService);
     private readonly destroyRef = inject(DestroyRef);
 
@@ -55,11 +44,8 @@ export class EdvLayersService {
     });
 
     private readonly catalogueResource: ResourceRef<DataSourceDefinition[] | undefined> = resource({
-        params: () => ({
-            root: LAYER_DB_ROOT_COLLECTION_ID,
-            category: this.debug() ? '*' : this.appConfig.EDV.CATEGORY,
-        }),
-        loader: ({params}) => this.loadCatalogue(params.root, params.category),
+        params: () => LAYER_DB_ROOT_COLLECTION_ID,
+        loader: ({params}) => this.loadCatalogue(params),
     });
 
     readonly dataSources = computed(() => (this.catalogueResource.hasValue() ? this.catalogueResource.value() : []));
@@ -89,9 +75,6 @@ export class EdvLayersService {
         if (!source || !variant) {
             return [];
         }
-        if (!variant.explicit) {
-            return variant.presets;
-        }
         return this.variantPresetCache().get(variantCacheKey(source.key, variant.key)) ?? [];
     });
     readonly variantLoading = computed(() => {
@@ -110,19 +93,6 @@ export class EdvLayersService {
         return source !== undefined && variant !== undefined && this.variantLoadErrorKey() === variantCacheKey(source.key, variant.key)
             ? this.variantLoadError()
             : undefined;
-    });
-    readonly presetGroups = computed(() => {
-        const groups = new Map<PresetCategory, VisualizationPreset[]>();
-        for (const preset of this.currentPresets()) {
-            const presets = groups.get(preset.category) ?? [];
-            presets.push(preset);
-            groups.set(preset.category, presets);
-        }
-        return [...groups.entries()].map(([category, presets]) => ({
-            category,
-            label: PRESET_CATEGORY_LABELS[category],
-            presets,
-        }));
     });
     readonly selectedPreset = computed(() => {
         const presets = this.currentPresets();
@@ -183,14 +153,9 @@ export class EdvLayersService {
             this.selectedVariantKey.set(variant?.key);
             if (sourceChanged && this.mapCenter()) this.pendingCenterSelection = false;
 
-            if (variant?.explicit) {
-                this.selectedPresetKey.set(undefined);
-                this.selectedPresetIndex.set(0);
-                untracked(() => void this.ensureVariantPresets(selected, variant));
-            } else {
-                this.selectedPresetKey.set(undefined);
-                this.selectedPresetIndex.set(0);
-            }
+            this.selectedPresetKey.set(undefined);
+            this.selectedPresetIndex.set(0);
+            if (variant) untracked(() => void this.ensureVariantPresets(selected, variant));
         });
     }
 
@@ -202,7 +167,7 @@ export class EdvLayersService {
     retryVariant(): void {
         const source = this.selectedDataSource();
         const variant = this.selectedVariant();
-        if (!source || !variant?.explicit) {
+        if (!source || !variant) {
             return;
         }
         this.removeCachedVariant(source.key, variant.key);
@@ -259,74 +224,32 @@ export class EdvLayersService {
         }
     }
 
-    /** Discover datasets in the EDV -> category -> dataset -> variant -> preset hierarchy. */
-    private async loadCatalogue(rootCollectionId: string, category: string): Promise<DataSourceDefinition[]> {
-        if (category !== '*' && !(PRESET_CATEGORIES as readonly string[]).includes(category)) {
-            throw new Error('Unsupported EDV category: ' + category);
-        }
-        const categories: readonly PresetCategory[] = category === '*' ? PRESET_CATEGORIES : [category as PresetCategory];
-
+    /** Load the EDV -> data source -> region -> preset catalogue. */
+    private async loadCatalogue(rootCollectionId: string): Promise<DataSourceDefinition[]> {
         const edvCollection = await this.findItem(rootCollectionId, (item) => item.type === 'collection' && item.name === 'EDV');
         const edvCollectionId = edvCollection && getCollectionId(edvCollection);
         if (!edvCollectionId) {
             throw new Error('EDV collection was not found under the layer database root');
         }
-
-        const categoryListings = await this.allItems(edvCollectionId);
-        const sourcesByCategory = await Promise.all(
-            categories.map((presetCategory) => {
-                const listing = categoryListings.find((item) => item.type === 'collection' && item.name === presetCategory);
-                return this.loadCategory(listing && getCollectionId(listing), presetCategory);
-            }),
-        );
-        return mergeAndSortDataSources(sourcesByCategory.flat());
+        const items = await this.allItems(edvCollectionId);
+        const sources = await Promise.all(items.filter(isCollection).map((item) => this.loadDataset(item)));
+        requireUniqueKeys(sources, 'data source');
+        return sources
+            .filter((source) => source.variants.length > 0)
+            .sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
     }
 
-    private async loadCategory(categoryId: string | undefined, category: PresetCategory): Promise<DataSourceDefinition[]> {
-        if (!categoryId) {
-            return [];
-        }
-        const datasets = await this.allItems(categoryId);
-        const sources = await Promise.all(datasets.map((dataset) => this.loadDataset(dataset, category)));
-        return sources.filter((source): source is DataSourceDefinition => source !== undefined);
-    }
-
-    private async loadDataset(dataset: CollectionItem, category: PresetCategory): Promise<DataSourceDefinition | undefined> {
-        const datasetId = getCollectionId(dataset);
+    private async loadDataset(dataset: Extract<CollectionItem, {type: 'collection'}>): Promise<DataSourceDefinition> {
         const metadata = getProperties(dataset);
-        const datasetKey = metadata.get('edv:dataset') ?? dataset.name;
-        if (!datasetId || !datasetKey || metadata.get('edv:type') !== 'dataset') {
-            return undefined;
-        }
-
-        const items = await this.allItems(datasetId);
-        const variantCollections = items.filter(isVariantCollection);
-        const directLayers = items.filter(
-            (item): item is Extract<CollectionItem, {type: 'layer'}> =>
-                item.type === 'layer' && getProperties(item).get('edv:type') === 'preset',
-        );
-        const variants =
-            variantCollections.length > 0
-                ? variantCollections
-                      .map((item) => this.loadVariant(item, category))
-                      .filter((variant): variant is DataSourceVariant => variant !== undefined)
-                : directLayers.length > 0
-                  ? [
-                        {
-                            key: 'default',
-                            name: 'Default',
-                            explicit: false,
-                            presets: directLayers
-                                .map((item) => this.createPreset(item, category, 'default'))
-                                .filter((preset): preset is VisualizationPreset => preset !== undefined),
-                        },
-                    ]
-                  : [];
-
+        const key = requiredProperty(dataset, 'edv:dataset');
+        const items = await this.allItems(dataset.id.collectionId);
+        const variants = items.filter(isCollection).map((item) => this.loadVariant(item));
+        requireUniqueKeys(variants, 'region in ' + dataset.name);
+        variants.sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
         const timeStep = metadata.get('edv:timeStep');
         return {
-            key: datasetKey,
-            name: dataset.name ?? datasetKey,
+            key,
+            name: dataset.name,
             variants,
             defaultTime: parseFiniteNumber(metadata.get('edv:defaultTime')),
             defaultTimeStep: timeStep ? timeStepDictTotimeStepDuration(TimeStepFromJSON(JSON.parse(timeStep))) : undefined,
@@ -334,49 +257,26 @@ export class EdvLayersService {
         };
     }
 
-    private loadVariant(item: CollectionItem, category: PresetCategory): DataSourceVariant | undefined {
-        const variantId = getCollectionId(item);
-        if (!variantId) {
-            return undefined;
-        }
-        const metadata = getProperties(item);
-        const variantKey = metadata.get('edv:variant') ?? item.name;
-        if (!variantKey) {
-            return undefined;
-        }
+    private loadVariant(item: Extract<CollectionItem, {type: 'collection'}>): DataSourceVariant {
+        const crs = requiredProperty(item, 'edv:crs');
         return {
-            key: variantKey,
-            name: item.name ?? variantKey,
-            crs: metadata.get('edv:crs'),
-            coverage: parseCoverage(metadata.get('edv:coverage')),
-            explicit: true,
-            presets: [],
-            collectionRefs: [{collectionId: variantId, category}],
+            key: crs,
+            name: item.name,
+            crs,
+            coverage: parseCoverage(getProperties(item).get('edv:coverage')),
+            collectionId: item.id.collectionId,
         };
     }
 
-    private createPreset(
-        item: Extract<CollectionItem, {type: 'layer'}>,
-        category: PresetCategory,
-        variantKey: string,
-    ): VisualizationPreset | undefined {
-        if (!item.id.layerId || !item.id.providerId) {
-            return undefined;
-        }
+    private createPreset(item: Extract<CollectionItem, {type: 'layer'}>): VisualizationPreset {
         const metadata = getProperties(item);
-        const key = metadata.get('edv:presetKey') ?? metadata.get('edv:preset') ?? item.name;
-        if (!key) {
-            return undefined;
-        }
         return {
-            key,
-            displayName: metadata.get('edv:preset') ?? item.name ?? 'Layer',
+            key: requiredProperty(item, 'edv:presetKey'),
+            displayName: item.name,
             backgroundImage: metadata.get('edv:thumbnail') ?? 'assets/grey.jpg',
             connectorId: item.id.providerId,
             layerId: item.id.layerId,
-            category,
             order: parseFiniteNumber(metadata.get('edv:order')) ?? 0,
-            variantKey,
         };
     }
 
@@ -427,35 +327,18 @@ export class EdvLayersService {
             this.variantLoadError.set(undefined);
         }
         try {
-            const itemsByCollection = await Promise.all(
-                (variant.collectionRefs ?? []).map(async (reference) => ({
-                    category: reference.category,
-                    items: await this.allItems(reference.collectionId),
-                })),
-            );
-            const presets = itemsByCollection
-                .flatMap(({category, items}) =>
-                    items
-                        .filter(
-                            (item): item is Extract<CollectionItem, {type: 'layer'}> =>
-                                item.type === 'layer' && getProperties(item).get('edv:type') === 'preset',
-                        )
-                        .map((item) => this.createPreset(item, category, variant.key)),
-                )
-                .filter((preset): preset is VisualizationPreset => preset !== undefined);
-            const byKey = new Map<string, VisualizationPreset>();
-            for (const preset of presets) {
-                byKey.set(preset.category + '/' + preset.key, preset);
-            }
-            const sorted = [...byKey.values()].sort(
-                (a, b) => a.order - b.order || a.category.localeCompare(b.category) || a.key.localeCompare(b.key),
-            );
+            const items = await this.allItems(variant.collectionId);
+            const presets = items
+                .filter((item): item is Extract<CollectionItem, {type: 'layer'}> => item.type === 'layer')
+                .map((item) => this.createPreset(item));
+            requireUniqueKeys(presets, 'preset in ' + variant.name);
+            presets.sort((a, b) => a.order - b.order || a.key.localeCompare(b.key));
             if (generation !== this.variantLoadGeneration || epoch !== (this.variantLoadEpochs.get(key) ?? 0)) {
                 this.finishVariantLoad(key, token);
                 return;
             }
             const cache = new Map(this.variantPresetCache());
-            cache.set(key, sorted);
+            cache.set(key, presets);
             this.variantPresetCache.set(cache);
             this.finishVariantLoad(key, token);
             if (this.selectedDataSource()?.key === source.key && this.selectedVariantKey() === variant.key) {
@@ -558,76 +441,23 @@ export class EdvLayersService {
     }
 }
 
-function mergeAndSortDataSources(sources: DataSourceDefinition[]): DataSourceDefinition[] {
-    const sourcesByKey = new Map<string, DataSourceDefinition>();
-    for (const source of sources) {
-        const existingSource = sourcesByKey.get(source.key);
-        if (!existingSource) {
-            sourcesByKey.set(source.key, {
-                ...source,
-                variants: source.variants.map((variant) => ({
-                    ...variant,
-                    presets: [...variant.presets],
-                    collectionRefs: variant.collectionRefs ? [...variant.collectionRefs] : undefined,
-                })),
-            });
-            continue;
-        }
-        for (const variant of source.variants) {
-            const existingVariant = existingSource.variants.find((candidate) => candidate.key === variant.key);
-            if (existingVariant) {
-                existingVariant.presets.push(...variant.presets);
-                existingVariant.explicit ||= variant.explicit;
-                existingVariant.collectionRefs = mergeCollectionRefs(existingVariant.collectionRefs, variant.collectionRefs);
-                existingVariant.coverage ??= variant.coverage;
-            } else {
-                existingSource.variants.push({
-                    ...variant,
-                    presets: [...variant.presets],
-                    collectionRefs: variant.collectionRefs ? [...variant.collectionRefs] : undefined,
-                });
-            }
-        }
-    }
+const isCollection = (item: CollectionItem): item is Extract<CollectionItem, {type: 'collection'}> => item.type === 'collection';
 
-    const hasContent = (variant: DataSourceVariant): boolean => variant.presets.length > 0 || (variant.collectionRefs?.length ?? 0) > 0;
-    const result = [...sourcesByKey.values()].filter((source) => source.variants.some(hasContent));
-    for (const source of result) {
-        for (const variant of source.variants) {
-            const presetsByKey = new Map<string, VisualizationPreset>();
-            for (const preset of variant.presets) {
-                presetsByKey.set(preset.category + '/' + preset.key, preset);
-            }
-            variant.presets = [...presetsByKey.values()].sort(
-                (a, b) => a.order - b.order || a.category.localeCompare(b.category) || a.key.localeCompare(b.key),
-            );
-        }
-        source.variants = source.variants
-            .filter(hasContent)
-            .sort((a, b) => Number(b.explicit) - Number(a.explicit) || a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
-    }
-    result.sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
-    return result;
-}
+const requiredProperty = (item: CollectionItem, key: string): string => {
+    const value = getProperties(item).get(key);
+    if (!value) throw new Error('Missing ' + key + ' on ' + item.name);
+    return value;
+};
 
-function mergeCollectionRefs(
-    current: DataSourceVariant['collectionRefs'],
-    additional: DataSourceVariant['collectionRefs'],
-): DataSourceVariant['collectionRefs'] {
-    const refs = [...(current ?? []), ...(additional ?? [])];
-    const unique = new Map(refs.map((reference) => [reference.category + '/' + reference.collectionId, reference]));
-    return [...unique.values()];
-}
+const requireUniqueKeys = (items: readonly {key: string}[], context: string): void => {
+    const keys = new Set<string>();
+    for (const item of items) {
+        if (keys.has(item.key)) throw new Error('Duplicate ' + context + ': ' + item.key);
+        keys.add(item.key);
+    }
+};
 
 const variantCacheKey = (sourceKey: string, variantKey: string): string => sourceKey + '/' + variantKey;
-
-function isVariantCollection(item: CollectionItem): boolean {
-    if (item.type !== 'collection') {
-        return false;
-    }
-    const properties = getProperties(item);
-    return properties.get('edv:type') === 'variant' || properties.has('edv:variant');
-}
 
 function getProperties(item: CollectionItem): Map<string, string> {
     const metadata = new Map<string, string>();

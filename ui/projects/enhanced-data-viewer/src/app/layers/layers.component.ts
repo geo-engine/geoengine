@@ -7,7 +7,7 @@ import {MatListModule} from '@angular/material/list';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, RasterSymbology, Time} from '@geoengine/common';
 import {toSignal} from '@angular/core/rxjs-interop';
-import type {DataSourceDefinition} from './data-sources';
+import type {DataSourceDefinition, VisualizationPreset} from './data-sources';
 import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatSelectModule} from '@angular/material/select';
@@ -59,7 +59,7 @@ import {MatSelectModule} from '@angular/material/select';
                     <mat-label>Available region</mat-label>
                     <mat-select panelWidth="320px" [value]="selectedVariant().key" (selectionChange)="setSelectedVariant($event.value)">
                         @for (variant of sortedVariants(); track variant.key) {
-                            <mat-option [value]="variant.key">{{ variant.name }} ({{ variant.crs ?? variant.key }})</mat-option>
+                            <mat-option [value]="variant.key">{{ variant.name }} ({{ variant.crs }})</mat-option>
                         }
                     </mat-select>
                 </mat-form-field>
@@ -141,29 +141,22 @@ import {MatSelectModule} from '@angular/material/select';
                 </div>
             }
             <mat-nav-list class="visualization-presets" [attr.aria-busy]="catalogueLoading() || variantLoading()">
-                @for (group of presetGroups(); track group.category) {
-                    @if (debug()) {
-                        <span class="preset-group-label">{{ group.label }}</span>
-                    }
-                    @for (preset of group.presets; track preset.key) {
-                        <mat-list-item
-                            [activated]="preset === selectedPreset()"
-                            [class.preset-active]="preset === selectedPreset()"
-                            [attr.aria-current]="preset === selectedPreset() ? 'true' : null"
-                            (click)="selectPreset(preset)"
-                            [matTooltip]="preset.displayName"
-                            [style.backgroundImage]="
-                                'linear-gradient(transparent, rgba(0, 0, 0, 0.65)), url(' + preset.backgroundImage + ')'
-                            "
-                        >
-                            <span matListItemTitle>{{ preset.displayName }}</span>
-                            @if (preset === selectedPreset()) {
-                                <span matListItemMeta class="preset-selected-indicator" aria-hidden="true">
-                                    <mat-icon>check</mat-icon>
-                                </span>
-                            }
-                        </mat-list-item>
-                    }
+                @for (preset of currentPresets(); track preset.key) {
+                    <mat-list-item
+                        [activated]="preset === selectedPreset()"
+                        [class.preset-active]="preset === selectedPreset()"
+                        [attr.aria-current]="preset === selectedPreset() ? 'true' : null"
+                        (click)="selectPreset(preset)"
+                        [matTooltip]="preset.displayName"
+                        [style.backgroundImage]="'linear-gradient(transparent, rgba(0, 0, 0, 0.65)), url(' + preset.backgroundImage + ')'"
+                    >
+                        <span matListItemTitle>{{ preset.displayName }}</span>
+                        @if (preset === selectedPreset()) {
+                            <span matListItemMeta class="preset-selected-indicator" aria-hidden="true">
+                                <mat-icon>check</mat-icon>
+                            </span>
+                        }
+                    </mat-list-item>
                 }
             </mat-nav-list>
             <div class="apply-preset-action">
@@ -192,7 +185,6 @@ import {MatSelectModule} from '@angular/material/select';
         `
             $text1: 1rem;
             $text2: 0.85rem;
-            $text3: 0.75rem;
 
             :host {
                 display: block;
@@ -351,20 +343,6 @@ import {MatSelectModule} from '@angular/material/select';
                 padding: 0;
                 margin: 0;
 
-                .preset-group-label {
-                    grid-column: 1 / -1;
-                    font-size: $text3;
-                    font-weight: 600;
-                    text-transform: uppercase;
-                    letter-spacing: 0.05em;
-                    color: var(--geoengine-primary-color, #2f6dff);
-                    margin-top: 0.5rem;
-
-                    &:first-child {
-                        margin-top: 0;
-                    }
-                }
-
                 mat-list-item {
                     position: relative;
                     box-sizing: border-box;
@@ -487,8 +465,6 @@ export class LayersComponent {
     readonly edvLayersService = inject(EdvLayersService);
     private readonly layerService = inject(LayersService);
 
-    readonly debug = this.edvLayersService.debug;
-
     readonly currentTime = toSignal(this.projectService.getTimeStream());
     readonly formattedTime = computed<string>(() => {
         const projectTime = this.currentTime();
@@ -517,7 +493,6 @@ export class LayersComponent {
     readonly mapCenterSelectionMessage = this.edvLayersService.mapCenterSelectionMessage;
     readonly selectedVariant = this.edvLayersService.selectedVariant;
     readonly currentPresets = this.edvLayersService.currentPresets;
-    readonly presetGroups = this.edvLayersService.presetGroups;
     readonly selectedPresetIndex = this.edvLayersService.selectedPresetIndex;
     readonly selectedPreset = this.edvLayersService.selectedPreset;
     readonly canApplyPreset = this.edvLayersService.canApplyPreset;
@@ -593,7 +568,7 @@ export class LayersComponent {
         if (dataSource.defaultTimeStep) this.projectService.setTimeStepDuration(dataSource.defaultTimeStep);
     }
 
-    selectPreset(preset: DataSourceDefinition['variants'][number]['presets'][number]): void {
+    selectPreset(preset: VisualizationPreset): void {
         this.edvLayersService.setSelectedPreset(preset.key);
     }
 

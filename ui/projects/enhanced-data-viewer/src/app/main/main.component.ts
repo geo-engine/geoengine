@@ -1,16 +1,4 @@
-import {
-    ChangeDetectionStrategy,
-    Component,
-    ElementRef,
-    afterNextRender,
-    computed,
-    inject,
-    booleanAttribute,
-    input,
-    signal,
-    viewChild,
-    effect,
-} from '@angular/core';
+import {ChangeDetectionStrategy, Component, ElementRef, afterNextRender, computed, inject, signal, viewChild} from '@angular/core';
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {ProjectService, MapService, MapContainerComponent, CoreModule, SpatialReferenceService, WGS_84} from '@geoengine/core';
 import {AppConfig} from '../app-config.service';
@@ -62,9 +50,6 @@ export class MainComponent {
 
     private readonly spatialReferenceService = inject(SpatialReferenceService);
 
-    // Bound from the debug query parameter and passed to the layers controls.
-    readonly debug = input(false, {transform: booleanAttribute});
-
     readonly topToolbar = viewChild.required<MatToolbar, ElementRef<HTMLElement>>('topToolbar', {read: ElementRef});
     readonly mapComponent = viewChild.required(MapContainerComponent);
 
@@ -106,10 +91,6 @@ export class MainComponent {
                 const topToolbarObserver = new ResizeObserver(() => this.onToolbarResize());
                 topToolbarObserver.observe(this.topToolbar().nativeElement);
             },
-        });
-
-        effect(() => {
-            this.edvLayersService.debug.set(this.debug());
         });
     }
 

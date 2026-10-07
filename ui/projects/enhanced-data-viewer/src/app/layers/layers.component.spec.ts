@@ -7,7 +7,6 @@ import type {CollectionItem} from '@geoengine/api-client';
 import {LAYER_DB_ROOT_COLLECTION_ID, LayersService, Time, TimeStepDuration} from '@geoengine/common';
 import {LayersComponent} from './layers.component';
 import {EdvLayersService} from './layers.service';
-import {AppConfig} from '../app-config.service';
 import View from 'ol/View';
 
 describe('LayersComponent', () => {
@@ -30,22 +29,10 @@ describe('LayersComponent', () => {
             items: [
                 {
                     type: 'collection',
-                    name: 'adHoc',
-                    id: {providerId: 'provider', collectionId: 'adhoc'},
-                    description: '',
-                    properties: [['edv:category', 'adHoc']],
-                },
-            ],
-        },
-        adhoc: {
-            items: [
-                {
-                    type: 'collection',
                     name: 'Sentinel',
                     id: {providerId: 'provider', collectionId: 'dataset'},
                     description: '',
                     properties: [
-                        ['edv:type', 'dataset'],
                         ['edv:dataset', 'sentinel'],
                         ['edv:defaultTime', '1775001600000'],
                         ['edv:timeStep', '{"step":1,"granularity":"days"}'],
@@ -56,13 +43,23 @@ describe('LayersComponent', () => {
         dataset: {
             items: [
                 {
+                    type: 'collection',
+                    name: 'Global',
+                    description: '',
+                    id: {providerId: 'provider', collectionId: 'region'},
+                    properties: [['edv:crs', 'EPSG:4326']],
+                },
+            ],
+        },
+        region: {
+            items: [
+                {
                     type: 'layer',
                     name: 'Default',
                     id: {providerId: 'provider', layerId: 'vv'},
                     description: '',
                     properties: [
-                        ['edv:type', 'preset'],
-                        ['edv:preset', 'Default'],
+                        ['edv:presetKey', 'Default'],
                         ['edv:order', '10'],
                     ],
                 },
@@ -72,8 +69,7 @@ describe('LayersComponent', () => {
                     id: {providerId: 'provider', layerId: 'alternate'},
                     description: '',
                     properties: [
-                        ['edv:type', 'preset'],
-                        ['edv:preset', 'Alternate'],
+                        ['edv:presetKey', 'Alternate'],
                         ['edv:order', '20'],
                     ],
                 },
@@ -101,10 +97,7 @@ describe('LayersComponent', () => {
             name,
             description: '',
             id: {providerId: 'provider', collectionId: key},
-            properties: [
-                ['edv:type', 'dataset'],
-                ['edv:dataset', key],
-            ],
+            properties: [['edv:dataset', key]],
         });
         const variant = (source: string, epsg: number): CollectionItem => ({
             type: 'collection',
@@ -112,8 +105,6 @@ describe('LayersComponent', () => {
             description: '',
             id: {providerId: 'provider', collectionId: `${source}-${epsg}`},
             properties: [
-                ['edv:type', 'variant'],
-                ['edv:variant', `epsg${epsg}`],
                 ['edv:crs', `EPSG:${epsg}`],
                 [
                     'edv:coverage',
@@ -128,8 +119,7 @@ describe('LayersComponent', () => {
         });
         const pages: Record<string, unknown[]> = {
             [LAYER_DB_ROOT_COLLECTION_ID]: listings[LAYER_DB_ROOT_COLLECTION_ID].items,
-            edv: listings.edv.items,
-            adhoc: [dataset('sentinel', 'A Sentinel'), dataset('landsat', 'B Landsat')],
+            edv: [dataset('sentinel', 'A Sentinel'), dataset('landsat', 'B Landsat')],
             sentinel: [32632, 32655, 32755].map((epsg) => variant('sentinel', epsg)),
             landsat: [32632, 32655].map((epsg) => variant('landsat', epsg)),
         };
@@ -157,7 +147,6 @@ describe('LayersComponent', () => {
                     provide: LayersService,
                     useValue: {getLayerCollectionItems, getLayer, registerAndGetLayerWorkflowId, getWorkflowIdMetadata},
                 },
-                {provide: AppConfig, useValue: {EDV: {CATEGORY: 'adHoc'}}},
                 EdvLayersService,
                 {
                     provide: MapService,
@@ -183,18 +172,18 @@ describe('LayersComponent', () => {
         mapView.setCenter([9, 50]);
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32632');
+        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32632');
 
         mapView.setCenter([148.5, -35.5]);
-        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32632');
+        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32632');
         edvLayersService.setSelectedDataSource('landsat');
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32655');
+        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32655');
         edvLayersService.setSelectedDataSource('sentinel');
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32755');
+        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32755');
         expect(setTime).not.toHaveBeenCalled();
         expect(edvLayersService.mapTileLayer()).toBeUndefined();
     });
@@ -212,23 +201,23 @@ describe('LayersComponent', () => {
         edvLayersService.setSelectedDataSource('landsat');
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32632');
+        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32632');
         replacement.setCenter([148.5, -35.5]);
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32655');
+        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32655');
     });
 
     it('preserves a manual variant chosen before the map initializes', async () => {
         mockCoverageCatalogue();
         fixture.detectChanges();
         await fixture.whenStable();
-        edvLayersService.setSelectedVariant('epsg32655');
+        edvLayersService.setSelectedVariant('EPSG:32655');
         mapView.setCenter([9, 50]);
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32655');
-        expect(edvLayersService.mapCenterVariantKey()).toBe('epsg32632');
+        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32655');
+        expect(edvLayersService.mapCenterVariantKey()).toBe('EPSG:32632');
     });
 
     it('shows loading indicators for both lists until catalogue discovery finishes', async () => {
@@ -262,8 +251,6 @@ describe('LayersComponent', () => {
                 id: {providerId: 'provider', collectionId: `region-${zone}`},
                 description: '',
                 properties: [
-                    ['edv:type', 'variant'],
-                    ['edv:variant', `epsg${32600 + zone}`],
                     ['edv:crs', `EPSG:${32600 + zone}`],
                     ['edv:coverage', coverage(-180 + 6 * (zone - 1), 0, -180 + 6 * zone, 84)],
                 ],
@@ -275,8 +262,6 @@ describe('LayersComponent', () => {
             id: {providerId: 'provider', collectionId: 'region55s'},
             description: '',
             properties: [
-                ['edv:type', 'variant'],
-                ['edv:variant', 'epsg32755'],
                 ['edv:crs', 'EPSG:32755'],
                 ['edv:coverage', coverage(144, -80, 150, 0)],
             ],
@@ -287,9 +272,7 @@ describe('LayersComponent', () => {
             id: {providerId: 'provider', layerId: `preset-${index + 1}`},
             description: '',
             properties: [
-                ['edv:type', 'preset'],
                 ['edv:presetKey', `preset-${index + 1}`],
-                ['edv:preset', `Preset ${String(index + 1).padStart(2, '0')}`],
                 ['edv:order', String(index + 1)],
             ],
         }));
@@ -298,15 +281,13 @@ describe('LayersComponent', () => {
                 [LAYER_DB_ROOT_COLLECTION_ID]: [
                     {type: 'collection', name: 'EDV', id: {providerId: 'provider', collectionId: 'edv'}, description: ''},
                 ],
-                edv: [{type: 'collection', name: 'adHoc', id: {providerId: 'provider', collectionId: 'adhoc'}, description: ''}],
-                adhoc: [
+                edv: [
                     {
                         type: 'collection',
                         name: 'Sentinel',
                         id: {providerId: 'provider', collectionId: 'dataset'},
                         description: '',
                         properties: [
-                            ['edv:type', 'dataset'],
                             ['edv:dataset', 'sentinel'],
                             ['edv:defaultTime', '1775001600000'],
                             ['edv:timeStep', '{"step":1,"granularity":"days"}'],
@@ -325,7 +306,7 @@ describe('LayersComponent', () => {
         await vi.waitFor(() => expect(edvLayersService.currentPresets()).toHaveLength(25));
         fixture.detectChanges();
         expect(edvLayersService.currentVariants()).toHaveLength(21);
-        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32755');
+        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32755');
         expect(edvLayersService.sortedVariants()[0].name).toBe('Region 01N');
         expect(edvLayersService.mapTileLayer()).toBeUndefined();
         expect(setTime).not.toHaveBeenCalled();
@@ -338,14 +319,14 @@ describe('LayersComponent', () => {
 
         mapView.setCenter([9, 50]);
         fixture.detectChanges();
-        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32755');
+        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32755');
         const useCenterButton = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find((button) =>
             button.textContent?.includes('Select at map center'),
         );
         expect(useCenterButton).toBeDefined();
         useCenterButton?.click();
         fixture.detectChanges();
-        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32632');
+        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32632');
         expect(edvLayersService.mapTileLayer()).toEqual(appliedLayer);
         expect(setTime).toHaveBeenCalledTimes(timeCalls);
     });
@@ -374,7 +355,6 @@ describe('LayersComponent', () => {
         const element = fixture.nativeElement as HTMLElement;
         const button = [...element.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('Apply visualization'))!;
         expect(fixture.componentInstance.dataSources().map((source) => source.key)).toEqual(['sentinel']);
-        expect(fixture.componentInstance.currentPresets()[0].category).toBe('adHoc');
         expect(fixture.componentInstance.mapTileLayer()).toBeUndefined();
         expect(button.disabled).toBe(true);
         expect(setTime).not.toHaveBeenCalled();
@@ -406,16 +386,15 @@ describe('LayersComponent', () => {
     it('keeps the applied layer and time while selecting another source until apply is clicked', async () => {
         const pages: Record<string, {items: unknown[]}> = {
             ...listings,
-            adhoc: {
+            edv: {
                 items: [
-                    ...listings.adhoc.items,
+                    ...listings.edv.items,
                     {
                         type: 'collection',
                         name: 'Z Other source',
                         id: {providerId: 'provider', collectionId: 'otherDataset'},
                         description: '',
                         properties: [
-                            ['edv:type', 'dataset'],
                             ['edv:dataset', 'other'],
                             ['edv:defaultTime', '1775088000000'],
                             ['edv:timeStep', '{"step":2,"granularity":"days"}'],
@@ -426,14 +405,22 @@ describe('LayersComponent', () => {
             otherDataset: {
                 items: [
                     {
+                        type: 'collection',
+                        name: 'Global',
+                        description: '',
+                        id: {providerId: 'provider', collectionId: 'otherRegion'},
+                        properties: [['edv:crs', 'EPSG:4326']],
+                    },
+                ],
+            },
+            otherRegion: {
+                items: [
+                    {
                         type: 'layer',
                         name: 'Other visualization',
                         id: {providerId: 'provider', layerId: 'other'},
                         description: '',
-                        properties: [
-                            ['edv:type', 'preset'],
-                            ['edv:preset', 'Other'],
-                        ],
+                        properties: [['edv:presetKey', 'other']],
                     },
                 ],
             },
@@ -457,6 +444,7 @@ describe('LayersComponent', () => {
         component.setSelectedDataSource('other');
         fixture.detectChanges();
         await fixture.whenStable();
+        await vi.waitFor(() => expect(component.currentPresets()).toHaveLength(1));
         expect(component.selectedDataSource()?.key).toBe('other');
         expect(component.mapTileLayer()).toBe(appliedLayer);
         expect(edvLayersService.appliedDataSource()).toBe(appliedSource);
@@ -545,31 +533,90 @@ describe('LayersComponent', () => {
         expect(getLayer).toHaveBeenLastCalledWith('provider', 'alternate');
     });
 
-    it('loads all configured categories when debug mode is enabled', async () => {
+    it('loads source and region collections and fetches presets from the single selected region', async () => {
         fixture.detectChanges();
         await fixture.whenStable();
-        edvLayersService.debug.set(true);
-        fixture.detectChanges();
-        await fixture.whenStable();
-        expect(fixture.componentInstance.presetGroups().map((group) => group.category)).toEqual(['adHoc']);
+        expect(fixture.componentInstance.dataSources()).toHaveLength(1);
+        expect(edvLayersService.selectedVariant()?.collectionId).toBe('region');
+        expect(fixture.componentInstance.currentPresets().map((preset) => preset.displayName)).toEqual(['Default', 'Alternate']);
+        expect(getLayerCollectionItems.mock.calls.map((call) => call[1])).toEqual([
+            LAYER_DB_ROOT_COLLECTION_ID,
+            'edv',
+            'dataset',
+            'region',
+        ]);
     });
+
+    it('reports a missing source key without traversing another folder level', async () => {
+        getLayerCollectionItems.mockImplementation((_provider, collection) =>
+            Promise.resolve(
+                collection === 'edv'
+                    ? {
+                          items: [
+                              {
+                                  type: 'collection',
+                                  name: 'Unannotated',
+                                  description: '',
+                                  id: {providerId: 'provider', collectionId: 'unannotated'},
+                              },
+                          ],
+                      }
+                    : (listings[collection] ?? {items: []}),
+            ),
+        );
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(edvLayersService.catalogueError()).toBe('Missing edv:dataset on Unannotated');
+        expect(getLayerCollectionItems.mock.calls.map((call) => call[1])).not.toContain('unannotated');
+    });
+
+    it('rejects duplicate source identities instead of merging their regions', async () => {
+        getLayerCollectionItems.mockImplementation((_provider, collection) =>
+            Promise.resolve(
+                collection === 'edv' ? {items: [...listings.edv.items, ...listings.edv.items]} : (listings[collection] ?? {items: []}),
+            ),
+        );
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(edvLayersService.catalogueError()).toBe('Duplicate data source: sentinel');
+    });
+
+    it('rejects duplicate region identities instead of merging their preset collections', async () => {
+        getLayerCollectionItems.mockImplementation((_provider, collection) =>
+            Promise.resolve(
+                collection === 'dataset'
+                    ? {items: [...listings.dataset.items, ...listings.dataset.items]}
+                    : (listings[collection] ?? {items: []}),
+            ),
+        );
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(edvLayersService.catalogueError()).toBe('Duplicate region in Sentinel: EPSG:4326');
+    });
+
+    it('requires region collections rather than synthesizing a region from source-level layers', async () => {
+        getLayerCollectionItems.mockImplementation((_provider, collection) =>
+            Promise.resolve(collection === 'dataset' ? listings.region : (listings[collection] ?? {items: []})),
+        );
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(edvLayersService.dataSources()).toHaveLength(0);
+        expect(edvLayersService.currentPresets()).toHaveLength(0);
+    });
+
     it('keeps variant and preset selection when collection and layer ids change', async () => {
         let deployment = 0;
         const deploymentListings: Array<Record<string, {items: unknown[]}>> = [
             {
                 root: {items: [{type: 'collection', name: 'EDV', id: {providerId: 'p0', collectionId: 'edv0'}, description: ''}]},
-                edv0: {items: [{type: 'collection', name: 'adHoc', id: {providerId: 'p0', collectionId: 'cat0'}, description: ''}]},
-                cat0: {
+                edv0: {
                     items: [
                         {
                             type: 'collection',
                             name: 'Sentinel',
                             id: {providerId: 'p0', collectionId: 'ds0'},
                             description: '',
-                            properties: [
-                                ['edv:type', 'dataset'],
-                                ['edv:dataset', 'sentinel'],
-                            ],
+                            properties: [['edv:dataset', 'sentinel']],
                         },
                     ],
                 },
@@ -580,22 +627,14 @@ describe('LayersComponent', () => {
                             name: 'Region 32N',
                             id: {providerId: 'p0', collectionId: 'v320'},
                             description: '',
-                            properties: [
-                                ['edv:type', 'variant'],
-                                ['edv:variant', 'epsg32632'],
-                                ['edv:crs', 'EPSG:32632'],
-                            ],
+                            properties: [['edv:crs', 'EPSG:32632']],
                         },
                         {
                             type: 'collection',
                             name: 'Region 33N',
                             id: {providerId: 'p0', collectionId: 'v330'},
                             description: '',
-                            properties: [
-                                ['edv:type', 'variant'],
-                                ['edv:variant', 'epsg32633'],
-                                ['edv:crs', 'EPSG:32633'],
-                            ],
+                            properties: [['edv:crs', 'EPSG:32633']],
                         },
                     ],
                 },
@@ -607,9 +646,7 @@ describe('LayersComponent', () => {
                             id: {providerId: 'data0', layerId: 'red32-0'},
                             description: '',
                             properties: [
-                                ['edv:type', 'preset'],
                                 ['edv:presetKey', 'red_band'],
-                                ['edv:preset', 'Red Band'],
                                 ['edv:order', '10'],
                             ],
                         },
@@ -623,9 +660,7 @@ describe('LayersComponent', () => {
                             id: {providerId: 'data0', layerId: 'red33-0'},
                             description: '',
                             properties: [
-                                ['edv:type', 'preset'],
                                 ['edv:presetKey', 'red_band'],
-                                ['edv:preset', 'Red Band'],
                                 ['edv:order', '10'],
                             ],
                         },
@@ -634,18 +669,14 @@ describe('LayersComponent', () => {
             },
             {
                 root: {items: [{type: 'collection', name: 'EDV', id: {providerId: 'p1', collectionId: 'edv1'}, description: ''}]},
-                edv1: {items: [{type: 'collection', name: 'adHoc', id: {providerId: 'p1', collectionId: 'cat1'}, description: ''}]},
-                cat1: {
+                edv1: {
                     items: [
                         {
                             type: 'collection',
                             name: 'Sentinel',
                             id: {providerId: 'p1', collectionId: 'ds1'},
                             description: '',
-                            properties: [
-                                ['edv:type', 'dataset'],
-                                ['edv:dataset', 'sentinel'],
-                            ],
+                            properties: [['edv:dataset', 'sentinel']],
                         },
                     ],
                 },
@@ -656,22 +687,14 @@ describe('LayersComponent', () => {
                             name: 'Region 32N',
                             id: {providerId: 'p1', collectionId: 'v321'},
                             description: '',
-                            properties: [
-                                ['edv:type', 'variant'],
-                                ['edv:variant', 'epsg32632'],
-                                ['edv:crs', 'EPSG:32632'],
-                            ],
+                            properties: [['edv:crs', 'EPSG:32632']],
                         },
                         {
                             type: 'collection',
                             name: 'Region 33N',
                             id: {providerId: 'p1', collectionId: 'v331'},
                             description: '',
-                            properties: [
-                                ['edv:type', 'variant'],
-                                ['edv:variant', 'epsg32633'],
-                                ['edv:crs', 'EPSG:32633'],
-                            ],
+                            properties: [['edv:crs', 'EPSG:32633']],
                         },
                     ],
                 },
@@ -683,9 +706,7 @@ describe('LayersComponent', () => {
                             id: {providerId: 'data1', layerId: 'red32-1'},
                             description: '',
                             properties: [
-                                ['edv:type', 'preset'],
                                 ['edv:presetKey', 'red_band'],
-                                ['edv:preset', 'Red Band'],
                                 ['edv:order', '10'],
                             ],
                         },
@@ -699,9 +720,7 @@ describe('LayersComponent', () => {
                             id: {providerId: 'data1', layerId: 'red33-1'},
                             description: '',
                             properties: [
-                                ['edv:type', 'preset'],
                                 ['edv:presetKey', 'red_band'],
-                                ['edv:preset', 'Red Band'],
                                 ['edv:order', '10'],
                             ],
                         },
@@ -716,14 +735,14 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.currentVariants().map((variant) => variant.key)).toEqual(['epsg32632', 'epsg32633']);
+        expect(edvLayersService.currentVariants().map((variant) => variant.key)).toEqual(['EPSG:32632', 'EPSG:32633']);
         expect(getLayerCollectionItems.mock.calls.map(([, collection]) => collection)).not.toContain('v330');
         expect(edvLayersService.mapTileLayer()).toBeUndefined();
-        edvLayersService.setSelectedVariant('epsg32633');
+        edvLayersService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
         await fixture.whenStable();
         fixture.detectChanges();
-        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32633');
+        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32633');
         await vi.waitFor(() => expect(edvLayersService.currentPresets().length).toBe(1));
         expect(edvLayersService.mapTileLayer()).toBeUndefined();
         edvLayersService.setSelectedPreset('red_band');
@@ -736,7 +755,7 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         await fixture.whenStable();
         fixture.detectChanges();
-        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32633');
+        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32633');
         expect(edvLayersService.mapTileLayer()).toEqual({dataConnectorId: 'data0', layerId: 'red33-0'});
         expect(edvLayersService.selectedPresetKey()).toBeUndefined();
     });
@@ -751,11 +770,7 @@ describe('LayersComponent', () => {
             name: 'Red',
             id: {providerId: 'data', layerId},
             description: '',
-            properties: [
-                ['edv:type', 'preset'],
-                ['edv:presetKey', 'red_band'],
-                ['edv:preset', 'Red Band'],
-            ],
+            properties: [['edv:presetKey', 'red_band']],
         });
         getLayerCollectionItems.mockImplementation((_provider, collection) => {
             if (collection === LAYER_DB_ROOT_COLLECTION_ID) {
@@ -765,21 +780,13 @@ describe('LayersComponent', () => {
             }
             if (collection === 'edv') {
                 return Promise.resolve({
-                    items: [{type: 'collection', name: 'adHoc', id: {providerId: 'p', collectionId: 'category'}, description: ''}],
-                });
-            }
-            if (collection === 'category') {
-                return Promise.resolve({
                     items: [
                         {
                             type: 'collection',
                             name: 'Sentinel',
                             id: {providerId: 'p', collectionId: 'dataset'},
                             description: '',
-                            properties: [
-                                ['edv:type', 'dataset'],
-                                ['edv:dataset', 'sentinel'],
-                            ],
+                            properties: [['edv:dataset', 'sentinel']],
                         },
                     ],
                 });
@@ -792,20 +799,14 @@ describe('LayersComponent', () => {
                             name: 'Region 32N',
                             id: {providerId: 'p', collectionId: 'v32'},
                             description: '',
-                            properties: [
-                                ['edv:type', 'variant'],
-                                ['edv:variant', 'epsg32632'],
-                            ],
+                            properties: [['edv:crs', 'EPSG:32632']],
                         },
                         {
                             type: 'collection',
                             name: 'Region 33N',
                             id: {providerId: 'p', collectionId: 'v33'},
                             description: '',
-                            properties: [
-                                ['edv:type', 'variant'],
-                                ['edv:variant', 'epsg32633'],
-                            ],
+                            properties: [['edv:crs', 'EPSG:32633']],
                         },
                     ],
                 });
@@ -825,7 +826,7 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
-        edvLayersService.setSelectedVariant('epsg32633');
+        edvLayersService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
         resolve33({items: [layer('red33')]});
         await vi.waitFor(() => expect(edvLayersService.currentPresets().length).toBe(1));
@@ -847,11 +848,7 @@ describe('LayersComponent', () => {
             name: 'Red',
             id: {providerId: 'data', layerId},
             description: '',
-            properties: [
-                ['edv:type', 'preset'],
-                ['edv:presetKey', 'red_band'],
-                ['edv:preset', 'Red Band'],
-            ],
+            properties: [['edv:presetKey', 'red_band']],
         });
         getLayerCollectionItems.mockImplementation((_provider, collection) => {
             if (collection === LAYER_DB_ROOT_COLLECTION_ID) {
@@ -861,21 +858,13 @@ describe('LayersComponent', () => {
             }
             if (collection === 'edv') {
                 return Promise.resolve({
-                    items: [{type: 'collection', name: 'adHoc', id: {providerId: 'p', collectionId: 'category'}, description: ''}],
-                });
-            }
-            if (collection === 'category') {
-                return Promise.resolve({
                     items: [
                         {
                             type: 'collection',
                             name: 'Sentinel',
                             id: {providerId: 'p', collectionId: 'dataset'},
                             description: '',
-                            properties: [
-                                ['edv:type', 'dataset'],
-                                ['edv:dataset', 'sentinel'],
-                            ],
+                            properties: [['edv:dataset', 'sentinel']],
                         },
                     ],
                 });
@@ -888,20 +877,14 @@ describe('LayersComponent', () => {
                             name: 'Region 32N',
                             id: {providerId: 'p', collectionId: 'v32'},
                             description: '',
-                            properties: [
-                                ['edv:type', 'variant'],
-                                ['edv:variant', 'epsg32632'],
-                            ],
+                            properties: [['edv:crs', 'EPSG:32632']],
                         },
                         {
                             type: 'collection',
                             name: 'Region 33N',
                             id: {providerId: 'p', collectionId: 'v33'},
                             description: '',
-                            properties: [
-                                ['edv:type', 'variant'],
-                                ['edv:variant', 'epsg32633'],
-                            ],
+                            properties: [['edv:crs', 'EPSG:32633']],
                         },
                     ],
                 });
@@ -920,7 +903,7 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
-        edvLayersService.setSelectedVariant('epsg32633');
+        edvLayersService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
         await vi.waitFor(() => expect(edvLayersService.variantError()).toBe('variant unavailable'));
         expect(edvLayersService.mapTileLayer()).toBeUndefined();
@@ -939,9 +922,7 @@ describe('LayersComponent', () => {
             id: {providerId: 'data', layerId},
             description: '',
             properties: [
-                ['edv:type', 'preset'],
                 ['edv:presetKey', key],
-                ['edv:preset', key],
                 ['edv:order', key === 'red_band' ? '10' : '20'],
             ],
         });
@@ -952,20 +933,13 @@ describe('LayersComponent', () => {
                 });
             if (collection === 'edv')
                 return Promise.resolve({
-                    items: [{type: 'collection', name: 'adHoc', id: {providerId: 'p', collectionId: 'category'}, description: ''}],
-                });
-            if (collection === 'category')
-                return Promise.resolve({
                     items: [
                         {
                             type: 'collection',
                             name: 'Sentinel',
                             id: {providerId: 'p', collectionId: 'dataset'},
                             description: '',
-                            properties: [
-                                ['edv:type', 'dataset'],
-                                ['edv:dataset', 'sentinel'],
-                            ],
+                            properties: [['edv:dataset', 'sentinel']],
                         },
                     ],
                 });
@@ -977,20 +951,14 @@ describe('LayersComponent', () => {
                             name: 'Region 32N',
                             id: {providerId: 'p', collectionId: 'v32'},
                             description: '',
-                            properties: [
-                                ['edv:type', 'variant'],
-                                ['edv:variant', 'epsg32632'],
-                            ],
+                            properties: [['edv:crs', 'EPSG:32632']],
                         },
                         {
                             type: 'collection',
                             name: 'Region 33N',
                             id: {providerId: 'p', collectionId: 'v33'},
                             description: '',
-                            properties: [
-                                ['edv:type', 'variant'],
-                                ['edv:variant', 'epsg32633'],
-                            ],
+                            properties: [['edv:crs', 'EPSG:32633']],
                         },
                     ],
                 });
@@ -1007,17 +975,17 @@ describe('LayersComponent', () => {
         edvLayersService.applySelectedPreset();
         expect(edvLayersService.mapTileLayer()?.layerId).toBe('ndvi32');
         const appliedLayer = edvLayersService.mapTileLayer();
-        edvLayersService.setSelectedVariant('epsg32633');
+        edvLayersService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
         expect(edvLayersService.mapTileLayer()).toBe(appliedLayer);
         await vi.waitFor(() => expect(edvLayersService.currentPresets().length).toBe(1));
         edvLayersService.setSelectedPreset('red_band');
         edvLayersService.applySelectedPreset();
         expect(edvLayersService.mapTileLayer()?.layerId).toBe('red33');
-        edvLayersService.setSelectedVariant('epsg32632');
+        edvLayersService.setSelectedVariant('EPSG:32632');
         fixture.detectChanges();
         expect(edvLayersService.mapTileLayer()?.layerId).toBe('red33');
-        edvLayersService.setSelectedVariant('epsg32633');
+        edvLayersService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
         expect(edvLayersService.selectedPresetKey()).toBeUndefined();
         expect(edvLayersService.canApplyPreset()).toBe(false);
@@ -1036,33 +1004,15 @@ describe('LayersComponent', () => {
             name: 'Red',
             id: {providerId: 'data', layerId: id},
             description: '',
-            properties: [
-                ['edv:type', 'preset'],
-                ['edv:presetKey', 'red'],
-            ],
+            properties: [['edv:presetKey', 'red']],
         });
         const pages: Record<string, {items: unknown[]}> = {
             [LAYER_DB_ROOT_COLLECTION_ID]: {items: [collection('edv', 'EDV')]},
-            edv: {items: [collection('category', 'adHoc')]},
-            category: {
-                items: [
-                    collection('dataset', 'Sentinel', [
-                        ['edv:type', 'dataset'],
-                        ['edv:dataset', 'sentinel'],
-                    ]),
-                ],
+            edv: {
+                items: [collection('dataset', 'Sentinel', [['edv:dataset', 'sentinel']])],
             },
             dataset: {
-                items: [
-                    collection('a', 'A', [
-                        ['edv:type', 'variant'],
-                        ['edv:variant', 'a'],
-                    ]),
-                    collection('b', 'B', [
-                        ['edv:type', 'variant'],
-                        ['edv:variant', 'b'],
-                    ]),
-                ],
+                items: [collection('a', 'A', [['edv:crs', 'EPSG:32632']]), collection('b', 'B', [['edv:crs', 'EPSG:32633']])],
             },
         };
         let resolveA!: (value: {items: unknown[]}) => void;
@@ -1081,7 +1031,7 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
-        edvLayersService.setSelectedVariant('b');
+        edvLayersService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
         await vi.waitFor(() => expect(edvLayersService.variantError()).toBe('B unavailable'));
         edvLayersService.retryVariant();
@@ -1090,7 +1040,7 @@ describe('LayersComponent', () => {
         edvLayersService.setSelectedPreset('red');
         edvLayersService.applySelectedPreset();
         expect(edvLayersService.mapTileLayer()?.layerId).toBe('red-b');
-        edvLayersService.setSelectedVariant('a');
+        edvLayersService.setSelectedVariant('EPSG:32632');
         fixture.detectChanges();
         expect(edvLayersService.mapTileLayer()?.layerId).toBe('red-b');
         resolveA({items: [layer('red-a')]});
