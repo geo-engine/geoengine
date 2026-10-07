@@ -1,7 +1,8 @@
 use crate::config::{StacCache, get_config_element};
-use crate::datasets::external::stac::{StacProviderDataset, grid::StacGridCellIndex};
+use crate::datasets::external::stac::StacProviderDataset;
 use futures::FutureExt;
 use geoengine_datatypes::primitives::TimeInterval;
+use geoengine_datatypes::raster::GridIdx2D;
 use geoengine_operators::{
     error::Error,
     source::{TileFile, gdal_worker_process::GdalMetadataMapping},
@@ -72,7 +73,7 @@ impl std::fmt::Debug for StacQueryCache {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct Key {
     dataset_id: u64,
-    cell: StacGridCellIndex,
+    cell: GridIdx2D,
     time_start: i64,
     time_end: i64,
 }
@@ -122,7 +123,7 @@ impl StacQueryCache {
     pub(crate) async fn get_or_fetch<F, Fut>(
         self: &Arc<Self>,
         dataset: StacProviderDataset,
-        cell: StacGridCellIndex,
+        cell: GridIdx2D,
         time: TimeInterval,
         fetch: F,
     ) -> StacQueryCacheResult
@@ -226,7 +227,7 @@ impl StacQueryCache {
 mod tests {
     use super::{StacQueryCache, StacQueryCacheResult, TileFile, result_bytes};
     use crate::datasets::external::stac::{
-        StacAssetBand, StacProviderDataset, StacProviderDatasetBand, grid::StacGridCellIndex,
+        StacAssetBand, StacProviderDataset, StacProviderDatasetBand,
     };
     use geoengine_datatypes::{
         primitives::{SpatialResolution, TimeInterval},
@@ -264,7 +265,7 @@ mod tests {
     async fn get<F, Fut>(
         cache: Arc<StacQueryCache>,
         dataset: StacProviderDataset,
-        x: u32,
+        x: isize,
         time: TimeInterval,
         fetch: F,
     ) -> StacQueryCacheResult
@@ -273,7 +274,7 @@ mod tests {
         Fut: Future<Output = Result<Vec<TileFile>, Error>> + Send + 'static,
     {
         cache
-            .get_or_fetch(dataset, StacGridCellIndex { x, y: 0 }, time, fetch)
+            .get_or_fetch(dataset, GridIdx2D::new_y_x(0, x), time, fetch)
             .await
     }
 
