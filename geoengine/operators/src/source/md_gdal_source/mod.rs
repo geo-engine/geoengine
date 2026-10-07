@@ -1367,21 +1367,21 @@ mod tests {
             1,
             "expected a single tile for the partial window"
         );
-        for (R, C) in [(0, 100), (1, 157), (3, 257), (2, 200)] {
+        for (row, col) in [(0, 100), (1, 157), (3, 257), (2, 200)] {
             let local = tiles[0]
                 .tile_information()
                 .global_pixel_bounds()
                 .min_index();
-            // stored row r = 3 - R (stored row 0 is the south edge), value = t*100000 + r*10 + C
-            let expected = ((3 - R) * 10 + C) as f32;
+            // stored row r = 3 - row (stored row 0 is the south edge), value = t*100000 + r*10 + col
+            let expected = ((3 - row) * 10 + col) as f32;
             assert_eq!(
                 grid_value(
                     &tiles[0],
-                    (R - local.y()) as usize,
-                    (C - local.x()) as usize
+                    (row - local.y()) as usize,
+                    (col - local.x()) as usize
                 ),
                 expected,
-                "value at tiling cell ({R}, {C})"
+                "value at tiling cell ({row}, {col})"
             );
         }
     }
