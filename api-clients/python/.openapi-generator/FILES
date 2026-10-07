@@ -797,6 +797,7 @@ geoengine_api_client/models/st_rectangle.py
 geoengine_api_client/models/stac_api_retries.py
 geoengine_api_client/models/stac_asset_band.py
 geoengine_api_client/models/stac_data_provider_definition.py
+geoengine_api_client/models/stac_grid.py
 geoengine_api_client/models/stac_provider_authentication.py
 geoengine_api_client/models/stac_provider_dataset.py
 geoengine_api_client/models/stac_provider_dataset_band.py

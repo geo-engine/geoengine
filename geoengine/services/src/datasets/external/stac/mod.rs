@@ -16,9 +16,11 @@ use std::{fmt, sync::Arc};
 mod auth;
 mod cache;
 pub(crate) mod common;
+mod grid;
 mod listing;
 mod loading_info;
 mod storage;
+pub use grid::StacGrid;
 
 const DEFAULT_QUERY_TIMEOUT_SECS: i64 = 60;
 const DEFAULT_PAGE_LIMIT: i64 = 100;
@@ -48,6 +50,18 @@ fn validate_s3_config(s3_config: Option<&StacProviderS3Config>) -> crate::error:
     Ok(())
 }
 
+fn validate_time_dimension(time_dimension: TimeDimension) -> crate::error::Result<()> {
+    match time_dimension {
+        TimeDimension::Regular(regular) if regular.step.step > 0 => Ok(()),
+        TimeDimension::Regular(_) => Err(crate::error::Error::InvalidConfig {
+            reason: "STAC regular time dimension step must be positive".to_owned(),
+        }),
+        TimeDimension::Irregular => {
+            Err(crate::error::Error::StacIrregularTimeDimensionNotSupported)
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
 #[postgres(name = "StacDataProviderDefinition")]
 #[serde(rename_all = "camelCase")]
@@ -69,6 +83,9 @@ pub struct StacDataProviderDefinition {
     pub page_limit: i64,
     /// Optional output cache lifetime; omitted values use the global cache default.
     pub cache_ttl_secs: Option<CacheTtlSeconds>,
+    /// Target square cell count per dataset CRS projected area of use for STAC metadata searches.
+    #[serde(default)]
+    pub stac_grid: Option<StacGrid>,
 }
 
 fn default_query_timeout() -> i64 {
@@ -203,28 +220,14 @@ impl StacProviderDatasetBand {
 #[async_trait]
 impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
     async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
-        validate_authentication(self.authentication.as_ref())?;
-        validate_s3_config(self.s3_config.as_ref())?;
-        if self.time_dimension == TimeDimension::Irregular {
-            return Err(crate::error::Error::StacIrregularTimeDimensionNotSupported);
-        }
-        let mut provider = StacDataProvider::new_with_cache_ttl_secs(
-            self.id,
-            self.name,
-            self.description,
-            self.api_url,
-            self.collection_name,
-            self.s3_config,
-            self.time_dimension,
-            self.datasets,
-            self.page_limit,
-            self.query_timeout_secs,
-            self.cache_ttl_secs,
-        );
+        let mut definition = *self;
+        let authentication = definition.authentication.take();
+        validate_authentication(authentication.as_ref())?;
+        let mut provider = StacDataProvider::from_definition(definition)?;
 
         provider.client = provider
             .client
-            .with_authentication(self.authentication, &provider.api_url)
+            .with_authentication(authentication, &provider.api_url)
             .await?;
 
         Ok(Box::new(provider))
@@ -279,6 +282,8 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
                 // `update` with the new provider as both `self` and `new`.
                 validate_authentication(new.authentication.as_ref())?;
                 validate_s3_config(new.s3_config.as_ref())?;
+                new.stac_grid.unwrap_or_default().validate()?;
+                validate_time_dimension(new.time_dimension)?;
 
                 TypedDataProviderDefinition::StacDataProviderDefinition(new)
             }
@@ -301,72 +306,43 @@ pub struct StacDataProvider {
     cache_ttl_secs: Option<CacheTtlSeconds>,
     /// Shared HTTP client, reused across all requests for this provider.
     client: StacClient,
-    /// In-memory cache for STAC query results (tile files), keyed by dataset
-    /// name and spatial/temporal query bounds.
+    /// In-memory cache for complete STAC cell results, keyed by dataset, integer
+    /// projected-grid index, and regular layer time step.
     query_cache: Arc<StacQueryCache>,
+    grid: StacGrid,
 }
 
 impl StacDataProvider {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        id: DataProviderId,
-        name: String,
-        description: String,
-        api_url: String,
-        collection_name: String,
-        s3_config: Option<StacProviderS3Config>,
-        time_dimension: TimeDimension,
-        datasets: Vec<StacProviderDataset>,
-        page_limit: i64,
-        query_timeout_secs: i64,
-    ) -> Self {
-        Self::new_with_cache_ttl_secs(
-            id,
-            name,
-            description,
-            api_url,
-            collection_name,
-            s3_config,
-            time_dimension,
-            datasets,
-            page_limit,
-            query_timeout_secs,
-            None,
-        )
-    }
+    /// Builds a provider from its persisted definition after validating its configuration.
+    ///
+    /// Authentication is installed asynchronously by [`StacDataProviderDefinition::initialize`].
+    fn from_definition(definition: StacDataProviderDefinition) -> crate::error::Result<Self> {
+        validate_s3_config(definition.s3_config.as_ref())?;
+        validate_time_dimension(definition.time_dimension)?;
+        let grid = definition.stac_grid.unwrap_or_default().validate()?;
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn new_with_cache_ttl_secs(
-        id: DataProviderId,
-        name: String,
-        description: String,
-        api_url: String,
-        collection_name: String,
-        s3_config: Option<StacProviderS3Config>,
-        time_dimension: TimeDimension,
-        datasets: Vec<StacProviderDataset>,
-        page_limit: i64,
-        query_timeout_secs: i64,
-        cache_ttl_secs: Option<CacheTtlSeconds>,
-    ) -> Self {
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(query_timeout_secs as u64))
+            .timeout(std::time::Duration::from_secs(
+                definition.query_timeout_secs as u64,
+            ))
             .build()
             .unwrap_or_default();
-        Self {
-            id,
-            name,
-            description,
-            api_url,
-            collection_name,
-            s3_config,
-            time_dimension,
-            datasets,
-            page_limit,
+
+        Ok(Self {
+            id: definition.id,
+            name: definition.name,
+            description: definition.description,
+            api_url: definition.api_url,
+            collection_name: definition.collection_name,
+            s3_config: definition.s3_config,
+            time_dimension: definition.time_dimension,
+            datasets: definition.datasets,
+            page_limit: definition.page_limit,
             client: StacClient::new(client),
-            cache_ttl_secs,
+            cache_ttl_secs: definition.cache_ttl_secs,
             query_cache: Arc::new(StacQueryCache::default()),
-        }
+            grid,
+        })
     }
 }
 
@@ -496,5 +472,61 @@ mod tests {
             .await;
 
         assert!(result.is_err());
+    }
+
+    #[crate::ge_context::test]
+    async fn grid_configuration_round_trips_through_database_and_api_and_rejects_invalid_updates(
+        app_ctx: crate::contexts::PostgresContext<tokio_postgres::NoTls>,
+    ) {
+        use crate::contexts::{ApplicationContext, SessionContext};
+        use crate::layers::storage::LayerProviderDb;
+        use crate::users::UserSession;
+        let db = app_ctx.session_context(UserSession::admin_session()).db();
+        let mut api: crate::api::model::services::StacDataProviderDefinition =
+            serde_json::from_str(include_str!(
+                "../../../../../test_data/provider_defs_api/stac_sentinel2.json"
+            ))
+            .unwrap();
+        api.s3_config = None;
+        api.authentication = None;
+        api.stac_grid = Some(
+            serde_json::from_value(serde_json::json!({"targetNumberOfCells":259_200})).unwrap(),
+        );
+        let mut definition = StacDataProviderDefinition::from(api);
+        let id = db
+            .add_layer_provider(definition.clone().into())
+            .await
+            .unwrap();
+        assert_eq!(
+            db.get_layer_provider_definition(id).await.unwrap(),
+            definition.clone().into()
+        );
+        let api = crate::api::model::services::StacDataProviderDefinition::from(definition.clone());
+        let api: crate::api::model::services::StacDataProviderDefinition =
+            serde_json::from_value(serde_json::to_value(api).unwrap()).unwrap();
+        assert_eq!(StacDataProviderDefinition::from(api), definition);
+        let mut invalid = definition.clone();
+        invalid.stac_grid.as_mut().unwrap().target_number_of_cells = 0;
+        assert!(
+            db.update_layer_provider_definition(id, invalid.into())
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            db.get_layer_provider_definition(id).await.unwrap(),
+            definition.clone().into()
+        );
+        definition
+            .stac_grid
+            .as_mut()
+            .unwrap()
+            .target_number_of_cells = 1440;
+        db.update_layer_provider_definition(id, definition.clone().into())
+            .await
+            .unwrap();
+        assert_eq!(
+            db.get_layer_provider_definition(id).await.unwrap(),
+            definition.into()
+        );
     }
 }

@@ -21,10 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_v
 from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
 from uuid import UUID
-from geoengine_api_client.models.stac_provider_authentication import StacProviderAuthentication
-from geoengine_api_client.models.stac_provider_dataset import StacProviderDataset
-from geoengine_api_client.models.stac_provider_s3_config import StacProviderS3Config
-from geoengine_api_client.models.time_dimension import TimeDimension
+from geoengine_api_client.models.stac_grid import StacGrid
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -46,7 +43,8 @@ class StacDataProviderDefinition(BaseModel):
     query_timeout_secs: Optional[StrictInt] = Field(default=None, description="Timeout in seconds for outgoing STAC API HTTP requests.", alias="queryTimeoutSecs")
     page_limit: Optional[StrictInt] = Field(default=None, alias="pageLimit")
     cache_ttl_secs: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, description="Optional output cache lifetime; omitted values use the global cache default.", alias="cacheTtlSecs")
-    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "collectionName", "s3Config", "authentication", "timeDimension", "datasets", "queryTimeoutSecs", "pageLimit", "cacheTtlSecs"]
+    stac_grid: Optional[StacGrid] = Field(default=None, description="Target number of square search cells per dataset CRS projected area of use; omitted values use 512.", alias="stacGrid")
+    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "collectionName", "s3Config", "authentication", "timeDimension", "datasets", "queryTimeoutSecs", "pageLimit", "cacheTtlSecs", "stacGrid"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -110,6 +108,9 @@ class StacDataProviderDefinition(BaseModel):
                 if _item_datasets:
                     _items.append(_item_datasets.to_dict())
             _dict['datasets'] = _items
+        # override the default output from pydantic by calling `to_dict()` of stac_grid
+        if self.stac_grid:
+            _dict['stacGrid'] = self.stac_grid.to_dict()
         # set to None if priority (nullable) is None
         # and model_fields_set contains the field
         if self.priority is None and "priority" in self.model_fields_set:
@@ -129,6 +130,11 @@ class StacDataProviderDefinition(BaseModel):
         # and model_fields_set contains the field
         if self.cache_ttl_secs is None and "cache_ttl_secs" in self.model_fields_set:
             _dict['cacheTtlSecs'] = None
+
+        # set to None if stac_grid (nullable) is None
+        # and model_fields_set contains the field
+        if self.stac_grid is None and "stac_grid" in self.model_fields_set:
+            _dict['stacGrid'] = None
 
         return _dict
 
@@ -155,7 +161,8 @@ class StacDataProviderDefinition(BaseModel):
             "datasets": [StacProviderDataset.from_dict(_item) for _item in obj["datasets"]] if obj.get("datasets") is not None else None,
             "queryTimeoutSecs": obj.get("queryTimeoutSecs"),
             "pageLimit": obj.get("pageLimit"),
-            "cacheTtlSecs": obj.get("cacheTtlSecs")
+            "cacheTtlSecs": obj.get("cacheTtlSecs"),
+            "stacGrid": StacGrid.from_dict(obj["stacGrid"]) if obj.get("stacGrid") is not None else None
         })
         return _obj
 

@@ -26,6 +26,13 @@ import {
     StacProviderDatasetToJSON,
     StacProviderDatasetToJSONTyped,
 } from './StacProviderDataset';
+import type { StacGrid } from './StacGrid';
+import {
+    StacGridFromJSON,
+    StacGridFromJSONTyped,
+    StacGridToJSON,
+    StacGridToJSONTyped,
+} from './StacGrid';
 import type { StacProviderAuthentication } from './StacProviderAuthentication';
 import {
     StacProviderAuthenticationFromJSON,
@@ -131,6 +138,12 @@ export interface StacDataProviderDefinition {
      * @memberof StacDataProviderDefinition
      */
     cacheTtlSecs?: number | null;
+    /**
+     * Target number of square search cells per dataset CRS projected area of use; omitted values use 512.
+     * @type {StacGrid}
+     * @memberof StacDataProviderDefinition
+     */
+    stacGrid?: StacGrid | null;
 }
 
 
@@ -182,6 +195,7 @@ export function StacDataProviderDefinitionFromJSONTyped(json: any, ignoreDiscrim
         'queryTimeoutSecs': json['queryTimeoutSecs'] == null ? undefined : json['queryTimeoutSecs'],
         'pageLimit': json['pageLimit'] == null ? undefined : json['pageLimit'],
         'cacheTtlSecs': json['cacheTtlSecs'] == null ? undefined : json['cacheTtlSecs'],
+        'stacGrid': json['stacGrid'] == null ? undefined : StacGridFromJSON(json['stacGrid']),
     };
 }
 
@@ -210,6 +224,7 @@ export function StacDataProviderDefinitionToJSONTyped(value?: StacDataProviderDe
         'queryTimeoutSecs': value['queryTimeoutSecs'],
         'pageLimit': value['pageLimit'],
         'cacheTtlSecs': value['cacheTtlSecs'],
+        'stacGrid': StacGridToJSON(value['stacGrid']),
     };
 }
 

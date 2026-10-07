@@ -62,6 +62,7 @@ itertools = { workspace = true }
 tracing = { workspace = true }
 tracing-appender = { workspace = true }
 mime = { workspace = true }
+moka = { workspace = true }
 num-traits = { workspace = true }
 oauth2 = { workspace = true }
 ogcapi-types = { workspace = true }
