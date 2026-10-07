@@ -254,6 +254,20 @@ fn main() {
     drop(file_guard);
 }
 
+/// Hands a failed read back to the parent, after logging it here.
+///
+/// This is the only place the real cause survives. The parent wraps it into
+/// `GdalProcessPoolError`, whose `Display` is just the variant name, so the error that
+/// reaches the client says nothing about *why* the read failed - and the caller's span
+/// (`gdal_worker_read_tile`) carries the read id, dataset and band this happened on.
+fn send_read_error(
+    sender: &IpcSender<IpcProcessRasterResult>,
+    err: IpcProcessError,
+) -> Result<(), ipc_channel::IpcError> {
+    tracing::error!(error = ?err, "gdal worker read failed");
+    sender.send(Err(err))
+}
+
 fn raster_type_dispatch(
     payload: IpcChannelMessagePayload,
     dataset_cache: &mut GdalDatasetHolder,
@@ -350,7 +364,7 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
     // Propagate channel send errors directly up out of the handler
     match byte_payload {
         Ok(td) => sender.send(Ok(IpcChannelResult::Raster(td))),
-        Err(err) => sender.send(Err(err)),
+        Err(err) => send_read_error(sender, err),
     }?;
 
     Ok(())
@@ -440,7 +454,7 @@ fn read_and_send_md<T: GdalType + Pixel + FromPrimitive>(
 
     match byte_payloads {
         Ok(payloads) => sender.send(Ok(IpcChannelResult::MdBatch(payloads))),
-        Err(err) => sender.send(Err(err)),
+        Err(err) => send_read_error(sender, err),
     }?;
 
     Ok(())
