@@ -184,7 +184,7 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                     font-weight: 600;
                     text-transform: uppercase;
                     letter-spacing: 0.05em;
-                    color: var(--geoengine-primary-color, #2f6dff);
+                    color: var(--geoengine-primary-color, #105fbc);
                     margin-top: 0.5rem;
 
                     &:first-child {
