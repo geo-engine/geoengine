@@ -1,4 +1,5 @@
 import type {TimeStepDuration} from '@geoengine/common';
+import type {GeographicCoverage} from './coverage';
 
 export const PRESET_CATEGORIES = ['static', 'harvested', 'adHoc'] as const;
 export type PresetCategory = (typeof PRESET_CATEGORIES)[number];
@@ -16,6 +17,7 @@ export interface DataSourceVariant {
     key: string;
     name: string;
     crs?: string;
+    coverage?: GeographicCoverage;
     explicit: boolean;
     presets: VisualizationPreset[];
     /** Runtime collection references used only to load this variant's presets. */

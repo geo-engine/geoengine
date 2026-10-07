@@ -1,7 +1,14 @@
-import {computed, effect, inject, resource, ResourceRef, Service, signal, untracked} from '@angular/core';
+import {computed, DestroyRef, effect, inject, resource, ResourceRef, Service, signal, untracked} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {CollectionItem, TimeStepFromJSON} from '@geoengine/api-client';
+import {MapService} from '@geoengine/core';
 import {LAYER_DB_PROVIDER_ID, LAYER_DB_ROOT_COLLECTION_ID, LayersService, timeStepDictTotimeStepDuration} from '@geoengine/common';
 import {AppConfig} from '../app-config.service';
+import {toLonLat} from 'ol/proj';
+import {unByKey} from 'ol/Observable';
+import type {EventsKey} from 'ol/events';
+import {coverageContains, normalizeLongitude, parseCoverage} from './coverage';
+import type {GeographicCenter} from './coverage';
 import {
     DataSourceDefinition,
     DataSourceLayer,
@@ -17,11 +24,16 @@ export class EdvLayersService {
     readonly debug = signal(false);
     readonly layerService = inject(LayersService);
     private readonly appConfig = inject(AppConfig);
+    private readonly mapService = inject(MapService);
+    private readonly destroyRef = inject(DestroyRef);
 
     readonly selectedDataSource = signal<DataSourceDefinition | undefined>(undefined);
     readonly selectedVariantKey = signal<string | undefined>(undefined);
     readonly selectedPresetKey = signal<string | undefined>(undefined);
     readonly selectedPresetIndex = signal(0);
+    readonly mapCenter = signal<GeographicCenter | undefined>(undefined);
+    private pendingCenterSelection = true;
+    private viewCenterListener?: EventsKey;
     /** Snapshot of the visualization on the map, independent of the pending catalogue selection. */
     private readonly appliedVisualization = signal<{source: DataSourceDefinition; preset: VisualizationPreset} | undefined>(undefined);
     readonly appliedDataSource = computed(() => this.appliedVisualization()?.source);
@@ -53,6 +65,20 @@ export class EdvLayersService {
     readonly dataSources = computed(() => (this.catalogueResource.hasValue() ? this.catalogueResource.value() : []));
     readonly catalogueLoading = computed(() => this.catalogueResource.isLoading());
     readonly currentVariants = computed(() => this.selectedDataSource()?.variants ?? []);
+    readonly sortedVariants = computed(() =>
+        [...this.currentVariants()].sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key)),
+    );
+    readonly hasCoverageVariants = computed(() => this.currentVariants().some((variant) => variant.coverage !== undefined));
+    readonly mapCenterVariantKey = computed(() => {
+        const source = this.selectedDataSource();
+        const center = this.mapCenter();
+        return source && center ? this.findCoverageVariantKey(source, center, this.selectedVariantKey()) : undefined;
+    });
+    readonly mapCenterSelectionMessage = computed(() => {
+        if (!this.hasCoverageVariants()) return undefined;
+        if (!this.mapCenter()) return 'The map center is not available yet.';
+        return this.mapCenterVariantKey() ? undefined : 'No available region covers the map center.';
+    });
     readonly selectedVariant = computed(() => {
         const variants = this.currentVariants();
         return variants.find((variant) => variant.key === this.selectedVariantKey()) ?? variants[0];
@@ -116,6 +142,17 @@ export class EdvLayersService {
     });
 
     constructor() {
+        this.mapService
+            .getViewStream()
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe((view) => {
+                if (this.viewCenterListener) unByKey(this.viewCenterListener);
+                this.viewCenterListener = view.on('change:center', () => this.updateMapCenter());
+                this.updateMapCenter();
+            });
+        this.destroyRef.onDestroy(() => {
+            if (this.viewCenterListener) unByKey(this.viewCenterListener);
+        });
         effect(() => {
             if (this.catalogueLoading()) {
                 this.invalidateVariantPresets();
@@ -134,11 +171,17 @@ export class EdvLayersService {
             const next = current ? sources.find((source) => source.key === current.key) : undefined;
             const selected = next ?? sources[0];
             const sourceChanged = current?.key !== selected.key;
+            if (sourceChanged) this.pendingCenterSelection = true;
             this.selectedDataSource.set(selected);
 
             const wantedVariantKey = sourceChanged ? undefined : this.selectedVariantKey();
-            const variant = selected.variants.find((candidate) => candidate.key === wantedVariantKey) ?? selected.variants[0];
+            const centerVariantKey = sourceChanged ? this.getMapCenterVariantKey(selected) : undefined;
+            const variant =
+                selected.variants.find((candidate) => candidate.key === centerVariantKey) ??
+                selected.variants.find((candidate) => candidate.key === wantedVariantKey) ??
+                selected.variants[0];
             this.selectedVariantKey.set(variant?.key);
+            if (sourceChanged && this.mapCenter()) this.pendingCenterSelection = false;
 
             if (variant?.explicit) {
                 this.selectedPresetKey.set(undefined);
@@ -172,7 +215,10 @@ export class EdvLayersService {
             return;
         }
         this.selectedDataSource.set(dataSource);
-        this.selectedVariantKey.set(undefined);
+        this.pendingCenterSelection = true;
+        const centerVariantKey = this.getMapCenterVariantKey(dataSource);
+        this.selectedVariantKey.set(centerVariantKey ?? dataSource.variants[0]?.key);
+        if (this.mapCenter()) this.pendingCenterSelection = false;
         this.selectedPresetKey.set(undefined);
         this.selectedPresetIndex.set(0);
     }
@@ -185,8 +231,15 @@ export class EdvLayersService {
         if (this.selectedVariantKey() !== variant.key) {
             this.selectedPresetKey.set(undefined);
         }
+        this.pendingCenterSelection = false;
         this.selectedVariantKey.set(variant.key);
         this.selectedPresetIndex.set(0);
+    }
+
+    selectMapCenterVariant(): void {
+        this.updateMapCenter();
+        const key = this.mapCenterVariantKey();
+        if (key) this.setSelectedVariant(key);
     }
 
     setSelectedPreset(key: string): void {
@@ -295,6 +348,7 @@ export class EdvLayersService {
             key: variantKey,
             name: item.name ?? variantKey,
             crs: metadata.get('edv:crs'),
+            coverage: parseCoverage(metadata.get('edv:coverage')),
             explicit: true,
             presets: [],
             collectionRefs: [{collectionId: variantId, category}],
@@ -461,6 +515,47 @@ export class EdvLayersService {
             offset += limit;
         }
     }
+
+    private updateMapCenter(): void {
+        const view = this.mapService.getView();
+        const center = view.getCenter();
+        if (!center) {
+            this.mapCenter.set(undefined);
+            return;
+        }
+        const [longitude, latitude] = toLonLat(center, view.getProjection());
+        if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+            this.mapCenter.set(undefined);
+            return;
+        }
+        const geographicCenter = {longitude: normalizeLongitude(longitude), latitude};
+        this.mapCenter.set(geographicCenter);
+        const source = this.selectedDataSource();
+        if (this.pendingCenterSelection && source) {
+            const key = this.getMapCenterVariantKey(source);
+            if (key && key !== this.selectedVariantKey()) this.setAutomaticVariant(key);
+            this.pendingCenterSelection = false;
+        }
+    }
+
+    private getMapCenterVariantKey(source: DataSourceDefinition | undefined): string | undefined {
+        const center = this.mapCenter();
+        if (!source || !center) return undefined;
+        return this.findCoverageVariantKey(source, center);
+    }
+
+    private findCoverageVariantKey(source: DataSourceDefinition, center: GeographicCenter, preferredKey?: string): string | undefined {
+        const matching = [...source.variants]
+            .filter((variant) => variant.coverage && coverageContains(variant.coverage, center))
+            .sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
+        return matching.find((variant) => variant.key === preferredKey)?.key ?? matching[0]?.key;
+    }
+
+    private setAutomaticVariant(key: string): void {
+        if (this.selectedVariantKey() !== key) this.selectedPresetKey.set(undefined);
+        this.selectedVariantKey.set(key);
+        this.selectedPresetIndex.set(0);
+    }
 }
 
 function mergeAndSortDataSources(sources: DataSourceDefinition[]): DataSourceDefinition[] {
@@ -484,6 +579,7 @@ function mergeAndSortDataSources(sources: DataSourceDefinition[]): DataSourceDef
                 existingVariant.presets.push(...variant.presets);
                 existingVariant.explicit ||= variant.explicit;
                 existingVariant.collectionRefs = mergeCollectionRefs(existingVariant.collectionRefs, variant.collectionRefs);
+                existingVariant.coverage ??= variant.coverage;
             } else {
                 existingSource.variants.push({
                     ...variant,

@@ -9,20 +9,24 @@ import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, Raster
 import {toSignal} from '@angular/core/rxjs-interop';
 import type {DataSourceDefinition} from './data-sources';
 import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
+import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatSelectModule} from '@angular/material/select';
 
 @Component({
     selector: 'geoengine-layers',
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         @if (catalogueError(); as error) {
-            <p class="catalogue-message catalogue-error">{{ error }}</p>
-            <button matButton type="button" (click)="retryCatalogue()">Retry</button>
+            <div class="catalogue-notice" role="alert">
+                <p class="catalogue-message catalogue-error">{{ error }}</p>
+                <button mat-stroked-button type="button" (click)="retryCatalogue()">Retry</button>
+            </div>
         } @else if (!catalogueLoading() && dataSources().length === 0) {
             <p class="catalogue-message">No data sources are available for this configuration.</p>
         }
 
-        <div>
-            <h2>Data Source</h2>
+        <section class="panel-section" aria-labelledby="data-source-heading">
+            <h2 id="data-source-heading">Data Source</h2>
             @if (catalogueLoading()) {
                 <div class="catalogue-loading" role="status">
                     <mat-spinner diameter="24" aria-label="Loading data sources"></mat-spinner>
@@ -45,54 +49,85 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                     </mat-list-option>
                 }
             </mat-selection-list>
-        </div>
+        </section>
         <mat-divider></mat-divider>
 
         @if (currentVariants().length > 1) {
-            <div>
-                <h2>Region</h2>
-                <mat-selection-list [multiple]="false" class="variants" (selectionChange)="onVariantSelectionChange($event.options)">
-                    @for (variant of currentVariants(); track variant.key) {
-                        <mat-list-option
-                            [value]="variant.key"
-                            [selected]="selectedVariant().key === variant.key"
-                            [matTooltip]="variant.crs ?? variant.name"
-                        >
-                            <span matListItemTitle>{{ variant.name }}</span>
-                        </mat-list-option>
+            <section class="panel-section" aria-labelledby="region-heading">
+                <h2 id="region-heading">Region</h2>
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="region-select">
+                    <mat-label>Available region</mat-label>
+                    <mat-select panelWidth="320px" [value]="selectedVariant().key" (selectionChange)="setSelectedVariant($event.value)">
+                        @for (variant of sortedVariants(); track variant.key) {
+                            <mat-option [value]="variant.key">{{ variant.name }} ({{ variant.crs ?? variant.key }})</mat-option>
+                        }
+                    </mat-select>
+                </mat-form-field>
+                @if (hasCoverageVariants()) {
+                    <button
+                        mat-stroked-button
+                        type="button"
+                        class="map-center-action"
+                        aria-label="Select region at map center"
+                        aria-describedby="map-center-hint"
+                        [disabled]="!mapCenterVariantKey()"
+                        (click)="selectMapCenterVariant()"
+                    >
+                        <mat-icon>my_location</mat-icon>
+                        Select at map center
+                    </button>
+                    <p id="map-center-hint" class="catalogue-message">Choose the region covering the center of the map.</p>
+                    @if (mapCenterSelectionMessage(); as message) {
+                        <p class="catalogue-message" role="status">{{ message }}</p>
                     }
-                </mat-selection-list>
-            </div>
+                } @else {
+                    <p class="catalogue-message" role="status">Map-center selection is unavailable for this source.</p>
+                }
+            </section>
             <mat-divider></mat-divider>
         }
 
-        <div class="time-selection">
-            <h2>Time Selection</h2>
+        <section class="panel-section time-selection" aria-labelledby="time-heading">
+            <h2 id="time-heading">Time Selection</h2>
             <mat-checkbox [checked]="autoSelectTime()" (change)="autoSelectTime.set($event.checked)">Auto select time</mat-checkbox>
-            <div>
+            <div class="time-controls">
                 <button
                     matIconButton
+                    type="button"
+                    aria-label="Previous time step"
                     (click)="timeBackwards()"
                     matTooltip="Backwards {{ timeStepDuration()?.durationAmount }} {{ timeStepDuration()?.durationUnit }}"
                 >
                     <mat-icon>navigate_before</mat-icon>
                 </button>
-                <input matInput [matDatepicker]="picker" size="0" [value]="currentDate()" (dateChange)="setDate($event)" />
-                <button matButton (click)="picker.open()" class="calendar-open">{{ formattedTime() }}</button>
+                <input
+                    matInput
+                    [matDatepicker]="picker"
+                    tabindex="-1"
+                    aria-label="Selected date"
+                    [value]="currentDate()"
+                    (dateChange)="setDate($event)"
+                />
+                <button mat-stroked-button type="button" (click)="picker.open()" class="calendar-open" aria-label="Choose date">
+                    <mat-icon>event</mat-icon>
+                    {{ formattedTime() }}
+                </button>
                 <mat-datepicker #picker></mat-datepicker>
                 <button
                     matIconButton
+                    type="button"
+                    aria-label="Next time step"
                     (click)="timeForward()"
                     matTooltip="Forward {{ timeStepDuration()?.durationAmount }} {{ timeStepDuration()?.durationUnit }}"
                 >
                     <mat-icon>navigate_next</mat-icon>
                 </button>
             </div>
-        </div>
+        </section>
         <mat-divider></mat-divider>
 
-        <div>
-            <h2>Visualization Presets</h2>
+        <section class="panel-section" aria-labelledby="presets-heading">
+            <h2 id="presets-heading">Visualization Presets</h2>
             @if (catalogueLoading() || variantLoading()) {
                 <div class="catalogue-loading" role="status">
                     <mat-spinner diameter="24" aria-label="Loading visualization presets"></mat-spinner>
@@ -100,8 +135,10 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                 </div>
             }
             @if (variantError(); as error) {
-                <p class="catalogue-message catalogue-error">{{ error }}</p>
-                <button matButton type="button" (click)="retryVariant()">Retry</button>
+                <div role="alert">
+                    <p class="catalogue-message catalogue-error">{{ error }}</p>
+                    <button mat-stroked-button type="button" class="retry-variant" (click)="retryVariant()">Retry</button>
+                </div>
             }
             <mat-nav-list class="visualization-presets" [attr.aria-busy]="catalogueLoading() || variantLoading()">
                 @for (group of presetGroups(); track group.category) {
@@ -112,11 +149,19 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                         <mat-list-item
                             [activated]="preset === selectedPreset()"
                             [class.preset-active]="preset === selectedPreset()"
+                            [attr.aria-current]="preset === selectedPreset() ? 'true' : null"
                             (click)="selectPreset(preset)"
                             [matTooltip]="preset.displayName"
-                            [style.backgroundImage]="'url(' + preset.backgroundImage + ')'"
+                            [style.backgroundImage]="
+                                'linear-gradient(transparent, rgba(0, 0, 0, 0.65)), url(' + preset.backgroundImage + ')'
+                            "
                         >
                             <span matListItemTitle>{{ preset.displayName }}</span>
+                            @if (preset === selectedPreset()) {
+                                <span matListItemMeta class="preset-selected-indicator" aria-hidden="true">
+                                    <mat-icon>check</mat-icon>
+                                </span>
+                            }
                         </mat-list-item>
                     }
                 }
@@ -126,12 +171,12 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                     Apply visualization
                 </button>
             </div>
-        </div>
-        <mat-divider></mat-divider>
+        </section>
 
         @if (isLegendVisible()) {
-            <div class="legend">
-                <h2>Legend</h2>
+            <mat-divider></mat-divider>
+            <section class="panel-section legend" aria-labelledby="legend-heading">
+                <h2 id="legend-heading">Legend</h2>
                 @if (legendLayer.isLoading()) {
                     <mat-progress-spinner mode="indeterminate" diameter="32"></mat-progress-spinner>
                 } @else if (legendLayer.status() === 'error') {
@@ -140,7 +185,7 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                     <span class="legend-layer-name" [matTooltip]="legend.layer.name">{{ legend.layer.name }}</span>
                     <geoengine-raster-legend-view [layer]="legend.layer" [metadata]="legend.metadata"></geoengine-raster-legend-view>
                 }
-            </div>
+            </section>
         }
     `,
     styles: [
@@ -151,36 +196,71 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
 
             :host {
                 display: block;
-                padding: 1rem 0.25rem 1rem;
+                min-width: 0;
+                padding: 1rem 0.5rem;
+                color: var(--geoengine-foreground-text-color);
+
+                --mat-button-outlined-label-text-tracking: normal;
+                --mat-button-filled-label-text-tracking: normal;
+            }
+
+            .panel-section {
+                display: flex;
+                flex-direction: column;
+                gap: 0.75rem;
+                min-width: 0;
             }
 
             h2 {
-                margin: 0 0 0.5rem;
+                margin: 0;
                 font-size: $text1;
+                line-height: 1.5;
                 font-weight: 600;
-                color: var(--mat-sys-on-surface);
             }
 
             mat-divider {
-                margin: 1rem 0;
+                margin: 1.25rem 0;
+            }
+
+            .catalogue-notice {
+                margin-bottom: 1rem;
+
+                button {
+                    margin-top: 0.5rem;
+                }
+            }
+
+            .retry-variant {
+                margin-top: 0.5rem;
+            }
+
+            .catalogue-message {
+                margin: 0;
+                font-size: $text2;
+                line-height: 1.5;
+                color: var(--geoengine-foreground-secondary-text-color);
+            }
+
+            .catalogue-error {
+                color: var(--geoengine-warn-color);
             }
 
             .catalogue-loading {
                 display: flex;
                 align-items: center;
                 gap: 0.75rem;
-                padding: 0.75rem 0;
+                padding: 0.25rem 0;
                 font-size: $text2;
-                color: var(--mat-sys-on-surface-variant);
+                color: var(--geoengine-foreground-secondary-text-color);
             }
 
             .data-sources {
                 padding: 0;
-                margin: -0.25rem;
+                margin: 0;
 
                 mat-list-option {
                     border-radius: 0.5rem;
-                    padding: 0 0.25rem;
+                    padding: 0 0.5rem;
 
                     --mat-list-list-item-label-text-size: #{$text2};
 
@@ -204,54 +284,75 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                 }
             }
 
-            .variants {
-                padding: 0;
-                margin: -0.25rem;
+            .region-select {
+                display: block;
+                width: 100%;
 
-                mat-list-option {
-                    border-radius: 0.5rem;
-                    padding: 0 0.25rem;
-                    --mat-list-list-item-label-text-size: #{$text2};
+                --mat-form-field-container-text-size: #{$text2};
+                --mat-select-trigger-text-size: #{$text2};
+            }
+
+            .map-center-action {
+                width: 100%;
+                height: 2.75rem;
+                padding: 0 0.75rem;
+                border-radius: 0.5rem;
+                font-size: $text2;
+                line-height: 1.4;
+                white-space: nowrap;
+
+                &:not(:disabled) {
+                    color: var(--geoengine-primary-color);
+                    border-color: var(--geoengine-primary-color);
+                    background-color: color-mix(in srgb, var(--geoengine-primary-color) 6%, var(--geoengine-card-background-color));
                 }
             }
 
             .time-selection {
-                div {
-                    display: flex;
-                    flex-direction: row;
-                    align-items: center;
-                    gap: 0.5rem;
+                mat-checkbox {
+                    --mat-checkbox-label-text-size: #{$text2};
                 }
-                input,
-                mat-datepicker {
+
+                .time-controls {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.25rem;
+                }
+
+                input {
+                    position: absolute;
                     visibility: hidden;
-                    height: 0px;
-                    width: 0px;
+                    height: 0;
+                    width: 0;
                     padding: 0;
                     margin: 0;
                     border: none;
                 }
+
                 .calendar-open {
                     flex: 1;
+                    min-width: 0;
+                    padding: 0 0.5rem;
+                    border-radius: 0.5rem;
+                    font-size: $text2;
                 }
 
-                button[matIconButton],
-                a[matIconButton] {
+                button[matIconButton] {
                     display: inline-flex; /* Icons are vertically centered differently otherwise. */
+                    flex-shrink: 0;
+                    --mat-icon-button-state-layer-size: 2.5rem;
                 }
             }
 
             .visualization-presets {
-                display: flex;
-                flex-direction: row;
-                flex-wrap: wrap;
-                gap: 0.5rem;
-                width: 100%;
-                border: none;
-                margin-top: 0.5rem;
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 0.75rem;
+                padding: 0;
+                margin: 0;
 
                 .preset-group-label {
-                    width: 100%;
+                    grid-column: 1 / -1;
                     font-size: $text3;
                     font-weight: 600;
                     text-transform: uppercase;
@@ -265,20 +366,22 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                 }
 
                 mat-list-item {
-                    width: calc(50% - 0.25rem);
+                    position: relative;
+                    box-sizing: border-box;
+                    width: 100%;
+                    min-width: 0;
                     text-align: center;
                     padding: 0;
                     cursor: pointer;
-                    border: 3px solid transparent;
+                    border: 2px solid transparent;
                     border-radius: 0.5rem;
                     transition:
                         border-color 120ms ease,
-                        box-shadow 120ms ease,
-                        transform 120ms ease;
+                        box-shadow 120ms ease;
                     overflow: hidden;
 
                     height: auto;
-                    aspect-ratio: 2 / 1;
+                    aspect-ratio: 1.6 / 1;
                     background-size: cover;
                     background-position: center;
                     background-origin: border-box;
@@ -288,17 +391,21 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                     }
 
                     [matListItemTitle] {
-                        display: block;
+                        display: -webkit-box;
+                        -webkit-line-clamp: 2;
+                        -webkit-box-orient: vertical;
                         width: 100%;
                         color: white;
                         text-shadow: 0 0 0.5rem rgba(0, 0, 0, 0.7);
                         font-size: $text2;
+                        line-height: 1.35;
+                        white-space: normal;
                         overflow: hidden;
-                        text-overflow: ellipsis;
                     }
 
                     &.preset-active {
-                        border-color: var(--geoengine-primary-color);
+                        border-color: white;
+                        box-shadow: 0 0 0 3px var(--geoengine-primary-color);
 
                         [matListItemTitle] {
                             font-weight: 600;
@@ -307,22 +414,46 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
                 }
             }
 
-            .apply-preset-action {
-                display: flex;
-                justify-content: center;
-                margin-top: 1rem;
+            .preset-selected-indicator {
+                position: absolute;
+                top: 0.25rem;
+                right: 0.25rem;
+                z-index: 1;
+                display: grid;
+                place-items: center;
+                box-sizing: border-box;
+                width: 1.5rem;
+                height: 1.5rem;
+                margin: 0;
+                border: 2px solid white;
+                border-radius: 50%;
+                background-color: var(--geoengine-primary-color);
+                color: white;
+                pointer-events: none;
+
+                mat-icon {
+                    width: 1rem;
+                    height: 1rem;
+                    font-size: 1rem;
+                    line-height: 1;
+                    color: white;
+                }
             }
 
-            .time-selection {
-                --mat-button-text-label-text-size: #{$text2};
+            .apply-preset-action {
+                button {
+                    width: 100%;
+                    min-height: 2.75rem;
+                    border-radius: 0.5rem;
+                }
             }
 
             .legend {
                 .legend-layer-name {
                     display: block;
-                    margin-bottom: 0.5rem;
+                    line-height: 1.5;
                     font-size: $text2;
-                    color: var(--mat-sys-on-surface-variant);
+                    color: var(--geoengine-foreground-secondary-text-color);
                     white-space: nowrap;
                     overflow: hidden;
                     text-overflow: ellipsis;
@@ -330,7 +461,7 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
 
                 .legend-error {
                     font-size: $text2;
-                    color: var(--mat-sys-error);
+                    color: var(--geoengine-warn-color);
                 }
 
                 mat-progress-spinner {
@@ -343,8 +474,10 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
         A11yModule,
         CoreModule,
         MatDatepickerModule,
+        MatFormFieldModule,
         MatCheckboxModule,
         MatListModule,
+        MatSelectModule,
         MatProgressSpinnerModule,
         RasterLegendViewComponent,
     ],
@@ -378,6 +511,10 @@ export class LayersComponent {
 
     readonly selectedDataSource = this.edvLayersService.selectedDataSource;
     readonly currentVariants = this.edvLayersService.currentVariants;
+    readonly sortedVariants = this.edvLayersService.sortedVariants;
+    readonly hasCoverageVariants = this.edvLayersService.hasCoverageVariants;
+    readonly mapCenterVariantKey = this.edvLayersService.mapCenterVariantKey;
+    readonly mapCenterSelectionMessage = this.edvLayersService.mapCenterSelectionMessage;
     readonly selectedVariant = this.edvLayersService.selectedVariant;
     readonly currentPresets = this.edvLayersService.currentPresets;
     readonly presetGroups = this.edvLayersService.presetGroups;
@@ -445,6 +582,10 @@ export class LayersComponent {
 
     setSelectedVariant(key: string): void {
         this.edvLayersService.setSelectedVariant(key);
+    }
+
+    selectMapCenterVariant(): void {
+        this.edvLayersService.selectMapCenterVariant();
     }
 
     private async applyDataSourceTime(dataSource: DataSourceDefinition): Promise<void> {

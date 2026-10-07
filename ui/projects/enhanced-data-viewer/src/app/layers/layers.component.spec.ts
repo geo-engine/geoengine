@@ -1,22 +1,27 @@
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {Observable, of} from 'rxjs';
+import {BehaviorSubject, Observable, of} from 'rxjs';
 import {provideNativeDateAdapter} from '@angular/material/core';
-import {ProjectService} from '@geoengine/core';
+import {MapService, ProjectService} from '@geoengine/core';
+import type {CollectionItem} from '@geoengine/api-client';
 import {LAYER_DB_ROOT_COLLECTION_ID, LayersService, Time, TimeStepDuration} from '@geoengine/common';
 import {LayersComponent} from './layers.component';
 import {EdvLayersService} from './layers.service';
 import {AppConfig} from '../app-config.service';
+import View from 'ol/View';
 
 describe('LayersComponent', () => {
     let fixture: ComponentFixture<LayersComponent>;
     let edvLayersService: EdvLayersService;
-    const getLayerCollectionItems = vi.fn<(_provider: string, collection: string) => Promise<{items: unknown[]}>>();
+    const getLayerCollectionItems =
+        vi.fn<(_provider: string, collection: string, offset?: number, limit?: number) => Promise<{items: unknown[]}>>();
     const getLayer = vi.fn();
     const registerAndGetLayerWorkflowId = vi.fn();
     const getWorkflowIdMetadata = vi.fn();
     const setTime = vi.fn().mockResolvedValue(undefined);
     const setTimeStepDuration = vi.fn();
+    let mapView: View;
+    let mapViews: BehaviorSubject<View>;
     const listings: Record<string, {items: unknown[]}> = {
         [LAYER_DB_ROOT_COLLECTION_ID]: {
             items: [{type: 'collection', name: 'EDV', id: {providerId: 'provider', collectionId: 'edv'}, description: ''}],
@@ -76,6 +81,63 @@ describe('LayersComponent', () => {
         },
     };
 
+    const coverage = (west: number, south: number, east: number, north: number): string =>
+        JSON.stringify({
+            type: 'Polygon',
+            coordinates: [
+                [
+                    [west, south],
+                    [east, south],
+                    [east, north],
+                    [west, north],
+                    [west, south],
+                ],
+            ],
+        });
+
+    function mockCoverageCatalogue(): void {
+        const dataset = (key: string, name: string): CollectionItem => ({
+            type: 'collection',
+            name,
+            description: '',
+            id: {providerId: 'provider', collectionId: key},
+            properties: [
+                ['edv:type', 'dataset'],
+                ['edv:dataset', key],
+            ],
+        });
+        const variant = (source: string, epsg: number): CollectionItem => ({
+            type: 'collection',
+            name: `Region ${epsg % 100}${epsg >= 32700 ? 'S' : 'N'}`,
+            description: '',
+            id: {providerId: 'provider', collectionId: `${source}-${epsg}`},
+            properties: [
+                ['edv:type', 'variant'],
+                ['edv:variant', `epsg${epsg}`],
+                ['edv:crs', `EPSG:${epsg}`],
+                [
+                    'edv:coverage',
+                    coverage(
+                        -180 + 6 * ((epsg % 100) - 1),
+                        source === 'landsat' ? -80 : epsg >= 32700 ? -80 : 0,
+                        -180 + 6 * (epsg % 100),
+                        source === 'landsat' ? 84 : epsg >= 32700 ? 0 : 84,
+                    ),
+                ],
+            ],
+        });
+        const pages: Record<string, unknown[]> = {
+            [LAYER_DB_ROOT_COLLECTION_ID]: listings[LAYER_DB_ROOT_COLLECTION_ID].items,
+            edv: listings.edv.items,
+            adhoc: [dataset('sentinel', 'A Sentinel'), dataset('landsat', 'B Landsat')],
+            sentinel: [32632, 32655, 32755].map((epsg) => variant('sentinel', epsg)),
+            landsat: [32632, 32655].map((epsg) => variant('landsat', epsg)),
+        };
+        getLayerCollectionItems.mockImplementation((_provider, collection, offset = 0, limit = 20) =>
+            Promise.resolve({items: (pages[collection] ?? []).slice(offset, offset + limit)}),
+        );
+    }
+
     beforeEach(async () => {
         vi.clearAllMocks();
         getLayerCollectionItems
@@ -85,6 +147,8 @@ describe('LayersComponent', () => {
         getLayer.mockReset().mockResolvedValue({name: 'Layer', symbology: undefined});
         registerAndGetLayerWorkflowId.mockReset().mockResolvedValue('workflow-id');
         getWorkflowIdMetadata.mockReset();
+        mapView = new View({projection: 'EPSG:4326'});
+        mapViews = new BehaviorSubject(mapView);
         await TestBed.configureTestingModule({
             imports: [LayersComponent],
             providers: [
@@ -95,6 +159,10 @@ describe('LayersComponent', () => {
                 },
                 {provide: AppConfig, useValue: {EDV: {CATEGORY: 'adHoc'}}},
                 EdvLayersService,
+                {
+                    provide: MapService,
+                    useValue: {getViewStream: (): Observable<View> => mapViews.asObservable(), getView: (): View => mapViews.value},
+                },
                 {
                     provide: ProjectService,
                     useValue: {
@@ -108,6 +176,59 @@ describe('LayersComponent', () => {
         }).compileComponents();
         edvLayersService = TestBed.inject(EdvLayersService);
         fixture = TestBed.createComponent(LayersComponent);
+    });
+
+    it('preselects the matching coverage on source switches and preserves the initial choice while panning', async () => {
+        mockCoverageCatalogue();
+        mapView.setCenter([9, 50]);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32632');
+
+        mapView.setCenter([148.5, -35.5]);
+        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32632');
+        edvLayersService.setSelectedDataSource('landsat');
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32655');
+        edvLayersService.setSelectedDataSource('sentinel');
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32755');
+        expect(setTime).not.toHaveBeenCalled();
+        expect(edvLayersService.mapTileLayer()).toBeUndefined();
+    });
+
+    it('waits for the replacement view center and removes the old view listener', async () => {
+        mockCoverageCatalogue();
+        mapView.setCenter([9, 50]);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        const replacement = new View({projection: 'EPSG:4326'});
+        mapViews.next(replacement);
+        expect(edvLayersService.mapCenter()).toBeUndefined();
+        mapView.setCenter([148.5, -35.5]);
+        expect(edvLayersService.mapCenter()).toBeUndefined();
+        edvLayersService.setSelectedDataSource('landsat');
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32632');
+        replacement.setCenter([148.5, -35.5]);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32655');
+    });
+
+    it('preserves a manual variant chosen before the map initializes', async () => {
+        mockCoverageCatalogue();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        edvLayersService.setSelectedVariant('epsg32655');
+        mapView.setCenter([9, 50]);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32655');
+        expect(edvLayersService.mapCenterVariantKey()).toBe('epsg32632');
     });
 
     it('shows loading indicators for both lists until catalogue discovery finishes', async () => {
@@ -130,6 +251,103 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         expect(element.querySelectorAll('mat-spinner').length).toBe(0);
         expect(element.textContent).toContain('Sentinel');
+    });
+
+    it('loads later coverage and preset pages and applies a map-center choice only on Apply', async () => {
+        const regionNumbers = [...Array.from({length: 19}, (_, index) => index + 1), 32];
+        const regionCollections = regionNumbers.map((zone) => {
+            return {
+                type: 'collection',
+                name: `Region ${String(zone).padStart(2, '0')}N`,
+                id: {providerId: 'provider', collectionId: `region-${zone}`},
+                description: '',
+                properties: [
+                    ['edv:type', 'variant'],
+                    ['edv:variant', `epsg${32600 + zone}`],
+                    ['edv:crs', `EPSG:${32600 + zone}`],
+                    ['edv:coverage', coverage(-180 + 6 * (zone - 1), 0, -180 + 6 * zone, 84)],
+                ],
+            };
+        });
+        regionCollections.push({
+            type: 'collection',
+            name: 'Region 55S',
+            id: {providerId: 'provider', collectionId: 'region55s'},
+            description: '',
+            properties: [
+                ['edv:type', 'variant'],
+                ['edv:variant', 'epsg32755'],
+                ['edv:crs', 'EPSG:32755'],
+                ['edv:coverage', coverage(144, -80, 150, 0)],
+            ],
+        });
+        const presets = Array.from({length: 25}, (_, index) => ({
+            type: 'layer',
+            name: `Preset ${String(index + 1).padStart(2, '0')}`,
+            id: {providerId: 'provider', layerId: `preset-${index + 1}`},
+            description: '',
+            properties: [
+                ['edv:type', 'preset'],
+                ['edv:presetKey', `preset-${index + 1}`],
+                ['edv:preset', `Preset ${String(index + 1).padStart(2, '0')}`],
+                ['edv:order', String(index + 1)],
+            ],
+        }));
+        getLayerCollectionItems.mockImplementation((_provider, collection, offset = 0, limit = 20) => {
+            const pages: Record<string, unknown[]> = {
+                [LAYER_DB_ROOT_COLLECTION_ID]: [
+                    {type: 'collection', name: 'EDV', id: {providerId: 'provider', collectionId: 'edv'}, description: ''},
+                ],
+                edv: [{type: 'collection', name: 'adHoc', id: {providerId: 'provider', collectionId: 'adhoc'}, description: ''}],
+                adhoc: [
+                    {
+                        type: 'collection',
+                        name: 'Sentinel',
+                        id: {providerId: 'provider', collectionId: 'dataset'},
+                        description: '',
+                        properties: [
+                            ['edv:type', 'dataset'],
+                            ['edv:dataset', 'sentinel'],
+                            ['edv:defaultTime', '1775001600000'],
+                            ['edv:timeStep', '{"step":1,"granularity":"days"}'],
+                        ],
+                    },
+                ],
+                dataset: regionCollections,
+                region55s: presets,
+            };
+            return Promise.resolve({items: pages[collection]?.slice(offset, offset + limit) ?? []});
+        });
+
+        mapView.setCenter([148.5, -35.5]);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await vi.waitFor(() => expect(edvLayersService.currentPresets()).toHaveLength(25));
+        fixture.detectChanges();
+        expect(edvLayersService.currentVariants()).toHaveLength(21);
+        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32755');
+        expect(edvLayersService.sortedVariants()[0].name).toBe('Region 01N');
+        expect(edvLayersService.mapTileLayer()).toBeUndefined();
+        expect(setTime).not.toHaveBeenCalled();
+
+        edvLayersService.setSelectedPreset('preset-1');
+        fixture.componentInstance.applySelectedPreset();
+        const appliedLayer = edvLayersService.mapTileLayer();
+        const timeCalls = setTime.mock.calls.length;
+        expect(appliedLayer).toEqual({dataConnectorId: 'provider', layerId: 'preset-1'});
+
+        mapView.setCenter([9, 50]);
+        fixture.detectChanges();
+        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32755');
+        const useCenterButton = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find((button) =>
+            button.textContent?.includes('Select at map center'),
+        );
+        expect(useCenterButton).toBeDefined();
+        useCenterButton?.click();
+        fixture.detectChanges();
+        expect(edvLayersService.selectedVariant()?.key).toBe('epsg32632');
+        expect(edvLayersService.mapTileLayer()).toEqual(appliedLayer);
+        expect(setTime).toHaveBeenCalledTimes(timeCalls);
     });
 
     it('ends loading on failure and displays both indicators again during retry', async () => {
@@ -359,7 +577,7 @@ describe('LayersComponent', () => {
                     items: [
                         {
                             type: 'collection',
-                            name: 'UTM 32N',
+                            name: 'Region 32N',
                             id: {providerId: 'p0', collectionId: 'v320'},
                             description: '',
                             properties: [
@@ -370,7 +588,7 @@ describe('LayersComponent', () => {
                         },
                         {
                             type: 'collection',
-                            name: 'UTM 33N',
+                            name: 'Region 33N',
                             id: {providerId: 'p0', collectionId: 'v330'},
                             description: '',
                             properties: [
@@ -435,7 +653,7 @@ describe('LayersComponent', () => {
                     items: [
                         {
                             type: 'collection',
-                            name: 'UTM 32N',
+                            name: 'Region 32N',
                             id: {providerId: 'p1', collectionId: 'v321'},
                             description: '',
                             properties: [
@@ -446,7 +664,7 @@ describe('LayersComponent', () => {
                         },
                         {
                             type: 'collection',
-                            name: 'UTM 33N',
+                            name: 'Region 33N',
                             id: {providerId: 'p1', collectionId: 'v331'},
                             description: '',
                             properties: [
@@ -571,7 +789,7 @@ describe('LayersComponent', () => {
                     items: [
                         {
                             type: 'collection',
-                            name: 'UTM 32N',
+                            name: 'Region 32N',
                             id: {providerId: 'p', collectionId: 'v32'},
                             description: '',
                             properties: [
@@ -581,7 +799,7 @@ describe('LayersComponent', () => {
                         },
                         {
                             type: 'collection',
-                            name: 'UTM 33N',
+                            name: 'Region 33N',
                             id: {providerId: 'p', collectionId: 'v33'},
                             description: '',
                             properties: [
@@ -667,7 +885,7 @@ describe('LayersComponent', () => {
                     items: [
                         {
                             type: 'collection',
-                            name: 'UTM 32N',
+                            name: 'Region 32N',
                             id: {providerId: 'p', collectionId: 'v32'},
                             description: '',
                             properties: [
@@ -677,7 +895,7 @@ describe('LayersComponent', () => {
                         },
                         {
                             type: 'collection',
-                            name: 'UTM 33N',
+                            name: 'Region 33N',
                             id: {providerId: 'p', collectionId: 'v33'},
                             description: '',
                             properties: [
@@ -756,7 +974,7 @@ describe('LayersComponent', () => {
                     items: [
                         {
                             type: 'collection',
-                            name: 'UTM 32N',
+                            name: 'Region 32N',
                             id: {providerId: 'p', collectionId: 'v32'},
                             description: '',
                             properties: [
@@ -766,7 +984,7 @@ describe('LayersComponent', () => {
                         },
                         {
                             type: 'collection',
-                            name: 'UTM 33N',
+                            name: 'Region 33N',
                             id: {providerId: 'p', collectionId: 'v33'},
                             description: '',
                             properties: [

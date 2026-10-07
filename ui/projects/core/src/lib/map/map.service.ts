@@ -198,4 +198,9 @@ export class MapService {
     getView(): OlView {
         return this.view$.value;
     }
+
+    /** Emits the current map view and any replacement view used after a projection change. */
+    getViewStream(): Observable<OlView> {
+        return this.view$.asObservable();
+    }
 }
