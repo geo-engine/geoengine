@@ -1,19 +1,25 @@
 # AGENTS.md: Backend (Rust)
 
-Backend-specific guidance. Repo-wide context (generated-code chain, PR rules) is in the root `AGENTS.md`.
+Backend-specific guidance.
+Repo-wide context (generated-code chain, PR rules) is in the root `AGENTS.md`.
 
-Requires GDAL ≥ 3.8.4, PROJ ≥ 9.4 (dev headers), and PostgreSQL with PostGIS. Run cargo commands from this directory.
+Requires GDAL ≥ 3.8.4, PROJ ≥ 9.4 (dev headers), and PostgreSQL with PostGIS.
+Run cargo commands from this directory.
 The `just` recipes below are written for the repo root.
 Inside this directory, drop the module prefix (`just test` instead of `just backend test`).
 
 ## Commands
 
-- Build: `just backend build`. Run the server: `just backend run`. This also builds the `gdalsource-process` binary the server needs.
-- Lint: `just backend lint` (rustfmt check + clippy + sqlfluff). CI-strict clippy: `just backend lint-clippy --deny-warnings`.
+- Build: `just backend build`.
+  Run the server: `just backend run`.
+  This also builds the `gdalsource-process` binary the server needs.
+- Lint: `just backend lint` (rustfmt check + clippy + sqlfluff).
+  CI-strict clippy: `just backend lint-clippy --deny-warnings`.
   - Format: `just backend lint-rustfmt --write`.
   - SQL only: `just backend lint-sql`.
 - Before committing: `just ci backend` runs the same install → lint → build → test sequence as CI.
-- Tests: `just backend test [filter]`. Per crate: `just backend test-services <filter>`, `test-operators`, `test-datatypes`, `test-macros` (lib tests only; `test-services <filter> --all` includes integration tests).
+- Tests: `just backend test [filter]`.
+  Per crate: `just backend test-services <filter>`, `test-operators`, `test-datatypes`, `test-macros` (lib tests only; `test-services <filter> --all` includes integration tests).
   - Doctests: `just backend test-doc`.
   - Single test, e.g.: `cargo test -p geoengine-operators --lib -- processing::expression::tests::it_works --nocapture`
 - Expression deps sync check: `cargo test --package geoengine-expression --test check-expression-deps`
@@ -46,45 +52,83 @@ Core layering: `services` depends on `operators`, which depends on `datatypes`; 
 Supporting crates: `expression` (used by `operators` and `services`), `macros` (used by `services`) and `crs-constants` (used by `datatypes`).
 
 - **`datatypes`**: primitives (time intervals, bounding boxes, spatial references), feature collections (Arrow-backed), raster tiles/grids, plots.
-- **`operators`**: the processing engine. `engine/` defines the operator lifecycle: serializable operator definitions (`RasterOperator`/`VectorOperator`/`PlotOperator`, combined in `TypedOperator`) are initialized against an `ExecutionContext` (which yields result descriptors) and then produce query processors that return async streams of tiles or feature chunks. Implementations live in `source/` (GDAL, OGR, CSV), `processing/`, `plot/` and `adapters/` (stream combinators). There is also `cache/` and `machine_learning/` (ONNX via `ort`). GDAL reads can run out-of-process through the `gdalsource-process` binary (`src/bin/`), managed by a process pool (`[gdal_process_pool]` settings).
-- **`expression`**: user expressions are compiled to Rust **at runtime** and dynamically linked. `expression/deps-workspace` pins the dependencies for that compilation and must stay in sync with the workspace (`geo`, `geo-types`, …). Update it with `.scripts/update-expression-deps.rs`.
+- **`operators`**: the processing engine.
+  `engine/` defines the operator lifecycle: serializable operator definitions (`RasterOperator`/`VectorOperator`/`PlotOperator`, combined in `TypedOperator`) are initialized against an `ExecutionContext` (which yields result descriptors) and then produce query processors that return async streams of tiles or feature chunks.
+  Implementations live in `source/` (GDAL, OGR, CSV), `processing/`, `plot/` and `adapters/` (stream combinators).
+  There is also `cache/` and `machine_learning/` (ONNX via `ort`).
+  GDAL reads can run out-of-process through the `gdalsource-process` binary (`src/bin/`), managed by a process pool (`[gdal_process_pool]` settings).
+- **`expression`**: user expressions are compiled to Rust **at runtime** and dynamically linked.
+  `expression/deps-workspace` pins the dependencies for that compilation and must stay in sync with the workspace (`geo`, `geo-types`, …).
+  Update it with `.scripts/update-expression-deps.rs`.
 - **`services`**: the actix-web server.
-  - `api/handlers/`: REST endpoints. `api/ogc/`: WMS/WFS/WCS and OGC API. `api/apidoc.rs`: utoipa OpenAPI registration. New endpoints and schemas must be registered there to appear in `openapi.json`.
-  - `api/model/`: **API-facing types, kept separate from internal `datatypes`/`operators` types**, with `From`/`TryFrom` conversions both ways. `api/model/processing_graphs/` mirrors every operator as an API type, declared with `#[api_operator]`, and `back_conversion/` maps them back. Exposing a new operator means adding it on both sides. The doc comments on these types become the operator pages on the website (generated from `openapi.json`, see `www/AGENTS.md`).
+  - `api/handlers/`: REST endpoints.
+    `api/ogc/`: WMS/WFS/WCS and OGC API.
+    `api/apidoc.rs`: utoipa OpenAPI registration.
+    New endpoints and schemas must be registered there to appear in `openapi.json`.
+  - `api/model/`: **API-facing types, kept separate from internal `datatypes`/`operators` types**, with `From`/`TryFrom` conversions both ways.
+    `api/model/processing_graphs/` mirrors every operator as an API type, declared with `#[api_operator]`, and `back_conversion/` maps them back.
+    Exposing a new operator means adding it on both sides.
+    The doc comments on these types become the operator pages on the website (generated from `openapi.json`, see `www/AGENTS.md`).
   - `contexts/`: `PostgresContext`/session handling and `migrations/`.
-  - `datasets/` (internal datasets, uploads, `external/` data providers such as STAC, GBIF, Pangaea, NetCDF-CF, Aruna, Copernicus, Wildlive), `layers/` (layer collections, provider registry), `workflows/`, `projects/`, `permissions/`, `users/` (incl. OIDC), `quota/`, `tasks/`, `machine_learning/`.
-- **`macros`** (`geoengine-macros`): `#[ge_context::test]` spins up a DB-backed app/context for service tests, with options like `user = "admin"`, `test_execution = "serial"`, `tiling_spec = …`. Also `#[api_operator]` and `#[type_tag]` for OpenAPI-friendly tagged types.
+  - `datasets/` (internal datasets, uploads, `external/` data providers), `layers/` (layer collections, provider registry), `workflows/`, `projects/`, `permissions/`, `users/` (incl. OIDC), `quota/`, `tasks/`, `machine_learning/`.
+- **`macros`** (`geoengine-macros`): `#[ge_context::test]` spins up a DB-backed app/context for service tests, with options like `user = "admin"`, `test_execution = "serial"`, `tiling_spec = …`.
+  Also `#[api_operator]` and `#[type_tag]` for OpenAPI-friendly tagged types.
 - **`crs-constants`**: zero-dependency static CRS metadata (EPSG bounds), generated from PROJ's EPSG database.
 
 ## Processing internals
 
-- **Sub-queries**: raster operators that need a different input region per output tile (reprojection, interpolation, downsampling, neighborhood aggregate) are built on `RasterSubQueryAdapter` (`operators/src/adapters/raster_subquery/`). For each output tile it issues a sub-query to the source and folds the results with a `SubQueryTileAggregator`. Reuse it rather than writing your own tile loop.
-- **Cache**: when `[cache] enabled` is set, `services` wraps every initialized operator in a cache operator (`services/src/contexts/mod.rs`, `operators/src/cache/`). So the cache sits between every pair of operators in a graph, not only at the output. Results must therefore be deterministic for a given query, and operators must propagate the `cache_hint` of their input tiles and chunks.
-- **Threads**: CPU-heavy work runs on the shared Rayon thread pool from `ctx.thread_pool()`, via `spawn_blocking_with_thread_pool`. Never block the async runtime, and do not create your own thread pools.
-- **GDAL**: GDAL opens and reads run in separate `gdalsource-process` worker processes (see `operators` above), limited by `[gdal_process_pool]`. GDAL state such as config options does not carry over from the server process; pass it with the dataset parameters (`gdal_config_options`).
+- **Raster tile order**: every raster stream has the same fixed order and no gaps.
+  Operators must expect this order from their inputs and produce it themselves.
+  Tiles are ordered by time first, then by tile position, then by band.
+  So the stream delivers all tiles of one time slice before the next one starts, and all bands of one tile position before the next position starts:
+  1. **Time**: ascending, without gaps (the end of one slice is the start of the next).
+     Sources fill gaps with no-data slices.
+  2. **Tile position**: all tiles that intersect the query's spatial bounds, row by row from the upper-left tile (x runs fastest, then y).
+     Tiles without data are emitted as empty tiles.
+  3. **Band**: one tile per selected band, in the order of the query's band selection (not necessarily sorted).
+
+  Example with 2 time slices, 2×2 tiles and bands `[0, 1]`: `t0 (0,0) b0`, `t0 (0,0) b1`, `t0 (0,1) b0`, `t0 (0,1) b1`, `t0 (1,0) b0`, …, `t1 (1,1) b1`.
+
+- **Sub-queries**: raster operators that need a different input region per output tile (reprojection, interpolation, downsampling, neighborhood aggregate) use `RasterSubQueryAdapter`, which issues one sub-query per output tile and folds the results.
+  Reuse it rather than writing your own tile loop.
+- **Cache**: when `[cache] enabled` is set, every operator in a graph is wrapped in a cache operator, not only the output.
+  Results must therefore be deterministic for a given query, and operators must propagate the `cache_hint` of their input tiles and chunks.
+- **Threads**: run CPU-heavy work on the shared thread pool from `ctx.thread_pool()`.
+  Never block the async runtime, and do not create your own thread pools.
+- **GDAL**: GDAL runs in separate `gdalsource-process` worker processes, so GDAL state such as config options does not carry over from the server process.
+  Pass it with the dataset parameters (`gdal_config_options`).
 
 ## Database migrations
 
-Migrations are in `services/src/contexts/migrations/` as `migration_NNNN_<name>.rs` (+ `.sql`). A new migration must:
+Migrations are in `services/src/contexts/migrations/` as `migration_NNNN_<name>.rs` (+ `.sql`).
+A new migration must:
 
 - implement `Migration` with `prev_version`/`version`,
 - be registered in `all_migrations()` in `mod.rs`,
 - be reflected in `current_schema.sql`, which fresh databases use directly.
 
-Tests compare the migrated schema with the current schema. Migrations run automatically when the server starts, so there is no manual migration step.
+Tests compare the migrated schema with the current schema.
+Migrations run automatically when the server starts, so there is no manual migration step.
 The full step-by-step procedure, including pitfalls, is the `new-migration` skill in `.agents/skills/new-migration/SKILL.md` at the repo root.
 
 ## SQL
 
-SQL lives in the migrations and in `test_data/` (e.g. GBIF/GFBio fixtures). It is PostgreSQL and is linted with sqlfluff (`.sqlfluff`, jinja templater):
+SQL lives in the migrations and in `test_data/` (e.g. GBIF/GFBio fixtures).
+It is PostgreSQL and is linted with sqlfluff (`.sqlfluff`, jinja templater):
 
 - Keywords in uppercase (`SELECT`, `FROM`, `WHERE`); table and column names in lowercase.
 - A few non-reserved PostgreSQL keywords (`name`, `data`, `location`, …) are allowed as identifiers; the list is in `.sqlfluff`.
 
 ## Conventions
 
-- Workspace clippy is `pedantic` plus `unwrap_used`, `print_stdout`/`print_stderr` and `dbg_macro` warnings. No `unwrap()`/`expect()` in production code: functions that can fail return `Result` and propagate with `?`. Errors use `snafu`.
-- `expect` is for tests, or where an error is truly impossible. Its message says why the value should be Ok, e.g. `.expect("env variable IMPORTANT_PATH should be set by wrapper_script.sh")`. Test function names start with `it_`.
-- Log with `tracing` macros (`tracing::debug!`, …) and add context as structured fields. `dbg!` is for local debugging only.
+- Workspace clippy is `pedantic` plus `unwrap_used`, `print_stdout`/`print_stderr` and `dbg_macro` warnings.
+  No `unwrap()`/`expect()` in production code: functions that can fail return `Result` and propagate with `?`.
+  Errors use `snafu`.
+- `expect` is for tests, or where an error is truly impossible.
+  Its message says why the value should be Ok, e.g. `.expect("env variable IMPORTANT_PATH should be set by wrapper_script.sh")`.
+- Test function names start with `it_`.
+- Log with `tracing` macros (`tracing::debug!`, …) and add context as structured fields.
+  `dbg!` is for local debugging only.
 - Serde JSON uses `#[serde(rename_all = "camelCase")]`.
-- Public items get `///` docs. Update `README.md` when adding developer-facing setup steps.
+- Public items get `///` docs.
+  Update `README.md` when adding developer-facing setup steps.
