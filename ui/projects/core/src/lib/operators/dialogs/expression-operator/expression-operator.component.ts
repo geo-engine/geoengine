@@ -263,7 +263,7 @@ export class ExpressionOperatorComponent implements AfterViewInit {
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) => {
                     if (inputWorkflow.type !== 'Raster') {
-                        throw new Error('Expected a raster workflow for expression operator.');
+                        throw new Error('Expected a raster processing graph for expression operator.');
                     }
 
                     const workflow: ProcessingGraph = {

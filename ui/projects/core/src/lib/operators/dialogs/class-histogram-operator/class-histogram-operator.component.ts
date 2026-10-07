@@ -177,7 +177,7 @@ export class ClassHistogramOperatorComponent implements AfterViewInit, OnDestroy
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) => {
                     if (inputWorkflow.type === 'Plot') {
-                        throw new Error('Expected a raster or vector workflow for class histogram.');
+                        throw new Error('Expected a raster or vector processing graph for class histogram.');
                     }
 
                     return this.projectService.registerWorkflow({

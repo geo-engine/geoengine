@@ -164,7 +164,7 @@ export class RasterizationComponent implements OnDestroy {
             .pipe(
                 mergeMap(([points]) => {
                     if (points.type !== 'Vector') {
-                        throw new Error('Expected a vector workflow for rasterization.');
+                        throw new Error('Expected a vector processing graph for rasterization.');
                     }
 
                     const workflow: ProcessingGraph = {

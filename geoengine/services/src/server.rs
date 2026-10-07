@@ -53,7 +53,7 @@ where
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
-            .configure(handlers::workflows::init_workflow_routes::<C>)
+            .configure(handlers::processing_graphs::init_processing_graph_routes::<C>)
             .configure(handlers::machine_learning::init_ml_routes::<C>)
             .configure(handlers::ogc::init_ogc_routes::<C>)
             .route(

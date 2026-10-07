@@ -29,8 +29,8 @@ export class OGCWCSApi extends runtime.BaseAPI {
      */
     wcsHandlerRequestOpts(requestParameters) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (requestParameters['workflow'] == null) {
-                throw new runtime.RequiredError('workflow', 'Required parameter "workflow" was null or undefined when calling wcsHandler().');
+            if (requestParameters['processingGraph'] == null) {
+                throw new runtime.RequiredError('processingGraph', 'Required parameter "processingGraph" was null or undefined when calling wcsHandler().');
             }
             if (requestParameters['request'] == null) {
                 throw new runtime.RequiredError('request', 'Required parameter "request" was null or undefined when calling wcsHandler().');
@@ -86,8 +86,8 @@ export class OGCWCSApi extends runtime.BaseAPI {
                     headerParameters["Authorization"] = `Bearer ${tokenString}`;
                 }
             }
-            let urlPath = `/wcs/{workflow}`;
-            urlPath = urlPath.replace(`{${"workflow"}}`, encodeURIComponent(String(requestParameters['workflow'])));
+            let urlPath = `/wcs/{processingGraph}`;
+            urlPath = urlPath.replace(`{${"processingGraph"}}`, encodeURIComponent(String(requestParameters['processingGraph'])));
             return {
                 path: urlPath,
                 method: 'GET',

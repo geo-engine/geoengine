@@ -38,13 +38,13 @@ class WmsTests(unittest.TestCase):
             )
 
             m.post(
-                "http://mock-instance/workflow",
+                "http://mock-instance/processingGraphs",
                 json={"id": "5b9508a8-bd34-5a1c-acd6-75bb832d2d38"},
                 request_headers={"Authorization": "Bearer c4983c3e-9b53-47ae-bda9-382223bd5081"},
             )
 
             m.get(
-                "http://mock-instance/workflow/5b9508a8-bd34-5a1c-acd6-75bb832d2d38/metadata",
+                "http://mock-instance/processingGraphs/5b9508a8-bd34-5a1c-acd6-75bb832d2d38/metadata",
                 json={
                     "type": "raster",
                     "dataType": "U8",
@@ -100,7 +100,7 @@ class WmsTests(unittest.TestCase):
 
             time = datetime.strptime("2014-04-01T12:00:00.000Z", ge.DEFAULT_ISO_TIME_FORMAT)
 
-            workflow = ge.register_workflow(workflow_definition)
+            workflow = ge.register_processing_graph(workflow_definition)
 
             img = workflow.wms_get_map_as_image(
                 ge.QueryRectangle(ge.BoundingBox2D(-180.0, -90.0, 180.0, 90.0), ge.TimeInterval(time)),
@@ -178,7 +178,7 @@ class WmsTests(unittest.TestCase):
                 ),
             )
 
-            workflow = ge.register_workflow(ge.workflow_builder.operators.GdalSource(dataset_name))
+            workflow = ge.register_processing_graph(ge.processing_graph_builder.operators.GdalSource(dataset_name))
 
             with self.assertRaises(ge.OGCXMLError) as ctx:
                 workflow.wms_get_map_as_image(

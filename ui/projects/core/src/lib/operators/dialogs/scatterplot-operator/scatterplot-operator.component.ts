@@ -129,7 +129,7 @@ export class ScatterplotOperatorComponent implements AfterViewInit, OnDestroy {
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) => {
                     if (inputWorkflow.type !== 'Vector') {
-                        throw new Error('Expected a vector workflow for scatter plot.');
+                        throw new Error('Expected a vector processing graph for scatter plot.');
                     }
 
                     return this.projectService.registerWorkflow({

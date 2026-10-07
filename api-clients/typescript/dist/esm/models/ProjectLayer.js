@@ -16,7 +16,7 @@ import { SymbologyFromJSON, SymbologyToJSON, } from './Symbology';
  * Check if a given object implements the ProjectLayer interface.
  */
 export function instanceOfProjectLayer(value) {
-    if (!('workflow' in value) || value['workflow'] === undefined)
+    if (!('processingGraph' in value) || value['processingGraph'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
@@ -34,7 +34,7 @@ export function ProjectLayerFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'workflow': json['workflow'],
+        'processingGraph': json['processingGraph'],
         'name': json['name'],
         'visibility': LayerVisibilityFromJSON(json['visibility']),
         'symbology': SymbologyFromJSON(json['symbology']),
@@ -48,7 +48,7 @@ export function ProjectLayerToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'workflow': value['workflow'],
+        'processingGraph': value['processingGraph'],
         'name': value['name'],
         'visibility': LayerVisibilityToJSON(value['visibility']),
         'symbology': SymbologyToJSON(value['symbology']),

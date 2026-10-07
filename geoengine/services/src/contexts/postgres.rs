@@ -4571,7 +4571,7 @@ mod tests {
             "id": project_id.to_string(),
             "layers": [{
                 "name": "NDVI",
-                "workflow": workflow_id.to_string(),
+                "processingGraph": workflow_id.to_string(),
                 "visibility": {
                     "data": true,
                     "legend": false
@@ -4607,7 +4607,7 @@ mod tests {
             "id": project_id.to_string(),
             "layers": [{
                 "name": "NDVI",
-                "workflow": workflow_id.to_string(),
+                "processingGraph": workflow_id.to_string(),
                 "visibility": {
                     "data": true,
                     "legend": false
@@ -4685,7 +4685,7 @@ mod tests {
             "id": project_id.to_string(),
             "layers": [{
                 "name": "NDVI",
-                "workflow": workflow_id.to_string(),
+                "processingGraph": workflow_id.to_string(),
                 "visibility": {
                     "data": true,
                     "legend": false
@@ -4763,7 +4763,7 @@ mod tests {
             "id": project_id.to_string(),
             "layers": [{
                 "name": "NDVI",
-                "workflow": workflow_id.to_string(),
+                "processingGraph": workflow_id.to_string(),
                 "visibility": {
                     "data": true,
                     "legend": false

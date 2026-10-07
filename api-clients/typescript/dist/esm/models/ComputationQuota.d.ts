@@ -31,7 +31,7 @@ export interface ComputationQuota {
      * @type {string}
      * @memberof ComputationQuota
      */
-    workflowId: string;
+    processingGraphId: string;
     /**
      *
      * @type {number}

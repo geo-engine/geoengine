@@ -15,7 +15,7 @@ export * from './lib/permissions/permissions.service';
 export * from './lib/plots/plots.service';
 export * from './lib/util/services/random-color.service';
 export * from './lib/user/user.service';
-export * from './lib/workflows/workflows.service';
+export * from './lib/processing-graphs/processing-graphs.service';
 
 // Components
 export * from './lib/colors/color-attribute-input/color-attribute-input.component';

@@ -848,21 +848,21 @@
         ]
       }
     },
-    "/datasetFromWorkflow/{id}": {
+    "/datasetFromProcessingGraph/{id}": {
       "post": {
         "tags": [
-          "Workflows"
+          "Processing Graphs"
         ],
-        "summary": "Create a task for creating a new dataset from the result of the workflow given by its `id` and the dataset parameters in the request body.\nReturns the id of the created task",
-        "operationId": "dataset_from_workflow_handler",
+        "summary": "Create a task for creating a new dataset from the result of the processing graph given by its `id` and the dataset parameters in the request body.\nReturns the id of the created task",
+        "operationId": "dataset_from_processing_graph_handler",
         "parameters": [
           {
             "name": "id",
             "in": "path",
-            "description": "Workflow id",
+            "description": "Processing graph id",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
+              "$ref": "#/components/schemas/ProcessingGraphId"
             }
           }
         ],
@@ -870,7 +870,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RasterDatasetFromWorkflow"
+                "$ref": "#/components/schemas/RasterDatasetFromProcessingGraph"
               }
             }
           },
@@ -2072,7 +2072,7 @@
                   },
                   "name": "Land Cover",
                   "description": "Land Cover derived from MODIS/Terra+Aqua Land Cover",
-                  "workflow": {
+                  "processingGraph": {
                     "type": "Raster",
                     "operator": {
                       "type": "GdalSource",
@@ -2270,13 +2270,13 @@
         ]
       }
     },
-    "/layers/{provider}/{layer}/workflowId": {
+    "/layers/{provider}/{layer}/processingGraphId": {
       "post": {
         "tags": [
           "Layers"
         ],
-        "summary": "Registers a layer from a provider as a workflow and returns the workflow id",
-        "operationId": "layer_to_workflow_id_handler",
+        "summary": "Registers a layer from a provider as a processing graph and returns the processing graph id",
+        "operationId": "layer_to_processing_graph_id_handler",
         "parameters": [
           {
             "name": "provider",
@@ -3306,7 +3306,7 @@
           "Plots"
         ],
         "summary": "Generates a plot.",
-        "description": "# Example\n\n1. Upload the file `plain_data.csv` with the following content:\n\n```csv\na\n1\n2\n```\n2. Create a dataset from it using the \"Plain Data\" example at `/dataset`.\n3. Create a statistics workflow using the \"Statistics Plot\" example at `/workflow`.\n4. Generate the plot with this handler.",
+        "description": "# Example\n\n1. Upload the file `plain_data.csv` with the following content:\n\n```csv\na\n1\n2\n```\n2. Create a dataset from it using the \"Plain Data\" example at `/dataset`.\n3. Create a statistics processing graph using the \"Statistics Plot\" example at `/processingGraphs`.\n4. Generate the plot with this handler.",
         "operationId": "get_plot_handler",
         "parameters": [
           {
@@ -3351,7 +3351,7 @@
           {
             "name": "id",
             "in": "path",
-            "description": "Workflow id",
+            "description": "Processing graph id",
             "required": true,
             "schema": {
               "type": "string",
@@ -3383,6 +3383,330 @@
                 }
               }
             }
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/processingGraphs": {
+      "post": {
+        "tags": [
+          "Processing Graphs"
+        ],
+        "summary": "Registers a new processing graph.",
+        "operationId": "register_processing_graph_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProcessingGraph"
+              },
+              "examples": {
+                "MockPointSource": {
+                  "value": {
+                    "type": "Vector",
+                    "operator": {
+                      "type": "MockPointSource",
+                      "params": {
+                        "points": [
+                          {
+                            "x": 0.0,
+                            "y": 0.1
+                          },
+                          {
+                            "x": 1.0,
+                            "y": 1.1
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                "Statistics Plot": {
+                  "value": {
+                    "type": "Plot",
+                    "operator": {
+                      "type": "Statistics",
+                      "params": {},
+                      "sources": {
+                        "source": {
+                          "type": "OgrSource",
+                          "params": {
+                            "data": "ne_10m_ports",
+                            "attributeProjection": null,
+                            "attributeFilters": null
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/IdResponse"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/processingGraphs/{id}": {
+      "get": {
+        "tags": [
+          "Processing Graphs"
+        ],
+        "summary": "Retrieves an existing processing graph.",
+        "operationId": "load_processing_graph_handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Processing graph id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProcessingGraphId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Processing graph loaded from database",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessingGraph"
+                },
+                "example": {
+                  "type": "Vector",
+                  "operator": {
+                    "type": "MockPointSource",
+                    "params": {
+                      "points": [
+                        {
+                          "x": 0.0,
+                          "y": 0.1
+                        },
+                        {
+                          "x": 1.0,
+                          "y": 1.1
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/processingGraphs/{id}/allMetadata/zip": {
+      "get": {
+        "tags": [
+          "Processing Graphs"
+        ],
+        "summary": "Gets a ZIP archive of the processing graph, its provenance and the output metadata.",
+        "operationId": "get_processing_graph_all_metadata_zip_handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Processing graph id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProcessingGraphId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ZipResponse"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/processingGraphs/{id}/metadata": {
+      "get": {
+        "tags": [
+          "Processing Graphs"
+        ],
+        "summary": "Gets the result metadata of a processing graph",
+        "operationId": "get_processing_graph_metadata_handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Processing graph id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProcessingGraphId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Result metadata of the processing graph",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TypedResultDescriptor"
+                },
+                "example": {
+                  "type": "vector",
+                  "dataType": "MultiPoint",
+                  "spatialReference": "EPSG:4326",
+                  "columns": {}
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/processingGraphs/{id}/provenance": {
+      "get": {
+        "tags": [
+          "Processing Graphs"
+        ],
+        "summary": "Gets the provenance of all datasets used in a processing graph.",
+        "operationId": "get_processing_graph_provenance_handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Processing graph id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProcessingGraphId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provenance of used datasets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProvenanceEntry"
+                  }
+                },
+                "example": [
+                  {
+                    "dataset": {
+                      "type": "internal",
+                      "datasetId": "846a823a-6859-4b94-ab0a-c1de80f593d8"
+                    },
+                    "provenance": {
+                      "citation": "Author, Dataset Tile",
+                      "license": "Some license",
+                      "uri": "http://example.org/"
+                    }
+                  },
+                  {
+                    "dataset": {
+                      "type": "internal",
+                      "datasetId": "453cd398-f271-437b-9c3d-7f42213ea30a"
+                    },
+                    "provenance": {
+                      "citation": "Another Author, Another Dataset Tile",
+                      "license": "Some other license",
+                      "uri": "http://example.org/"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/processingGraphs/{id}/rasterStream": {
+      "get": {
+        "tags": [
+          "Processing Graphs"
+        ],
+        "summary": "Query a processing graph raster result as a stream of tiles via a websocket connection.",
+        "operationId": "raster_stream_websocket",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Processing graph id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProcessingGraphId"
+            }
+          },
+          {
+            "name": "spatialBounds",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SpatialPartition2D"
+            }
+          },
+          {
+            "name": "timeInterval",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "attributes",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resultType",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/RasterStreamWebsocketResultType"
+            }
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Upgrade to websocket connection"
           }
         },
         "security": [
@@ -4779,7 +5103,7 @@
         ]
       }
     },
-    "/wcs/{workflow}": {
+    "/wcs/{processingGraph}": {
       "get": {
         "tags": [
           "OGC WCS"
@@ -4788,12 +5112,12 @@
         "operationId": "wcs_handler",
         "parameters": [
           {
-            "name": "workflow",
+            "name": "processingGraph",
             "in": "path",
-            "description": "Workflow id",
+            "description": "Processing graph id",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
+              "$ref": "#/components/schemas/ProcessingGraphId"
             }
           },
           {
@@ -4847,7 +5171,7 @@
             "schema": {
               "type": "string"
             },
-            "example": "<Workflow Id>"
+            "example": "<Processing Graph Id>"
           },
           {
             "name": "identifiers",
@@ -4856,7 +5180,7 @@
             "schema": {
               "type": "string"
             },
-            "example": "<Workflow Id>"
+            "example": "<Processing Graph Id>"
           },
           {
             "name": "nodatavalue",
@@ -4954,7 +5278,7 @@
         ]
       }
     },
-    "/wfs/{workflow}": {
+    "/wfs/{processingGraph}": {
       "get": {
         "tags": [
           "OGC WFS"
@@ -4963,12 +5287,12 @@
         "operationId": "wfs_handler",
         "parameters": [
           {
-            "name": "workflow",
+            "name": "processingGraph",
             "in": "path",
-            "description": "Workflow id",
+            "description": "Processing graph id",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
+              "$ref": "#/components/schemas/ProcessingGraphId"
             }
           },
           {
@@ -5093,7 +5417,7 @@
             "schema": {
               "$ref": "#/components/schemas/TypeNames"
             },
-            "example": "<Workflow Id>"
+            "example": "<Processing Graph Id>"
           },
           {
             "name": "version",
@@ -5225,7 +5549,7 @@
         ]
       }
     },
-    "/wms/{workflow}": {
+    "/wms/{processingGraph}": {
       "get": {
         "tags": [
           "OGC WMS"
@@ -5234,12 +5558,12 @@
         "operationId": "wms_handler",
         "parameters": [
           {
-            "name": "workflow",
+            "name": "processingGraph",
             "in": "path",
-            "description": "Workflow id",
+            "description": "Processing graph id",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
+              "$ref": "#/components/schemas/ProcessingGraphId"
             }
           },
           {
@@ -5352,7 +5676,7 @@
             "schema": {
               "type": "string"
             },
-            "example": "<Workflow Id>"
+            "example": "<Processing Graph Id>"
           },
           {
             "name": "query_layers",
@@ -5468,330 +5792,6 @@
           }
         ]
       }
-    },
-    "/workflow": {
-      "post": {
-        "tags": [
-          "Workflows"
-        ],
-        "summary": "Registers a new Workflow.",
-        "operationId": "register_workflow_handler",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProcessingGraph"
-              },
-              "examples": {
-                "MockPointSource": {
-                  "value": {
-                    "type": "Vector",
-                    "operator": {
-                      "type": "MockPointSource",
-                      "params": {
-                        "points": [
-                          {
-                            "x": 0.0,
-                            "y": 0.1
-                          },
-                          {
-                            "x": 1.0,
-                            "y": 1.1
-                          }
-                        ]
-                      }
-                    }
-                  }
-                },
-                "Statistics Plot": {
-                  "value": {
-                    "type": "Plot",
-                    "operator": {
-                      "type": "Statistics",
-                      "params": {},
-                      "sources": {
-                        "source": {
-                          "type": "OgrSource",
-                          "params": {
-                            "data": "ne_10m_ports",
-                            "attributeProjection": null,
-                            "attributeFilters": null
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/IdResponse"
-          }
-        },
-        "security": [
-          {
-            "session_token": []
-          }
-        ]
-      }
-    },
-    "/workflow/{id}": {
-      "get": {
-        "tags": [
-          "Workflows"
-        ],
-        "summary": "Retrieves an existing Workflow.",
-        "operationId": "load_workflow_handler",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "description": "Workflow id",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Workflow loaded from database",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProcessingGraph"
-                },
-                "example": {
-                  "type": "Vector",
-                  "operator": {
-                    "type": "MockPointSource",
-                    "params": {
-                      "points": [
-                        {
-                          "x": 0.0,
-                          "y": 0.1
-                        },
-                        {
-                          "x": 1.0,
-                          "y": 1.1
-                        }
-                      ]
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session_token": []
-          }
-        ]
-      }
-    },
-    "/workflow/{id}/allMetadata/zip": {
-      "get": {
-        "tags": [
-          "Workflows"
-        ],
-        "summary": "Gets a ZIP archive of the worklow, its provenance and the output metadata.",
-        "operationId": "get_workflow_all_metadata_zip_handler",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "description": "Workflow id",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/ZipResponse"
-          }
-        },
-        "security": [
-          {
-            "session_token": []
-          }
-        ]
-      }
-    },
-    "/workflow/{id}/metadata": {
-      "get": {
-        "tags": [
-          "Workflows"
-        ],
-        "summary": "Gets the metadata of a workflow",
-        "operationId": "get_workflow_metadata_handler",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "description": "Workflow id",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Metadata of loaded workflow",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TypedResultDescriptor"
-                },
-                "example": {
-                  "type": "vector",
-                  "dataType": "MultiPoint",
-                  "spatialReference": "EPSG:4326",
-                  "columns": {}
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session_token": []
-          }
-        ]
-      }
-    },
-    "/workflow/{id}/provenance": {
-      "get": {
-        "tags": [
-          "Workflows"
-        ],
-        "summary": "Gets the provenance of all datasets used in a workflow.",
-        "operationId": "get_workflow_provenance_handler",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "description": "Workflow id",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Provenance of used datasets",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ProvenanceEntry"
-                  }
-                },
-                "example": [
-                  {
-                    "dataset": {
-                      "type": "internal",
-                      "datasetId": "846a823a-6859-4b94-ab0a-c1de80f593d8"
-                    },
-                    "provenance": {
-                      "citation": "Author, Dataset Tile",
-                      "license": "Some license",
-                      "uri": "http://example.org/"
-                    }
-                  },
-                  {
-                    "dataset": {
-                      "type": "internal",
-                      "datasetId": "453cd398-f271-437b-9c3d-7f42213ea30a"
-                    },
-                    "provenance": {
-                      "citation": "Another Author, Another Dataset Tile",
-                      "license": "Some other license",
-                      "uri": "http://example.org/"
-                    }
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session_token": []
-          }
-        ]
-      }
-    },
-    "/workflow/{id}/rasterStream": {
-      "get": {
-        "tags": [
-          "Workflows"
-        ],
-        "summary": "Query a workflow raster result as a stream of tiles via a websocket connection.",
-        "operationId": "raster_stream_websocket",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "description": "Workflow id",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
-            }
-          },
-          {
-            "name": "spatialBounds",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/SpatialPartition2D"
-            }
-          },
-          {
-            "name": "timeInterval",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "attributes",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "resultType",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/RasterStreamWebsocketResultType"
-            }
-          }
-        ],
-        "responses": {
-          "101": {
-            "description": "Upgrade to websocket connection"
-          }
-        },
-        "security": [
-          {
-            "session_token": []
-          }
-        ]
-      }
     }
   },
   "components": {
@@ -5899,7 +5899,7 @@
         "required": [
           "name",
           "description",
-          "workflow"
+          "processingGraph"
         ],
         "properties": {
           "name": {
@@ -5910,7 +5910,7 @@
             "type": "string",
             "example": "Example layer description"
           },
-          "workflow": {
+          "processingGraph": {
             "$ref": "#/components/schemas/ProcessingGraph"
           },
           "symbology": {
@@ -7239,7 +7239,7 @@
         "required": [
           "timestamp",
           "computationId",
-          "workflowId",
+          "processingGraphId",
           "count"
         ],
         "properties": {
@@ -7250,8 +7250,8 @@
           "computationId": {
             "$ref": "#/components/schemas/ComputationId"
           },
-          "workflowId": {
-            "$ref": "#/components/schemas/WorkflowId"
+          "processingGraphId": {
+            "$ref": "#/components/schemas/ProcessingGraphId"
           },
           "count": {
             "type": "integer",
@@ -9677,7 +9677,7 @@
           "id",
           "name",
           "description",
-          "workflow"
+          "processingGraph"
         ],
         "properties": {
           "id": {
@@ -9689,7 +9689,7 @@
           "description": {
             "type": "string"
           },
-          "workflow": {
+          "processingGraph": {
             "$ref": "#/components/schemas/ProcessingGraph"
           },
           "symbology": {
@@ -11863,12 +11863,12 @@
       "Plot": {
         "type": "object",
         "required": [
-          "workflow",
+          "processingGraph",
           "name"
         ],
         "properties": {
-          "workflow": {
-            "$ref": "#/components/schemas/WorkflowId"
+          "processingGraph": {
+            "$ref": "#/components/schemas/ProcessingGraphId"
           },
           "name": {
             "type": "string"
@@ -12159,6 +12159,10 @@
         ],
         "description": "Operator outputs are distinguished by their data type.\nThere are `raster`, `vector` and `plot` operators."
       },
+      "ProcessingGraphId": {
+        "type": "string",
+        "format": "uuid"
+      },
       "Project": {
         "type": "object",
         "required": [
@@ -12211,14 +12215,14 @@
       "ProjectLayer": {
         "type": "object",
         "required": [
-          "workflow",
+          "processingGraph",
           "name",
           "visibility",
           "symbology"
         ],
         "properties": {
-          "workflow": {
-            "$ref": "#/components/schemas/WorkflowId"
+          "processingGraph": {
+            "$ref": "#/components/schemas/ProcessingGraphId"
           },
           "name": {
             "type": "string"
@@ -12530,9 +12534,9 @@
           "F64"
         ]
       },
-      "RasterDatasetFromWorkflow": {
+      "RasterDatasetFromProcessingGraph": {
         "type": "object",
-        "description": "parameter for the dataset from workflow handler (body)",
+        "description": "parameter for the dataset from processing graph handler (body)",
         "required": [
           "displayName",
           "query"
@@ -15722,7 +15726,7 @@
       "TimeShift": {
         "type": "object",
         "title": "Time Shift",
-        "description": "The `TimeShift` operator allows retrieving data temporally relative to the actual [`QueryRectangle`](../datatypes/queryrectangle).\nIt shifts the query rectangle by a given amount of time and modifies the result data accordingly.\nUsers have two options for specifying the time shift:\n\n1. Relative shift – shift relatively to the query rectangle, e.g., one month or one year to the past.\n   This can be useful for comparing multiple points in time relative to the query rectangle.\n2. Absolute shift – change query rectangle to a fixed temporal reference, e.g., January 2014.\n   This can be used to compare data in the query rectangle's time to a fixed point of reference.\n\nThe output is either a stream of raster data or a stream of vector data depending on the input.\n\nAn example usage scenario is to compare the current time with the previous time of the same raster data.\nFor instance, a raster source outputs monthly data aggregates of mean temperatures.\nIf you want to compute the difference between the current month and the previous month, you can use the `TimeShift` operator.\nYou will have two workflows.\nOne is the unmodified temperature raster source.\nThe other is the same source, shifted by one month.\nThen, you can use both workflows as sources of an [`Expression`](/docs/operators/expression) operator.\n\n_Note_: This operator modifies the time values of the returned data.\nFor rasters and vector data, it shifts the time intervals opposite to the time shift specified in the operator.\nThis is necessary to have only data inside the result that is part of the [`QueryRectangle`'s](../datatypes/queryrectangle) time interval.\nAs an example, we shift monthly data by one month to the past.\nOur query rectangle points to February.\nThen, the operator shifts the query rectangle to January.\nThe data, originally valid for January, is shifted forward to February again, to fit into the original query rectangle, which is February.\n",
+        "description": "The `TimeShift` operator allows retrieving data temporally relative to the actual [`QueryRectangle`](../datatypes/queryrectangle).\nIt shifts the query rectangle by a given amount of time and modifies the result data accordingly.\nUsers have two options for specifying the time shift:\n\n1. Relative shift – shift relatively to the query rectangle, e.g., one month or one year to the past.\n   This can be useful for comparing multiple points in time relative to the query rectangle.\n2. Absolute shift – change query rectangle to a fixed temporal reference, e.g., January 2014.\n   This can be used to compare data in the query rectangle's time to a fixed point of reference.\n\nThe output is either a stream of raster data or a stream of vector data depending on the input.\n\nAn example usage scenario is to compare the current time with the previous time of the same raster data.\nFor instance, a raster source outputs monthly data aggregates of mean temperatures.\nIf you want to compute the difference between the current month and the previous month, you can use the `TimeShift` operator.\nYou will have two processing graphs.\nOne is the unmodified temperature raster source.\nThe other is the same source, shifted by one month.\nThen, you can use both processing graphs as sources of an [`Expression`](/docs/operators/expression) operator.\n\n_Note_: This operator modifies the time values of the returned data.\nFor rasters and vector data, it shifts the time intervals opposite to the time shift specified in the operator.\nThis is necessary to have only data inside the result that is part of the [`QueryRectangle`'s](../datatypes/queryrectangle) time interval.\nAs an example, we shift monthly data by one month to the past.\nOur query rectangle points to February.\nThen, the operator shifts the query rectangle to January.\nThe data, originally valid for January, is shifted forward to February again, to fit into the original query rectangle, which is February.\n",
         "required": [
           "type",
           "params",
@@ -16178,7 +16182,7 @@
         "required": [
           "name",
           "description",
-          "workflow"
+          "processingGraph"
         ],
         "properties": {
           "name": {
@@ -16189,7 +16193,7 @@
             "type": "string",
             "example": "Example layer description"
           },
-          "workflow": {
+          "processingGraph": {
             "$ref": "#/components/schemas/ProcessingGraph"
           },
           "symbology": {
@@ -16309,7 +16313,7 @@
           "name": "TestUpdate",
           "layers": [
             {
-              "workflow": "100ee39c-761c-4218-9d85-ec861a8f3097",
+              "processingGraph": "100ee39c-761c-4218-9d85-ec861a8f3097",
               "name": "L1",
               "visibility": {
                 "data": true,
@@ -16956,7 +16960,7 @@
       "VisualPointClustering": {
         "type": "object",
         "title": "Visual Point Clustering",
-        "description": "The `VisualPointClustering` is a clustering operator for point collections that removes clutter and preserves the spatial structure of the input.\nThe output is a point collection with a count and radius attribute.\nThe operator utilizes the input resolution of the query to determine when points, being displayed as circles, would overlap.\nMoreover, it allows aggregating non-geo attributes to preserve the other columns of the input.\nFor more information on the algorithm, cf. the paper [Beilschmidt, C. et al.: A Linear-Time Algorithm for the Aggregation and Visualization of Big Spatial Point Data. SIGSPATIAL/GIS 2017: 73:1-73:4](https://doi.org/10.1145/3139958.3140037).\n\nAn exemplary use case for this operator is the visualization of point data in an online map application.\nThere, you can use this operator as the final step of the workflow to cluster the points and display them as circles.\nThese circles then pose a decluttered view of the data, e.g., via a WFS endpoint.\n\n## Errors\n\nIf the source value `vector` is not a point collection, an error is thrown.\n\nIf multiple columns in `columnAggregates` have the same names, an error is thrown.\n",
+        "description": "The `VisualPointClustering` is a clustering operator for point collections that removes clutter and preserves the spatial structure of the input.\nThe output is a point collection with a count and radius attribute.\nThe operator utilizes the input resolution of the query to determine when points, being displayed as circles, would overlap.\nMoreover, it allows aggregating non-geo attributes to preserve the other columns of the input.\nFor more information on the algorithm, cf. the paper [Beilschmidt, C. et al.: A Linear-Time Algorithm for the Aggregation and Visualization of Big Spatial Point Data. SIGSPATIAL/GIS 2017: 73:1-73:4](https://doi.org/10.1145/3139958.3140037).\n\nAn exemplary use case for this operator is the visualization of point data in an online map application.\nThere, you can use this operator as the final step of the processing graph to cluster the points and display them as circles.\nThese circles then pose a decluttered view of the data, e.g., via a WFS endpoint.\n\n## Errors\n\nIf the source value `vector` is not a point collection, an error is thrown.\n\nIf multiple columns in `columnAggregates` have the same names, an error is thrown.\n",
         "required": [
           "type",
           "params",
@@ -17245,10 +17249,6 @@
         "enum": [
           "1.3.0"
         ]
-      },
-      "WorkflowId": {
-        "type": "string",
-        "format": "uuid"
       },
       "WrappedPlotOutput": {
         "type": "object",

@@ -116,7 +116,7 @@ export class MeanRasterPixelValuesOverTimeDialogComponent implements AfterViewIn
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) => {
                     if (inputWorkflow.type !== 'Raster') {
-                        throw new Error('Expected a raster workflow for mean raster pixel values over time.');
+                        throw new Error('Expected a raster processing graph for mean raster pixel values over time.');
                     }
 
                     return this.projectService.registerWorkflow({

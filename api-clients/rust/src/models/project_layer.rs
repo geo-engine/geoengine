@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectLayer {
-    #[serde(rename = "workflow")]
-    pub workflow: uuid::Uuid,
+    #[serde(rename = "processingGraph")]
+    pub processing_graph: uuid::Uuid,
     #[serde(rename = "name")]
     pub name: String,
     #[serde(rename = "visibility")]
@@ -23,9 +23,9 @@ pub struct ProjectLayer {
 }
 
 impl ProjectLayer {
-    pub fn new(workflow: uuid::Uuid, name: String, visibility: models::LayerVisibility, symbology: models::Symbology) -> ProjectLayer {
+    pub fn new(processing_graph: uuid::Uuid, name: String, visibility: models::LayerVisibility, symbology: models::Symbology) -> ProjectLayer {
         ProjectLayer {
-            workflow,
+            processing_graph,
             name,
             visibility: Box::new(visibility),
             symbology: Box::new(symbology),

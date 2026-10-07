@@ -9,7 +9,7 @@ Name | Type
 `id` | [ProviderLayerId](ProviderLayerId.md)
 `name` | string
 `description` | string
-`workflow` | [ProcessingGraph](ProcessingGraph.md)
+`processingGraph` | [ProcessingGraph](ProcessingGraph.md)
 `symbology` | [Symbology](Symbology.md)
 `properties` | Array&lt;Array&lt;string&gt;&gt;
 `metadata` | { [key: string]: string; }
@@ -24,7 +24,7 @@ const example = {
   "id": null,
   "name": null,
   "description": null,
-  "workflow": null,
+  "processingGraph": null,
   "symbology": null,
   "properties": null,
   "metadata": null,

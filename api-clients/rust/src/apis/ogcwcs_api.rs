@@ -22,9 +22,9 @@ pub enum WcsHandlerError {
 }
 
 
-pub async fn wcs_handler(configuration: &configuration::Configuration, workflow: &str, request: models::WcsRequest, boundingbox: Option<&str>, format: Option<models::GetCoverageFormat>, gridbasecrs: Option<&str>, gridoffsets: Option<&str>, gridorigin: Option<&str>, identifier: Option<&str>, identifiers: Option<&str>, nodatavalue: Option<f64>, resx: Option<f64>, resy: Option<f64>, service: Option<models::WcsService>, time: Option<&str>, version: Option<&str>) -> Result<String, Error<WcsHandlerError>> {
+pub async fn wcs_handler(configuration: &configuration::Configuration, processing_graph: &str, request: models::WcsRequest, boundingbox: Option<&str>, format: Option<models::GetCoverageFormat>, gridbasecrs: Option<&str>, gridoffsets: Option<&str>, gridorigin: Option<&str>, identifier: Option<&str>, identifiers: Option<&str>, nodatavalue: Option<f64>, resx: Option<f64>, resy: Option<f64>, service: Option<models::WcsService>, time: Option<&str>, version: Option<&str>) -> Result<String, Error<WcsHandlerError>> {
     // add a prefix to parameters to efficiently prevent name collisions
-    let p_path_workflow = workflow;
+    let p_path_processing_graph = processing_graph;
     let p_query_request = request;
     let p_query_boundingbox = boundingbox;
     let p_query_format = format;
@@ -40,7 +40,7 @@ pub async fn wcs_handler(configuration: &configuration::Configuration, workflow:
     let p_query_time = time;
     let p_query_version = version;
 
-    let uri_str = format!("{}/wcs/{workflow}", configuration.base_path, workflow=crate::apis::urlencode(p_path_workflow));
+    let uri_str = format!("{}/wcs/{processingGraph}", configuration.base_path, processingGraph=crate::apis::urlencode(p_path_processing_graph));
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref param_value) = p_query_boundingbox {

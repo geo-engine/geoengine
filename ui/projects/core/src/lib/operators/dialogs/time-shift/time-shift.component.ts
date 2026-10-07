@@ -237,7 +237,7 @@ export class TimeShiftComponent implements AfterViewInit {
                         );
                     }
 
-                    throw new Error(`Invalid workflow type ${inputWorkflow.type}.`);
+                    throw new Error(`Invalid processing graph type ${inputWorkflow.type}.`);
                 }),
                 mergeMap((workflowId: string) => {
                     if (layerType === 'Vector') {

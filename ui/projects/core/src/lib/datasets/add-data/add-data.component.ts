@@ -96,8 +96,8 @@ export class AddDataComponent {
      */
     static createAddWorkflowByIdButton(): AddDataButton {
         return {
-            name: 'Add Workflow by Id',
-            description: 'Add a workflow by its id',
+            name: 'Add Processing Graph by Id',
+            description: 'Add a processing graph by its id',
             icon: 'build',
             sidenavConfig: {component: AddWorkflowComponent, keepParent: true},
         };

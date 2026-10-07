@@ -35,7 +35,7 @@ export interface ComputationQuota {
      * @type {string}
      * @memberof ComputationQuota
      */
-    workflowId: string;
+    processingGraphId: string;
     /**
      * 
      * @type {number}
@@ -50,7 +50,7 @@ export interface ComputationQuota {
 export function instanceOfComputationQuota(value: object): value is ComputationQuota {
     if (!('timestamp' in value) || value['timestamp'] === undefined) return false;
     if (!('computationId' in value) || value['computationId'] === undefined) return false;
-    if (!('workflowId' in value) || value['workflowId'] === undefined) return false;
+    if (!('processingGraphId' in value) || value['processingGraphId'] === undefined) return false;
     if (!('count' in value) || value['count'] === undefined) return false;
     return true;
 }
@@ -67,7 +67,7 @@ export function ComputationQuotaFromJSONTyped(json: any, ignoreDiscriminator: bo
         
         'timestamp': (new Date(json['timestamp'])),
         'computationId': json['computationId'],
-        'workflowId': json['workflowId'],
+        'processingGraphId': json['processingGraphId'],
         'count': json['count'],
     };
 }
@@ -85,7 +85,7 @@ export function ComputationQuotaToJSONTyped(value?: ComputationQuota | null, ign
         
         'timestamp': value['timestamp'].toISOString(),
         'computationId': value['computationId'],
-        'workflowId': value['workflowId'],
+        'processingGraphId': value['processingGraphId'],
         'count': value['count'],
     };
 }

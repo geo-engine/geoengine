@@ -152,7 +152,7 @@ export class BandNeighborhoodAggregateComponent {
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) => {
                     if (inputWorkflow.type !== 'Raster') {
-                        throw new Error('Expected a raster workflow for band neighborhood aggregate.');
+                        throw new Error('Expected a raster processing graph for band neighborhood aggregate.');
                     }
 
                     const workflow: TypedRasterOperator = {

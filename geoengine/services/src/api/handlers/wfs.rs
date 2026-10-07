@@ -1,3 +1,4 @@
+use crate::api::model::processing_graphs::ProcessingGraphId;
 use crate::{
     api::{
         model::datatypes::TimeInterval,
@@ -50,7 +51,7 @@ where
     C: ApplicationContext,
     C::Session: FromRequest,
 {
-    cfg.service(web::resource("/wfs/{workflow}").route(web::get().to(wfs_handler::<C>)));
+    cfg.service(web::resource("/wfs/{processingGraph}").route(web::get().to(wfs_handler::<C>)));
 }
 
 #[derive(Debug, Deserialize)]
@@ -102,7 +103,7 @@ impl IntoParams for WfsQueryParams {
 #[utoipa::path(
     tag = "OGC WFS",
     get,
-    path = "/wfs/{workflow}",
+    path = "/wfs/{processingGraph}",
     responses(
         (status = 200, description = "OK", content_type = "text/xml", body = String,
             // TODO: add example when utoipa supports more than just json examples
@@ -294,7 +295,7 @@ impl IntoParams for WfsQueryParams {
         )),
     ),
     params(
-        ("workflow" = WorkflowId, description = "Workflow id"),
+        ("processingGraph" = ProcessingGraphId, description = "Processing graph id"),
         WfsQueryParams
     ),
     security(
@@ -304,7 +305,7 @@ impl IntoParams for WfsQueryParams {
 
 async fn wfs_handler<C>(
     req: HttpRequest,
-    workflow_id: web::Path<WorkflowId>,
+    processing_graph: web::Path<ProcessingGraphId>,
     request: OgcQueryExtractor<WfsQueryParams>, // case insensitive query params
     app_ctx: web::Data<C>,
     session: C::Session,
@@ -316,10 +317,17 @@ where
 
     match request {
         WfsQueryParams::GetCapabilities(r) => {
-            wfs_get_capabilities(workflow_id.into_inner(), r, app_ctx, session).await
+            wfs_get_capabilities(processing_graph.into_inner().into(), r, app_ctx, session).await
         }
         WfsQueryParams::GetFeature(r) => {
-            wfs_get_feature(req, workflow_id.into_inner(), r, app_ctx, session).await
+            wfs_get_feature(
+                req,
+                processing_graph.into_inner().into(),
+                r,
+                app_ctx,
+                session,
+            )
+            .await
         }
     }
 }
@@ -433,7 +441,7 @@ where
     <FeatureTypeList>
         <FeatureType>
             <Name>{workflow}</Name>
-            <Title>Workflow {workflow}</Title>
+            <Title>Processing Graph {workflow}</Title>
             <DefaultCRS>urn:ogc:def:crs:{srs_authority}::{srs_code}</DefaultCRS>
             <ows:WGS84BoundingBox>
                 <ows:LowerCorner>-90 -180</ows:LowerCorner>

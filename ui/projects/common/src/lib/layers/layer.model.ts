@@ -89,7 +89,7 @@ export class VectorLayer extends Layer {
         if (dict.symbology.type === 'point' || dict.symbology.type === 'line' || dict.symbology.type === 'polygon') {
             return new VectorLayer({
                 name: dict.name,
-                workflowId: dict.workflow,
+                workflowId: dict.processingGraph,
                 isLegendVisible: dict.visibility.legend,
                 isVisible: dict.visibility.data,
                 symbology: VectorSymbology.fromVectorSymbologyDict(dict.symbology),
@@ -101,7 +101,7 @@ export class VectorLayer extends Layer {
     toDict(): ProjectLayerDict {
         return {
             name: this.name,
-            workflow: this.workflowId,
+            processingGraph: this.workflowId,
             visibility: {
                 data: this.isVisible,
                 legend: this.isLegendVisible,
@@ -167,7 +167,7 @@ export class RasterLayer extends Layer {
                 name: dict.name,
                 isLegendVisible: dict.visibility.legend,
                 isVisible: dict.visibility.data,
-                workflowId: dict.workflow,
+                workflowId: dict.processingGraph,
                 symbology: RasterSymbology.fromRasterSymbologyDict(dict.symbology),
             });
         }
@@ -210,7 +210,7 @@ export class RasterLayer extends Layer {
     toDict(): ProjectLayerDict {
         return {
             name: this.name,
-            workflow: this.workflowId,
+            processingGraph: this.workflowId,
             visibility: {
                 data: this.isVisible,
                 legend: this.isLegendVisible,

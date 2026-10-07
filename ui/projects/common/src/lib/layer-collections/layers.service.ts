@@ -20,7 +20,7 @@ import {
 
 import {apiConfigurationWithAccessKey, UserService} from '../user/user.service';
 import {UUID} from '../datasets/dataset.model';
-import {WorkflowsService} from '../workflows/workflows.service';
+import {ProcessingGraphsService} from '../processing-graphs/processing-graphs.service';
 import {LayerMetadata, RasterLayerMetadata, VectorLayerMetadata} from '../layers/layer-metadata.model';
 import {RandomColorService} from '../util/services/random-color.service';
 import {Layer, RasterLayer, VectorLayer} from '../layers/layer.model';
@@ -32,7 +32,7 @@ import {createVectorSymbology} from '../util/symbologies';
 })
 export class LayersService {
     private sessionService = inject(UserService);
-    private workflowsService = inject(WorkflowsService);
+    private processingGraphsService = inject(ProcessingGraphsService);
     private randomColorService = inject(RandomColorService);
 
     layersApi = new ReplaySubject<LayersApi>(1);
@@ -64,7 +64,7 @@ export class LayersService {
     async registerAndGetLayerWorkflowId(providerId: UUID, layerId: string): Promise<UUID> {
         const layersApi = await firstValueFrom(this.layersApi);
 
-        const workflow = await layersApi.layerToWorkflowIdHandler({provider: providerId, layer: layerId});
+        const workflow = await layersApi.layerToProcessingGraphIdHandler({provider: providerId, layer: layerId});
 
         return workflow.id;
     }
@@ -75,7 +75,7 @@ export class LayersService {
     }
 
     async getWorkflowIdMetadataDict(workflowId: UUID): Promise<TypedResultDescriptor> {
-        return await this.workflowsService.getMetadata(workflowId);
+        return await this.processingGraphsService.getMetadata(workflowId);
     }
 
     /**
@@ -170,7 +170,7 @@ export class LayersService {
             });
         } else {
             // TODO: implement plots, etc.
-            throw new Error('Adding this workflow type is unimplemented, yet');
+            throw new Error('Adding this processing graph type is unimplemented, yet');
         }
     }
 

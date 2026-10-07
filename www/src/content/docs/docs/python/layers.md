@@ -151,9 +151,11 @@ Remove a layer or collection from this collection
 #### add\_layer
 
 ```python
+@renamed_parameter("workflow", "processing_graph")
 def add_layer(name: str,
               description: str,
-              workflow: dict[str, Any] | WorkflowBuilderOperator,
+              processing_graph: dict[str, Any]
+              | ProcessingGraphBuilderOperator,
               symbology: Symbology | None,
               replace_existing: bool = False,
               timeout: int = 60) -> LayerId
@@ -164,10 +166,11 @@ Add a layer to this collection. Removes existing layers with the same name if fo
 #### add\_layer\_with\_permissions
 
 ```python
+@renamed_parameter("workflow", "processing_graph")
 def add_layer_with_permissions(name: str,
                                description: str,
-                               workflow: dict[str, Any]
-                               | WorkflowBuilderOperator,
+                               processing_graph: dict[str, Any]
+                               | ProcessingGraphBuilderOperator,
                                symbology: Symbology | None,
                                permission_tuples: list[tuple[RoleId,
                                                              Permission]]
@@ -269,7 +272,7 @@ class Layer()
 
 A layer
 
-#### workflow
+#### processing\_graph
 
 TODO: specify in more detail
 
@@ -284,13 +287,25 @@ TODO: specify in more detail
 #### \_\_init\_\_
 
 ```python
+@renamed_parameter("workflow", "processing_graph")
 def __init__(name: str, description: str, layer_id: LayerId,
-             provider_id: LayerProviderId, workflow: dict[str, Any],
+             provider_id: LayerProviderId, processing_graph: dict[str, Any],
              symbology: Symbology | None, properties: list[Any],
              metadata: dict[Any, Any]) -> None
 ```
 
 Create a new `Layer`
+
+#### workflow
+
+```python
+@property
+@deprecated("Use `Layer.processing_graph` instead.",
+            category=DeprecationWarning)
+def workflow() -> dict[str, Any]
+```
+
+Deprecated: use `Layer.processing_graph` instead.
 
 #### from\_response
 
@@ -333,21 +348,41 @@ def to_api_dict() -> geoengine_api_client.Layer
 
 Convert to a dictionary that can be serialized to JSON
 
+#### as\_processing\_graph\_id
+
+```python
+def as_processing_graph_id(timeout: int = 60) -> ProcessingGraphId
+```
+
+Register a layer as a processing graph and returns its `ProcessingGraphId`
+
+#### as\_processing\_graph
+
+```python
+def as_processing_graph(timeout: int = 60) -> ProcessingGraph
+```
+
+Register a layer as a processing graph and returns the processing graph
+
 #### as\_workflow\_id
 
 ```python
-def as_workflow_id(timeout: int = 60) -> WorkflowId
+@deprecated("Use `Layer.as_processing_graph_id` instead.",
+            category=DeprecationWarning)
+def as_workflow_id(timeout: int = 60) -> ProcessingGraphId
 ```
 
-Register a layer as a workflow and returns its workflowId
+Deprecated: use `Layer.as_processing_graph_id` instead.
 
 #### as\_workflow
 
 ```python
-def as_workflow(timeout: int = 60) -> Workflow
+@deprecated("Use `Layer.as_processing_graph` instead.",
+            category=DeprecationWarning)
+def as_workflow(timeout: int = 60) -> ProcessingGraph
 ```
 
-Register a layer as a workflow and returns the workflow
+Deprecated: use `Layer.as_processing_graph` instead.
 
 #### layer\_collection
 

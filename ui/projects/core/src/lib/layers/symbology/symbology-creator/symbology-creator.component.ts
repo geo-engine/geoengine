@@ -200,7 +200,7 @@ export class SymbologyCreatorComponent implements OnInit, OnDestroy, ControlValu
         const statisticsWorkflow$ = from(this.projectService.getWorkflow(workflowId)).pipe(
             mergeMap((workflow) => {
                 if (workflow.type !== 'Raster') {
-                    throw new Error('Expected a raster workflow for symbology statistics.');
+                    throw new Error('Expected a raster processing graph for symbology statistics.');
                 }
 
                 return this.projectService.registerWorkflow({

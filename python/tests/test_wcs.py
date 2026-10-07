@@ -27,13 +27,13 @@ class WcsTests(unittest.TestCase):
             )
 
             m_urllib.post(
-                "http://mock-instance/workflow",
+                "http://mock-instance/processingGraphs",
                 json={"id": "8df9b0e6-e4b4-586e-90a3-6cf0f08c4e62"},
                 request_headers={"Authorization": "Bearer c4983c3e-9b53-47ae-bda9-382223bd5081"},
             )
 
             m_urllib.get(
-                "http://mock-instance/workflow/8df9b0e6-e4b4-586e-90a3-6cf0f08c4e62/metadata",
+                "http://mock-instance/processingGraphs/8df9b0e6-e4b4-586e-90a3-6cf0f08c4e62/metadata",
                 json={
                     "type": "raster",
                     "dataType": "U8",
@@ -71,7 +71,7 @@ class WcsTests(unittest.TestCase):
                 },
             }
 
-            workflow = ge.register_workflow(workflow_definition)
+            workflow = ge.register_processing_graph(workflow_definition)
 
         with requests_mock.Mocker() as m_requests, open("tests/responses/ndvi.tiff", "rb") as ndvi_tiff:
             m_requests.get(
@@ -122,7 +122,7 @@ class WcsTests(unittest.TestCase):
             </ows:OperationsMetadata>
             <wcs:Contents>
                 <wcs:CoverageSummary>
-                    <ows:Title>Workflow 8df9b0e6-e4b4-586e-90a3-6cf0f08c4e62</ows:Title>
+                    <ows:Title>Processing Graph 8df9b0e6-e4b4-586e-90a3-6cf0f08c4e62</ows:Title>
                     <ows:WGS84BoundingBox>
                         <ows:LowerCorner>-180.0 -90.0</ows:LowerCorner>
                         <ows:UpperCorner>180.0 90.0</ows:UpperCorner>
@@ -177,13 +177,13 @@ class WcsTests(unittest.TestCase):
             )
 
             m_urllib.post(
-                "http://mock-instance/workflow",
+                "http://mock-instance/processingGraphs",
                 json={"id": "8df9b0e6-e4b4-586e-90a3-6cf0f08c4e62"},
                 request_headers={"Authorization": "Bearer c4983c3e-9b53-47ae-bda9-382223bd5081"},
             )
 
             m_urllib.get(
-                "http://mock-instance/workflow/8df9b0e6-e4b4-586e-90a3-6cf0f08c4e62/metadata",
+                "http://mock-instance/processingGraphs/8df9b0e6-e4b4-586e-90a3-6cf0f08c4e62/metadata",
                 json={
                     "type": "raster",
                     "dataType": "U8",
@@ -221,7 +221,7 @@ class WcsTests(unittest.TestCase):
                 },
             }
 
-            workflow = ge.register_workflow(workflow_definition)
+            workflow = ge.register_processing_graph(workflow_definition)
 
         with requests_mock.Mocker() as m_requests:
             m_requests.get(
@@ -272,7 +272,7 @@ class WcsTests(unittest.TestCase):
             </ows:OperationsMetadata>
             <wcs:Contents>
                 <wcs:CoverageSummary>
-                    <ows:Title>Workflow 8df9b0e6-e4b4-586e-90a3-6cf0f08c4e62</ows:Title>
+                    <ows:Title>Processing Graph 8df9b0e6-e4b4-586e-90a3-6cf0f08c4e62</ows:Title>
                     <ows:WGS84BoundingBox>
                         <ows:LowerCorner>-180.0 -90.0</ows:LowerCorner>
                         <ows:UpperCorner>180.0 90.0</ows:UpperCorner>
@@ -325,13 +325,13 @@ class WcsTests(unittest.TestCase):
             )
 
             m_urllib.post(
-                "http://mock-instance/workflow",
+                "http://mock-instance/processingGraphs",
                 json={"id": "8df9b0e6-e4b4-586e-90a3-6cf0f08c4e62"},
                 request_headers={"Authorization": "Bearer c4983c3e-9b53-47ae-bda9-382223bd5081"},
             )
 
             m_urllib.get(
-                "http://mock-instance/workflow/8df9b0e6-e4b4-586e-90a3-6cf0f08c4e62/metadata",
+                "http://mock-instance/processingGraphs/8df9b0e6-e4b4-586e-90a3-6cf0f08c4e62/metadata",
                 json={
                     "type": "raster",
                     "dataType": "U8",
@@ -369,7 +369,7 @@ class WcsTests(unittest.TestCase):
                 },
             }
 
-            workflow = ge.register_workflow(workflow_definition)
+            workflow = ge.register_processing_graph(workflow_definition)
 
         with requests_mock.Mocker() as m_requests, open("tests/responses/ndvi.tiff", "rb") as ndvi_tiff:
             m_requests.get(
@@ -430,7 +430,7 @@ class WcsTests(unittest.TestCase):
             </ows:OperationsMetadata>
             <wcs:Contents>
                 <wcs:CoverageSummary>
-                    <ows:Title>Workflow 8df9b0e6-e4b4-586e-90a3-6cf0f08c4e62</ows:Title>
+                    <ows:Title>Processing Graph 8df9b0e6-e4b4-586e-90a3-6cf0f08c4e62</ows:Title>
                     <ows:WGS84BoundingBox>
                         <ows:LowerCorner>-180.0 -90.0</ows:LowerCorner>
                         <ows:UpperCorner>180.0 90.0</ows:UpperCorner>

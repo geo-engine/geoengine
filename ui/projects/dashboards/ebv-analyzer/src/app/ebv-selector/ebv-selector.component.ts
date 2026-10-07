@@ -282,7 +282,7 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
 
         this.dataSubscription = from(this.layersService.getLayer(layerId.providerId, layerId.layerId))
             .pipe(
-                mergeMap((layer) => combineLatest([of(layer), this.projectService.registerWorkflow(layer.workflow)])),
+                mergeMap((layer) => combineLatest([of(layer), this.projectService.registerWorkflow(layer.processingGraph)])),
                 mergeMap(([layer, workflowId]) => {
                     if (!layer.symbology) {
                         throw new Error('Layer has no symbology');
@@ -404,7 +404,7 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
         ).pipe(
             mergeMap(
                 (projectedRasterWorkflowId) =>
-                    this.backend.getWorkflowMetadata(projectedRasterWorkflowId, sessionToken) as Observable<RasterResultDescriptorDict>,
+                    this.projectService.getWorkflowMetaData(projectedRasterWorkflowId) as Observable<RasterResultDescriptorDict>,
             ),
         );
 

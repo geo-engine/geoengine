@@ -10,7 +10,7 @@ import {
     Symbology,
     SymbologyWorkflow,
     VectorSymbology,
-    WorkflowsService,
+    ProcessingGraphsService,
     createVectorSymbology as createDefaultVectorSymbology,
     WHITE,
     UUID,
@@ -62,7 +62,7 @@ export interface LayerForm {
 })
 export class LayerEditorComponent {
     private readonly layersService = inject(LayersService);
-    private readonly workflowsService = inject(WorkflowsService);
+    private readonly processingGraphsService = inject(ProcessingGraphsService);
     private readonly dialog = inject(MatDialog);
     private readonly snackBar = inject(MatSnackBar);
     private readonly config = inject(AppConfig);
@@ -107,11 +107,11 @@ export class LayerEditorComponent {
 
         this.setUpColorizer(layer);
 
-        const workflowId = await this.workflowsService.registerWorkflow(layer.workflow);
+        const workflowId = await this.processingGraphsService.registerProcessingGraph(layer.processingGraph);
         this.workflowId = workflowId;
         this.setUpSymbology();
 
-        const resultDescriptor = await this.workflowsService.getMetadata(workflowId);
+        const resultDescriptor = await this.processingGraphsService.getMetadata(workflowId);
         this.resultDescriptor.set(resultDescriptor);
 
         this.setUpForm(layer);
@@ -130,17 +130,17 @@ export class LayerEditorComponent {
         const workflowId = this.workflowId;
 
         if (!layer || !workflowId) {
-            this.snackBar.open('Could not create symbology because the workflow could not be created.', 'Close', {
+            this.snackBar.open('Could not create symbology because the processing graph could not be created.', 'Close', {
                 panelClass: ['error-snackbar'],
             });
             return;
         }
 
-        if (layer.workflow.type == 'Raster') {
+        if (layer.processingGraph.type == 'Raster') {
             if (this.rasterSymbology) {
                 this.rasterSymbologyWorkflow.set({workflowId, symbology: this.rasterSymbology});
             }
-        } else if (layer.workflow.type == 'Vector') {
+        } else if (layer.processingGraph.type == 'Vector') {
             if (this.vectorSymbology) {
                 this.vectorSymbologyWorkflow.set({workflowId, symbology: this.vectorSymbology});
             }
@@ -160,11 +160,11 @@ export class LayerEditorComponent {
     }
 
     createSymbology(layer: Layer): void {
-        if (layer.workflow.type === 'Vector') {
+        if (layer.processingGraph.type === 'Vector') {
             this.vectorSymbology = this.createVectorSymbology();
             this.form.controls.symbology.setValue(this.vectorSymbology.toDict());
         }
-        if (layer.workflow.type === 'Raster') {
+        if (layer.processingGraph.type === 'Raster') {
             this.rasterSymbology = this.createRasterSymbology();
             this.form.controls.symbology.setValue(this.rasterSymbology.toDict());
         }
@@ -241,7 +241,7 @@ export class LayerEditorComponent {
                 }),
             ),
 
-            workflow: new FormControl(JSON.stringify(layer.workflow, null, ' '), {
+            workflow: new FormControl(JSON.stringify(layer.processingGraph, null, ' '), {
                 nonNullable: true,
             }),
             symbology: new FormControl(layer.symbology ?? undefined, {
@@ -356,7 +356,7 @@ export class LayerEditorComponent {
                 name,
                 properties,
                 metadata,
-                workflow: JSON.parse(this.form.controls.workflow.value),
+                processingGraph: JSON.parse(this.form.controls.workflow.value),
                 symbology: this.form.controls.symbology.value,
             });
 

@@ -4,10 +4,10 @@
  }
  
  
--pub async fn wfs_handler(configuration: &configuration::Configuration, workflow: &str, request: models::WfsRequest, bbox: Option<&str>, count: Option<i64>, filter: Option<&str>, namespaces: Option<&str>, property_name: Option<&str>, result_type: Option<&str>, service: Option<models::WfsService>, sort_by: Option<&str>, srs_name: Option<&str>, time: Option<&str>, type_names: Option<&str>, version: Option<&str>) -> Result<models::GeoJson, Error<WfsHandlerError>> {
-+pub async fn wfs_handler(configuration: &configuration::Configuration, workflow: &str, request: models::WfsRequest, bbox: Option<&str>, count: Option<i64>, filter: Option<&str>, namespaces: Option<&str>, property_name: Option<&str>, result_type: Option<&str>, service: Option<models::WfsService>, sort_by: Option<&str>, srs_name: Option<&str>, time: Option<&str>, type_names: Option<&str>, version: Option<&str>, computation_id: Option<&mut String>) -> Result<models::GeoJson, Error<WfsHandlerError>> {
+-pub async fn wfs_handler(configuration: &configuration::Configuration, processing_graph: &str, request: models::WfsRequest, bbox: Option<&str>, count: Option<i64>, filter: Option<&str>, namespaces: Option<&str>, property_name: Option<&str>, result_type: Option<&str>, service: Option<models::WfsService>, sort_by: Option<&str>, srs_name: Option<&str>, time: Option<&str>, type_names: Option<&str>, version: Option<&str>) -> Result<models::GeoJson, Error<WfsHandlerError>> {
++pub async fn wfs_handler(configuration: &configuration::Configuration, processing_graph: &str, request: models::WfsRequest, bbox: Option<&str>, count: Option<i64>, filter: Option<&str>, namespaces: Option<&str>, property_name: Option<&str>, result_type: Option<&str>, service: Option<models::WfsService>, sort_by: Option<&str>, srs_name: Option<&str>, time: Option<&str>, type_names: Option<&str>, version: Option<&str>, computation_id: Option<&mut String>) -> Result<models::GeoJson, Error<WfsHandlerError>> {
      // add a prefix to parameters to efficiently prevent name collisions
-     let p_path_workflow = workflow;
+     let p_path_processing_graph = processing_graph;
      let p_query_request = request;
 @@ -96,7 +96,7 @@
          .get("content-type")

@@ -206,7 +206,7 @@ export class HistogramOperatorComponent implements AfterViewInit, OnDestroy {
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) => {
                     if (inputWorkflow.type !== 'Raster' && inputWorkflow.type !== 'Vector') {
-                        throw new Error(`Invalid workflow type ${inputWorkflow.type}.`);
+                        throw new Error(`Invalid processing graph type ${inputWorkflow.type}.`);
                     }
 
                     const sourceOperator: RasterOperator | VectorOperator = inputWorkflow.operator;

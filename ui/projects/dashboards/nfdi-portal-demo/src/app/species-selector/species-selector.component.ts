@@ -687,12 +687,9 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
             .pipe(
                 combineLatestWith(this.datasetService.getDataset(layer.name)),
                 tap(([workflowId, _dataset]) => {
-                    this.userService
-                        .getSessionTokenForRequest()
-                        .pipe(mergeMap((token) => this.backend.getWorkflowProvenance(workflowId, token)))
-                        .subscribe((provenance) => {
-                            this.selectedEnvironmentCitation.next(provenance.map((p) => p.provenance.citation).join(','));
-                        });
+                    this.projectService.getWorkflowProvenance(workflowId).subscribe((provenance) => {
+                        this.selectedEnvironmentCitation.next(provenance.map((p) => p.provenance.citation).join(','));
+                    });
                 }),
                 mergeMap(([workflowId, dataset]) => {
                     this.selectedEnvironmentDataset = dataset;
@@ -747,13 +744,10 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
             .pipe(
                 combineLatestWith(this.datasetService.getDataset(this.intensityDataset)),
                 tap(([workflowId, _dataset]) => {
-                    this.userService
-                        .getSessionTokenForRequest()
-                        .pipe(mergeMap((token) => this.backend.getWorkflowProvenance(workflowId, token)))
-                        .subscribe((_provenance) => {
-                            // TODO: citation
-                            // this.selectedEnvironmentCitation.next(provenance.map((p) => p.provenance.citation).join(','));
-                        });
+                    this.projectService.getWorkflowProvenance(workflowId).subscribe((_provenance) => {
+                        // TODO: citation
+                        // this.selectedEnvironmentCitation.next(provenance.map((p) => p.provenance.citation).join(','));
+                    });
                 }),
                 mergeMap(([workflowId, dataset]) => {
                     this.selectedEnvironmentDataset = dataset;

@@ -272,7 +272,7 @@ __exportStar(require("./Radiance"), exports);
 __exportStar(require("./RasterBandDescriptor"), exports);
 __exportStar(require("./RasterColorizer"), exports);
 __exportStar(require("./RasterDataType"), exports);
-__exportStar(require("./RasterDatasetFromWorkflow"), exports);
+__exportStar(require("./RasterDatasetFromProcessingGraph"), exports);
 __exportStar(require("./RasterOperator"), exports);
 __exportStar(require("./RasterPropertiesEntryType"), exports);
 __exportStar(require("./RasterPropertiesKey"), exports);

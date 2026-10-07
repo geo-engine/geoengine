@@ -79,7 +79,7 @@ export class PointInPolygonFilterOperatorComponent {
             .pipe(
                 mergeMap(([points, polygons]) => {
                     if (points.type !== 'Vector' || polygons.type !== 'Vector') {
-                        throw new Error('Expected vector workflows for point-in-polygon filter.');
+                        throw new Error('Expected vector processing graphs for point-in-polygon filter.');
                     }
 
                     const workflow: ProcessingGraph = {

@@ -2233,10 +2233,10 @@ impl TryFrom<TimeProjection> for OperatorsTimeProjection {
 /// An example usage scenario is to compare the current time with the previous time of the same raster data.
 /// For instance, a raster source outputs monthly data aggregates of mean temperatures.
 /// If you want to compute the difference between the current month and the previous month, you can use the `TimeShift` operator.
-/// You will have two workflows.
+/// You will have two processing graphs.
 /// One is the unmodified temperature raster source.
 /// The other is the same source, shifted by one month.
-/// Then, you can use both workflows as sources of an [`Expression`](/docs/operators/expression) operator.
+/// Then, you can use both processing graphs as sources of an [`Expression`](/docs/operators/expression) operator.
 ///
 /// _Note_: This operator modifies the time values of the returned data.
 /// For rasters and vector data, it shifts the time intervals opposite to the time shift specified in the operator.
@@ -2504,7 +2504,7 @@ impl TryFrom<VectorJoin> for OperatorsVectorJoin {
 /// For more information on the algorithm, cf. the paper [Beilschmidt, C. et al.: A Linear-Time Algorithm for the Aggregation and Visualization of Big Spatial Point Data. SIGSPATIAL/GIS 2017: 73:1-73:4](https://doi.org/10.1145/3139958.3140037).
 ///
 /// An exemplary use case for this operator is the visualization of point data in an online map application.
-/// There, you can use this operator as the final step of the workflow to cluster the points and display them as circles.
+/// There, you can use this operator as the final step of the processing graph to cluster the points and display them as circles.
 /// These circles then pose a decluttered view of the data, e.g., via a WFS endpoint.
 ///
 /// ## Errors

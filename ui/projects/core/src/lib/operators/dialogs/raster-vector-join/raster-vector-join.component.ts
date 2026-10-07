@@ -264,7 +264,7 @@ export class RasterVectorJoinComponent implements OnDestroy {
                 mergeMap((projectedOperators) => {
                     const vectorWorkflow = projectedOperators[0];
                     if (vectorWorkflow.type !== 'Vector') {
-                        throw new Error('Expected a vector workflow for raster-vector join.');
+                        throw new Error('Expected a vector processing graph for raster-vector join.');
                     }
 
                     const validRasterOperators = projectedOperators

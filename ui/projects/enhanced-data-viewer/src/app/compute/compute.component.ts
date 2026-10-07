@@ -259,7 +259,7 @@ export class ComputeComponent {
         try {
             const sourceProcessingGraph = (await this.userService
                 .processingGraphAPI()
-                .loadWorkflowHandler({id: processingGraphId})) as TypedRasterOperator;
+                .loadProcessingGraphHandler({id: processingGraphId})) as TypedRasterOperator;
             const measurementType = bandMeasurementType(metadata.bands, band);
             let processingGraph: TypedPlotOperator;
             if (measurementType === 'classification') {
@@ -292,7 +292,7 @@ export class ComputeComponent {
                     },
                 };
             }
-            const plotWorkflowId = (await this.userService.processingGraphAPI().registerWorkflowHandler({processingGraph})).id;
+            const plotWorkflowId = (await this.userService.processingGraphAPI().registerProcessingGraphHandler({processingGraph})).id;
 
             const plotData = await this.plotsService.getPlot(
                 plotWorkflowId,

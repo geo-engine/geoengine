@@ -82,7 +82,7 @@ All URIs are relative to *https://geoengine.io/api*
 *LayersApi* | [**getProviderDefinition**](docs/LayersApi.md#getproviderdefinition) | **GET** /layerDb/providers/{provider} | Get an existing provider\&#39;s definition
 *LayersApi* | [**layerHandler**](docs/LayersApi.md#layerhandler) | **GET** /layers/{provider}/{layer} | Retrieves the layer of the given provider
 *LayersApi* | [**layerToDataset**](docs/LayersApi.md#layertodataset) | **POST** /layers/{provider}/{layer}/dataset | Persist a raster layer from a provider as a dataset.
-*LayersApi* | [**layerToWorkflowIdHandler**](docs/LayersApi.md#layertoworkflowidhandler) | **POST** /layers/{provider}/{layer}/workflowId | Registers a layer from a provider as a workflow and returns the workflow id
+*LayersApi* | [**layerToProcessingGraphIdHandler**](docs/LayersApi.md#layertoprocessinggraphidhandler) | **POST** /layers/{provider}/{layer}/processingGraphId | Registers a layer from a provider as a processing graph and returns the processing graph id
 *LayersApi* | [**listCollectionHandler**](docs/LayersApi.md#listcollectionhandler) | **GET** /layers/collections/{provider}/{collection} | List the contents of the collection of the given provider
 *LayersApi* | [**listProviders**](docs/LayersApi.md#listproviders) | **GET** /layerDb/providers | List all providers
 *LayersApi* | [**listRootCollectionsHandler**](docs/LayersApi.md#listrootcollectionshandler) | **GET** /layers/collections | List all layer collections
@@ -107,13 +107,20 @@ All URIs are relative to *https://geoengine.io/api*
 *OGCAPIApi* | [**tile**](docs/OGCAPIApi.md#tile) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol} | OGC API Tile
 *OGCAPIApi* | [**tileMatrixSet**](docs/OGCAPIApi.md#tilematrixset) | **GET** /ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId} | OGC API Tile Matrix Set Definition
 *OGCAPIApi* | [**tileMatrixSets**](docs/OGCAPIApi.md#tilematrixsets) | **GET** /ogc/{dataConnectorId}/{layerId}/tileMatrixSets | OGC API Tile Matrix Set List
-*OGCWCSApi* | [**wcsHandler**](docs/OGCWCSApi.md#wcshandler) | **GET** /wcs/{workflow} | OGC WCS endpoint
-*OGCWFSApi* | [**wfsHandler**](docs/OGCWFSApi.md#wfshandler) | **GET** /wfs/{workflow} | OGC WFS endpoint
-*OGCWMSApi* | [**wmsHandler**](docs/OGCWMSApi.md#wmshandler) | **GET** /wms/{workflow} | OGC WMS endpoint
+*OGCWCSApi* | [**wcsHandler**](docs/OGCWCSApi.md#wcshandler) | **GET** /wcs/{processingGraph} | OGC WCS endpoint
+*OGCWFSApi* | [**wfsHandler**](docs/OGCWFSApi.md#wfshandler) | **GET** /wfs/{processingGraph} | OGC WFS endpoint
+*OGCWMSApi* | [**wmsHandler**](docs/OGCWMSApi.md#wmshandler) | **GET** /wms/{processingGraph} | OGC WMS endpoint
 *PermissionsApi* | [**addPermissionHandler**](docs/PermissionsApi.md#addpermissionhandler) | **PUT** /permissions | Adds a new permission.
 *PermissionsApi* | [**getResourcePermissionsHandler**](docs/PermissionsApi.md#getresourcepermissionshandler) | **GET** /permissions/resources/{resource_type}/{resource_id} | Lists permission for a given resource.
 *PermissionsApi* | [**removePermissionHandler**](docs/PermissionsApi.md#removepermissionhandler) | **DELETE** /permissions | Removes an existing permission.
 *PlotsApi* | [**getPlotHandler**](docs/PlotsApi.md#getplothandler) | **GET** /plot/{id} | Generates a plot.
+*ProcessingGraphsApi* | [**datasetFromProcessingGraphHandler**](docs/ProcessingGraphsApi.md#datasetfromprocessinggraphhandler) | **POST** /datasetFromProcessingGraph/{id} | Create a task for creating a new dataset from the result of the processing graph given by its &#x60;id&#x60; and the dataset parameters in the request body. Returns the id of the created task
+*ProcessingGraphsApi* | [**getProcessingGraphAllMetadataZipHandler**](docs/ProcessingGraphsApi.md#getprocessinggraphallmetadataziphandler) | **GET** /processingGraphs/{id}/allMetadata/zip | Gets a ZIP archive of the processing graph, its provenance and the output metadata.
+*ProcessingGraphsApi* | [**getProcessingGraphMetadataHandler**](docs/ProcessingGraphsApi.md#getprocessinggraphmetadatahandler) | **GET** /processingGraphs/{id}/metadata | Gets the result metadata of a processing graph
+*ProcessingGraphsApi* | [**getProcessingGraphProvenanceHandler**](docs/ProcessingGraphsApi.md#getprocessinggraphprovenancehandler) | **GET** /processingGraphs/{id}/provenance | Gets the provenance of all datasets used in a processing graph.
+*ProcessingGraphsApi* | [**loadProcessingGraphHandler**](docs/ProcessingGraphsApi.md#loadprocessinggraphhandler) | **GET** /processingGraphs/{id} | Retrieves an existing processing graph.
+*ProcessingGraphsApi* | [**rasterStreamWebsocket**](docs/ProcessingGraphsApi.md#rasterstreamwebsocket) | **GET** /processingGraphs/{id}/rasterStream | Query a processing graph raster result as a stream of tiles via a websocket connection.
+*ProcessingGraphsApi* | [**registerProcessingGraphHandler**](docs/ProcessingGraphsApi.md#registerprocessinggraphhandler) | **POST** /processingGraphs | Registers a new processing graph.
 *ProjectsApi* | [**createProjectHandler**](docs/ProjectsApi.md#createprojecthandler) | **POST** /project | Create a new project for the user.
 *ProjectsApi* | [**deleteProjectHandler**](docs/ProjectsApi.md#deleteprojecthandler) | **DELETE** /project/{project} | Deletes a project.
 *ProjectsApi* | [**listProjectsHandler**](docs/ProjectsApi.md#listprojectshandler) | **GET** /projects | List all projects accessible to the user that match the selected criteria.
@@ -150,13 +157,6 @@ All URIs are relative to *https://geoengine.io/api*
 *UserApi* | [**removeRoleHandler**](docs/UserApi.md#removerolehandler) | **DELETE** /roles/{role} | Remove a role. Requires admin privilige.
 *UserApi* | [**revokeRoleHandler**](docs/UserApi.md#revokerolehandler) | **DELETE** /users/{user}/roles/{role} | Revoke a role from a user. Requires admin privilige.
 *UserApi* | [**updateUserQuotaHandler**](docs/UserApi.md#updateuserquotahandler) | **POST** /quotas/{user} | Update the available quota of a specific user.
-*WorkflowsApi* | [**datasetFromWorkflowHandler**](docs/WorkflowsApi.md#datasetfromworkflowhandler) | **POST** /datasetFromWorkflow/{id} | Create a task for creating a new dataset from the result of the workflow given by its &#x60;id&#x60; and the dataset parameters in the request body. Returns the id of the created task
-*WorkflowsApi* | [**getWorkflowAllMetadataZipHandler**](docs/WorkflowsApi.md#getworkflowallmetadataziphandler) | **GET** /workflow/{id}/allMetadata/zip | Gets a ZIP archive of the worklow, its provenance and the output metadata.
-*WorkflowsApi* | [**getWorkflowMetadataHandler**](docs/WorkflowsApi.md#getworkflowmetadatahandler) | **GET** /workflow/{id}/metadata | Gets the metadata of a workflow
-*WorkflowsApi* | [**getWorkflowProvenanceHandler**](docs/WorkflowsApi.md#getworkflowprovenancehandler) | **GET** /workflow/{id}/provenance | Gets the provenance of all datasets used in a workflow.
-*WorkflowsApi* | [**loadWorkflowHandler**](docs/WorkflowsApi.md#loadworkflowhandler) | **GET** /workflow/{id} | Retrieves an existing Workflow.
-*WorkflowsApi* | [**rasterStreamWebsocket**](docs/WorkflowsApi.md#rasterstreamwebsocket) | **GET** /workflow/{id}/rasterStream | Query a workflow raster result as a stream of tiles via a websocket connection.
-*WorkflowsApi* | [**registerWorkflowHandler**](docs/WorkflowsApi.md#registerworkflowhandler) | **POST** /workflow | Registers a new Workflow.
 
 
 ### Models
@@ -417,7 +417,7 @@ All URIs are relative to *https://geoengine.io/api*
 - [RasterBandDescriptor](docs/RasterBandDescriptor.md)
 - [RasterColorizer](docs/RasterColorizer.md)
 - [RasterDataType](docs/RasterDataType.md)
-- [RasterDatasetFromWorkflow](docs/RasterDatasetFromWorkflow.md)
+- [RasterDatasetFromProcessingGraph](docs/RasterDatasetFromProcessingGraph.md)
 - [RasterOperator](docs/RasterOperator.md)
 - [RasterPropertiesEntryType](docs/RasterPropertiesEntryType.md)
 - [RasterPropertiesKey](docs/RasterPropertiesKey.md)

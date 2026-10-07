@@ -35,12 +35,12 @@ class TestVecUpdate(unittest.TestCase):
         model = VecUpdate()
         if include_optional:
             return VecUpdate(
-                workflow = '',
+                processing_graph = '',
                 name = ''
             )
         else:
             return VecUpdate(
-                workflow = '',
+                processing_graph = '',
                 name = '',
         )
         """

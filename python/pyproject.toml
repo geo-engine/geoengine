@@ -33,6 +33,7 @@ dependencies = [
     "xarray >=2024.4,<2026.3",
     "urllib3 >= 2.1, < 2.7",
     "pydantic >= 2.10.6, < 2.13",
+    "typing-extensions >= 4.7.1",
     'skl2onnx >=1.20,<1.21',
 ]
 
@@ -88,6 +89,9 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "geoengine/__init__.py" = [
+    "F401", # module imported but unused
+]
+"geoengine/processing_graph_builder/__init__.py" = [
     "F401", # module imported but unused
 ]
 "geoengine/workflow_builder/__init__.py" = [

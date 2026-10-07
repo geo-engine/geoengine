@@ -3,6 +3,7 @@ use crate::{
         handlers::tasks::TaskResponse,
         model::{
             datatypes::LayerId,
+            processing_graphs::ProcessingGraphId,
             responses::IdResponse,
             services::{
                 AddLayer, Layer, LayerProviderListing, TypedDataProviderDefinition, UpdateLayer,
@@ -28,7 +29,7 @@ use crate::{
         extractors::{ValidatedJson, ValidatedQuery},
         workflows::validate_workflow,
     },
-    workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
+    workflows::registry::WorkflowRegistry,
 };
 use actix_web::{FromRequest, HttpResponse, Responder, web};
 use geoengine_datatypes::dataset::DataProviderId;
@@ -78,8 +79,8 @@ where
                     .service(
                         web::scope("/{layer}")
                             .route(
-                                "/workflowId",
-                                web::post().to(layer_to_workflow_id_handler::<C>),
+                                "/processingGraphId",
+                                web::post().to(layer_to_processing_graph_id_handler::<C>),
                             )
                             .route("/dataset", web::post().to(layer_to_dataset::<C>))
                             .route("", web::get().to(layer_handler::<C>)),
@@ -206,7 +207,7 @@ async fn get_layer_providers<C: ApplicationContext>(
                 ),
             },
             name: "Data Catalog".to_string(),
-            description: "Catalog of data and workflows".to_string(),
+            description: "Catalog of data and processing graphs".to_string(),
             properties: Default::default(),
         }));
 
@@ -550,7 +551,7 @@ async fn autocomplete_handler<C: ApplicationContext>(
                 },
                 "name": "Land Cover",
                 "description": "Land Cover derived from MODIS/Terra+Aqua Land Cover",
-                "workflow": {
+                "processingGraph": {
                   "type": "Raster",
                   "operator": {
                     "type": "GdalSource",
@@ -722,13 +723,13 @@ async fn layer_handler<C: ApplicationContext>(
     Ok(web::Json(collection))
 }
 
-/// Registers a layer from a provider as a workflow and returns the workflow id
+/// Registers a layer from a provider as a processing graph and returns the processing graph id
 #[utoipa::path(
     tag = "Layers",
     post,
-    path = "/layers/{provider}/{layer}/workflowId",
+    path = "/layers/{provider}/{layer}/processingGraphId",
     responses(
-        (status = 200, response = IdResponse::<WorkflowId>)
+        (status = 200, response = IdResponse::<ProcessingGraphId>)
     ),
     params(
         ("provider" = crate::api::model::datatypes::DataProviderId, description = "Data provider id"),
@@ -738,11 +739,11 @@ async fn layer_handler<C: ApplicationContext>(
         ("session_token" = [])
     )
 )]
-async fn layer_to_workflow_id_handler<C: ApplicationContext>(
+async fn layer_to_processing_graph_id_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     path: web::Path<(DataProviderId, LayerId)>,
     session: C::Session,
-) -> Result<web::Json<IdResponse<WorkflowId>>> {
+) -> Result<web::Json<IdResponse<ProcessingGraphId>>> {
     let (provider, item) = path.into_inner();
 
     let db = app_ctx.session_context(session.clone()).db();
@@ -757,9 +758,9 @@ async fn layer_to_workflow_id_handler<C: ApplicationContext>(
     };
 
     let db = app_ctx.session_context(session).db();
-    let workflow_id = db.register_workflow(layer.workflow).await?;
+    let processing_graph_id: ProcessingGraphId = db.register_workflow(layer.workflow).await?.into();
 
-    Ok(web::Json(IdResponse::from(workflow_id)))
+    Ok(web::Json(IdResponse::from(processing_graph_id)))
 }
 
 /// Persist a raster layer from a provider as a dataset.
@@ -1350,7 +1351,7 @@ mod tests {
         tasks::{TaskManager, TaskStatus, util::test::wait_for_task_to_finish},
         users::{UserAuth, UserSession},
         util::tests::{TestDataUploads, admin_login, read_body_string, send_test_request},
-        workflows::workflow::Workflow,
+        workflows::workflow::{Workflow, WorkflowId},
     };
     use actix_web::{
         dev::ServiceResponse,
@@ -1400,7 +1401,7 @@ mod tests {
             .set_json(serde_json::json!({
                 "name": "Foo",
                 "description": "Bar",
-                "workflow": {
+                "processingGraph": {
                   "type": "Vector",
                   "operator": {
                     "type": "MockPointSource",
@@ -1657,7 +1658,7 @@ mod tests {
         let invalid_workflow_layer = serde_json::json!({
             "name": "Foo",
             "description": "Bar",
-            "workflow":{
+            "processingGraph":{
                 "type": "Raster",
                 "operator": {
                     "type": "GdalSource",
@@ -2169,7 +2170,7 @@ mod tests {
                 ),
             },
             name: "Data Catalog".to_string(),
-            description: "Catalog of data and workflows".to_string(),
+            description: "Catalog of data and processing graphs".to_string(),
             properties: vec![],
         });
 

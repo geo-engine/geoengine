@@ -423,7 +423,7 @@ pub enum Error {
 
     #[snafu(context(false))]
     WorkflowApi {
-        source: crate::api::handlers::workflows::WorkflowApiError,
+        source: crate::api::handlers::processing_graphs::WorkflowApiError,
     },
 
     Api {

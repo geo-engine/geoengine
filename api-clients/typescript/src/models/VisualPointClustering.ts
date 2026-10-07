@@ -35,7 +35,7 @@ import {
  * For more information on the algorithm, cf. the paper [Beilschmidt, C. et al.: A Linear-Time Algorithm for the Aggregation and Visualization of Big Spatial Point Data. SIGSPATIAL/GIS 2017: 73:1-73:4](https://doi.org/10.1145/3139958.3140037).
  * 
  * An exemplary use case for this operator is the visualization of point data in an online map application.
- * There, you can use this operator as the final step of the workflow to cluster the points and display them as circles.
+ * There, you can use this operator as the final step of the processing graph to cluster the points and display them as circles.
  * These circles then pose a decluttered view of the data, e.g., via a WFS endpoint.
  * 
  * ## Errors

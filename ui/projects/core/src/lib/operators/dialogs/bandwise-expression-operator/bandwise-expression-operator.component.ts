@@ -212,7 +212,7 @@ export class BandwiseExpressionOperatorComponent implements AfterViewInit {
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) => {
                     if (inputWorkflow.type !== 'Raster') {
-                        throw new Error('Expected a raster workflow for bandwise expression operator.');
+                        throw new Error('Expected a raster processing graph for bandwise expression operator.');
                     }
 
                     const workflow: ProcessingGraph = {

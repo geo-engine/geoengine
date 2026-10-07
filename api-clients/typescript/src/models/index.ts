@@ -256,7 +256,7 @@ export * from './Radiance';
 export * from './RasterBandDescriptor';
 export * from './RasterColorizer';
 export * from './RasterDataType';
-export * from './RasterDatasetFromWorkflow';
+export * from './RasterDatasetFromProcessingGraph';
 export * from './RasterOperator';
 export * from './RasterPropertiesEntryType';
 export * from './RasterPropertiesKey';

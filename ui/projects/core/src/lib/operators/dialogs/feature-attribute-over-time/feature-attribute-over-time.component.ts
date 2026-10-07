@@ -129,7 +129,7 @@ export class FeatureAttributeOvertimeComponent implements AfterViewInit, OnDestr
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) => {
                     if (inputWorkflow.type !== 'Vector') {
-                        throw new Error('Expected a vector workflow for feature attribute over time.');
+                        throw new Error('Expected a vector processing graph for feature attribute over time.');
                     }
 
                     return this.projectService.registerWorkflow({

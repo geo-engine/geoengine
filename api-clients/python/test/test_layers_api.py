@@ -96,10 +96,10 @@ class TestLayersApi(unittest.TestCase):
         """
         pass
 
-    def test_layer_to_workflow_id_handler(self) -> None:
-        """Test case for layer_to_workflow_id_handler
+    def test_layer_to_processing_graph_id_handler(self) -> None:
+        """Test case for layer_to_processing_graph_id_handler
 
-        Registers a layer from a provider as a workflow and returns the workflow id
+        Registers a layer from a provider as a processing graph and returns the processing graph id
         """
         pass
 

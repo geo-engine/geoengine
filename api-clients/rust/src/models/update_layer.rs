@@ -16,8 +16,8 @@ pub struct UpdateLayer {
     pub name: String,
     #[serde(rename = "description")]
     pub description: String,
-    #[serde(rename = "workflow")]
-    pub workflow: Box<models::ProcessingGraph>,
+    #[serde(rename = "processingGraph")]
+    pub processing_graph: Box<models::ProcessingGraph>,
     #[serde(rename = "symbology", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub symbology: Option<Option<Box<models::Symbology>>>,
     /// properties, for instance, to be rendered in the UI
@@ -29,11 +29,11 @@ pub struct UpdateLayer {
 }
 
 impl UpdateLayer {
-    pub fn new(name: String, description: String, workflow: models::ProcessingGraph) -> UpdateLayer {
+    pub fn new(name: String, description: String, processing_graph: models::ProcessingGraph) -> UpdateLayer {
         UpdateLayer {
             name,
             description,
-            workflow: Box::new(workflow),
+            processing_graph: Box::new(processing_graph),
             symbology: None,
             properties: None,
             metadata: None,

@@ -227,6 +227,8 @@ impl TemporalBounded for STRectangle {
 pub struct ProjectLayer {
     // TODO: check that workflow/operator output type fits to the type of LayerInfo
     // TODO: LayerId?
+    #[serde(rename = "processingGraph")]
+    #[schema(value_type = crate::api::model::processing_graphs::ProcessingGraphId)]
     pub workflow: WorkflowId,
     pub name: String,
     pub visibility: LayerVisibility,
@@ -435,6 +437,8 @@ impl Default for LayerVisibility {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct Plot {
+    #[serde(rename = "processingGraph")]
+    #[schema(value_type = crate::api::model::processing_graphs::ProcessingGraphId)]
     pub workflow: WorkflowId,
     pub name: String,
 }
@@ -520,7 +524,7 @@ pub struct CreateProject {
     "name": "TestUpdate",
     "layers": [
         {
-            "workflow": "100ee39c-761c-4218-9d85-ec861a8f3097",
+            "processingGraph": "100ee39c-761c-4218-9d85-ec861a8f3097",
             "name": "L1",
             "visibility": {
                 "data": true,
@@ -739,7 +743,7 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<LayerUpdate>(
                 &json!({
-                    "workflow": workflow.clone(),
+                    "processingGraph": workflow.clone(),
                     "name": "L2",
                     "visibility": {
                         "data": true,

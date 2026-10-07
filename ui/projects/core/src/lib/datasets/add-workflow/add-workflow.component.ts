@@ -63,7 +63,7 @@ export class AddWorkflowComponent {
                     this.addRasterLayer(layerName, workflowId, resultDescriptorDict as RasterResultDescriptorDict);
                 } else {
                     // TODO: implement plots, etc.
-                    this.notificationService.error('Adding this workflow type is unimplemented, yet');
+                    this.notificationService.error('Adding this processing graph type is unimplemented, yet');
                 }
             },
             (requestError) => this.handleError(requestError.error, workflowId),
@@ -112,7 +112,7 @@ export class AddWorkflowComponent {
     }
 
     private handleError(error: GeoEngineErrorDict, workflowId: UUID): void {
-        let errorMessage = `No workflow found for id: ${workflowId}`;
+        let errorMessage = `No processing graph found for id: ${workflowId}`;
 
         if (error.error !== 'NoWorkflowForGivenId') {
             errorMessage = `Unknown error -> ${error.error}: ${error.message}`;

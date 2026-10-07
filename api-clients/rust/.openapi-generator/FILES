@@ -251,6 +251,7 @@ docs/PointInPolygonFilterSource.md
 docs/PointSymbology.md
 docs/PolygonSymbology.md
 docs/ProcessingGraph.md
+docs/ProcessingGraphsApi.md
 docs/Project.md
 docs/ProjectLayer.md
 docs/ProjectListing.md
@@ -269,7 +270,7 @@ docs/Radiance.md
 docs/RasterBandDescriptor.md
 docs/RasterColorizer.md
 docs/RasterDataType.md
-docs/RasterDatasetFromWorkflow.md
+docs/RasterDatasetFromProcessingGraph.md
 docs/RasterOperator.md
 docs/RasterPropertiesEntryType.md
 docs/RasterPropertiesKey.md
@@ -450,7 +451,6 @@ docs/WmsRequest.md
 docs/WmsResponseFormat.md
 docs/WmsService.md
 docs/WmsVersion.md
-docs/WorkflowsApi.md
 docs/WrappedPlotOutput.md
 git_push.sh
 src/apis/configuration.rs
@@ -465,13 +465,13 @@ src/apis/ogcwfs_api.rs
 src/apis/ogcwms_api.rs
 src/apis/permissions_api.rs
 src/apis/plots_api.rs
+src/apis/processing_graphs_api.rs
 src/apis/projects_api.rs
 src/apis/session_api.rs
 src/apis/spatial_references_api.rs
 src/apis/tasks_api.rs
 src/apis/uploads_api.rs
 src/apis/user_api.rs
-src/apis/workflows_api.rs
 src/lib.rs
 src/models/access_constraints.rs
 src/models/add_dataset.rs
@@ -730,7 +730,7 @@ src/models/radiance.rs
 src/models/raster_band_descriptor.rs
 src/models/raster_colorizer.rs
 src/models/raster_data_type.rs
-src/models/raster_dataset_from_workflow.rs
+src/models/raster_dataset_from_processing_graph.rs
 src/models/raster_operator.rs
 src/models/raster_properties_entry_type.rs
 src/models/raster_properties_key.rs

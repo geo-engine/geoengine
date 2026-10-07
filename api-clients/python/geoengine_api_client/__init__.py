@@ -28,13 +28,13 @@ __all__ = [
     "OGCWMSApi",
     "PermissionsApi",
     "PlotsApi",
+    "ProcessingGraphsApi",
     "ProjectsApi",
     "SessionApi",
     "SpatialReferencesApi",
     "TasksApi",
     "UploadsApi",
     "UserApi",
-    "WorkflowsApi",
     "ApiResponse",
     "ApiClient",
     "Configuration",
@@ -300,7 +300,7 @@ __all__ = [
     "RasterBandDescriptor",
     "RasterColorizer",
     "RasterDataType",
-    "RasterDatasetFromWorkflow",
+    "RasterDatasetFromProcessingGraph",
     "RasterOperator",
     "RasterPropertiesEntryType",
     "RasterPropertiesKey",
@@ -490,13 +490,13 @@ from geoengine_api_client.api.ogcwfs_api import OGCWFSApi as OGCWFSApi
 from geoengine_api_client.api.ogcwms_api import OGCWMSApi as OGCWMSApi
 from geoengine_api_client.api.permissions_api import PermissionsApi as PermissionsApi
 from geoengine_api_client.api.plots_api import PlotsApi as PlotsApi
+from geoengine_api_client.api.processing_graphs_api import ProcessingGraphsApi as ProcessingGraphsApi
 from geoengine_api_client.api.projects_api import ProjectsApi as ProjectsApi
 from geoengine_api_client.api.session_api import SessionApi as SessionApi
 from geoengine_api_client.api.spatial_references_api import SpatialReferencesApi as SpatialReferencesApi
 from geoengine_api_client.api.tasks_api import TasksApi as TasksApi
 from geoengine_api_client.api.uploads_api import UploadsApi as UploadsApi
 from geoengine_api_client.api.user_api import UserApi as UserApi
-from geoengine_api_client.api.workflows_api import WorkflowsApi as WorkflowsApi
 
 # import ApiClient
 from geoengine_api_client.api_response import ApiResponse as ApiResponse
@@ -766,7 +766,7 @@ from geoengine_api_client.models.radiance import Radiance as Radiance
 from geoengine_api_client.models.raster_band_descriptor import RasterBandDescriptor as RasterBandDescriptor
 from geoengine_api_client.models.raster_colorizer import RasterColorizer as RasterColorizer
 from geoengine_api_client.models.raster_data_type import RasterDataType as RasterDataType
-from geoengine_api_client.models.raster_dataset_from_workflow import RasterDatasetFromWorkflow as RasterDatasetFromWorkflow
+from geoengine_api_client.models.raster_dataset_from_processing_graph import RasterDatasetFromProcessingGraph as RasterDatasetFromProcessingGraph
 from geoengine_api_client.models.raster_operator import RasterOperator as RasterOperator
 from geoengine_api_client.models.raster_properties_entry_type import RasterPropertiesEntryType as RasterPropertiesEntryType
 from geoengine_api_client.models.raster_properties_key import RasterPropertiesKey as RasterPropertiesKey

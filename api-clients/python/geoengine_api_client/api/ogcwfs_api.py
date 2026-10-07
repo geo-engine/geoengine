@@ -44,7 +44,7 @@ class OGCWFSApi:
     @validate_call
     def wfs_handler(
         self,
-        workflow: Annotated[UUID, Field(description="Workflow id")],
+        processing_graph: Annotated[UUID, Field(description="Processing graph id")],
         request: Annotated[WfsRequest, Field(description="type of WFS request")],
         bbox: Optional[StrictStr] = None,
         count: Optional[Annotated[int, Field(strict=True, ge=0)]] = None,
@@ -74,8 +74,8 @@ class OGCWFSApi:
         """OGC WFS endpoint
 
 
-        :param workflow: Workflow id (required)
-        :type workflow: UUID
+        :param processing_graph: Processing graph id (required)
+        :type processing_graph: UUID
         :param request: type of WFS request (required)
         :type request: WfsRequest
         :param bbox:
@@ -125,7 +125,7 @@ class OGCWFSApi:
         """ # noqa: E501
 
         _param = self._wfs_handler_serialize(
-            workflow=workflow,
+            processing_graph=processing_graph,
             request=request,
             bbox=bbox,
             count=count,
@@ -162,7 +162,7 @@ class OGCWFSApi:
     @validate_call
     def wfs_handler_with_http_info(
         self,
-        workflow: Annotated[UUID, Field(description="Workflow id")],
+        processing_graph: Annotated[UUID, Field(description="Processing graph id")],
         request: Annotated[WfsRequest, Field(description="type of WFS request")],
         bbox: Optional[StrictStr] = None,
         count: Optional[Annotated[int, Field(strict=True, ge=0)]] = None,
@@ -192,8 +192,8 @@ class OGCWFSApi:
         """OGC WFS endpoint
 
 
-        :param workflow: Workflow id (required)
-        :type workflow: UUID
+        :param processing_graph: Processing graph id (required)
+        :type processing_graph: UUID
         :param request: type of WFS request (required)
         :type request: WfsRequest
         :param bbox:
@@ -243,7 +243,7 @@ class OGCWFSApi:
         """ # noqa: E501
 
         _param = self._wfs_handler_serialize(
-            workflow=workflow,
+            processing_graph=processing_graph,
             request=request,
             bbox=bbox,
             count=count,
@@ -280,7 +280,7 @@ class OGCWFSApi:
     @validate_call
     def wfs_handler_without_preload_content(
         self,
-        workflow: Annotated[UUID, Field(description="Workflow id")],
+        processing_graph: Annotated[UUID, Field(description="Processing graph id")],
         request: Annotated[WfsRequest, Field(description="type of WFS request")],
         bbox: Optional[StrictStr] = None,
         count: Optional[Annotated[int, Field(strict=True, ge=0)]] = None,
@@ -310,8 +310,8 @@ class OGCWFSApi:
         """OGC WFS endpoint
 
 
-        :param workflow: Workflow id (required)
-        :type workflow: UUID
+        :param processing_graph: Processing graph id (required)
+        :type processing_graph: UUID
         :param request: type of WFS request (required)
         :type request: WfsRequest
         :param bbox:
@@ -361,7 +361,7 @@ class OGCWFSApi:
         """ # noqa: E501
 
         _param = self._wfs_handler_serialize(
-            workflow=workflow,
+            processing_graph=processing_graph,
             request=request,
             bbox=bbox,
             count=count,
@@ -393,7 +393,7 @@ class OGCWFSApi:
 
     def _wfs_handler_serialize(
         self,
-        workflow,
+        processing_graph,
         request,
         bbox,
         count,
@@ -428,8 +428,8 @@ class OGCWFSApi:
         _body_params: Optional[bytes] = None
 
         # process the path parameters
-        if workflow is not None:
-            _path_params['workflow'] = workflow
+        if processing_graph is not None:
+            _path_params['processingGraph'] = processing_graph
         # process the query parameters
         if bbox is not None:
             
@@ -504,7 +504,7 @@ class OGCWFSApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/wfs/{workflow}',
+            resource_path='/wfs/{processingGraph}',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,

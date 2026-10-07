@@ -348,10 +348,13 @@ async fn run_provider_benchmark(
     let provider_definition = build_provider_definition(config, root_dir)?;
     let provider_id = register_stac_provider_fallback(&api, provider_definition).await?;
 
-    let workflow =
-        apis::layers_api::layer_to_workflow_id_handler(&api, &provider_id.to_string(), "dataset/2")
-            .await
-            .map_err(map_api_error("provider layer_to_workflow_id"))?;
+    let workflow = apis::layers_api::layer_to_processing_graph_id_handler(
+        &api,
+        &provider_id.to_string(),
+        "dataset/2",
+    )
+    .await
+    .map_err(map_api_error("provider layer_to_processing_graph_id"))?;
     let workflow_id = workflow.id;
 
     trigger_workflow_metadata_fallback(&api, workflow_id).await?;
@@ -496,7 +499,7 @@ async fn trigger_workflow_metadata_fallback(api: &Configuration, workflow_id: Uu
     let response = api
         .client
         .get(format!(
-            "{}/workflow/{}/metadata",
+            "{}/processingGraphs/{}/metadata",
             api.base_path, workflow_id
         ))
         .bearer_auth(
@@ -550,7 +553,7 @@ async fn register_harvest_workflow(api: &Configuration) -> Result<Uuid> {
     );
     let workflow = models::ProcessingGraph::TypedRasterOperator(Box::new(typed_raster));
 
-    let id = apis::workflows_api::register_workflow_handler(api, workflow)
+    let id = apis::processing_graphs_api::register_processing_graph_handler(api, workflow)
         .await
         .map_err(map_api_error("register harvest workflow"))?;
 
@@ -614,7 +617,7 @@ fn build_ndvi_workflow_operator(
 async fn register_workflow_raw(api: &Configuration, typed_operator: Value) -> Result<Uuid> {
     let response = api
         .client
-        .post(format!("{}/workflow", api.base_path))
+        .post(format!("{}/processingGraphs", api.base_path))
         .bearer_auth(
             api.bearer_access_token
                 .as_ref()

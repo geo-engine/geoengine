@@ -20,7 +20,7 @@ export function instanceOfAddLayer(value) {
         return false;
     if (!('description' in value) || value['description'] === undefined)
         return false;
-    if (!('workflow' in value) || value['workflow'] === undefined)
+    if (!('processingGraph' in value) || value['processingGraph'] === undefined)
         return false;
     return true;
 }
@@ -34,7 +34,7 @@ export function AddLayerFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'name': json['name'],
         'description': json['description'],
-        'workflow': ProcessingGraphFromJSON(json['workflow']),
+        'processingGraph': ProcessingGraphFromJSON(json['processingGraph']),
         'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
         'properties': json['properties'] == null ? undefined : json['properties'],
         'metadata': json['metadata'] == null ? undefined : json['metadata'],
@@ -50,7 +50,7 @@ export function AddLayerToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'name': value['name'],
         'description': value['description'],
-        'workflow': ProcessingGraphToJSON(value['workflow']),
+        'processingGraph': ProcessingGraphToJSON(value['processingGraph']),
         'symbology': SymbologyToJSON(value['symbology']),
         'properties': value['properties'],
         'metadata': value['metadata'],

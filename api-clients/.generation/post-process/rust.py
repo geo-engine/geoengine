@@ -180,14 +180,14 @@ def ogcwms_api_rs(file_contents: list[str]) -> Generator[str, None, None]:
         dedented_line = dedent(line)
 
         if dedented_line.startswith(
-            'let uri_str = format!("{}/wms/{workflow}?request=GetLegendGraphic"'
+            'let uri_str = format!("{}/wms/{processingGraph}?request=GetLegendGraphic"'
         ):
             line = indent(
                 """\
                 let uri_str = format!(
-                    "{}/wms/{workflow}?request={request}&version={version}&service={service}&layer={layer}",
+                    "{}/wms/{processingGraph}?request={request}&version={version}&service={service}&layer={layer}",
                     configuration.base_path,
-                    workflow = crate::apis::urlencode(p_path_workflow),
+                    processingGraph = crate::apis::urlencode(p_path_processing_graph),
                     version = p_path_version.to_string(),
                     service = p_path_service.to_string(),
                     request = p_path_request.to_string(),
@@ -197,14 +197,14 @@ def ogcwms_api_rs(file_contents: list[str]) -> Generator[str, None, None]:
                 INDENT,
             )
         elif dedented_line.startswith(
-            'let uri_str = format!("{}/wms/{workflow}?request=GetCapabilities"'
+            'let uri_str = format!("{}/wms/{processingGraph}?request=GetCapabilities"'
         ):
             line = indent(
                 """\
                 let uri_str = format!(
-                    "{}/wms/{workflow}?request={request}&service={service}&version={version}&format={format}",
+                    "{}/wms/{processingGraph}?request={request}&service={service}&version={version}&format={format}",
                     configuration.base_path,
-                    workflow = crate::apis::urlencode(p_path_workflow),
+                    processingGraph = crate::apis::urlencode(p_path_processing_graph),
                     version = p_path_version.unwrap().to_string(),
                     service = p_path_service.to_string(),
                     request = p_path_request.to_string(),

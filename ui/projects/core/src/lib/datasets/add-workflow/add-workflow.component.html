@@ -1,9 +1,9 @@
-<geoengine-sidenav-header>Add Workflow via Id</geoengine-sidenav-header>
+<geoengine-sidenav-header>Add Processing Graph via Id</geoengine-sidenav-header>
 
 <geoengine-dialog-help>
     <p>
-        Here you can add a new layer by pasting a workflow id. This comes in handy, when you defined a workflow elsewhere, for instance, in
-        a Python notebook and want to continue working in the UI.
+        Here you can add a new layer by pasting a processing graph id. This comes in handy, when you defined a processing graph elsewhere,
+        for instance, in a Python notebook and want to continue working in the UI.
     </p>
 </geoengine-dialog-help>
 
@@ -17,7 +17,7 @@
     </mat-form-field>
 
     <mat-form-field appearance="fill">
-        <mat-label>Workflow Id</mat-label>
+        <mat-label>Processing Graph Id</mat-label>
         <input matInput type="text" formControlName="workflowId" />
         @if (form.controls.workflowId.errors) {
             <mat-hint class="error">Must be valid UUID</mat-hint>

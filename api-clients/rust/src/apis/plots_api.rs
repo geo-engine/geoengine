@@ -22,7 +22,7 @@ pub enum GetPlotHandlerError {
 }
 
 
-/// # Example  1. Upload the file `plain_data.csv` with the following content:  ```csv a 1 2 ``` 2. Create a dataset from it using the \"Plain Data\" example at `/dataset`. 3. Create a statistics workflow using the \"Statistics Plot\" example at `/workflow`. 4. Generate the plot with this handler.
+/// # Example  1. Upload the file `plain_data.csv` with the following content:  ```csv a 1 2 ``` 2. Create a dataset from it using the \"Plain Data\" example at `/dataset`. 3. Create a statistics processing graph using the \"Statistics Plot\" example at `/processingGraphs`. 4. Generate the plot with this handler.
 pub async fn get_plot_handler(configuration: &configuration::Configuration, bbox: &str, time: &str, spatial_resolution: &str, id: &str, crs: Option<&str>) -> Result<models::WrappedPlotOutput, Error<GetPlotHandlerError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_query_bbox = bbox;

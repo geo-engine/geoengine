@@ -182,7 +182,7 @@ export class TemporalRasterAggregationComponent implements AfterViewInit {
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) => {
                     if (inputWorkflow.type !== 'Raster') {
-                        throw new Error('Expected a raster workflow for temporal raster aggregation.');
+                        throw new Error('Expected a raster processing graph for temporal raster aggregation.');
                     }
 
                     return from(

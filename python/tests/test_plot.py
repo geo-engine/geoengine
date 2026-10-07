@@ -33,12 +33,14 @@ class PlotTests(unittest.TestCase):
                     "type": "Histogram",
                     "params": {"columnName": "ndvi", "bounds": "data", "buckets": {"type": "number", "value": 20}},
                     "sources": {
-                        "source": ge.workflow_builder.operators.GdalSource("ndvi").to_workflow_dict()["operator"]
+                        "source": ge.processing_graph_builder.operators.GdalSource("ndvi").to_processing_graph_dict()[
+                            "operator"
+                        ]
                     },
                 },
             }
 
-            workflow = ge.register_workflow(workflow_definition)
+            workflow = ge.register_processing_graph(workflow_definition)
 
             vega_chart = workflow.plot_chart(
                 ge.QueryRectangle(
@@ -60,7 +62,7 @@ class PlotTests(unittest.TestCase):
             )
 
             m.get(
-                "http://mock-instance/workflow/5b9508a8-bd34-5a1c-acd6-75bb832d2d38/metadata",
+                "http://mock-instance/processingGraphs/5b9508a8-bd34-5a1c-acd6-75bb832d2d38/metadata",
                 json={
                     "type": "plot",
                     "spatialReference": "EPSG:4326",
@@ -69,7 +71,7 @@ class PlotTests(unittest.TestCase):
             )
 
             m.get(
-                f"http://mock-instance/workflow/{NOT_FOUND_UUID}/metadata",
+                f"http://mock-instance/processingGraphs/{NOT_FOUND_UUID}/metadata",
                 status_code=404,
                 json={
                     "error": "NotFound",
@@ -80,7 +82,7 @@ class PlotTests(unittest.TestCase):
 
             ge.initialize("http://mock-instance")
 
-            workflow = ge.workflow_by_id("5b9508a8-bd34-5a1c-acd6-75bb832d2d38")
+            workflow = ge.processing_graph_by_id("5b9508a8-bd34-5a1c-acd6-75bb832d2d38")
 
             result_descriptor = workflow.get_result_descriptor()
 
@@ -89,7 +91,7 @@ class PlotTests(unittest.TestCase):
             self.assertEqual(repr(result_descriptor), textwrap.dedent(expected_repr))
 
             with self.assertRaises(ge.NotFoundException) as exception:
-                workflow = ge.workflow_by_id(NOT_FOUND_UUID)
+                workflow = ge.processing_graph_by_id(NOT_FOUND_UUID)
 
                 result_descriptor = workflow.get_result_descriptor()
 
@@ -105,7 +107,7 @@ class PlotTests(unittest.TestCase):
             )
 
             m.get(
-                "http://mock-instance/workflow/5b9508a8-bd34-5a1c-acd6-75bb832d2d38/metadata",
+                "http://mock-instance/processingGraphs/5b9508a8-bd34-5a1c-acd6-75bb832d2d38/metadata",
                 json={
                     "type": "plot",
                     "spatialReference": "EPSG:4326",
@@ -114,7 +116,7 @@ class PlotTests(unittest.TestCase):
             )
 
             m.get(
-                "http://mock-instance/workflow/foo/metadata",
+                "http://mock-instance/processingGraphs/foo/metadata",
                 json={
                     "error": "NotFound",
                     "message": "Not Found",
@@ -124,7 +126,7 @@ class PlotTests(unittest.TestCase):
 
             ge.initialize("http://mock-instance")
 
-            workflow = ge.workflow_by_id("5b9508a8-bd34-5a1c-acd6-75bb832d2d38")
+            workflow = ge.processing_graph_by_id("5b9508a8-bd34-5a1c-acd6-75bb832d2d38")
 
             time = datetime.strptime("2014-04-01T12:00:00.000Z", ge.DEFAULT_ISO_TIME_FORMAT)
 
@@ -144,13 +146,13 @@ class PlotTests(unittest.TestCase):
             )
 
             m.post(
-                "http://mock-instance/workflow",
+                "http://mock-instance/processingGraphs",
                 json={"id": "5b9508a8-bd34-5a1c-acd6-75bb832d2d38"},
                 request_headers={"Authorization": "Bearer c4983c3e-9b53-47ae-bda9-382223bd5081"},
             )
 
             m.get(
-                "http://mock-instance/workflow/5b9508a8-bd34-5a1c-acd6-75bb832d2d38/metadata",
+                "http://mock-instance/processingGraphs/5b9508a8-bd34-5a1c-acd6-75bb832d2d38/metadata",
                 json={
                     "type": "plot",
                     "spatialReference": "EPSG:4326",
@@ -188,7 +190,7 @@ class PlotTests(unittest.TestCase):
 
             time = datetime.strptime("2004-04-01T12:00:00.000Z", ge.DEFAULT_ISO_TIME_FORMAT)
 
-            workflow = ge.register_workflow(workflow_definition)
+            workflow = ge.register_processing_graph(workflow_definition)
 
             with self.assertRaises(ge.BadRequestException) as ctx:
                 workflow.plot_chart(

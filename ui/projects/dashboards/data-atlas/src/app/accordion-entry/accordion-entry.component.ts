@@ -93,7 +93,7 @@ export class AccordionEntryComponent implements OnInit {
 
         from(this.layersService.getLayer(id.providerId, id.layerId))
             .pipe(
-                mergeMap((layer) => combineLatest([of(layer), this.projectService.registerWorkflow(layer.workflow)])),
+                mergeMap((layer) => combineLatest([of(layer), this.projectService.registerWorkflow(layer.processingGraph)])),
                 mergeMap(([layer, workflowId]) => {
                     if (!layer.symbology) {
                         throw new Error('Layer has no symbology');

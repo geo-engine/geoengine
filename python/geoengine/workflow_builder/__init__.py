@@ -1,3 +1,8 @@
-"""Entry point for workflow building blocks for the Geo Engine API"""
+"""Deprecated: use `geoengine.processing_graph_builder` instead."""
 
-from . import blueprints, operators
+from geoengine._deprecation import warn_deprecated_module
+
+warn_deprecated_module("geoengine.workflow_builder", "geoengine.processing_graph_builder")
+
+# pylint: disable=wrong-import-position
+from . import blueprints, operators  # noqa: E402
