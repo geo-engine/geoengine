@@ -34,13 +34,13 @@ build project="gis": common::_clear
 run project="gis" type="local": common::_clear
     npm run serve:{{ project }}:{{ type }}
 
-[arg("app", long="app", help="Whether to only run tests for a specific app, e.g. `--app=gis`.")]
-[arg("include", long="include", help="Whether to include only specific test files, e.g. `--include=`.")]
+[arg("project", long="project", help="Whether to only run tests for a specific project, e.g. `--project=gis`.")]
+[arg("include", long="include", help="Whether to include only specific test files, e.g. `--include=projects/core/src/lib/util/conversions.spec.ts`.")]
 [arg("ci", long="ci", value="true", help="Whether to run tests in CI mode.")]
-test ci="false" app="" include="" filter="": common::_clear
+test ci="false" project="" include="" filter="": common::_clear
     npm run test{{ if ci == "true" { ":browser:ci" } else { "" } }} \
         -- \
-        {{ app }} \
+        {{ project }} \
         {{ if include == "" { "" } else { "--include=" + include } }} \
         {{ if filter == "" { "" } else { '--filter="' + filter + '"' } }}
 
