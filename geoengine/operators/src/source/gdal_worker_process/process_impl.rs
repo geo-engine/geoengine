@@ -959,6 +959,47 @@ mod tests {
         }
     }
 
+    /// The dataset cache is keyed on the *file*, not on the shape of the request.
+    ///
+    /// This is what makes two things safe: splitting a read batch into single-slice requests
+    /// must not cost extra GDAL opens, and two arrays of one file must share the open handle.
+    /// Both fall out of `is_hit` looking only at the path and the open/config options, and
+    /// neither survives someone adding a request field to that comparison.
+    #[test]
+    #[serial_test::serial]
+    fn dataset_cache_is_keyed_on_the_file_not_the_request() {
+        let params = get_params();
+        let mut holder = GdalDatasetHolder::new();
+        assert!(holder.get_or_open(&params).is_ok(), "the fixture must open");
+        assert!(holder.contains(&params));
+
+        // another band of the same file is the same open dataset
+        let mut other = params.clone();
+        other.rasterband_channel = 7;
+        assert!(
+            holder.contains(&other),
+            "band must not be part of the cache key"
+        );
+
+        // nothing request-shaped short of the open/config options may evict the handle: the
+        // z slice arrives in `GdalReadKind`, which is not in these parameters at all
+        let mut other = params.clone();
+        other.no_data_value = Some(42.0);
+        other.width = 1;
+        assert!(
+            holder.contains(&other),
+            "the read window must not be part of the cache key"
+        );
+
+        // ...but a different file is
+        let mut other = params.clone();
+        other.file_path = test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-02.TIFF").into();
+        assert!(
+            !holder.contains(&other),
+            "a different file must not reuse the handle"
+        );
+    }
+
     #[test]
     #[serial_test::serial]
     fn ipc_process_error_ipc_channel_roundtrip() {

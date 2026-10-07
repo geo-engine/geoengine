@@ -68,6 +68,7 @@ FIXTURES = [
     "projected_no_crs.nc",
     "time_depth_4d.nc",
     "variables.nc",
+    "variables_multitile.nc",
     "grouped_variables.nc",
 ]
 
@@ -402,6 +403,27 @@ def variables(path: Path):
     _fill_variables(new_netcdf(path).GetRootGroup(), 8, 8, 8)
 
 
+def variables_multitile(path: Path):
+    """Two CF data variables on the wrapped 0..360 multi-tile grid -> Geo Engine bands.
+
+    `variables.nc` is 8x8 and therefore a single tiling cell, so it cannot tell whether a
+    band is emitted before or after the next spatial tile. At 0.25 deg the 1440 columns span
+    three tile columns, which is the shape that makes the order observable.
+    """
+    width, height, ntime = 1440, 4, 2
+    ds = new_netcdf(path)
+    rg = ds.GetRootGroup()
+    xdim, ydim = add_xy_dims(rg, width, height, 0.0, 1.0, lon_step=0.25, lat_step=0.25)
+    tdim = add_time_dim(rg, ntime, "days since 2000-01-01 00:00:00")
+    ts = np.arange(ntime, dtype=np.int64)
+    rows = np.arange(height) * 10
+    cols = np.arange(width)
+    vals = (ts[:, None, None] * 100_000 + rows[None, :, None] + cols[None, None, :]).astype("float32")
+    write_array(rg, "temperature", [tdim, ydim, xdim], vals, -9999, "air temperature", "K")
+    write_array(rg, "precipitation", [tdim, ydim, xdim], vals * 2, -9999, "precipitation", "mm")
+    ds = None
+
+
 def grouped_variables(path: Path):
     """Same as `variables` but the data arrays live in the `analysis` subgroup."""
     ds = new_netcdf(path)
@@ -445,6 +467,7 @@ def main() -> None:
     projected_no_crs(OUT_DIR / "projected_no_crs.nc")
     time_depth_4d(OUT_DIR / "time_depth_4d.nc")
     variables(OUT_DIR / "variables.nc")
+    variables_multitile(OUT_DIR / "variables_multitile.nc")
     grouped_variables(OUT_DIR / "grouped_variables.nc")
 
     EXAMPLE_COPY.parent.mkdir(parents=True, exist_ok=True)

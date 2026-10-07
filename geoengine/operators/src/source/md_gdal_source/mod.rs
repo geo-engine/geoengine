@@ -175,13 +175,19 @@ where
             spatial_tiles.len(),
         );
 
-        // Build one request list per band, then interleave by z so the stream is
-        // time-major: for each z step emit every band before moving to the next z step.
-        // This matches the (time, space, band) order downstream consumers expect.
+        // A read batch may only span a *contiguous* run in the output order, which Geo Engine
+        // fixes as `band` fastest, `space` (row by row) next and `time` slowest.
+        //
+        // `ZRole::Band` puts z on the band axis, so a batch is one contiguous run of bands at
+        // one tile and pays off directly. `ZRole::Variable` puts z on the time axis - the
+        // slowest one - so a batch would straddle whole time steps and the tiles could only be
+        // put back in order by buffering every spatial tile of those steps. A spatial row can
+        // be arbitrarily long, so that is not an option: a time axis gets one slice per read.
+        let batch_size = effective_z_batch_size(z_role, loading_info.max_z_batch_size());
+
         let mut per_band: Vec<Vec<(usize, MdRequest)>> = Vec::with_capacity(band_groups.len());
         for sel_band in band_groups {
-            let (batches, missing) =
-                loading_info.z_batches(&global_z, sel_band, loading_info.max_z_batch_size());
+            let (batches, missing) = loading_info.z_batches(&global_z, sel_band, batch_size);
             let mut reqs = Vec::with_capacity(batches.len() + missing.len());
             for batch in batches {
                 reqs.push((
@@ -205,7 +211,8 @@ where
         }
 
         // merge-sort the per-band lists by first_z (stable, preserving band order within a z)
-        let mut requests: Vec<MdRequest> = Vec::new();
+        // merge-sort the per-band lists by first_z (stable, preserving band order within a z)
+        let mut requests: Vec<(usize, MdRequest)> = Vec::new();
         let mut cursors = vec![0usize; per_band.len()];
         loop {
             let mut best_band: Option<usize> = None;
@@ -220,14 +227,49 @@ where
             }
             match best_band {
                 Some(bi) => {
-                    requests.push(per_band[bi][cursors[bi]].1.clone());
+                    let (first_z, request) = per_band[bi][cursors[bi]].clone();
+                    requests.push((first_z, request));
                     cursors[bi] += 1;
                 }
                 None => break,
             }
         }
 
-        let stream = stream::iter(itertools::iproduct!(requests, spatial_tiles.into_iter()))
+        // Canonical output order: `band` fastest, `space` (row by row) next, `time` slowest.
+        // `iproduct!(requests, spatial_tiles)` emitted (time, band, space) instead - band
+        // before space - which is wrong for every multi-band query, and with a batch larger
+        // than one it emitted (z-block, space) which is wrong even single-band.
+        let mut work: Vec<(MdRequest, TileInformation)> = Vec::new();
+        match z_role {
+            // one time step: the order is (space, band), and a request is already a run of
+            // consecutive bands of a single tile
+            ZRole::Band => {
+                for tile_info in &spatial_tiles {
+                    for (_, request) in &requests {
+                        work.push((request.clone(), *tile_info));
+                    }
+                }
+            }
+            // one z step per request, requests already ordered by (z, band)
+            ZRole::Variable => {
+                let mut start = 0;
+                while start < requests.len() {
+                    let z = requests[start].0;
+                    let mut end = start;
+                    while end < requests.len() && requests[end].0 == z {
+                        end += 1;
+                    }
+                    for tile_info in &spatial_tiles {
+                        for (_, request) in &requests[start..end] {
+                            work.push((request.clone(), *tile_info));
+                        }
+                    }
+                    start = end;
+                }
+            }
+        }
+
+        let stream = stream::iter(work)
             .map(move |(request, tile_info)| {
                 let gdal_worker = gdal_worker.clone();
                 let loading_info = loading_info.clone();
@@ -252,6 +294,11 @@ where
                     }
                 }
             })
+            // Concurrency, not buffering: at most this many `(request, tile)` results are in
+            // flight, and a request is one z slice for a time axis. Peak tile memory is
+            // therefore `TILE_READ_CONCURRENCY` slices - deliberately *not* `batch x tiles`,
+            // which is what a reorder buffer would have needed and what makes long spatial
+            // rows untenable.
             .buffered(TILE_READ_CONCURRENCY)
             .flat_map(|res: Result<Vec<RasterTile2D<P>>>| match res {
                 Ok(tiles) => stream::iter(tiles.into_iter().map(Ok)).boxed(),
@@ -310,6 +357,18 @@ fn empty_tile<P: Pixel>(
         RasterProperties::default(),
         loading_info.cache_hint(default_cache_ttl),
     )
+}
+
+/// How many consecutive z slices one read may ask for.
+///
+/// Only a contiguous run in the output order (`band` fastest, `space` next, `time` slowest)
+/// may be read as one batch. `ZRole::Band` has z on the band axis, so it is; `ZRole::Variable`
+/// has z on the time axis, so it is not - see the batching comment in `query_processor`.
+const fn effective_z_batch_size(z_role: ZRole, max_z_batch_size: usize) -> usize {
+    match z_role {
+        ZRole::Band => max_z_batch_size,
+        ZRole::Variable => 1,
+    }
 }
 
 /// The output-band groups to query: one per selected band for `ZRole::Variable` (each
@@ -716,6 +775,52 @@ mod tests {
                 z_role: ZRole::Variable,
                 time: Some((EPOCH_2000, DAY)),
                 bands: vec!["temperature"],
+                max_z_batch_size: None,
+            }
+        }
+
+        /// Several arrays as bands on the wrapped 0..360 grid, one band per array.
+        fn wrapped_arrays(
+            path: &'static str,
+            width: usize,
+            height: usize,
+            grid: (f64, f64, f64, f64),
+            slices: usize,
+            arrays: &[(&'static str, u32)],
+        ) -> Self {
+            let mut dataset = Self::wrapped_arrays_flat(path, width, height, grid, slices, arrays);
+            dataset.wrap = true;
+            dataset
+        }
+
+        fn wrapped_arrays_flat(
+            path: &'static str,
+            width: usize,
+            height: usize,
+            grid: (f64, f64, f64, f64),
+            slices: usize,
+            arrays: &[(&'static str, u32)],
+        ) -> Self {
+            Self {
+                files: arrays
+                    .iter()
+                    .map(|(array_name, band)| MdFile {
+                        path,
+                        array_name,
+                        group: None,
+                        band: *band,
+                        z_start: 0,
+                        slices,
+                        leading_prefix: Vec::new(),
+                    })
+                    .collect(),
+                grid,
+                width,
+                height,
+                wrap: false,
+                z_role: ZRole::Variable,
+                time: Some((EPOCH_2000, DAY)),
+                bands: arrays.iter().map(|(n, _)| *n).collect(),
                 max_z_batch_size: None,
             }
         }
@@ -1622,6 +1727,175 @@ mod tests {
         assert_eq!(grid_value(&tiles[0], 7, 7), 3.0 * (100 + 77) as f32);
         assert_eq!(grid_value(&tiles[1], 3, 5), 2.0 * (100 + 35) as f32);
         assert_eq!(grid_value(&tiles[1], 7, 7), 2.0 * (100 + 77) as f32);
+    }
+
+    // --- the output order: band fastest, space next, time slowest ---
+
+    /// `(time, space)` ordering. Three tile columns and two time steps: every tile of the
+    /// first step must precede every tile of the second, whatever the batch size.
+    #[tokio::test]
+    async fn test_emits_time_before_space() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+        let mut spec = MdDataset::wrapped(
+            "md/wrap_0_360_multitile.nc",
+            1440,
+            4,
+            (0.0, 1.0, 0.25, -0.25),
+            2,
+        );
+        // a batch larger than the query is exactly what used to emit all of a tile's steps
+        // before the next tile
+        spec.max_z_batch_size = Some(4);
+        let name = add_md_dataset(&mut exe_ctx, "md_order_time_space", spec);
+
+        let spatial = GridBoundingBox2D::new_unchecked([-4, -720], [-1, 719]);
+        let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + 2 * DAY);
+        let tiles = query_md_source(
+            &exe_ctx,
+            &query_ctx,
+            name,
+            spatial,
+            time,
+            BandSelection::first(),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+        assert!(
+            tiles.len() > 2,
+            "the fixture must span more than one tile, got {}",
+            tiles.len()
+        );
+        let keys: Vec<_> = tiles
+            .iter()
+            .map(|t| {
+                let idx = t.tile_information().global_pixel_bounds().min_index();
+                (t.time.start().inner(), idx.y(), idx.x())
+            })
+            .collect();
+        let mut sorted = keys.clone();
+        sorted.sort_unstable();
+        assert_eq!(
+            keys, sorted,
+            "tiles must come out as (time, space): time slowest, spatial tile row by row"
+        );
+        assert_ne!(keys[0].0, keys[keys.len() - 1].0, "need two time steps");
+    }
+
+    /// `(time, band)` ordering with the band axis fastest. Two variables, two time steps:
+    /// the two bands of a step must be adjacent, not the two steps of a band.
+    #[tokio::test]
+    async fn test_emits_band_fastest() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+        let name = add_md_dataset(
+            &mut exe_ctx,
+            "md_order_band",
+            MdDataset::one_array_per_band(
+                "md/variables.nc",
+                None,
+                &[("temperature", 0), ("precipitation", 1)],
+            ),
+        );
+
+        let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + 2 * DAY);
+        let tiles = query_md_source(
+            &exe_ctx,
+            &query_ctx,
+            name,
+            ts_grid_bounds(),
+            time,
+            BandSelection::first_n(2),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+        let keys: Vec<_> = tiles
+            .iter()
+            .map(|t| (t.time.start().inner(), t.band))
+            .collect();
+        assert_eq!(
+            keys,
+            vec![
+                (EPOCH_2000, 0),
+                (EPOCH_2000, 1),
+                (EPOCH_2000 + DAY, 0),
+                (EPOCH_2000 + DAY, 1),
+            ],
+            "band is the fastest-changing axis, so both bands of a step are adjacent"
+        );
+    }
+
+    /// `band` before `space` is the bug the fix exists for: with several bands *and* several
+    /// tiles the two orderings differ, and only this shape can tell them apart.
+    #[tokio::test]
+    async fn test_emits_band_inside_space() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+        let mut spec = MdDataset::wrapped_arrays(
+            "md/variables_multitile.nc",
+            1440,
+            4,
+            (0.0, 1.0, 0.25, -0.25),
+            2,
+            &[("temperature", 0), ("precipitation", 1)],
+        );
+        spec.max_z_batch_size = Some(4);
+        let name = add_md_dataset(&mut exe_ctx, "md_order_band_space", spec);
+
+        // three tile columns, two time steps, two bands
+        let spatial = GridBoundingBox2D::new_unchecked([-4, -720], [-1, 719]);
+        let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + 2 * DAY);
+        let tiles = query_md_source(
+            &exe_ctx,
+            &query_ctx,
+            name,
+            spatial,
+            time,
+            BandSelection::first_n(2),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+        assert!(tiles.len() >= 6, "need several tiles, got {}", tiles.len());
+        // group the emitted tiles into runs of identical (time, space); a correct stream has
+        // one run per (time, space) holding every band, in band order
+        let mut runs: Vec<((i64, isize, isize), Vec<u32>)> = Vec::new();
+        for t in &tiles {
+            let idx = t.tile_information().global_pixel_bounds().min_index();
+            let key = (t.time.start().inner(), idx.y(), idx.x());
+            match runs.last_mut() {
+                Some((k, bands)) if *k == key => bands.push(t.band),
+                _ => runs.push((key, vec![t.band])),
+            }
+        }
+        for (key, bands) in &runs {
+            let mut ascending = bands.clone();
+            ascending.sort_unstable();
+            assert_eq!(
+                bands, &ascending,
+                "the bands of one (time, tile) must be emitted together and in order,                  got {bands:?} at {key:?}"
+            );
+        }
+        let keys: Vec<_> = runs.iter().map(|(k, _)| *k).collect();
+        let mut sorted = keys.clone();
+        sorted.sort_unstable();
+        assert_eq!(keys, sorted, "(time, space) must be non-decreasing");
+    }
+
+    /// A time axis gets one slice per read; a band axis keeps the batch.
+    #[test]
+    fn test_z_batch_spans_only_the_fastest_axis() {
+        assert_eq!(effective_z_batch_size(ZRole::Variable, 4), 1);
+        assert_eq!(effective_z_batch_size(ZRole::Band, 4), 4);
+        assert_eq!(effective_z_batch_size(ZRole::Band, 1), 1);
     }
 
     #[test]
