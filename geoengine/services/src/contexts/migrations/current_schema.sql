@@ -1485,7 +1485,8 @@ CREATE TYPE "MdTileEntry" AS (
     array_group text,
     time_descriptor "TimeDescriptor",
     time_steps "TimeInterval" [], -- noqa: rules.shorthands
-    gdal_params "GdalDatasetParameters"
+    gdal_params "GdalDatasetParameters",
+    leading_prefix bigint[]
 );
 
 -- Returns true if the partitions have any space in common

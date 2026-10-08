@@ -47,7 +47,14 @@ CREATE TABLE dataset_md_tiles (
     time_descriptor "TimeDescriptor" NOT NULL,
     -- one interval per z slice, always populated
     time_steps "TimeInterval" [] NOT NULL,
-    gdal_params "GdalDatasetParameters" NOT NULL
+    gdal_params "GdalDatasetParameters" NOT NULL,
+    -- fixed index into each dimension between z and (y, x), so one row is one slice of a
+    -- 4D array - `[depth]` for `(time, depth, y, x)`. Empty for 3D.
+    --
+    -- Per row rather than per dataset, so the bands of one dataset can each select a
+    -- different slice: a `(time, depth, y, x)` file with one row per depth becomes a
+    -- single dataset whose band `b` is depth `b`, sharing one time axis.
+    leading_prefix bigint[] NOT NULL DEFAULT '{}'
 );
 
 CREATE UNIQUE INDEX dataset_md_tiles_unique_idx ON dataset_md_tiles (
@@ -80,5 +87,6 @@ CREATE TYPE "MdTileEntry" AS (
     array_group text,
     time_descriptor "TimeDescriptor",
     time_steps "TimeInterval" [],
-    gdal_params "GdalDatasetParameters"
+    gdal_params "GdalDatasetParameters",
+    leading_prefix bigint[]
 );

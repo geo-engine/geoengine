@@ -1499,6 +1499,7 @@ fn md_time_axis(times: &[MdFileTimes], query_time: TimeInterval) -> Result<Vec<T
     times
         .iter()
         .flat_map(MdFileTimes::intervals)
+        .copied()
         .map(Result::Ok)
         .collect::<Vec<Result<TimeInterval>>>()
         .into_iter()
@@ -1551,6 +1552,7 @@ struct MdTileEntry {
     time_descriptor: TimeDescriptor,
     time_steps: Vec<TimeInterval>,
     gdal_params: GdalDatasetParameters,
+    leading_prefix: Vec<i64>,
 }
 
 #[async_trait]
@@ -1909,6 +1911,7 @@ async fn batch_insert_md_tiles(
                 .map(|t| geoengine_datatypes::primitives::TimeInterval::from(*t))
                 .collect(),
             gdal_params: tile.params.clone().into(),
+            leading_prefix: tile.leading_prefix.clone(),
         })
         .collect::<Vec<_>>();
 
@@ -1916,7 +1919,8 @@ async fn batch_insert_md_tiles(
         r#"
             INSERT INTO dataset_md_tiles (
                 id, dataset_id, time, bbox, band, z_index,
-                array_name, array_group, time_descriptor, time_steps, gdal_params
+                array_name, array_group, time_descriptor, time_steps, gdal_params,
+                leading_prefix
             )
                 SELECT * FROM unnest($1::"MdTileEntry"[]);
             "#,
@@ -1927,14 +1931,17 @@ async fn batch_insert_md_tiles(
     Ok(())
 }
 
-/// Grows the dataset's spatial and temporal extents to cover the newly added MD files.
+/// Grows the dataset's spatial and temporal extents to cover the newly added files.
 ///
-/// The spatial bounds come from the row's (wrap-aware) `spatial_partition`, not from the
-/// file's geo transform, so 0..360 degree datasets stay correct.
-async fn update_md_dataset_extents(
+/// The spatial bounds come from each tile's (wrap-aware) footprint, not from the file's geo
+/// transform, so 0..360 degree datasets stay correct. `meta_path` is the meta data composite
+/// attribute whose result descriptor is mirrored, e.g. `gdal_multi_band` or
+/// `gdal_md_meta_data`.
+async fn update_dataset_extents_of(
     tx: &Transaction<'_>,
     dataset: DatasetId,
-    tiles: &[AddDatasetMdTile],
+    extents: impl Iterator<Item = (SpatialPartition2D, TimeInterval)>,
+    meta_path: &str,
 ) -> Result<()> {
     let row = tx
         .query_one(
@@ -1954,29 +1961,42 @@ async fn update_md_dataset_extents(
     let (mut dataset_grid, mut time_bounds): (SpatialGridDefinition, Option<TimeInterval>) =
         (row.get(0), row.get(1));
 
-    for tile in tiles {
-        dataset_grid = extend_spatial_bounds(dataset_grid, tile.spatial_partition);
-        time_bounds = Some(extend_time_bounds(
-            time_bounds,
-            tile.file_time_bounds().into(),
-        ));
+    for (spatial_partition, file_time) in extents {
+        dataset_grid = extend_spatial_bounds(dataset_grid, spatial_partition);
+        time_bounds = Some(extend_time_bounds(time_bounds, file_time));
     }
 
-    tx.execute(
+    let sql = format!(
         r#"
             UPDATE datasets
             SET
                 result_descriptor.raster.spatial_grid.spatial_grid = $2,
                 result_descriptor.raster."time".bounds = $3,
-                meta_data.gdal_md_meta_data.result_descriptor.spatial_grid.spatial_grid = $2,
-                meta_data.gdal_md_meta_data.result_descriptor."time".bounds = $3
+                meta_data.{meta_path}.result_descriptor.spatial_grid.spatial_grid = $2,
+                meta_data.{meta_path}.result_descriptor."time".bounds = $3
             WHERE id = $1;
-            "#,
-        &[&dataset, &dataset_grid, &time_bounds],
-    )
-    .await?;
+            "#
+    );
+    tx.execute(&sql, &[&dataset, &dataset_grid, &time_bounds])
+        .await?;
 
     Ok(())
+}
+
+async fn update_md_dataset_extents(
+    tx: &Transaction<'_>,
+    dataset: DatasetId,
+    tiles: &[AddDatasetMdTile],
+) -> Result<()> {
+    update_dataset_extents_of(
+        tx,
+        dataset,
+        tiles
+            .iter()
+            .map(|t| (t.spatial_partition, t.file_time_bounds().into())),
+        "gdal_md_meta_data",
+    )
+    .await
 }
 
 async fn validate_time(
@@ -2138,46 +2158,13 @@ async fn update_dataset_extents(
     dataset: DatasetId,
     tiles: &[AddDatasetTile],
 ) -> Result<()> {
-    // update the dataset extents
-    let row = tx
-        .query_one(
-            r#"
-            SELECT
-                (result_descriptor).raster.spatial_grid.spatial_grid,
-                (result_descriptor).raster."time".bounds
-            FROM
-                datasets
-            WHERE
-                id = $1;
-            "#,
-            &[&dataset],
-        )
-        .await?;
-
-    let (mut dataset_grid, mut time_bounds): (SpatialGridDefinition, Option<TimeInterval>) =
-        (row.get(0), row.get(1));
-
-    for tile in tiles {
-        dataset_grid = extend_spatial_bounds(dataset_grid, tile.spatial_partition);
-
-        time_bounds = Some(extend_time_bounds(time_bounds, tile.time.into()));
-    }
-
-    tx.execute(
-        r#"
-            UPDATE datasets
-            SET 
-                result_descriptor.raster.spatial_grid.spatial_grid = $2,
-                result_descriptor.raster."time".bounds = $3,
-                meta_data.gdal_multi_band.result_descriptor.spatial_grid.spatial_grid = $2,
-                meta_data.gdal_multi_band.result_descriptor."time".bounds = $3
-            WHERE id = $1;
-            "#,
-        &[&dataset, &dataset_grid, &time_bounds],
+    update_dataset_extents_of(
+        tx,
+        dataset,
+        tiles.iter().map(|t| (t.spatial_partition, t.time.into())),
+        "gdal_multi_band",
     )
-    .await?;
-
-    Ok(())
+    .await
 }
 
 #[async_trait]

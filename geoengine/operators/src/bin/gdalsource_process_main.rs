@@ -276,41 +276,23 @@ fn raster_type_dispatch(
     dataset_cache: &mut GdalDatasetHolder,
     sender: &IpcSender<IpcProcessRasterResult>,
 ) -> Result<(), IpcProcessError> {
-    if matches!(payload.read_kind, GdalReadKind::MdArray { .. }) {
-        return md_raster_type_dispatch(payload, dataset_cache, sender);
+    macro_rules! dispatch {
+        ($t:ty) => {
+            read_and_send::<$t>(payload, dataset_cache, sender)?
+        };
     }
-
+    use geoengine_datatypes::raster::RasterDataType as T;
     match payload.data_type {
-        geoengine_datatypes::raster::RasterDataType::U8 => {
-            read_and_send::<u8>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::U16 => {
-            read_and_send::<u16>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::U32 => {
-            read_and_send::<u32>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::U64 => {
-            read_and_send::<u64>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::I8 => {
-            read_and_send::<i8>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::I16 => {
-            read_and_send::<i16>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::I32 => {
-            read_and_send::<i32>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::I64 => {
-            read_and_send::<i64>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::F32 => {
-            read_and_send::<f32>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::F64 => {
-            read_and_send::<f64>(payload, dataset_cache, sender)?;
-        }
+        T::U8 => dispatch!(u8),
+        T::U16 => dispatch!(u16),
+        T::U32 => dispatch!(u32),
+        T::U64 => dispatch!(u64),
+        T::I8 => dispatch!(i8),
+        T::I16 => dispatch!(i16),
+        T::I32 => dispatch!(i32),
+        T::I64 => dispatch!(i64),
+        T::F32 => dispatch!(f32),
+        T::F64 => dispatch!(f64),
     }
 
     Ok(())
@@ -352,111 +334,46 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
         read_advise,
         data_type: _,
         read_id: _,
-        read_kind: _,
-    }: IpcChannelMessagePayload,
-    dataset_cache: &mut GdalDatasetHolder,
-    sender: &IpcSender<IpcProcessRasterResult>,
-) -> Result<(), IpcProcessError> {
-    let gp = GdalHandling::load_tile_data_with_dataset_retry::<T>(
-        dataset_cache,
-        &dataset_params,
-        read_advise,
-    );
-
-    let byte_payload = gp.and_then(|p| GdalIpcBytePayload::try_from(p).map_err(Into::into));
-    // Propagate channel send errors directly up out of the handler
-    match byte_payload {
-        Ok(td) => sender.send(Ok(IpcChannelResult::Raster(td))),
-        Err(err) => send_read_error(sender, err),
-    }?;
-
-    Ok(())
-}
-
-fn md_raster_type_dispatch(
-    payload: IpcChannelMessagePayload,
-    dataset_cache: &mut GdalDatasetHolder,
-    sender: &IpcSender<IpcProcessRasterResult>,
-) -> Result<(), IpcProcessError> {
-    match payload.data_type {
-        geoengine_datatypes::raster::RasterDataType::U8 => {
-            read_and_send_md::<u8>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::U16 => {
-            read_and_send_md::<u16>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::U32 => {
-            read_and_send_md::<u32>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::U64 => {
-            read_and_send_md::<u64>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::I8 => {
-            read_and_send_md::<i8>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::I16 => {
-            read_and_send_md::<i16>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::I32 => {
-            read_and_send_md::<i32>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::I64 => {
-            read_and_send_md::<i64>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::F32 => {
-            read_and_send_md::<f32>(payload, dataset_cache, sender)?;
-        }
-        geoengine_datatypes::raster::RasterDataType::F64 => {
-            read_and_send_md::<f64>(payload, dataset_cache, sender)?;
-        }
-    }
-
-    Ok(())
-}
-
-fn read_and_send_md<T: GdalType + Pixel + FromPrimitive>(
-    IpcChannelMessagePayload {
-        dataset_params,
-        read_advise,
-        data_type: _,
-        read_id: _,
         read_kind,
     }: IpcChannelMessagePayload,
     dataset_cache: &mut GdalDatasetHolder,
     sender: &IpcSender<IpcProcessRasterResult>,
 ) -> Result<(), IpcProcessError> {
-    let GdalReadKind::MdArray {
-        group,
-        array_name,
-        z_range,
-        leading_prefix,
-    } = read_kind
-    else {
-        return Err(IpcProcessError::IpcOther {
-            msg: "read kind must be MdArray for multidim reads".to_string(),
-        });
+    let byte_payload = match read_kind {
+        GdalReadKind::Raster => GdalHandling::load_tile_data_with_dataset_retry::<T>(
+            dataset_cache,
+            &dataset_params,
+            read_advise,
+        )
+        .and_then(|p| GdalIpcBytePayload::try_from(p).map_err(Into::into))
+        .map(IpcChannelResult::Raster),
+        GdalReadKind::MdArray {
+            group,
+            array_name,
+            z_range,
+            leading_prefix,
+        } => GdalHandling::load_md_tile_data_with_dataset_retry::<T>(
+            dataset_cache,
+            &dataset_params,
+            read_advise,
+            group.as_deref(),
+            &array_name,
+            z_range,
+            &leading_prefix,
+        )
+        .and_then(|payloads| {
+            payloads
+                .into_iter()
+                .map(GdalIpcBytePayload::try_from)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(Into::into)
+        })
+        .map(IpcChannelResult::MdBatch),
     };
 
-    let batches = GdalHandling::load_md_tile_data_with_dataset_retry::<T>(
-        dataset_cache,
-        &dataset_params,
-        read_advise,
-        group.as_deref(),
-        &array_name,
-        z_range,
-        &leading_prefix,
-    );
-
-    let byte_payloads = batches.and_then(|payloads| {
-        payloads
-            .into_iter()
-            .map(GdalIpcBytePayload::try_from)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
-    });
-
-    match byte_payloads {
-        Ok(payloads) => sender.send(Ok(IpcChannelResult::MdBatch(payloads))),
+    // Propagate channel send errors directly up out of the handler
+    match byte_payload {
+        Ok(result) => sender.send(Ok(result)),
         Err(err) => send_read_error(sender, err),
     }?;
 
