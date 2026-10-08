@@ -1631,7 +1631,14 @@ mod tests {
         let req = TestRequest::put()
             .uri(&format!("/layerDb/layers/{layer_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .set_json(serde_json::json!(update_layer.clone()));
+            .set_json(serde_json::json!({
+                "name": update_layer.name,
+                "description": update_layer.description,
+                "processingGraph": update_layer.workflow,
+                "symbology": update_layer.symbology,
+                "metadata": update_layer.metadata,
+                "properties": update_layer.properties,
+            }));
         let response = send_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
