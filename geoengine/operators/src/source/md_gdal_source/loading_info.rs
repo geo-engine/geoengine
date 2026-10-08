@@ -316,6 +316,7 @@ pub struct MdDatasetFile {
 pub struct MdZBatch {
     pub file_idx: usize,
     pub local_z: Range<usize>,
+    pub global_z: Range<usize>,
 }
 
 /// The loading information of a `MdGdalSource`: a set of MD arrays that are
@@ -467,12 +468,14 @@ impl MdLoadingInfo {
         let mut missing = Vec::new();
 
         // candidate files of the requested band, sorted by z_start (probe keeps them sorted);
-        // binary search per z-index gives O(z log files) instead of O(z * files)
+        // binary search per z-index gives O(z log files) instead of O(z * files).
+        // `z_start == z_end` marks a file with no slice in the query window; such rows carry
+        // a placeholder `z_start = 0` that would break the ascending order the search needs.
         let candidates: Vec<usize> = self
             .files
             .iter()
             .enumerate()
-            .filter(|(_, f)| output_band.is_none_or(|b| f.output_band == b))
+            .filter(|(_, f)| output_band.is_none_or(|b| f.output_band == b) && f.z_start < f.z_end)
             .map(|(i, _)| i)
             .collect();
 
@@ -499,11 +502,17 @@ impl MdLoadingInfo {
                         && b.local_z.len() < batch_size =>
                 {
                     b.local_z.end += 1;
+                    b.global_z.end += 1;
                 }
-                _ => batches.push(MdZBatch {
-                    file_idx,
-                    local_z: local..local + 1,
-                }),
+                _ => {
+                    let file = &self.files[file_idx];
+                    let g0 = file.z_start + (local - file.local_offset);
+                    batches.push(MdZBatch {
+                        file_idx,
+                        local_z: local..local + 1,
+                        global_z: g0..g0 + 1,
+                    })
+                }
             }
         }
 
@@ -640,11 +649,13 @@ mod tests {
             vec![
                 MdZBatch {
                     file_idx: 0,
-                    local_z: 0..4
+                    local_z: 0..4,
+                    global_z: 0..4,
                 },
                 MdZBatch {
                     file_idx: 1,
-                    local_z: 0..4
+                    local_z: 0..4,
+                    global_z: 4..8,
                 },
             ]
         );
@@ -655,7 +666,8 @@ mod tests {
             batches,
             vec![MdZBatch {
                 file_idx: 2,
-                local_z: 0..8
+                local_z: 0..8,
+                global_z: 0..8,
             }]
         );
     }
@@ -680,11 +692,13 @@ mod tests {
             vec![
                 MdZBatch {
                     file_idx: 0,
-                    local_z: 0..2
+                    local_z: 0..2,
+                    global_z: 0..2,
                 },
                 MdZBatch {
                     file_idx: 0,
-                    local_z: 2..4
+                    local_z: 2..4,
+                    global_z: 2..4,
                 },
             ]
         );

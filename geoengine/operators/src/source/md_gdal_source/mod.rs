@@ -191,7 +191,7 @@ where
             let mut reqs = Vec::with_capacity(batches.len() + missing.len());
             for batch in batches {
                 reqs.push((
-                    batch.local_z.start,
+                    batch.global_z.start,
                     MdRequest::Batch(MdTileRequest {
                         file_idx: batch.file_idx,
                         local_z: batch.local_z,
@@ -207,11 +207,14 @@ where
                     }),
                 ));
             }
+            // batches and gaps are collected separately; the merge below needs one list
+            // ascending in its key, and a hole in the middle of the axis would otherwise
+            // put every gap after every batch
+            reqs.sort_by_key(|(z, _)| *z);
             per_band.push(reqs);
         }
 
-        // merge-sort the per-band lists by first_z (stable, preserving band order within a z)
-        // merge-sort the per-band lists by first_z (stable, preserving band order within a z)
+        // merge-sort the per-band lists by global z (stable, preserving band order within a z)
         let mut requests: Vec<(usize, MdRequest)> = Vec::new();
         let mut cursors = vec![0usize; per_band.len()];
         loop {
@@ -295,10 +298,12 @@ where
                 }
             })
             // Concurrency, not buffering: at most this many `(request, tile)` results are in
-            // flight, and a request is one z slice for a time axis. Peak tile memory is
-            // therefore `TILE_READ_CONCURRENCY` slices - deliberately *not* `batch x tiles`,
-            // which is what a reorder buffer would have needed and what makes long spatial
-            // rows untenable.
+            // flight. A request is one z slice for a time axis, but a whole band run (up to
+            // `batch_size` slices) for a band axis - so peak tile memory is
+            // `TILE_READ_CONCURRENCY` slices for `ZRole::Variable` and
+            // `TILE_READ_CONCURRENCY * batch_size` for `ZRole::Band`. Deliberately *not*
+            // `batch x tiles`, which is what a reorder buffer would have needed and what
+            // makes long spatial rows untenable.
             .buffered(TILE_READ_CONCURRENCY)
             .flat_map(|res: Result<Vec<RasterTile2D<P>>>| match res {
                 Ok(tiles) => stream::iter(tiles.into_iter().map(Ok)).boxed(),
@@ -1896,6 +1901,97 @@ mod tests {
         assert_eq!(effective_z_batch_size(ZRole::Variable, 4), 1);
         assert_eq!(effective_z_batch_size(ZRole::Band, 4), 4);
         assert_eq!(effective_z_batch_size(ZRole::Band, 1), 1);
+    }
+
+    /// The merge used to key batches by their *file-local* z start, which restarts at every
+    /// file boundary. Two bands whose files split at different z then interleave wrongly.
+    /// Band 0 is split across two files at gz 4, band 1 is a single file: the key `0` of band
+    /// 0's second file must not jump ahead of band 1's gz 3.
+    #[tokio::test]
+    async fn test_emits_band_fastest_across_mismatched_file_splits() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+        let mut spec = MdDataset::daily_series("md/time_series_split_a.nc", 4);
+        spec.files
+            .push(MdFile::of("md/time_series_split_b.nc", "temperature", 4, 4));
+        spec.files.push(MdFile {
+            path: "md/variables.nc",
+            array_name: "precipitation",
+            group: None,
+            band: 1,
+            z_start: 0,
+            slices: 8,
+            leading_prefix: Vec::new(),
+        });
+        spec.bands = vec!["temperature", "precipitation"];
+        let name = add_md_dataset(&mut exe_ctx, "md_order_mismatched_splits", spec);
+
+        let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + 8 * DAY);
+        let tiles = query_md_source(
+            &exe_ctx,
+            &query_ctx,
+            name,
+            ts_grid_bounds(),
+            time,
+            BandSelection::first_n(2),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+        let keys: Vec<_> = tiles
+            .iter()
+            .map(|t| (t.time.start().inner(), t.band))
+            .collect();
+        let expected: Vec<_> = (0..8)
+            .flat_map(|t| [0u32, 1].map(|b| (EPOCH_2000 + t * DAY, b)))
+            .collect();
+        assert_eq!(
+            keys, expected,
+            "band fastest, then time; a file boundary in one band only must not reorder the stream"
+        );
+    }
+
+    /// A z index no file covers is a gap-filled empty tile, and it belongs at its own time
+    /// position - not appended after every real slice of the band.
+    #[tokio::test]
+    async fn test_emits_gap_at_its_time_position() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+        let mut spec = MdDataset::daily_series("md/time_series_split_a.nc", 2);
+        // hole at gz 2: the two files cover 0..2 and 3..5
+        spec.files
+            .push(MdFile::of("md/time_series_split_b.nc", "temperature", 3, 2));
+        let name = add_md_dataset(&mut exe_ctx, "md_order_gap", spec);
+
+        let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + 5 * DAY);
+        let tiles = query_md_source(
+            &exe_ctx,
+            &query_ctx,
+            name,
+            ts_grid_bounds(),
+            time,
+            BandSelection::first(),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+        let keys: Vec<_> = tiles
+            .iter()
+            .map(|t| (t.time.start().inner(), t.band))
+            .collect();
+        let expected: Vec<_> = (0..5).map(|t| (EPOCH_2000 + t * DAY, 0)).collect();
+        assert_eq!(
+            keys, expected,
+            "the gap tile must sit at t=2, not after t=4"
+        );
+        assert!(
+            tiles[2].grid_array.is_empty(),
+            "the gap at gz 2 must be an empty tile"
+        );
     }
 
     #[test]
