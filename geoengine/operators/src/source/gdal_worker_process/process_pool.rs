@@ -71,15 +71,13 @@ type FastHashMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<FxHa
 #[derive(Debug, Snafu, Clone)]
 #[snafu(visibility(pub))]
 pub enum GdalProcessPoolError {
-    IpcProcessError {
-        source: IpcProcessError,
-    },
+    #[snafu(display("IpcProcessError caused by: {source}"))]
+    IpcProcessError { source: IpcProcessError },
 
     #[snafu(display("IpcError caused by: {error_str}"))]
-    IpcError {
-        error_str: String,
-    },
+    IpcError { error_str: String },
 
+    #[snafu(display("GDAL worker process panicked"))]
     WorkerPanic,
 }
 
