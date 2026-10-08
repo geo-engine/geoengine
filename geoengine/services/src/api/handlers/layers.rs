@@ -708,19 +708,16 @@ async fn layer_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    if provider == crate::layers::storage::INTERNAL_PROVIDER_ID {
-        let collection = db.load_layer(&item.into()).await?;
+    let layer = if provider == crate::layers::storage::INTERNAL_PROVIDER_ID {
+        db.load_layer(&item.into()).await?
+    } else {
+        db.load_layer_provider(provider)
+            .await?
+            .load_layer(&item.into())
+            .await?
+    };
 
-        return Ok(web::Json(collection));
-    }
-
-    let collection = db
-        .load_layer_provider(provider)
-        .await?
-        .load_layer(&item.into())
-        .await?;
-
-    Ok(web::Json(collection))
+    Ok(web::Json(Layer::try_from(layer)?))
 }
 
 /// Registers a layer from a provider as a processing graph and returns the processing graph id

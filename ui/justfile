@@ -9,7 +9,9 @@ _default:
 [group("install")]
 install no-lock="false" with-deps="false": common::_clear
     rm -rf node_modules/@geoengine/api-client \
-           .angular/cache
+           .angular/cache \
+           dist/common \
+           dist/core
     cd ../api-clients/typescript && npm install
     npm link ../api-clients/typescript
     npm {{ if no-lock == "true" { "install" } else { "ci" } }}
@@ -32,6 +34,8 @@ build project="gis": common::_clear
 
 [arg("type", long="type", help="Run type, e.g., `local` or `nightly`.")]
 run project="gis" type="local": common::_clear
+    rm -rf dist/common \
+           dist/core
     npm run serve:{{ project }}:{{ type }}
 
 [arg("project", long="project", help="Whether to only run tests for a specific project, e.g. `--project=gis`.")]

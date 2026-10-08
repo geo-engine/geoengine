@@ -1648,6 +1648,22 @@ impl TryFrom<Layer> for crate::layers::layer::Layer {
     }
 }
 
+impl TryFrom<crate::layers::layer::Layer> for Layer {
+    type Error = Error;
+
+    fn try_from(value: crate::layers::layer::Layer) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: value.id,
+            name: value.name,
+            description: value.description,
+            processing_graph: ProcessingGraph::try_from(&value.workflow).context(error::Api)?,
+            symbology: value.symbology,
+            properties: value.properties,
+            metadata: value.metadata,
+        })
+    }
+}
+
 impl TryFrom<AddLayer> for crate::layers::layer::AddLayer {
     type Error = Error;
 
