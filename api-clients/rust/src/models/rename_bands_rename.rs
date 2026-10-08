@@ -10,19 +10,21 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
+/// RenameBandsRename : A new name for each band, to be used instead of the original band names.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Rename {
-    #[serde(rename = "values")]
-    pub values: Vec<String>,
+pub struct RenameBandsRename {
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "values")]
+    pub values: Vec<String>,
 }
 
-impl Rename {
-    pub fn new(values: Vec<String>, r#type: Type) -> Rename {
-        Rename {
-            values,
+impl RenameBandsRename {
+    /// A new name for each band, to be used instead of the original band names.
+    pub fn new(r#type: Type, values: Vec<String>) -> RenameBandsRename {
+        RenameBandsRename {
             r#type,
+            values,
         }
     }
 }

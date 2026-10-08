@@ -293,8 +293,10 @@ docs/Reflectance.md
 docs/ReflectanceParameters.md
 docs/Regular.md
 docs/RegularTimeDimension.md
-docs/Rename.md
 docs/RenameBands.md
+docs/RenameBandsDefault.md
+docs/RenameBandsRename.md
+docs/RenameBandsSuffix.md
 docs/Reprojection.md
 docs/ReprojectionParameters.md
 docs/Resource.md
@@ -755,8 +757,10 @@ geoengine_api_client/models/reflectance.py
 geoengine_api_client/models/reflectance_parameters.py
 geoengine_api_client/models/regular.py
 geoengine_api_client/models/regular_time_dimension.py
-geoengine_api_client/models/rename.py
 geoengine_api_client/models/rename_bands.py
+geoengine_api_client/models/rename_bands_default.py
+geoengine_api_client/models/rename_bands_rename.py
+geoengine_api_client/models/rename_bands_suffix.py
 geoengine_api_client/models/reprojection.py
 geoengine_api_client/models/reprojection_parameters.py
 geoengine_api_client/models/resource.py
@@ -1209,8 +1213,10 @@ test/test_reflectance.py
 test/test_reflectance_parameters.py
 test/test_regular.py
 test/test_regular_time_dimension.py
-test/test_rename.py
 test/test_rename_bands.py
+test/test_rename_bands_default.py
+test/test_rename_bands_rename.py
+test/test_rename_bands_suffix.py
 test/test_reprojection.py
 test/test_reprojection_parameters.py
 test/test_resource.py

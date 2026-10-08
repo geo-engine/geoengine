@@ -292,8 +292,10 @@ docs/Reflectance.md
 docs/ReflectanceParameters.md
 docs/Regular.md
 docs/RegularTimeDimension.md
-docs/Rename.md
 docs/RenameBands.md
+docs/RenameBandsDefault.md
+docs/RenameBandsRename.md
+docs/RenameBandsSuffix.md
 docs/Reprojection.md
 docs/ReprojectionParameters.md
 docs/Resource.md
@@ -752,8 +754,10 @@ src/models/reflectance.rs
 src/models/reflectance_parameters.rs
 src/models/regular.rs
 src/models/regular_time_dimension.rs
-src/models/rename.rs
 src/models/rename_bands.rs
+src/models/rename_bands_default.rs
+src/models/rename_bands_rename.rs
+src/models/rename_bands_suffix.rs
 src/models/reprojection.rs
 src/models/reprojection_parameters.rs
 src/models/resource.rs

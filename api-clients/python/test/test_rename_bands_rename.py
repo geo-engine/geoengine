@@ -14,10 +14,10 @@
 
 import unittest
 
-from geoengine_api_client.models.rename import Rename
+from geoengine_api_client.models.rename_bands_rename import RenameBandsRename
 
-class TestRename(unittest.TestCase):
-    """Rename unit test stubs"""
+class TestRenameBandsRename(unittest.TestCase):
+    """RenameBandsRename unit test stubs"""
 
     def setUp(self):
         pass
@@ -25,32 +25,32 @@ class TestRename(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def make_instance(self, include_optional) -> Rename:
-        """Test Rename
+    def make_instance(self, include_optional) -> RenameBandsRename:
+        """Test RenameBandsRename
             include_optional is a boolean, when False only required
             params are included, when True both required and
             optional params are included """
-        # uncomment below to create an instance of `Rename`
+        # uncomment below to create an instance of `RenameBandsRename`
         """
-        model = Rename()
+        model = RenameBandsRename()
         if include_optional:
-            return Rename(
+            return RenameBandsRename(
+                type = 'rename',
                 values = [
                     ''
-                    ],
-                type = 'rename'
+                    ]
             )
         else:
-            return Rename(
+            return RenameBandsRename(
+                type = 'rename',
                 values = [
                     ''
                     ],
-                type = 'rename',
         )
         """
 
-    def testRename(self):
-        """Test Rename"""
+    def testRenameBandsRename(self):
+        """Test RenameBandsRename"""
         # inst_req_only = self.make_instance(include_optional=False)
         # inst_req_and_optional = self.make_instance(include_optional=True)
 

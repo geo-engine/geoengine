@@ -291,8 +291,10 @@ from geoengine_api_client.models.reflectance import Reflectance
 from geoengine_api_client.models.reflectance_parameters import ReflectanceParameters
 from geoengine_api_client.models.regular import Regular
 from geoengine_api_client.models.regular_time_dimension import RegularTimeDimension
-from geoengine_api_client.models.rename import Rename
 from geoengine_api_client.models.rename_bands import RenameBands
+from geoengine_api_client.models.rename_bands_default import RenameBandsDefault
+from geoengine_api_client.models.rename_bands_rename import RenameBandsRename
+from geoengine_api_client.models.rename_bands_suffix import RenameBandsSuffix
 from geoengine_api_client.models.reprojection import Reprojection
 from geoengine_api_client.models.reprojection_parameters import ReprojectionParameters
 from geoengine_api_client.models.resource import Resource

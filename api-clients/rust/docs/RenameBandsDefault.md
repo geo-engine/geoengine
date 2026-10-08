@@ -1,11 +1,10 @@
-# Rename
+# RenameBandsDefault
 
 ## Properties
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**values** | **Vec<String>** |  | 
-**r#type** | **Type** |  (enum: rename) | 
+**r#type** | **Type** |  (enum: default) | 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

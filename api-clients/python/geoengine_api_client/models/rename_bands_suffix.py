@@ -22,19 +22,19 @@ from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
 
-class Rename(BaseModel):
+class RenameBandsSuffix(BaseModel):
     """
-    Rename
+    A suffix for every input, to be appended to the original band names.
     """ # noqa: E501
-    values: List[StrictStr]
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["values", "type"]
+    values: List[StrictStr]
+    __properties: ClassVar[List[str]] = ["type", "values"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
         """Validates the enum"""
-        if value not in set(['rename']):
-            raise ValueError("must be one of enum values ('rename')")
+        if value not in set(['suffix']):
+            raise ValueError("must be one of enum values ('suffix')")
         return value
 
     model_config = ConfigDict(
@@ -55,7 +55,7 @@ class Rename(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of Rename from a JSON string"""
+        """Create an instance of RenameBandsSuffix from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -80,7 +80,7 @@ class Rename(BaseModel):
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of Rename from a dict"""
+        """Create an instance of RenameBandsSuffix from a dict"""
         if obj is None:
             return None
 
@@ -88,8 +88,8 @@ class Rename(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "values": obj.get("values"),
-            "type": obj.get("type")
+            "type": obj.get("type"),
+            "values": obj.get("values")
         })
         return _obj
 

@@ -13252,65 +13252,82 @@
       "RenameBands": {
         "oneOf": [
           {
-            "type": "object",
-            "title": "Default",
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "default"
-                ]
-              }
-            }
+            "$ref": "#/components/schemas/RenameBandsDefault"
           },
           {
-            "type": "object",
-            "title": "Suffix",
-            "required": [
-              "values",
-              "type"
-            ],
-            "properties": {
-              "values": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "suffix"
-                ]
-              }
-            }
+            "$ref": "#/components/schemas/RenameBandsSuffix"
           },
           {
-            "type": "object",
-            "title": "Rename",
-            "required": [
-              "values",
-              "type"
-            ],
-            "properties": {
-              "values": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "rename"
-                ]
-              }
+            "$ref": "#/components/schemas/RenameBandsRename"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "default": "#/components/schemas/RenameBandsDefault",
+            "rename": "#/components/schemas/RenameBandsRename",
+            "suffix": "#/components/schemas/RenameBandsSuffix"
+          }
+        }
+      },
+      "RenameBandsDefault": {
+        "type": "object",
+        "description": "Append ` (n)` to the band name for the `n`-th conflict.",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "default"
+            ]
+          }
+        }
+      },
+      "RenameBandsRename": {
+        "type": "object",
+        "description": "A new name for each band, to be used instead of the original band names.",
+        "required": [
+          "type",
+          "values"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "rename"
+            ]
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           }
-        ]
+        }
+      },
+      "RenameBandsSuffix": {
+        "type": "object",
+        "description": "A suffix for every input, to be appended to the original band names.",
+        "required": [
+          "type",
+          "values"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "suffix"
+            ]
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
       },
       "Reprojection": {
         "type": "object",

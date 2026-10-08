@@ -13,40 +13,40 @@
 /**
  * @export
  */
-export const RenameTypeEnum = {
+export const RenameBandsRenameTypeEnum = {
     Rename: 'rename'
 };
 /**
- * Check if a given object implements the Rename interface.
+ * Check if a given object implements the RenameBandsRename interface.
  */
-export function instanceOfRename(value) {
-    if (!('values' in value) || value['values'] === undefined)
-        return false;
+export function instanceOfRenameBandsRename(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('values' in value) || value['values'] === undefined)
         return false;
     return true;
 }
-export function RenameFromJSON(json) {
-    return RenameFromJSONTyped(json, false);
+export function RenameBandsRenameFromJSON(json) {
+    return RenameBandsRenameFromJSONTyped(json, false);
 }
-export function RenameFromJSONTyped(json, ignoreDiscriminator) {
+export function RenameBandsRenameFromJSONTyped(json, ignoreDiscriminator) {
     if (json == null) {
         return json;
     }
     return {
-        'values': json['values'],
         'type': json['type'],
+        'values': json['values'],
     };
 }
-export function RenameToJSON(json) {
-    return RenameToJSONTyped(json, false);
+export function RenameBandsRenameToJSON(json) {
+    return RenameBandsRenameToJSONTyped(json, false);
 }
-export function RenameToJSONTyped(value, ignoreDiscriminator = false) {
+export function RenameBandsRenameToJSONTyped(value, ignoreDiscriminator = false) {
     if (value == null) {
         return value;
     }
     return {
-        'values': value['values'],
         'type': value['type'],
+        'values': value['values'],
     };
 }

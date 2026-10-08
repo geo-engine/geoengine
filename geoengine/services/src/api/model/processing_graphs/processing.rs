@@ -230,22 +230,61 @@ impl TryFrom<Expression> for OperatorsExpression {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type", content = "values")]
+#[serde(untagged)]
+#[schema(discriminator = "type")]
 pub enum RenameBands {
-    #[schema(title = "Default")]
-    Default,
-    #[schema(title = "Suffix")]
-    Suffix(Vec<String>),
-    #[schema(title = "Rename")]
-    Rename(Vec<String>),
+    Default(RenameBandsDefault),
+    Suffix(RenameBandsSuffix),
+    Rename(RenameBandsRename),
+}
+
+/// Append ` (n)` to the band name for the `n`-th conflict.
+#[type_tag(value = "default")]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema, Default)]
+pub struct RenameBandsDefault {}
+
+/// A suffix for every input, to be appended to the original band names.
+#[type_tag(value = "suffix")]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
+pub struct RenameBandsSuffix {
+    pub values: Vec<String>,
+}
+
+/// A new name for each band, to be used instead of the original band names.
+#[type_tag(value = "rename")]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
+pub struct RenameBandsRename {
+    pub values: Vec<String>,
 }
 
 impl From<RenameBands> for geoengine_datatypes::raster::RenameBands {
     fn from(value: RenameBands) -> Self {
         match value {
-            RenameBands::Default => Self::Default,
-            RenameBands::Suffix(values) => Self::Suffix(values),
-            RenameBands::Rename(values) => Self::Rename(values),
+            RenameBands::Default(_) => Self::Default,
+            RenameBands::Suffix(suffix) => Self::Suffix(suffix.values),
+            RenameBands::Rename(rename) => Self::Rename(rename.values),
+        }
+    }
+}
+
+impl From<&geoengine_datatypes::raster::RenameBands> for RenameBands {
+    fn from(value: &geoengine_datatypes::raster::RenameBands) -> Self {
+        match value {
+            geoengine_datatypes::raster::RenameBands::Default => {
+                Self::Default(RenameBandsDefault::default())
+            }
+            geoengine_datatypes::raster::RenameBands::Suffix(values) => {
+                Self::Suffix(RenameBandsSuffix {
+                    r#type: Default::default(),
+                    values: values.clone(),
+                })
+            }
+            geoengine_datatypes::raster::RenameBands::Rename(values) => {
+                Self::Rename(RenameBandsRename {
+                    r#type: Default::default(),
+                    values: values.clone(),
+                })
+            }
         }
     }
 }
@@ -3038,11 +3077,47 @@ mod tests {
     }
 
     #[test]
+    fn it_deserializes_rename_bands_by_type() {
+        for (json, expected) in [
+            (
+                json!({"type": "default"}),
+                geoengine_datatypes::raster::RenameBands::Default,
+            ),
+            (
+                json!({"type": "suffix", "values": ["_a", "_b"]}),
+                geoengine_datatypes::raster::RenameBands::Suffix(vec![
+                    "_a".to_string(),
+                    "_b".to_string(),
+                ]),
+            ),
+            (
+                json!({"type": "rename", "values": ["blue", "green"]}),
+                geoengine_datatypes::raster::RenameBands::Rename(vec![
+                    "blue".to_string(),
+                    "green".to_string(),
+                ]),
+            ),
+        ] {
+            let rename_bands: RenameBands = serde_json::from_value(json.clone()).unwrap();
+            assert_eq!(serde_json::to_value(&rename_bands).unwrap(), json);
+            assert_eq!(
+                geoengine_datatypes::raster::RenameBands::from(rename_bands),
+                expected
+            );
+        }
+
+        assert!(serde_json::from_value::<RenameBands>(json!({"type": "rename"})).is_err());
+    }
+
+    #[test]
     fn it_converts_raster_stacker_params() {
         let api = RasterStacker {
             r#type: Default::default(),
             params: RasterStackerParameters {
-                rename_bands: RenameBands::Suffix(vec!["_a".to_string(), "_b".to_string()]),
+                rename_bands: RenameBands::Suffix(RenameBandsSuffix {
+                    r#type: Default::default(),
+                    values: vec!["_a".to_string(), "_b".to_string()],
+                }),
             },
             sources: Box::new(MultipleRasterSources {
                 rasters: vec![
