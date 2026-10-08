@@ -270,9 +270,34 @@ where
             + PartialEq
             + Clone,
     {
-        if self.is_empty() && source.is_empty() {
+        self.grid_blit_valid_pixels(source, true);
+    }
+
+    /// Fill no-data pixels with valid pixels from `source`, preserving existing
+    /// valid pixels. Empty or invalid source pixels leave the destination untouched.
+    pub fn grid_blit_fill_no_data<D1>(&mut self, source: &GridOrEmpty<D1, T>)
+    where
+        D1: GridSize<ShapeArray = [usize; 2]>
+            + GridBounds<IndexArray = [isize; 2]>
+            + GridSpaceToLinearSpace<IndexArray = [isize; 2]>
+            + PartialEq
+            + Clone,
+    {
+        self.grid_blit_valid_pixels(source, false);
+    }
+
+    fn grid_blit_valid_pixels<D1>(&mut self, source: &GridOrEmpty<D1, T>, overwrite_valid: bool)
+    where
+        D1: GridSize<ShapeArray = [usize; 2]>
+            + GridBounds<IndexArray = [isize; 2]>
+            + GridSpaceToLinearSpace<IndexArray = [isize; 2]>
+            + PartialEq
+            + Clone,
+    {
+        if source.is_empty() {
             return;
         }
+        let dest_was_empty = self.is_empty();
         self.materialize();
         let dest_bbox = self.bounding_box();
         let dest_grid = self.as_masked_grid_mut().expect("should be a grid");
@@ -286,7 +311,9 @@ where
                     let [y_size, x_size] = intersection.axis_size();
 
                     // Fast path: all pixels in the intersection are valid → regular blit
-                    if source_grid.all_valid_in_bbox(&intersection) {
+                    if (overwrite_valid || dest_was_empty)
+                        && source_grid.all_valid_in_bbox(&intersection)
+                    {
                         self.grid_blit_from(source);
                         return;
                     }
@@ -299,12 +326,18 @@ where
                         let mut x: isize = 0;
                         while x < x_size as isize {
                             let src_idx = src_row_base + x as usize;
-                            if source_grid.validity_mask.data[src_idx] {
+                            if source_grid.validity_mask.data[src_idx]
+                                && (overwrite_valid
+                                    || !dest_grid.validity_mask.data[dest_row_base + x as usize])
+                            {
                                 let run_start = x;
                                 x += 1;
                                 // Extend run while consecutive pixels are valid
                                 while x < x_size as isize
                                     && source_grid.validity_mask.data[src_row_base + x as usize]
+                                    && (overwrite_valid
+                                        || !dest_grid.validity_mask.data
+                                            [dest_row_base + x as usize])
                                 {
                                     x += 1;
                                 }
@@ -345,6 +378,65 @@ mod tests {
         GridOrEmpty, MaskedGrid,
         masked_grid::{MaskedGrid2D, MaskedGrid3D},
     };
+
+    #[test]
+    fn it_fills_no_data_without_overwriting_valid_pixels() {
+        let bbox = GridBoundingBox::new([0, 0], [1, 3]).unwrap();
+        let mut dest = GridOrEmpty::new_grid(
+            MaskedGrid::new(
+                Grid::new(bbox, vec![10; 8]).unwrap(),
+                Grid::new(
+                    bbox,
+                    vec![true, false, false, true, false, false, false, false],
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        );
+        let source = GridOrEmpty::new_grid(
+            MaskedGrid::new(
+                Grid::new(bbox, vec![20; 8]).unwrap(),
+                Grid::new(bbox, vec![true, true, false, true, true, true, true, false]).unwrap(),
+            )
+            .unwrap(),
+        );
+        dest.grid_blit_fill_no_data(&source);
+        let grid = dest.as_masked_grid().unwrap();
+        assert_eq!(grid.inner_grid.data, vec![10, 20, 10, 10, 20, 20, 20, 10]);
+        assert_eq!(
+            grid.validity_mask.data,
+            vec![true, true, false, true, true, true, true, false]
+        );
+
+        // All-valid sources must also preserve higher-priority valid pixels.
+        let all_valid =
+            GridOrEmpty::new_grid(MaskedGrid::new_with_data(Grid::new_filled(bbox, 30)));
+        dest.grid_blit_fill_no_data(&all_valid);
+        let grid = dest.as_masked_grid().unwrap();
+        assert_eq!(grid.inner_grid.data, vec![10, 20, 30, 10, 20, 20, 20, 30]);
+        assert!(grid.all_valid_in_bbox(&bbox));
+    }
+
+    #[test]
+    fn it_fills_no_data_with_offset_grids_and_empty_sources() {
+        let bbox = GridBoundingBox::new([-1, -1], [1, 1]).unwrap();
+        let mut dest: GridOrEmpty<_, i32> = GridOrEmpty::new_empty_shape(bbox);
+        dest.grid_blit_fill_no_data(&GridOrEmpty::new_empty_shape(bbox));
+        assert!(dest.is_empty());
+        let source_bbox = GridBoundingBox::new([0, 0], [2, 2]).unwrap();
+        let source =
+            GridOrEmpty::new_grid(MaskedGrid::new_with_data(Grid::new_filled(source_bbox, 42)));
+        dest.grid_blit_fill_no_data(&source);
+        let grid = dest.as_masked_grid().unwrap();
+        assert_eq!(grid.inner_grid.data, vec![0, 0, 0, 0, 42, 42, 0, 42, 42]);
+        assert_eq!(
+            grid.validity_mask.data,
+            vec![false, false, false, false, true, true, false, true, true]
+        );
+        let before = dest.clone();
+        dest.grid_blit_fill_no_data(&GridOrEmpty::new_empty_shape(bbox));
+        assert_eq!(dest, before);
+    }
 
     #[test]
     fn grid_blit_from_2d_0_0() {

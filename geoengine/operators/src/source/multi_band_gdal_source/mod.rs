@@ -1929,6 +1929,41 @@ mod tests {
 
     #[tokio::test]
     async fn it_combines_partially_overlapping_tiles_with_grid_blit_valid_only() {
+        let partition_a = SpatialPartition2D::new_unchecked((0.0, 4.0).into(), (3.0, 0.0).into());
+        let partition_b = SpatialPartition2D::new_unchecked((1.0, 4.0).into(), (4.0, 0.0).into());
+        assert_overlap_mosaic(partition_a, partition_b, "left.tif", "right.tif", None).await;
+    }
+
+    #[tokio::test]
+    async fn it_fills_higher_z_no_data_for_identical_footprints_and_skips_occluded_files() {
+        let partition = SpatialPartition2D::new_unchecked((0.0, 4.0).into(), (4.0, 0.0).into());
+        // A nonexistent lowest-z file must be skipped after both valid masks
+        // combine to cover the tile. Either complementary image alone has holes.
+        assert_overlap_mosaic(partition, partition, "left.tif", "right.tif", Some((-1, 4))).await;
+    }
+
+    #[tokio::test]
+    async fn it_skips_lower_z_files_when_the_higher_z_image_is_all_valid() {
+        let partition = SpatialPartition2D::new_unchecked((0.0, 4.0).into(), (4.0, 0.0).into());
+        assert_overlap_mosaic(partition, partition, "missing.tif", "expected.tif", None).await;
+    }
+
+    #[tokio::test]
+    async fn it_skips_a_covered_read_window_while_other_pixels_still_have_no_data() {
+        let partition = SpatialPartition2D::new_unchecked((0.0, 4.0).into(), (4.0, 0.0).into());
+        // Highest-z left.tif covers the missing file's two columns. The output
+        // still needs the right-hand pixels from the lowest-z right.tif.
+        assert_overlap_mosaic(partition, partition, "right.tif", "left.tif", Some((1, 2))).await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn assert_overlap_mosaic(
+        partition_a: SpatialPartition2D,
+        partition_b: SpatialPartition2D,
+        lower_file: &str,
+        higher_file: &str,
+        occluded_file: Option<(i64, usize)>,
+    ) {
         // Uses persisted test data from test_data/raster/grid_blit_valid_only/
         // File A (left.tif):  valid data (100) in cols 0,1, no-data (0) in cols 2,3
         // File B (right.tif): no-data (0) in cols 0,1, valid data (200) in cols 2,3
@@ -1945,7 +1980,8 @@ mod tests {
         };
 
         let dataset_params = GdalDatasetParameters {
-            file_path: test_data!("raster/grid_blit_valid_only/left.tif").to_path_buf(),
+            file_path: test_data!(format!("raster/grid_blit_valid_only/{lower_file}"))
+                .to_path_buf(),
             rasterband_channel: 1,
             geo_transform,
             width,
@@ -1960,14 +1996,8 @@ mod tests {
         };
 
         let mut params_b = dataset_params.clone();
-        params_b.file_path = test_data!("raster/grid_blit_valid_only/right.tif").to_path_buf();
-
-        // Partially overlapping spatial partitions so neither is filtered out:
-        //   A covers x in [0,3)  (left 3 cols)  → (0,4)-(3,0)
-        //   B covers x in [1,4)  (right 3 cols) → (1,4)-(4,0)
-        // Neither contains the other → both are kept by tile_files()
-        let partition_a = SpatialPartition2D::new_unchecked((0.0, 4.0).into(), (3.0, 0.0).into());
-        let partition_b = SpatialPartition2D::new_unchecked((1.0, 4.0).into(), (4.0, 0.0).into());
+        params_b.file_path =
+            test_data!(format!("raster/grid_blit_valid_only/{higher_file}")).to_path_buf();
 
         let time_interval = TimeInterval::new_unchecked(
             TimeInstance::from_str("2025-01-01T00:00:00Z").unwrap(),
@@ -1986,12 +2016,22 @@ mod tests {
             time: time_interval,
             spatial_partition: partition_b,
             band: 0,
-            z_index: 1,
+            z_index: 2,
             params: params_b,
         };
 
-        let loading_info =
-            MultiBandGdalLoadingInfo::new(vec![time_interval], vec![tile_a, tile_b], None);
+        let mut files = vec![];
+        if let Some((z_index, width)) = occluded_file {
+            let mut occluded = tile_a.clone();
+            occluded.z_index = z_index;
+            occluded.params.width = width;
+            occluded.params.file_path =
+                test_data!("raster/grid_blit_valid_only/missing.tif").to_path_buf();
+            files.push(occluded);
+        }
+        files.extend([tile_a, tile_b]);
+        files.sort_by_key(|file| file.z_index);
+        let loading_info = MultiBandGdalLoadingInfo::new(vec![time_interval], files, None);
 
         // Both files and tile share the same spatial grid
         let data_grid = SpatialGridDefinition::new(
