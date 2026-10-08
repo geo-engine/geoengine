@@ -1,7 +1,7 @@
 import {afterNextRender, ChangeDetectionStrategy, Component, computed, inject, resource, signal} from '@angular/core';
 import {CoreModule, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
 import {A11yModule} from '@angular/cdk/a11y';
-import {EdvLayersService} from './layers.service';
+import {EOdysseyLayerService} from './layers.service';
 import {MatCheckboxModule} from '@angular/material/checkbox';
 import {MatListModule} from '@angular/material/list';
 import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, RasterSymbology, Time} from '@geoengine/common';
@@ -265,10 +265,10 @@ import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/da
 })
 export class LayersComponent {
     readonly projectService = inject(ProjectService);
-    readonly edvLayersService = inject(EdvLayersService);
+    readonly eodysseyLayerService = inject(EOdysseyLayerService);
     private readonly layerService = inject(LayersService);
 
-    readonly debug = this.edvLayersService.debug;
+    readonly debug = this.eodysseyLayerService.debug;
 
     readonly currentTime = toSignal(this.projectService.getTimeStream());
     readonly formattedTime = computed<string>(() => {
@@ -286,15 +286,15 @@ export class LayersComponent {
 
     readonly autoSelectTime = signal<boolean>(true);
 
-    readonly selectedDataSource = this.edvLayersService.selectedDataSource;
+    readonly selectedDataSource = this.eodysseyLayerService.selectedDataSource;
     readonly selectedDataSourceKey = computed(() => this.selectedDataSource()?.key ?? '');
-    readonly currentPresets = this.edvLayersService.currentPresets;
-    readonly presetGroups = this.edvLayersService.presetGroups;
-    readonly selectedPresetIndex = this.edvLayersService.selectedPresetIndex;
-    readonly mapTileLayer = this.edvLayersService.mapTileLayer;
+    readonly currentPresets = this.eodysseyLayerService.currentPresets;
+    readonly presetGroups = this.eodysseyLayerService.presetGroups;
+    readonly selectedPresetIndex = this.eodysseyLayerService.selectedPresetIndex;
+    readonly mapTileLayer = this.eodysseyLayerService.mapTileLayer;
 
     readonly legendLayer = resource({
-        params: () => ({layerId: this.edvLayersService.mapTileLayer()}),
+        params: () => ({layerId: this.eodysseyLayerService.mapTileLayer()}),
         loader: async ({params: {layerId}}): Promise<{layer: RasterLayer; metadata: RasterLayerMetadata} | undefined> => {
             if (!layerId) return undefined;
 
