@@ -4,10 +4,10 @@ import {CollectionItem, ProviderLayerId} from '@geoengine/api-client';
 import {LayersService} from '@geoengine/common';
 
 /**
- * Service for managing layers in the Enhanced Data Viewer.
+ * Service for managing layers in the EOdyssey.
  */
 @Service()
-export class EdvLayersService {
+export class EOdysseyLayerService {
     readonly debug = signal(false);
     readonly layerService = inject(LayersService);
 

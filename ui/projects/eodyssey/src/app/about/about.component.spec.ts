@@ -15,7 +15,7 @@ describe('AboutComponent', () => {
 
         const host = fixture.nativeElement as HTMLElement;
 
-        expect(host.textContent).toContain('Enhanced Data Viewer');
+        expect(host.textContent).toContain('EOdyssey');
         expect(host.textContent).toContain('Explore data layers');
         expect(host.textContent).toContain('CODE-DE Lab');
     });

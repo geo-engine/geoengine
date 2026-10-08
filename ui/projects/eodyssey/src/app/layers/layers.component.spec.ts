@@ -5,11 +5,11 @@ import {provideNativeDateAdapter} from '@angular/material/core';
 import {ProjectService} from '@geoengine/core';
 import {LayersService, Time, TimeStepDuration} from '@geoengine/common';
 import {LayersComponent} from './layers.component';
-import {EdvLayersService} from './layers.service';
+import {EOdysseyLayerService} from './layers.service';
 
 describe('LayersComponent', () => {
     let fixture: ComponentFixture<LayersComponent>;
-    let edvLayersService: EdvLayersService;
+    let eodysseyLayerService: EOdysseyLayerService;
     const getLayerCollectionItems = vi.fn();
     const getLayer = vi.fn();
     const registerAndGetLayerWorkflowId = vi.fn();
@@ -33,7 +33,7 @@ describe('LayersComponent', () => {
                     provide: LayersService,
                     useValue: {getLayerCollectionItems, getLayer, registerAndGetLayerWorkflowId, getWorkflowIdMetadata},
                 },
-                EdvLayersService,
+                EOdysseyLayerService,
                 {
                     provide: ProjectService,
                     useValue: {
@@ -46,7 +46,7 @@ describe('LayersComponent', () => {
             ],
         }).compileComponents();
 
-        edvLayersService = TestBed.inject(EdvLayersService);
+        eodysseyLayerService = TestBed.inject(EOdysseyLayerService);
         fixture = TestBed.createComponent(LayersComponent);
     });
 
@@ -56,7 +56,7 @@ describe('LayersComponent', () => {
         expect(fixture.componentInstance.currentPresets().map((preset) => preset.category)).toEqual(['harvested', 'harvested']);
         expect((fixture.nativeElement as HTMLElement).querySelectorAll('.preset-group-label')).toHaveLength(0);
 
-        edvLayersService.debug.set(true);
+        eodysseyLayerService.debug.set(true);
 
         fixture.detectChanges();
         await fixture.whenStable();

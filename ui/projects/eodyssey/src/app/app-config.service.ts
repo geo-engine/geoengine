@@ -7,10 +7,10 @@ interface AppConfigStructure extends CoreConfigStructure {}
 
 const APP_CONFIG_DEFAULTS = mergeDeepOverrideLists(DEFAULT_CORE_CONFIG, {
     BRANDING: {
-        LOGO_URL: 'assets/CODE-DE-Lab_RGB.svg',
-        LOGO_ICON_URL: 'favicon.ico',
-        LOGO_ALT_URL: 'assets/CODE-DE-Lab_white_RGB.svg',
-        PAGE_TITLE: 'Enhanced Data Viewer | CODE-DE Lab',
+        LOGO_URL: 'assets/eodyssey-logo.svg',
+        LOGO_ICON_URL: 'assets/eodyssey-icon.svg',
+        LOGO_ALT_URL: 'assets/eodyssey-logo-negative.svg',
+        PAGE_TITLE: 'EOdyssey | CODE-DE Lab',
     },
     DEFAULTS: {
         PROJECT: {
@@ -24,17 +24,17 @@ const APP_CONFIG_DEFAULTS = mergeDeepOverrideLists(DEFAULT_CORE_CONFIG, {
     MAP: {
         DRAWING: {
             DRAW_STYLE: {
-                STROKE_COLOR: 'rgba(62, 163, 220, 0.8)',
+                STROKE_COLOR: 'rgba(255, 130, 37, 0.8)',
                 STROKE_CONTRAST_COLOR: '#FFFFFF',
-                FILL_COLOR: 'rgba(62, 163, 220, 0.1)',
+                FILL_COLOR: 'rgba(255, 130, 37, 0.1)',
                 WIDTH: 2,
                 IMAGE_WIDTH: 4,
                 DASH_PATTERN: [8, 8],
             },
             AFTER_DRAW_STYLE: {
-                STROKE_COLOR: 'rgba(62, 163, 220, 1)',
+                STROKE_COLOR: 'rgba(255, 130, 37, 1)',
                 STROKE_CONTRAST_COLOR: '#FFFFFF',
-                FILL_COLOR: 'rgba(62, 163, 220, 0.2)',
+                FILL_COLOR: 'rgba(255, 130, 37, 0.2)',
                 WIDTH: 2,
                 IMAGE_WIDTH: 4,
                 DASH_PATTERN: [8, 8],
