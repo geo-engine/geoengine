@@ -273,9 +273,10 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
 }
 
 /// Validates a tile file path against the dataset's data path and returns the absolute path
-/// to open. External data uses remote URLs (http://, https://, s3://) and must not refer to
-/// local filesystem paths; the GDAL virtual file system prefix is added only when the dataset
-/// is opened, so external paths resolve to an empty base.
+/// to open. External data uses remote URLs (http://, https://, s3://) or remote GDAL VSI
+/// handlers (/vsicurl/, /vsis3/, ...) and must not refer to local filesystem paths; the
+/// GDAL virtual file system prefix is added only when the dataset is opened, so external
+/// paths resolve to an empty base.
 fn validate_tile_file_path(
     file_path: &Path,
     data_path: &DataPath,

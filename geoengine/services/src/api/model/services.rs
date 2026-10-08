@@ -230,8 +230,10 @@ impl DataPath {
     /// Validates that a file path is appropriate for this data path variant.
     ///
     /// For `External`, the file path must be a remote URL with an `http://`, `https://`,
-    /// or `s3://` scheme. The GDAL virtual file system prefix (e.g. `/vsicurl/` or
-    /// `/vsis3/`) is only added when the dataset is actually opened.
+    /// or `s3://` scheme, or a GDAL VSI path under one of the *remote* handlers
+    /// (`/vsicurl/`, `/vsis3/`, ...). Local handlers such as `/vsizip/` and `/vsigzip/`
+    /// are rejected because they would let a dataset read arbitrary local files.
+    /// The GDAL virtual file system prefix is only added when the dataset is actually opened.
     /// For `Volume` and `Upload`, the file path must be a relative path
     /// with no root, parent, or current-directory components.
     pub fn validate_file_path(&self, file_path: &Path) -> Result<()> {
@@ -241,11 +243,20 @@ impl DataPath {
                 let is_url = path_str.starts_with("http://")
                     || path_str.starts_with("https://")
                     || path_str.starts_with("s3://");
-                // ponytail: any /vsi prefix is accepted, so /vsizip/ can still reach
-                // inside a local archive; accept only the remote handlers
-                // (/vsicurl/, /vsis3/, ...) if that matters
-                let is_vsi = path_str.starts_with("/vsi");
-                if !is_url && !is_vsi {
+                // only *remote* VSI handlers: /vsizip/, /vsigzip/, /vsitar/ and friends
+                // would let an external dataset read arbitrary local files
+                let is_remote_vsi = [
+                    "/vsicurl/",
+                    "/vsicurl_streaming/",
+                    "/vsis3/",
+                    "/vsigs/",
+                    "/vsiaz/",
+                    "/vsioss/",
+                    "/vsiswift/",
+                ]
+                .iter()
+                .any(|prefix| path_str.starts_with(prefix));
+                if !is_url && !is_remote_vsi {
                     return Err(Error::InvalidPath);
                 }
                 Ok(())
@@ -1748,5 +1759,37 @@ mod tests {
                 "password": SECRET_REPLACEMENT,
             })
         );
+    }
+
+    #[test]
+    fn external_path_accepts_only_remote_urls_and_vsi_handlers() {
+        use super::DataPath;
+        use std::path::Path;
+
+        let external = DataPath::External;
+        for ok in [
+            "https://example.com/a.tif",
+            "http://example.com/a.tif",
+            "s3://bucket/a.tif",
+            "/vsicurl/https://example.com/a.tif",
+            "/vsis3/bucket/a.tif",
+            "/vsigs/bucket/a.tif",
+        ] {
+            assert!(
+                external.validate_file_path(Path::new(ok)).is_ok(),
+                "{ok} must be accepted"
+            );
+        }
+        // local VSI handlers would let an external dataset read arbitrary local files
+        for bad in [
+            "/vsizip//tmp/evil.zip/a.tif",
+            "/vsigzip//tmp/evil.gz",
+            "/vsi//tmp/a",
+        ] {
+            assert!(
+                external.validate_file_path(Path::new(bad)).is_err(),
+                "{bad} must be rejected"
+            );
+        }
     }
 }
