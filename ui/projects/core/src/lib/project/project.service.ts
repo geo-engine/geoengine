@@ -993,7 +993,7 @@ export class ProjectService implements OnDestroy {
      * Viewport changes are not part of this: a tile that left the viewport or a zoom level that was zoomed past
      * depends on the tile, not on the project, and is watched per rendered frame by `TileLoader.cancelUnwanted`.
      *
-     * If the layer is not registered with the project service (e.g. in the enhanced data viewer), the stream does not
+     * If the layer is not registered with the project service (e.g. in the EOdyssey app), the stream does not
      * emit when the layer is removed, only on the viewing conditions below.
      *
      * Emits the condition that made the request obsolete, e.g. `'time changed'`, for diagnostics.

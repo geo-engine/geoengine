@@ -26,7 +26,7 @@ import {A11yModule} from '@angular/cdk/a11y';
 import {MeasureDirective, MeasurementType} from './measure.directive';
 import {isActive, Router, RouterModule} from '@angular/router';
 import {addCitationToMapImage} from './map-image-export';
-import {EdvLayersService} from '../layers/layers.service';
+import {EOdysseyLayerService} from '../layers/layers.service';
 
 @Component({
     selector: 'geoengine-main',
@@ -58,7 +58,7 @@ export class MainComponent {
     readonly userService = inject(UserService);
     private readonly mapService = inject(MapService);
     private readonly router = inject(Router);
-    private readonly edvLayersService = inject(EdvLayersService);
+    private readonly eodysseyLayerService = inject(EOdysseyLayerService);
 
     private readonly spatialReferenceService = inject(SpatialReferenceService);
 
@@ -80,9 +80,9 @@ export class MainComponent {
     readonly spatialReference = toSignal(this.projectService.getSpatialReferenceStream());
     readonly currentTime = toSignal(this.projectService.getTimeStream());
 
-    readonly mapTileLayer = computed(() => this.edvLayersService.mapTileLayer());
+    readonly mapTileLayer = computed(() => this.eodysseyLayerService.mapTileLayer());
     readonly tileLoading = signal(false);
-    readonly isLoading = computed(() => (this.edvLayersService.mapTileLayerResource.isLoading() ?? false) || this.tileLoading());
+    readonly isLoading = computed(() => (this.eodysseyLayerService.mapTileLayerResource.isLoading() ?? false) || this.tileLoading());
 
     readonly isLayersActive = isActive('/map/layers', this.router);
     readonly isComputeActive = isActive('/map/compute', this.router);
@@ -109,7 +109,7 @@ export class MainComponent {
         });
 
         effect(() => {
-            this.edvLayersService.debug.set(this.debug());
+            this.eodysseyLayerService.debug.set(this.debug());
         });
     }
 
@@ -152,9 +152,9 @@ export class MainComponent {
         if (this.mapImageLoading()) return;
 
         const [currentDate] = (this.currentTime()?.toString() ?? new Date().toISOString()).split('T');
-        const currentLayer = this.layersReverse().at(-1)?.name ?? 'enhanced-data-viewer-map';
+        const currentLayer = this.layersReverse().at(-1)?.name ?? 'eodyssey-map';
         const citation = replaceCitationPlaceholders(
-            this.edvLayersService.selectedDataSource().citation ?? '',
+            this.eodysseyLayerService.selectedDataSource().citation ?? '',
             this.currentTime() ?? new Date(),
         );
 
