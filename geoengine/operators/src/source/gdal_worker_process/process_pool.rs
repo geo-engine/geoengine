@@ -10,11 +10,12 @@ use geoengine_datatypes::raster::{GridBoundingBox2D, GridBounds, Pixel};
 use ipc_channel::ipc::{IpcReceiver, IpcSender};
 use rustc_hash::FxHasher;
 
-use crate::source::gdal_worker_process::process_common::GdalIpcBytePayload;
-
 use super::{
     GdalProcessPoolAccess,
-    process_common::{GdalIpcPayload, IpcChannelMessage, IpcProcessError, IpcProcessRasterResult},
+    process_common::{
+        GdalIpcPayload, IpcChannelMessage, IpcChannelResult, IpcProcessError,
+        IpcProcessRasterResult,
+    },
     process_impl::{ChildProcessGuard, WorkerConfig, spawn_ipc_server_process},
 };
 
@@ -70,15 +71,13 @@ type FastHashMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<FxHa
 #[derive(Debug, Snafu, Clone)]
 #[snafu(visibility(pub))]
 pub enum GdalProcessPoolError {
-    IpcProcessError {
-        source: IpcProcessError,
-    },
+    #[snafu(display("IpcProcessError caused by: {source}"))]
+    IpcProcessError { source: IpcProcessError },
 
     #[snafu(display("IpcError caused by: {error_str}"))]
-    IpcError {
-        error_str: String,
-    },
+    IpcError { error_str: String },
 
+    #[snafu(display("GDAL worker process panicked"))]
     WorkerPanic,
 }
 
@@ -236,8 +235,8 @@ enum BrokerCommand {
 }
 
 type SharedResult = Option<
-    Arc<(
-        Result<GdalIpcBytePayload, GdalProcessPoolError>,
+    std::sync::Arc<(
+        Result<IpcChannelResult, GdalProcessPoolError>,
         Option<tracing::Span>,
     )>,
 >;
@@ -833,6 +832,18 @@ impl Drop for LeaderCleanupGuard {
     }
 }
 
+/// Wraps a pool error into the `IpcProcessError` a caller sees, keeping its cause chain.
+///
+/// `GdalProcessPoolError`'s `Display` is just the variant name (`IpcProcessError`), so
+/// `e.to_string()` here used to throw the real cause away and leave "Unhandled worker
+/// exception: `IpcProcessError`" with no way to tell a GDAL failure from a broken channel.
+/// `Debug` walks the whole chain.
+fn pool_error_as_ipc_other(error: &GdalProcessPoolError) -> IpcProcessError {
+    IpcProcessError::IpcOther {
+        msg: format!("{error:?}"),
+    }
+}
+
 impl GdalPoolDispatcher {
     pub fn new(pool: Arc<GdalProcessPool>) -> Self {
         Self { pool }
@@ -853,13 +864,84 @@ impl GdalPoolDispatcher {
         &self,
         request: IpcChannelMessage,
     ) -> Result<GdalIpcPayload<P>, GdalProcessPoolError> {
-        self.read_data_dedup(request).await
+        let shared_res = self.dispatch_dedup(request).await?;
+
+        let result_ref = shared_res.0.as_ref().map_err(pool_error_as_ipc_other)?;
+
+        let IpcChannelResult::Raster(byte_payload) = result_ref else {
+            return Err(GdalProcessPoolError::IpcProcessError {
+                source: IpcProcessError::IpcOther {
+                    msg: "expected a classic raster result but got an MD batch".to_string(),
+                },
+            });
+        };
+
+        let payload: GdalIpcPayload<P> =
+            byte_payload
+                .try_into()
+                .map_err(|e: bytemuck::PodCastError| {
+                    tracing::error!("DEBUG: Failed to cast payload: {:?}", e);
+                    GdalProcessPoolError::IpcProcessError {
+                        source: IpcProcessError::PocCastError {
+                            error: e.to_string(),
+                        },
+                    }
+                })?;
+
+        Ok(payload)
     }
 
-    async fn read_data_dedup<P: Pixel>(
+    /// Read a batch of z-slices from a GDAL multidimensional array (one request,
+    /// one response containing one payload per z-slice). Uses the same
+    /// leader/follower deduplication as [`Self::read_data`].
+    ///
+    /// # Panics
+    /// This function will panic if a required channel is dropped unexpectedly.
+    pub async fn read_md_batch_data<P: Pixel>(
         &self,
         request: IpcChannelMessage,
-    ) -> Result<GdalIpcPayload<P>, GdalProcessPoolError> {
+    ) -> Result<Vec<GdalIpcPayload<P>>, GdalProcessPoolError> {
+        let shared_res = self.dispatch_dedup(request).await?;
+
+        let result_ref = shared_res.0.as_ref().map_err(pool_error_as_ipc_other)?;
+
+        let IpcChannelResult::MdBatch(byte_payloads) = result_ref else {
+            return Err(GdalProcessPoolError::IpcProcessError {
+                source: IpcProcessError::IpcOther {
+                    msg: "expected an MD batch result but got a classic raster result".to_string(),
+                },
+            });
+        };
+
+        byte_payloads
+            .iter()
+            .map(|byte_payload| {
+                byte_payload
+                    .try_into()
+                    .map_err(|e: bytemuck::PodCastError| {
+                        tracing::error!("DEBUG: Failed to cast MD payload: {:?}", e);
+                        GdalProcessPoolError::IpcProcessError {
+                            source: IpcProcessError::PocCastError {
+                                error: e.to_string(),
+                            },
+                        }
+                    })
+            })
+            .collect()
+    }
+
+    /// Shared leader/follower dispatch: hashes the request, coalesces identical
+    /// concurrent requests, submits to the broker and waits for the result.
+    async fn dispatch_dedup(
+        &self,
+        request: IpcChannelMessage,
+    ) -> Result<
+        std::sync::Arc<(
+            Result<IpcChannelResult, GdalProcessPoolError>,
+            Option<tracing::Span>,
+        )>,
+        GdalProcessPoolError,
+    > {
         let mut s = rustc_hash::FxHasher::default();
         request.full_hash(&mut s);
         let tile_key = s.finish();
@@ -957,27 +1039,7 @@ impl GdalPoolDispatcher {
             tracing::Span::current().follows_from(span.id());
         }
 
-        let byte_payload_ref =
-            shared_res
-                .0
-                .as_ref()
-                .map_err(|e| GdalProcessPoolError::IpcProcessError {
-                    source: IpcProcessError::IpcOther { msg: e.to_string() },
-                })?;
-
-        let payload: GdalIpcPayload<P> =
-            byte_payload_ref
-                .try_into()
-                .map_err(|e: bytemuck::PodCastError| {
-                    tracing::error!("DEBUG: Failed to cast payload: {:?}", e);
-                    GdalProcessPoolError::IpcProcessError {
-                        source: IpcProcessError::PocCastError {
-                            error: e.to_string(),
-                        },
-                    }
-                })?;
-
-        Ok(payload)
+        Ok(shared_res)
     }
 }
 
@@ -992,6 +1054,7 @@ mod tests {
     use super::*;
     use float_cmp::assert_approx_eq;
     use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
+    use std::path::PathBuf;
 
     /// Creates a window from min/max `[row, col]` indices.
     fn window(min: [isize; 2], max: [isize; 2]) -> GridBoundingBox2D {
@@ -1025,6 +1088,129 @@ mod tests {
         let a = window([0, 0], [7, 7]);
         let b = window([50, 0], [57, 7]);
         assert_approx_eq!(f64, calculate_grid_distance(&a, &b), 50.0);
+    }
+
+    // --- routing is z-blind, sharing is z-aware ---
+
+    fn md_message(z_range: std::ops::Range<usize>) -> IpcChannelMessage {
+        IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
+            dataset_params: GdalDatasetParameters {
+                file_path: PathBuf::from("/vsicurl/https://example.invalid/tasmax.nc"),
+                rasterband_channel: 1,
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: (0.0, 0.0).into(),
+                    x_pixel_size: 0.25,
+                    y_pixel_size: 0.25,
+                },
+                width: 1440,
+                height: 600,
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value: None,
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: Some(vec![(
+                    "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_string(),
+                    ".nc".to_string(),
+                )]),
+                allow_alphaband_as_mask: false,
+                retry: None,
+            },
+            read_advise: GdalReadAdvise {
+                gdal_read_widow: GdalReadWindow {
+                    start_x: 0,
+                    start_y: 0,
+                    size_x: 512,
+                    size_y: 360,
+                },
+                read_window_bounds: window([0, 0], [359, 511]),
+                bounds_of_target: window([0, 0], [599, 1439]),
+                flip_y: true,
+            },
+            data_type: geoengine_datatypes::raster::RasterDataType::F32,
+            read_id: None,
+            read_kind: GdalReadKind::MdArray {
+                group: None,
+                array_name: "tasmax".to_string(),
+                z_range,
+                leading_prefix: Vec::new(),
+            },
+        })
+    }
+
+    fn hash_of(msg: &IpcChannelMessage, full: bool) -> u64 {
+        let mut h = rustc_hash::FxHasher::default();
+        if full {
+            msg.full_hash(&mut h);
+        } else {
+            msg.0.dataset_params.partial_hash(&mut h);
+        }
+        h.finish()
+    }
+
+    /// Requests for the same file but different z slices must land in the same worker queue,
+    /// so the worker can reuse the GDAL dataset it already has open. The routing key is
+    /// `dataset_params.partial_hash`, which must not contain the z range.
+    #[test]
+    fn routing_is_blind_to_the_z_range() {
+        let a = md_message(0..4);
+        let b = md_message(48..52);
+        assert_eq!(
+            hash_of(&a, false),
+            hash_of(&b, false),
+            "different z slices of one file must be routed together, or each slice re-opens \
+             the dataset and the 4.8s round trip is paid again"
+        );
+    }
+
+    /// ...while the *dedup* key must not collapse them: two different z ranges are two
+    /// different batches and must not share a result.
+    #[test]
+    fn sharing_is_not_blind_to_the_z_range() {
+        let a = md_message(0..4);
+        let b = md_message(48..52);
+        assert_ne!(
+            hash_of(&a, true),
+            hash_of(&b, true),
+            "collapsing different z ranges would return the wrong slices"
+        );
+    }
+
+    /// A different array of the *same file* must also route together - the open handle is
+    /// per file, and GDAL can resolve several arrays from it. Only the dedup key has to
+    /// tell them apart, since they return different data.
+    #[test]
+    fn routing_is_blind_to_the_array_but_sharing_is_not() {
+        let a = md_message(0..4);
+        let mut b = md_message(0..4);
+        let IpcChannelMessage(p) = &mut b;
+        let IpcChannelMessagePayload { read_kind, .. } = p;
+        *read_kind = GdalReadKind::MdArray {
+            group: None,
+            array_name: "tasmin".to_string(),
+            z_range: 0..4,
+            leading_prefix: Vec::new(),
+        };
+        assert_eq!(
+            hash_of(&a, false),
+            hash_of(&b, false),
+            "two arrays of one file share the open GDAL dataset"
+        );
+        assert_ne!(
+            hash_of(&a, true),
+            hash_of(&b, true),
+            "but they must not share a read result"
+        );
+    }
+
+    /// The same array at the same z in a *different* file is a different read.
+    #[test]
+    fn routing_separates_different_files() {
+        let a = md_message(0..4);
+        let mut b = md_message(0..4);
+        let IpcChannelMessage(p) = &mut b;
+        p.dataset_params.file_path = PathBuf::from("/vsicurl/https://example.invalid/tasmin.nc");
+        assert_ne!(hash_of(&a, false), hash_of(&b, false));
+        assert_ne!(hash_of(&a, true), hash_of(&b, true));
     }
 
     // --- WorkerAffinity::calculate_score ---
@@ -1099,8 +1285,9 @@ mod tests {
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
     };
     use crate::source::gdal_worker_process::process_common::{
-        GdalDataGridByteVariant, GdalIpcRasterProperties, GdalReadAdvise, GdalReadWindow,
-        IpcChannelMessage, IpcChannelMessagePayload,
+        GdalDataGridByteVariant, GdalIpcBytePayload, GdalIpcRasterProperties, GdalReadAdvise,
+        GdalReadKind, GdalReadWindow, IpcChannelMessage, IpcChannelMessagePayload,
+        IpcChannelResult,
     };
     use geoengine_datatypes::primitives::Coordinate2D;
     use geoengine_datatypes::raster::{GridShape2D, RasterDataType};
@@ -1161,6 +1348,7 @@ mod tests {
             },
             data_type: RasterDataType::U8,
             read_id: None,
+            read_kind: GdalReadKind::Raster,
         });
         let req = Box::new(QueuedRequest {
             dataset_hash,
@@ -1278,7 +1466,7 @@ mod tests {
                 if let BrokerCommand::Read(req) = cmd {
                     read_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     let _ = req.respond_to.send(ReadResult {
-                        result: Ok(Ok(GdalIpcBytePayload {
+                        result: Ok(Ok(IpcChannelResult::Raster(GdalIpcBytePayload {
                             dimensions: window([0, 0], [7, 7]),
                             properties: GdalIpcRasterProperties {
                                 offset: None,
@@ -1287,7 +1475,7 @@ mod tests {
                                 properties_map: vec![],
                             },
                             data_variant: GdalDataGridByteVariant::Empty,
-                        })),
+                        }))),
                         companion_span: None,
                     });
                 }

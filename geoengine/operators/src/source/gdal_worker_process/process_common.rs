@@ -65,6 +65,27 @@ impl GdalReadWindow {
     }
 }
 
+/// The kind of read a [`IpcChannelMessagePayload`] requests: a classic 2D rasterband
+/// read or a batched multidimensional (MD) array read.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash)]
+pub enum GdalReadKind {
+    /// Classic 2D rasterband read (`rasterband_channel` selects the band).
+    Raster,
+    /// Multidim array read: read the array `array_name` (in the MD group `group`,
+    /// `None` = root group) z-slice index range `z_range` (file-local, end-exclusive)
+    /// in one batched request.
+    MdArray {
+        group: Option<String>,
+        array_name: String,
+        z_range: std::ops::Range<usize>,
+        /// Fixed index into each dimension between z and (y, x); empty for 3D.
+        ///
+        /// `#[serde(default)]` so a worker from the previous build still reads 3D data.
+        #[serde(default)]
+        leading_prefix: Vec<u64>,
+    },
+}
+
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct IpcChannelMessagePayload {
     pub dataset_params: GdalDatasetParameters,
@@ -75,9 +96,23 @@ pub struct IpcChannelMessagePayload {
     /// caller span with the worker process span for the same logical read.
     #[serde(default)]
     pub read_id: Option<String>,
+    /// Whether this is a classic 2D or a multidim array read.
+    pub read_kind: GdalReadKind,
 }
 
-pub type IpcProcessRasterResult = Result<GdalIpcBytePayload, IpcProcessError>;
+/// Result payload of a worker read: a classic 2D raster payload, or a batch of
+/// per-z-slice payloads for multidim array reads.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub enum IpcChannelResult {
+    /// Classic 2D rasterband read result.
+    Raster(GdalIpcBytePayload),
+    /// Multidim read result: one payload per z-slice of the requested
+    /// [`GdalReadKind::MdArray`] batch, in ascending z order. Each slice uses the same
+    /// byte encoding as `Raster`.
+    MdBatch(Vec<GdalIpcBytePayload>),
+}
+
+pub type IpcProcessRasterResult = Result<IpcChannelResult, IpcProcessError>;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct GdalIpcBytePayload {
@@ -546,5 +581,8 @@ impl IpcChannelMessage {
         // Hash read advise
         self.0.read_advise.hash(state);
         self.0.data_type.hash(state);
+
+        // Hash multidim request parts
+        self.0.read_kind.hash(state);
     }
 }

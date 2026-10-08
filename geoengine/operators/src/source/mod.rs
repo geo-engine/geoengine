@@ -1,6 +1,7 @@
 mod csv;
 pub mod gdal_source;
 pub mod gdal_worker_process;
+mod md_gdal_source;
 mod multi_band_gdal_source;
 mod ogr_source;
 
@@ -16,6 +17,10 @@ pub use self::gdal_worker_process::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetadataMapping,
     GdalProcessPool, GdalProcessPoolAccess, GdalProcessPoolError, GdalRetryOptions,
     GdalSourceTimePlaceholder, TimeReference,
+};
+pub use self::md_gdal_source::{
+    GdalMdMetaData, MdDatasetFile, MdFileTimes, MdGdalSource, MdGdalSourceError,
+    MdGdalSourceParameters, MdGdalSourceProcessor, MdLoadingInfo, ZRole, presented_geo_transform,
 };
 pub use self::multi_band_gdal_source::{
     GdalMultiBand, GdalSourceError as MultiBandGdalSourceError,

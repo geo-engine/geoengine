@@ -20,7 +20,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { AddDatasetTileToJSON, AutoCreateDatasetToJSON, CreateDatasetToJSON, DatasetFromJSON, DatasetListingFromJSON, DatasetNameResponseFromJSON, MetaDataDefinitionFromJSON, MetaDataDefinitionToJSON, MetaDataSuggestionFromJSON, ProvenancesToJSON, SuggestMetaDataToJSON, SymbologyToJSON, UpdateDatasetToJSON, VolumeFromJSON, VolumeFileLayersResponseFromJSON, } from '../models/index';
+import { AddDatasetMdTileToJSON, AddDatasetTileToJSON, AutoCreateDatasetToJSON, CreateDatasetToJSON, DatasetFromJSON, DatasetListingFromJSON, DatasetNameResponseFromJSON, MetaDataDefinitionFromJSON, MetaDataDefinitionToJSON, MetaDataSuggestionFromJSON, ProvenancesToJSON, SuggestMetaDataToJSON, SymbologyToJSON, UpdateDatasetToJSON, VolumeFromJSON, VolumeFileLayersResponseFromJSON, } from '../models/index';
 /**
  *
  */
@@ -73,6 +73,58 @@ export class DatasetsApi extends runtime.BaseAPI {
     addDatasetTilesHandler(requestParameters, initOverrides) {
         return __awaiter(this, void 0, void 0, function* () {
             yield this.addDatasetTilesHandlerRaw(requestParameters, initOverrides);
+        });
+    }
+    /**
+     * Creates request options for addMdDatasetTilesHandler without sending the request
+     */
+    addMdDatasetTilesHandlerRequestOpts(requestParameters) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (requestParameters['dataset'] == null) {
+                throw new runtime.RequiredError('dataset', 'Required parameter "dataset" was null or undefined when calling addMdDatasetTilesHandler().');
+            }
+            if (requestParameters['addDatasetMdTile'] == null) {
+                throw new runtime.RequiredError('addDatasetMdTile', 'Required parameter "addDatasetMdTile" was null or undefined when calling addMdDatasetTilesHandler().');
+            }
+            const queryParameters = {};
+            const headerParameters = {};
+            headerParameters['Content-Type'] = 'application/json';
+            if (this.configuration && this.configuration.accessToken) {
+                const token = this.configuration.accessToken;
+                const tokenString = yield token("session_token", []);
+                if (tokenString) {
+                    headerParameters["Authorization"] = `Bearer ${tokenString}`;
+                }
+            }
+            let urlPath = `/dataset/{dataset}/md-tiles`;
+            urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+            return {
+                path: urlPath,
+                method: 'POST',
+                headers: headerParameters,
+                query: queryParameters,
+                body: requestParameters['addDatasetMdTile'].map(AddDatasetMdTileToJSON),
+            };
+        });
+    }
+    /**
+     * One row per file, covering all of that file\'s z slices. The per-slice times live in `timeDescriptor` plus `timeSteps`, and the file\'s overall bounds are derived from them when the row is stored, so a request cannot describe a row as covering a window it does not.
+     * Adds MD array files to an `MdGdalSource` dataset.
+     */
+    addMdDatasetTilesHandlerRaw(requestParameters, initOverrides) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const requestOptions = yield this.addMdDatasetTilesHandlerRequestOpts(requestParameters);
+            const response = yield this.request(requestOptions, initOverrides);
+            return new runtime.VoidApiResponse(response);
+        });
+    }
+    /**
+     * One row per file, covering all of that file\'s z slices. The per-slice times live in `timeDescriptor` plus `timeSteps`, and the file\'s overall bounds are derived from them when the row is stored, so a request cannot describe a row as covering a window it does not.
+     * Adds MD array files to an `MdGdalSource` dataset.
+     */
+    addMdDatasetTilesHandler(requestParameters, initOverrides) {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield this.addMdDatasetTilesHandlerRaw(requestParameters, initOverrides);
         });
     }
     /**

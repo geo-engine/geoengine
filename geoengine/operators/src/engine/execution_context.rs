@@ -13,15 +13,15 @@ use crate::meta::wrapper::InitializedOperatorWrapper;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess, WorkerConfig};
 use crate::source::{
-    GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-    OgrSourceDataset,
+    GdalLoadingInfo, MdLoadingInfo, MultiBandGdalLoadingInfo,
+    MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
 };
 use crate::util::{Result, create_rayon_thread_pool};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::machine_learning::MlModelName;
 use geoengine_datatypes::primitives::{
-    CacheTtlSeconds, RasterQueryRectangle, VectorQueryRectangle,
+    CacheTtlSeconds, RasterQueryRectangle, TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
@@ -44,7 +44,8 @@ pub trait ExecutionContext: Send
         MultiBandGdalLoadingInfo,
         RasterResultDescriptor,
         MultiBandGdalLoadingInfoQueryRectangle,
-    > + GdalProcessPoolAccess
+    > + MetaDataProvider<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    + GdalProcessPoolAccess
 {
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn tiling_specification(&self) -> TilingSpecification;
@@ -92,6 +93,17 @@ where
 {
     async fn loading_info(&self, query: Q) -> Result<L>;
     async fn result_descriptor(&self) -> Result<R>;
+
+    /// The time axis over `query`, for sources that store one and can answer without
+    /// materialising a full loading info.
+    ///
+    /// `None` means "no separate axis here", and the caller derives the steps from
+    /// [`Self::loading_info`] instead. Sources whose axis is implied by their result
+    /// descriptor's `Regular` time dimension never need this: the query processor answers
+    /// those arithmetically.
+    async fn time_axis(&self, _query: TimeInterval) -> Result<Option<Vec<TimeInterval>>> {
+        Ok(None)
+    }
 
     fn box_clone(&self) -> Box<dyn MetaData<L, R, Q>>;
 }

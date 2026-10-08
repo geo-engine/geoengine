@@ -69,6 +69,8 @@ class RasterOperator(Operator):
             return GdalSource.from_operator_dict(operator_dict)
         if operator_dict["type"] == "MultiBandGdalSource":
             return MultiBandGdalSource.from_operator_dict(operator_dict)
+        if operator_dict["type"] == "MdGdalSource":
+            return MdGdalSource.from_operator_dict(operator_dict)
         if operator_dict["type"] == "RasterScaling":
             return RasterScaling.from_operator_dict(operator_dict)
         if operator_dict["type"] == "RasterTypeConversion":
@@ -177,6 +179,36 @@ class MultiBandGdalSource(RasterOperator):
             raise ValueError("Invalid operator type")
 
         return MultiBandGdalSource(cast(str, operator_dict["params"]["data"]))
+
+
+class MdGdalSource(RasterOperator):
+    """A multidimensional GDAL source operator for n-dimensional netCDF/Zarr arrays.
+
+    The dataset's own time dimension selects which z slices a query returns, so the
+    query's time interval picks the time steps; there is no separate temporal operator.
+    """
+
+    dataset: str
+
+    def __init__(self, dataset: str | DatasetName):
+        """Creates a new multidimensional GDAL source operator."""
+        if isinstance(dataset, DatasetName):
+            dataset = str(dataset)
+        self.dataset = dataset
+
+    def name(self) -> str:
+        return "MdGdalSource"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": self.name(), "params": {"data": self.dataset}}
+
+    @classmethod
+    def from_operator_dict(cls, operator_dict: dict[str, Any]) -> MdGdalSource:
+        """Returns an operator from a dictionary."""
+        if operator_dict["type"] != "MdGdalSource":
+            raise ValueError("Invalid operator type")
+
+        return MdGdalSource(cast(str, operator_dict["params"]["data"]))
 
 
 class OgrSource(VectorOperator):

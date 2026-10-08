@@ -18,6 +18,9 @@ Name | Type
 `start` | number
 `end` | number
 `bandOffset` | number
+`zRole` | [ZRole](ZRole.md)
+`wrap` | boolean
+`maxZBatchSize` | number
 
 ## Example
 
@@ -38,6 +41,9 @@ const example = {
   "start": null,
   "end": null,
   "bandOffset": null,
+  "zRole": null,
+  "wrap": null,
+  "maxZBatchSize": null,
 } satisfies MetaDataDefinition
 
 console.log(example)

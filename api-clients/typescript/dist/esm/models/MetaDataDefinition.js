@@ -10,6 +10,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { GdalMdMetaDataFromJSONTyped, GdalMdMetaDataToJSON, } from './GdalMdMetaData';
 import { GdalMetaDataListFromJSONTyped, GdalMetaDataListToJSON, } from './GdalMetaDataList';
 import { GdalMetaDataRegularFromJSONTyped, GdalMetaDataRegularToJSON, } from './GdalMetaDataRegular';
 import { GdalMetaDataStaticFromJSONTyped, GdalMetaDataStaticToJSON, } from './GdalMetaDataStatic';
@@ -25,6 +26,8 @@ export function MetaDataDefinitionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     switch (json['type']) {
+        case 'GdalMdMetaData':
+            return Object.assign({}, GdalMdMetaDataFromJSONTyped(json, true), { type: 'GdalMdMetaData' });
         case 'GdalMetaDataList':
             return Object.assign({}, GdalMetaDataListFromJSONTyped(json, true), { type: 'GdalMetaDataList' });
         case 'GdalMetaDataNetCdfCf':
@@ -51,6 +54,8 @@ export function MetaDataDefinitionToJSONTyped(value, ignoreDiscriminator = false
         return value;
     }
     switch (value['type']) {
+        case 'GdalMdMetaData':
+            return Object.assign({}, GdalMdMetaDataToJSON(value), { type: 'GdalMdMetaData' });
         case 'GdalMetaDataList':
             return Object.assign({}, GdalMetaDataListToJSON(value), { type: 'GdalMetaDataList' });
         case 'GdalMetaDataNetCdfCf':

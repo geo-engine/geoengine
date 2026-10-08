@@ -14,6 +14,7 @@
 
 import * as runtime from '../runtime';
 import type {
+  AddDatasetMdTile,
   AddDatasetTile,
   AutoCreateDataset,
   CreateDataset,
@@ -32,6 +33,8 @@ import type {
   VolumeFileLayersResponse,
 } from '../models/index';
 import {
+    AddDatasetMdTileFromJSON,
+    AddDatasetMdTileToJSON,
     AddDatasetTileFromJSON,
     AddDatasetTileToJSON,
     AutoCreateDatasetFromJSON,
@@ -69,6 +72,11 @@ import {
 export interface AddDatasetTilesHandlerRequest {
     dataset: string;
     addDatasetTile: Array<AddDatasetTile>;
+}
+
+export interface AddMdDatasetTilesHandlerRequest {
+    dataset: string;
+    addDatasetMdTile: Array<AddDatasetMdTile>;
 }
 
 export interface AutoCreateDatasetHandlerRequest {
@@ -193,6 +201,70 @@ export class DatasetsApi extends runtime.BaseAPI {
      */
     async addDatasetTilesHandler(requestParameters: AddDatasetTilesHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
         await this.addDatasetTilesHandlerRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * Creates request options for addMdDatasetTilesHandler without sending the request
+     */
+    async addMdDatasetTilesHandlerRequestOpts(requestParameters: AddMdDatasetTilesHandlerRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['dataset'] == null) {
+            throw new runtime.RequiredError(
+                'dataset',
+                'Required parameter "dataset" was null or undefined when calling addMdDatasetTilesHandler().'
+            );
+        }
+
+        if (requestParameters['addDatasetMdTile'] == null) {
+            throw new runtime.RequiredError(
+                'addDatasetMdTile',
+                'Required parameter "addDatasetMdTile" was null or undefined when calling addMdDatasetTilesHandler().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("session_token", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/dataset/{dataset}/md-tiles`;
+        urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+
+        return {
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: requestParameters['addDatasetMdTile']!.map(AddDatasetMdTileToJSON),
+        };
+    }
+
+    /**
+     * One row per file, covering all of that file\'s z slices. The per-slice times live in `timeDescriptor` plus `timeSteps`, and the file\'s overall bounds are derived from them when the row is stored, so a request cannot describe a row as covering a window it does not.
+     * Adds MD array files to an `MdGdalSource` dataset.
+     */
+    async addMdDatasetTilesHandlerRaw(requestParameters: AddMdDatasetTilesHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
+        const requestOptions = await this.addMdDatasetTilesHandlerRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     * One row per file, covering all of that file\'s z slices. The per-slice times live in `timeDescriptor` plus `timeSteps`, and the file\'s overall bounds are derived from them when the row is stored, so a request cannot describe a row as covering a window it does not.
+     * Adds MD array files to an `MdGdalSource` dataset.
+     */
+    async addMdDatasetTilesHandler(requestParameters: AddMdDatasetTilesHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
+        await this.addMdDatasetTilesHandlerRaw(requestParameters, initOverrides);
     }
 
     /**

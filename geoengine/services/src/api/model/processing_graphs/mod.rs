@@ -33,8 +33,8 @@ use geoengine_operators::{
         VisualPointClustering as OperatorsVisualPointClustering,
     },
     source::{
-        GdalSource as OperatorsGdalSource, MultiBandGdalSource as OperatorsMultiBandGdalSource,
-        OgrSource as OperatorsOgrSource,
+        GdalSource as OperatorsGdalSource, MdGdalSource as OperatorsMdGdalSource,
+        MultiBandGdalSource as OperatorsMultiBandGdalSource, OgrSource as OperatorsOgrSource,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -81,8 +81,9 @@ pub use crate::api::model::processing_graphs::{
         VisualPointClustering, VisualPointClusteringParameters,
     },
     source::{
-        AttributeFilter, GdalSource, GdalSourceParameters, MockPointSource,
-        MockPointSourceParameters, MultiBandGdalSource, OgrSource, OgrSourceParameters,
+        AttributeFilter, GdalSource, GdalSourceParameters, MdGdalSource, MdGdalSourceParameters,
+        MockPointSource, MockPointSourceParameters, MultiBandGdalSource, OgrSource,
+        OgrSourceParameters,
     },
     source_parameters::{
         MultipleRasterOrSingleVectorOperator, MultipleRasterOrSingleVectorSource,
@@ -164,6 +165,7 @@ pub enum RasterOperator {
     Expression(Expression),
     GdalSource(GdalSource),
     Interpolation(Interpolation),
+    MdGdalSource(MdGdalSource),
     MultiBandGdalSource(MultiBandGdalSource),
     NeighborhoodAggregate(NeighborhoodAggregate),
     Onnx(Onnx),
@@ -239,6 +241,9 @@ impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
             }
             RasterOperator::Interpolation(interpolation) => {
                 OperatorsInterpolation::try_from(interpolation).map(OperatorsRasterOperator::boxed)
+            }
+            RasterOperator::MdGdalSource(gdal_source) => {
+                OperatorsMdGdalSource::try_from(gdal_source).map(OperatorsRasterOperator::boxed)
             }
             RasterOperator::MultiBandGdalSource(gdal_source) => {
                 OperatorsMultiBandGdalSource::try_from(gdal_source)
@@ -390,6 +395,8 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     // Source
     GdalSource,
     GdalSourceParameters,
+    MdGdalSource,
+    MdGdalSourceParameters,
     MockPointSource,
     MockPointSourceParameters,
     MultiBandGdalSource,

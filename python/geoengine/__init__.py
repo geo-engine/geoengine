@@ -34,6 +34,7 @@ from .datasets import (
     StoredDataset,
     add_dataset,
     add_dataset_tiles,
+    add_md_dataset_tiles,
     add_multiband_gdal_source,
     add_or_replace_dataset_with_permissions,
     dataset_info_by_name,

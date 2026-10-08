@@ -5,6 +5,7 @@ All URIs are relative to *https://geoengine.io/api*
 Method | HTTP request | Description
 ------------- | ------------- | -------------
 [**add_dataset_tiles_handler**](DatasetsApi.md#add_dataset_tiles_handler) | **POST** /dataset/{dataset}/tiles | Add a tile to a gdal dataset.
+[**add_md_dataset_tiles_handler**](DatasetsApi.md#add_md_dataset_tiles_handler) | **POST** /dataset/{dataset}/md-tiles | Adds MD array files to an `MdGdalSource` dataset.
 [**auto_create_dataset_handler**](DatasetsApi.md#auto_create_dataset_handler) | **POST** /dataset/auto | Creates a new dataset using previously uploaded files. The format of the files will be automatically detected when possible.
 [**create_dataset_handler**](DatasetsApi.md#create_dataset_handler) | **POST** /dataset | Creates a new dataset referencing files. Users can reference previously uploaded files. Admins can reference files from a volume.
 [**delete_dataset_handler**](DatasetsApi.md#delete_dataset_handler) | **DELETE** /dataset/{dataset} | Delete a dataset
@@ -46,6 +47,37 @@ Name | Type | Description  | Required | Notes
 
 - **Content-Type**: application/json
 - **Accept**: Not defined
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+
+## add_md_dataset_tiles_handler
+
+> add_md_dataset_tiles_handler(dataset, add_dataset_md_tile)
+Adds MD array files to an `MdGdalSource` dataset.
+
+One row per file, covering all of that file's z slices. The per-slice times live in `timeDescriptor` plus `timeSteps`, and the file's overall bounds are derived from them when the row is stored, so a request cannot describe a row as covering a window it does not.
+
+### Parameters
+
+
+Name | Type | Description  | Required | Notes
+------------- | ------------- | ------------- | ------------- | -------------
+**dataset** | **String** | Dataset Name | [required] |
+**add_dataset_md_tile** | [**Vec<models::AddDatasetMdTile>**](AddDatasetMdTile.md) |  | [required] |
+
+### Return type
+
+ (empty response body)
+
+### Authorization
+
+[session_token](../README.md#session_token)
+
+### HTTP request headers
+
+- **Content-Type**: application/json
+- **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

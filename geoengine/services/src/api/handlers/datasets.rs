@@ -31,8 +31,10 @@ use actix_web::{
     FromRequest, HttpResponse, HttpResponseBuilder, Responder,
     web::{self, Json},
 };
+use gdal::GdalOpenFlags;
 use gdal::{
     DatasetOptions,
+    spatial_ref::SpatialRef,
     vector::{Layer, LayerAccess, OGRFieldType},
 };
 use geoengine_datatypes::{
@@ -41,6 +43,7 @@ use geoengine_datatypes::{
     primitives::{FeatureDataType, Measurement, TimeInterval, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
+use geoengine_operators::util::GdalConfigOptions;
 use geoengine_operators::{
     engine::{
         OperatorName, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
@@ -58,7 +61,7 @@ use geoengine_operators::{
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     convert::{TryFrom, TryInto},
     path::{Path, PathBuf},
 };
@@ -102,6 +105,10 @@ where
             .service(
                 web::resource("/{dataset}/tiles")
                     .route(web::post().to(add_dataset_tiles_handler::<C>)),
+            )
+            .service(
+                web::resource("/{dataset}/md-tiles")
+                    .route(web::post().to(add_md_dataset_tiles_handler::<C>)),
             )
             .service(
                 web::resource("/{dataset}")
@@ -265,44 +272,62 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
     Ok(HttpResponse::Ok().finish())
 }
 
+/// Validates a tile file path against the dataset's data path and returns the absolute path
+/// to open. External data uses remote URLs (http://, https://, s3://) or remote GDAL VSI
+/// handlers (/vsicurl/, /vsis3/, ...) and must not refer to local filesystem paths; the
+/// GDAL virtual file system prefix is added only when the dataset is opened, so external
+/// paths resolve to an empty base.
+fn validate_tile_file_path(
+    file_path: &Path,
+    data_path: &DataPath,
+    data_path_file_path: &Path,
+) -> Result<PathBuf, AddDatasetTilesError> {
+    if matches!(data_path, DataPath::External) {
+        ensure!(
+            data_path.validate_file_path(file_path).is_ok(),
+            TileFileMustBeExternalPath {
+                file_path: file_path.to_string_lossy().to_string()
+            }
+        );
+        return Ok(PathBuf::new());
+    }
+
+    // Volume and upload paths must be relative; they are resolved against the data path
+    ensure!(
+        file_path.is_relative(),
+        TileFilePathNotRelative {
+            file_path: file_path.to_string_lossy().to_string()
+        }
+    );
+
+    let absolute_path = data_path_file_path.join(file_path);
+
+    ensure!(
+        absolute_path.exists(),
+        TileFilePathDoesNotExist {
+            file_path: file_path.to_string_lossy().to_string(),
+            absolute_path: absolute_path.to_string_lossy().to_string(),
+        }
+    );
+
+    Ok(absolute_path)
+}
+
 fn validate_tile(
     tile: &AddDatasetTile,
     data_path: &DataPath,
     data_path_file_path: &Path,
     dataset_descriptor: &RasterResultDescriptor,
 ) -> Result<(), AddDatasetTilesError> {
-    // External data uses remote URLs (http://, https://, s3://) and must not
-    // refer to local filesystem paths. The GDAL virtual file system prefix is
-    // added only when the dataset is opened.
+    // external paths are opened through GDAL's virtual file system, which the caller
+    // already prefixed, so there is no local file to inspect
     if matches!(data_path, DataPath::External) {
-        if data_path
-            .validate_file_path(&tile.params.file_path)
-            .is_err()
-        {
-            return Err(AddDatasetTilesError::TileFileMustBeExternalPath {
-                file_path: tile.params.file_path.to_string_lossy().to_string(),
-            });
-        }
+        validate_tile_file_path(&tile.params.file_path, data_path, data_path_file_path)?;
         return Ok(());
     }
 
-    // Volume and upload paths must be relative; they are resolved against the data path
-    ensure!(
-        tile.params.file_path.is_relative(),
-        TileFilePathNotRelative {
-            file_path: tile.params.file_path.to_string_lossy().to_string()
-        }
-    );
-
-    let absolute_path = data_path_file_path.join(&tile.params.file_path);
-
-    ensure!(
-        absolute_path.exists(),
-        TileFilePathDoesNotExist {
-            file_path: tile.params.file_path.to_string_lossy().to_string(),
-            absolute_path: absolute_path.to_string_lossy().to_string(),
-        }
-    );
+    let absolute_path =
+        validate_tile_file_path(&tile.params.file_path, data_path, data_path_file_path)?;
 
     let ds = gdal_open_dataset_ex(&absolute_path, DatasetOptions::default()).context(
         CannotOpenTileFile {
@@ -396,6 +421,422 @@ pub struct AddDatasetTile {
     pub band: u32,
     pub z_index: i64,
     pub params: GdalDatasetParameters,
+}
+
+/// One MD array file of an `MdGdalSource` dataset, covering all of that file's z slices.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema)]
+pub struct AddDatasetMdTile {
+    /// the presented footprint (wrap-around aware)
+    pub spatial_partition: SpatialPartition2D,
+    pub band: u32,
+    /// position of this file in the concatenated z axis of `band`
+    pub z_index: i64,
+    pub array_name: String,
+    /// "/"-separated path to the MD group below the root group; `None` = root group
+    #[serde(default)]
+    pub array_group: Option<String>,
+    pub time_descriptor: crate::api::model::operators::TimeDescriptor,
+    /// One interval per z slice, always required.
+    ///
+    /// Both forms are stored on purpose: `time_descriptor` is the compact form the API
+    /// advertises, `time_steps` says which slices exist and is what the read path derives
+    /// the file's slice count from. Omitting it would make the file contribute zero slices
+    /// and every later file come back at the wrong time.
+    pub time_steps: Vec<crate::api::model::datatypes::TimeInterval>,
+    pub params: GdalDatasetParameters,
+    /// Fixed index into each dimension between z and (y, x), so one row is one slice of a
+    /// 4D array - `[depth]` for `(time, depth, y, x)`. Empty for 3D.
+    ///
+    /// Per row rather than per dataset, so the bands of one dataset can each select a
+    /// different slice: a `(time, depth, y, x)` file with one row per depth becomes one
+    /// dataset whose band `b` is depth `b`.
+    #[serde(default)]
+    pub leading_prefix: Vec<i64>,
+}
+
+impl AddDatasetMdTile {
+    /// The file's overall time bounds, derived from the declared steps.
+    ///
+    /// Row filtering and gap filling read the stored `time` column, so it has to be the
+    /// extent the steps actually cover. Deriving it keeps a row from being described as
+    /// covering a window it does not.
+    pub(crate) fn file_time_bounds(&self) -> crate::api::model::datatypes::TimeInterval {
+        self.md_times().bounds().into()
+    }
+
+    fn md_times(&self) -> geoengine_operators::source::MdFileTimes {
+        geoengine_operators::source::MdFileTimes {
+            descriptor: self.time_descriptor.clone().into(),
+            steps: self
+                .time_steps
+                .iter()
+                .map(|t| geoengine_datatypes::primitives::TimeInterval::from(*t))
+                .collect(),
+        }
+    }
+}
+
+/// Adds MD array files to an `MdGdalSource` dataset.
+///
+/// One row per file, covering all of that file's z slices. The per-slice times live in
+/// `timeDescriptor` plus `timeSteps`, and the file's overall bounds are derived from them
+/// when the row is stored, so a request cannot describe a row as covering a window it does
+/// not.
+#[utoipa::path(
+    tag = "Datasets",
+    post,
+    path = "/dataset/{dataset}/md-tiles",
+    request_body = Vec<AddDatasetMdTile>,
+    responses(
+        (status = 200),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
+    ),
+    params(
+        ("dataset" = DatasetName, description = "Dataset Name"),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn add_md_dataset_tiles_handler<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    dataset: web::Path<DatasetName>,
+    tiles: Json<Vec<AddDatasetMdTile>>,
+) -> Result<HttpResponse, AddDatasetMdTilesError> {
+    let session_context = app_ctx.session_context(session);
+    let db = session_context.db();
+
+    let dataset = dataset.into_inner();
+    let dataset_id = db
+        .resolve_dataset_name_to_id(&dataset)
+        .await
+        .context(CannotLoadDatasetForAddingMdTiles)?;
+
+    let dataset_id = dataset_id
+        .ok_or(error::Error::UnknownDatasetName {
+            dataset_name: dataset.to_string(),
+        })
+        .context(CannotLoadDatasetForAddingMdTiles)?;
+
+    let dataset = db
+        .load_dataset(&dataset_id)
+        .await
+        .context(CannotLoadDatasetForAddingMdTiles)?;
+
+    ensure!(
+        dataset.source_operator == geoengine_operators::source::MdGdalSource::TYPE_NAME,
+        DatasetIsNotMdGdal
+    );
+
+    let meta_data = db
+        .load_loading_info(&dataset_id)
+        .await
+        .context(CannotLoadDatasetForAddingMdTiles)?;
+
+    let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md_meta_data) = &meta_data
+    else {
+        return Err(AddDatasetMdTilesError::DatasetIsNotMdGdal);
+    };
+    let wrap = md_meta_data.wrap;
+
+    let TypedResultDescriptor::Raster(dataset_descriptor) = dataset.result_descriptor else {
+        return Err(AddDatasetMdTilesError::DatasetIsNotMdGdal);
+    };
+
+    let tiles = tiles.into_inner();
+
+    let data_path = dataset
+        .data_path
+        .ok_or(AddDatasetMdTilesError::MdDatasetIsMissingDataPath)?;
+
+    let data_path_file_path = file_path_from_data_path(&data_path, &session_context)
+        .context(CannotAddMdTilesToDataset)?;
+
+    // Opening a tile's array is a header read, but for external data it is a /vsicurl
+    // request, and a 65-file yearly series would pay 65 of them to learn the same thing 65
+    // times over. So every file is checked for local data, and for external data only the
+    // first row of each distinct array is - which is enough to catch the errors that are
+    // shared by all rows of a dataset: a wrong array name, group, grid, slice count, prefix
+    // length or CRS. A per-file divergence still fails loudly at read time, because the read
+    // window then exceeds the array.
+    let external = matches!(data_path, DataPath::External);
+    let mut checked_arrays: HashSet<(String, Option<String>)> = HashSet::new();
+    for tile in &tiles {
+        if external && !checked_arrays.insert((tile.array_name.clone(), tile.array_group.clone())) {
+            validate_md_tile(
+                tile,
+                wrap,
+                &data_path,
+                &data_path_file_path,
+                &dataset_descriptor,
+                false,
+            )?;
+            continue;
+        }
+        validate_md_tile(
+            tile,
+            wrap,
+            &data_path,
+            &data_path_file_path,
+            &dataset_descriptor,
+            true,
+        )?;
+    }
+
+    db.add_md_dataset_tiles(dataset_id, tiles)
+        .await
+        .context(CannotAddMdTilesToDataset)?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+/// The z size of the tile's MD array, or `None` if the file, group or array cannot be opened.
+///
+/// MD arrays are not exposed as classic raster bands, so the array has to be reached through
+/// GDAL's multidim API instead of `raster_descriptor_from_dataset`.
+///
+/// ponytail: GDAL on the caller's thread, not in the worker pool - see the note on
+/// `ProbedGdalMdMetaData`. Fold this into the probe endpoint once probing is pooled.
+/// The shape and declared CRS of the tile's MD array.
+///
+/// Returns `None` if the file, group or array cannot be opened, and otherwise the z size,
+/// the `(y, x)` sizes and the CF-declared CRS (if any). Reading these is a header-only
+/// operation.
+struct MdArrayShape {
+    z: usize,
+    y: usize,
+    x: usize,
+    /// one index per dimension between z and `(y, x)`; `[depth]` for `(time, depth, y, x)`
+    prefix_len: usize,
+    crs: Option<SpatialReference>,
+}
+
+fn md_array_shape(path: &Path, tile: &AddDatasetMdTile) -> Option<MdArrayShape> {
+    // The tile's config options are what lets GDAL read `.nc` over `/vsicurl` at all, so a
+    // check that opens the file has to run in the same GDAL environment as the read does.
+    // Without this guard every remote row was rejected as unopenable while reading it worked.
+    let params: geoengine_operators::source::GdalDatasetParameters = tile.params.clone().into();
+    let _configs = params
+        .gdal_config_options_for_request()
+        .map(|configs| GdalConfigOptions::new(&configs).expect("GDAL config options are valid"));
+
+    let dataset = gdal_open_dataset_ex(
+        path,
+        DatasetOptions {
+            open_flags: GdalOpenFlags::GDAL_OF_RASTER | GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER,
+            ..Default::default()
+        },
+    )
+    .ok()?;
+
+    let mut group = dataset.root_group().ok()?;
+    for segment in tile
+        .array_group
+        .as_deref()
+        .unwrap_or_default()
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+    {
+        group = group.open_group(segment, Default::default()).ok()?;
+    }
+
+    let md_array = group
+        .open_md_array(&tile.array_name, Default::default())
+        .ok()?;
+    let dimensions = md_array.dimensions().ok()?;
+    if dimensions.len() < 3 {
+        return None;
+    }
+
+    // z is dimension 0; any dimensions between it and (y, x) are the leading prefix and do
+    // not contribute z slices
+    let crs = ["crs", "spatial_ref", "grid_mapping"]
+        .into_iter()
+        .find_map(|name| md_array.attribute(name).ok().map(|a| a.read_as_string()))
+        .and_then(|definition| SpatialRef::from_definition(definition.trim()).ok())
+        .and_then(|srs| SpatialReference::try_from(srs).ok());
+
+    Some(MdArrayShape {
+        z: dimensions[0].size(),
+        y: dimensions[dimensions.len() - 2].size(),
+        x: dimensions[dimensions.len() - 1].size(),
+        prefix_len: dimensions.len() - 3,
+        crs,
+    })
+}
+
+/// The path an MD row's array is opened with.
+///
+/// [`validate_tile_file_path`] resolves volume/upload rows against the data path root and
+/// returns an **empty** path for external data, whose rows carry their own absolute
+/// `/vsicurl` URL in `params.file_path` - which is what the read path opens. Using the
+/// resolved path unconditionally opened `""` and rejected every remote row as unopenable
+/// while reading it worked.
+fn md_tile_open_path(
+    tile: &AddDatasetMdTile,
+    data_path: &DataPath,
+    absolute_path: &Path,
+) -> PathBuf {
+    if matches!(data_path, DataPath::External) {
+        tile.params.file_path.clone()
+    } else {
+        absolute_path.to_path_buf()
+    }
+}
+
+/// Checks a tile's declared metadata against the array it names.
+///
+/// This is the only place a wrong `arrayName`, `leadingPrefix`, grid, slice count or CRS can
+/// be caught, so it runs even for external data - where the file is not opened elsewhere.
+fn check_md_tile_against_array(
+    tile: &AddDatasetMdTile,
+    open_path: &Path,
+    dataset_descriptor: &RasterResultDescriptor,
+) -> Result<(), AddDatasetMdTilesError> {
+    let file_path = tile.params.file_path.to_string_lossy().to_string();
+
+    let shape =
+        md_array_shape(open_path, tile).ok_or(AddDatasetMdTilesError::CannotOpenMdTileFile {
+            source: geoengine_operators::error::Error::InvalidOperatorSpec {
+                reason: format!(
+                    "MD array '{}{}' could not be opened",
+                    tile.array_name,
+                    tile.array_group
+                        .as_deref()
+                        .map(|g| format!(" in group '{g}'"))
+                        .unwrap_or_default()
+                ),
+            },
+            file_path: file_path.clone(),
+        })?;
+
+    let slices = tile.time_steps.len();
+    if shape.z != slices {
+        return Err(AddDatasetMdTilesError::MdTileSliceCountMismatch {
+            expected: slices,
+            found: shape.z,
+            file_path,
+        });
+    }
+
+    // a 4D array needs one prefix index per dimension between z and (y, x)
+    if shape.prefix_len != tile.leading_prefix.len() {
+        return Err(AddDatasetMdTilesError::MdTileLeadingPrefixMismatch {
+            expected: shape.prefix_len,
+            found: tile.leading_prefix.len(),
+            file_path,
+        });
+    }
+
+    if (shape.x, shape.y) != (tile.params.width, tile.params.height) {
+        return Err(AddDatasetMdTilesError::MdTileArraySizeMismatch {
+            declared: (tile.params.width, tile.params.height),
+            found: (shape.x, shape.y),
+            file_path,
+        });
+    }
+
+    // a declared CRS the file contradicts is a mislabelled dataset; a file that declares
+    // none is not an error, because degrees-based x units justify EPSG:4326 on their own
+    if let (Some(declared), Some(found)) = (
+        Option::<SpatialReference>::from(dataset_descriptor.spatial_reference),
+        shape.crs,
+    ) && declared != found
+    {
+        return Err(AddDatasetMdTilesError::MdTileCrsMismatch {
+            declared: declared.to_string(),
+            found: found.to_string(),
+            file_path,
+        });
+    }
+
+    Ok(())
+}
+
+/// Validates one MD tile at the trust boundary: the file must exist, the named array must
+/// open with a z dimension matching the declared time steps, the band must exist, and the
+/// file's grid must match the dataset's (with the wrap-around shift applied).
+fn validate_md_tile(
+    tile: &AddDatasetMdTile,
+    wrap: bool,
+    data_path: &DataPath,
+    data_path_file_path: &Path,
+    dataset_descriptor: &RasterResultDescriptor,
+    check_against_array: bool,
+) -> Result<(), AddDatasetMdTilesError> {
+    let file_path = tile.params.file_path.to_string_lossy().to_string();
+
+    let absolute_path =
+        validate_tile_file_path(&tile.params.file_path, data_path, data_path_file_path).map_err(
+            |e| AddDatasetMdTilesError::InvalidMdTileFile {
+                source: e,
+                file_path: file_path.clone(),
+            },
+        )?;
+
+    ensure!(
+        tile.band < dataset_descriptor.bands.count(),
+        MdTileBandDoesNotExist {
+            band_count: dataset_descriptor.bands.count(),
+            found: tile.band,
+            file_path: file_path.clone(),
+        }
+    );
+
+    // required for every file, on every data path: the slice count below is derived from it,
+    // and a file with no declared slices would contribute nothing to the time axis
+    ensure!(
+        !tile.time_steps.is_empty(),
+        MdTileMissingTimeSteps {
+            file_path: file_path.clone(),
+        }
+    );
+
+    // the file's raw transform (possibly south-up and/or 0..360) has to land on the
+    // dataset's presented transform
+    let expected = dataset_descriptor.spatial_grid.geo_transform();
+    let file_transform = geoengine_operators::source::presented_geo_transform(
+        geoengine_operators::source::GdalDatasetGeoTransform::from(tile.params.geo_transform),
+        tile.params.height,
+        wrap,
+    );
+    ensure!(
+        expected.is_compatible_grid(file_transform),
+        MdTileGeoTransformMismatch {
+            expected,
+            found: file_transform,
+            file_path: file_path.clone(),
+        }
+    );
+
+    // both columns come from outside, and a row whose descriptor disagrees with its steps
+    // would be read with `steps` while advertised with `descriptor`. Checked before anything
+    // path-specific: it needs no file, and external rows are stored exactly the same way.
+    let times = tile.md_times();
+    ensure!(
+        times.is_consistent(),
+        MdTileTimeAxisInconsistent {
+            file_path: file_path.clone(),
+        }
+    );
+    ensure!(
+        times.is_ordered(),
+        MdTileTimeAxisUnordered {
+            file_path: file_path.clone(),
+        }
+    );
+
+    if check_against_array {
+        check_md_tile_against_array(
+            tile,
+            &md_tile_open_path(tile, data_path, &absolute_path),
+            dataset_descriptor,
+        )?;
+    }
+
+    Ok(())
 }
 
 /// Retrieves details about a dataset using the internal name.
@@ -750,6 +1191,9 @@ pub fn adjust_meta_data_path<A: AdjustFilePath>(
         }
         MetaDataDefinition::GdalMultiBand(_gdal_multi_band) => {
             // do nothing, the file paths are not inside the meta data defintion but inside the dataset's tiles
+        }
+        MetaDataDefinition::GdalMdMetaData(_gdal_md_meta_data) => {
+            // do nothing, the file paths are not inside the meta data definition but inside the dataset's MD tiles
         }
     }
     Ok(())
@@ -5791,5 +6235,1027 @@ mod tests {
         );
 
         Ok(())
+    }
+    /// One MD dataset row, declared the way an importer declares it.
+    ///
+    /// The probe lives on a stacked branch, so these tests state the metadata instead of
+    /// deriving it. Constants are transcribed from the fixture manifest in
+    /// `test_data/md/generate_md_fixtures.py`.
+    struct MdRow {
+        path: &'static str,
+        array_name: &'static str,
+        group: Option<&'static str>,
+        band: u32,
+        /// position of this file in the concatenated z axis of `band`
+        z_index: i64,
+        /// first slice of this file in the dataset's global z axis
+        z_start: usize,
+        slices: usize,
+        leading_prefix: Vec<i64>,
+    }
+
+    impl MdRow {
+        /// A row of the 8x8 `time_series` grid: edges lon 0..240 (30 degree pixels),
+        /// lat 0..-8, daily slices from 2000-01-01.
+        fn of(path: &'static str, array_name: &'static str, z_start: usize, slices: usize) -> Self {
+            Self {
+                path,
+                array_name,
+                group: None,
+                band: 0,
+                z_index: 0,
+                z_start,
+                slices,
+                leading_prefix: Vec::new(),
+            }
+        }
+    }
+
+    /// The presented footprint of the 8x8 / 30 degree fixture grid: pixel edges 0..240 and
+    /// 0..-8, so the box spans lon 0..240 and lat -8..0. No wrap, so the presented transform
+    /// is the stored one.
+    fn grid_8x8_spatial_bounds() -> SpatialPartition2D {
+        let grid = geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]);
+        geoengine_datatypes::raster::GeoTransform::new((0.0, 0.0).into(), 30.0, -1.0)
+            .grid_to_spatial_bounds(&grid)
+    }
+
+    /// A regular daily axis over `steps`, as `MdFileTimes` would have derived it.
+    fn daily_descriptor(steps: &[geoengine_datatypes::primitives::TimeInterval]) -> TimeDescriptor {
+        TimeDescriptor::from(geoengine_operators::engine::TimeDescriptor::new_regular(
+            Some(
+                geoengine_datatypes::primitives::TimeInterval::new_unchecked(
+                    steps[0].start(),
+                    steps[steps.len() - 1].end(),
+                ),
+            ),
+            steps[0].start(),
+            geoengine_datatypes::primitives::TimeStep::days(1).expect("one day is a valid step"),
+        ))
+    }
+
+    fn api_band(name: &str) -> RasterBandDescriptor {
+        RasterBandDescriptor {
+            name: name.to_owned(),
+            measurement: geoengine_datatypes::primitives::Measurement::Unitless.into(),
+        }
+    }
+
+    const MD_DAY: i64 = 86_400_000;
+    const MD_EPOCH_2000: i64 = 946_684_800_000;
+
+    /// The rows plus the `GdalMdMetaData` that describes them, as a caller would post them.
+    fn md_dataset_meta(
+        rows: &[MdRow],
+        bands: Vec<RasterBandDescriptor>,
+    ) -> (
+        crate::datasets::storage::MetaDataDefinition,
+        Vec<AddDatasetMdTile>,
+    ) {
+        let total = rows.iter().map(|r| r.z_start + r.slices).max().unwrap();
+        let time_steps: Vec<TimeInterval> = (0..total)
+            .map(|i| {
+                TimeInterval::new_unchecked(
+                    MD_EPOCH_2000 + i as i64 * MD_DAY,
+                    MD_EPOCH_2000 + (i as i64 + 1) * MD_DAY,
+                )
+            })
+            .collect();
+
+        let tiles = rows
+            .iter()
+            .map(|r| {
+                let file_steps = &time_steps[r.z_start..r.z_start + r.slices];
+                let params = GdalDatasetParameters {
+                    file_path: test_data!(r.path).to_path_buf(),
+                    rasterband_channel: 1,
+                    // the *stored* grid; the presented one is what the descriptor carries
+                    geo_transform: GeoTransform {
+                        origin_coordinate: Coordinate2D { x: 0.0, y: 0.0 },
+                        x_pixel_size: 30.0,
+                        y_pixel_size: -1.0,
+                    },
+                    width: 8,
+                    height: 8,
+                    file_not_found_handling: FileNotFoundHandling::NoData,
+                    no_data_value: Some(-9999.0),
+                    properties_mapping: None,
+                    gdal_open_options: None,
+                    gdal_config_options: None,
+                    allow_alphaband_as_mask: false,
+                };
+                // the presented footprint of an 8x8 grid at 30 degree pixels: no wrap, so
+                // the stored and presented transforms agree
+                let bounds = grid_8x8_spatial_bounds();
+                AddDatasetMdTile {
+                    spatial_partition: bounds.into(),
+                    band: r.band,
+                    z_index: r.z_index,
+                    array_name: r.array_name.to_owned(),
+                    array_group: r.group.map(str::to_string),
+                    time_descriptor: daily_descriptor(file_steps),
+                    time_steps: file_steps
+                        .iter()
+                        .map(|iv| crate::api::model::datatypes::TimeInterval {
+                            start: iv.start().into(),
+                            end: iv.end().into(),
+                        })
+                        .collect(),
+                    params,
+                    leading_prefix: r.leading_prefix.clone(),
+                }
+            })
+            .collect::<Vec<_>>();
+
+        // the operators descriptor, so `GdalMdMetaData` takes it directly
+        let result_descriptor = geoengine_operators::engine::RasterResultDescriptor::new(
+            geoengine_datatypes::raster::RasterDataType::F32,
+            geoengine_datatypes::spatial_reference::SpatialReference::epsg_4326().into(),
+            geoengine_operators::engine::TimeDescriptor::new_regular(
+                Some(
+                    geoengine_datatypes::primitives::TimeInterval::new_unchecked(
+                        time_steps[0].start(),
+                        time_steps[time_steps.len() - 1].end(),
+                    ),
+                ),
+                time_steps[0].start(),
+                geoengine_datatypes::primitives::TimeStep::days(1)
+                    .expect("one day is a valid step"),
+            ),
+            geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
+                geoengine_datatypes::raster::GeoTransform::new((0.0, 0.0).into(), 30.0, -1.0),
+                geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]),
+            ),
+            geoengine_operators::engine::RasterBandDescriptors::new(
+                bands
+                    .into_iter()
+                    .map(|b| {
+                        geoengine_operators::engine::RasterBandDescriptor::new(
+                            b.name,
+                            b.measurement.into(),
+                        )
+                    })
+                    .collect(),
+            )
+            .unwrap(),
+        );
+
+        (
+            geoengine_operators::source::GdalMdMetaData::new(
+                result_descriptor,
+                geoengine_operators::source::ZRole::Variable,
+                false,
+                None,
+                None,
+            )
+            .into(),
+            tiles,
+        )
+    }
+
+    /// The MD loading info's time axis must come from the files' *per-slice* intervals, not
+    /// from one interval per stored row. A stored row spans a whole file (365 daily slices
+    /// for a year of CMIP6), so deriving the axis from row times collapses it to one step
+    /// per file and every query then reads the wrong slice. The gap fixtures make it
+    /// observable: `gap_a` covers t 0..4, `gap_b` covers t 8..12, t 4..8 is absent.
+    /// Fixture values are exact integers in f32
+    #[allow(clippy::float_cmp)]
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_reads_md_tiles_across_a_gap_in_the_file_sequence(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let volume = VolumeName("test_data".to_string());
+
+        // gap_a covers global z 0..4 and gap_b covers 8..12, so z 4..8 is a hole the read
+        // path has to gap-fill
+        let (meta_data, tiles) = md_dataset_meta(
+            &[
+                MdRow {
+                    z_index: 0,
+                    ..MdRow::of("md/time_series_gap_a.nc", "temperature", 0, 4)
+                },
+                MdRow {
+                    z_index: 1,
+                    ..MdRow::of("md/time_series_gap_b.nc", "temperature", 8, 4)
+                },
+            ],
+            vec![api_band("temperature")],
+        );
+
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "md gap".to_string(),
+                    description: "md gap".to_string(),
+                    source_operator: "MdGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: None,
+                },
+                meta_data: meta_data.into(),
+            },
+        };
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+
+        // two rows: one per file, z_index 0 and 1
+        assert_eq!(tiles.len(), 2);
+        assert_eq!(tiles[0].z_index, 0);
+        assert_eq!(tiles[1].z_index, 1);
+        // the files store absolute paths; the volume expects them relative to its root
+        let rel = |f: &AddDatasetMdTile| {
+            let mut f = f.clone();
+            f.params.file_path = Path::new("md").join(f.params.file_path.file_name().unwrap());
+            f
+        };
+
+        let req = actix_web::test::TestRequest::post()
+            .uri(&format!("/dataset/{dataset_name}/md-tiles"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(
+                &tiles.iter().map(rel).collect::<Vec<_>>(),
+            )?);
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(
+            res.status(),
+            200,
+            "response: {}",
+            String::from_utf8_lossy(&actix_web::test::read_body(res).await)
+        );
+
+        // query the whole series in one go: 4 + 1 gap step + 4 = 9 steps
+        let operator = geoengine_operators::source::MdGdalSource {
+            params: geoengine_operators::source::MdGdalSourceParameters::new(dataset_name.into()),
+        };
+        let execution_context = ctx.execution_context()?;
+        let initialized = operator
+            .boxed()
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await?;
+        let processor = initialized.query_processor()?;
+        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
+
+        let tiling_grid = processor
+            .result_descriptor()
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(execution_context.tiling_specification());
+        let query_grid = tiling_grid
+            .tiling_spatial_grid_definition()
+            .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
+                (0., 0.).into(),
+                (240., -8.).into(),
+            ));
+
+        // 2000-01-01 .. 2000-01-13 covers t 0..12, i.e. both files plus the hole
+        let query_rect = RasterQueryRectangle::new(
+            query_grid.grid_bounds(),
+            TimeInterval::new(
+                geoengine_datatypes::primitives::TimeInstance::from_str("2000-01-01T00:00:00Z")
+                    .unwrap(),
+                geoengine_datatypes::primitives::TimeInstance::from_str("2000-01-13T00:00:00Z")
+                    .unwrap(),
+            )
+            .unwrap(),
+            BandSelection::first(),
+        );
+
+        let tiles = processor
+            .get_f32()
+            .unwrap()
+            .query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        // The query asks for 13 days but only 8 are covered, so the axis is
+        // [t0..t3] [gap t4..t8] [t8..t11] - 9 steps, one tile each. The uncovered tail past
+        // the last slice is not represented as a step of its own.
+        let mut daily = tiles;
+        daily.sort_by_key(|t| t.time.start());
+
+        let is_empty = |t: &geoengine_datatypes::raster::RasterTile2D<f32>| {
+            matches!(
+                t.grid_array,
+                geoengine_datatypes::raster::GridOrEmpty::Empty(_)
+            )
+        };
+        let first_value = |t: &geoengine_datatypes::raster::RasterTile2D<f32>| match &t.grid_array {
+            geoengine_datatypes::raster::GridOrEmpty::Grid(g) => g.inner_grid.data[0],
+            geoengine_datatypes::raster::GridOrEmpty::Empty(_) => f32::NAN,
+        };
+
+        assert_eq!(daily.len(), 9, "got {} steps", daily.len());
+
+        // before the gap: one tile per day, each stamped with its own date
+        for (i, tile) in daily.iter().enumerate().take(4) {
+            assert_eq!(
+                tile.time.start().inner(),
+                946_684_800_000 + i64::try_from(i).unwrap() * 86_400_000,
+                "step {i} must carry its own timestamp"
+            );
+            assert_eq!(first_value(tile), i as f32 * 1000.0);
+        }
+
+        // t 4..8 is absent from the data: one gap interval, and its tile must be empty
+        assert_eq!(
+            daily[4].time.start().inner(),
+            946_684_800_000 + 4 * 86_400_000
+        );
+        assert!(is_empty(&daily[4]), "the gap step must be an empty tile");
+
+        // after the gap: file b's slices, NOT a repeat of file a's. A z_start taken from a
+        // running slice count would put t=8..12 at indices 4..8 and hand back t=3 here.
+        assert_eq!(
+            daily[5].time.start().inner(),
+            946_684_800_000 + 8 * 86_400_000
+        );
+        assert_eq!(first_value(&daily[5]), 8_000.0);
+        assert_eq!(first_value(&daily[8]), 11_000.0);
+
+        Ok(())
+    }
+
+    /// `MetaData::time_axis` must answer the same gap-filled axis that `loading_info` does,
+    /// without the file rows: a plain time query never asks for a bbox, and an axis derived
+    /// from stored *row* times would collapse to one step per file.
+    #[ge_context::test]
+    async fn it_answers_the_md_time_axis_without_a_bbox(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let volume = VolumeName("test_data".to_string());
+
+        // gap_a covers global z 0..4 and gap_b covers 8..12, so z 4..8 is a hole the read
+        // path has to gap-fill
+        let (meta_data, tiles) = md_dataset_meta(
+            &[
+                MdRow {
+                    z_index: 0,
+                    ..MdRow::of("md/time_series_gap_a.nc", "temperature", 0, 4)
+                },
+                MdRow {
+                    z_index: 1,
+                    ..MdRow::of("md/time_series_gap_b.nc", "temperature", 8, 4)
+                },
+            ],
+            vec![api_band("temperature")],
+        );
+
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session);
+        let db = ctx.db();
+
+        let id_and_name = db
+            .add_dataset(
+                AddDataset {
+                    name: None,
+                    display_name: "md time axis".to_string(),
+                    description: "md time axis".to_string(),
+                    source_operator: "MdGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: None,
+                }
+                .into(),
+                meta_data,
+                Some(DataPath::Volume(volume)),
+            )
+            .await?;
+
+        let rel = |f: &AddDatasetMdTile| {
+            let mut f = f.clone();
+            f.params.file_path = Path::new("md").join(f.params.file_path.file_name().unwrap());
+            f
+        };
+        db.add_md_dataset_tiles(id_and_name.id, tiles.iter().map(rel).collect())
+            .await?;
+
+        let meta_data: Box<
+            dyn MetaData<
+                    geoengine_operators::source::MdLoadingInfo,
+                    geoengine_operators::engine::RasterResultDescriptor,
+                    RasterQueryRectangle,
+                >,
+        > = db
+            .meta_data(
+                &DataId::Internal(InternalDataId {
+                    dataset_id: id_and_name.id.into(),
+                    r#type:
+                        crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
+                })
+                .into(),
+            )
+            .await?;
+
+        // 2000-01-01 .. 2000-01-13 spans t 0..12: 4 covered + 1 gap + 4 covered = 9 steps
+        let axis = meta_data
+            .time_axis(TimeInterval::new_unchecked(
+                TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
+                TimeInstance::from_str("2000-01-13T00:00:00Z").unwrap(),
+            ))
+            .await?
+            .expect("a Time-role dataset has an axis");
+
+        assert_eq!(axis.len(), 9);
+        assert_eq!(axis[0].start().inner(), 946_684_800_000);
+        // the gap step starts where file a stopped, and file b resumes after it
+        assert_eq!(axis[4].start().inner(), 946_684_800_000 + 4 * 86_400_000);
+        assert_eq!(axis[5].start().inner(), 946_684_800_000 + 8 * 86_400_000);
+
+        Ok(())
+    }
+
+    /// A dataset's `cache_ttl` must survive the round trip through the database and reach
+    /// the loading info, mirroring `MultiBandGdalSource`. A dataset without one must fall
+    /// back to the caller's context default instead of a frozen hint.
+    #[ge_context::test]
+    async fn it_carries_a_dataset_cache_ttl_onto_md_tiles(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session);
+        let db = ctx.db();
+        let volume = VolumeName("test_data".to_string());
+
+        // `ProbedGdalMdMetaData` is not `Clone`, so probe per case rather than sharing one
+        let rel = |f: &AddDatasetMdTile| {
+            let mut f = f.clone();
+            f.params.file_path = Path::new("md").join(f.params.file_path.file_name().unwrap());
+            f
+        };
+
+        for (label, cache_ttl) in [("with ttl", Some(1234_u32)), ("without ttl", None)] {
+            let (meta_data, tiles) = md_dataset_meta(
+                &[MdRow::of("md/time_series_gap_a.nc", "temperature", 0, 4)],
+                vec![api_band("temperature")],
+            );
+            let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(mut md) = meta_data
+            else {
+                unreachable!("md_dataset_meta returns MD metadata")
+            };
+            md.cache_ttl = cache_ttl.map(geoengine_datatypes::primitives::CacheTtlSeconds::new);
+            let meta_data = crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md);
+
+            let id_and_name = db
+                .add_dataset(
+                    AddDataset {
+                        name: None,
+                        display_name: format!("md ttl {label}"),
+                        description: format!("md ttl {label}"),
+                        source_operator: "MdGdalSource".to_string(),
+                        symbology: None,
+                        provenance: None,
+                        tags: None,
+                    }
+                    .into(),
+                    meta_data,
+                    Some(DataPath::Volume(volume.clone())),
+                )
+                .await?;
+            db.add_md_dataset_tiles(id_and_name.id, tiles.iter().map(rel).collect())
+                .await?;
+
+            let provider: Box<
+                dyn MetaData<
+                        geoengine_operators::source::MdLoadingInfo,
+                        geoengine_operators::engine::RasterResultDescriptor,
+                        RasterQueryRectangle,
+                    >,
+            > = db
+                .meta_data(
+                    &DataId::Internal(InternalDataId {
+                        dataset_id: id_and_name.id.into(),
+                        r#type:
+                            crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
+                    })
+                    .into(),
+                )
+                .await?;
+
+            let loading_info = provider
+                .loading_info(RasterQueryRectangle::new(
+                    geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]),
+                    TimeInterval::new_unchecked(
+                        TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
+                        TimeInstance::from_str("2000-01-05T00:00:00Z").unwrap(),
+                    ),
+                    BandSelection::first(),
+                ))
+                .await?;
+            assert!(
+                !loading_info.files().is_empty(),
+                "a dataset {label} must match its stored rows"
+            );
+
+            // a `CacheHint` embeds its own creation time, so compare the expiry the TTL
+            // yields rather than two hints built microseconds apart
+            let context_ttl = geoengine_datatypes::primitives::CacheTtlSeconds::new(7);
+            let expected_ttl = cache_ttl.map_or(context_ttl, |secs| {
+                geoengine_datatypes::primitives::CacheTtlSeconds::new(secs)
+            });
+            let expires_in = loading_info
+                .cache_hint(context_ttl)
+                .expires()
+                .seconds_to_expiration();
+            let expected_in = expected_ttl.seconds();
+            assert!(
+                expires_in.abs_diff(expected_in) <= 2,
+                "a dataset {label} cached for {expires_in}s, expected ~{expected_in}s"
+            );
+        }
+
+        Ok(())
+    }
+
+    /// `leading_prefix` is what turns a 4D array into depth bands, and it is per row. It has
+    /// to survive the write, not just the validation that reads it before the insert.
+    #[ge_context::test]
+    async fn it_persists_the_leading_prefix_of_md_tiles(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session);
+        let db = ctx.db();
+        let volume = VolumeName("test_data".to_string());
+
+        let mut row = MdRow::of("md/time_depth_4d.nc", "temperature", 0, 6);
+        row.leading_prefix = vec![0];
+        let (meta_data, tiles) = md_dataset_meta(&[row], vec![api_band("temperature")]);
+
+        let id_and_name = db
+            .add_dataset(
+                AddDataset {
+                    name: None,
+                    display_name: "md leading prefix".to_string(),
+                    description: "md leading prefix".to_string(),
+                    source_operator: "MdGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: None,
+                }
+                .into(),
+                meta_data,
+                Some(DataPath::Volume(volume)),
+            )
+            .await?;
+        let rel = |f: &AddDatasetMdTile| {
+            let mut f = f.clone();
+            f.params.file_path = Path::new("md").join(f.params.file_path.file_name().unwrap());
+            f
+        };
+        db.add_md_dataset_tiles(id_and_name.id, tiles.iter().map(rel).collect())
+            .await?;
+
+        let provider: Box<
+            dyn MetaData<
+                    geoengine_operators::source::MdLoadingInfo,
+                    geoengine_operators::engine::RasterResultDescriptor,
+                    RasterQueryRectangle,
+                >,
+        > = db
+            .meta_data(
+                &DataId::Internal(InternalDataId {
+                    dataset_id: id_and_name.id.into(),
+                    r#type:
+                        crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
+                })
+                .into(),
+            )
+            .await?;
+        let loading_info = provider
+            .loading_info(RasterQueryRectangle::new(
+                geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]),
+                TimeInterval::new_unchecked(
+                    TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
+                    TimeInstance::from_str("2000-01-07T00:00:00Z").unwrap(),
+                ),
+                BandSelection::first(),
+            ))
+            .await?;
+
+        let files = loading_info.files();
+        assert_eq!(files.len(), 1);
+        assert_eq!(
+            files[0].leading_prefix,
+            vec![0],
+            "the leading prefix must come back from the row, not the column default"
+        );
+
+        Ok(())
+    }
+
+    /// A `ZRole::Variable` dataset stores one row per `(file, variable)`, so the row reader
+    /// sees every band's copy of the same intervals. The axis must be built from one band's
+    /// rows only: concatenating all of them yields N copies of the timeline, which
+    /// `try_time_irregular_range_fill` passes through and turns into a non-monotonic axis.
+    #[ge_context::test]
+    async fn it_builds_one_md_time_axis_per_variable_not_one_per_band(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let volume = VolumeName("test_data".to_string());
+
+        let (meta_data, tiles) = md_dataset_meta(
+            &[
+                MdRow {
+                    band: 0,
+                    ..MdRow::of("md/variables.nc", "temperature", 0, 8)
+                },
+                MdRow {
+                    band: 1,
+                    ..MdRow::of("md/variables.nc", "precipitation", 0, 8)
+                },
+            ],
+            vec![api_band("temperature"), api_band("precipitation")],
+        );
+
+        // two rows: one per (file, variable)
+        assert_eq!(tiles.len(), 2);
+
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session);
+        let db = ctx.db();
+
+        let id_and_name = db
+            .add_dataset(
+                AddDataset {
+                    name: None,
+                    display_name: "md variables".to_string(),
+                    description: "md variables".to_string(),
+                    source_operator: "MdGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: None,
+                }
+                .into(),
+                meta_data,
+                Some(DataPath::Volume(volume)),
+            )
+            .await?;
+
+        let rel = |f: &AddDatasetMdTile| {
+            let mut f = f.clone();
+            f.params.file_path = Path::new("md").join(f.params.file_path.file_name().unwrap());
+            f
+        };
+        db.add_md_dataset_tiles(id_and_name.id, tiles.iter().map(rel).collect())
+            .await?;
+
+        let meta_data: Box<
+            dyn MetaData<
+                    geoengine_operators::source::MdLoadingInfo,
+                    geoengine_operators::engine::RasterResultDescriptor,
+                    RasterQueryRectangle,
+                >,
+        > = db
+            .meta_data(
+                &DataId::Internal(InternalDataId {
+                    dataset_id: id_and_name.id.into(),
+                    r#type:
+                        crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
+                })
+                .into(),
+            )
+            .await?;
+
+        // `variables.nc` is a single 8-step daily series with 2 data variables, so the
+        // dataset has 8 time steps. Concatenating every row's intervals would give 16.
+        let axis = meta_data
+            .time_axis(TimeInterval::new_unchecked(
+                TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
+                TimeInstance::from_str("2000-01-09T00:00:00Z").unwrap(),
+            ))
+            .await?
+            .expect("a Variable-role dataset has an axis");
+
+        assert_eq!(
+            axis.len(),
+            8,
+            "one axis per dataset, not one per (file, variable) row"
+        );
+
+        // a narrow window clips: `try_time_irregular_range_fill` extends coverage to the
+        // query but never trims it, so without a filter this returns all 8 slices
+        let window = meta_data
+            .time_axis(TimeInterval::new_unchecked(
+                TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
+                TimeInstance::from_str("2000-01-02T00:00:00Z").unwrap(),
+            ))
+            .await?
+            .expect("a Variable-role dataset has an axis");
+
+        assert_eq!(window.len(), 1, "a one-day window returns one slice");
+
+        Ok(())
+    }
+
+    /// `ZRole::Band` stores every row with `band = 0` because the z index *is* the band, so
+    /// a `band = ANY(...)` predicate would match nothing and a request for band 2 would
+    /// silently come back as an empty tile instead of data.
+    #[ge_context::test]
+    async fn it_reads_md_band_role_rows_for_any_requested_band(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let volume = VolumeName("test_data".to_string());
+
+        let (meta_data, tiles) = md_dataset_meta(
+            &[MdRow::of("md/bands.nc", "reflectance", 0, 4)],
+            (0..4).map(|b| api_band(&format!("band {b}"))).collect(),
+        );
+        let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(mut md) = meta_data else {
+            unreachable!("md_dataset_meta returns MD metadata")
+        };
+        md.z_role = geoengine_operators::source::ZRole::Band;
+        let meta_data = crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md);
+
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session);
+        let db = ctx.db();
+
+        let id_and_name = db
+            .add_dataset(
+                AddDataset {
+                    name: None,
+                    display_name: "md bands".to_string(),
+                    description: "md bands".to_string(),
+                    source_operator: "MdGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: None,
+                }
+                .into(),
+                meta_data,
+                Some(DataPath::Volume(volume)),
+            )
+            .await?;
+
+        let rel = |f: &AddDatasetMdTile| {
+            let mut f = f.clone();
+            f.params.file_path = Path::new("md").join(f.params.file_path.file_name().unwrap());
+            f
+        };
+        db.add_md_dataset_tiles(id_and_name.id, tiles.iter().map(rel).collect())
+            .await?;
+
+        let meta_data: Box<
+            dyn MetaData<
+                    geoengine_operators::source::MdLoadingInfo,
+                    geoengine_operators::engine::RasterResultDescriptor,
+                    RasterQueryRectangle,
+                >,
+        > = db
+            .meta_data(
+                &DataId::Internal(InternalDataId {
+                    dataset_id: id_and_name.id.into(),
+                    r#type:
+                        crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
+                })
+                .into(),
+            )
+            .await?;
+
+        // band 2 of a band-role dataset: the row filter must not look at the `band` column
+        let loading_info = meta_data
+            .loading_info(RasterQueryRectangle::new(
+                geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]),
+                TimeInterval::new_unchecked(
+                    TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
+                    TimeInstance::from_str("2000-01-02T00:00:00Z").unwrap(),
+                ),
+                BandSelection::new_single(2),
+            ))
+            .await?;
+
+        assert!(
+            !loading_info.files().is_empty(),
+            "band 2 must match the stored rows, not come back empty"
+        );
+
+        Ok(())
+    }
+
+    /// The path an MD row's array is opened with. Getting this wrong opened `""` for every
+    /// remote row and rejected it as unopenable, while reading the same row worked.
+    #[test]
+    fn it_opens_an_external_md_row_at_its_own_url() {
+        let (_, tiles) = md_dataset_meta(
+            &[MdRow::of("md/time_series.nc", "temperature", 0, 8)],
+            vec![api_band("temperature")],
+        );
+        let mut tile = tiles[0].clone();
+        tile.params.file_path = "/vsicurl/https://example.invalid/temperature.nc".into();
+
+        // `validate_tile_file_path` hands back an empty path for external data
+        let resolved =
+            validate_tile_file_path(&tile.params.file_path, &DataPath::External, Path::new(""))
+                .expect("a /vsicurl URL is a valid external path");
+        assert!(resolved.as_os_str().is_empty(), "{resolved:?}");
+
+        assert_eq!(
+            md_tile_open_path(&tile, &DataPath::External, &resolved),
+            Path::new("/vsicurl/https://example.invalid/temperature.nc"),
+            "an external row is opened at its own URL, not at the empty resolved path"
+        );
+
+        // a volume row is opened at the path resolved against the volume root
+        let volume = DataPath::Volume(VolumeName("test_data".to_string()));
+        assert_eq!(
+            md_tile_open_path(&tile, &volume, Path::new("/data/temperature.nc")),
+            Path::new("/data/temperature.nc"),
+        );
+    }
+
+    /// The array check is the only thing standing between a wrong `arrayName` and a dataset
+    /// that reads nothing, so it has to run on every data path - including external, where a
+    /// wrong CRS would otherwise be a permanent mislabel with nothing to catch it.
+    #[test]
+    fn it_checks_an_md_row_against_the_array_it_names() {
+        let (meta_data, tiles) = md_dataset_meta(
+            &[MdRow::of("md/time_series.nc", "temperature", 0, 8)],
+            vec![api_band("temperature")],
+        );
+        let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md) = meta_data else {
+            panic!("md_dataset_meta returns MD metadata")
+        };
+        let local = |tile: &AddDatasetMdTile| {
+            let mut tile = tile.clone();
+            tile.params.file_path = test_data!("md/time_series.nc").to_path_buf();
+            tile
+        };
+
+        // the declared row matches the fixture
+        assert!(
+            check_md_tile_against_array(
+                &local(&tiles[0]),
+                test_data!("md/time_series.nc"),
+                &md.result_descriptor
+            )
+            .is_ok()
+        );
+
+        // a name that does not exist cannot be opened
+        let mut wrong_name = local(&tiles[0]);
+        wrong_name.array_name = "no_such_array".to_owned();
+        assert!(matches!(
+            check_md_tile_against_array(
+                &wrong_name,
+                test_data!("md/time_series.nc"),
+                &md.result_descriptor
+            ),
+            Err(AddDatasetMdTilesError::CannotOpenMdTileFile { .. })
+        ));
+
+        // a wrong slice count is caught here rather than reading the wrong slices
+        let mut wrong_slices = local(&tiles[0]);
+        wrong_slices.time_steps.pop();
+        assert!(matches!(
+            check_md_tile_against_array(
+                &wrong_slices,
+                test_data!("md/time_series.nc"),
+                &md.result_descriptor
+            ),
+            Err(AddDatasetMdTilesError::MdTileSliceCountMismatch {
+                expected: 7,
+                found: 8,
+                ..
+            })
+        ));
+
+        // a 3D array declares no prefix, so a non-empty one is wrong
+        let mut wrong_prefix = local(&tiles[0]);
+        wrong_prefix.leading_prefix = vec![0];
+        assert!(matches!(
+            check_md_tile_against_array(
+                &wrong_prefix,
+                test_data!("md/time_series.nc"),
+                &md.result_descriptor
+            ),
+            Err(AddDatasetMdTilesError::MdTileLeadingPrefixMismatch {
+                expected: 0,
+                found: 1,
+                ..
+            })
+        ));
+
+        // the fixture has no `crs` attribute, so nothing contradicts EPSG:4326
+        let mut wrong_grid = local(&tiles[0]);
+        wrong_grid.params.width = 7;
+        assert!(matches!(
+            check_md_tile_against_array(
+                &wrong_grid,
+                test_data!("md/time_series.nc"),
+                &md.result_descriptor
+            ),
+            Err(AddDatasetMdTilesError::MdTileArraySizeMismatch {
+                declared: (7, 8),
+                found: (8, 8),
+                ..
+            })
+        ));
+    }
+
+    /// A CRS the file actually declares has to match the dataset's: a mismatch is a
+    /// mislabelled dataset, and nothing downstream would ever notice.
+    #[test]
+    fn it_rejects_an_md_row_whose_crs_contradicts_the_dataset() {
+        let (meta_data, tiles) = md_dataset_meta(
+            &[MdRow::of("md/projected_crs.nc", "elevation", 0, 4)],
+            vec![api_band("elevation")],
+        );
+        let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md) = meta_data else {
+            panic!("md_dataset_meta returns MD metadata")
+        };
+        // the fixture declares EPSG:32633 (metre pixels), the descriptor claims EPSG:4326
+        assert!(matches!(
+            check_md_tile_against_array(
+                &tiles[0],
+                test_data!("md/projected_crs.nc"),
+                &md.result_descriptor
+            ),
+            Err(AddDatasetMdTilesError::MdTileCrsMismatch { .. })
+        ));
+    }
+
+    /// External data is never opened while a row is validated, so the declared axis is the
+    /// only thing that can be wrong about such a row. A descriptor that disagrees with its
+    /// steps is read as `steps` but advertised as `descriptor`, and out-of-order steps derive
+    /// an inverted file extent - both have to be rejected on every data path, not just the
+    /// ones where a file can be opened.
+    #[test]
+    fn it_rejects_a_bad_axis_on_external_rows() {
+        let (meta_data, tiles) = md_dataset_meta(
+            &[MdRow::of("md/variables.nc", "temperature", 0, 8)],
+            vec![api_band("temperature")],
+        );
+        let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md) = meta_data else {
+            panic!("a probe produces MD metadata");
+        };
+
+        let external = |tile: &AddDatasetMdTile| {
+            let mut tile = tile.clone();
+            // a bare URL is external data; the probe's local path is not
+            tile.params.file_path = "/vsicurl/https://example.invalid/variables.nc".into();
+            tile
+        };
+
+        // `variables.nc` has a uniform daily axis, which has to be advertised as Regular
+        let mut tile = external(&tiles[0]);
+        tile.time_descriptor = TimeDescriptor {
+            bounds: None,
+            dimension: TimeDimension::Irregular,
+        };
+        assert!(matches!(
+            validate_md_tile(
+                &tile,
+                md.wrap,
+                &DataPath::External,
+                Path::new(""),
+                &md.result_descriptor,
+                // external rows are the ones whose file is not opened, which is exactly why
+                // the axis checks have to be independent of it
+                false,
+            ),
+            Err(AddDatasetMdTilesError::MdTileTimeAxisInconsistent { .. }),
+        ));
+
+        // consistent, but reversed: `MdFileTimes::bounds` would take the first and last
+        // step and describe the file as covering an inverted window
+        let mut tile = external(&tiles[0]);
+        tile.time_steps.reverse();
+        let times = geoengine_operators::source::MdFileTimes::from_intervals(
+            tile.time_steps
+                .iter()
+                .map(|t| geoengine_datatypes::primitives::TimeInterval::from(*t))
+                .collect(),
+        );
+        tile.time_descriptor = times.descriptor.into();
+        assert!(matches!(
+            validate_md_tile(
+                &tile,
+                md.wrap,
+                &DataPath::External,
+                Path::new(""),
+                &md.result_descriptor,
+                // external rows are the ones whose file is not opened, which is exactly why
+                // the axis checks have to be independent of it
+                false,
+            ),
+            Err(AddDatasetMdTilesError::MdTileTimeAxisUnordered { .. }),
+        ));
     }
 }

@@ -199,18 +199,34 @@ endpoint = "http://127.0.0.1:4317"
 [gdal_process_pool.worker.gdal_config_options]
 # Process-global GDAL config options applied once when a GDAL worker process starts.
 #
-# Two categories:
+# Three categories:
 # 1. Frozen at first /vsicurl/ use (changing these requires restarting the worker process):
 #    - VSI_CACHE, VSI_CACHE_SIZE
 #    - CPL_VSIL_CURL_CHUNK_SIZE
 # 2. Read per dataset open (can also be overridden per request via gdal_config_options):
 #    - GDAL_DISABLE_READDIR_ON_OPEN
 #    - CPL_VSIL_CURL_ALLOWED_EXTENSIONS
+# 3. Process resource budgets (safe to change on restart, but they are budgets, not facts
+#    about a dataset - keep them out of dataset rows and import notebooks):
+#    - GDAL_CACHEMAX, VSI_CACHE_SIZE
 GDAL_DISABLE_READDIR_ON_OPEN = "EMPTY_DIR"
-CPL_VSIL_CURL_ALLOWED_EXTENSIONS = ".tif,.tiff,.TIF,.jp2,.ovr"
-CPL_VSIL_CURL_CHUNK_SIZE = "1048576" # 1mb TODO: need to tune this!
+CPL_VSIL_CURL_ALLOWED_EXTENSIONS = ".tif,.tiff,.TIF,.jp2,.ovr,.nc"
+
+# One fetch per HDF5 chunk. netCDF stores a chunk per time step (600x1440 float32 = 3.3 MiB),
+# so 1 MiB meant four range requests to assemble one chunk and about fourteen per 4-slice
+# read - a measurable part of every read's latency. 4 MiB also covers a whole JP2 codestream
+# fetch and over-fetches COG tiles into the cache, which a tiled query reads next anyway.
+CPL_VSIL_CURL_CHUNK_SIZE = "4194304"
+
+# In-memory raster/MD block cache in MiB. GDAL's implicit default is 5% of usable RAM, which
+# on a large host is gigabytes *per worker process*; state it so the pool cannot walk into it.
+GDAL_CACHEMAX = "128"
+
 VSI_CACHE = "TRUE"
-VSI_CACHE_SIZE = "67108864" # 64mb per worker! TODO: need to tune this!
+# /vsicurl chunks cached on disk, per worker process. Raise per host via Settings.toml -
+# this is a disk budget, not a dataset fact. A 365-step netCDF year is ~1.2 GiB, so this
+# only covers a fraction of it and the access order matters more than the size does.
+VSI_CACHE_SIZE = "67108864"
 
 [gdal_process_pool.worker.logging]
 # Logging for the GDAL worker processes. Independent from the main `[logging]` section because

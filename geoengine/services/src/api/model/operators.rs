@@ -1511,6 +1511,79 @@ impl From<GdalMultiBand> for geoengine_operators::source::GdalMultiBand {
     }
 }
 
+#[type_tag(value = "GdalMdMetaData")]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GdalMdMetaData {
+    pub result_descriptor: RasterResultDescriptor,
+    pub z_role: ZRole,
+    /// whether the stored 0..360 degree coverage is re-presented as -180..180
+    pub wrap: bool,
+    /// upper bound on the z slices a single worker read may request; `None` means the
+    /// operator's default. A dataset property, since a batch is sized against the slice
+    /// size of the data itself.
+    pub max_z_batch_size: Option<i64>,
+    /// Dataset-level TTL fallback used when no tile-level TTL is provided.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<CacheTtlSeconds>,
+}
+
+/// How the z dimension of an MD array maps to the 2D raster output. Mirrors
+/// `geoengine_operators::source::ZRole`, which cannot derive a schema of its own.
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, Copy, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ZRole {
+    /// Each z slice is a raster band of a single time step.
+    Band,
+    /// Each selected variable is a raster band; within a variable the z slices are time
+    /// steps and the time axis is shared by all variables. A single-variable dataset
+    /// (previously `Time`) is just one band.
+    Variable,
+}
+
+impl From<geoengine_operators::source::ZRole> for ZRole {
+    fn from(value: geoengine_operators::source::ZRole) -> Self {
+        match value {
+            geoengine_operators::source::ZRole::Band => ZRole::Band,
+            geoengine_operators::source::ZRole::Variable => ZRole::Variable,
+        }
+    }
+}
+
+impl From<ZRole> for geoengine_operators::source::ZRole {
+    fn from(value: ZRole) -> Self {
+        match value {
+            ZRole::Band => geoengine_operators::source::ZRole::Band,
+            ZRole::Variable => geoengine_operators::source::ZRole::Variable,
+        }
+    }
+}
+
+impl From<geoengine_operators::source::GdalMdMetaData> for GdalMdMetaData {
+    fn from(value: geoengine_operators::source::GdalMdMetaData) -> Self {
+        Self {
+            r#type: Default::default(),
+            result_descriptor: value.result_descriptor.into(),
+            z_role: value.z_role.into(),
+            wrap: value.wrap,
+            max_z_batch_size: value.max_z_batch_size,
+            cache_ttl: value.cache_ttl.map(Into::into),
+        }
+    }
+}
+
+impl From<GdalMdMetaData> for geoengine_operators::source::GdalMdMetaData {
+    fn from(value: GdalMdMetaData) -> Self {
+        Self {
+            result_descriptor: value.result_descriptor.into(),
+            z_role: value.z_role.into(),
+            wrap: value.wrap,
+            max_z_batch_size: value.max_z_batch_size,
+            cache_ttl: value.cache_ttl.map(Into::into),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum CsvHeader {

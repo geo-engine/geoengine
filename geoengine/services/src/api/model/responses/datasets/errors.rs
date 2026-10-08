@@ -179,3 +179,87 @@ impl fmt::Debug for AddDatasetTilesError {
         write!(f, "{}", ge_report(self))
     }
 }
+
+#[derive(Snafu, IntoStaticStr)]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
+pub enum AddDatasetMdTilesError {
+    #[snafu(display("Cannot load dataset for adding MD tiles"))]
+    CannotLoadDatasetForAddingMdTiles { source: error::Error },
+    #[snafu(display("Cannot add MD tiles to dataset: {source}"))]
+    CannotAddMdTilesToDataset { source: error::Error },
+    #[snafu(display("Cannot add MD tiles to dataset that is not an MdGdalSource"))]
+    DatasetIsNotMdGdal,
+    #[snafu(display("Dataset is missing a data path"))]
+    MdDatasetIsMissingDataPath,
+    /// the file path failed one of the shared tile path checks
+    InvalidMdTileFile {
+        source: AddDatasetTilesError,
+        file_path: String,
+    },
+    CannotOpenMdTileFile {
+        source: geoengine_operators::error::Error,
+        file_path: String,
+    },
+    MdTileBandDoesNotExist {
+        band_count: u32,
+        found: u32,
+        file_path: String,
+    },
+    MdTileGeoTransformMismatch {
+        expected: geoengine_datatypes::raster::GeoTransform,
+        found: geoengine_datatypes::raster::GeoTransform,
+        file_path: String,
+    },
+    /// the array's z size disagrees with the declared time axis
+    MdTileSliceCountMismatch {
+        expected: usize,
+        found: usize,
+        file_path: String,
+    },
+    /// the array has a different number of dimensions between z and (y, x) than the row
+    /// declares a leading prefix for
+    MdTileLeadingPrefixMismatch {
+        expected: usize,
+        found: usize,
+        file_path: String,
+    },
+    /// the array's (x, y) size disagrees with the row's declared grid
+    MdTileArraySizeMismatch {
+        declared: (usize, usize),
+        found: (usize, usize),
+        file_path: String,
+    },
+    /// the array declares a CRS that contradicts the dataset's
+    MdTileCrsMismatch {
+        declared: String,
+        found: String,
+        file_path: String,
+    },
+    #[snafu(display(
+        "MD tile '{file_path}' declares no time steps; one interval per z slice is required"
+    ))]
+    MdTileMissingTimeSteps { file_path: String },
+    #[snafu(display(
+        "MD tile '{file_path}' declares a time descriptor that does not describe its time steps"
+    ))]
+    MdTileTimeAxisInconsistent { file_path: String },
+    #[snafu(display("MD tile '{file_path}' declares time steps that do not run in time order"))]
+    MdTileTimeAxisUnordered { file_path: String },
+}
+
+impl ResponseError for AddDatasetMdTilesError {
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
+    }
+
+    fn status_code(&self) -> StatusCode {
+        StatusCode::BAD_REQUEST
+    }
+}
+
+impl fmt::Debug for AddDatasetMdTilesError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", ge_report(self))
+    }
+}

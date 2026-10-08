@@ -5,6 +5,7 @@ All URIs are relative to *https://geoengine.io/api*
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
 | [**addDatasetTilesHandler**](DatasetsApi.md#adddatasettileshandler) | **POST** /dataset/{dataset}/tiles | Add a tile to a gdal dataset. |
+| [**addMdDatasetTilesHandler**](DatasetsApi.md#addmddatasettileshandler) | **POST** /dataset/{dataset}/md-tiles | Adds MD array files to an &#x60;MdGdalSource&#x60; dataset. |
 | [**autoCreateDatasetHandler**](DatasetsApi.md#autocreatedatasethandler) | **POST** /dataset/auto | Creates a new dataset using previously uploaded files. The format of the files will be automatically detected when possible. |
 | [**createDatasetHandler**](DatasetsApi.md#createdatasethandler) | **POST** /dataset | Creates a new dataset referencing files. Users can reference previously uploaded files. Admins can reference files from a volume. |
 | [**deleteDatasetHandler**](DatasetsApi.md#deletedatasethandler) | **DELETE** /dataset/{dataset} | Delete a dataset |
@@ -89,6 +90,82 @@ example().catch(console.error);
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 | **200** |  |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## addMdDatasetTilesHandler
+
+> addMdDatasetTilesHandler(dataset, addDatasetMdTile)
+
+Adds MD array files to an &#x60;MdGdalSource&#x60; dataset.
+
+One row per file, covering all of that file\&#39;s z slices. The per-slice times live in &#x60;timeDescriptor&#x60; plus &#x60;timeSteps&#x60;, and the file\&#39;s overall bounds are derived from them when the row is stored, so a request cannot describe a row as covering a window it does not.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  DatasetsApi,
+} from '@geoengine/api-client';
+import type { AddMdDatasetTilesHandlerRequest } from '@geoengine/api-client';
+
+async function example() {
+  console.log("🚀 Testing @geoengine/api-client SDK...");
+  const config = new Configuration({ 
+    // Configure HTTP bearer authorization: session_token
+    accessToken: "YOUR BEARER TOKEN",
+  });
+  const api = new DatasetsApi(config);
+
+  const body = {
+    // string | Dataset Name
+    dataset: dataset_example,
+    // Array<AddDatasetMdTile>
+    addDatasetMdTile: ...,
+  } satisfies AddMdDatasetTilesHandlerRequest;
+
+  try {
+    const data = await api.addMdDatasetTilesHandler(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **dataset** | `string` | Dataset Name | [Defaults to `undefined`] |
+| **addDatasetMdTile** | `Array<AddDatasetMdTile>` |  | |
+
+### Return type
+
+`void` (Empty response body)
+
+### Authorization
+
+[session_token](../README.md#session_token)
+
+### HTTP request headers
+
+- **Content-Type**: `application/json`
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** |  |  -  |
+| **400** | Bad request |  -  |
+| **401** | Authorization failed |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 

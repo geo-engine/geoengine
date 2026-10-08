@@ -33,6 +33,13 @@ class TestDatasetsApi(unittest.TestCase):
         """
         pass
 
+    def test_add_md_dataset_tiles_handler(self) -> None:
+        """Test case for add_md_dataset_tiles_handler
+
+        Adds MD array files to an `MdGdalSource` dataset.
+        """
+        pass
+
     def test_auto_create_dataset_handler(self) -> None:
         """Test case for auto_create_dataset_handler
 

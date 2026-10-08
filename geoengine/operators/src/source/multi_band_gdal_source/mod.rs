@@ -5,7 +5,9 @@ use crate::engine::{
 use crate::error::Error;
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
 use crate::source::GdalDatasetParameters;
-use crate::source::gdal_worker_process::{GdalReaderMode, OverviewReaderState, ReaderState};
+use crate::source::gdal_worker_process::{
+    GdalReaderMode, OverviewReaderState, ReaderState, TILE_READ_CONCURRENCY,
+};
 use crate::source::multi_band_gdal_source::reader::GdalPoolReader;
 use crate::{
     engine::{
@@ -261,7 +263,7 @@ where
                 )
                 .map_err(Error::from)
             })
-            .buffered(16) // TODO: make configurable
+            .buffered(TILE_READ_CONCURRENCY)
             .boxed();
 
         return Ok(stream);

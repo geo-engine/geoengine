@@ -727,6 +727,35 @@ def add_dataset_tiles(dataset: DatasetName | str, tiles: list[MultiBandGdalFileS
         )
 
 
+def add_md_dataset_tiles(
+    dataset: DatasetName | str,
+    tiles: list[geoengine_api_client.AddDatasetMdTile],
+    timeout: int = 600,
+) -> None:
+    """Add MD array files to an existing `MdGdalSource` dataset.
+
+    One row per file, covering all of that file's z slices - see
+    `python/examples/md_gdal_source_dataset.ipynb` for how a row is built by hand. Set
+    `params.gdal_config_options` on each row for remote data, e.g.
+    `[["CPL_VSIL_CURL_ALLOWED_EXTENSIONS", "...,.nc"]]`.
+
+    `leading_prefix` selects a slice of a 4D array: `[2]` reads depth 2 of a
+    `(time, depth, y, x)` file, and leaving it empty reads a 3D array.
+    """
+    if not isinstance(dataset, DatasetName):
+        dataset = DatasetName(dataset)
+
+    session = get_session()
+
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        datasets_api = geoengine_api_client.DatasetsApi(api_client)
+        datasets_api.add_md_dataset_tiles_handler(
+            str(dataset),
+            tiles,
+            _request_timeout=timeout,
+        )
+
+
 def add_multiband_gdal_source(
     name: str,
     bands: list[RasterBandDescriptor],

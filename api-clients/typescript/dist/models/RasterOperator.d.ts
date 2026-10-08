@@ -15,6 +15,7 @@ import type { Downsampling } from './Downsampling';
 import type { Expression } from './Expression';
 import type { GdalSource } from './GdalSource';
 import type { Interpolation } from './Interpolation';
+import type { MdGdalSource } from './MdGdalSource';
 import type { MultiBandGdalSource } from './MultiBandGdalSource';
 import type { NeighborhoodAggregate } from './NeighborhoodAggregate';
 import type { Onnx } from './Onnx';
@@ -48,6 +49,8 @@ export type RasterOperator = {
 } & GdalSource | {
     type: 'Interpolation';
 } & Interpolation | {
+    type: 'MdGdalSource';
+} & MdGdalSource | {
     type: 'MultiBandGdalSource';
 } & MultiBandGdalSource | {
     type: 'NeighborhoodAggregate';
