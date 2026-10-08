@@ -31,7 +31,7 @@ import {
 } from '@geoengine/common';
 import OlPolygon from 'ol/geom/Polygon';
 import {LayerIdPair} from '../main/main.component';
-import {EdvLayersService} from '../layers/layers.service';
+import {EOdysseyLayerService} from '../layers/layers.service';
 import {PlotOutputFormat, RasterBandDescriptor, TypedPlotOperator, TypedRasterOperator, WrappedPlotOutput} from '@geoengine/api-client';
 import {PlotDialogComponent} from './plot-dialog.component';
 
@@ -141,13 +141,13 @@ export class ComputeComponent {
     private readonly plotsService = inject(PlotsService);
     private readonly projectService = inject(ProjectService);
     private readonly userService = inject(UserService);
-    private readonly edvLayerService = inject(EdvLayersService);
+    private readonly eodysseyLayerService = inject(EOdysseyLayerService);
 
     readonly plotWidthPx = signal(0);
     readonly spinnerWidthPx = computed(() => Math.round(this.plotWidthPx() / 2));
     readonly hostElement = inject(ElementRef).nativeElement as HTMLElement;
 
-    readonly selectedRasterLayer = this.edvLayerService.mapTileLayer;
+    readonly selectedRasterLayer = this.eodysseyLayerService.mapTileLayer;
     readonly selectedProcessingGraphId = resource<string | undefined, LayerIdPair | undefined>({
         params: () => this.selectedRasterLayer(),
         loader: async ({params: rasterLayer}): Promise<string | undefined> => {

@@ -27,7 +27,7 @@ import {
 } from '@geoengine/common';
 import {PlotOutputFormat, WrappedPlotOutput} from '@geoengine/api-client';
 import {ComputeComponent} from './compute.component';
-import {EdvLayersService} from '../layers/layers.service';
+import {EOdysseyLayerService} from '../layers/layers.service';
 import {DataSourceLayer} from '../layers/data-sources';
 
 describe('ComputeComponent', () => {
@@ -96,7 +96,7 @@ describe('ComputeComponent', () => {
                 provideZonelessChangeDetection(),
                 {provide: BackendService, useValue: {}},
                 {provide: LayersService, useValue: layersService},
-                {provide: EdvLayersService, useValue: {mapTileLayer: selectedLayerSignal}},
+                {provide: EOdysseyLayerService, useValue: {mapTileLayer: selectedLayerSignal}},
                 {
                     provide: MapService,
                     useValue: {

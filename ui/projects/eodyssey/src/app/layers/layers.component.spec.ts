@@ -6,12 +6,12 @@ import {MapService, ProjectService} from '@geoengine/core';
 import type {CollectionItem} from '@geoengine/api-client';
 import {LAYER_DB_ROOT_COLLECTION_ID, LayersService, Time, TimeStepDuration} from '@geoengine/common';
 import {LayersComponent} from './layers.component';
-import {EdvLayersService} from './layers.service';
+import {EOdysseyLayerService} from './layers.service';
 import View from 'ol/View';
 
 describe('LayersComponent', () => {
     let fixture: ComponentFixture<LayersComponent>;
-    let edvLayersService: EdvLayersService;
+    let eodysseyLayerService: EOdysseyLayerService;
     const getLayerCollectionItems =
         vi.fn<(_provider: string, collection: string, offset?: number, limit?: number) => Promise<{items: unknown[]}>>();
     const getLayer = vi.fn();
@@ -147,7 +147,7 @@ describe('LayersComponent', () => {
                     provide: LayersService,
                     useValue: {getLayerCollectionItems, getLayer, registerAndGetLayerWorkflowId, getWorkflowIdMetadata},
                 },
-                EdvLayersService,
+                EOdysseyLayerService,
                 {
                     provide: MapService,
                     useValue: {getViewStream: (): Observable<View> => mapViews.asObservable(), getView: (): View => mapViews.value},
@@ -163,7 +163,7 @@ describe('LayersComponent', () => {
                 },
             ],
         }).compileComponents();
-        edvLayersService = TestBed.inject(EdvLayersService);
+        eodysseyLayerService = TestBed.inject(EOdysseyLayerService);
         fixture = TestBed.createComponent(LayersComponent);
     });
 
@@ -172,20 +172,20 @@ describe('LayersComponent', () => {
         mapView.setCenter([9, 50]);
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32632');
+        expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:32632');
 
         mapView.setCenter([148.5, -35.5]);
-        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32632');
-        edvLayersService.setSelectedDataSource('landsat');
+        expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:32632');
+        eodysseyLayerService.setSelectedDataSource('landsat');
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32655');
-        edvLayersService.setSelectedDataSource('sentinel');
+        expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:32655');
+        eodysseyLayerService.setSelectedDataSource('sentinel');
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32755');
+        expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:32755');
         expect(setTime).not.toHaveBeenCalled();
-        expect(edvLayersService.mapTileLayer()).toBeUndefined();
+        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
     });
 
     it('waits for the replacement view center and removes the old view listener', async () => {
@@ -195,29 +195,29 @@ describe('LayersComponent', () => {
         await fixture.whenStable();
         const replacement = new View({projection: 'EPSG:4326'});
         mapViews.next(replacement);
-        expect(edvLayersService.mapCenter()).toBeUndefined();
+        expect(eodysseyLayerService.mapCenter()).toBeUndefined();
         mapView.setCenter([148.5, -35.5]);
-        expect(edvLayersService.mapCenter()).toBeUndefined();
-        edvLayersService.setSelectedDataSource('landsat');
+        expect(eodysseyLayerService.mapCenter()).toBeUndefined();
+        eodysseyLayerService.setSelectedDataSource('landsat');
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32632');
+        expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:32632');
         replacement.setCenter([148.5, -35.5]);
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32655');
+        expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:32655');
     });
 
     it('preserves a manual variant chosen before the map initializes', async () => {
         mockCoverageCatalogue();
         fixture.detectChanges();
         await fixture.whenStable();
-        edvLayersService.setSelectedVariant('EPSG:32655');
+        eodysseyLayerService.setSelectedVariant('EPSG:32655');
         mapView.setCenter([9, 50]);
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32655');
-        expect(edvLayersService.mapCenterVariantKey()).toBe('EPSG:32632');
+        expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:32655');
+        expect(eodysseyLayerService.mapCenterVariantKey()).toBe('EPSG:32632');
     });
 
     it('shows loading indicators for both lists until catalogue discovery finishes', async () => {
@@ -303,31 +303,31 @@ describe('LayersComponent', () => {
         mapView.setCenter([148.5, -35.5]);
         fixture.detectChanges();
         await fixture.whenStable();
-        await vi.waitFor(() => expect(edvLayersService.currentPresets()).toHaveLength(25));
+        await vi.waitFor(() => expect(eodysseyLayerService.currentPresets()).toHaveLength(25));
         fixture.detectChanges();
-        expect(edvLayersService.currentVariants()).toHaveLength(21);
-        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32755');
-        expect(edvLayersService.sortedVariants()[0].name).toBe('Region 01N');
-        expect(edvLayersService.mapTileLayer()).toBeUndefined();
+        expect(eodysseyLayerService.currentVariants()).toHaveLength(21);
+        expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:32755');
+        expect(eodysseyLayerService.sortedVariants()[0].name).toBe('Region 01N');
+        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
         expect(setTime).not.toHaveBeenCalled();
 
-        edvLayersService.setSelectedPreset('preset-1');
+        eodysseyLayerService.setSelectedPreset('preset-1');
         fixture.componentInstance.applySelectedPreset();
-        const appliedLayer = edvLayersService.mapTileLayer();
+        const appliedLayer = eodysseyLayerService.mapTileLayer();
         const timeCalls = setTime.mock.calls.length;
         expect(appliedLayer).toEqual({dataConnectorId: 'provider', layerId: 'preset-1'});
 
         mapView.setCenter([9, 50]);
         fixture.detectChanges();
-        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32755');
+        expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:32755');
         const useCenterButton = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find((button) =>
             button.textContent?.includes('Select at map center'),
         );
         expect(useCenterButton).toBeDefined();
         useCenterButton?.click();
         fixture.detectChanges();
-        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32632');
-        expect(edvLayersService.mapTileLayer()).toEqual(appliedLayer);
+        expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:32632');
+        expect(eodysseyLayerService.mapTileLayer()).toEqual(appliedLayer);
         expect(setTime).toHaveBeenCalledTimes(timeCalls);
     });
 
@@ -434,7 +434,7 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         await fixture.whenStable();
         const appliedLayer = component.mapTileLayer();
-        const appliedSource = edvLayersService.appliedDataSource();
+        const appliedSource = eodysseyLayerService.appliedDataSource();
         expect(appliedLayer).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
         expect(setTime).toHaveBeenCalledWith(new Time(new Date(1775001600000)));
         setTime.mockClear();
@@ -447,7 +447,7 @@ describe('LayersComponent', () => {
         await vi.waitFor(() => expect(component.currentPresets()).toHaveLength(1));
         expect(component.selectedDataSource()?.key).toBe('other');
         expect(component.mapTileLayer()).toBe(appliedLayer);
-        expect(edvLayersService.appliedDataSource()).toBe(appliedSource);
+        expect(eodysseyLayerService.appliedDataSource()).toBe(appliedSource);
         expect(component.selectedPreset()).toBeUndefined();
         expect(component.canApplyPreset()).toBe(false);
         component.selectPreset(component.currentPresets()[0]);
@@ -463,7 +463,7 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         await fixture.whenStable();
         expect(component.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'other'});
-        expect(edvLayersService.appliedDataSource()?.key).toBe('other');
+        expect(eodysseyLayerService.appliedDataSource()?.key).toBe('other');
         expect(setTime).toHaveBeenCalledWith(new Time(new Date(1775088000000)));
         expect(setTimeStepDuration).toHaveBeenCalledWith({durationAmount: 2, durationUnit: 'days'});
         expect(getLayer).toHaveBeenCalledWith('provider', 'other');
@@ -490,7 +490,7 @@ describe('LayersComponent', () => {
         fixture.componentInstance.applySelectedPreset();
         fixture.detectChanges();
         await fixture.whenStable();
-        const appliedLayer = edvLayersService.mapTileLayer();
+        const appliedLayer = eodysseyLayerService.mapTileLayer();
         setTime.mockClear();
         setTimeStepDuration.mockClear();
 
@@ -537,7 +537,7 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         await fixture.whenStable();
         expect(fixture.componentInstance.dataSources()).toHaveLength(1);
-        expect(edvLayersService.selectedVariant()?.collectionId).toBe('region');
+        expect(eodysseyLayerService.selectedVariant()?.collectionId).toBe('region');
         expect(fixture.componentInstance.currentPresets().map((preset) => preset.displayName)).toEqual(['Default', 'Alternate']);
         expect(getLayerCollectionItems.mock.calls.map((call) => call[1])).toEqual([
             LAYER_DB_ROOT_COLLECTION_ID,
@@ -566,7 +566,7 @@ describe('LayersComponent', () => {
         );
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.catalogueError()).toBe('Missing edv:dataset on Unannotated');
+        expect(eodysseyLayerService.catalogueError()).toBe('Missing edv:dataset on Unannotated');
         expect(getLayerCollectionItems.mock.calls.map((call) => call[1])).not.toContain('unannotated');
     });
 
@@ -578,7 +578,7 @@ describe('LayersComponent', () => {
         );
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.catalogueError()).toBe('Duplicate data source: sentinel');
+        expect(eodysseyLayerService.catalogueError()).toBe('Duplicate data source: sentinel');
     });
 
     it('rejects duplicate region identities instead of merging their preset collections', async () => {
@@ -591,7 +591,7 @@ describe('LayersComponent', () => {
         );
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.catalogueError()).toBe('Duplicate region in Sentinel: EPSG:4326');
+        expect(eodysseyLayerService.catalogueError()).toBe('Duplicate region in Sentinel: EPSG:4326');
     });
 
     it('requires region collections rather than synthesizing a region from source-level layers', async () => {
@@ -600,8 +600,8 @@ describe('LayersComponent', () => {
         );
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.dataSources()).toHaveLength(0);
-        expect(edvLayersService.currentPresets()).toHaveLength(0);
+        expect(eodysseyLayerService.dataSources()).toHaveLength(0);
+        expect(eodysseyLayerService.currentPresets()).toHaveLength(0);
     });
 
     it('keeps variant and preset selection when collection and layer ids change', async () => {
@@ -735,29 +735,29 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.currentVariants().map((variant) => variant.key)).toEqual(['EPSG:32632', 'EPSG:32633']);
+        expect(eodysseyLayerService.currentVariants().map((variant) => variant.key)).toEqual(['EPSG:32632', 'EPSG:32633']);
         expect(getLayerCollectionItems.mock.calls.map(([, collection]) => collection)).not.toContain('v330');
-        expect(edvLayersService.mapTileLayer()).toBeUndefined();
-        edvLayersService.setSelectedVariant('EPSG:32633');
+        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
+        eodysseyLayerService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
         await fixture.whenStable();
         fixture.detectChanges();
-        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32633');
-        await vi.waitFor(() => expect(edvLayersService.currentPresets().length).toBe(1));
-        expect(edvLayersService.mapTileLayer()).toBeUndefined();
-        edvLayersService.setSelectedPreset('red_band');
-        edvLayersService.applySelectedPreset();
-        expect(edvLayersService.mapTileLayer()).toEqual({dataConnectorId: 'data0', layerId: 'red33-0'});
+        expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:32633');
+        await vi.waitFor(() => expect(eodysseyLayerService.currentPresets().length).toBe(1));
+        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
+        eodysseyLayerService.setSelectedPreset('red_band');
+        eodysseyLayerService.applySelectedPreset();
+        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'data0', layerId: 'red33-0'});
 
         deployment = 1;
-        edvLayersService.retryCatalogue();
+        eodysseyLayerService.retryCatalogue();
         await fixture.whenStable();
         fixture.detectChanges();
         await fixture.whenStable();
         fixture.detectChanges();
-        expect(edvLayersService.selectedVariant()?.key).toBe('EPSG:32633');
-        expect(edvLayersService.mapTileLayer()).toEqual({dataConnectorId: 'data0', layerId: 'red33-0'});
-        expect(edvLayersService.selectedPresetKey()).toBeUndefined();
+        expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:32633');
+        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'data0', layerId: 'red33-0'});
+        expect(eodysseyLayerService.selectedPresetKey()).toBeUndefined();
     });
 
     it('ignores a stale preset response after switching variants', async () => {
@@ -826,17 +826,17 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
-        edvLayersService.setSelectedVariant('EPSG:32633');
+        eodysseyLayerService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
         resolve33({items: [layer('red33')]});
-        await vi.waitFor(() => expect(edvLayersService.currentPresets().length).toBe(1));
-        expect(edvLayersService.mapTileLayer()).toBeUndefined();
-        edvLayersService.setSelectedPreset('red_band');
-        edvLayersService.applySelectedPreset();
-        expect(edvLayersService.mapTileLayer()).toEqual({dataConnectorId: 'data', layerId: 'red33'});
+        await vi.waitFor(() => expect(eodysseyLayerService.currentPresets().length).toBe(1));
+        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
+        eodysseyLayerService.setSelectedPreset('red_band');
+        eodysseyLayerService.applySelectedPreset();
+        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'data', layerId: 'red33'});
         resolve32({items: [layer('red32')]});
         await Promise.resolve();
-        expect(edvLayersService.mapTileLayer()).toEqual({dataConnectorId: 'data', layerId: 'red33'});
+        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'data', layerId: 'red33'});
     });
 
     it('shows a variant loading error and retries the selected variant', async () => {
@@ -903,17 +903,17 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
-        edvLayersService.setSelectedVariant('EPSG:32633');
+        eodysseyLayerService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
-        await vi.waitFor(() => expect(edvLayersService.variantError()).toBe('variant unavailable'));
-        expect(edvLayersService.mapTileLayer()).toBeUndefined();
-        edvLayersService.retryVariant();
-        await vi.waitFor(() => expect(edvLayersService.currentPresets().length).toBe(1));
-        expect(edvLayersService.mapTileLayer()).toBeUndefined();
-        edvLayersService.setSelectedPreset('red_band');
-        edvLayersService.applySelectedPreset();
-        expect(edvLayersService.mapTileLayer()).toEqual({dataConnectorId: 'data', layerId: 'red33'});
-        expect(edvLayersService.variantError()).toBeUndefined();
+        await vi.waitFor(() => expect(eodysseyLayerService.variantError()).toBe('variant unavailable'));
+        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
+        eodysseyLayerService.retryVariant();
+        await vi.waitFor(() => expect(eodysseyLayerService.currentPresets().length).toBe(1));
+        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
+        eodysseyLayerService.setSelectedPreset('red_band');
+        eodysseyLayerService.applySelectedPreset();
+        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'data', layerId: 'red33'});
+        expect(eodysseyLayerService.variantError()).toBeUndefined();
     });
     it('reconciles the selected preset when switching to a cached variant', async () => {
         const layer = (key: string, layerId: string): unknown => ({
@@ -969,26 +969,26 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(edvLayersService.mapTileLayer()).toBeUndefined();
-        edvLayersService.setSelectedPreset('ndvi');
-        expect(edvLayersService.canApplyPreset()).toBe(true);
-        edvLayersService.applySelectedPreset();
-        expect(edvLayersService.mapTileLayer()?.layerId).toBe('ndvi32');
-        const appliedLayer = edvLayersService.mapTileLayer();
-        edvLayersService.setSelectedVariant('EPSG:32633');
+        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
+        eodysseyLayerService.setSelectedPreset('ndvi');
+        expect(eodysseyLayerService.canApplyPreset()).toBe(true);
+        eodysseyLayerService.applySelectedPreset();
+        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('ndvi32');
+        const appliedLayer = eodysseyLayerService.mapTileLayer();
+        eodysseyLayerService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
-        expect(edvLayersService.mapTileLayer()).toBe(appliedLayer);
-        await vi.waitFor(() => expect(edvLayersService.currentPresets().length).toBe(1));
-        edvLayersService.setSelectedPreset('red_band');
-        edvLayersService.applySelectedPreset();
-        expect(edvLayersService.mapTileLayer()?.layerId).toBe('red33');
-        edvLayersService.setSelectedVariant('EPSG:32632');
+        expect(eodysseyLayerService.mapTileLayer()).toBe(appliedLayer);
+        await vi.waitFor(() => expect(eodysseyLayerService.currentPresets().length).toBe(1));
+        eodysseyLayerService.setSelectedPreset('red_band');
+        eodysseyLayerService.applySelectedPreset();
+        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('red33');
+        eodysseyLayerService.setSelectedVariant('EPSG:32632');
         fixture.detectChanges();
-        expect(edvLayersService.mapTileLayer()?.layerId).toBe('red33');
-        edvLayersService.setSelectedVariant('EPSG:32633');
+        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('red33');
+        eodysseyLayerService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
-        expect(edvLayersService.selectedPresetKey()).toBeUndefined();
-        expect(edvLayersService.canApplyPreset()).toBe(false);
+        expect(eodysseyLayerService.selectedPresetKey()).toBeUndefined();
+        expect(eodysseyLayerService.canApplyPreset()).toBe(false);
     });
 
     it('keeps an in-flight variant load alive when retrying another variant', async () => {
@@ -1031,20 +1031,20 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
-        edvLayersService.setSelectedVariant('EPSG:32633');
+        eodysseyLayerService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
-        await vi.waitFor(() => expect(edvLayersService.variantError()).toBe('B unavailable'));
-        edvLayersService.retryVariant();
-        await vi.waitFor(() => expect(edvLayersService.currentPresets().length).toBe(1));
-        expect(edvLayersService.mapTileLayer()).toBeUndefined();
-        edvLayersService.setSelectedPreset('red');
-        edvLayersService.applySelectedPreset();
-        expect(edvLayersService.mapTileLayer()?.layerId).toBe('red-b');
-        edvLayersService.setSelectedVariant('EPSG:32632');
+        await vi.waitFor(() => expect(eodysseyLayerService.variantError()).toBe('B unavailable'));
+        eodysseyLayerService.retryVariant();
+        await vi.waitFor(() => expect(eodysseyLayerService.currentPresets().length).toBe(1));
+        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
+        eodysseyLayerService.setSelectedPreset('red');
+        eodysseyLayerService.applySelectedPreset();
+        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('red-b');
+        eodysseyLayerService.setSelectedVariant('EPSG:32632');
         fixture.detectChanges();
-        expect(edvLayersService.mapTileLayer()?.layerId).toBe('red-b');
+        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('red-b');
         resolveA({items: [layer('red-a')]});
-        await vi.waitFor(() => expect(edvLayersService.currentPresets().length).toBe(1));
-        expect(edvLayersService.mapTileLayer()?.layerId).toBe('red-b');
+        await vi.waitFor(() => expect(eodysseyLayerService.currentPresets().length).toBe(1));
+        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('red-b');
     });
 });

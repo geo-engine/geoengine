@@ -14,7 +14,7 @@ import {DataSourceDefinition, DataSourceLayer, DataSourceVariant, VisualizationP
  * Service for managing layers in the EOdyssey.
  */
 @Service()
-export class EdvLayersService {
+export class EOdysseyLayerService {
     readonly layerService = inject(LayersService);
     private readonly mapService = inject(MapService);
     private readonly destroyRef = inject(DestroyRef);

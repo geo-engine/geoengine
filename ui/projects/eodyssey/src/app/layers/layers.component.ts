@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, Component, computed, inject, resource, signal} from '@angular/core';
 import {CoreModule, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
 import {A11yModule} from '@angular/cdk/a11y';
-import {EdvLayersService} from './layers.service';
+import {EOdysseyLayerService} from './layers.service';
 import {MatCheckboxModule} from '@angular/material/checkbox';
 import {MatListModule} from '@angular/material/list';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
@@ -462,7 +462,7 @@ import {MatSelectModule} from '@angular/material/select';
 })
 export class LayersComponent {
     readonly projectService = inject(ProjectService);
-    readonly edvLayersService = inject(EdvLayersService);
+    readonly eodysseyLayerService = inject(EOdysseyLayerService);
     private readonly layerService = inject(LayersService);
 
     readonly currentTime = toSignal(this.projectService.getTimeStream());
@@ -477,29 +477,29 @@ export class LayersComponent {
         if (!time) return undefined;
         return time.start.toDate();
     });
-    readonly dataSources = this.edvLayersService.dataSources;
-    readonly catalogueLoading = this.edvLayersService.catalogueLoading;
-    readonly catalogueError = this.edvLayersService.catalogueError;
-    readonly variantLoading = this.edvLayersService.variantLoading;
-    readonly variantError = this.edvLayersService.variantError;
+    readonly dataSources = this.eodysseyLayerService.dataSources;
+    readonly catalogueLoading = this.eodysseyLayerService.catalogueLoading;
+    readonly catalogueError = this.eodysseyLayerService.catalogueError;
+    readonly variantLoading = this.eodysseyLayerService.variantLoading;
+    readonly variantError = this.eodysseyLayerService.variantError;
 
     readonly autoSelectTime = signal<boolean>(true);
 
-    readonly selectedDataSource = this.edvLayersService.selectedDataSource;
-    readonly currentVariants = this.edvLayersService.currentVariants;
-    readonly sortedVariants = this.edvLayersService.sortedVariants;
-    readonly hasCoverageVariants = this.edvLayersService.hasCoverageVariants;
-    readonly mapCenterVariantKey = this.edvLayersService.mapCenterVariantKey;
-    readonly mapCenterSelectionMessage = this.edvLayersService.mapCenterSelectionMessage;
-    readonly selectedVariant = this.edvLayersService.selectedVariant;
-    readonly currentPresets = this.edvLayersService.currentPresets;
-    readonly selectedPresetIndex = this.edvLayersService.selectedPresetIndex;
-    readonly selectedPreset = this.edvLayersService.selectedPreset;
-    readonly canApplyPreset = this.edvLayersService.canApplyPreset;
-    readonly mapTileLayer = this.edvLayersService.mapTileLayer;
+    readonly selectedDataSource = this.eodysseyLayerService.selectedDataSource;
+    readonly currentVariants = this.eodysseyLayerService.currentVariants;
+    readonly sortedVariants = this.eodysseyLayerService.sortedVariants;
+    readonly hasCoverageVariants = this.eodysseyLayerService.hasCoverageVariants;
+    readonly mapCenterVariantKey = this.eodysseyLayerService.mapCenterVariantKey;
+    readonly mapCenterSelectionMessage = this.eodysseyLayerService.mapCenterSelectionMessage;
+    readonly selectedVariant = this.eodysseyLayerService.selectedVariant;
+    readonly currentPresets = this.eodysseyLayerService.currentPresets;
+    readonly selectedPresetIndex = this.eodysseyLayerService.selectedPresetIndex;
+    readonly selectedPreset = this.eodysseyLayerService.selectedPreset;
+    readonly canApplyPreset = this.eodysseyLayerService.canApplyPreset;
+    readonly mapTileLayer = this.eodysseyLayerService.mapTileLayer;
 
     readonly legendLayer = resource({
-        params: () => ({layerId: this.edvLayersService.mapTileLayer()}),
+        params: () => ({layerId: this.eodysseyLayerService.mapTileLayer()}),
         loader: async ({params: {layerId}}): Promise<{layer: RasterLayer; metadata: RasterLayerMetadata} | undefined> => {
             if (!layerId) return undefined;
 
@@ -535,8 +535,8 @@ export class LayersComponent {
         () => !!this.mapTileLayer() && (this.legendLayer.isLoading() || this.legendLayer.status() === 'error' || !!this.legend()),
     );
 
-    readonly retryCatalogue = (): void => this.edvLayersService.retryCatalogue();
-    readonly retryVariant = (): void => this.edvLayersService.retryVariant();
+    readonly retryCatalogue = (): void => this.eodysseyLayerService.retryCatalogue();
+    readonly retryVariant = (): void => this.eodysseyLayerService.retryVariant();
 
     onDataSourceSelectionChange(options: readonly {value: string}[]): void {
         const selected = options[0]?.value;
@@ -547,20 +547,20 @@ export class LayersComponent {
     setSelectedDataSource(key: string): void {
         const dataSource = this.dataSources().find((d) => d.key === key);
         if (!dataSource) return;
-        this.edvLayersService.setSelectedDataSource(dataSource.key);
+        this.eodysseyLayerService.setSelectedDataSource(dataSource.key);
     }
 
     onVariantSelectionChange(options: readonly {value: string}[]): void {
         const selected = options[0]?.value;
-        if (selected) this.edvLayersService.setSelectedVariant(selected);
+        if (selected) this.eodysseyLayerService.setSelectedVariant(selected);
     }
 
     setSelectedVariant(key: string): void {
-        this.edvLayersService.setSelectedVariant(key);
+        this.eodysseyLayerService.setSelectedVariant(key);
     }
 
     selectMapCenterVariant(): void {
-        this.edvLayersService.selectMapCenterVariant();
+        this.eodysseyLayerService.selectMapCenterVariant();
     }
 
     private async applyDataSourceTime(dataSource: DataSourceDefinition): Promise<void> {
@@ -569,15 +569,15 @@ export class LayersComponent {
     }
 
     selectPreset(preset: VisualizationPreset): void {
-        this.edvLayersService.setSelectedPreset(preset.key);
+        this.eodysseyLayerService.setSelectedPreset(preset.key);
     }
 
     applySelectedPreset(): void {
         if (!this.canApplyPreset()) return;
 
         const source = this.selectedDataSource();
-        const sourceChanged = source !== this.edvLayersService.appliedDataSource();
-        this.edvLayersService.applySelectedPreset();
+        const sourceChanged = source !== this.eodysseyLayerService.appliedDataSource();
+        this.eodysseyLayerService.applySelectedPreset();
         if (source && sourceChanged) void this.applyDataSourceTime(source);
     }
 

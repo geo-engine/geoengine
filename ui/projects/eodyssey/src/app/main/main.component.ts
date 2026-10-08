@@ -14,7 +14,7 @@ import {A11yModule} from '@angular/cdk/a11y';
 import {MeasureDirective, MeasurementType} from './measure.directive';
 import {isActive, Router, RouterModule} from '@angular/router';
 import {addCitationToMapImage} from './map-image-export';
-import {EdvLayersService} from '../layers/layers.service';
+import {EOdysseyLayerService} from '../layers/layers.service';
 
 @Component({
     selector: 'geoengine-main',
@@ -46,7 +46,7 @@ export class MainComponent {
     readonly userService = inject(UserService);
     private readonly mapService = inject(MapService);
     private readonly router = inject(Router);
-    private readonly edvLayersService = inject(EdvLayersService);
+    private readonly eodysseyLayerService = inject(EOdysseyLayerService);
 
     private readonly spatialReferenceService = inject(SpatialReferenceService);
 
@@ -65,9 +65,9 @@ export class MainComponent {
     readonly spatialReference = toSignal(this.projectService.getSpatialReferenceStream());
     readonly currentTime = toSignal(this.projectService.getTimeStream());
 
-    readonly mapTileLayer = computed(() => this.edvLayersService.mapTileLayer());
+    readonly mapTileLayer = computed(() => this.eodysseyLayerService.mapTileLayer());
     readonly tileLoading = signal(false);
-    readonly isLoading = computed(() => this.edvLayersService.catalogueLoading() || this.tileLoading());
+    readonly isLoading = computed(() => this.eodysseyLayerService.catalogueLoading() || this.tileLoading());
 
     readonly isLayersActive = isActive('/map/layers', this.router);
     readonly isComputeActive = isActive('/map/compute', this.router);
@@ -135,7 +135,7 @@ export class MainComponent {
         const [currentDate] = (this.currentTime()?.toString() ?? new Date().toISOString()).split('T');
         const currentLayer = this.layersReverse().at(-1)?.name ?? 'eodyssey-map';
         const citation = replaceCitationPlaceholders(
-            this.edvLayersService.appliedDataSource()?.citation ?? '',
+            this.eodysseyLayerService.appliedDataSource()?.citation ?? '',
             this.currentTime() ?? new Date(),
         );
 
