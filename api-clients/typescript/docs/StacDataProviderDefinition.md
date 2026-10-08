@@ -20,6 +20,7 @@ Name | Type
 `queryTimeoutSecs` | number
 `pageLimit` | number
 `cacheTtlSecs` | number
+`stacGrid` | [StacGrid](StacGrid.md)
 
 ## Example
 
@@ -42,6 +43,7 @@ const example = {
   "queryTimeoutSecs": null,
   "pageLimit": null,
   "cacheTtlSecs": null,
+  "stacGrid": null,
 } satisfies StacDataProviderDefinition
 
 console.log(example)

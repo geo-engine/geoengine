@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
 from geoengine_api_client.models.raster_result_descriptor import RasterResultDescriptor
-from typing import Set
+from typing import Optional, Set
 from typing_extensions import Self
 
 class GdalMultiBand(BaseModel):
@@ -30,7 +30,7 @@ class GdalMultiBand(BaseModel):
     """ # noqa: E501
     type: StrictStr
     result_descriptor: RasterResultDescriptor = Field(alias="resultDescriptor")
-    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
+    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, description="Dataset-level TTL fallback used when no tile-level TTL is provided.", alias="cacheTtl")
     __properties: ClassVar[List[str]] = ["type", "resultDescriptor", "cacheTtl"]
 
     @field_validator('type')
@@ -86,6 +86,7 @@ class GdalMultiBand(BaseModel):
         # and model_fields_set contains the field
         if self.cache_ttl is None and "cache_ttl" in self.model_fields_set:
             _dict['cacheTtl'] = None
+
         return _dict
 
     @classmethod

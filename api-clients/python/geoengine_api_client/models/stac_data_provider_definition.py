@@ -22,6 +22,10 @@ from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
 from uuid import UUID
 from geoengine_api_client.models.stac_grid import StacGrid
+from geoengine_api_client.models.stac_provider_authentication import StacProviderAuthentication
+from geoengine_api_client.models.stac_provider_dataset import StacProviderDataset
+from geoengine_api_client.models.stac_provider_s3_config import StacProviderS3Config
+from geoengine_api_client.models.time_dimension import TimeDimension
 from typing import Optional, Set
 from typing_extensions import Self
 

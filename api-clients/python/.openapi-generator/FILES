@@ -336,6 +336,7 @@ docs/SpatialResolution.md
 docs/StacApiRetries.md
 docs/StacAssetBand.md
 docs/StacDataProviderDefinition.md
+docs/StacGrid.md
 docs/StacProviderAuthentication.md
 docs/StacProviderDataset.md
 docs/StacProviderDatasetBand.md
@@ -1253,6 +1254,7 @@ test/test_st_rectangle.py
 test/test_stac_api_retries.py
 test/test_stac_asset_band.py
 test/test_stac_data_provider_definition.py
+test/test_stac_grid.py
 test/test_stac_provider_authentication.py
 test/test_stac_provider_dataset.py
 test/test_stac_provider_dataset_band.py

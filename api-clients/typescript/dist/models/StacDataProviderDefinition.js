@@ -20,6 +20,7 @@ exports.StacDataProviderDefinitionToJSON = StacDataProviderDefinitionToJSON;
 exports.StacDataProviderDefinitionToJSONTyped = StacDataProviderDefinitionToJSONTyped;
 const StacProviderS3Config_1 = require("./StacProviderS3Config");
 const StacProviderDataset_1 = require("./StacProviderDataset");
+const StacGrid_1 = require("./StacGrid");
 const StacProviderAuthentication_1 = require("./StacProviderAuthentication");
 const TimeDimension_1 = require("./TimeDimension");
 /**
@@ -72,6 +73,7 @@ function StacDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminator) {
         'queryTimeoutSecs': json['queryTimeoutSecs'] == null ? undefined : json['queryTimeoutSecs'],
         'pageLimit': json['pageLimit'] == null ? undefined : json['pageLimit'],
         'cacheTtlSecs': json['cacheTtlSecs'] == null ? undefined : json['cacheTtlSecs'],
+        'stacGrid': json['stacGrid'] == null ? undefined : (0, StacGrid_1.StacGridFromJSON)(json['stacGrid']),
     };
 }
 function StacDataProviderDefinitionToJSON(json) {
@@ -96,5 +98,6 @@ function StacDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator = fals
         'queryTimeoutSecs': value['queryTimeoutSecs'],
         'pageLimit': value['pageLimit'],
         'cacheTtlSecs': value['cacheTtlSecs'],
+        'stacGrid': (0, StacGrid_1.StacGridToJSON)(value['stacGrid']),
     };
 }

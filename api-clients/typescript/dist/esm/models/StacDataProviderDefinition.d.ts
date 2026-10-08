@@ -10,6 +10,7 @@
  */
 import type { StacProviderS3Config } from './StacProviderS3Config';
 import type { StacProviderDataset } from './StacProviderDataset';
+import type { StacGrid } from './StacGrid';
 import type { StacProviderAuthentication } from './StacProviderAuthentication';
 import type { TimeDimension } from './TimeDimension';
 /**
@@ -102,6 +103,12 @@ export interface StacDataProviderDefinition {
      * @memberof StacDataProviderDefinition
      */
     cacheTtlSecs?: number | null;
+    /**
+     * Target number of square search cells per dataset CRS projected area of use; omitted values use 512.
+     * @type {StacGrid}
+     * @memberof StacDataProviderDefinition
+     */
+    stacGrid?: StacGrid | null;
 }
 /**
  * @export

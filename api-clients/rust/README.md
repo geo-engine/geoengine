@@ -451,6 +451,7 @@ Class | Method | HTTP request | Description
  - [StacApiRetries](docs/StacApiRetries.md)
  - [StacAssetBand](docs/StacAssetBand.md)
  - [StacDataProviderDefinition](docs/StacDataProviderDefinition.md)
+ - [StacGrid](docs/StacGrid.md)
  - [StacProviderAuthentication](docs/StacProviderAuthentication.md)
  - [StacProviderDataset](docs/StacProviderDataset.md)
  - [StacProviderDatasetBand](docs/StacProviderDatasetBand.md)

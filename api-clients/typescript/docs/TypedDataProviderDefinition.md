@@ -46,6 +46,7 @@ Name | Type
 `queryTimeoutSecs` | number
 `pageLimit` | number
 `cacheTtlSecs` | number
+`stacGrid` | [StacGrid](StacGrid.md)
 `user` | string
 `refreshToken` | string
 `expiryDate` | Date
@@ -97,6 +98,7 @@ const example = {
   "queryTimeoutSecs": null,
   "pageLimit": null,
   "cacheTtlSecs": null,
+  "stacGrid": null,
   "user": null,
   "refreshToken": null,
   "expiryDate": null,
