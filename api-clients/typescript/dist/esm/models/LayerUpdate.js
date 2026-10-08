@@ -10,38 +10,38 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import { instanceOfPlot, PlotFromJSONTyped, PlotToJSON, } from './Plot';
+import { instanceOfProjectLayer, ProjectLayerFromJSONTyped, ProjectLayerToJSON, } from './ProjectLayer';
 import { instanceOfProjectUpdateToken, ProjectUpdateTokenFromJSONTyped, ProjectUpdateTokenToJSON, } from './ProjectUpdateToken';
-export function VecUpdateFromJSON(json) {
-    return VecUpdateFromJSONTyped(json, false);
+export function LayerUpdateFromJSON(json) {
+    return LayerUpdateFromJSONTyped(json, false);
 }
-export function VecUpdateFromJSONTyped(json, ignoreDiscriminator) {
+export function LayerUpdateFromJSONTyped(json, ignoreDiscriminator) {
     if (json == null) {
         return json;
     }
     if (typeof json !== 'object') {
         return json;
     }
-    if (instanceOfPlot(json)) {
-        return PlotFromJSONTyped(json, true);
+    if (instanceOfProjectLayer(json)) {
+        return ProjectLayerFromJSONTyped(json, true);
     }
     if (instanceOfProjectUpdateToken(json)) {
         return ProjectUpdateTokenFromJSONTyped(json, true);
     }
     return {};
 }
-export function VecUpdateToJSON(json) {
-    return VecUpdateToJSONTyped(json, false);
+export function LayerUpdateToJSON(json) {
+    return LayerUpdateToJSONTyped(json, false);
 }
-export function VecUpdateToJSONTyped(value, ignoreDiscriminator = false) {
+export function LayerUpdateToJSONTyped(value, ignoreDiscriminator = false) {
     if (value == null) {
         return value;
     }
     if (typeof value !== 'object') {
         return value;
     }
-    if (typeof value === 'object' && instanceOfPlot(value)) {
-        return PlotToJSON(value);
+    if (typeof value === 'object' && instanceOfProjectLayer(value)) {
+        return ProjectLayerToJSON(value);
     }
     if (instanceOfProjectUpdateToken(value)) {
         return ProjectUpdateTokenToJSON(value);

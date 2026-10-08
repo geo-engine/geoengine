@@ -18,9 +18,9 @@ import {MatButton} from '@angular/material/button';
 import {AsyncPipe} from '@angular/common';
 
 @Component({
-    selector: 'geoengine-add-workflow',
-    templateUrl: './add-workflow.component.html',
-    styleUrls: ['./add-workflow.component.scss'],
+    selector: 'geoengine-add-processing-graph',
+    templateUrl: './add-processing-graph.component.html',
+    styleUrls: ['./add-processing-graph.component.scss'],
     changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         SidenavHeaderComponent,
@@ -35,7 +35,7 @@ import {AsyncPipe} from '@angular/common';
         AsyncPipe,
     ],
 })
-export class AddWorkflowComponent {
+export class AddProcessingGraphComponent {
     protected readonly projectService = inject(ProjectService);
     protected readonly notificationService = inject(NotificationService);
     protected readonly randomColorService = inject(RandomColorService);
@@ -45,35 +45,35 @@ export class AddWorkflowComponent {
     constructor() {
         this.form = new UntypedFormGroup({
             layerName: new UntypedFormControl('New Layer', Validators.required),
-            workflowId: new UntypedFormControl('', [Validators.required, isValidUuid]),
+            processingGraphId: new UntypedFormControl('', [Validators.required, isValidUuid]),
         });
     }
 
     add(): void {
         const layerName: string = this.form.controls.layerName.value;
-        const workflowId: UUID = this.form.controls.workflowId.value;
+        const processingGraphId: UUID = this.form.controls.processingGraphId.value;
 
-        this.projectService.getWorkflowMetaData(workflowId).subscribe(
+        this.projectService.getProcessingGraphMetaData(processingGraphId).subscribe(
             (resultDescriptorDict) => {
                 const keys = Object.keys(resultDescriptorDict);
 
                 if (keys.includes('columns')) {
-                    this.addVectorLayer(layerName, workflowId, resultDescriptorDict as VectorResultDescriptorDict);
+                    this.addVectorLayer(layerName, processingGraphId, resultDescriptorDict as VectorResultDescriptorDict);
                 } else if (keys.includes('bands')) {
-                    this.addRasterLayer(layerName, workflowId, resultDescriptorDict as RasterResultDescriptorDict);
+                    this.addRasterLayer(layerName, processingGraphId, resultDescriptorDict as RasterResultDescriptorDict);
                 } else {
                     // TODO: implement plots, etc.
                     this.notificationService.error('Adding this processing graph type is unimplemented, yet');
                 }
             },
-            (requestError) => this.handleError(requestError.error, workflowId),
+            (requestError: {error: GeoEngineErrorDict}) => this.handleError(requestError.error, processingGraphId),
         );
     }
 
-    private addVectorLayer(layerName: string, workflowId: UUID, resultDescriptor: VectorResultDescriptorDict): void {
+    private addVectorLayer(layerName: string, processingGraphId: UUID, resultDescriptor: VectorResultDescriptorDict): void {
         const layer = new VectorLayer({
             name: layerName,
-            workflowId,
+            processingGraphId,
             isVisible: true,
             isLegendVisible: false,
             symbology: createVectorSymbology(resultDescriptor.dataType, this.randomColorService.getRandomColorRgba()),
@@ -82,10 +82,10 @@ export class AddWorkflowComponent {
         this.projectService.addLayer(layer);
     }
 
-    private addRasterLayer(layerName: string, workflowId: UUID, _resultDescriptor: RasterResultDescriptorDict): void {
+    private addRasterLayer(layerName: string, processingGraphId: UUID, _resultDescriptor: RasterResultDescriptorDict): void {
         const layer = new RasterLayer({
             name: layerName,
-            workflowId,
+            processingGraphId,
             isVisible: true,
             isLegendVisible: false,
             symbology: RasterSymbology.fromRasterSymbologyDict({
@@ -111,10 +111,10 @@ export class AddWorkflowComponent {
         this.projectService.addLayer(layer);
     }
 
-    private handleError(error: GeoEngineErrorDict, workflowId: UUID): void {
-        let errorMessage = `No processing graph found for id: ${workflowId}`;
+    private handleError(error: GeoEngineErrorDict, processingGraphId: UUID): void {
+        let errorMessage = `No processing graph found for id: ${processingGraphId}`;
 
-        if (error.error !== 'NoWorkflowForGivenId') {
+        if (error.error !== 'NoProcessingGraphForGivenId') {
             errorMessage = `Unknown error -> ${error.error}: ${error.message}`;
         }
 

@@ -61,21 +61,21 @@ export class LayersService {
         return layersApi.layerHandler({provider, layer});
     }
 
-    async registerAndGetLayerWorkflowId(providerId: UUID, layerId: string): Promise<UUID> {
+    async registerAndGetLayerProcessingGraphId(providerId: UUID, layerId: string): Promise<UUID> {
         const layersApi = await firstValueFrom(this.layersApi);
 
-        const workflow = await layersApi.layerToProcessingGraphIdHandler({provider: providerId, layer: layerId});
+        const processingGraph = await layersApi.layerToProcessingGraphIdHandler({provider: providerId, layer: layerId});
 
-        return workflow.id;
+        return processingGraph.id;
     }
 
-    async getWorkflowIdMetadata(workflowId: UUID): Promise<VectorLayerMetadata | RasterLayerMetadata> {
-        const workflowMetadataDict = await this.getWorkflowIdMetadataDict(workflowId);
-        return LayerMetadata.fromDict(workflowMetadataDict);
+    async getProcessingGraphIdMetadata(processingGraphId: UUID): Promise<VectorLayerMetadata | RasterLayerMetadata> {
+        const processingGraphMetadataDict = await this.getProcessingGraphIdMetadataDict(processingGraphId);
+        return LayerMetadata.fromDict(processingGraphMetadataDict);
     }
 
-    async getWorkflowIdMetadataDict(workflowId: UUID): Promise<TypedResultDescriptor> {
-        return await this.processingGraphsService.getMetadata(workflowId);
+    async getProcessingGraphIdMetadataDict(processingGraphId: UUID): Promise<TypedResultDescriptor> {
+        return await this.processingGraphsService.getMetadata(processingGraphId);
     }
 
     /**
@@ -127,14 +127,14 @@ export class LayersService {
     async resolveLayer(layerId: ProviderLayerId): Promise<Layer> {
         const layer = await this.getLayer(layerId.providerId, layerId.layerId);
 
-        const workflowId = await this.registerAndGetLayerWorkflowId(layerId.providerId, layerId.layerId);
+        const processingGraphId = await this.registerAndGetLayerProcessingGraphId(layerId.providerId, layerId.layerId);
 
-        const metadata = await this.getWorkflowIdMetadata(workflowId);
+        const metadata = await this.getProcessingGraphIdMetadata(processingGraphId);
 
         if (metadata instanceof VectorLayerMetadata) {
             return new VectorLayer({
                 name: layer.name,
-                workflowId,
+                processingGraphId,
                 isVisible: true,
                 isLegendVisible: false,
                 symbology: layer.symbology
@@ -144,7 +144,7 @@ export class LayersService {
         } else if (metadata instanceof RasterLayerMetadata) {
             return new RasterLayer({
                 name: layer.name,
-                workflowId,
+                processingGraphId,
                 isVisible: true,
                 isLegendVisible: false,
                 symbology: layer.symbology

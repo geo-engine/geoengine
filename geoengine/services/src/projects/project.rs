@@ -28,8 +28,7 @@ use validator::{Validate, ValidationError};
 
 identifier!(ProjectId);
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Project {
     pub id: ProjectId,
     pub version: ProjectVersion, // TODO: remove, this exists only for pro
@@ -38,7 +37,6 @@ pub struct Project {
     pub layers: Vec<ProjectLayer>,
     pub plots: Vec<Plot>,
     pub bounds: STRectangle,
-    #[schema(value_type = crate::api::model::datatypes::TimeStep)]
     pub time_step: TimeStep,
 }
 
@@ -223,12 +221,10 @@ impl TemporalBounded for STRectangle {
 }
 
 // TODO: split into Raster and VectorLayer like in frontend?
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ProjectLayer {
     // TODO: check that workflow/operator output type fits to the type of LayerInfo
     // TODO: LayerId?
-    #[serde(rename = "processingGraph")]
-    #[schema(value_type = crate::api::model::processing_graphs::ProcessingGraphId)]
     pub workflow: WorkflowId,
     pub name: String,
     pub visibility: LayerVisibility,
@@ -435,10 +431,8 @@ impl Default for LayerVisibility {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Plot {
-    #[serde(rename = "processingGraph")]
-    #[schema(value_type = crate::api::model::processing_graphs::ProcessingGraphId)]
     pub workflow: WorkflowId,
     pub name: String,
 }
@@ -517,52 +511,14 @@ pub struct CreateProject {
     pub time_step: Option<TimeStep>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema, Validate)]
-#[serde(rename_all = "camelCase")]
-#[schema(example = json!({
-    "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
-    "name": "TestUpdate",
-    "layers": [
-        {
-            "processingGraph": "100ee39c-761c-4218-9d85-ec861a8f3097",
-            "name": "L1",
-            "visibility": {
-                "data": true,
-                "legend": false
-            },
-            "symbology": {
-                "type": "raster",
-                "opacity": 1.0,
-                "colorizer": {
-                    "type": "linearGradient",
-                    "breakpoints": [
-                        {
-                            "value": 1.0,
-                            "color": [255, 255, 255, 255],
-                        },
-                        {
-                            "value": 2.0,
-                            "color": [0, 0, 0, 255],
-                        },
-                    ],
-                    "noDataColor": [0, 0, 0, 0],
-                    "overColor": [255, 255, 255, 255],
-                    "underColor": [0, 0, 0, 255],
-                }
-            }
-        }
-    ]
-}))]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UpdateProject {
     pub id: ProjectId,
-    #[validate(length(min = 1))]
     pub name: Option<String>,
-    #[validate(length(min = 1))]
     pub description: Option<String>,
     pub layers: Option<Vec<LayerUpdate>>,
     pub plots: Option<Vec<PlotUpdate>>,
     pub bounds: Option<STRectangle>,
-    #[schema(value_type = Option<crate::api::model::datatypes::TimeStep>)]
     pub time_step: Option<TimeStep>,
 }
 
@@ -595,30 +551,6 @@ impl PartialSchema for Delete {
         ObjectBuilder::new()
             .schema_type(SchemaType::Type(Type::String))
             .enum_values::<[&str; 2], &str>(Some(["none", "delete"]))
-            .into()
-    }
-}
-
-impl ToSchema for LayerUpdate {}
-
-impl PartialSchema for LayerUpdate {
-    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
-        use utoipa::openapi::*;
-        OneOfBuilder::new()
-            .item(Ref::from_schema_name("ProjectUpdateToken"))
-            .item(Ref::from_schema_name("ProjectLayer"))
-            .into()
-    }
-}
-
-impl ToSchema for PlotUpdate {}
-
-impl PartialSchema for PlotUpdate {
-    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
-        use utoipa::openapi::*;
-        OneOfBuilder::new()
-            .item(Ref::from_schema_name("ProjectUpdateToken"))
-            .item(Ref::from_schema_name("Plot"))
             .into()
     }
 }
@@ -725,133 +657,6 @@ mod tests {
             .to_string(),
         )
         .unwrap();
-    }
-
-    #[test]
-    fn deserialize_layer_update() {
-        assert_eq!(
-            serde_json::from_str::<LayerUpdate>(&json!("none").to_string()).unwrap(),
-            LayerUpdate::None(Default::default())
-        );
-
-        assert_eq!(
-            serde_json::from_str::<LayerUpdate>(&json!("delete").to_string()).unwrap(),
-            LayerUpdate::Delete(Default::default())
-        );
-
-        let workflow = WorkflowId::new();
-        assert_eq!(
-            serde_json::from_str::<LayerUpdate>(
-                &json!({
-                    "processingGraph": workflow.clone(),
-                    "name": "L2",
-                    "visibility": {
-                        "data": true,
-                        "legend": false,
-                    },
-                    "symbology": {
-                        "type": "raster",
-                        "opacity": 1.0,
-                        "rasterColorizer": {
-                            "type": "singleBand",
-                            "band": 0,
-                            "bandColorizer": {
-                                "type": "linearGradient",
-                                "breakpoints": [
-                                    {
-                                        "value": 1.0,
-                                        "color": [255, 255, 255, 255],
-                                    },
-                                    {
-                                        "value": 2.0,
-                                        "color": [0, 0, 0, 255],
-                                    },
-                                ],
-                                "noDataColor": [0, 0, 0, 0],
-                                "overColor": [255, 255, 255, 255],
-                                "underColor": [0, 0, 0, 255],
-                            }
-                        }
-                    }
-                })
-                .to_string()
-            )
-            .unwrap(),
-            LayerUpdate::UpdateOrInsert(ProjectLayer {
-                workflow,
-                name: "L2".to_string(),
-                visibility: LayerVisibility {
-                    data: true,
-                    legend: false,
-                },
-                symbology: Symbology::Raster(RasterSymbology {
-                    r#type: Default::default(),
-                    opacity: 1.0,
-                    raster_colorizer: RasterColorizer::SingleBand {
-                        band: 0,
-                        band_colorizer: Colorizer::test_default(),
-                    },
-                })
-            })
-        );
-    }
-
-    #[test]
-    fn serialize_update_project() {
-        let update = UpdateProject {
-            id: ProjectId::new(),
-            name: Some("name".to_string()),
-            description: Some("description".to_string()),
-            layers: Some(vec![
-                LayerUpdate::None(Default::default()),
-                LayerUpdate::Delete(Default::default()),
-                LayerUpdate::UpdateOrInsert(ProjectLayer {
-                    workflow: WorkflowId::new(),
-                    name: "vector layer".to_string(),
-                    visibility: Default::default(),
-                    symbology: Symbology::Raster(RasterSymbology {
-                        r#type: Default::default(),
-                        opacity: 1.0,
-                        raster_colorizer: RasterColorizer::SingleBand {
-                            band: 0,
-                            band_colorizer: Colorizer::test_default(),
-                        },
-                    }),
-                }),
-                LayerUpdate::UpdateOrInsert(ProjectLayer {
-                    workflow: WorkflowId::new(),
-                    name: "raster layer".to_string(),
-                    visibility: Default::default(),
-                    symbology: Symbology::Raster(RasterSymbology {
-                        r#type: Default::default(),
-                        opacity: 1.0,
-                        raster_colorizer: RasterColorizer::SingleBand {
-                            band: 0,
-                            band_colorizer: Colorizer::test_default(),
-                        },
-                    }),
-                }),
-            ]),
-            plots: None,
-            bounds: Some(STRectangle {
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                bounding_box: BoundingBox2D::new((0.0, 0.1).into(), (1.0, 1.1).into()).unwrap(),
-                time_interval: Default::default(),
-            }),
-            time_step: Some(TimeStep {
-                step: 1,
-                granularity: TimeGranularity::Days,
-            }),
-        };
-
-        let serialized = serde_json::to_string(&update).unwrap();
-
-        let deserialized: UpdateProject = serde_json::from_str(&serialized).unwrap();
-
-        assert_eq!(update, deserialized);
-
-        let _update_project: UpdateProject =
-            serde_json::from_reader(serialized.as_bytes()).unwrap();
     }
 
     #[test]

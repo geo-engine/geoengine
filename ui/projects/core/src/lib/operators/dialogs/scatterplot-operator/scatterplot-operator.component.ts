@@ -125,14 +125,14 @@ export class ScatterplotOperatorComponent implements AfterViewInit, OnDestroy {
 
         const outputName: string = this.form.controls['name'].value;
 
-        from(this.projectService.getWorkflow(inputLayer.workflowId))
+        from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) => {
                     if (inputWorkflow.type !== 'Vector') {
                         throw new Error('Expected a vector processing graph for scatter plot.');
                     }
 
-                    return this.projectService.registerWorkflow({
+                    return this.projectService.registerProcessingGraph({
                         type: 'Plot',
                         operator: {
                             type: 'ScatterPlot',

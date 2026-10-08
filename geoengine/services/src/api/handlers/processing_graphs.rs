@@ -561,7 +561,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
     let operator = workflow
         .operator
         .get_raster()
-        .boxed_context(error::WorkflowMustBeOfTypeRaster)?;
+        .boxed_context(error::ProcessingGraphMustBeOfTypeRaster)?;
 
     let execution_context = ctx.execution_context()?;
 
@@ -687,7 +687,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
     let operator = workflow
         .operator
         .get_vector()
-        .boxed_context(error::WorkflowMustBeOfTypeVector)?;
+        .boxed_context(error::ProcessingGraphMustBeOfTypeVector)?;
 
     let query_rectangle = VectorQueryRectangle::new(
         query.spatial_bounds,
@@ -747,7 +747,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(module(error), context(suffix(false)))] // disables default `Snafu` suffix
-pub enum WorkflowApiError {
+pub enum ProcessingGraphApiError {
     #[snafu(display("Adding data to output ZIP file failed"))]
     CannotAddDataToZipFile {
         item: &'static str,
@@ -756,9 +756,9 @@ pub enum WorkflowApiError {
     #[snafu(display("Finishing to output ZIP file failed"))]
     CannotFinishZipFile { source: Box<dyn ErrorSource> },
     #[snafu(display("You can only query a raster stream for a raster processing graph"))]
-    WorkflowMustBeOfTypeRaster { source: Box<dyn ErrorSource> },
+    ProcessingGraphMustBeOfTypeRaster { source: Box<dyn ErrorSource> },
     #[snafu(display("You can only query a vector stream for a vector processing graph"))]
-    WorkflowMustBeOfTypeVector { source: Box<dyn ErrorSource> },
+    ProcessingGraphMustBeOfTypeVector { source: Box<dyn ErrorSource> },
     #[snafu(display("Unsupported operator type in processing graph: {source}"))]
     EngineTypeConversion { source: anyhow::Error },
 }

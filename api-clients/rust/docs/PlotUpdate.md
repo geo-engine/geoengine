@@ -1,4 +1,4 @@
-# VecUpdate
+# PlotUpdate
 
 ## Enum Variants
 

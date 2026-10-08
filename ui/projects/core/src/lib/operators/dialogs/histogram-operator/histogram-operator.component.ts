@@ -202,7 +202,7 @@ export class HistogramOperatorComponent implements AfterViewInit, OnDestroy {
 
         const outputName: string = this.form.controls['name'].value;
 
-        from(this.projectService.getWorkflow(inputLayer.workflowId))
+        from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) => {
                     if (inputWorkflow.type !== 'Raster' && inputWorkflow.type !== 'Vector') {
@@ -211,7 +211,7 @@ export class HistogramOperatorComponent implements AfterViewInit, OnDestroy {
 
                     const sourceOperator: RasterOperator | VectorOperator = inputWorkflow.operator;
 
-                    return this.projectService.registerWorkflow({
+                    return this.projectService.registerProcessingGraph({
                         type: 'Plot',
                         operator: {
                             type: 'Histogram',

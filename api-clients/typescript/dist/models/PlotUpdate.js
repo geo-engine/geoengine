@@ -12,16 +12,16 @@
  * Do not edit the class manually.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.VecUpdateFromJSON = VecUpdateFromJSON;
-exports.VecUpdateFromJSONTyped = VecUpdateFromJSONTyped;
-exports.VecUpdateToJSON = VecUpdateToJSON;
-exports.VecUpdateToJSONTyped = VecUpdateToJSONTyped;
+exports.PlotUpdateFromJSON = PlotUpdateFromJSON;
+exports.PlotUpdateFromJSONTyped = PlotUpdateFromJSONTyped;
+exports.PlotUpdateToJSON = PlotUpdateToJSON;
+exports.PlotUpdateToJSONTyped = PlotUpdateToJSONTyped;
 const Plot_1 = require("./Plot");
 const ProjectUpdateToken_1 = require("./ProjectUpdateToken");
-function VecUpdateFromJSON(json) {
-    return VecUpdateFromJSONTyped(json, false);
+function PlotUpdateFromJSON(json) {
+    return PlotUpdateFromJSONTyped(json, false);
 }
-function VecUpdateFromJSONTyped(json, ignoreDiscriminator) {
+function PlotUpdateFromJSONTyped(json, ignoreDiscriminator) {
     if (json == null) {
         return json;
     }
@@ -36,10 +36,10 @@ function VecUpdateFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {};
 }
-function VecUpdateToJSON(json) {
-    return VecUpdateToJSONTyped(json, false);
+function PlotUpdateToJSON(json) {
+    return PlotUpdateToJSONTyped(json, false);
 }
-function VecUpdateToJSONTyped(value, ignoreDiscriminator = false) {
+function PlotUpdateToJSONTyped(value, ignoreDiscriminator = false) {
     if (value == null) {
         return value;
     }

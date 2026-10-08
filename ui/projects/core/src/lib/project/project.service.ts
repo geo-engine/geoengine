@@ -456,35 +456,35 @@ export class ProjectService implements OnDestroy {
         );
     }
 
-    async registerWorkflow(processingGraph: ProcessingGraph): Promise<UUID> {
+    async registerProcessingGraph(processingGraph: ProcessingGraph): Promise<UUID> {
         const response = await this.processingGraphAPI().registerProcessingGraphHandler({processingGraph});
         return response.id;
     }
 
-    async getWorkflow(processingGraphId: UUID): Promise<ProcessingGraph> {
+    async getProcessingGraph(processingGraphId: UUID): Promise<ProcessingGraph> {
         return await this.processingGraphAPI().loadProcessingGraphHandler({id: processingGraphId});
     }
 
-    getWorkflowMetaData(workflowId: UUID): Observable<TypedResultDescriptor> {
-        return from(this.processingGraphsService.getMetadata(workflowId));
+    getProcessingGraphMetaData(processingGraphId: UUID): Observable<TypedResultDescriptor> {
+        return from(this.processingGraphsService.getMetadata(processingGraphId));
     }
 
-    getWorkflowProvenance(workflowId: UUID): Observable<Array<ProvenanceEntry>> {
-        return from(this.processingGraphsService.getProvenance(workflowId));
+    getProcessingGraphProvenance(processingGraphId: UUID): Observable<Array<ProvenanceEntry>> {
+        return from(this.processingGraphsService.getProvenance(processingGraphId));
     }
 
     /**
      * Determines a common projection for all layers and return their operator with an added a projection if necessary
      */
     getAutomaticallyProjectedOperatorsFromLayers(layers: Array<Layer>): Observable<Array<TypedOperator>> {
-        const meta: Array<Observable<TypedResultDescriptor>> = layers.map((l) => this.getWorkflowMetaData(l.workflowId));
+        const meta: Array<Observable<TypedResultDescriptor>> = layers.map((l) => this.getProcessingGraphMetaData(l.workflowId));
 
         return combineLatest(meta).pipe(
             mergeMap((descriptors: Array<TypedResultDescriptor>) => {
                 const srefs = descriptors.map((l) => SpatialReference.fromSrsString(l.spatialReference));
                 const targetSref = getProjectionTarget(srefs);
 
-                const workflowsObservable = layers.map((l) => from(this.getWorkflow(l.workflowId)));
+                const workflowsObservable = layers.map((l) => from(this.getProcessingGraph(l.workflowId)));
 
                 return combineLatest(workflowsObservable).pipe(
                     map((workflows: Array<ProcessingGraph>) => {

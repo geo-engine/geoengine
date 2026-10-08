@@ -153,7 +153,7 @@ export class ComputeComponent {
         loader: async ({params: rasterLayer}): Promise<string | undefined> => {
             if (!rasterLayer) return undefined;
 
-            return await this.layerService.registerAndGetLayerWorkflowId(rasterLayer.dataConnectorId, rasterLayer.layerId);
+            return await this.layerService.registerAndGetLayerProcessingGraphId(rasterLayer.dataConnectorId, rasterLayer.layerId);
         },
     });
     readonly selectedLayerMetadata = resource<RasterLayerMetadata | undefined, UUID | undefined>({
@@ -161,11 +161,11 @@ export class ComputeComponent {
         loader: async ({params: processingGraphId}): Promise<RasterLayerMetadata | undefined> => {
             if (!processingGraphId) return undefined;
 
-            const workflowIdMetadata = await this.layerService.getWorkflowIdMetadata(processingGraphId);
+            const processingGraphIdMetadata = await this.layerService.getProcessingGraphIdMetadata(processingGraphId);
 
-            if (workflowIdMetadata.layerType !== 'raster') return undefined;
+            if (processingGraphIdMetadata.layerType !== 'raster') return undefined;
 
-            return workflowIdMetadata;
+            return processingGraphIdMetadata;
         },
     });
     readonly bands = computed(() => this.selectedLayerMetadata.value()?.bands.map((band) => band.name));

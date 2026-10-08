@@ -9888,6 +9888,16 @@
           }
         }
       },
+      "LayerUpdate": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ProjectUpdateToken"
+          },
+          {
+            "$ref": "#/components/schemas/ProjectLayer"
+          }
+        ]
+      },
       "LayerVisibility": {
         "type": "object",
         "required": [
@@ -11956,6 +11966,16 @@
             ]
           }
         }
+      },
+      "PlotUpdate": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ProjectUpdateToken"
+          },
+          {
+            "$ref": "#/components/schemas/Plot"
+          }
+        ]
       },
       "PointInPolygonFilter": {
         "type": "object",
@@ -16292,7 +16312,7 @@
               "null"
             ],
             "items": {
-              "$ref": "#/components/schemas/VecUpdate"
+              "$ref": "#/components/schemas/LayerUpdate"
             }
           },
           "plots": {
@@ -16301,7 +16321,7 @@
               "null"
             ],
             "items": {
-              "$ref": "#/components/schemas/VecUpdate"
+              "$ref": "#/components/schemas/PlotUpdate"
             }
           },
           "bounds": {
@@ -16588,16 +16608,6 @@
             "minimum": 0
           }
         }
-      },
-      "VecUpdate": {
-        "oneOf": [
-          {
-            "$ref": "#/components/schemas/ProjectUpdateToken"
-          },
-          {
-            "$ref": "#/components/schemas/Plot"
-          }
-        ]
       },
       "VectorColumnInfo": {
         "type": "object",

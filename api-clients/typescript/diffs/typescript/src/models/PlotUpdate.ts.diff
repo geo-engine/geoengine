@@ -1,5 +1,5 @@
---- typescript/src/models/VecUpdate.ts
-+++ typescript/src/models/VecUpdate.ts
+--- typescript/src/models/PlotUpdate.ts
++++ typescript/src/models/PlotUpdate.ts
 @@ -65,7 +65,7 @@
      if (typeof value !== 'object') {
          return value;

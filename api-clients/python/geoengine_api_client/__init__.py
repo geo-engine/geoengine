@@ -195,6 +195,7 @@ __all__ = [
     "LayerListing",
     "LayerProviderListing",
     "LayerResource",
+    "LayerUpdate",
     "LayerVisibility",
     "LineSimplification",
     "LineSimplificationAlgorithm",
@@ -278,6 +279,7 @@ __all__ = [
     "PlotOperator",
     "PlotOutputFormat",
     "PlotResultDescriptor",
+    "PlotUpdate",
     "PointInPolygonFilter",
     "PointInPolygonFilterSource",
     "PointSymbology",
@@ -452,7 +454,6 @@ __all__ = [
     "UserRegistration",
     "UserSession",
     "VariableMatrixWidth",
-    "VecUpdate",
     "VectorColumnInfo",
     "VectorDataType",
     "VectorExpression",
@@ -663,6 +664,7 @@ from geoengine_api_client.models.layer_collection_resource import LayerCollectio
 from geoengine_api_client.models.layer_listing import LayerListing as LayerListing
 from geoengine_api_client.models.layer_provider_listing import LayerProviderListing as LayerProviderListing
 from geoengine_api_client.models.layer_resource import LayerResource as LayerResource
+from geoengine_api_client.models.layer_update import LayerUpdate as LayerUpdate
 from geoengine_api_client.models.layer_visibility import LayerVisibility as LayerVisibility
 from geoengine_api_client.models.line_simplification import LineSimplification as LineSimplification
 from geoengine_api_client.models.line_simplification_algorithm import LineSimplificationAlgorithm as LineSimplificationAlgorithm
@@ -746,6 +748,7 @@ from geoengine_api_client.models.plot import Plot as Plot
 from geoengine_api_client.models.plot_operator import PlotOperator as PlotOperator
 from geoengine_api_client.models.plot_output_format import PlotOutputFormat as PlotOutputFormat
 from geoengine_api_client.models.plot_result_descriptor import PlotResultDescriptor as PlotResultDescriptor
+from geoengine_api_client.models.plot_update import PlotUpdate as PlotUpdate
 from geoengine_api_client.models.point_in_polygon_filter import PointInPolygonFilter as PointInPolygonFilter
 from geoengine_api_client.models.point_in_polygon_filter_source import PointInPolygonFilterSource as PointInPolygonFilterSource
 from geoengine_api_client.models.point_symbology import PointSymbology as PointSymbology
@@ -920,7 +923,6 @@ from geoengine_api_client.models.user_info import UserInfo as UserInfo
 from geoengine_api_client.models.user_registration import UserRegistration as UserRegistration
 from geoengine_api_client.models.user_session import UserSession as UserSession
 from geoengine_api_client.models.variable_matrix_width import VariableMatrixWidth as VariableMatrixWidth
-from geoengine_api_client.models.vec_update import VecUpdate as VecUpdate
 from geoengine_api_client.models.vector_column_info import VectorColumnInfo as VectorColumnInfo
 from geoengine_api_client.models.vector_data_type import VectorDataType as VectorDataType
 from geoengine_api_client.models.vector_expression import VectorExpression as VectorExpression

@@ -155,6 +155,7 @@ docs/LayerCollectionResource.md
 docs/LayerListing.md
 docs/LayerProviderListing.md
 docs/LayerResource.md
+docs/LayerUpdate.md
 docs/LayerVisibility.md
 docs/LayersApi.md
 docs/LineSimplification.md
@@ -245,6 +246,7 @@ docs/Plot.md
 docs/PlotOperator.md
 docs/PlotOutputFormat.md
 docs/PlotResultDescriptor.md
+docs/PlotUpdate.md
 docs/PlotsApi.md
 docs/PointInPolygonFilter.md
 docs/PointInPolygonFilterSource.md
@@ -427,7 +429,6 @@ docs/UserInfo.md
 docs/UserRegistration.md
 docs/UserSession.md
 docs/VariableMatrixWidth.md
-docs/VecUpdate.md
 docs/VectorColumnInfo.md
 docs/VectorDataType.md
 docs/VectorExpression.md
@@ -626,6 +627,7 @@ src/models/layer_collection_resource.rs
 src/models/layer_listing.rs
 src/models/layer_provider_listing.rs
 src/models/layer_resource.rs
+src/models/layer_update.rs
 src/models/layer_visibility.rs
 src/models/line_simplification.rs
 src/models/line_simplification_algorithm.rs
@@ -710,6 +712,7 @@ src/models/plot.rs
 src/models/plot_operator.rs
 src/models/plot_output_format.rs
 src/models/plot_result_descriptor.rs
+src/models/plot_update.rs
 src/models/point_in_polygon_filter.rs
 src/models/point_in_polygon_filter_source.rs
 src/models/point_symbology.rs
@@ -884,7 +887,6 @@ src/models/user_info.rs
 src/models/user_registration.rs
 src/models/user_session.rs
 src/models/variable_matrix_width.rs
-src/models/vec_update.rs
 src/models/vector_column_info.rs
 src/models/vector_data_type.rs
 src/models/vector_expression.rs

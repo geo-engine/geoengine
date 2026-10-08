@@ -18,7 +18,7 @@ export * from './lib/tabs/tabs.service';
 
 // Components
 export * from './lib/datasets/add-data/add-data.component';
-export * from './lib/datasets/add-workflow/add-workflow.component';
+export * from './lib/datasets/add-processing-graph/add-processing-graph.component';
 export * from './lib/datasets/dataset-list/dataset-list.component';
 export * from './lib/datasets/dataset/dataset.component';
 export * from './lib/datasets/drag-and-drop/drag-and-drop.component';

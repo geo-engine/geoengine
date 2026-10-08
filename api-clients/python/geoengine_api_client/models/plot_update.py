@@ -23,11 +23,11 @@ from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-VECUPDATE_ONE_OF_SCHEMAS = ["Plot", "ProjectUpdateToken"]
+PLOTUPDATE_ONE_OF_SCHEMAS = ["Plot", "ProjectUpdateToken"]
 
-class VecUpdate(BaseModel):
+class PlotUpdate(BaseModel):
     """
-    VecUpdate
+    PlotUpdate
     """
     # data type: ProjectUpdateToken
     oneof_schema_1_validator: Optional[ProjectUpdateToken] = None
@@ -54,7 +54,7 @@ class VecUpdate(BaseModel):
 
     @field_validator('actual_instance')
     def actual_instance_must_validate_oneof(cls, v):
-        instance = VecUpdate.model_construct()
+        instance = PlotUpdate.model_construct()
         error_messages = []
         match = 0
         # validate data type: ProjectUpdateToken
@@ -69,10 +69,10 @@ class VecUpdate(BaseModel):
             match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in VecUpdate with oneOf schemas: Plot, ProjectUpdateToken. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in PlotUpdate with oneOf schemas: Plot, ProjectUpdateToken. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in VecUpdate with oneOf schemas: Plot, ProjectUpdateToken. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in PlotUpdate with oneOf schemas: Plot, ProjectUpdateToken. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -102,10 +102,10 @@ class VecUpdate(BaseModel):
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into VecUpdate with oneOf schemas: Plot, ProjectUpdateToken. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into PlotUpdate with oneOf schemas: Plot, ProjectUpdateToken. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into VecUpdate with oneOf schemas: Plot, ProjectUpdateToken. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into PlotUpdate with oneOf schemas: Plot, ProjectUpdateToken. Details: " + ", ".join(error_messages))
         else:
             return instance
 

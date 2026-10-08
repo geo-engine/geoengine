@@ -70,17 +70,17 @@ export class AccordionVectorEntryComponent implements OnInit {
 
         forkJoin({
             layer: this.layersService.getLayer(id.providerId, id.layerId),
-            workflowId: this.layersService.registerAndGetLayerWorkflowId(id.providerId, id.layerId),
+            processingGraphId: this.layersService.registerAndGetLayerProcessingGraphId(id.providerId, id.layerId),
         })
             .pipe(
-                mergeMap(({layer, workflowId}: {layer: LayerDict; workflowId: UUID}) =>
+                mergeMap(({layer, processingGraphId}: {layer: LayerDict; processingGraphId: UUID}) =>
                     forkJoin({
                         layer: of(layer),
-                        workflowId: of(workflowId),
-                        resultDescriptorDict: this.projectService.getWorkflowMetaData(workflowId),
+                        processingGraphId: of(processingGraphId),
+                        resultDescriptorDict: this.projectService.getProcessingGraphMetaData(processingGraphId),
                     }),
                 ),
-                mergeMap(({layer, workflowId, resultDescriptorDict}) => {
+                mergeMap(({layer, processingGraphId, resultDescriptorDict}) => {
                     const keys = Object.keys(resultDescriptorDict);
                     if (!keys.includes('columns')) {
                         return of(); // is not a vector layer
@@ -118,7 +118,7 @@ export class AccordionVectorEntryComponent implements OnInit {
 
                     const vectorLayer = new VectorLayer({
                         name: 'EBV',
-                        workflowId,
+                        processingGraphId,
                         isVisible: true,
                         isLegendVisible: false,
                         symbology,

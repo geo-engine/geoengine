@@ -546,12 +546,12 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
             },
         };
 
-        from(this.projectService.registerWorkflow(workflow))
+        from(this.projectService.registerProcessingGraph(workflow))
             .pipe(
                 mergeMap((workflowId) =>
                     this.dataSelectionService.setSpecies1Layer(
                         new VectorLayer({
-                            workflowId,
+                            processingGraphId: workflowId,
                             name: 'Beobachtungen',
                             symbology: ClusteredPointSymbology.fromPointSymbologyDict({
                                 type: 'point',
@@ -621,12 +621,12 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
             },
         };
 
-        from(this.projectService.registerWorkflow(workflow))
+        from(this.projectService.registerProcessingGraph(workflow))
             .pipe(
                 mergeMap((workflowId) =>
                     this.dataSelectionService.setSpecies2Layer(
                         new VectorLayer({
-                            workflowId,
+                            processingGraphId: workflowId,
                             name: 'Beobachtungen',
                             symbology: ClusteredPointSymbology.fromPointSymbologyDict({
                                 type: 'point',
@@ -683,11 +683,11 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
 
         this.selectedEnvironmentCitation.next('');
 
-        from(this.projectService.registerWorkflow(workflow))
+        from(this.projectService.registerProcessingGraph(workflow))
             .pipe(
                 combineLatestWith(this.datasetService.getDataset(layer.name)),
                 tap(([workflowId, _dataset]) => {
-                    this.projectService.getWorkflowProvenance(workflowId).subscribe((provenance) => {
+                    this.projectService.getProcessingGraphProvenance(workflowId).subscribe((provenance) => {
                         this.selectedEnvironmentCitation.next(provenance.map((p) => p.provenance.citation).join(','));
                     });
                 }),
@@ -696,7 +696,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                     if (!!dataset.symbology && dataset.symbology instanceof RasterSymbology) {
                         return this.dataSelectionService.setRasterLayer(
                             new RasterLayer({
-                                workflowId,
+                                processingGraphId: workflowId,
                                 name: layer.displayName,
                                 symbology: dataset.symbology,
                                 isLegendVisible: false,
@@ -740,11 +740,11 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
             },
         };
 
-        from(this.projectService.registerWorkflow(workflow))
+        from(this.projectService.registerProcessingGraph(workflow))
             .pipe(
                 combineLatestWith(this.datasetService.getDataset(this.intensityDataset)),
                 tap(([workflowId, _dataset]) => {
-                    this.projectService.getWorkflowProvenance(workflowId).subscribe((_provenance) => {
+                    this.projectService.getProcessingGraphProvenance(workflowId).subscribe((_provenance) => {
                         // TODO: citation
                         // this.selectedEnvironmentCitation.next(provenance.map((p) => p.provenance.citation).join(','));
                     });
@@ -753,7 +753,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                     this.selectedEnvironmentDataset = dataset;
                     if (!!dataset.symbology && dataset.symbology instanceof RasterSymbology) {
                         this.intensityLayer = new RasterLayer({
-                            workflowId,
+                            processingGraphId: workflowId,
                             name: 'Beprobungshäufigkeit',
                             symbology: dataset.symbology,
                             isLegendVisible: false,
@@ -816,8 +816,8 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                 }),
                 mergeMap(([rasterLayer, speciesLayer]) =>
                     combineLatest([
-                        this.projectService.getWorkflow(rasterLayer.workflowId),
-                        this.projectService.getWorkflow(speciesLayer.workflowId),
+                        this.projectService.getProcessingGraph(rasterLayer.workflowId),
+                        this.projectService.getProcessingGraph(speciesLayer.workflowId),
                         this.projectService.getLayerMetadata(rasterLayer),
                         this.projectService.getLayerMetadata(speciesLayer),
                     ]),
@@ -849,7 +849,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                         };
                     }
 
-                    return this.projectService.registerWorkflow({
+                    return this.projectService.registerProcessingGraph({
                         type: 'Vector',
                         operator: {
                             type: 'RasterVectorJoin',
@@ -893,8 +893,8 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                 }),
                 mergeMap((workflowId) =>
                     combineLatest([
-                        this.projectService.getWorkflow(workflowId),
-                        this.projectService.getWorkflowMetaData(workflowId) as Observable<VectorResultDescriptorDict>,
+                        this.projectService.getProcessingGraph(workflowId),
+                        this.projectService.getProcessingGraphMetaData(workflowId) as Observable<VectorResultDescriptorDict>,
                         this.dataSelectionService.dataRange,
                     ]),
                 ),
@@ -934,7 +934,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                         };
                     }
 
-                    return this.projectService.registerWorkflow({
+                    return this.projectService.registerProcessingGraph({
                         type: 'Plot',
                         operator: plotWorkflow,
                     });
@@ -1024,8 +1024,8 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                 }),
                 mergeMap(([rasterLayer, speciesLayer]) =>
                     combineLatest([
-                        this.projectService.getWorkflow(rasterLayer.workflowId),
-                        this.projectService.getWorkflow(speciesLayer.workflowId),
+                        this.projectService.getProcessingGraph(rasterLayer.workflowId),
+                        this.projectService.getProcessingGraph(speciesLayer.workflowId),
                         this.projectService.getLayerMetadata(rasterLayer),
                         this.projectService.getLayerMetadata(speciesLayer),
                     ]),
@@ -1057,7 +1057,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                         };
                     }
 
-                    return this.projectService.registerWorkflow({
+                    return this.projectService.registerProcessingGraph({
                         type: 'Vector',
                         operator: {
                             type: 'RasterVectorJoin',
@@ -1078,8 +1078,8 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                 }),
                 mergeMap((workflowId) =>
                     combineLatest([
-                        this.projectService.getWorkflow(workflowId),
-                        this.projectService.getWorkflowMetaData(workflowId) as Observable<VectorResultDescriptorDict>,
+                        this.projectService.getProcessingGraph(workflowId),
+                        this.projectService.getProcessingGraphMetaData(workflowId) as Observable<VectorResultDescriptorDict>,
                         this.dataSelectionService.dataRange,
                     ]),
                 ),
@@ -1117,7 +1117,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                         };
                     }
 
-                    return this.projectService.registerWorkflow({
+                    return this.projectService.registerProcessingGraph({
                         type: 'Plot',
                         operator: plotWorkflow,
                     });

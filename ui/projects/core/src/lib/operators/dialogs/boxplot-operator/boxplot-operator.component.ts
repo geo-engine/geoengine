@@ -219,7 +219,7 @@ export class BoxPlotOperatorComponent implements AfterViewInit, OnDestroy {
                         ? (inputOperators[0].operator as VectorOperator)
                         : inputOperators.map((inputOperator) => inputOperator.operator as RasterOperator);
 
-                    return this.projectService.registerWorkflow({
+                    return this.projectService.registerProcessingGraph({
                         type: 'Plot',
                         operator: {
                             type: 'BoxPlot',

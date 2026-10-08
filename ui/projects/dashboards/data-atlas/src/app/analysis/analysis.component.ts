@@ -73,12 +73,12 @@ export class AnalysisComponent {
             },
         };
 
-        from(this.projectService.registerWorkflow(workflow))
+        from(this.projectService.registerProcessingGraph(workflow))
             .pipe(
                 mergeMap((workflowId) =>
                     this.dataSelectionService.setPolygonLayer(
                         new VectorLayer({
-                            workflowId,
+                            processingGraphId: workflowId,
                             name: country,
                             symbology: PolygonSymbology.fromPolygonSymbologyDict({
                                 type: 'polygon',
@@ -148,7 +148,7 @@ export class AnalysisComponent {
                         return of(); // no next, just complete
                     }
 
-                    return from(this.projectService.getWorkflow(layer.workflowId));
+                    return from(this.projectService.getProcessingGraph(layer.workflowId));
                 }),
             ),
             this.dataSelectionService.rasterLayer.pipe(
@@ -157,7 +157,7 @@ export class AnalysisComponent {
                         return of(); // no next, just complete
                     }
 
-                    return this.projectService.getWorkflowMetaData(layer.workflowId) as Observable<RasterResultDescriptorDict>;
+                    return this.projectService.getProcessingGraphMetaData(layer.workflowId) as Observable<RasterResultDescriptorDict>;
                 }),
             ),
             this.dataSelectionService.dataRange,
@@ -169,7 +169,7 @@ export class AnalysisComponent {
                     this.plotData.next(undefined);
                 }),
                 mergeMap(([rasterWorkflow, rasterResultDescriptor, dataRange]) =>
-                    this.projectService.registerWorkflow({
+                    this.projectService.registerProcessingGraph({
                         type: 'Plot',
                         operator: {
                             type: 'Histogram',

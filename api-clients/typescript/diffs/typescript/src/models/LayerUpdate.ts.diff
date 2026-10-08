@@ -1,0 +1,11 @@
+--- typescript/src/models/LayerUpdate.ts
++++ typescript/src/models/LayerUpdate.ts
+@@ -65,7 +65,7 @@
+     if (typeof value !== 'object') {
+         return value;
+     }
+-    if (instanceOfProjectLayer(value)) {
++    if (typeof value === 'object' && instanceOfProjectLayer(value)) {
+         return ProjectLayerToJSON(value as ProjectLayer);
+     }
+     if (instanceOfProjectUpdateToken(value)) {

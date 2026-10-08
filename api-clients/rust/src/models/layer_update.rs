@@ -12,12 +12,12 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum VecUpdate {
+pub enum LayerUpdate {
     ProjectUpdateToken(models::ProjectUpdateToken),
-    Plot(Box<models::Plot>),
+    ProjectLayer(Box<models::ProjectLayer>),
 }
 
-impl Default for VecUpdate {
+impl Default for LayerUpdate {
     fn default() -> Self {
         Self::ProjectUpdateToken(Default::default())
     }

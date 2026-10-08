@@ -273,7 +273,7 @@ export class RasterVectorJoinComponent implements OnDestroy {
                         .map((rasterWorkflow) => rasterWorkflow.operator);
 
                     return from(
-                        this.projectService.registerWorkflow({
+                        this.projectService.registerProcessingGraph({
                             type: 'Vector',
                             operator: {
                                 type: 'RasterVectorJoin',
@@ -288,7 +288,7 @@ export class RasterVectorJoinComponent implements OnDestroy {
                         mergeMap((workflowId) =>
                             this.projectService.addLayer(
                                 new VectorLayer({
-                                    workflowId,
+                                    processingGraphId: workflowId,
                                     name: outputLayerName,
                                     symbology: this.symbologyWithNewColor(vectorLayer.symbology as PointSymbology),
                                     isLegendVisible: false,

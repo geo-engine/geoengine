@@ -67,7 +67,7 @@ where
         let row = conn.query(&stmt, &[&id]).await?;
 
         if row.is_empty() {
-            return Err(error::Error::NoWorkflowForGivenId);
+            return Err(error::Error::NoProcessingGraphForGivenId);
         }
 
         Ok(serde_json::from_value(row[0].get(0)).context(error::SerdeJson)?)

@@ -156,6 +156,7 @@ docs/LayerCollectionResource.md
 docs/LayerListing.md
 docs/LayerProviderListing.md
 docs/LayerResource.md
+docs/LayerUpdate.md
 docs/LayerVisibility.md
 docs/LayersApi.md
 docs/LineSimplification.md
@@ -246,6 +247,7 @@ docs/Plot.md
 docs/PlotOperator.md
 docs/PlotOutputFormat.md
 docs/PlotResultDescriptor.md
+docs/PlotUpdate.md
 docs/PlotsApi.md
 docs/PointInPolygonFilter.md
 docs/PointInPolygonFilterSource.md
@@ -428,7 +430,6 @@ docs/UserInfo.md
 docs/UserRegistration.md
 docs/UserSession.md
 docs/VariableMatrixWidth.md
-docs/VecUpdate.md
 docs/VectorColumnInfo.md
 docs/VectorDataType.md
 docs/VectorExpression.md
@@ -630,6 +631,7 @@ geoengine_api_client/models/layer_collection_resource.py
 geoengine_api_client/models/layer_listing.py
 geoengine_api_client/models/layer_provider_listing.py
 geoengine_api_client/models/layer_resource.py
+geoengine_api_client/models/layer_update.py
 geoengine_api_client/models/layer_visibility.py
 geoengine_api_client/models/line_simplification.py
 geoengine_api_client/models/line_simplification_algorithm.py
@@ -713,6 +715,7 @@ geoengine_api_client/models/plot.py
 geoengine_api_client/models/plot_operator.py
 geoengine_api_client/models/plot_output_format.py
 geoengine_api_client/models/plot_result_descriptor.py
+geoengine_api_client/models/plot_update.py
 geoengine_api_client/models/point_in_polygon_filter.py
 geoengine_api_client/models/point_in_polygon_filter_source.py
 geoengine_api_client/models/point_symbology.py
@@ -887,7 +890,6 @@ geoengine_api_client/models/user_info.py
 geoengine_api_client/models/user_registration.py
 geoengine_api_client/models/user_session.py
 geoengine_api_client/models/variable_matrix_width.py
-geoengine_api_client/models/vec_update.py
 geoengine_api_client/models/vector_column_info.py
 geoengine_api_client/models/vector_data_type.py
 geoengine_api_client/models/vector_expression.py
@@ -1076,6 +1078,7 @@ test/test_layer_collection_resource.py
 test/test_layer_listing.py
 test/test_layer_provider_listing.py
 test/test_layer_resource.py
+test/test_layer_update.py
 test/test_layer_visibility.py
 test/test_layers_api.py
 test/test_line_simplification.py
@@ -1166,6 +1169,7 @@ test/test_plot.py
 test/test_plot_operator.py
 test/test_plot_output_format.py
 test/test_plot_result_descriptor.py
+test/test_plot_update.py
 test/test_plots_api.py
 test/test_point_in_polygon_filter.py
 test/test_point_in_polygon_filter_source.py
@@ -1348,7 +1352,6 @@ test/test_user_info.py
 test/test_user_registration.py
 test/test_user_session.py
 test/test_variable_matrix_width.py
-test/test_vec_update.py
 test/test_vector_column_info.py
 test/test_vector_data_type.py
 test/test_vector_expression.py

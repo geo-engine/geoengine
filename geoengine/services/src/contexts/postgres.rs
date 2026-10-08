@@ -582,6 +582,7 @@ where
 mod tests {
     use super::*;
     use crate::{
+        api::model::projects::UpdateProject as ApiUpdateProject,
         config::QuotaTrackingMode,
         datasets::{
             AddDataset, DatasetIdAndName,
@@ -4567,7 +4568,7 @@ mod tests {
 
         let project_id = db.create_project(create_project).await.unwrap();
 
-        let update: UpdateProject = serde_json::from_value(json!({
+        let update: UpdateProject = serde_json::from_value::<ApiUpdateProject>(json!({
             "id": project_id.to_string(),
             "layers": [{
                 "name": "NDVI",
@@ -4599,11 +4600,12 @@ mod tests {
                 }
             }]
         }))
-        .unwrap();
+        .unwrap()
+        .into();
 
         db.update_project(update).await.unwrap();
 
-        let update: UpdateProject = serde_json::from_value(json!({
+        let update: UpdateProject = serde_json::from_value::<ApiUpdateProject>(json!({
             "id": project_id.to_string(),
             "layers": [{
                 "name": "NDVI",
@@ -4677,11 +4679,12 @@ mod tests {
                 }
             }]
         }))
-        .unwrap();
+        .unwrap()
+        .into();
 
         db.update_project(update).await.unwrap();
 
-        let update: UpdateProject = serde_json::from_value(json!({
+        let update: UpdateProject = serde_json::from_value::<ApiUpdateProject>(json!({
             "id": project_id.to_string(),
             "layers": [{
                 "name": "NDVI",
@@ -4755,11 +4758,12 @@ mod tests {
                 }
             }]
         }))
-        .unwrap();
+        .unwrap()
+        .into();
 
         db.update_project(update).await.unwrap();
 
-        let update: UpdateProject = serde_json::from_value(json!({
+        let update: UpdateProject = serde_json::from_value::<ApiUpdateProject>(json!({
             "id": project_id.to_string(),
             "layers": [{
                 "name": "NDVI",
@@ -4833,7 +4837,8 @@ mod tests {
                 }
             }]
         }))
-        .unwrap();
+        .unwrap()
+        .into();
 
         // run two updates concurrently
         let (r0, r1) = join!(db.update_project(update.clone()), db.update_project(update));

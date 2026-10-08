@@ -72,8 +72,8 @@ describe('ComputeComponent', () => {
         };
 
         const layersService = {
-            registerAndGetLayerWorkflowId: vi.fn().mockResolvedValue('workflow-id'),
-            getWorkflowIdMetadata: vi
+            registerAndGetLayerProcessingGraphId: vi.fn().mockResolvedValue('workflow-id'),
+            getProcessingGraphIdMetadata: vi
                 .fn()
                 .mockResolvedValue(
                     new RasterLayerMetadata(
@@ -89,7 +89,7 @@ describe('ComputeComponent', () => {
                         ),
                     ),
                 ),
-        } satisfies Pick<LayersService, 'registerAndGetLayerWorkflowId' | 'getWorkflowIdMetadata'>;
+        } satisfies Pick<LayersService, 'registerAndGetLayerProcessingGraphId' | 'getProcessingGraphIdMetadata'>;
 
         await TestBed.configureTestingModule({
             providers: [
@@ -150,10 +150,10 @@ describe('ComputeComponent', () => {
     it('updates band names and the workflow when the selected layer changes', async () => {
         const layersService = TestBed.inject(LayersService);
         const registerWorkflow = vi
-            .spyOn(layersService, 'registerAndGetLayerWorkflowId')
+            .spyOn(layersService, 'registerAndGetLayerProcessingGraphId')
             .mockImplementation(() => Promise.resolve('ndvi-workflow'));
         const getMetadata = vi
-            .spyOn(layersService, 'getWorkflowIdMetadata')
+            .spyOn(layersService, 'getProcessingGraphIdMetadata')
             .mockImplementation(() =>
                 Promise.resolve(
                     new RasterLayerMetadata(

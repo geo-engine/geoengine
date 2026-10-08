@@ -263,7 +263,7 @@ export class NeighborhoodAggregateComponent implements AfterViewInit, OnDestroy 
                         } as NeighborhoodAggregate,
                     };
 
-                    return this.projectService.registerWorkflow(workflow);
+                    return this.projectService.registerProcessingGraph(workflow);
                 }),
                 mergeMap((workflowId: UUID) => {
                     const symbology$: Observable<RasterSymbology> = this.symbologyCreator().symbologyForRasterLayer(
@@ -275,7 +275,7 @@ export class NeighborhoodAggregateComponent implements AfterViewInit, OnDestroy 
                 mergeMap(([workflowId, symbology]: [UUID, RasterSymbology]) =>
                     this.projectService.addLayer(
                         new RasterLayer({
-                            workflowId,
+                            processingGraphId: workflowId,
                             name,
                             symbology,
                             isLegendVisible: false,

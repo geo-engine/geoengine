@@ -208,7 +208,7 @@ export class BandwiseExpressionOperatorComponent implements AfterViewInit {
             return; // checked by form validator
         }
 
-        from(this.projectService.getWorkflow(rasterLayer.workflowId))
+        from(this.projectService.getProcessingGraph(rasterLayer.workflowId))
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) => {
                     if (inputWorkflow.type !== 'Raster') {
@@ -230,7 +230,7 @@ export class BandwiseExpressionOperatorComponent implements AfterViewInit {
                         },
                     };
 
-                    return this.projectService.registerWorkflow(workflow);
+                    return this.projectService.registerProcessingGraph(workflow);
                 }),
                 mergeMap((workflowId: UUID) => {
                     const symbology$: Observable<RasterSymbology> = this.symbologyCreator().symbologyForRasterLayer(
@@ -244,7 +244,7 @@ export class BandwiseExpressionOperatorComponent implements AfterViewInit {
                         const outSymbology = new RasterSymbology(symbology.opacity, symbology.rasterColorizer.replaceBand(0));
                         return this.projectService.addLayer(
                             new RasterLayer({
-                                workflowId,
+                                processingGraphId: workflowId,
                                 name,
                                 symbology: outSymbology,
                                 isLegendVisible: false,

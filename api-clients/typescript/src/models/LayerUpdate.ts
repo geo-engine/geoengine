@@ -11,13 +11,13 @@
  * Do not edit the class manually.
  */
 
-import type { Plot } from './Plot';
+import type { ProjectLayer } from './ProjectLayer';
 import {
-    instanceOfPlot,
-    PlotFromJSON,
-    PlotFromJSONTyped,
-    PlotToJSON,
-} from './Plot';
+    instanceOfProjectLayer,
+    ProjectLayerFromJSON,
+    ProjectLayerFromJSONTyped,
+    ProjectLayerToJSON,
+} from './ProjectLayer';
 import type { ProjectUpdateToken } from './ProjectUpdateToken';
 import {
     instanceOfProjectUpdateToken,
@@ -27,25 +27,25 @@ import {
 } from './ProjectUpdateToken';
 
 /**
- * @type VecUpdate
+ * @type LayerUpdate
  * 
  * @export
  */
-export type VecUpdate = Plot | ProjectUpdateToken;
+export type LayerUpdate = ProjectLayer | ProjectUpdateToken;
 
-export function VecUpdateFromJSON(json: any): VecUpdate {
-    return VecUpdateFromJSONTyped(json, false);
+export function LayerUpdateFromJSON(json: any): LayerUpdate {
+    return LayerUpdateFromJSONTyped(json, false);
 }
 
-export function VecUpdateFromJSONTyped(json: any, ignoreDiscriminator: boolean): VecUpdate {
+export function LayerUpdateFromJSONTyped(json: any, ignoreDiscriminator: boolean): LayerUpdate {
     if (json == null) {
         return json;
     }
     if (typeof json !== 'object') {
         return json;
     }
-    if (instanceOfPlot(json)) {
-        return PlotFromJSONTyped(json, true);
+    if (instanceOfProjectLayer(json)) {
+        return ProjectLayerFromJSONTyped(json, true);
     }
     if (instanceOfProjectUpdateToken(json)) {
         return ProjectUpdateTokenFromJSONTyped(json, true);
@@ -53,19 +53,19 @@ export function VecUpdateFromJSONTyped(json: any, ignoreDiscriminator: boolean):
     return {} as any;
 }
 
-export function VecUpdateToJSON(json: any): any {
-    return VecUpdateToJSONTyped(json, false);
+export function LayerUpdateToJSON(json: any): any {
+    return LayerUpdateToJSONTyped(json, false);
 }
 
-export function VecUpdateToJSONTyped(value?: VecUpdate | null, ignoreDiscriminator: boolean = false): any {
+export function LayerUpdateToJSONTyped(value?: LayerUpdate | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
     if (typeof value !== 'object') {
         return value;
     }
-    if (typeof value === 'object' && instanceOfPlot(value)) {
-        return PlotToJSON(value as Plot);
+    if (typeof value === 'object' && instanceOfProjectLayer(value)) {
+        return ProjectLayerToJSON(value as ProjectLayer);
     }
     if (instanceOfProjectUpdateToken(value)) {
         return ProjectUpdateTokenToJSON(value as ProjectUpdateToken);

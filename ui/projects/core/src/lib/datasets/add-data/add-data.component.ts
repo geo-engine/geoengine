@@ -1,7 +1,7 @@
 import {Component, ChangeDetectionStrategy, inject, input} from '@angular/core';
 import {concatMap, first, from, Observable, range, reduce, takeWhile} from 'rxjs';
 import {LayoutService, SidenavConfig} from '../../layout.service';
-import {AddWorkflowComponent} from '../add-workflow/add-workflow.component';
+import {AddProcessingGraphComponent} from '../add-processing-graph/add-processing-graph.component';
 import {DrawFeaturesComponent} from '../draw-features/draw-features.component';
 import {UploadComponent} from '../upload/upload.component';
 import {LayersService} from '@geoengine/common';
@@ -99,7 +99,7 @@ export class AddDataComponent {
             name: 'Add Processing Graph by Id',
             description: 'Add a processing graph by its id',
             icon: 'build',
-            sidenavConfig: {component: AddWorkflowComponent, keepParent: true},
+            sidenavConfig: {component: AddProcessingGraphComponent, keepParent: true},
         };
     }
 }

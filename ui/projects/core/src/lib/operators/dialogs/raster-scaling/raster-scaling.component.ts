@@ -223,10 +223,10 @@ export class RasterScalingComponent implements AfterViewInit {
 
         const scalingMode = scaleType.type;
 
-        from(this.projectService.getWorkflow(inputLayer.workflowId))
+        from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) =>
-                    this.projectService.registerWorkflow({
+                    this.projectService.registerProcessingGraph({
                         type: 'Raster',
                         operator: {
                             type: 'RasterScaling',
@@ -249,7 +249,7 @@ export class RasterScalingComponent implements AfterViewInit {
                 mergeMap(([workflowId, symbology]: [UUID, RasterSymbology]) =>
                     this.projectService.addLayer(
                         new RasterLayer({
-                            workflowId,
+                            processingGraphId: workflowId,
                             name: outputName,
                             symbology,
                             isLegendVisible: false,

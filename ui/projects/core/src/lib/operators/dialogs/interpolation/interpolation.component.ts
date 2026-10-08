@@ -133,11 +133,11 @@ export class InterpolationComponent implements AfterViewInit, OnDestroy {
 
         this.loading$.next(true);
 
-        from(this.projectService.getWorkflow(inputLayer.workflowId))
+        from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) =>
                     from(
-                        this.projectService.registerWorkflow({
+                        this.projectService.registerProcessingGraph({
                             type: 'Raster',
                             operator: {
                                 type: 'Interpolation',
@@ -160,7 +160,7 @@ export class InterpolationComponent implements AfterViewInit, OnDestroy {
                 mergeMap(([workflowId, symbology]: [UUID, RasterSymbology]) =>
                     this.projectService.addLayer(
                         new RasterLayer({
-                            workflowId,
+                            processingGraphId: workflowId,
                             name: outputName,
                             symbology,
                             isLegendVisible: false,

@@ -11,12 +11,12 @@
 import type { Plot } from './Plot';
 import type { ProjectUpdateToken } from './ProjectUpdateToken';
 /**
- * @type VecUpdate
+ * @type PlotUpdate
  *
  * @export
  */
-export type VecUpdate = Plot | ProjectUpdateToken;
-export declare function VecUpdateFromJSON(json: any): VecUpdate;
-export declare function VecUpdateFromJSONTyped(json: any, ignoreDiscriminator: boolean): VecUpdate;
-export declare function VecUpdateToJSON(json: any): any;
-export declare function VecUpdateToJSONTyped(value?: VecUpdate | null, ignoreDiscriminator?: boolean): any;
+export type PlotUpdate = Plot | ProjectUpdateToken;
+export declare function PlotUpdateFromJSON(json: any): PlotUpdate;
+export declare function PlotUpdateFromJSONTyped(json: any, ignoreDiscriminator: boolean): PlotUpdate;
+export declare function PlotUpdateToJSON(json: any): any;
+export declare function PlotUpdateToJSONTyped(value?: PlotUpdate | null, ignoreDiscriminator?: boolean): any;

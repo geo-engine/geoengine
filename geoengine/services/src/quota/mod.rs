@@ -192,13 +192,10 @@ pub struct OperatorQuota {
     pub count: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug)]
 pub struct ComputationQuota {
     pub timestamp: DateTime,
     pub computation_id: ComputationId,
-    #[serde(rename = "processingGraphId")]
-    #[schema(value_type = crate::api::model::processing_graphs::ProcessingGraphId)]
     pub workflow_id: WorkflowId,
     pub count: u64,
 }

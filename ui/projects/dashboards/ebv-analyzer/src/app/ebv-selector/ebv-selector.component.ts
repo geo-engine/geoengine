@@ -282,7 +282,7 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
 
         this.dataSubscription = from(this.layersService.getLayer(layerId.providerId, layerId.layerId))
             .pipe(
-                mergeMap((layer) => combineLatest([of(layer), this.projectService.registerWorkflow(layer.processingGraph)])),
+                mergeMap((layer) => combineLatest([of(layer), this.projectService.registerProcessingGraph(layer.processingGraph)])),
                 mergeMap(([layer, workflowId]) => {
                     if (!layer.symbology) {
                         throw new Error('Layer has no symbology');
@@ -318,7 +318,7 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
 
                     const rasterLayer = new RasterLayer({
                         name: 'EBV',
-                        workflowId,
+                        processingGraphId: workflowId,
                         isVisible: true,
                         isLegendVisible: false,
                         symbology,
@@ -386,7 +386,7 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
 
         const sessionToken = await firstValueFrom(this.userService.getSessionTokenForRequest());
 
-        const rasterWorkflow = await this.projectService.getWorkflow(rasterLayer.workflowId);
+        const rasterWorkflow = await this.projectService.getProcessingGraph(rasterLayer.workflowId);
 
         // TODO: use native CRS from raster layer for plot -> determine resolution in this CRS
         const projectedRasterWorkflow = this.projectService.createProjectedOperator(
@@ -397,18 +397,18 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
         ) as RasterOperator;
 
         const projectedRasterWorkflowMetadata$ = from(
-            this.projectService.registerWorkflow({
+            this.projectService.registerProcessingGraph({
                 type: 'Raster',
                 operator: projectedRasterWorkflow,
             }),
         ).pipe(
             mergeMap(
                 (projectedRasterWorkflowId) =>
-                    this.projectService.getWorkflowMetaData(projectedRasterWorkflowId) as Observable<RasterResultDescriptorDict>,
+                    this.projectService.getProcessingGraphMetaData(projectedRasterWorkflowId) as Observable<RasterResultDescriptorDict>,
             ),
         );
 
-        const plotWorkflowId$ = this.projectService.registerWorkflow({
+        const plotWorkflowId$ = this.projectService.registerProcessingGraph({
             type: 'Plot',
             operator: {
                 type: 'MeanRasterPixelValuesOverTime',

@@ -178,7 +178,7 @@ export class TemporalRasterAggregationComponent implements AfterViewInit {
 
         this.loading$.next(true);
 
-        void from(this.projectService.getWorkflow(inputLayer.workflowId))
+        void from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) => {
                     if (inputWorkflow.type !== 'Raster') {
@@ -186,7 +186,7 @@ export class TemporalRasterAggregationComponent implements AfterViewInit {
                     }
 
                     return from(
-                        this.projectService.registerWorkflow({
+                        this.projectService.registerProcessingGraph({
                             type: 'Raster',
                             operator: {
                                 type: 'TemporalRasterAggregation',
@@ -213,7 +213,7 @@ export class TemporalRasterAggregationComponent implements AfterViewInit {
                 mergeMap(([workflowId, symbology]: [UUID, RasterSymbology]) =>
                     this.projectService.addLayer(
                         new RasterLayer({
-                            workflowId,
+                            processingGraphId: workflowId,
                             name: outputName,
                             symbology,
                             isLegendVisible: false,

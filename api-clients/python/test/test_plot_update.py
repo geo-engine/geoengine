@@ -14,10 +14,10 @@
 
 import unittest
 
-from geoengine_api_client.models.vec_update import VecUpdate
+from geoengine_api_client.models.plot_update import PlotUpdate
 
-class TestVecUpdate(unittest.TestCase):
-    """VecUpdate unit test stubs"""
+class TestPlotUpdate(unittest.TestCase):
+    """PlotUpdate unit test stubs"""
 
     def setUp(self):
         pass
@@ -25,28 +25,28 @@ class TestVecUpdate(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def make_instance(self, include_optional) -> VecUpdate:
-        """Test VecUpdate
+    def make_instance(self, include_optional) -> PlotUpdate:
+        """Test PlotUpdate
             include_optional is a boolean, when False only required
             params are included, when True both required and
             optional params are included """
-        # uncomment below to create an instance of `VecUpdate`
+        # uncomment below to create an instance of `PlotUpdate`
         """
-        model = VecUpdate()
+        model = PlotUpdate()
         if include_optional:
-            return VecUpdate(
+            return PlotUpdate(
                 processing_graph = '',
                 name = ''
             )
         else:
-            return VecUpdate(
+            return PlotUpdate(
                 processing_graph = '',
                 name = '',
         )
         """
 
-    def testVecUpdate(self):
-        """Test VecUpdate"""
+    def testPlotUpdate(self):
+        """Test PlotUpdate"""
         # inst_req_only = self.make_instance(include_optional=False)
         # inst_req_and_optional = self.make_instance(include_optional=True)
 

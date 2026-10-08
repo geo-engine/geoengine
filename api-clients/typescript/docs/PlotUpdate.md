@@ -1,5 +1,5 @@
 
-# VecUpdate
+# PlotUpdate
 
 
 ## Properties
@@ -12,13 +12,13 @@ Name | Type
 ## Example
 
 ```typescript
-import type { VecUpdate } from '@geoengine/api-client'
+import type { PlotUpdate } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
   "processingGraph": null,
   "name": null,
-} satisfies VecUpdate
+} satisfies PlotUpdate
 
 console.log(example)
 
@@ -27,7 +27,7 @@ const exampleJSON: string = JSON.stringify(example)
 console.log(exampleJSON)
 
 // Parse the JSON string back to an object
-const exampleParsed = JSON.parse(exampleJSON) as VecUpdate
+const exampleParsed = JSON.parse(exampleJSON) as PlotUpdate
 console.log(exampleParsed)
 ```
 
