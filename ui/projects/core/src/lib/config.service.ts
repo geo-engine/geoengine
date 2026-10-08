@@ -49,6 +49,8 @@ export interface ConfigMap {
     readonly REFRESH_LAYERS_ON_CHANGE: boolean;
     readonly VALID_CRS: Array<string>;
     readonly DRAWING: DrawSettings;
+    /** Logs every tile request, response and decode to the console. For debugging tile issues. */
+    readonly DEBUG_TILES: boolean;
 }
 
 export type Basemaps = Record<string, Basemap>;
@@ -164,6 +166,7 @@ export const DEFAULT_CORE_CONFIG: CoreConfigStructure = {
         },
         REFRESH_LAYERS_ON_CHANGE: false,
         VALID_CRS: ['EPSG:4326', 'EPSG:3857'],
+        DEBUG_TILES: false,
         DRAWING: {
             DRAW_STYLE: {
                 FILL_COLOR: 'rgba(25, 118, 210, 0.3)',

@@ -8,7 +8,7 @@ description: Add a new PostgreSQL schema or data migration to the Geo Engine bac
 Migrations live in `geoengine/services/src/contexts/migrations/` (paths below are relative to it unless they start with `geoengine/`).
 They run automatically on server start inside a single transaction; there is no manual migration step.
 
-Use the migration name the user gave. If none was given, ask for a short description and derive the name from it.
+Use the user's migration name, or derive one from the task or changes and state it. Ask for a short description only if neither works.
 
 ## 1. Name and number
 
@@ -49,10 +49,15 @@ The test `migrations_lead_to_ground_truth_schema` compares it with the result of
 
 ## 5. Update Rust mapping types
 
-If a table or composite type changes, update the Rust struct mapped to it: `#[derive(ToSql, FromSql)]` with `#[postgres(name = "…")]`.
+If a table or composite type changes, update the Rust type mapped to it.
 Grep for the type name, e.g. `geoengine/services/src/contexts/db_types.rs` or `geoengine/operators/src/source/gdal_source/db_types.rs`.
+
+- **Derive** `ToSql`/`FromSql` (with `#[postgres(name = "…")]`) directly on the Rust type if it maps 1:1: a struct whose fields match the composite type, or a fieldless enum that maps to a PostgreSQL enum (e.g. `FeatureDataType`).
+- **Delegate** if it does not: enums with data (PostgreSQL has no sum types), or types whose shape differs or that need validation on read.
+  Add a `…DbType` struct that derives the traits, usually with a discriminator enum and `Option<…>` fields per variant, implement `From<&T> for TDbType` and `TryFrom<TDbType> for T`, and call `delegate_from_to_sql!(T, TDbType)`. Example: `ColorParamDbType` in `geoengine/services/src/contexts/db_types.rs`.
+
 Field names must match the column or attribute names. New nullable fields are `Option<…>`.
-Then fix the code that builds or reads these structs (`From`/`TryFrom` impls, inserts and queries).
+Then fix the code that builds or reads these types (`From`/`TryFrom` impls, inserts and queries).
 
 ## 6. Tests
 
