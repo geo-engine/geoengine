@@ -21,13 +21,13 @@ A server for processing and visualizing geospatial data, with native time-series
 
 A monorepo with five projects. Each has its own `justfile`, which the root `justfile` mounts as a `just` module:
 
-| Directory      | just module   | What it is                                                                                     |
-| -------------- | ------------- | ---------------------------------------------------------------------------------------------- |
-| `geoengine/`   | `backend`     | Rust Cargo workspace: the Geo Engine server, CLI and core libraries                            |
-| `api-clients/` | `api-clients` | Python, Rust and TypeScript clients **generated** from `openapi.json`                          |
-| `python/`      | `python`      | `geoengine` Python library, built on the generated Python API client                           |
-| `ui/`          | `ui`          | Angular workspace: the `common` and `core` libraries plus apps (gis, edv, dashboards, manager) |
-| `www/`         | `www`         | Astro website and docs, including operator/plot docs (`www/src/content/docs/docs/`)            |
+| Directory      | just module   | What it is                                                                                          |
+| -------------- | ------------- | --------------------------------------------------------------------------------------------------- |
+| `geoengine/`   | `backend`     | Rust Cargo workspace: the Geo Engine server, CLI and core libraries                                 |
+| `api-clients/` | `api-clients` | Python, Rust and TypeScript clients **generated** from `openapi.json`                               |
+| `python/`      | `python`      | `geoengine` Python library, built on the generated Python API client                                |
+| `ui/`          | `ui`          | Angular workspace: the `common` and `core` libraries plus apps (gis, eodyssey, dashboards, manager) |
+| `www/`         | `www`         | Astro website and docs, including operator/plot docs (`www/src/content/docs/docs/`)                 |
 
 Each project directory has its own `AGENTS.md` with that project's commands, architecture and conventions. Read it before working in that project.
 
