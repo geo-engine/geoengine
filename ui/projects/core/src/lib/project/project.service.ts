@@ -22,6 +22,7 @@ import {LoadingState} from './loading-state.model';
 import {HttpErrorResponse} from '@angular/common/http';
 import {BackendService} from '../backend/backend.service';
 import {BBoxDict, ToDict, UUID} from '../backend/backend.model';
+import {MapService, ViewportSize} from '../map/map.service';
 import {Session} from '../users/session.model';
 import OlFeature from 'ol/Feature';
 import OlGeometry from 'ol/geom/Geometry';
