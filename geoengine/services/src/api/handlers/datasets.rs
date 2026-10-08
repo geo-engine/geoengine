@@ -6783,6 +6783,83 @@ mod tests {
         Ok(())
     }
 
+    /// `leading_prefix` is what turns a 4D array into depth bands, and it is per row. It has
+    /// to survive the write, not just the validation that reads it before the insert.
+    #[ge_context::test]
+    async fn it_persists_the_leading_prefix_of_md_tiles(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session);
+        let db = ctx.db();
+        let volume = VolumeName("test_data".to_string());
+
+        let mut row = MdRow::of("md/time_depth_4d.nc", "temperature", 0, 6);
+        row.leading_prefix = vec![0];
+        let (meta_data, tiles) = md_dataset_meta(&[row], vec![api_band("temperature")]);
+
+        let id_and_name = db
+            .add_dataset(
+                AddDataset {
+                    name: None,
+                    display_name: "md leading prefix".to_string(),
+                    description: "md leading prefix".to_string(),
+                    source_operator: "MdGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: None,
+                }
+                .into(),
+                meta_data,
+                Some(DataPath::Volume(volume)),
+            )
+            .await?;
+        let rel = |f: &AddDatasetMdTile| {
+            let mut f = f.clone();
+            f.params.file_path = Path::new("md").join(f.params.file_path.file_name().unwrap());
+            f
+        };
+        db.add_md_dataset_tiles(id_and_name.id, tiles.iter().map(rel).collect())
+            .await?;
+
+        let provider: Box<
+            dyn MetaData<
+                    geoengine_operators::source::MdLoadingInfo,
+                    geoengine_operators::engine::RasterResultDescriptor,
+                    RasterQueryRectangle,
+                >,
+        > = db
+            .meta_data(
+                &DataId::Internal(InternalDataId {
+                    dataset_id: id_and_name.id.into(),
+                    r#type:
+                        crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
+                })
+                .into(),
+            )
+            .await?;
+        let loading_info = provider
+            .loading_info(RasterQueryRectangle::new(
+                geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]),
+                TimeInterval::new_unchecked(
+                    TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
+                    TimeInstance::from_str("2000-01-07T00:00:00Z").unwrap(),
+                ),
+                BandSelection::first(),
+            ))
+            .await?;
+
+        let files = loading_info.files();
+        assert_eq!(files.len(), 1);
+        assert_eq!(
+            files[0].leading_prefix,
+            vec![0],
+            "the leading prefix must come back from the row, not the column default"
+        );
+
+        Ok(())
+    }
+
     /// A `ZRole::Variable` dataset stores one row per `(file, variable)`, so the row reader
     /// sees every band's copy of the same intervals. The axis must be built from one band's
     /// rows only: concatenating all of them yields N copies of the timeline, which

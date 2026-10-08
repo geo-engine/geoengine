@@ -20,8 +20,8 @@ use geoengine_datatypes::{
         AxisAlignedRectangle, BandSelection, CacheTtlSeconds, RasterQueryRectangle, TimeInterval,
     },
     raster::{
-        ChangeGridBounds, EmptyGrid, GridOrEmpty, Pixel, RasterDataType, RasterProperties,
-        RasterTile2D, SpatialGridDefinition, TileInformation, TilingSpecification,
+        ChangeGridBounds, EmptyGrid, GridOrEmpty, Pixel, RasterProperties, RasterTile2D,
+        SpatialGridDefinition, TileInformation, TilingSpecification,
     },
 };
 use num::FromPrimitive;
@@ -86,8 +86,6 @@ where
     pub default_cache_ttl: CacheTtlSeconds,
     pub _phantom_data: PhantomData<T>,
 }
-
-impl<T> MdGdalSourceProcessor<T> where T: gdal::raster::GdalType + Pixel {}
 
 #[async_trait]
 impl<P> QueryProcessor for MdGdalSourceProcessor<P>
@@ -214,29 +212,10 @@ where
             per_band.push(reqs);
         }
 
-        // merge-sort the per-band lists by global z (stable, preserving band order within a z)
-        let mut requests: Vec<(usize, MdRequest)> = Vec::new();
-        let mut cursors = vec![0usize; per_band.len()];
-        loop {
-            let mut best_band: Option<usize> = None;
-            let mut best_z = usize::MAX;
-            for (bi, reqs) in per_band.iter().enumerate() {
-                if let Some((first_z, _)) = reqs.get(cursors[bi])
-                    && *first_z < best_z
-                {
-                    best_z = *first_z;
-                    best_band = Some(bi);
-                }
-            }
-            match best_band {
-                Some(bi) => {
-                    let (first_z, request) = per_band[bi][cursors[bi]].clone();
-                    requests.push((first_z, request));
-                    cursors[bi] += 1;
-                }
-                None => break,
-            }
-        }
+        // merge the per-band lists by global z; a stable sort of the concatenation keeps band
+        // order within a z, which is the fastest axis of the output
+        let mut requests: Vec<(usize, MdRequest)> = per_band.into_iter().flatten().collect();
+        requests.sort_by_key(|(z, _)| *z);
 
         // Canonical output order: `band` fastest, `space` (row by row) next, `time` slowest.
         // `iproduct!(requests, spatial_tiles)` emitted (time, band, space) instead - band
@@ -343,15 +322,18 @@ fn empty_tile<P: Pixel>(
     default_cache_ttl: CacheTtlSeconds,
 ) -> RasterTile2D<P> {
     let time_steps = loading_info.time_steps();
-    let band = match loading_info.z_role() {
-        ZRole::Band => gap.global_z as u32,
-        ZRole::Variable => gap.output_band,
-    };
 
-    // `global_z` is validated against the band count before it reaches here, but a gap
-    // index outside `time_steps` would panic; an empty tile with a degenerate interval is
-    // recoverable, a panic in a query task is not
-    let time = time_steps.get(gap.global_z).copied().unwrap_or_default();
+    // a gap index outside `time_steps` would panic; an empty tile with a degenerate interval
+    // is recoverable, a panic in a query task is not
+    let (time, band) = match time_steps.get(gap.global_z) {
+        Some(_) => loading_info::time_and_band(
+            loading_info.z_role(),
+            gap.global_z,
+            gap.output_band,
+            time_steps,
+        ),
+        None => (TimeInterval::default(), gap.output_band),
+    };
 
     RasterTile2D::new_with_properties(
         time,
@@ -383,30 +365,19 @@ fn output_band_groups(
     band_count: u32,
     attributes: &BandSelection,
 ) -> Result<Vec<Option<u32>>> {
+    // an out-of-range band would otherwise reach `empty_tile`/`z_batches` as a missing index
+    // and panic on `time_steps[global_z]`
+    for &b in attributes.as_slice() {
+        if b >= band_count {
+            return Err(Error::from(MdGdalSourceError::UnsupportedBandRequest {
+                message: format!("band {b} does not exist, there are {band_count} bands"),
+            }));
+        }
+    }
     match z_role {
-        ZRole::Variable => {
-            for &b in attributes.as_slice() {
-                if b >= band_count {
-                    return Err(Error::from(MdGdalSourceError::UnsupportedBandRequest {
-                        message: format!("band {b} does not exist, there are {band_count} bands"),
-                    }));
-                }
-            }
-            Ok(attributes.as_vec().into_iter().map(Some).collect())
-        }
-        // `ZRole::Band` maps a band index straight to a z index, so an out-of-range band
-        // would otherwise reach `empty_tile`/`z_batches` as a missing index and panic on
-        // `time_steps[global_z]`.
-        ZRole::Band => {
-            for &b in attributes.as_slice() {
-                if b >= band_count {
-                    return Err(Error::from(MdGdalSourceError::UnsupportedBandRequest {
-                        message: format!("band {b} does not exist, there are {band_count} bands"),
-                    }));
-                }
-            }
-            Ok(vec![None])
-        }
+        ZRole::Variable => Ok(attributes.as_vec().into_iter().map(Some).collect()),
+        // `ZRole::Band` maps a band index straight to a z index, so one group covers all files
+        ZRole::Band => Ok(vec![None]),
     }
 }
 
@@ -503,110 +474,18 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
         &self.produced_result_descriptor
     }
 
-    #[allow(clippy::too_many_lines)]
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        Ok(match self.result_descriptor().data_type {
-            RasterDataType::U8 => TypedRasterQueryProcessor::U8(
-                MdGdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-            RasterDataType::U16 => TypedRasterQueryProcessor::U16(
-                MdGdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-            RasterDataType::U32 => TypedRasterQueryProcessor::U32(
-                MdGdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-            RasterDataType::U64 => TypedRasterQueryProcessor::U64(
-                MdGdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-            RasterDataType::I8 => TypedRasterQueryProcessor::I8(
-                MdGdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-            RasterDataType::I16 => TypedRasterQueryProcessor::I16(
-                MdGdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-            RasterDataType::I32 => TypedRasterQueryProcessor::I32(
-                MdGdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-            RasterDataType::I64 => TypedRasterQueryProcessor::I64(
-                MdGdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-            RasterDataType::F32 => TypedRasterQueryProcessor::F32(
-                MdGdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-            RasterDataType::F64 => TypedRasterQueryProcessor::F64(
-                MdGdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-        })
+        Ok(call_generic_raster_processor!(
+            self.result_descriptor().data_type,
+            MdGdalSourceProcessor {
+                produced_result_descriptor: self.produced_result_descriptor.clone(),
+                tiling_specification: self.tiling_specification,
+                meta_data: self.meta_data.clone(),
+                default_cache_ttl: self.default_cache_ttl,
+                _phantom_data: PhantomData,
+            }
+            .boxed()
+        ))
     }
 
     fn canonic_name(&self) -> CanonicOperatorName {
@@ -974,7 +853,7 @@ mod tests {
             wrap,
         );
         let result_descriptor = RasterResultDescriptor::new(
-            RasterDataType::F32,
+            geoengine_datatypes::raster::RasterDataType::F32,
             geoengine_datatypes::spatial_reference::SpatialReference::epsg_4326().into(),
             MdLoadingInfo::new(
                 time_steps.clone(),

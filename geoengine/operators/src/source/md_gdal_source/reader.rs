@@ -15,6 +15,7 @@ use crate::source::gdal_worker_process::{
     GdalPoolDispatcher, GdalReaderMode,
     process_common::{GdalReadAdvise, GdalReadWindow},
 };
+use crate::source::md_gdal_source::loading_info::time_and_band;
 use crate::source::md_gdal_source::{MdDatasetFile, MdGdalSourceError, MdLoadingInfo, ZRole};
 
 /// One z-slice batch request: which file, and which local z range within it.
@@ -246,13 +247,7 @@ fn raster_tile_from_frame<T: Pixel>(
     z_role: ZRole,
     time_steps: &[TimeInterval],
 ) -> RasterTile2D<T> {
-    let (time, band) = match z_role {
-        // Band-role intervals are synthetic `[k, k+1)` unit steps indexed by band, so the
-        // tile stamp is `time_steps[global_z]` -- the same rule `empty_tile` uses, which is
-        // what keeps gap tiles and data tiles in one query consistent
-        ZRole::Band => (time_steps[global_z], global_z as u32),
-        ZRole::Variable => (time_steps[global_z], file.output_band),
-    };
+    let (time, band) = time_and_band(z_role, global_z, file.output_band, time_steps);
 
     RasterTile2D::new_with_properties(
         time,

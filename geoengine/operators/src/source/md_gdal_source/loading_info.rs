@@ -142,8 +142,8 @@ impl MdFileTimes {
 
     /// One interval per z slice, in slice order.
     #[must_use]
-    pub fn intervals(&self) -> Vec<TimeInterval> {
-        self.steps.clone()
+    pub fn intervals(&self) -> &[TimeInterval] {
+        &self.steps
     }
 
     /// The overall extent of this file's time axis.
@@ -157,22 +157,6 @@ impl MdFileTimes {
                 .last()
                 .map_or(TimeInstance::MAX, TimeInterval::end),
         )
-    }
-
-    /// Start of this file's time axis, i.e. the first z slice's start.
-    #[must_use]
-    pub fn start(&self) -> TimeInstance {
-        self.bounds().start()
-    }
-
-    /// The interval of this file's first z slice.
-    ///
-    /// `ZRole::Band` datasets have no real time axis: their intervals are synthetic
-    /// `[k, k+1)` unit steps and tiles are stamped with `time_steps[global_z]`, not with
-    /// this. It stays available as the file's own starting point.
-    #[must_use]
-    pub fn first_interval(&self) -> Option<TimeInterval> {
-        self.steps.first().copied()
     }
 
     /// Reads a stored row back, rejecting a descriptor that disagrees with the intervals.
@@ -309,6 +293,22 @@ pub struct MdDatasetFile {
     /// `variables_as_bands` becomes one dataset whose band `b` is depth `b`.
     #[serde(default)]
     pub leading_prefix: Vec<i64>,
+}
+
+/// The `(time, band)` stamp of the tile at `global_z`: band-role intervals are synthetic
+/// `[k, k+1)` unit steps indexed by band, so the time is `time_steps[global_z]` and the band
+/// is the z index; a variable-role tile is stamped with its file's output band instead. Data
+/// tiles and gap tiles use the same rule, which is what keeps one query consistent.
+pub(crate) fn time_and_band(
+    z_role: ZRole,
+    global_z: usize,
+    output_band: u32,
+    time_steps: &[TimeInterval],
+) -> (TimeInterval, u32) {
+    match z_role {
+        ZRole::Band => (time_steps[global_z], global_z as u32),
+        ZRole::Variable => (time_steps[global_z], output_band),
+    }
 }
 
 /// A contiguous chunk of z-slices from a single file.
@@ -511,7 +511,7 @@ impl MdLoadingInfo {
                         file_idx,
                         local_z: local..local + 1,
                         global_z: g0..g0 + 1,
-                    })
+                    });
                 }
             }
         }
@@ -552,7 +552,7 @@ mod tests {
         assert_eq!(times.steps, intervals);
         assert!(times.is_consistent());
         assert_eq!(times.intervals(), intervals);
-        assert_eq!(times.first_interval(), Some(interval(0, 86_400_000)));
+        assert_eq!(times.steps.first().copied(), Some(interval(0, 86_400_000)));
     }
 
     #[test]

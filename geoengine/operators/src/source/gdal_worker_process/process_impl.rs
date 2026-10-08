@@ -392,19 +392,17 @@ impl GdalHandling {
         }
     }
 
-    ///
-    /// A method to load single tiles from a GDAL dataset.
-    ///
-    pub fn load_tile_data_with_dataset_retry<T: Pixel + GdalType + FromPrimitive>(
+    /// Opens the dataset (or reuses the cached one) and runs `read` on it, retrying both the
+    /// open and the read with backoff. Remote paths clear their VSI cache on failure, and a
+    /// file that explicitly does not exist is never retried.
+    fn open_with_retry<R>(
         cache: &mut GdalDatasetHolder,
         dataset_params: &GdalDatasetParameters,
-        read_advise: GdalReadAdvise,
-    ) -> Result<super::process_common::GdalIpcPayload<T>, IpcProcessError> {
+        mut read: impl FnMut(&mut GdalDataset, &GdalDatasetParameters) -> Result<R, IpcProcessError>,
+    ) -> Result<R, IpcProcessError> {
         let is_remote = dataset_params.is_remote();
         let max_retries = dataset_params.max_retries().unwrap_or(0);
         let dp = &dataset_params;
-
-        // Wrap both OPEN and READ actions inside the retry loop
 
         retry_sync(
             max_retries,
@@ -422,7 +420,7 @@ impl GdalHandling {
                     }
                 };
 
-                Self::load_tile_data(ds, dataset_params, read_advise).inspect_err(|_e| {
+                read(ds, dataset_params).inspect_err(|_e| {
                     if is_remote {
                         Self::clear_gdal_vsi_cache_for_path(&dp.file_path_for_open());
                     }
@@ -431,6 +429,19 @@ impl GdalHandling {
             // If the file explicitly does not exist, do not waste time retrying
             |e| matches!(e, IpcProcessError::GdalError { kind, details: _ } if *kind == IpcProcessGdalErrorKind::FileNotFound),
         )
+    }
+
+    ///
+    /// A method to load single tiles from a GDAL dataset.
+    ///
+    pub fn load_tile_data_with_dataset_retry<T: Pixel + GdalType + FromPrimitive>(
+        cache: &mut GdalDatasetHolder,
+        dataset_params: &GdalDatasetParameters,
+        read_advise: GdalReadAdvise,
+    ) -> Result<super::process_common::GdalIpcPayload<T>, IpcProcessError> {
+        Self::open_with_retry(cache, dataset_params, |ds, params| {
+            Self::load_tile_data(ds, params, read_advise)
+        })
     }
 
     /// This method reads the data for a single grid with a specified size from the GDAL dataset.
@@ -692,45 +703,17 @@ impl GdalHandling {
         z_range: std::ops::Range<usize>,
         leading_prefix: &[u64],
     ) -> Result<Vec<super::process_common::GdalIpcPayload<T>>, IpcProcessError> {
-        let is_remote = dataset_params.is_remote();
-        let max_retries = dataset_params.max_retries().unwrap_or(0);
-        let dp = &dataset_params;
-
-        // Wrap both OPEN and READ actions inside the retry loop
-        retry_sync(
-            max_retries,
-            GDAL_RETRY_INITIAL_BACKOFF_MS,
-            GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR,
-            Some(GDAL_RETRY_MAX_BACKOFF_MS),
-            || {
-                let ds = match cache.get_or_open(dp) {
-                    Ok(dataset) => dataset,
-                    Err(gdal_error) => {
-                        if is_remote {
-                            Self::clear_gdal_vsi_cache_for_path(&dp.file_path_for_open());
-                        }
-                        return Err(IpcProcessError::from(gdal_error));
-                    }
-                };
-
-                Self::load_md_tile_data(
-                    ds,
-                    dataset_params,
-                    read_advise,
-                    group,
-                    array_name,
-                    z_range.clone(),
-                    leading_prefix,
-                )
-                .inspect_err(|_e| {
-                    if is_remote {
-                        Self::clear_gdal_vsi_cache_for_path(&dp.file_path_for_open());
-                    }
-                })
-            },
-            // If the file explicitly does not exist, do not waste time retrying
-            |e| matches!(e, IpcProcessError::GdalError { kind, details: _ } if *kind == IpcProcessGdalErrorKind::FileNotFound),
-        )
+        Self::open_with_retry(cache, dataset_params, |ds, params| {
+            Self::load_md_tile_data(
+                ds,
+                params,
+                read_advise,
+                group,
+                array_name,
+                z_range.clone(),
+                leading_prefix,
+            )
+        })
     }
 
     /// Reads a batch of z-slices from a multidim array in one `GDALMDArrayRead` call
