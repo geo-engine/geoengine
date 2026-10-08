@@ -75,7 +75,7 @@ class ProvenanceTests(unittest.TestCase):
 
             ge.initialize("http://mock-instance")
 
-            workflow_definition = {
+            processing_graph_definition = {
                 "type": "Raster",
                 "operator": {
                     "type": "GdalSource",
@@ -83,9 +83,9 @@ class ProvenanceTests(unittest.TestCase):
                 },
             }
 
-            workflow = ge.register_processing_graph(workflow_definition)
+            processing_graph = ge.register_processing_graph(processing_graph_definition)
 
-            provenance = workflow.get_provenance()
+            provenance = processing_graph.get_provenance()
 
             self.assertEqual(
                 provenance,

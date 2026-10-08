@@ -1,4 +1,4 @@
-"""Tests for raster streaming workflows"""
+"""Tests for raster streaming processing graphs"""
 
 import asyncio
 import json
@@ -109,12 +109,12 @@ def arrow_bytes(data: xr.DataArray, time: ge.TimeInterval, band: int) -> bytes:
 
 
 class ProcessingGraphRasterStreamTests(unittest.TestCase):
-    """Test methods for retrieving raster workflows as data streams"""
+    """Test methods for retrieving raster processing graphs as data streams"""
 
     def setUp(self) -> None:
         ge.reset(False)
 
-    def test_streaming_workflow(self):
+    def test_streaming_processing_graph(self):
         with UrllibMocker() as m:
             m.get(
                 "http://localhost:3030/session",
@@ -142,7 +142,7 @@ class ProcessingGraphRasterStreamTests(unittest.TestCase):
                 time=ge.TimeDescriptor(dimension=ge.IrregularTimeDimension(), bounds=None),
             ),
         ):
-            workflow = ge.ProcessingGraph(UUID("00000000-0000-0000-0000-000000000000"))
+            processing_graph = ge.ProcessingGraph(UUID("00000000-0000-0000-0000-000000000000"))
 
         query_rect = ge.QueryRectangle(
             spatial_bounds=ge.BoundingBox2D(-180.0, -90.0, 180.0, 90.0),
@@ -154,7 +154,7 @@ class ProcessingGraphRasterStreamTests(unittest.TestCase):
             async def inner1():
                 tiles = []
 
-                async for tile in workflow.raster_stream(query_rect):
+                async for tile in processing_graph.raster_stream(query_rect):
                     tiles.append(tile)
 
                 assert len(tiles) == 8
@@ -164,7 +164,7 @@ class ProcessingGraphRasterStreamTests(unittest.TestCase):
         with unittest.mock.patch("websockets.asyncio.client.connect", return_value=MockWebsocket()):
 
             async def inner2():
-                array = await workflow.raster_stream_into_xarray(query_rect)
+                array = await processing_graph.raster_stream_into_xarray(query_rect)
                 assert array.shape == (2, 1, 8, 8)  # time, band, y, x
 
                 original_array = rioxarray.open_rasterio("tests/responses/ndvi.tiff").isel(band=0, drop=True)

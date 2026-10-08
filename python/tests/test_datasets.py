@@ -504,12 +504,14 @@ class DatasetsTests(unittest.TestCase):
             # In the central region all four tiles overlap; the tile with the
             # highest z-index (x1y1) must win. Query a single day so the query
             # time matches the file time (as required by the source)
-            workflow = ge.register_processing_graph(wb.MultiBandGdalSource(dataset_name).to_processing_graph_dict())
+            processing_graph = ge.register_processing_graph(
+                wb.MultiBandGdalSource(dataset_name).to_processing_graph_dict()
+            )
             query = ge.QueryRectangle(
                 ge.BoundingBox2D(-45.0, -22.4, 45.0, 22.4),
                 ge.TimeInterval(start=datetime(2025, 1, 1), end=datetime(2025, 1, 2)),
             )
-            array = workflow.get_array(query)
+            array = processing_graph.get_array(query)
 
             # The server also includes the boundary row whose bottom edge
             # coincides with the query's top edge. The remaining rows come

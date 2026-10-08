@@ -1,4 +1,4 @@
-"""Tests for vector streaming workflows"""
+"""Tests for vector streaming processing graphs"""
 
 import asyncio
 import unittest
@@ -133,12 +133,12 @@ def arrow_bytes(geo: list[str], time: list[list[int]], data: list[int]) -> bytes
 
 
 class ProcessingGraphVectorStreamTests(unittest.TestCase):
-    """Test methods for retrieving vector workflows as data streams"""
+    """Test methods for retrieving vector processing graphs as data streams"""
 
     def setUp(self) -> None:
         ge.reset(False)
 
-    def test_streaming_workflow(self):
+    def test_streaming_processing_graph(self):
         with UrllibMocker() as m:
             m.get(
                 "http://localhost:3030/session",
@@ -161,7 +161,7 @@ class ProcessingGraphVectorStreamTests(unittest.TestCase):
                 },
             ),
         ):
-            workflow = ge.ProcessingGraph(UUID("00000000-0000-0000-0000-000000000000"))
+            processing_graph = ge.ProcessingGraph(UUID("00000000-0000-0000-0000-000000000000"))
 
         query_rect = ge.QueryRectangle(
             spatial_bounds=ge.BoundingBox2D(-180.0, -90.0, 180.0, 90.0),
@@ -173,7 +173,7 @@ class ProcessingGraphVectorStreamTests(unittest.TestCase):
             async def inner1():
                 chunks = []
 
-                async for chunk in workflow.vector_stream(query_rect):
+                async for chunk in processing_graph.vector_stream(query_rect):
                     chunks.append(chunk)
 
                 assert len(chunks) == 4
@@ -183,7 +183,7 @@ class ProcessingGraphVectorStreamTests(unittest.TestCase):
         with unittest.mock.patch("websockets.asyncio.client.connect", return_value=MockWebsocket()):
 
             async def inner2():
-                data_frame = await workflow.vector_stream_into_geopandas(query_rect)
+                data_frame = await processing_graph.vector_stream_into_geopandas(query_rect)
 
                 # 1x geo + 2x time + 1x data
                 assert data_frame.shape == (8, 4)

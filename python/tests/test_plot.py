@@ -27,7 +27,7 @@ class PlotTests(unittest.TestCase):
 
             ge.initialize(ge_instance.address())
 
-            workflow_definition = {
+            processing_graph_definition = {
                 "type": "Plot",
                 "operator": {
                     "type": "Histogram",
@@ -40,9 +40,9 @@ class PlotTests(unittest.TestCase):
                 },
             }
 
-            workflow = ge.register_processing_graph(workflow_definition)
+            processing_graph = ge.register_processing_graph(processing_graph_definition)
 
-            vega_chart = workflow.plot_chart(
+            vega_chart = processing_graph.plot_chart(
                 ge.QueryRectangle(
                     ge.BoundingBox2D(-180.0, -90.0, 180.0, 90.0),
                     ge.TimeInterval(np.datetime64("2014-04-01T12:00:00")),
@@ -82,18 +82,18 @@ class PlotTests(unittest.TestCase):
 
             ge.initialize("http://mock-instance")
 
-            workflow = ge.processing_graph_by_id("5b9508a8-bd34-5a1c-acd6-75bb832d2d38")
+            processing_graph = ge.processing_graph_by_id("5b9508a8-bd34-5a1c-acd6-75bb832d2d38")
 
-            result_descriptor = workflow.get_result_descriptor()
+            result_descriptor = processing_graph.get_result_descriptor()
 
             expected_repr = "Plot Result"
 
             self.assertEqual(repr(result_descriptor), textwrap.dedent(expected_repr))
 
             with self.assertRaises(ge.NotFoundException) as exception:
-                workflow = ge.processing_graph_by_id(NOT_FOUND_UUID)
+                processing_graph = ge.processing_graph_by_id(NOT_FOUND_UUID)
 
-                result_descriptor = workflow.get_result_descriptor()
+                result_descriptor = processing_graph.get_result_descriptor()
 
             self.assertEqual(str(exception.exception), "NotFound: Not Found")
 
@@ -126,12 +126,12 @@ class PlotTests(unittest.TestCase):
 
             ge.initialize("http://mock-instance")
 
-            workflow = ge.processing_graph_by_id("5b9508a8-bd34-5a1c-acd6-75bb832d2d38")
+            processing_graph = ge.processing_graph_by_id("5b9508a8-bd34-5a1c-acd6-75bb832d2d38")
 
             time = datetime.strptime("2014-04-01T12:00:00.000Z", ge.DEFAULT_ISO_TIME_FORMAT)
 
             with self.assertRaises(ge.MethodNotCalledOnVectorException):
-                workflow.get_dataframe(
+                processing_graph.get_dataframe(
                     ge.QueryRectangle(
                         ge.BoundingBox2D(-180.0, -90.0, 180.0, 90.0),
                         ge.TimeInterval(time),
@@ -174,7 +174,7 @@ class PlotTests(unittest.TestCase):
 
             ge.initialize("http://mock-instance")
 
-            workflow_definition = {
+            processing_graph_definition = {
                 "type": "Plot",
                 "operator": {
                     "type": "Histogram",
@@ -190,10 +190,10 @@ class PlotTests(unittest.TestCase):
 
             time = datetime.strptime("2004-04-01T12:00:00.000Z", ge.DEFAULT_ISO_TIME_FORMAT)
 
-            workflow = ge.register_processing_graph(workflow_definition)
+            processing_graph = ge.register_processing_graph(processing_graph_definition)
 
             with self.assertRaises(ge.BadRequestException) as ctx:
-                workflow.plot_chart(
+                processing_graph.plot_chart(
                     ge.QueryRectangle(
                         ge.BoundingBox2D(-180.0, -90.0, 180.0, 90.0),
                         ge.TimeInterval(time),

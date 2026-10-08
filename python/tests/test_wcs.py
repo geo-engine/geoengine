@@ -63,7 +63,7 @@ class WcsTests(unittest.TestCase):
 
             ge.initialize("http://mock-instance")
 
-            workflow_definition = {
+            processing_graph_definition = {
                 "type": "Raster",
                 "operator": {
                     "type": "GdalSource",
@@ -71,7 +71,7 @@ class WcsTests(unittest.TestCase):
                 },
             }
 
-            workflow = ge.register_processing_graph(workflow_definition)
+            processing_graph = ge.register_processing_graph(processing_graph_definition)
 
         with requests_mock.Mocker() as m_requests, open("tests/responses/ndvi.tiff", "rb") as ndvi_tiff:
             m_requests.get(
@@ -147,7 +147,7 @@ class WcsTests(unittest.TestCase):
 
             query = ge.QueryRectangle(ge.BoundingBox2D(-180.0, -90.0, 180.0, 90.0), ge.TimeInterval(time))
 
-            array = workflow.get_array(
+            array = processing_graph.get_array(
                 query,
                 spatial_resolution=ge.SpatialResolution(360.0 / 8, 180.0 / 8),
             )
@@ -213,7 +213,7 @@ class WcsTests(unittest.TestCase):
 
             ge.initialize("http://mock-instance")
 
-            workflow_definition = {
+            processing_graph_definition = {
                 "type": "Raster",
                 "operator": {
                     "type": "GdalSource",
@@ -221,7 +221,7 @@ class WcsTests(unittest.TestCase):
                 },
             }
 
-            workflow = ge.register_processing_graph(workflow_definition)
+            processing_graph = ge.register_processing_graph(processing_graph_definition)
 
         with requests_mock.Mocker() as m_requests:
             m_requests.get(
@@ -306,7 +306,7 @@ class WcsTests(unittest.TestCase):
             )
 
             with self.assertRaises(owslib.util.ServiceException) as ctx:
-                workflow.get_array(
+                processing_graph.get_array(
                     query,
                     spatial_resolution=ge.SpatialResolution(360.0 / 8, 180.0 / 8),
                 )
@@ -361,7 +361,7 @@ class WcsTests(unittest.TestCase):
 
             ge.initialize("http://mock-instance")
 
-            workflow_definition = {
+            processing_graph_definition = {
                 "type": "Raster",
                 "operator": {
                     "type": "GdalSource",
@@ -369,7 +369,7 @@ class WcsTests(unittest.TestCase):
                 },
             }
 
-            workflow = ge.register_processing_graph(workflow_definition)
+            processing_graph = ge.register_processing_graph(processing_graph_definition)
 
         with requests_mock.Mocker() as m_requests, open("tests/responses/ndvi.tiff", "rb") as ndvi_tiff:
             m_requests.get(
@@ -449,7 +449,7 @@ class WcsTests(unittest.TestCase):
                 ge.TimeInterval(time),
             )
 
-            array = workflow.get_xarray(query, spatial_resolution=ge.SpatialResolution(360.0 / 8, 180.0 / 8))
+            array = processing_graph.get_xarray(query, spatial_resolution=ge.SpatialResolution(360.0 / 8, 180.0 / 8))
 
             self.assertEqual(array.shape, (1, 8, 8))
 
