@@ -1439,8 +1439,10 @@ fn md_loading_info_from_rows(
             band = Some(row_band);
             slices_per_band = 0;
             // every band shares one time axis (that is what `ZRole::Variable` means), so the
-            // axis is built from the first band's rows only; collecting all bands would
-            // concatenate N copies of the same intervals and produce a non-monotonic axis
+            // axis is built from one band's rows only; collecting all bands would concatenate
+            // N copies of the same intervals and produce a non-monotonic axis. The clear on
+            // band change leaves the *last* band's rows - equal to the first's because the
+            // axis is shared, but nothing at insert time enforces that.
             all_times.clear();
         }
 
