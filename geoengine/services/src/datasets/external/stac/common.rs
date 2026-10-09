@@ -24,7 +24,7 @@ use super::StacProviderS3Config;
 /// `assets.*.proj:code`) and the STAC 1.0.0 metadata (`assets.*.raster:bands`,
 /// item-level projection fields, and `assets.*.proj:epsg`) so that items of either version
 /// survive the field filter.
-pub const STAC_ITEM_FIELDS: &str = "stac_version,properties.datetime,properties.updated,properties.gsd,properties.proj:code,properties.proj:epsg,assets.*.title,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.raster:bands,assets.*.proj:code,assets.*.proj:epsg,assets.*.proj:shape,assets.*.proj:transform";
+pub const STAC_ITEM_FIELDS: &str = "stac_version,properties.datetime,properties.updated,properties.gsd,properties.proj:code,properties.proj:epsg,assets.*.title,assets.*.href,assets.*.data_type,assets.*.nodata,assets.*.bands,assets.*.raster:bands,assets.*.proj:code,assets.*.proj:epsg,assets.*.proj:shape,assets.*.proj:transform";
 
 // ---------------------------------------------------------------------------
 // STAC extension version types
@@ -34,6 +34,27 @@ pub const STAC_ITEM_FIELDS: &str = "stac_version,properties.datetime,properties.
 pub enum StacExtensionMajorVersion {
     V1,
     V2,
+}
+
+/// Read the no-data value for a one-based GDAL raster channel from STAC metadata.
+/// Band-specific values override the asset-wide value. If no value is declared,
+/// GDAL can fall back to the raster file's own no-data value or validity mask.
+pub fn no_data_value_for_rasterband(asset: &stac::Asset, rasterband_channel: usize) -> Option<f64> {
+    let band_index = rasterband_channel.checked_sub(1)?;
+    asset
+        .bands
+        .get(band_index)
+        .and_then(|band| band.nodata)
+        .or(asset.nodata)
+        .or_else(|| {
+            asset
+                .additional_fields
+                .get("raster:bands")?
+                .as_array()?
+                .get(band_index)?
+                .get("nodata")?
+                .as_f64()
+        })
 }
 
 /// Extract a `GeoTransform` from `proj:transform` in asset/collection fields.
@@ -652,6 +673,36 @@ pub fn gdal_config_options_for_file_path(
 mod tests {
     use super::*;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
+
+    #[test]
+    fn it_reads_stac_no_data_for_the_selected_rasterband() {
+        for (metadata, channel, expected) in [
+            (serde_json::json!({"nodata": -32768}), 1, Some(-32768.)),
+            (serde_json::json!({"nodata": 0}), 3, Some(0.)),
+            (
+                serde_json::json!({"nodata": 0, "bands": [{"nodata": -1}, {"nodata": -2}]}),
+                2,
+                Some(-2.),
+            ),
+            (
+                serde_json::json!({"raster:bands": [{"nodata": 0}, {"nodata": 255}]}),
+                2,
+                Some(255.),
+            ),
+            (serde_json::json!({"bands": [{"name": "VV"}]}), 1, None),
+            (serde_json::json!({"nodata": 0}), 0, None),
+        ] {
+            let mut metadata = metadata;
+            metadata["href"] = serde_json::json!("s3://example/raster.tif");
+            let asset: stac::Asset = serde_json::from_value(metadata).unwrap();
+            assert_eq!(no_data_value_for_rasterband(&asset, channel), expected);
+        }
+        assert!(
+            STAC_ITEM_FIELDS
+                .split(',')
+                .any(|field| field == "assets.*.nodata")
+        );
+    }
 
     // -----------------------------------------------------------------------
     // geo_transform_from_fields
