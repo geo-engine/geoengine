@@ -42,11 +42,11 @@
         "publish:core:minor": "version=minor scripts/publish-to-github.sh",
         "publish:core:major": "version=major scripts/publish-to-github.sh",
         "prettier": "prettier",
-        "check": "prettier --check . && ng lint",
+        "check": "prettier --check . && npm run lint",
         "test": "ng test --watch=false",
         "test:browser": "ng test --watch=false --browsers=chromiumHeadless",
         "test:browser:ci": "ng test --watch=false --no-progress --browsers=chromiumHeadless",
-        "lint": "ng lint",
+        "lint": "TSESTREE_SINGLE_RUN=true ng lint",
         "e2e": "ng e2e"
     },
     "private": true,
