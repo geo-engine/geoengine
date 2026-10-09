@@ -3,13 +3,12 @@ import {Validators, FormBuilder, FormControl, FormArray, FormGroup, FormsModule,
 
 import {ProjectService} from '../../../project/project.service';
 
-import {Observable, of, ReplaySubject, Subscription} from 'rxjs';
+import {from, Observable, of, ReplaySubject, Subscription} from 'rxjs';
 import {map, mergeMap, tap} from 'rxjs/operators';
 import {
     geoengineValidators,
     Layer,
     Plot,
-    RasterLayer,
     ResultTypes,
     VectorColumnDataTypes,
     VectorLayer,
@@ -18,13 +17,12 @@ import {
     FxFlexDirective,
     FxLayoutAlignDirective,
 } from '@geoengine/common';
-import {MultipleRasterOrSingleVectorOperator, Statistics, StatisticsParameters, TypedOperator} from '@geoengine/api-client';
+import {ProcessingGraph, RasterOperator, Statistics, StatisticsParameters, VectorOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
 import {MatIcon} from '@angular/material/icon';
 import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
-import {MultiLayerSelectionComponent} from '../helpers/multi-layer-selection/multi-layer-selection.component';
 import {DialogSectionHeadingComponent} from '../../../dialogs/dialog-section-heading/dialog-section-heading.component';
 import {MatFormField, MatHint} from '@angular/material/input';
 import {MatSelect} from '@angular/material/select';
@@ -36,7 +34,6 @@ interface StatisticsPlotForm {
     layer: FormControl<Layer | null>;
     name: FormControl<string>;
     columnNames: FormArray<FormControl<string | null>>;
-    additionalRasterLayers: FormControl<Array<RasterLayer> | null>;
 }
 
 /**
@@ -47,16 +44,6 @@ const isVectorLayer = (layer: Layer | null): boolean => {
         return false;
     }
     return layer.layerType === 'vector';
-};
-
-/**
- * Checks whether the layer is a raster layer.
- */
-const isRasterLayer = (layer: Layer | null): boolean => {
-    if (!layer) {
-        return false;
-    }
-    return layer.layerType === 'raster';
 };
 
 @Component({
@@ -72,7 +59,6 @@ const isRasterLayer = (layer: Layer | null): boolean => {
         MatIconButton,
         MatIcon,
         LayerSelectionComponent,
-        MultiLayerSelectionComponent,
         FxLayoutDirective,
         DialogSectionHeadingComponent,
         FxFlexDirective,
@@ -92,13 +78,9 @@ export class StatisticsPlotComponent implements AfterViewInit, OnDestroy {
 
     readonly allowedLayerTypes = ResultTypes.LAYER_TYPES;
 
-    readonly RASTER_TYPE = [ResultTypes.RASTER];
-
     attributes$ = new ReplaySubject<Array<string>>(1);
 
     isVectorLayer$: Observable<boolean>;
-
-    isRasterLayer$: Observable<boolean>;
 
     form: FormGroup<StatisticsPlotForm>;
 
@@ -113,7 +95,6 @@ export class StatisticsPlotComponent implements AfterViewInit, OnDestroy {
                 [],
                 geoengineValidators.conditionalValidator(Validators.required, () => isVectorLayer(layerControl.value)),
             ),
-            additionalRasterLayers: this.formBuilder.control<Array<RasterLayer> | null>([]), // new FormControl<Array<RasterLayer> | null>(null),
         });
         this.subscriptions.push(
             this.form.controls['layer'].valueChanges
@@ -121,7 +102,6 @@ export class StatisticsPlotComponent implements AfterViewInit, OnDestroy {
                     // reset
                     tap(() => {
                         this.columnNames.clear();
-                        this.additionalRasterLayers.setValue([]);
                         if (isVectorLayer(layerControl.value)) {
                             this.addColumn();
                         }
@@ -150,15 +130,10 @@ export class StatisticsPlotComponent implements AfterViewInit, OnDestroy {
                 }),
         );
         this.isVectorLayer$ = this.form.controls['layer']?.valueChanges.pipe(map((layer) => isVectorLayer(layer)));
-        this.isRasterLayer$ = this.form.controls['layer']?.valueChanges.pipe(map((layer) => isRasterLayer(layer)));
     }
 
     get columnNames(): FormArray<FormControl<string | null>> {
         return this.form.get('columnNames') as FormArray<FormControl<string | null>>;
-    }
-
-    get additionalRasterLayers(): FormControl<Array<RasterLayer> | null> {
-        return this.form.get('additionalRasterLayers') as FormControl<Array<RasterLayer> | null>;
     }
 
     addColumn(): void {
@@ -172,24 +147,19 @@ export class StatisticsPlotComponent implements AfterViewInit, OnDestroy {
     add(): void {
         const inputLayer = this.form.controls['layer'].value!;
 
-        const columnNames = this.columnNames.controls.map((fc) => (fc ? fc.value?.toString() : ''));
+        // for rasters, an empty list selects all bands
+        const columnNames = isVectorLayer(inputLayer) ? this.columnNames.controls.map((fc) => (fc ? fc.value?.toString() : '')) : [];
 
-        const sources = [inputLayer] as Array<Layer>;
-
-        if (inputLayer.layerType === 'raster') {
-            const rasterLayers: Array<RasterLayer> | null = this.additionalRasterLayers.value;
-            columnNames.push(inputLayer.name);
-            rasterLayers?.forEach((value) => {
-                sources.push(value);
-                columnNames.push(value.name);
-            });
-        }
-
-        this.projectService
-            .getAutomaticallyProjectedOperatorsFromLayers(sources)
+        from(this.projectService.getWorkflow(inputLayer.workflowId))
             .pipe(
-                mergeMap((inputOperators: Array<TypedOperator>) =>
-                    this.projectService.registerWorkflow({
+                mergeMap((inputWorkflow: ProcessingGraph) => {
+                    if (inputWorkflow.type !== 'Raster' && inputWorkflow.type !== 'Vector') {
+                        throw new Error(`Invalid workflow type ${inputWorkflow.type}.`);
+                    }
+
+                    const source: RasterOperator | VectorOperator = inputWorkflow.operator;
+
+                    return this.projectService.registerWorkflow({
                         type: 'Plot',
                         operator: {
                             type: 'Statistics',
@@ -197,11 +167,11 @@ export class StatisticsPlotComponent implements AfterViewInit, OnDestroy {
                                 columnNames,
                             } as StatisticsParameters,
                             sources: {
-                                source: singleVectorOrMultipleRasterOperators(inputOperators),
+                                source,
                             },
                         } as Statistics,
-                    }),
-                ),
+                    });
+                }),
                 mergeMap((workflowId) =>
                     this.projectService.addPlot(
                         new Plot({
@@ -227,16 +197,4 @@ export class StatisticsPlotComponent implements AfterViewInit, OnDestroy {
             this.form.controls['layer'].updateValueAndValidity();
         });
     }
-}
-
-function singleVectorOrMultipleRasterOperators(inputOperators: Array<TypedOperator>): MultipleRasterOrSingleVectorOperator {
-    if (inputOperators.length === 1 && inputOperators[0].type === 'Vector') {
-        return inputOperators[0].operator;
-    }
-
-    if (inputOperators.every((op) => op.type === 'Raster')) {
-        return inputOperators.map((op) => op.operator);
-    }
-
-    throw new Error('Input operators must be either a single vector or multiple rasters.');
 }

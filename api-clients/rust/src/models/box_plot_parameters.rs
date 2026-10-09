@@ -10,16 +10,16 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// BoxPlotParameters : The parameter spec for [`BoxPlot`].  ## Vector Data  In the case of vector data, the operator generates one box for each of the selected numerical attributes. The operator returns an error if one of the selected attributes is not numeric.  ## Raster Data  For raster data, the operator generates one box for each input raster. 
+/// BoxPlotParameters : The parameter spec for [`BoxPlot`].  ## Vector Data  In the case of vector data, the operator generates one box for each of the selected numerical attributes. The operator returns an error if one of the selected attributes is not numeric.  ## Raster Data  For raster data, the operator generates one box for each of the selected bands. 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BoxPlotParameters {
-    /// ## Vector Data The names of the attributes to generate boxes for.  ## Raster Data _Optional_: An alias for each input source. The operator will automatically name the boxes `Raster-1`, `Raster-2`, ... if this parameter is empty. If aliases are given, the number of aliases must match the number of input rasters. Otherwise an error is returned.
+    /// ## Vector Data The names of the attributes to generate boxes for.  ## Raster Data _Optional_: The names of the bands to generate boxes for. The operator generates boxes for all bands if this parameter is empty.
     #[serde(rename = "columnNames", skip_serializing_if = "Option::is_none")]
     pub column_names: Option<Vec<String>>,
 }
 
 impl BoxPlotParameters {
-    /// The parameter spec for [`BoxPlot`].  ## Vector Data  In the case of vector data, the operator generates one box for each of the selected numerical attributes. The operator returns an error if one of the selected attributes is not numeric.  ## Raster Data  For raster data, the operator generates one box for each input raster. 
+    /// The parameter spec for [`BoxPlot`].  ## Vector Data  In the case of vector data, the operator generates one box for each of the selected numerical attributes. The operator returns an error if one of the selected attributes is not numeric.  ## Raster Data  For raster data, the operator generates one box for each of the selected bands. 
     pub fn new() -> BoxPlotParameters {
         BoxPlotParameters {
             column_names: None,

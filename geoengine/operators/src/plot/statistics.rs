@@ -1,28 +1,29 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-    InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, OperatorName,
-    PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
+    InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
+    PlotResultDescriptor, QueryContext, QueryProcessor, SingleRasterOrVectorSource,
     TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
     WorkflowOperatorPath,
 };
 use crate::error;
 use crate::error::Error;
 use crate::optimization::OptimizationError;
+use crate::plot::util::{SelectedBand, masked_pixels_in_query, pixel_count_in_query, select_bands};
 use crate::util::Result;
-use crate::util::input::MultiRasterOrVectorOperator;
+use crate::util::input::RasterOrVectorOperator;
 use crate::util::number_statistics::NumberStatistics;
 use crate::util::statistics::{SafePSquareQuantileEstimator, StatisticsError};
 use async_trait::async_trait;
-use futures::stream::select_all;
-use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
+use futures::{StreamExt, TryFutureExt, TryStreamExt};
 use geoengine_datatypes::collections::FeatureCollectionInfos;
+use geoengine_datatypes::plots::{Plot, PlotData, Table, TableColumn};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, PlotQueryRectangle,
-    RasterQueryRectangle, SpatialResolution, partitions_extent, time_interval_extent,
+    RasterQueryRectangle, SpatialResolution,
 };
 use geoengine_datatypes::raster::ConvertDataTypeParallel;
-use geoengine_datatypes::raster::{GridOrEmpty, GridSize};
-use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+use geoengine_datatypes::raster::GridOrEmpty;
+use itertools::Itertools;
 use num_traits::AsPrimitive;
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
@@ -35,7 +36,7 @@ pub const STATISTICS_OPERATOR_NAME: &str = "Statistics";
 ///
 /// Does currently not use a weighted computations, so it assumes equally weighted
 /// time steps in the sources.
-pub type Statistics = Operator<StatisticsParams, MultipleRasterOrSingleVectorSource>;
+pub type Statistics = Operator<StatisticsParams, SingleRasterOrVectorSource>;
 
 impl OperatorName for Statistics {
     const TYPE_NAME: &'static str = "Statistics";
@@ -45,7 +46,7 @@ impl OperatorName for Statistics {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatisticsParams {
-    /// Names of the (numeric) attributes to compute the statistics on.
+    /// Names of the (numeric) attributes or raster bands to compute the statistics on.
     #[serde(default)]
     pub column_names: Vec<String>,
     #[serde(default)]
@@ -70,77 +71,52 @@ impl PlotOperator for Statistics {
             }
         );
 
+        ensure!(
+            self.params
+                .percentiles
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+                == self.params.percentiles.len(),
+            error::InvalidOperatorSpec {
+                reason: "The percentiles must be unique.".to_string(),
+            }
+        );
+
+        let percentiles = self
+            .params
+            .percentiles
+            .iter()
+            .map(|p| p.into_inner())
+            .collect();
+
         match self.sources.source {
-            MultiRasterOrVectorOperator::Raster(rasters) => {
-                ensure!( self.params.column_names.is_empty() || self.params.column_names.len() == rasters.len(),
-                    error::InvalidOperatorSpec {
-                        reason: "Statistics on raster data must either contain a name/alias for every input ('column_names' parameter) or no names at all."
-                            .to_string(),
-                });
+            RasterOrVectorOperator::Raster(raster_source) => {
+                let initialized_raster = raster_source
+                    .initialize(path.clone_and_append(0), context)
+                    .await?;
 
-                let output_names = if self.params.column_names.is_empty() {
-                    (1..=rasters.len())
-                        .map(|i| format!("Raster-{i}"))
-                        .collect::<Vec<_>>()
-                } else {
-                    self.params.column_names.clone()
-                };
+                let in_descriptor = initialized_raster.result_descriptor();
 
-                let rasters = futures::future::try_join_all(
-                    rasters
-                        .into_iter()
-                        .enumerate()
-                        .map(|(i, op)| op.initialize(path.clone_and_append(i as u8), context)),
-                )
-                .await?;
+                let bands = select_bands(&in_descriptor.bands, &self.params.column_names)?;
 
-                let in_descriptors = rasters
-                    .iter()
-                    .map(InitializedRasterOperator::result_descriptor)
-                    .collect::<Vec<_>>();
-
-                // TODO: implement multi-band functionality and remove this check
-                ensure!(
-                    in_descriptors.iter().all(|r| r.bands.len() == 1),
-                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                        operator: Statistics::TYPE_NAME,
-                    }
-                );
-
-                if rasters.len() > 1 {
-                    let srs = in_descriptors[0].spatial_reference;
-                    ensure!(
-                        in_descriptors.iter().all(|d| d.spatial_reference == srs),
-                        error::AllSourcesMustHaveSameSpatialReference
-                    );
-                }
-
-                let time = time_interval_extent(in_descriptors.iter().map(|d| d.time.bounds));
-                let bbox = partitions_extent(in_descriptors.iter().map(|d| d.spatial_bounds()));
+                let bbox = in_descriptor.spatial_bounds();
 
                 let initialized_operator = InitializedStatistics::new(
                     name,
                     PlotResultDescriptor {
-                        spatial_reference: rasters.first().map_or_else(
-                            || SpatialReferenceOption::Unreferenced,
-                            |r| r.result_descriptor().spatial_reference,
-                        ),
-                        time,
-                        bbox: bbox
-                            .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
+                        spatial_reference: in_descriptor.spatial_reference,
+                        time: in_descriptor.time.bounds,
+                        bbox: BoundingBox2D::new(bbox.lower_left(), bbox.upper_right()).ok(),
                     },
-                    output_names,
-                    self.params
-                        .percentiles
-                        .iter()
-                        .map(|p| p.into_inner())
-                        .collect(),
-                    rasters,
+                    bands,
+                    percentiles,
+                    initialized_raster,
                 );
 
                 Ok(initialized_operator.boxed())
             }
-            MultiRasterOrVectorOperator::Vector(vector_source) => {
+            RasterOrVectorOperator::Vector(vector_source) => {
                 let initialized_vector = vector_source
                     .initialize(path.clone_and_append(0), context)
                     .await?;
@@ -154,6 +130,7 @@ impl PlotOperator for Statistics {
                         .into_iter()
                         .filter(|(_, info)| info.data_type.is_numeric())
                         .map(|(name, _)| name)
+                        .sorted() // the columns are a `HashMap`, so sort them for a stable row order
                         .collect()
                 } else {
                     for cn in &self.params.column_names {
@@ -182,11 +159,7 @@ impl PlotOperator for Statistics {
                         bbox: in_descriptor.bbox,
                     },
                     column_names,
-                    self.params
-                        .percentiles
-                        .iter()
-                        .map(|p| p.into_inner())
-                        .collect(),
+                    percentiles,
                     initialized_vector,
                 );
 
@@ -199,42 +172,59 @@ impl PlotOperator for Statistics {
 }
 
 /// The initialization of `Statistics`
-pub struct InitializedStatistics<Op> {
+///
+/// `Columns` are the names of the vector columns or the selected raster bands.
+pub struct InitializedStatistics<Op, Columns> {
     name: CanonicOperatorName,
     result_descriptor: PlotResultDescriptor,
-    column_names: Vec<String>,
+    columns: Vec<Columns>,
     percentiles: Vec<f64>,
     source: Op,
 }
 
-impl<Op> InitializedStatistics<Op> {
+impl<Op, Columns> InitializedStatistics<Op, Columns> {
     pub fn new(
         name: CanonicOperatorName,
         result_descriptor: PlotResultDescriptor,
-        column_names: Vec<String>,
+        columns: Vec<Columns>,
         percentiles: Vec<f64>,
         source: Op,
     ) -> Self {
         Self {
             name,
             result_descriptor,
-            column_names,
+            columns,
             percentiles,
             source,
         }
     }
+
+    fn optimized_params(&self, column_names: Vec<String>) -> StatisticsParams {
+        StatisticsParams {
+            column_names,
+            percentiles: self
+                .percentiles
+                .iter()
+                .copied()
+                .map(NotNan::<f64>::new)
+                .collect::<Result<Vec<_>, _>>()
+                .expect(
+                    "percentiles should be not nan because they are NotNan<f64> during initialization",
+                ),
+        }
+    }
 }
 
-impl InitializedPlotOperator for InitializedStatistics<Box<dyn InitializedVectorOperator>> {
+impl InitializedPlotOperator for InitializedStatistics<Box<dyn InitializedVectorOperator>, String> {
     fn result_descriptor(&self) -> &PlotResultDescriptor {
         &self.result_descriptor
     }
 
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
-        Ok(TypedPlotQueryProcessor::JsonPlain(
+        Ok(TypedPlotQueryProcessor::JsonVega(
             StatisticsVectorQueryProcessor {
                 vector: self.source.query_processor()?,
-                column_names: self.column_names.clone(),
+                column_names: self.columns.clone(),
                 percentiles: self.percentiles.clone(),
             }
             .boxed(),
@@ -250,39 +240,27 @@ impl InitializedPlotOperator for InitializedStatistics<Box<dyn InitializedVector
         target_resolution: SpatialResolution,
     ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
         Ok(Statistics {
-            params: StatisticsParams {
-                column_names: self.column_names.clone(),
-                percentiles: self
-                    .percentiles
-                    .iter()
-                    .copied()
-                    .map(NotNan::<f64>::new)
-                    .collect::<Result<Vec<_>,_>>().expect("percentiles should be not nan because they are NotNan<f64> during initialization"),
-            },
-            sources: MultipleRasterOrSingleVectorSource {
-                source: MultiRasterOrVectorOperator::Vector(
-                    self.source.optimize(target_resolution)?,
-                ),
+            params: self.optimized_params(self.columns.clone()),
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Vector(self.source.optimize(target_resolution)?),
             },
         }
         .boxed())
     }
 }
 
-impl InitializedPlotOperator for InitializedStatistics<Vec<Box<dyn InitializedRasterOperator>>> {
+impl InitializedPlotOperator
+    for InitializedStatistics<Box<dyn InitializedRasterOperator>, SelectedBand>
+{
     fn result_descriptor(&self) -> &PlotResultDescriptor {
         &self.result_descriptor
     }
 
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
-        Ok(TypedPlotQueryProcessor::JsonPlain(
+        Ok(TypedPlotQueryProcessor::JsonVega(
             StatisticsRasterQueryProcessor {
-                rasters: self
-                    .source
-                    .iter()
-                    .map(InitializedRasterOperator::query_processor)
-                    .collect::<Result<Vec<_>>>()?,
-                column_names: self.column_names.clone(),
+                raster: self.source.query_processor()?,
+                bands: self.columns.clone(),
                 percentiles: self.percentiles.clone(),
             }
             .boxed(),
@@ -298,22 +276,10 @@ impl InitializedPlotOperator for InitializedStatistics<Vec<Box<dyn InitializedRa
         target_resolution: SpatialResolution,
     ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
         Ok(Statistics {
-            params: StatisticsParams {
-                column_names: self.column_names.clone(),
-                percentiles: self
-                    .percentiles
-                    .iter()
-                    .copied()
-                    .map(NotNan::<f64>::new)
-                    .collect::<Result<Vec<_>,_>>().expect("percentiles should be not nan because they are NotNan<f64> during initialization"),
-            },
-            sources: MultipleRasterOrSingleVectorSource {
-                source: MultiRasterOrVectorOperator::Raster(
-                    self.source
-                        .iter()
-                        .map(|s| s.optimize(target_resolution))
-                        .collect::<Result<Vec<_>, OptimizationError>>()?,
-                ),
+            params: self
+                .optimized_params(self.columns.iter().map(|band| band.name.clone()).collect()),
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Raster(self.source.optimize(target_resolution)?),
             },
         }
         .boxed())
@@ -329,7 +295,7 @@ pub struct StatisticsVectorQueryProcessor {
 
 #[async_trait]
 impl PlotQueryProcessor for StatisticsVectorQueryProcessor {
-    type OutputFormat = serde_json::Value;
+    type OutputFormat = PlotData;
 
     fn plot_type(&self) -> &'static str {
         STATISTICS_OPERATOR_NAME
@@ -340,7 +306,7 @@ impl PlotQueryProcessor for StatisticsVectorQueryProcessor {
         query: PlotQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
-        let mut statistics: HashMap<String, StatisticsAggregator<f64>> = self
+        let mut statistics: Vec<(String, StatisticsAggregator<f64>)> = self
             .column_names
             .iter()
             .map(|column| {
@@ -374,26 +340,28 @@ impl PlotQueryProcessor for StatisticsVectorQueryProcessor {
             }
         });
 
-        let output: HashMap<String, StatisticsOutput> = statistics
-            .iter()
-            .map(|(column, number_statistics)| {
-                (column.clone(), StatisticsOutput::from(number_statistics))
-            })
-            .collect();
-        serde_json::to_value(output).map_err(Into::into)
+        statistics_table(
+            statistics
+                .iter()
+                .map(|(column, number_statistics)| {
+                    StatisticsOutput::new(column.clone(), number_statistics)
+                })
+                .collect(),
+            &self.percentiles,
+        )
     }
 }
 
-/// A query processor that calculates the statistics about its raster inputs.
+/// A query processor that calculates the statistics about the bands of its raster input.
 pub struct StatisticsRasterQueryProcessor {
-    rasters: Vec<TypedRasterQueryProcessor>,
-    column_names: Vec<String>,
+    raster: TypedRasterQueryProcessor,
+    bands: Vec<SelectedBand>,
     percentiles: Vec<f64>,
 }
 
 #[async_trait]
 impl PlotQueryProcessor for StatisticsRasterQueryProcessor {
-    type OutputFormat = serde_json::Value;
+    type OutputFormat = PlotData;
 
     fn plot_type(&self) -> &'static str {
         STATISTICS_OPERATOR_NAME
@@ -404,60 +372,68 @@ impl PlotQueryProcessor for StatisticsRasterQueryProcessor {
         query: PlotQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
-        let mut queries = Vec::with_capacity(self.rasters.len());
-        for (i, raster_processor) in self.rasters.iter().enumerate() {
-            let rd = raster_processor.result_descriptor();
+        let rd = self.raster.result_descriptor();
 
-            let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
-                &query,
-                BandSelection::first(),
-                rd.tiling_grid_definition(ctx.tiling_specification())
-                    .tiling_geo_transform(),
-            );
+        let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
+            &query,
+            BandSelection::new(self.bands.iter().map(|band| band.index).collect())?,
+            rd.tiling_grid_definition(ctx.tiling_specification())
+                .tiling_geo_transform(),
+        );
+        let query_bounds = raster_query_rect.spatial_bounds();
 
-            queries.push(
-                call_on_generic_raster_processor!(raster_processor, processor => {
-                    processor.query(raster_query_rect.clone(), ctx).await? // TODO: avoid cloning query?
-                             .and_then(move |tile| crate::util::spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || (i, tile.convert_data_type_parallel()) ).map_err(Into::into))
-                             .boxed()
-                }),
-            );
-        }
+        // tiles carry the index of their band in the source raster
+        let statistics_index_of_band: HashMap<u32, usize> = self
+            .bands
+            .iter()
+            .enumerate()
+            .map(|(i, band)| (band.index, i))
+            .collect();
 
-        let statistics =
-            vec![StatisticsAggregator::with_percentiles(&self.percentiles); self.rasters.len()];
+        let tiles = call_on_generic_raster_processor!(&self.raster, processor => {
+            processor.query(raster_query_rect, ctx).await?
+                .and_then(move |tile| crate::util::spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || tile.convert_data_type_parallel()).map_err(Into::into))
+                .boxed()
+        });
 
-        select_all(queries)
+        let statistics = tiles
             .try_fold(
-                statistics,
-                |statistics: Vec<StatisticsAggregator<f64>>, enumerated_raster_tile| async move {
-                    let mut statistics = statistics;
+                vec![StatisticsAggregator::with_percentiles(&self.percentiles); self.bands.len()],
+                |mut statistics: Vec<StatisticsAggregator<f64>>, raster_tile| {
+                    let result = statistics_index_of_band
+                        .get(&raster_tile.band)
+                        .ok_or(Error::InvalidOperatorSpec {
+                            reason: format!(
+                                "Statistics received a tile of unexpected band {}.",
+                                raster_tile.band
+                            ),
+                        })
+                        .and_then(|&i| {
+                            match &raster_tile.grid_array {
+                                GridOrEmpty::Grid(_) => process_raster(
+                                    &mut statistics[i],
+                                    masked_pixels_in_query(&raster_tile, &query_bounds),
+                                )?,
+                                GridOrEmpty::Empty(_) => statistics[i].add_no_data_batch(
+                                    pixel_count_in_query(&raster_tile, &query_bounds),
+                                ),
+                            }
+                            Ok(statistics)
+                        });
 
-                    let (i, raster_tile) = enumerated_raster_tile;
-
-                    match raster_tile.grid_array {
-                        GridOrEmpty::Grid(g) => {
-                            process_raster(&mut statistics[i], g.masked_element_deref_iterator())?;
-                        }
-                        GridOrEmpty::Empty(n) => {
-                            statistics[i]
-                                .number_statistics
-                                .add_no_data_batch(n.number_of_elements());
-                        }
-                    }
-
-                    Ok(statistics)
+                    futures::future::ready(result)
                 },
             )
-            .map(|number_statistics| {
-                let output: HashMap<String, StatisticsOutput> = number_statistics?
-                    .iter()
-                    .enumerate()
-                    .map(|(i, stat)| (self.column_names[i].clone(), StatisticsOutput::from(stat)))
-                    .collect();
-                serde_json::to_value(output).map_err(Into::into)
-            })
-            .await
+            .await?;
+
+        statistics_table(
+            self.bands
+                .iter()
+                .zip(&statistics)
+                .map(|(band, stat)| StatisticsOutput::new(band.name.clone(), stat))
+                .collect(),
+            &self.percentiles,
+        )
     }
 }
 
@@ -555,10 +531,44 @@ impl<T: AsPrimitive<f64>> PercentileEstimator<T> {
     }
 }
 
+/// Creates a table with one row of `statistics` per band or column.
+///
+/// The rows contain the raw statistics in the `data.values` of the Vega spec,
+/// the columns display them and one computed column per percentile.
+fn statistics_table(statistics: Vec<StatisticsOutput>, percentiles: &[f64]) -> Result<PlotData> {
+    let rows = statistics
+        .into_iter()
+        .map(|row| match serde_json::to_value(row)? {
+            serde_json::Value::Object(row) => Ok(row),
+            _ => unreachable!("statistics output should serialize to a JSON object"),
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let mut columns = vec![
+        TableColumn::new("valueCount").with_format(",d"),
+        TableColumn::new("validCount").with_format(",d"),
+        TableColumn::new("min").with_format(".2f"),
+        TableColumn::new("max").with_format(".2f"),
+        TableColumn::new("mean").with_format(".2f"),
+        TableColumn::new("stddev").with_format(".2f"),
+    ];
+    columns.extend(percentiles.iter().enumerate().map(|(i, percentile)| {
+        // round to avoid titles like `p33.300000000000004`
+        let title = format!("p{}", (percentile * 100_000.).round() / 1_000.);
+        TableColumn::computed(format!("p{i}"), format!("datum.percentiles[{i}].value"))
+            .with_title(title)
+            .with_format(".2f")
+    }));
+
+    Ok(Table::new("name", rows, columns)?.to_vega_embeddable(false)?)
+}
+
 /// The statistics summary output type for each raster input/vector input column
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StatisticsOutput {
+    /// The name of the band or column
+    pub name: String,
     pub value_count: usize,
     pub valid_count: usize,
     pub min: f64,
@@ -574,10 +584,11 @@ struct PercentileOutput {
     value: f64,
 }
 
-impl From<&StatisticsAggregator<f64>> for StatisticsOutput {
-    fn from(statistics: &StatisticsAggregator<f64>) -> Self {
+impl StatisticsOutput {
+    fn new(name: String, statistics: &StatisticsAggregator<f64>) -> Self {
         let number_statistics = statistics.number_statistics;
         Self {
+            name,
             value_count: number_statistics.count() + number_statistics.nan_count(),
             valid_count: number_statistics.count(),
             min: number_statistics.min(),
@@ -608,10 +619,11 @@ mod tests {
         ChunkByteSize, MockExecutionContext, RasterOperator, RasterResultDescriptor,
         SpatialGridDescriptor, TimeDescriptor,
     };
-    use crate::engine::{RasterBandDescriptors, VectorOperator};
+    use crate::engine::{RasterBandDescriptor, RasterBandDescriptors, VectorOperator};
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
-    use crate::util::input::MultiRasterOrVectorOperator::Raster;
-    use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, NoGeometry, TimeInterval};
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, FeatureData, Measurement, NoGeometry, TimeInterval,
+    };
     use geoengine_datatypes::raster::{
         BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, GridShape2D, RasterDataType,
         RasterTile2D, TileInformation, TilingSpecification,
@@ -622,138 +634,223 @@ mod tests {
     fn serialization() {
         let statistics = Statistics {
             params: StatisticsParams {
-                column_names: vec![],
+                column_names: vec!["band".to_string()],
                 percentiles: vec![],
             },
-            sources: MultipleRasterOrSingleVectorSource {
-                source: Raster(vec![]),
-            },
+            sources: MockRasterSource {
+                params: MockRasterSourceParams::<u8> {
+                    data: vec![],
+                    result_descriptor: multi_band_result_descriptor(1),
+                },
+            }
+            .boxed()
+            .into(),
         };
 
+        let serialized = serde_json::to_value(&statistics).unwrap();
+
+        assert_eq!(
+            serialized["sources"]["source"]["type"],
+            "MockRasterSourceu8"
+        );
+
+        let deserialized: Statistics = serde_json::from_value(serialized).unwrap();
+
+        assert_eq!(deserialized.params, statistics.params);
+        assert!(deserialized.sources.source.is_raster());
+    }
+
+    #[test]
+    fn it_rejects_multiple_raster_sources() {
         let serialized = json!({
             "type": "Statistics",
             "params": {},
             "sources": {
                 "source": [],
             },
-        })
-        .to_string();
+        });
 
-        let deserialized: Statistics = serde_json::from_str(&serialized).unwrap();
-
-        assert_eq!(deserialized.params, statistics.params);
+        assert!(serde_json::from_value::<Statistics>(serialized).is_err());
     }
 
-    #[tokio::test]
-    async fn empty_raster_input() {
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
-        let tiling_specification = TilingSpecification {
-            tile_size_in_pixels,
-        };
-
-        let statistics = Statistics {
-            params: StatisticsParams {
-                column_names: vec![],
-                percentiles: vec![],
-            },
-            sources: vec![].into(),
-        };
-
-        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let statistics = statistics
-            .boxed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
-            .await
-            .unwrap();
-
-        let processor = statistics.query_processor().unwrap().json_plain().unwrap();
-
-        let result = processor
-            .plot_query(
-                PlotQueryRectangle::new(
-                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-                    TimeInterval::default(),
-                    PlotSeriesSelection::all(),
-                ),
-                &execution_context.mock_query_context(ChunkByteSize::MIN),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(result.to_string(), json!({}).to_string());
-    }
-
-    #[tokio::test]
-    async fn single_raster_implicit_name() {
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
-        let result_descriptor = RasterResultDescriptor {
+    /// A result descriptor for a raster with `num_bands` bands named `band_0`, `band_1`, …
+    fn multi_band_result_descriptor(num_bands: u32) -> RasterResultDescriptor {
+        RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size_in_pixels.bounding_box(),
+                GridShape2D::new_2d(3, 2).bounding_box(),
             ),
-            bands: RasterBandDescriptors::new_single_band(),
-        };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+            bands: RasterBandDescriptors::new(
+                (0..num_bands)
+                    .map(|i| RasterBandDescriptor::new(format!("band_{i}"), Measurement::Unitless))
+                    .collect(),
+            )
+            .unwrap(),
+        }
+    }
 
-        let raster_source = MockRasterSource {
+    /// A raster source with one 3x2 tile at tile position [0, 0] per band, filled with `band_values`.
+    fn multi_band_raster_source(band_values: Vec<Vec<u8>>) -> Box<dyn RasterOperator> {
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+
+        MockRasterSource {
             params: MockRasterSourceParams {
-                data: vec![RasterTile2D::new_with_tile_info(
-                    TimeInterval::default(),
-                    TileInformation {
-                        global_geo_transform: TestDefault::test_default(),
-                        global_tile_position: [0, 0].into(),
-                        tile_size_in_pixels,
-                    },
-                    0,
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
-                        .unwrap()
-                        .into(),
-                    CacheHint::no_cache(),
-                )],
-                result_descriptor,
+                result_descriptor: multi_band_result_descriptor(band_values.len() as u32),
+                data: band_values
+                    .into_iter()
+                    .enumerate()
+                    .map(|(band, values)| {
+                        RasterTile2D::new_with_tile_info(
+                            TimeInterval::default(),
+                            TileInformation {
+                                global_geo_transform: TestDefault::test_default(),
+                                global_tile_position: [0, 0].into(),
+                                tile_size_in_pixels,
+                            },
+                            band as u32,
+                            Grid2D::new(tile_size_in_pixels, values).unwrap().into(),
+                            CacheHint::no_cache(),
+                        )
+                    })
+                    .collect(),
             },
         }
-        .boxed();
+        .boxed()
+    }
+
+    async fn raster_statistics(
+        source: Box<dyn RasterOperator>,
+        params: StatisticsParams,
+        bbox: BoundingBox2D,
+    ) -> Result<serde_json::Value> {
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(GridShape2D::new_2d(3, 2)),
+        );
 
         let statistics = Statistics {
-            params: StatisticsParams {
-                column_names: vec![],
-                percentiles: vec![],
-            },
-            sources: vec![raster_source].into(),
-        };
+            params,
+            sources: source.into(),
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .await?;
 
-        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let processor = statistics.query_processor()?.json_vega().unwrap();
 
-        let statistics = statistics
-            .boxed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
-            .await
-            .unwrap();
-
-        let processor = statistics.query_processor().unwrap().json_plain().unwrap();
-
-        let result = processor
+        processor
             .plot_query(
-                PlotQueryRectangle::new(
-                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-                    TimeInterval::default(),
-                    PlotSeriesSelection::all(),
-                ),
+                PlotQueryRectangle::new(bbox, TimeInterval::default(), PlotSeriesSelection::all()),
                 &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
-            .unwrap();
+            .map(|plot| table_rows(&plot))
+    }
+
+    /// The rows of the statistics table, i.e., the `data.values` of the Vega spec
+    fn table_rows(plot: &PlotData) -> serde_json::Value {
+        let spec: serde_json::Value = plot.vega_spec.clone();
+        spec["data"]["values"].clone()
+    }
+
+    #[tokio::test]
+    async fn it_creates_a_column_per_percentile() {
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(GridShape2D::new_2d(3, 2)),
+        );
+        let plot = Statistics {
+            params: StatisticsParams {
+                column_names: vec![],
+                percentiles: vec![NotNan::new(0.25).unwrap(), NotNan::new(1. / 3.).unwrap()],
+            },
+            sources: multi_band_raster_source(vec![vec![1, 2, 3, 4, 5, 6]]).into(),
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .await
+        .unwrap()
+        .query_processor()
+        .unwrap()
+        .json_vega()
+        .unwrap()
+        .plot_query(
+            PlotQueryRectangle::new(
+                world_bbox(),
+                TimeInterval::default(),
+                PlotSeriesSelection::all(),
+            ),
+            &execution_context.mock_query_context(ChunkByteSize::MIN),
+        )
+        .await
+        .unwrap();
+
+        let spec: serde_json::Value = plot.vega_spec.clone();
 
         assert_eq!(
-            result.to_string(),
-            json!({
-                "Raster-1": {
-                    "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
+            spec["encoding"]["x"]["sort"],
+            json!([
+                "valueCount",
+                "validCount",
+                "min",
+                "max",
+                "mean",
+                "stddev",
+                "p25",
+                "p33.333"
+            ])
+        );
+        assert_eq!(
+            spec["transform"][0],
+            json!({"calculate": "datum.percentiles[0].value", "as": "p0"})
+        );
+        assert_eq!(
+            spec["transform"][1],
+            json!({"calculate": "datum.percentiles[1].value", "as": "p1"})
+        );
+    }
+
+    #[tokio::test]
+    async fn it_rejects_duplicate_percentiles() {
+        let result = raster_statistics(
+            multi_band_raster_source(vec![vec![1, 2, 3, 4, 5, 6]]),
+            StatisticsParams {
+                column_names: vec![],
+                percentiles: vec![NotNan::new(0.5).unwrap(), NotNan::new(0.5).unwrap()],
+            },
+            world_bbox(),
+        )
+        .await;
+
+        assert!(
+            matches!(result, Err(error::Error::InvalidOperatorSpec{reason}) if reason == *"The percentiles must be unique.")
+        );
+    }
+
+    fn world_bbox() -> BoundingBox2D {
+        BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn single_raster_implicit_name() {
+        let result = raster_statistics(
+            multi_band_raster_source(vec![vec![1, 2, 3, 4, 5, 6]]),
+            StatisticsParams {
+                column_names: vec![],
+                percentiles: vec![],
+            },
+            world_bbox(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            result,
+            json!([
+                {
+                    "name": "band_0",
+                    "valueCount": 65_341, // 361*181: the query bounds include the pixels at the right and lower edge
                     "validCount": 6,
                     "min": 1.0,
                     "max": 6.0,
@@ -761,103 +858,29 @@ mod tests {
                     "stddev": 1.707_825_127_659_933,
                     "percentiles": [],
                 }
-            })
-            .to_string()
+            ])
         );
     }
 
     #[tokio::test]
-    #[allow(clippy::too_many_lines)]
-    async fn two_rasters_implicit_names() {
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
-        let result_descriptor = RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: SpatialReference::epsg_4326().into(),
-            time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
-            spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size_in_pixels.bounding_box(),
-            ),
-            bands: RasterBandDescriptors::new_single_band(),
-        };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
-
-        let raster_source = vec![
-            MockRasterSource {
-                params: MockRasterSourceParams {
-                    data: vec![RasterTile2D::new_with_tile_info(
-                        TimeInterval::default(),
-                        TileInformation {
-                            global_geo_transform: TestDefault::test_default(),
-                            global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels,
-                        },
-                        0,
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
-                            .unwrap()
-                            .into(),
-                        CacheHint::no_cache(),
-                    )],
-                    result_descriptor: result_descriptor.clone(),
-                },
-            }
-            .boxed(),
-            MockRasterSource {
-                params: MockRasterSourceParams {
-                    data: vec![RasterTile2D::new_with_tile_info(
-                        TimeInterval::default(),
-                        TileInformation {
-                            global_geo_transform: TestDefault::test_default(),
-                            global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels,
-                        },
-                        0,
-                        Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
-                            .unwrap()
-                            .into(),
-                        CacheHint::no_cache(),
-                    )],
-                    result_descriptor,
-                },
-            }
-            .boxed(),
-        ];
-
-        let statistics = Statistics {
-            params: StatisticsParams {
+    async fn it_computes_statistics_for_all_bands() {
+        let result = raster_statistics(
+            multi_band_raster_source(vec![vec![1, 2, 3, 4, 5, 6], vec![7, 8, 9, 10, 11, 12]]),
+            StatisticsParams {
                 column_names: vec![],
                 percentiles: vec![],
             },
-            sources: raster_source.into(),
-        };
-
-        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let statistics = statistics
-            .boxed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
-            .await
-            .unwrap();
-
-        let processor = statistics.query_processor().unwrap().json_plain().unwrap();
-
-        let result = processor
-            .plot_query(
-                PlotQueryRectangle::new(
-                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-                    TimeInterval::default(),
-                    PlotSeriesSelection::all(),
-                ),
-                &execution_context.mock_query_context(ChunkByteSize::MIN),
-            )
-            .await
-            .unwrap();
+            world_bbox(),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             result,
-            json!({
-                "Raster-1": {
-                    "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
+            json!([
+                {
+                    "name": "band_0",
+                    "valueCount": 65_341, // 361*181: the query bounds include the pixels at the right and lower edge
                     "validCount": 6,
                     "min": 1.0,
                     "max": 6.0,
@@ -865,8 +888,9 @@ mod tests {
                     "stddev": 1.707_825_127_659_933,
                     "percentiles": [],
                 },
-                "Raster-2": {
-                    "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
+                {
+                    "name": "band_1",
+                    "valueCount": 65_341,
                     "validCount": 6,
                     "min": 7.0,
                     "max": 12.0,
@@ -874,102 +898,33 @@ mod tests {
                     "stddev": 1.707_825_127_659_933,
                     "percentiles": [],
                 },
-            })
+            ])
         );
     }
 
     #[tokio::test]
-    #[allow(clippy::too_many_lines)]
-    async fn two_rasters_explicit_names() {
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
-        let result_descriptor = RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: SpatialReference::epsg_4326().into(),
-            time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
-            spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size_in_pixels.bounding_box(),
-            ),
-            bands: RasterBandDescriptors::new_single_band(),
-        };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
-
-        let raster_source = vec![
-            MockRasterSource {
-                params: MockRasterSourceParams {
-                    data: vec![RasterTile2D::new_with_tile_info(
-                        TimeInterval::default(),
-                        TileInformation {
-                            global_geo_transform: TestDefault::test_default(),
-                            global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels,
-                        },
-                        0,
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
-                            .unwrap()
-                            .into(),
-                        CacheHint::no_cache(),
-                    )],
-                    result_descriptor: result_descriptor.clone(),
-                },
-            }
-            .boxed(),
-            MockRasterSource {
-                params: MockRasterSourceParams {
-                    data: vec![RasterTile2D::new_with_tile_info(
-                        TimeInterval::default(),
-                        TileInformation {
-                            global_geo_transform: TestDefault::test_default(),
-                            global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels,
-                        },
-                        0,
-                        Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
-                            .unwrap()
-                            .into(),
-                        CacheHint::no_cache(),
-                    )],
-                    result_descriptor,
-                },
-            }
-            .boxed(),
-        ];
-
-        let statistics = Statistics {
-            params: StatisticsParams {
-                column_names: vec!["A".to_string(), "B".to_string()],
+    async fn it_computes_statistics_for_selected_bands() {
+        let result = raster_statistics(
+            multi_band_raster_source(vec![
+                vec![1, 2, 3, 4, 5, 6],
+                vec![7, 8, 9, 10, 11, 12],
+                vec![13, 14, 15, 16, 17, 18],
+            ]),
+            StatisticsParams {
+                column_names: vec!["band_2".to_string(), "band_0".to_string()],
                 percentiles: vec![],
             },
-            sources: raster_source.into(),
-        };
-
-        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let statistics = statistics
-            .boxed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
-            .await
-            .unwrap();
-
-        let processor = statistics.query_processor().unwrap().json_plain().unwrap();
-
-        let result = processor
-            .plot_query(
-                PlotQueryRectangle::new(
-                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-                    TimeInterval::default(),
-                    PlotSeriesSelection::all(),
-                ),
-                &execution_context.mock_query_context(ChunkByteSize::MIN),
-            )
-            .await
-            .unwrap();
+            world_bbox(),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(
             result,
-            json!({
-                "A": {
-                    "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
+            json!([
+                {
+                    "name": "band_0",
+                    "valueCount": 65_341,
                     "validCount": 6,
                     "min": 1.0,
                     "max": 6.0,
@@ -977,92 +932,65 @@ mod tests {
                     "stddev": 1.707_825_127_659_933,
                     "percentiles": [],
                 },
-                "B": {
-                    "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
+                {
+                    "name": "band_2",
+                    "valueCount": 65_341,
                     "validCount": 6,
-                    "min": 7.0,
-                    "max": 12.0,
-                    "mean": 9.5,
+                    "min": 13.0,
+                    "max": 18.0,
+                    "mean": 15.5,
                     "stddev": 1.707_825_127_659_933,
                     "percentiles": [],
                 },
-            })
+            ])
         );
     }
 
     #[tokio::test]
-    async fn two_rasters_explicit_names_incomplete() {
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
-        let result_descriptor = RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: SpatialReference::epsg_4326().into(),
-            time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
-            spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size_in_pixels.bounding_box(),
-            ),
-            bands: RasterBandDescriptors::new_single_band(),
-        };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
-
-        let raster_source = vec![
-            MockRasterSource {
-                params: MockRasterSourceParams {
-                    data: vec![RasterTile2D::new_with_tile_info(
-                        TimeInterval::default(),
-                        TileInformation {
-                            global_geo_transform: TestDefault::test_default(),
-                            global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels,
-                        },
-                        0,
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
-                            .unwrap()
-                            .into(),
-                        CacheHint::no_cache(),
-                    )],
-                    result_descriptor: result_descriptor.clone(),
-                },
-            }
-            .boxed(),
-            MockRasterSource {
-                params: MockRasterSourceParams {
-                    data: vec![RasterTile2D::new_with_tile_info(
-                        TimeInterval::default(),
-                        TileInformation {
-                            global_geo_transform: TestDefault::test_default(),
-                            global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels,
-                        },
-                        0,
-                        Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
-                            .unwrap()
-                            .into(),
-                        CacheHint::no_cache(),
-                    )],
-                    result_descriptor,
-                },
-            }
-            .boxed(),
-        ];
-
-        let statistics = Statistics {
-            params: StatisticsParams {
-                column_names: vec!["A".to_string()],
+    async fn it_fails_on_unknown_band_name() {
+        let result = raster_statistics(
+            multi_band_raster_source(vec![vec![1, 2, 3, 4, 5, 6]]),
+            StatisticsParams {
+                column_names: vec!["foo".to_string()],
                 percentiles: vec![],
             },
-            sources: raster_source.into(),
-        };
-
-        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let statistics = statistics
-            .boxed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
-            .await;
+            world_bbox(),
+        )
+        .await;
 
         assert!(
-            matches!(statistics, Err(error::Error::InvalidOperatorSpec{reason}) if reason == *"Statistics on raster data must either contain a name/alias for every input ('column_names' parameter) or no names at all.")
+            matches!(result, Err(error::Error::InvalidOperatorSpec{reason}) if reason == *"Band 'foo' does not exist.")
+        );
+    }
+
+    #[tokio::test]
+    async fn it_counts_only_pixels_in_query_rectangle() {
+        // the tile covers x in [0, 2) and y in (-3, 0], the query only the pixels with values 1 and 3
+        let result = raster_statistics(
+            multi_band_raster_source(vec![vec![1, 2, 3, 4, 5, 6]]),
+            StatisticsParams {
+                column_names: vec![],
+                percentiles: vec![],
+            },
+            BoundingBox2D::new((0.2, -1.8).into(), (0.8, -0.2).into()).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            result,
+            json!([
+                {
+                    "name": "band_0",
+                    "valueCount": 2,
+                    "validCount": 2,
+                    "min": 1.0,
+                    "max": 3.0,
+                    "mean": 2.0,
+                    "stddev": 1.0,
+                    "percentiles": [],
+                }
+            ])
         );
     }
 
@@ -1124,7 +1052,7 @@ mod tests {
             .await
             .unwrap();
 
-        let processor = statistics.query_processor().unwrap().json_plain().unwrap();
+        let processor = statistics.query_processor().unwrap().json_vega().unwrap();
 
         let result = processor
             .plot_query(
@@ -1137,20 +1065,13 @@ mod tests {
             )
             .await
             .unwrap();
+        let result = table_rows(&result);
 
         assert_eq!(
             result,
-            json!({
-                "foo": {
-                    "valueCount": 7,
-                    "validCount": 3,
-                    "min": 1.0,
-                    "max": 6.0,
-                    "mean": 3.333_333_333_333_333,
-                    "stddev": 2.054_804_667_656_325_6,
-                    "percentiles": [],
-                },
-                "bar": {
+            json!([
+                {
+                    "name": "bar",
                     "valueCount": 7,
                     "validCount": 3,
                     "min": 1.0,
@@ -1159,7 +1080,17 @@ mod tests {
                     "stddev": 1.699_673_171_197_595,
                     "percentiles": [],
                 },
-            })
+                {
+                    "name": "foo",
+                    "valueCount": 7,
+                    "validCount": 3,
+                    "min": 1.0,
+                    "max": 6.0,
+                    "mean": 3.333_333_333_333_333,
+                    "stddev": 2.054_804_667_656_325_6,
+                    "percentiles": [],
+                },
+            ])
         );
     }
 
@@ -1221,7 +1152,7 @@ mod tests {
             .await
             .unwrap();
 
-        let processor = statistics.query_processor().unwrap().json_plain().unwrap();
+        let processor = statistics.query_processor().unwrap().json_vega().unwrap();
 
         let result = processor
             .plot_query(
@@ -1234,11 +1165,13 @@ mod tests {
             )
             .await
             .unwrap();
+        let result = table_rows(&result);
 
         assert_eq!(
             result.to_string(),
-            json!({
-                "foo": {
+            json!([
+                {
+                    "name": "foo",
                     "valueCount": 7,
                     "validCount": 3,
                     "min": 1.0,
@@ -1247,7 +1180,7 @@ mod tests {
                     "stddev": 2.054_804_667_656_325_6,
                     "percentiles": [],
                 },
-            })
+            ])
             .to_string()
         );
     }
@@ -1310,7 +1243,7 @@ mod tests {
             .await
             .unwrap();
 
-        let processor = statistics.query_processor().unwrap().json_plain().unwrap();
+        let processor = statistics.query_processor().unwrap().json_vega().unwrap();
 
         let result = processor
             .plot_query(
@@ -1323,11 +1256,13 @@ mod tests {
             )
             .await
             .unwrap();
+        let result = table_rows(&result);
 
         assert_eq!(
             result,
-            json!({
-                "foo": {
+            json!([
+                {
+                    "name": "foo",
                     "valueCount": 7,
                     "validCount": 3,
                     "min": 1.0,
@@ -1336,7 +1271,8 @@ mod tests {
                     "stddev": 2.054_804_667_656_325_6,
                     "percentiles": [],
                 },
-                "bar": {
+                {
+                    "name": "bar",
                     "valueCount": 7,
                     "validCount": 3,
                     "min": 1.0,
@@ -1345,7 +1281,7 @@ mod tests {
                     "stddev": 1.699_673_171_197_595,
                     "percentiles": [],
                 },
-            })
+            ])
         );
     }
 
@@ -1392,7 +1328,7 @@ mod tests {
                 column_names: vec![],
                 percentiles: vec![NotNan::new(0.25).unwrap(), NotNan::new(0.75).unwrap()],
             },
-            sources: vec![raster_source].into(),
+            sources: raster_source.into(),
         };
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
@@ -1403,7 +1339,7 @@ mod tests {
             .await
             .unwrap();
 
-        let processor = statistics.query_processor().unwrap().json_plain().unwrap();
+        let processor = statistics.query_processor().unwrap().json_vega().unwrap();
 
         let result = processor
             .plot_query(
@@ -1416,12 +1352,14 @@ mod tests {
             )
             .await
             .unwrap();
+        let result = table_rows(&result);
 
         assert_eq!(
             result.to_string(),
-            json!({
-                "Raster-1": {
-                    "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
+            json!([
+                {
+                    "name": "band",
+                    "valueCount": 65_341, // 361*181: the query bounds include the pixels at the right and lower edge
                     "validCount": 6,
                     "min": 1.0,
                     "max": 6.0,
@@ -1432,7 +1370,7 @@ mod tests {
                         {"percentile": 0.75, "value": 3.0},
                     ],
                 }
-            })
+            ])
             .to_string()
         );
     }
@@ -1495,7 +1433,7 @@ mod tests {
             .await
             .unwrap();
 
-        let processor = statistics.query_processor().unwrap().json_plain().unwrap();
+        let processor = statistics.query_processor().unwrap().json_vega().unwrap();
 
         let result = processor
             .plot_query(
@@ -1508,11 +1446,13 @@ mod tests {
             )
             .await
             .unwrap();
+        let result = table_rows(&result);
 
         assert_eq!(
             result.to_string(),
-            json!({
-                "foo": {
+            json!([
+                {
+                    "name": "foo",
                     "valueCount": 7,
                     "validCount": 3,
                     "min": 1.0,
@@ -1524,7 +1464,7 @@ mod tests {
                         {"percentile": 0.75, "value": 6.0},
                     ],
                 },
-            })
+            ])
             .to_string()
         );
     }

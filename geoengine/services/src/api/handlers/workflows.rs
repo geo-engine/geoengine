@@ -764,9 +764,9 @@ mod tests {
             datatypes::Coordinate2D,
             processing_graphs::{
                 GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
-                MultipleRasterOrSingleVectorOperator, PlotOperator, RasterOperator,
-                SpatialBoundsDerive, Statistics, StatisticsParameters, TypedOperator,
-                VectorOperator,
+                PlotOperator, RasterOperator, SingleRasterOrVectorOperator,
+                SingleRasterOrVectorSource, SpatialBoundsDerive, Statistics, StatisticsParameters,
+                TypedOperator, VectorOperator,
             },
             responses::ErrorResponse,
         },
@@ -1255,8 +1255,16 @@ mod tests {
                     column_names: vec![],
                     percentiles: vec![],
                 },
-                sources: crate::api::model::processing_graphs::MultipleRasterOrSingleVectorSource {
-                    source: MultipleRasterOrSingleVectorOperator::Raster(vec![]),
+                sources: SingleRasterOrVectorSource {
+                    source: SingleRasterOrVectorOperator::Vector(VectorOperator::MockPointSource(
+                        MockPointSource {
+                            r#type: Default::default(),
+                            params: MockPointSourceParameters {
+                                points: vec![Coordinate2D { x: 1.0, y: 2.0 }],
+                                spatial_bounds: SpatialBoundsDerive::Derive(Default::default()),
+                            },
+                        },
+                    )),
                 },
             }))
             .try_into()
@@ -1278,9 +1286,12 @@ mod tests {
             serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
             serde_json::json!({
                 "type": "plot",
-                "spatialReference": "",
+                "spatialReference": "EPSG:4326",
                 "time": null,
-                "bbox": null
+                "bbox": {
+                    "lowerLeftCoordinate": {"x": 1.0, "y": 2.0},
+                    "upperRightCoordinate": {"x": 1.0, "y": 2.0}
+                }
             })
         );
     }

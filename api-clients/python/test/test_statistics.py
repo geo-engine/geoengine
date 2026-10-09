@@ -43,7 +43,7 @@ class TestStatistics(unittest.TestCase):
                     percentiles = [
                         1.337
                         ], ),
-                sources = geoengine_api_client.models.multiple_raster_or_single_vector_source.MultipleRasterOrSingleVectorSource(
+                sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
                     source = null, )
             )
         else:
@@ -56,7 +56,7 @@ class TestStatistics(unittest.TestCase):
                     percentiles = [
                         1.337
                         ], ),
-                sources = geoengine_api_client.models.multiple_raster_or_single_vector_source.MultipleRasterOrSingleVectorSource(
+                sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
                     source = null, ),
         )
         """

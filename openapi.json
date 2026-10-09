@@ -3368,17 +3368,27 @@
                   "$ref": "#/components/schemas/WrappedPlotOutput"
                 },
                 "example": {
-                  "outputFormat": "JsonPlain",
+                  "outputFormat": "JsonVega",
                   "plotType": "Statistics",
                   "data": {
-                    "a": {
-                      "max": 2.0,
-                      "mean": 1.5,
-                      "min": 1.0,
-                      "stddev": 0.5,
-                      "validCount": 2,
-                      "valueCount": 2
-                    }
+                    "vegaSpec": {
+                      "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+                      "data": {
+                        "values": [
+                          {
+                            "name": "a",
+                            "valueCount": 2,
+                            "validCount": 2,
+                            "min": 1.0,
+                            "max": 2.0,
+                            "mean": 1.5,
+                            "stddev": 0.5,
+                            "percentiles": []
+                          }
+                        ]
+                      }
+                    },
+                    "metadata": null
                   }
                 }
               }
@@ -6710,7 +6720,7 @@
       "BoxPlot": {
         "type": "object",
         "title": "BoxPlot",
-        "description": "The `BoxPlot` is a _plot operator_ that computes a box plot over\n\n- a selection of numerical columns of a single vector dataset, or\n- multiple raster datasets.\n\nThereby, the operator considers all data in the given query rectangle.\n\nThe boxes of the plot span the 1st and 3rd quartile and highlight the median.\nThe whiskers indicate the minimum and maximum values of the corresponding attribute or raster.\n\n## Errors\n\nThe operator returns an error in the following cases.\n\n- Vector data: The `attribute` for one of the given `columnNames` is not numeric.\n- Vector data: The `attribute` for one of the given `columnNames` does not exist.\n- Raster data: The length of the `columnNames` parameter does not match the number of input rasters.\n\n## Notes\n\nIf your dataset contains `infinite` or `NAN` values, they are ignored for the computation.\nMoreover, if your dataset contains more than `10.000`values (which is likely for rasters),\nthe median and quartiles are estimated using the P^2 algorithm described in:\n\nR. Jain and I. Chlamtac, The P^2 algorithm for dynamic calculation of quantiles and\nhistograms without storing observations, Communications of the ACM,\nVolume 28 (October), Number 10, 1985, p. 1076-1085.\n<https://www.cse.wustl.edu/~jain/papers/ftp/psqr.pdf>",
+        "description": "The `BoxPlot` is a _plot operator_ that computes a box plot over\n\n- a selection of numerical columns of a single vector dataset, or\n- a selection of bands of a single raster dataset.\n\nThereby, the operator considers all data in the given query rectangle.\nFor raster data, these are the pixels that intersect the query rectangle.\n\nThe boxes of the plot span the 1st and 3rd quartile and highlight the median.\nThe whiskers indicate the minimum and maximum values of the corresponding attribute or band.\n\n## Errors\n\nThe operator returns an error in the following cases.\n\n- Vector data: The `attribute` for one of the given `columnNames` is not numeric.\n- Vector data: The `attribute` for one of the given `columnNames` does not exist.\n- Raster data: The band for one of the given `columnNames` does not exist.\n- Raster data: More than 8 bands are selected.\n\n## Notes\n\nIf your dataset contains `infinite` or `NAN` values, they are ignored for the computation.\nMoreover, if your dataset contains more than `10.000`values (which is likely for rasters),\nthe median and quartiles are estimated using the P^2 algorithm described in:\n\nR. Jain and I. Chlamtac, The P^2 algorithm for dynamic calculation of quantiles and\nhistograms without storing observations, Communications of the ACM,\nVolume 28 (October), Number 10, 1985, p. 1076-1085.\n<https://www.cse.wustl.edu/~jain/papers/ftp/psqr.pdf>",
         "required": [
           "type",
           "params",
@@ -6727,7 +6737,7 @@
             "$ref": "#/components/schemas/BoxPlotParameters"
           },
           "sources": {
-            "$ref": "#/components/schemas/MultipleRasterOrSingleVectorSource"
+            "$ref": "#/components/schemas/SingleRasterOrVectorSource"
           }
         },
         "examples": [
@@ -6752,32 +6762,24 @@
             "type": "BoxPlot",
             "params": {
               "columnNames": [
-                "A",
-                "B"
+                "red",
+                "green"
               ]
             },
             "sources": {
-              "source": [
-                {
-                  "type": "GdalSource",
-                  "params": {
-                    "data": "ndvi"
-                  }
-                },
-                {
-                  "type": "GdalSource",
-                  "params": {
-                    "data": "temperature"
-                  }
+              "source": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "sentinel2"
                 }
-              ]
+              }
             }
           }
         ]
       },
       "BoxPlotParameters": {
         "type": "object",
-        "description": "The parameter spec for [`BoxPlot`].\n\n## Vector Data\n\nIn the case of vector data, the operator generates one box for each of the selected numerical attributes.\nThe operator returns an error if one of the selected attributes is not numeric.\n\n## Raster Data\n\nFor raster data, the operator generates one box for each input raster.\n",
+        "description": "The parameter spec for [`BoxPlot`].\n\n## Vector Data\n\nIn the case of vector data, the operator generates one box for each of the selected numerical attributes.\nThe operator returns an error if one of the selected attributes is not numeric.\n\n## Raster Data\n\nFor raster data, the operator generates one box for each of the selected bands.\n",
         "properties": {
           "columnNames": {
             "type": "array",
@@ -6790,7 +6792,7 @@
                 ]
               ]
             },
-            "description": "## Vector Data\nThe names of the attributes to generate boxes for.\n\n## Raster Data\n_Optional_: An alias for each input source.\nThe operator will automatically name the boxes `Raster-1`, `Raster-2`, ... if this parameter is empty.\nIf aliases are given, the number of aliases must match the number of input rasters.\nOtherwise an error is returned."
+            "description": "## Vector Data\nThe names of the attributes to generate boxes for.\n\n## Raster Data\n_Optional_: The names of the bands to generate boxes for.\nThe operator generates boxes for all bands if this parameter is empty."
           }
         }
       },
@@ -10695,32 +10697,6 @@
           }
         }
       },
-      "MultipleRasterOrSingleVectorOperator": {
-        "oneOf": [
-          {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RasterOperator"
-            }
-          },
-          {
-            "$ref": "#/components/schemas/VectorOperator"
-          }
-        ],
-        "description": "It is either a set of `RasterOperator` or a single `VectorOperator`"
-      },
-      "MultipleRasterOrSingleVectorSource": {
-        "type": "object",
-        "description": "Either one or more raster operators or a single vector operator as source for this operator.",
-        "required": [
-          "source"
-        ],
-        "properties": {
-          "source": {
-            "$ref": "#/components/schemas/MultipleRasterOrSingleVectorOperator"
-          }
-        }
-      },
       "MultipleRasterSources": {
         "type": "object",
         "description": "One or more raster operators as sources for this operator.",
@@ -13747,7 +13723,7 @@
             "$ref": "#/components/schemas/VectorOperator"
           }
         ],
-        "description": "It is either a set of `RasterOperator` or a single `VectorOperator`"
+        "description": "It is either a single `RasterOperator` or a single `VectorOperator`"
       },
       "SingleRasterOrVectorSource": {
         "type": "object",
@@ -14402,7 +14378,7 @@
       "Statistics": {
         "type": "object",
         "title": "Statistics",
-        "description": "The `Statistics` operator is a _plot operator_ that computes count statistics over\n\n- a selection of numerical columns of a single vector dataset, or\n- multiple raster datasets.\n\nThe output is a JSON description.\n\nFor instance, you want to get an overview of a raster data source.\nThen, you can use this operator to get basic count statistics.\n\n## Vector Data\n\nIn the case of vector data, the operator generates one statistic for each of the selected numerical attributes.\nThe operator returns an error if one of the selected attributes is not numeric.\n\n## Raster Data\n\nFor raster data, the operator generates one statistic for each input raster.\n\n## Errors\n\nThe operator returns an error in the following cases.\n\n- Vector data: The `attribute` for one of the given `columnNames` is not numeric.\n- Vector data: The `attribute` for one of the given `columnNames` does not exist.\n- Raster data: The length of the `columnNames` parameter does not match the number of input rasters.\n\n### Example Output\n\n```json\n{\n  \"A\": {\n    \"valueCount\": 6,\n    \"validCount\": 6,\n    \"min\": 1.0,\n    \"max\": 6.0,\n    \"mean\": 3.5,\n    \"stddev\": 1.707,\n    \"percentiles\": [\n      {\n        \"percentile\": 0.25,\n        \"value\": 2.0\n      },\n      {\n        \"percentile\": 0.5,\n        \"value\": 3.5\n      },\n      {\n        \"percentile\": 0.75,\n        \"value\": 5.0\n      }\n    ]\n  }\n}\n```\n",
+        "description": "The `Statistics` operator is a _plot operator_ that computes count statistics over\n\n- a selection of numerical columns of a single vector dataset, or\n- a selection of bands of a single raster dataset.\n\nThe output is a Vega-Lite table with one row per attribute or band.\nThe raw statistics of each row are in the `data.values` of the Vega-Lite spec in `vegaSpec`,\nwith the attribute or band in `name`.\n\nFor instance, you want to get an overview of a raster data source.\nThen, you can use this operator to get basic count statistics.\n\n## Vector Data\n\nIn the case of vector data, the operator generates one statistic for each of the selected numerical attributes.\nThe operator returns an error if one of the selected attributes is not numeric.\n\n## Raster Data\n\nFor raster data, the operator generates one statistic for each of the selected bands.\nIt only considers the pixels that intersect the query rectangle.\n\n## Errors\n\nThe operator returns an error in the following cases.\n\n- Vector data: The `attribute` for one of the given `columnNames` is not numeric.\n- Vector data: The `attribute` for one of the given `columnNames` does not exist.\n- Raster data: The band for one of the given `columnNames` does not exist.\n\n### Example Output\n\nThe `data.values` of the Vega-Lite spec:\n\n```json\n[\n  {\n    \"name\": \"ndvi\",\n    \"valueCount\": 6,\n    \"validCount\": 6,\n    \"min\": 1.0,\n    \"max\": 6.0,\n    \"mean\": 3.5,\n    \"stddev\": 1.707,\n    \"percentiles\": [\n      {\n        \"percentile\": 0.25,\n        \"value\": 2.0\n      },\n      {\n        \"percentile\": 0.5,\n        \"value\": 3.5\n      },\n      {\n        \"percentile\": 0.75,\n        \"value\": 5.0\n      }\n    ]\n  }\n]\n```\n",
         "required": [
           "type",
           "params",
@@ -14419,7 +14395,7 @@
             "$ref": "#/components/schemas/StatisticsParameters"
           },
           "sources": {
-            "$ref": "#/components/schemas/MultipleRasterOrSingleVectorSource"
+            "$ref": "#/components/schemas/SingleRasterOrVectorSource"
           }
         },
         "examples": [
@@ -14427,7 +14403,7 @@
             "type": "Statistics",
             "params": {
               "columnNames": [
-                "A"
+                "ndvi"
               ],
               "percentiles": [
                 0.25,
@@ -14436,14 +14412,12 @@
               ]
             },
             "sources": {
-              "source": [
-                {
-                  "type": "GdalSource",
-                  "params": {
-                    "data": "ndvi"
-                  }
+              "source": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "ndvi"
                 }
-              ]
+              }
             }
           }
         ]
@@ -14463,7 +14437,7 @@
                 ]
               ]
             },
-            "description": "# Vector data\nThe names of the attributes to generate statistics for.\n\n# Raster data\n_Optional_: An alias for each input source.\nThe operator will automatically name the rasters `Raster-1`, `Raster-2`, … if this parameter is empty.\nIf aliases are given, the number of aliases must match the number of input rasters.\nOtherwise an error is returned."
+            "description": "# Vector data\nThe names of the attributes to generate statistics for.\n\n# Raster data\n_Optional_: The names of the bands to generate statistics for.\nThe operator generates statistics for all bands if this parameter is empty."
           },
           "percentiles": {
             "type": "array",

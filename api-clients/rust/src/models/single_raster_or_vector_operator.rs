@@ -10,8 +10,8 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// SingleRasterOrVectorOperator : It is either a set of `RasterOperator` or a single `VectorOperator`
-/// It is either a set of `RasterOperator` or a single `VectorOperator`
+/// SingleRasterOrVectorOperator : It is either a single `RasterOperator` or a single `VectorOperator`
+/// It is either a single `RasterOperator` or a single `VectorOperator`
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum SingleRasterOrVectorOperator {

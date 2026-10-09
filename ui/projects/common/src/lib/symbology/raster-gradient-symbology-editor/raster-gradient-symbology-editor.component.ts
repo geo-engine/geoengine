@@ -238,12 +238,14 @@ export class RasterGradientSymbologyEditorComponent {
         }
 
         this.histogramCreated = true;
+        this.histogramLoading.next(true);
         this.createHistogramWorkflowId()
             .then((histogramWorkflowId) => this.createHistogram(histogramWorkflowId, histogramParams))
             .then((histogramData) => {
                 this.histogramData.next(histogramData);
             })
-            .catch((error) => console.error('Error:', error));
+            .catch((error) => console.error('Error:', error))
+            .finally(() => this.histogramLoading.next(false));
     }
 
     createColorTable(): void {
@@ -281,10 +283,7 @@ export class RasterGradientSymbologyEditorComponent {
                 histogramParams.resolution,
                 histogramParams.spatialReference,
             )
-            .then((plotData) => {
-                this.histogramLoading.next(false);
-                return plotData.data as VegaChartData;
-            });
+            .then((plotData) => plotData.data as VegaChartData);
     }
 
     private createHistogramWorkflowId(): Promise<UUID> {

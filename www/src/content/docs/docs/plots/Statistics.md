@@ -5,9 +5,11 @@ title: Statistics
 The `Statistics` operator is a _plot operator_ that computes count statistics over
 
 - a selection of numerical columns of a single vector dataset, or
-- multiple raster datasets.
+- a selection of bands of a single raster dataset.
 
-The output is a JSON description.
+The output is a Vega-Lite table with one row per attribute or band.
+The raw statistics of each row are in the `data.values` of the Vega-Lite spec in `vegaSpec`,
+with the attribute or band in `name`.
 
 For instance, you want to get an overview of a raster data source.
 Then, you can use this operator to get basic count statistics.
@@ -19,7 +21,8 @@ The operator returns an error if one of the selected attributes is not numeric.
 
 ## Raster Data
 
-For raster data, the operator generates one statistic for each input raster.
+For raster data, the operator generates one statistic for each of the selected bands.
+It only considers the pixels that intersect the query rectangle.
 
 ## Errors
 
@@ -27,13 +30,16 @@ The operator returns an error in the following cases.
 
 - Vector data: The `attribute` for one of the given `columnNames` is not numeric.
 - Vector data: The `attribute` for one of the given `columnNames` does not exist.
-- Raster data: The length of the `columnNames` parameter does not match the number of input rasters.
+- Raster data: The band for one of the given `columnNames` does not exist.
 
 ### Example Output
 
+The `data.values` of the Vega-Lite spec:
+
 ```json
-{
-    "A": {
+[
+    {
+        "name": "ndvi",
         "valueCount": 6,
         "validCount": 6,
         "min": 1.0,
@@ -55,21 +61,21 @@ The operator returns an error in the following cases.
             }
         ]
     }
-}
+]
 ```
 
 ## Parameters
 
-| Name        | Type  | Description                                                                                                                                                                                                                                                                                                                                                                      | Examples               |
-| ----------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| columnNames | array | # Vector data<br>The names of the attributes to generate statistics for.<br><br># Raster data<br>_Optional_: An alias for each input source.<br>The operator will automatically name the rasters `Raster-1`, `Raster-2`, … if this parameter is empty.<br>If aliases are given, the number of aliases must match the number of input rasters.<br>Otherwise an error is returned. | `["x","y"]`<br>`["A"]` |
-| percentiles | array | The percentiles to compute for each attribute.                                                                                                                                                                                                                                                                                                                                   | `[0.25,0.5,0.75]`      |
+| Name        | Type  | Description                                                                                                                                                                                                                                    | Examples                  |
+| ----------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| columnNames | array | # Vector data<br>The names of the attributes to generate statistics for.<br><br># Raster data<br>_Optional_: The names of the bands to generate statistics for.<br>The operator generates statistics for all bands if this parameter is empty. | `["x","y"]`<br>`["ndvi"]` |
+| percentiles | array | The percentiles to compute for each attribute.                                                                                                                                                                                                 | `[0.25,0.5,0.75]`         |
 
 ## Sources
 
-| Name   | Type                                 | Description                                                         |
-| ------ | ------------------------------------ | ------------------------------------------------------------------- |
-| source | MultipleRasterOrSingleVectorOperator | It is either a set of `RasterOperator` or a single `VectorOperator` |
+| Name   | Type                         | Description                                                         |
+| ------ | ---------------------------- | ------------------------------------------------------------------- |
+| source | SingleRasterOrVectorOperator | It is either a single `RasterOperator` or a single `VectorOperator` |
 
 ## Examples
 
@@ -77,18 +83,16 @@ The operator returns an error in the following cases.
 {
     "type": "Statistics",
     "params": {
-        "columnNames": ["A"],
+        "columnNames": ["ndvi"],
         "percentiles": [0.25, 0.5, 0.75]
     },
     "sources": {
-        "source": [
-            {
-                "type": "GdalSource",
-                "params": {
-                    "data": "ndvi"
-                }
+        "source": {
+            "type": "GdalSource",
+            "params": {
+                "data": "ndvi"
             }
-        ]
+        }
     }
 }
 ```

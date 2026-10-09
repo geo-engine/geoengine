@@ -12,13 +12,6 @@
  */
 
 import { mapValues } from '../runtime';
-import type { MultipleRasterOrSingleVectorSource } from './MultipleRasterOrSingleVectorSource';
-import {
-    MultipleRasterOrSingleVectorSourceFromJSON,
-    MultipleRasterOrSingleVectorSourceFromJSONTyped,
-    MultipleRasterOrSingleVectorSourceToJSON,
-    MultipleRasterOrSingleVectorSourceToJSONTyped,
-} from './MultipleRasterOrSingleVectorSource';
 import type { BoxPlotParameters } from './BoxPlotParameters';
 import {
     BoxPlotParametersFromJSON,
@@ -26,17 +19,25 @@ import {
     BoxPlotParametersToJSON,
     BoxPlotParametersToJSONTyped,
 } from './BoxPlotParameters';
+import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
+import {
+    SingleRasterOrVectorSourceFromJSON,
+    SingleRasterOrVectorSourceFromJSONTyped,
+    SingleRasterOrVectorSourceToJSON,
+    SingleRasterOrVectorSourceToJSONTyped,
+} from './SingleRasterOrVectorSource';
 
 /**
  * The `BoxPlot` is a _plot operator_ that computes a box plot over
  * 
  * - a selection of numerical columns of a single vector dataset, or
- * - multiple raster datasets.
+ * - a selection of bands of a single raster dataset.
  * 
  * Thereby, the operator considers all data in the given query rectangle.
+ * For raster data, these are the pixels that intersect the query rectangle.
  * 
  * The boxes of the plot span the 1st and 3rd quartile and highlight the median.
- * The whiskers indicate the minimum and maximum values of the corresponding attribute or raster.
+ * The whiskers indicate the minimum and maximum values of the corresponding attribute or band.
  * 
  * ## Errors
  * 
@@ -44,7 +45,8 @@ import {
  * 
  * - Vector data: The `attribute` for one of the given `columnNames` is not numeric.
  * - Vector data: The `attribute` for one of the given `columnNames` does not exist.
- * - Raster data: The length of the `columnNames` parameter does not match the number of input rasters.
+ * - Raster data: The band for one of the given `columnNames` does not exist.
+ * - Raster data: More than 8 bands are selected.
  * 
  * ## Notes
  * 
@@ -74,10 +76,10 @@ export interface BoxPlot {
     params: BoxPlotParameters;
     /**
      * 
-     * @type {MultipleRasterOrSingleVectorSource}
+     * @type {SingleRasterOrVectorSource}
      * @memberof BoxPlot
      */
-    sources: MultipleRasterOrSingleVectorSource;
+    sources: SingleRasterOrVectorSource;
 }
 
 
@@ -112,7 +114,7 @@ export function BoxPlotFromJSONTyped(json: any, ignoreDiscriminator: boolean): B
         
         'type': json['type'],
         'params': BoxPlotParametersFromJSON(json['params']),
-        'sources': MultipleRasterOrSingleVectorSourceFromJSON(json['sources']),
+        'sources': SingleRasterOrVectorSourceFromJSON(json['sources']),
     };
 }
 
@@ -129,7 +131,7 @@ export function BoxPlotToJSONTyped(value?: BoxPlot | null, ignoreDiscriminator: 
         
         'type': value['type'],
         'params': BoxPlotParametersToJSON(value['params']),
-        'sources': MultipleRasterOrSingleVectorSourceToJSON(value['sources']),
+        'sources': SingleRasterOrVectorSourceToJSON(value['sources']),
     };
 }
 

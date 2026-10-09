@@ -33,7 +33,7 @@ It ignores missing or no-data values and values that are not covered by the [`Me
 
 | Name   | Type                         | Description                                                         |
 | ------ | ---------------------------- | ------------------------------------------------------------------- |
-| source | SingleRasterOrVectorOperator | It is either a set of `RasterOperator` or a single `VectorOperator` |
+| source | SingleRasterOrVectorOperator | It is either a single `RasterOperator` or a single `VectorOperator` |
 
 ## Examples
 

@@ -18,7 +18,7 @@
  *
  * ## Raster Data
  *
- * For raster data, the operator generates one box for each input raster.
+ * For raster data, the operator generates one box for each of the selected bands.
  *
  * @export
  * @interface BoxPlotParameters
@@ -29,10 +29,8 @@ export interface BoxPlotParameters {
      * The names of the attributes to generate boxes for.
      *
      * ## Raster Data
-     * _Optional_: An alias for each input source.
-     * The operator will automatically name the boxes `Raster-1`, `Raster-2`, ... if this parameter is empty.
-     * If aliases are given, the number of aliases must match the number of input rasters.
-     * Otherwise an error is returned.
+     * _Optional_: The names of the bands to generate boxes for.
+     * The operator generates boxes for all bands if this parameter is empty.
      * @type {Array<string>}
      * @memberof BoxPlotParameters
      */

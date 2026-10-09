@@ -183,8 +183,6 @@ export * from './MultiBandRasterColorizer';
 export * from './MultiLineString';
 export * from './MultiPoint';
 export * from './MultiPolygon';
-export * from './MultipleRasterOrSingleVectorOperator';
-export * from './MultipleRasterOrSingleVectorSource';
 export * from './MultipleRasterSources';
 export * from './Names';
 export * from './NeighborhoodAggregate';

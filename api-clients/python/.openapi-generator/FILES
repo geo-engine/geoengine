@@ -190,8 +190,6 @@ docs/MultiBandRasterColorizer.md
 docs/MultiLineString.md
 docs/MultiPoint.md
 docs/MultiPolygon.md
-docs/MultipleRasterOrSingleVectorOperator.md
-docs/MultipleRasterOrSingleVectorSource.md
 docs/MultipleRasterSources.md
 docs/Names.md
 docs/NeighborhoodAggregate.md
@@ -660,8 +658,6 @@ geoengine_api_client/models/multi_band_raster_colorizer.py
 geoengine_api_client/models/multi_line_string.py
 geoengine_api_client/models/multi_point.py
 geoengine_api_client/models/multi_polygon.py
-geoengine_api_client/models/multiple_raster_or_single_vector_operator.py
-geoengine_api_client/models/multiple_raster_or_single_vector_source.py
 geoengine_api_client/models/multiple_raster_sources.py
 geoengine_api_client/models/names.py
 geoengine_api_client/models/neighborhood_aggregate.py
@@ -1106,8 +1102,6 @@ test/test_multi_band_raster_colorizer.py
 test/test_multi_line_string.py
 test/test_multi_point.py
 test/test_multi_polygon.py
-test/test_multiple_raster_or_single_vector_operator.py
-test/test_multiple_raster_or_single_vector_source.py
 test/test_multiple_raster_sources.py
 test/test_names.py
 test/test_neighborhood_aggregate.py

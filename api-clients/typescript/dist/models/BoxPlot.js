@@ -18,8 +18,8 @@ exports.BoxPlotFromJSON = BoxPlotFromJSON;
 exports.BoxPlotFromJSONTyped = BoxPlotFromJSONTyped;
 exports.BoxPlotToJSON = BoxPlotToJSON;
 exports.BoxPlotToJSONTyped = BoxPlotToJSONTyped;
-const MultipleRasterOrSingleVectorSource_1 = require("./MultipleRasterOrSingleVectorSource");
 const BoxPlotParameters_1 = require("./BoxPlotParameters");
+const SingleRasterOrVectorSource_1 = require("./SingleRasterOrVectorSource");
 /**
  * @export
  */
@@ -48,7 +48,7 @@ function BoxPlotFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'type': json['type'],
         'params': (0, BoxPlotParameters_1.BoxPlotParametersFromJSON)(json['params']),
-        'sources': (0, MultipleRasterOrSingleVectorSource_1.MultipleRasterOrSingleVectorSourceFromJSON)(json['sources']),
+        'sources': (0, SingleRasterOrVectorSource_1.SingleRasterOrVectorSourceFromJSON)(json['sources']),
     };
 }
 function BoxPlotToJSON(json) {
@@ -61,6 +61,6 @@ function BoxPlotToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'type': value['type'],
         'params': (0, BoxPlotParameters_1.BoxPlotParametersToJSON)(value['params']),
-        'sources': (0, MultipleRasterOrSingleVectorSource_1.MultipleRasterOrSingleVectorSourceToJSON)(value['sources']),
+        'sources': (0, SingleRasterOrVectorSource_1.SingleRasterOrVectorSourceToJSON)(value['sources']),
     };
 }

@@ -6,6 +6,7 @@ mod histogram2d;
 mod multi_line_plot;
 mod pie_chart;
 mod scatter_plot;
+mod table;
 
 pub use area_line_plot::AreaLineChart;
 pub use bar_chart::BarChart;
@@ -15,6 +16,7 @@ pub use histogram2d::{Histogram2D, HistogramDimension};
 pub use multi_line_plot::{DataPoint, MultiLineChart};
 pub use pie_chart::PieChart;
 pub use scatter_plot::ScatterPlot;
+pub use table::{Table, TableColumn};
 
 use crate::util::Result;
 use serde::{Deserialize, Serialize};
@@ -33,25 +35,12 @@ pub trait Plot {
     // fn to_png(&self, width_px: u16, height_px: u16) -> Vec<u8>;
 }
 
-#[derive(Debug, Clone, Deserialize, Eq, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlotData {
-    pub vega_string: String,
+    /// The Vega-Lite spec of the plot
+    pub vega_spec: serde_json::Value,
     pub metadata: PlotMetaData,
-}
-
-impl PartialEq for PlotData {
-    fn eq(&self, other: &Self) -> bool {
-        let vega_equals = match (
-            serde_json::from_str::<serde_json::Value>(&self.vega_string),
-            serde_json::from_str::<serde_json::Value>(&other.vega_string),
-        ) {
-            (Ok(v1), Ok(v2)) => v1 == v2, // if the vega_string is valid JSON, compare the JSON values to avoid formatting differences
-            _ => self.vega_string == other.vega_string,
-        };
-
-        vega_equals && self.metadata == other.metadata
-    }
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize, Default)]

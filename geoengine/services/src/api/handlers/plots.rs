@@ -74,17 +74,25 @@ pub(crate) struct GetPlot {
     responses(
         (status = 200, description = "OK", body = WrappedPlotOutput,
             example = json!({
-                "outputFormat": "JsonPlain",
+                "outputFormat": "JsonVega",
                 "plotType": "Statistics",
                 "data": {
-                    "a": {
-                        "max": 2.0,
-                        "mean": 1.5,
-                        "min": 1.0,
-                        "stddev": 0.5,
-                        "validCount": 2,
-                        "valueCount": 2
-                    }
+                    "vegaSpec": {
+                        "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+                        "data": {
+                            "values": [{
+                                "name": "a",
+                                "valueCount": 2,
+                                "validCount": 2,
+                                "min": 1.0,
+                                "max": 2.0,
+                                "mean": 1.5,
+                                "stddev": 0.5,
+                                "percentiles": []
+                            }]
+                        }
+                    },
+                    "metadata": null
                 }
            })
         )
@@ -221,10 +229,10 @@ pub struct WrappedPlotOutput {
 mod tests {
     use super::*;
     use crate::{
+        api::model::datatypes::NamedData,
         api::model::processing_graphs::{
             GdalSource, GdalSourceParameters, Histogram, HistogramBounds, HistogramBoundsValues,
-            HistogramBuckets, HistogramBucketsNumber, HistogramParameters,
-            MultipleRasterOrSingleVectorOperator, MultipleRasterOrSingleVectorSource, PlotOperator,
+            HistogramBuckets, HistogramBucketsNumber, HistogramParameters, PlotOperator,
             RasterOperator, SingleRasterOrVectorOperator, SingleRasterOrVectorSource, Statistics,
             StatisticsParameters, TypedOperator,
         },
@@ -268,16 +276,16 @@ mod tests {
                     column_names: vec![],
                     percentiles: vec![],
                 },
-                sources: MultipleRasterOrSingleVectorSource {
-                    source: MultipleRasterOrSingleVectorOperator::Raster(vec![
-                        RasterOperator::GdalSource(GdalSource {
+                sources: SingleRasterOrVectorSource {
+                    source: SingleRasterOrVectorOperator::Raster(RasterOperator::GdalSource(
+                        GdalSource {
                             r#type: Default::default(),
                             params: GdalSourceParameters {
                                 data: dataset_name.into(),
                                 overview_level: None,
                             },
-                        }),
-                    ]),
+                        },
+                    )),
                 },
             }))
             .try_into()
@@ -314,23 +322,25 @@ mod tests {
             body = read_body_string(res).await
         );
 
+        let response = read_body_json(res).await;
+
+        assert_eq!(response["outputFormat"], "JsonVega");
+        assert_eq!(response["plotType"], "Statistics");
+
+        let vega_json: Value = response["data"]["vegaSpec"].clone();
+
         assert_eq!(
-            read_body_json(res).await,
-            json!({
-                "outputFormat": "JsonPlain",
-                "plotType": "Statistics",
-                "data": {
-                    "Raster-1": {
-                        "valueCount": 144,
-                        "validCount": 144,
-                        "min": 29.0,
-                        "max": 255.0,
-                        "mean": 226.333_333_333_333_3,
-                        "stddev": 71.463_277_282_811_49,
-                        "percentiles": []
-                    }
-                }
-            })
+            vega_json["data"]["values"],
+            json!([{
+                "name": "ndvi",
+                "valueCount": 121, // 11*11 pixels of the query rectangle (including its edges)
+                "validCount": 121,
+                "min": 29.0,
+                "max": 255.0,
+                "mean": 224.280_991_735_537_24,
+                "stddev": 73.572_163_162_468_53,
+                "percentiles": []
+            }])
         );
     }
 
@@ -417,18 +427,17 @@ mod tests {
         assert_eq!(response["plotType"], "Histogram");
         assert!(response["plotType"]["metadata"].is_null());
 
-        let vega_json: Value =
-            serde_json::from_str(response["data"]["vegaString"].as_str().unwrap()).unwrap();
+        let vega_json: Value = response["data"]["vegaSpec"].clone();
 
         assert_eq!(
             vega_json,
             json!({
-                "$schema": "https://vega.github.io/schema/vega-lite/v4.json",
+                "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
                 "data": {
                     "values": [{
                         "binStart": 0.0,
                         "binEnd": 63.75,
-                        "Frequency": 20
+                        "Frequency": 18
                     }, {
                         "binStart": 63.75,
                         "binEnd": 127.5,
@@ -440,7 +449,7 @@ mod tests {
                     }, {
                         "binStart": 191.25,
                         "binEnd": 255.0,
-                        "Frequency": 124
+                        "Frequency": 103
                     }]
                 },
                 "mark": "bar",
@@ -511,8 +520,16 @@ mod tests {
                         column_names: vec![],
                         percentiles: vec![],
                     },
-                    sources: MultipleRasterOrSingleVectorSource {
-                        source: MultipleRasterOrSingleVectorOperator::Raster(vec![]),
+                    sources: SingleRasterOrVectorSource {
+                        source: SingleRasterOrVectorOperator::Raster(RasterOperator::GdalSource(
+                            GdalSource {
+                                r#type: Default::default(),
+                                params: GdalSourceParameters {
+                                    data: NamedData::with_system_name("ndvi"),
+                                    overview_level: None,
+                                },
+                            },
+                        )),
                     },
                 }))
                 .try_into()

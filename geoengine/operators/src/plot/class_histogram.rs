@@ -8,6 +8,7 @@ use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::error;
 use crate::error::Error;
 use crate::optimization::OptimizationError;
+use crate::plot::util::masked_pixels_in_query;
 use crate::util::Result;
 use crate::util::input::RasterOrVectorOperator;
 use async_trait::async_trait;
@@ -328,13 +329,16 @@ impl ClassHistogramRasterQueryProcessor {
                 .tiling_geo_transform(),
         );
 
+        let query_bounds = raster_query_rect.spatial_bounds();
+
         call_on_generic_raster_processor!(&self.input, processor => {
             let mut query = processor.query(raster_query_rect, ctx).await?;
 
             while let Some(tile) = query.next().await {
-                match tile?.grid_array {
-                    geoengine_datatypes::raster::GridOrEmpty::Grid(g) => {
-                        g.masked_element_deref_iterator().for_each(|value_option| {
+                let tile = tile?;
+                match tile.grid_array {
+                    geoengine_datatypes::raster::GridOrEmpty::Grid(_) => {
+                        masked_pixels_in_query(&tile, &query_bounds).for_each(|value_option| {
                             if let Some(v) = value_option
                                 && let Some(count) = class_counts.get_mut(&v.as_()) {
                                     *count += 1;
@@ -614,6 +618,63 @@ mod tests {
                     ("D".to_string(), 1),
                     ("E".to_string(), 1),
                     ("F".to_string(), 1),
+                ]
+                .into_iter()
+                .collect(),
+                "test-class".to_string(),
+                "Frequency".to_string()
+            )
+            .to_vega_embeddable(true)
+            .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn it_uses_only_pixels_in_query_rectangle() {
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
+        let histogram = ClassHistogram {
+            params: ClassHistogramParams { column_name: None },
+            sources: mock_raster_source().into(),
+        };
+
+        let query_processor = histogram
+            .boxed()
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .json_vega()
+            .unwrap();
+
+        // the tile covers x in [0, 2) and y in (-3, 0], the query only the pixels with values 1 and 3
+        let result = query_processor
+            .plot_query(
+                PlotQueryRectangle::new(
+                    BoundingBox2D::new((0.2, -1.8).into(), (0.8, -0.2).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result,
+            BarChart::new(
+                [
+                    ("A".to_string(), 1),
+                    ("B".to_string(), 0),
+                    ("C".to_string(), 1),
+                    ("D".to_string(), 0),
+                    ("E".to_string(), 0),
+                    ("F".to_string(), 0),
                 ]
                 .into_iter()
                 .collect(),

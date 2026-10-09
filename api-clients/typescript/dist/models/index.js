@@ -199,8 +199,6 @@ __exportStar(require("./MultiBandRasterColorizer"), exports);
 __exportStar(require("./MultiLineString"), exports);
 __exportStar(require("./MultiPoint"), exports);
 __exportStar(require("./MultiPolygon"), exports);
-__exportStar(require("./MultipleRasterOrSingleVectorOperator"), exports);
-__exportStar(require("./MultipleRasterOrSingleVectorSource"), exports);
 __exportStar(require("./MultipleRasterSources"), exports);
 __exportStar(require("./Names"), exports);
 __exportStar(require("./NeighborhoodAggregate"), exports);

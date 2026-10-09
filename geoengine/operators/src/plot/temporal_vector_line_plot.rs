@@ -373,12 +373,12 @@ mod tests {
 
         assert!(matches!(result.metadata, PlotMetaData::None));
 
-        let vega_json: Value = serde_json::from_str(&result.vega_string).unwrap();
+        let vega_json: Value = result.vega_spec.clone();
 
         assert_eq!(
             vega_json,
             json!({
-                "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json",
+                "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
                 "data": {
                     "values": [{
                         "x": "2014-01-01T00:00:00+00:00",
@@ -520,12 +520,12 @@ mod tests {
 
         assert!(matches!(result.metadata, PlotMetaData::None));
 
-        let vega_json: Value = serde_json::from_str(&result.vega_string).unwrap();
+        let vega_json: Value = result.vega_spec.clone();
 
         assert_eq!(
             vega_json,
             json!({
-                "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json",
+                "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
                 "data": {
                     "values": [{
                         "x": "2014-01-01T00:00:00+00:00",
@@ -655,12 +655,12 @@ mod tests {
 
         assert!(matches!(result.metadata, PlotMetaData::None));
 
-        let vega_json: Value = serde_json::from_str(&result.vega_string).unwrap();
+        let vega_json: Value = result.vega_spec.clone();
 
         assert_eq!(
             vega_json,
             json!({
-                "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json",
+                "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
                 "data": {
                     "values": [{
                         "x": "2014-01-01T00:00:00+00:00",

@@ -22,9 +22,11 @@ import {
     RasterResultDescriptor,
     RasterSymbology,
     SingleBandRasterColorizer,
+    statisticsFromPlotData,
     Time,
     TRANSPARENT,
     UserService,
+    VegaChartData,
     FxFlexDirective,
 } from '@geoengine/common';
 import {MatFormField, MatLabel, MatHint, MatInput} from '@angular/material/input';
@@ -195,10 +197,13 @@ export class SymbologyCreatorComponent implements OnInit, OnDestroy, ControlValu
     }
 
     protected computeSymbologyForRasterLayer(workflowId: UUID): Observable<RasterSymbology> {
-        const rasterName = 'raster';
+        // the symbology colorizes the first band
+        const bandName$ = this.projectService
+            .getWorkflowMetaData(workflowId)
+            .pipe(map((resultDescriptor) => (resultDescriptor as RasterResultDescriptorDict).bands[0].name));
 
-        const statisticsWorkflow$ = from(this.projectService.getWorkflow(workflowId)).pipe(
-            mergeMap((workflow) => {
+        const statisticsWorkflow$ = combineLatest([from(this.projectService.getWorkflow(workflowId)), bandName$]).pipe(
+            mergeMap(([workflow, bandName]) => {
                 if (workflow.type !== 'Raster') {
                     throw new Error('Expected a raster workflow for symbology statistics.');
                 }
@@ -208,10 +213,10 @@ export class SymbologyCreatorComponent implements OnInit, OnDestroy, ControlValu
                     operator: {
                         type: 'Statistics',
                         params: {
-                            columnNames: [rasterName],
+                            columnNames: [bandName],
                         },
                         sources: {
-                            source: [workflow.operator],
+                            source: workflow.operator,
                         },
                     },
                 });
@@ -253,31 +258,26 @@ export class SymbologyCreatorComponent implements OnInit, OnDestroy, ControlValu
             }),
         );
 
-        return combineLatest([statisticsWorkflow$, queryParams$, this.userService.getSessionOnce()]).pipe(
+        return combineLatest([statisticsWorkflow$, bandName$, queryParams$, this.userService.getSessionOnce()]).pipe(
             first(),
-            mergeMap(([statisticsWorkflow, queryParams, session]) =>
-                this.backend.getPlot(statisticsWorkflow, queryParams, session.sessionToken),
+            mergeMap(([statisticsWorkflow, bandName, queryParams, session]) =>
+                this.backend.getPlot(statisticsWorkflow, queryParams, session.sessionToken).pipe(map((plot) => ({plot, bandName}))),
             ),
-            map((plot) => {
+            map(({plot, bandName}) => {
                 if (plot.plotType !== 'Statistics') {
                     throw new Error('Expected `Statistics` plot.');
                 }
 
-                return plot.data as Record<
-                    string,
-                    {
-                        valueCount: number;
-                        validCount: number;
-                        min: number;
-                        max: number;
-                        mean: number;
-                        stddev: number;
-                    }
-                >;
+                const bandStatistics = statisticsFromPlotData(plot.data as VegaChartData).get(bandName);
+                if (!bandStatistics) {
+                    throw new Error(`Band ${bandName} not found in statistics`);
+                }
+
+                return bandStatistics;
             }),
-            map((statistics) => {
-                const min = statistics[rasterName].min;
-                const max = statistics[rasterName].max;
+            map((bandStatistics) => {
+                const min = bandStatistics.min;
+                const max = bandStatistics.max;
 
                 if (min === null || min === undefined || max === null || max === undefined) {
                     throw new Error('Sample statistics do not have valid min/max values.');

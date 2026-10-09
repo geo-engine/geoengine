@@ -1,14 +1,15 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-    InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, OperatorName,
-    PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
+    InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
+    PlotResultDescriptor, QueryContext, QueryProcessor, SingleRasterOrVectorSource,
     TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
     WorkflowOperatorPath,
 };
 use crate::error::{self, Error};
 use crate::optimization::OptimizationError;
+use crate::plot::util::{SelectedBand, masked_pixels_in_query, select_bands};
 use crate::util::Result;
-use crate::util::input::MultiRasterOrVectorOperator;
+use crate::util::input::RasterOrVectorOperator;
 use crate::util::statistics::PSquareQuantileEstimator;
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -16,20 +17,21 @@ use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::plots::{BoxPlotAttribute, Plot, PlotData};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, PlotQueryRectangle,
-    RasterQueryRectangle, SpatialResolution, partitions_extent, time_interval_extent,
+    RasterQueryRectangle, SpatialResolution,
 };
 use geoengine_datatypes::raster::GridOrEmpty;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use std::collections::HashMap;
 
 pub const BOXPLOT_OPERATOR_NAME: &str = "BoxPlot";
 const EXACT_CALC_BOUND: usize = 10_000;
 const BATCH_SIZE: usize = 1_000;
-const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
+const MAX_NUMBER_OF_RASTER_BANDS: usize = 8;
 
 /// A box plot about vector data attribute values
-pub type BoxPlot = Operator<BoxPlotParams, MultipleRasterOrSingleVectorSource>;
+pub type BoxPlot = Operator<BoxPlotParams, SingleRasterOrVectorSource>;
 
 impl OperatorName for BoxPlot {
     const TYPE_NAME: &'static str = "BoxPlot";
@@ -39,7 +41,7 @@ impl OperatorName for BoxPlot {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BoxPlotParams {
-    /// Name of the (numeric) attributes to compute the box plots on.
+    /// Name of the (numeric) attributes or raster bands to compute the box plots on.
     #[serde(default)]
     pub column_names: Vec<String>,
 }
@@ -56,79 +58,40 @@ impl PlotOperator for BoxPlot {
         let name = CanonicOperatorName::from(&self);
 
         match self.sources.source {
-            MultiRasterOrVectorOperator::Raster(raster_sources) => {
+            RasterOrVectorOperator::Raster(raster_source) => {
+                let raster_source = raster_source
+                    .initialize(path.clone_and_append(0), context)
+                    .await?;
+
+                let in_descriptor = raster_source.result_descriptor();
+
+                let bands = select_bands(&in_descriptor.bands, &self.params.column_names)?;
+
                 ensure!(
-                    (1..=MAX_NUMBER_OF_RASTER_INPUTS).contains(&raster_sources.len()),
-                    error::InvalidNumberOfRasterInputs {
-                        expected: 1..MAX_NUMBER_OF_RASTER_INPUTS,
-                        found: raster_sources.len()
-                    }
-                );
-                ensure!( self.params.column_names.is_empty() || self.params.column_names.len() == raster_sources.len(),
+                    (1..=MAX_NUMBER_OF_RASTER_BANDS).contains(&bands.len()),
                     error::InvalidOperatorSpec {
-                        reason: "BoxPlot on raster data must either contain a name/alias for every input ('column_names' parameter) or no names at all."
-                            .to_string(),
-                });
-
-                let raster_sources = futures::future::try_join_all(
-                    raster_sources
-                        .into_iter()
-                        .enumerate()
-                        .map(|(i, op)| op.initialize(path.clone_and_append(i as u8), context)),
-                )
-                .await?;
-
-                // TODO: implement multi-band functionality and remove this check
-                ensure!(
-                    raster_sources
-                        .iter()
-                        .all(|s| s.result_descriptor().bands.len() == 1),
-                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                        operator: BoxPlot::TYPE_NAME
+                        reason: format!(
+                            "BoxPlot on raster data supports 1 to {MAX_NUMBER_OF_RASTER_BANDS} bands, but {} were selected.",
+                            bands.len()
+                        ),
                     }
                 );
 
-                let output_names = if self.params.column_names.is_empty() {
-                    (1..=raster_sources.len())
-                        .map(|i| format!("Raster-{i}"))
-                        .collect::<Vec<_>>()
-                } else {
-                    self.params.column_names.clone()
-                };
-
-                if raster_sources.len() > 1 {
-                    let srs = raster_sources[0].result_descriptor().spatial_reference;
-                    ensure!(
-                        raster_sources
-                            .iter()
-                            .all(|op| op.result_descriptor().spatial_reference == srs),
-                        error::AllSourcesMustHaveSameSpatialReference
-                    );
-                }
-
-                let in_descriptors = raster_sources
-                    .iter()
-                    .map(InitializedRasterOperator::result_descriptor)
-                    .collect::<Vec<_>>();
-
-                let time = time_interval_extent(in_descriptors.iter().map(|d| d.time.bounds));
-                let bbox = partitions_extent(in_descriptors.iter().map(|d| d.spatial_bounds()));
+                let bbox = in_descriptor.spatial_bounds();
 
                 Ok(InitializedBoxPlot::new(
                     name,
                     PlotResultDescriptor {
-                        spatial_reference: in_descriptors[0].spatial_reference,
-                        time,
-                        // converting `SpatialPartition2D` to `BoundingBox2D` is ok here, because is makes the covered area only larger
-                        bbox: bbox
-                            .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
+                        spatial_reference: in_descriptor.spatial_reference,
+                        time: in_descriptor.time.bounds,
+                        bbox: BoundingBox2D::new(bbox.lower_left(), bbox.upper_right()).ok(),
                     },
-                    output_names,
-                    raster_sources,
+                    bands,
+                    raster_source,
                 )
                 .boxed())
             }
-            MultiRasterOrVectorOperator::Vector(vector_source) => {
+            RasterOrVectorOperator::Vector(vector_source) => {
                 ensure!( !self.params.column_names.is_empty(),
                     error::InvalidOperatorSpec {
                         reason: "BoxPlot on vector data requires the selection of at least one numeric column ('column_names' parameter)."
@@ -180,30 +143,31 @@ impl PlotOperator for BoxPlot {
 }
 
 /// The initialization of `BoxPlot`
-pub struct InitializedBoxPlot<Op> {
+pub struct InitializedBoxPlot<Op, Columns> {
     name: CanonicOperatorName,
     result_descriptor: PlotResultDescriptor,
-    names: Vec<String>,
+    /// The names of the vector columns or the selected raster bands
+    columns: Vec<Columns>,
 
     source: Op,
 }
 
-impl<Op> InitializedBoxPlot<Op> {
+impl<Op, Columns> InitializedBoxPlot<Op, Columns> {
     pub fn new(
         name: CanonicOperatorName,
         result_descriptor: PlotResultDescriptor,
-        names: Vec<String>,
+        columns: Vec<Columns>,
         source: Op,
     ) -> Self {
         Self {
             name,
             result_descriptor,
-            names,
+            columns,
             source,
         }
     }
 }
-impl InitializedPlotOperator for InitializedBoxPlot<Box<dyn InitializedVectorOperator>> {
+impl InitializedPlotOperator for InitializedBoxPlot<Box<dyn InitializedVectorOperator>, String> {
     fn result_descriptor(&self) -> &PlotResultDescriptor {
         &self.result_descriptor
     }
@@ -211,7 +175,7 @@ impl InitializedPlotOperator for InitializedBoxPlot<Box<dyn InitializedVectorOpe
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let processor = BoxPlotVectorQueryProcessor {
             input: self.source.query_processor()?,
-            column_names: self.names.clone(),
+            column_names: self.columns.clone(),
         };
 
         Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
@@ -227,33 +191,27 @@ impl InitializedPlotOperator for InitializedBoxPlot<Box<dyn InitializedVectorOpe
     ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
         Ok(BoxPlot {
             params: BoxPlotParams {
-                column_names: self.names.clone(),
+                column_names: self.columns.clone(),
             },
-            sources: MultipleRasterOrSingleVectorSource {
-                source: MultiRasterOrVectorOperator::Vector(
-                    self.source.optimize(target_resolution)?,
-                ),
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Vector(self.source.optimize(target_resolution)?),
             },
         }
         .boxed())
     }
 }
 
-impl InitializedPlotOperator for InitializedBoxPlot<Vec<Box<dyn InitializedRasterOperator>>> {
+impl InitializedPlotOperator
+    for InitializedBoxPlot<Box<dyn InitializedRasterOperator>, SelectedBand>
+{
     fn result_descriptor(&self) -> &PlotResultDescriptor {
         &self.result_descriptor
     }
 
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
-        let input = self
-            .source
-            .iter()
-            .map(InitializedRasterOperator::query_processor)
-            .collect::<Result<Vec<_>>>()?;
-
         let processor = BoxPlotRasterQueryProcessor {
-            input,
-            names: self.names.clone(),
+            input: self.source.query_processor()?,
+            bands: self.columns.clone(),
         };
         Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
     }
@@ -268,15 +226,10 @@ impl InitializedPlotOperator for InitializedBoxPlot<Vec<Box<dyn InitializedRaste
     ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
         Ok(BoxPlot {
             params: BoxPlotParams {
-                column_names: self.names.clone(),
+                column_names: self.columns.iter().map(|band| band.name.clone()).collect(),
             },
-            sources: MultipleRasterOrSingleVectorSource {
-                source: MultiRasterOrVectorOperator::Raster(
-                    self.source
-                        .iter()
-                        .map(|s| s.optimize(target_resolution))
-                        .collect::<Result<Vec<_>, OptimizationError>>()?,
-                ),
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Raster(self.source.optimize(target_resolution)?),
             },
         }
         .boxed())
@@ -335,48 +288,10 @@ impl PlotQueryProcessor for BoxPlotVectorQueryProcessor {
     }
 }
 
-/// A query processor that calculates the boxplots about its raster input.
+/// A query processor that calculates the boxplots about the bands of its raster input.
 pub struct BoxPlotRasterQueryProcessor {
-    input: Vec<TypedRasterQueryProcessor>,
-    names: Vec<String>,
-}
-
-impl BoxPlotRasterQueryProcessor {
-    async fn process_raster(
-        name: String,
-        input: &TypedRasterQueryProcessor,
-        query: PlotQueryRectangle,
-        ctx: &dyn QueryContext,
-    ) -> Result<Option<BoxPlotAttribute>> {
-        let result_descrpitor = input.result_descriptor();
-
-        let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
-            &query,
-            BandSelection::first(),
-            result_descrpitor
-                .tiling_grid_definition(ctx.tiling_specification())
-                .tiling_geo_transform(),
-        );
-
-        call_on_generic_raster_processor!(input, processor => {
-
-            let mut stream = processor.query(raster_query_rect, ctx).await?;
-            let mut accum = BoxPlotAccum::new(name);
-
-            while let Some(tile) = stream.next().await {
-                let tile = tile?;
-
-                match tile.grid_array {
-                    // Ignore empty grids if no_data should not be included
-                    GridOrEmpty::Empty(_) => {},
-                    GridOrEmpty::Grid(grid) => {
-                        accum.update(grid.masked_element_deref_iterator().filter_map(|pixel_option| pixel_option.map(|p| { let v: f64 = p.as_(); v})))?;
-                    }
-                }
-            }
-            accum.finish()
-        })
-    }
+    input: TypedRasterQueryProcessor,
+    bands: Vec<SelectedBand>,
 }
 
 #[async_trait]
@@ -392,23 +307,60 @@ impl PlotQueryProcessor for BoxPlotRasterQueryProcessor {
         query: PlotQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
-        let results: Vec<_> = self
-            .input
+        let result_descriptor = self.input.result_descriptor();
+
+        let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
+            &query,
+            BandSelection::new(self.bands.iter().map(|band| band.index).collect())?,
+            result_descriptor
+                .tiling_grid_definition(ctx.tiling_specification())
+                .tiling_geo_transform(),
+        );
+        let query_bounds = raster_query_rect.spatial_bounds();
+
+        // tiles carry the index of their band in the source raster
+        let accum_index_of_band: HashMap<u32, usize> = self
+            .bands
             .iter()
-            .zip(self.names.iter())
-            .map(|(proc, name)| Self::process_raster(name.clone(), proc, query.clone(), ctx))
+            .enumerate()
+            .map(|(i, band)| (band.index, i))
             .collect();
 
-        let results = futures::future::join_all(results)
-            .await
-            .into_iter()
-            .collect::<Result<Vec<_>>>();
+        let mut accums: Vec<BoxPlotAccum> = self
+            .bands
+            .iter()
+            .map(|band| BoxPlotAccum::new(band.name.clone()))
+            .collect();
+
+        call_on_generic_raster_processor!(&self.input, processor => {
+            let mut stream = processor.query(raster_query_rect, ctx).await?;
+
+            while let Some(tile) = stream.next().await {
+                let tile = tile?;
+
+                let accum = accum_index_of_band
+                    .get(&tile.band)
+                    .map(|&i| &mut accums[i])
+                    .ok_or(Error::InvalidOperatorSpec {
+                        reason: format!("BoxPlot received a tile of unexpected band {}.", tile.band),
+                    })?;
+
+                match tile.grid_array {
+                    // Ignore empty grids if no_data should not be included
+                    GridOrEmpty::Empty(_) => {},
+                    GridOrEmpty::Grid(_) => {
+                        accum.update(masked_pixels_in_query(&tile, &query_bounds).filter_map(|pixel_option| pixel_option.map(|p| { let v: f64 = p.as_(); v})))?;
+                    }
+                }
+            }
+        });
 
         let mut chart = geoengine_datatypes::plots::BoxPlot::new();
-        results?
-            .into_iter()
-            .flatten()
-            .for_each(|a| chart.add_attribute(a));
+        for accum in &mut accums {
+            if let Some(attrib) = accum.finish()? {
+                chart.add_attribute(attrib);
+            }
+        }
         Ok(chart.to_vega_embeddable(false)?)
     }
 }
@@ -1110,7 +1062,7 @@ mod tests {
 
         let mut expected = geoengine_datatypes::plots::BoxPlot::new();
         expected.add_attribute(
-            BoxPlotAttribute::new("Raster-1".to_owned(), 0.0, 0.0, 0.0, 0.0, 0.0, true).unwrap(),
+            BoxPlotAttribute::new("band".to_owned(), 0.0, 0.0, 0.0, 0.0, 0.0, true).unwrap(),
         );
 
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
@@ -1248,7 +1200,7 @@ mod tests {
 
         let mut expected = geoengine_datatypes::plots::BoxPlot::new();
         expected.add_attribute(
-            BoxPlotAttribute::new("Raster-1".to_owned(), 4.0, 4.0, 4.0, 4.0, 4.0, true).unwrap(),
+            BoxPlotAttribute::new("band".to_owned(), 4.0, 4.0, 4.0, 4.0, 4.0, true).unwrap(),
         );
 
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
@@ -1328,7 +1280,7 @@ mod tests {
 
         let mut expected = geoengine_datatypes::plots::BoxPlot::new();
         expected.add_attribute(
-            BoxPlotAttribute::new("Raster-1".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
+            BoxPlotAttribute::new("band".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
         );
 
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
@@ -1401,14 +1353,14 @@ mod tests {
 
         let mut expected = geoengine_datatypes::plots::BoxPlot::new();
         expected.add_attribute(
-            BoxPlotAttribute::new("Raster-1".to_string(), 0.0, 7.0, 1.5, 0.0, 5.0, true).unwrap(),
+            BoxPlotAttribute::new("band".to_string(), 0.0, 7.0, 1.5, 0.0, 5.0, true).unwrap(),
         );
 
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
     }
 
-    #[tokio::test]
-    async fn multiple_rasters_with_no_data_exclude_no_data() {
+    /// A raster source with `num_bands` bands that each contain the same 4x2 tile with no-data values
+    fn multi_band_raster_source(num_bands: u32) -> Box<dyn RasterOperator> {
         let tile_size_in_pixels = GridShape2D::new_2d(4, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
@@ -1418,81 +1370,152 @@ mod tests {
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size_in_pixels.bounding_box(),
             ),
-            bands: RasterBandDescriptors::new_single_band(),
+            bands: RasterBandDescriptors::new_multiple_bands(num_bands),
         };
 
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
-        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let src = MockRasterSource {
+        MockRasterSource {
             params: MockRasterSourceParams {
-                data: vec![RasterTile2D::new_with_tile_info(
-                    TimeInterval::default(),
-                    TileInformation {
-                        global_geo_transform: TestDefault::test_default(),
-                        global_tile_position: [0, 0].into(),
-                        tile_size_in_pixels,
-                    },
-                    0,
-                    MaskedGrid2D::new(
-                        Grid2D::new(tile_size_in_pixels, vec![1, 2, 0, 4, 0, 6, 7, 0]).unwrap(),
-                        Grid2D::new(
-                            tile_size_in_pixels,
-                            vec![true, true, false, true, false, true, true, false],
+                data: (0..num_bands)
+                    .map(|band| {
+                        RasterTile2D::new_with_tile_info(
+                            TimeInterval::default(),
+                            TileInformation {
+                                global_geo_transform: TestDefault::test_default(),
+                                global_tile_position: [0, 0].into(),
+                                tile_size_in_pixels,
+                            },
+                            band,
+                            MaskedGrid2D::new(
+                                Grid2D::new(tile_size_in_pixels, vec![1, 2, 0, 4, 0, 6, 7, 0])
+                                    .unwrap(),
+                                Grid2D::new(
+                                    tile_size_in_pixels,
+                                    vec![true, true, false, true, false, true, true, false],
+                                )
+                                .unwrap(),
+                            )
+                            .unwrap()
+                            .into(),
+                            CacheHint::no_cache(),
                         )
-                        .unwrap(),
-                    )
-                    .unwrap()
-                    .into(),
-                    CacheHint::no_cache(),
-                )],
+                    })
+                    .collect(),
                 result_descriptor,
             },
-        };
+        }
+        .boxed()
+    }
 
-        let histogram = BoxPlot {
-            params: BoxPlotParams {
-                column_names: vec![],
-            },
-            sources: vec![
-                src.clone().boxed(),
-                src.clone().boxed(),
-                src.clone().boxed(),
-            ]
-            .into(),
-        };
+    async fn raster_box_plot(
+        source: Box<dyn RasterOperator>,
+        column_names: Vec<String>,
+        bbox: BoundingBox2D,
+    ) -> Result<PlotData> {
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(GridShape2D::new_2d(4, 2)),
+        );
 
-        let query_processor = histogram
-            .boxed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
-            .await
-            .unwrap()
-            .query_processor()
-            .unwrap()
-            .json_vega()
-            .unwrap();
+        let query_processor = BoxPlot {
+            params: BoxPlotParams { column_names },
+            sources: source.into(),
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .await?
+        .query_processor()?
+        .json_vega()
+        .unwrap();
 
-        let result = query_processor
+        query_processor
             .plot_query(
                 PlotQueryRectangle::new(
-                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    bbox,
                     TimeInterval::new_instant(DateTime::new_utc(2013, 12, 1, 12, 0, 0)).unwrap(),
                     PlotSeriesSelection::all(),
                 ),
                 &execution_context.mock_query_context_test_default(),
             )
             .await
+    }
+
+    fn world_bbox() -> BoundingBox2D {
+        BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn multiple_bands_with_no_data_exclude_no_data() {
+        let result = raster_box_plot(multi_band_raster_source(3), vec![], world_bbox())
+            .await
             .unwrap();
 
         let mut expected = geoengine_datatypes::plots::BoxPlot::new();
-        expected.add_attribute(
-            BoxPlotAttribute::new("Raster-1".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
+        for name in ["band 0", "band 1", "band 2"] {
+            expected.add_attribute(
+                BoxPlotAttribute::new(name.to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
+            );
+        }
+
+        assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
+    }
+
+    #[tokio::test]
+    async fn it_computes_box_plots_for_selected_bands() {
+        let result = raster_box_plot(
+            multi_band_raster_source(3),
+            vec!["band 2".to_string(), "band 0".to_string()],
+            world_bbox(),
+        )
+        .await
+        .unwrap();
+
+        let mut expected = geoengine_datatypes::plots::BoxPlot::new();
+        for name in ["band 0", "band 2"] {
+            expected.add_attribute(
+                BoxPlotAttribute::new(name.to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
+            );
+        }
+
+        assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);
+    }
+
+    #[tokio::test]
+    async fn it_fails_on_unknown_band_name() {
+        let result = raster_box_plot(
+            multi_band_raster_source(1),
+            vec!["foo".to_string()],
+            world_bbox(),
+        )
+        .await;
+
+        assert!(
+            matches!(result, Err(error::Error::InvalidOperatorSpec{reason}) if reason == *"Band 'foo' does not exist.")
         );
+    }
+
+    #[tokio::test]
+    async fn it_fails_on_too_many_bands() {
+        let result = raster_box_plot(multi_band_raster_source(9), vec![], world_bbox()).await;
+
+        assert!(matches!(
+            result,
+            Err(error::Error::InvalidOperatorSpec { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn it_uses_only_pixels_in_query_rectangle() {
+        // the tile covers x in [0, 2) and y in (-4, 0], the query only the first two rows with values 1, 2 and 4
+        let result = raster_box_plot(
+            multi_band_raster_source(1),
+            vec![],
+            BoundingBox2D::new((0.2, -1.8).into(), (1.8, -0.2).into()).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let mut expected = geoengine_datatypes::plots::BoxPlot::new();
         expected.add_attribute(
-            BoxPlotAttribute::new("Raster-2".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
-        );
-        expected.add_attribute(
-            BoxPlotAttribute::new("Raster-3".to_string(), 1.0, 7.0, 4.0, 1.5, 6.5, true).unwrap(),
+            BoxPlotAttribute::new("band 0".to_string(), 1.0, 4.0, 2.0, 1.0, 4.0, true).unwrap(),
         );
 
         assert_eq!(expected.to_vega_embeddable(false).unwrap(), result);

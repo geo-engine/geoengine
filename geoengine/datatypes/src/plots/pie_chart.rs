@@ -73,7 +73,7 @@ impl Plot for PieChart {
         let radius = if self.donut { 50 } else { 0 };
 
         let vega_spec = serde_json::json!({
-          "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+          "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
           "width": "container",
           "data": {
             "values": values,
@@ -86,7 +86,7 @@ impl Plot for PieChart {
         });
 
         Ok(PlotData {
-            vega_string: vega_spec.to_string(),
+            vega_spec,
             metadata: PlotMetaData::None,
         })
     }
@@ -110,8 +110,8 @@ mod tests {
         assert_eq!(
             chart.to_vega_embeddable(false).unwrap(),
             PlotData {
-                vega_string: serde_json::json!({
-                  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                vega_spec: serde_json::json!({
+                  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
                   "width": "container",
                   "data": {
                     "values": [
@@ -124,8 +124,7 @@ mod tests {
                     "theta": {"field": "value", "type": "quantitative"},
                     "color": {"field": "Label", "type": "nominal"}
                   }
-                })
-                .to_string(),
+                }),
                 metadata: PlotMetaData::None,
             }
         );
@@ -145,8 +144,8 @@ mod tests {
         assert_eq!(
             chart.to_vega_embeddable(false).unwrap(),
             PlotData {
-                vega_string: serde_json::json!({
-                  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                vega_spec: serde_json::json!({
+                  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
                   "width": "container",
                   "data": {
                     "values": [
@@ -159,8 +158,7 @@ mod tests {
                     "theta": {"field": "value", "type": "quantitative"},
                     "color": {"field": "Rain (in cm)", "type": "nominal"}
                   }
-                })
-                .to_string(),
+                }),
                 metadata: PlotMetaData::None,
             }
         );
@@ -178,8 +176,8 @@ mod tests {
         assert_eq!(
             chart.to_vega_embeddable(false).unwrap(),
             PlotData {
-                vega_string: serde_json::json!({
-                  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                vega_spec: serde_json::json!({
+                  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
                   "width": "container",
                   "data": {
                     "values": []
@@ -189,8 +187,7 @@ mod tests {
                     "theta": {"field": "value", "type": "quantitative"},
                     "color": {"field": "Rain (in cm)", "type": "nominal"}
                   }
-                })
-                .to_string(),
+                }),
                 metadata: PlotMetaData::None,
             }
         );
