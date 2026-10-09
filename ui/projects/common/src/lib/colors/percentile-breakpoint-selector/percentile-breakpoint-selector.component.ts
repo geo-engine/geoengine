@@ -275,7 +275,7 @@ export class PercentileBreakpointSelectorComponent {
                         percentiles,
                     },
                     sources: {
-                        source: [sourceOperator],
+                        source: sourceOperator,
                     },
                 } as Statistics,
             });

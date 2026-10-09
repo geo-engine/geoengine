@@ -378,7 +378,7 @@ mod tests {
         assert_eq!(
             vega_json,
             json!({
-                "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json",
+                "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
                 "data": {
                     "values": [{
                         "x": "2014-01-01T00:00:00+00:00",
@@ -525,7 +525,7 @@ mod tests {
         assert_eq!(
             vega_json,
             json!({
-                "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json",
+                "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
                 "data": {
                     "values": [{
                         "x": "2014-01-01T00:00:00+00:00",
@@ -660,7 +660,7 @@ mod tests {
         assert_eq!(
             vega_json,
             json!({
-                "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json",
+                "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
                 "data": {
                     "values": [{
                         "x": "2014-01-01T00:00:00+00:00",

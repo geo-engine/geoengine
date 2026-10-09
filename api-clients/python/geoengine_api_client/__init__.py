@@ -227,8 +227,6 @@ __all__ = [
     "MultiLineString",
     "MultiPoint",
     "MultiPolygon",
-    "MultipleRasterOrSingleVectorOperator",
-    "MultipleRasterOrSingleVectorSource",
     "MultipleRasterSources",
     "Names",
     "NeighborhoodAggregate",
@@ -693,8 +691,6 @@ from geoengine_api_client.models.multi_band_raster_colorizer import MultiBandRas
 from geoengine_api_client.models.multi_line_string import MultiLineString as MultiLineString
 from geoengine_api_client.models.multi_point import MultiPoint as MultiPoint
 from geoengine_api_client.models.multi_polygon import MultiPolygon as MultiPolygon
-from geoengine_api_client.models.multiple_raster_or_single_vector_operator import MultipleRasterOrSingleVectorOperator as MultipleRasterOrSingleVectorOperator
-from geoengine_api_client.models.multiple_raster_or_single_vector_source import MultipleRasterOrSingleVectorSource as MultipleRasterOrSingleVectorSource
 from geoengine_api_client.models.multiple_raster_sources import MultipleRasterSources as MultipleRasterSources
 from geoengine_api_client.models.names import Names as Names
 from geoengine_api_client.models.neighborhood_aggregate import NeighborhoodAggregate as NeighborhoodAggregate

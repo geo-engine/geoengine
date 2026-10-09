@@ -8,6 +8,7 @@ use crate::engine::{
 use crate::error;
 use crate::error::Error;
 use crate::optimization::OptimizationError;
+use crate::plot::util::{masked_pixels_in_query, pixel_count_in_query};
 use crate::string_token;
 use crate::util::Result;
 use crate::util::input::RasterOrVectorOperator;
@@ -15,16 +16,13 @@ use async_trait::async_trait;
 use float_cmp::approx_eq;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryFutureExt};
+use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::plots::{Plot, PlotData};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, ColumnSelection, DataRef, FeatureDataRef, FeatureDataType,
     Geometry, Measurement, PlotQueryRectangle, RasterQueryRectangle, SpatialResolution,
 };
-use geoengine_datatypes::raster::{Pixel, RasterTile2D};
-use geoengine_datatypes::{
-    collections::{FeatureCollection, FeatureCollectionInfos},
-    raster::GridSize,
-};
+use geoengine_datatypes::raster::{GridBoundingBox2D, Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::convert::TryFrom;
@@ -378,14 +376,17 @@ impl HistogramRasterQueryProcessor {
     ) -> Result<HistogramMetadata> {
         async fn process_metadata<T: Pixel>(
             mut input: BoxStream<'_, Result<RasterTile2D<T>>>,
+            query_bounds: GridBoundingBox2D,
             metadata: HistogramMetadataOptions,
         ) -> Result<HistogramMetadata> {
             let mut computed_metadata = HistogramMetadataInProgress::default();
 
             while let Some(tile) = input.next().await {
-                match tile?.grid_array {
-                    geoengine_datatypes::raster::GridOrEmpty::Grid(g) => {
-                        computed_metadata.add_raster_batch(g.masked_element_deref_iterator());
+                let tile = tile?;
+                match tile.grid_array {
+                    geoengine_datatypes::raster::GridOrEmpty::Grid(_) => {
+                        computed_metadata
+                            .add_raster_batch(masked_pixels_in_query(&tile, &query_bounds));
                     }
                     geoengine_datatypes::raster::GridOrEmpty::Empty(_) => {} // TODO: find out if we really do nothing for empty tiles?
                 }
@@ -408,8 +409,10 @@ impl HistogramRasterQueryProcessor {
                 .tiling_geo_transform(),
         );
 
+        let query_bounds = raster_query_rect.spatial_bounds();
+
         call_on_generic_raster_processor!(&self.input, processor => {
-            process_metadata(processor.query(raster_query_rect, ctx).await?, self.metadata).await
+            process_metadata(processor.query(raster_query_rect, ctx).await?, query_bounds, self.metadata).await
         })
     }
 
@@ -437,15 +440,17 @@ impl HistogramRasterQueryProcessor {
                 .tiling_geo_transform(),
         );
 
+        let query_bounds = raster_query_rect.spatial_bounds();
+
         call_on_generic_raster_processor!(&self.input, processor => {
             let mut query = processor.query(raster_query_rect, ctx).await?;
 
             while let Some(tile) = query.next().await {
+                let tile = tile?;
 
-
-                match tile?.grid_array {
-                    geoengine_datatypes::raster::GridOrEmpty::Grid(g) => histogram.add_raster_data(g.masked_element_deref_iterator()),
-                    geoengine_datatypes::raster::GridOrEmpty::Empty(n) => histogram.add_nodata_batch(n.number_of_elements() as u64) // TODO: why u64?
+                match tile.grid_array {
+                    geoengine_datatypes::raster::GridOrEmpty::Grid(_) => histogram.add_raster_data(masked_pixels_in_query(&tile, &query_bounds)),
+                    geoengine_datatypes::raster::GridOrEmpty::Empty(_) => histogram.add_nodata_batch(pixel_count_in_query(&tile, &query_bounds) as u64) // TODO: why u64?
                 }
             }
         });
@@ -979,6 +984,72 @@ mod tests {
                 .to_vega_embeddable(false)
                 .unwrap()
         );
+    }
+
+    #[tokio::test]
+    async fn it_uses_only_pixels_in_query_rectangle() {
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
+        // the tile covers x in [0, 2) and y in (-3, 0], the query only the pixels with values 1 and 3
+        let query_rectangle = PlotQueryRectangle::new(
+            BoundingBox2D::new((0.2, -1.8).into(), (0.8, -0.2).into()).unwrap(),
+            TimeInterval::default(),
+            PlotSeriesSelection::all(),
+        );
+
+        for (bounds, buckets, expected) in [
+            (
+                HistogramBounds::Values { min: 0.0, max: 8.0 },
+                HistogramBuckets::Number { value: 3 },
+                geoengine_datatypes::plots::Histogram::builder(3, 0., 8., Measurement::Unitless)
+                    .counts(vec![1, 1, 0]),
+            ),
+            (
+                HistogramBounds::Data(Default::default()),
+                HistogramBuckets::SquareRootChoiceRule {
+                    max_number_of_buckets: 100,
+                },
+                geoengine_datatypes::plots::Histogram::builder(1, 1., 3., Measurement::Unitless)
+                    .counts(vec![2]),
+            ),
+        ] {
+            let histogram = Histogram {
+                params: HistogramParams {
+                    attribute_name: "band".to_string(),
+                    bounds,
+                    buckets,
+                    interactive: false,
+                },
+                sources: mock_raster_source().into(),
+            };
+
+            let query_processor = histogram
+                .boxed()
+                .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+                .await
+                .unwrap()
+                .query_processor()
+                .unwrap()
+                .json_vega()
+                .unwrap();
+
+            let result = query_processor
+                .plot_query(
+                    query_rectangle.clone(),
+                    &execution_context.mock_query_context(ChunkByteSize::MIN),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                result,
+                expected.build().unwrap().to_vega_embeddable(false).unwrap()
+            );
+        }
     }
 
     #[tokio::test]

@@ -5,6 +5,7 @@ use crate::engine::{
     TypedPlotQueryProcessor, WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
+use crate::plot::util::masked_pixels_in_query;
 use crate::util::Result;
 use crate::util::math::average_floor;
 use async_trait::async_trait;
@@ -15,7 +16,7 @@ use geoengine_datatypes::primitives::{
     BandSelection, Measurement, PlotQueryRectangle, RasterQueryRectangle, SpatialResolution,
     TimeInstance, TimeInterval,
 };
-use geoengine_datatypes::raster::{Pixel, RasterTile2D};
+use geoengine_datatypes::raster::{GridBoundingBox2D, Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::BTreeMap;
@@ -168,8 +169,11 @@ impl<P: Pixel> PlotQueryProcessor for MeanRasterPixelValuesOverTimeQueryProcesso
                 .tiling_geo_transform(),
         );
 
+        let query_bounds = raster_query_rect.spatial_bounds();
+
         let means = Self::calculate_means(
             self.raster.query(raster_query_rect, ctx).await?,
+            query_bounds,
             self.time_position,
         )
         .await?;
@@ -185,6 +189,7 @@ impl<P: Pixel> PlotQueryProcessor for MeanRasterPixelValuesOverTimeQueryProcesso
 impl<P: Pixel> MeanRasterPixelValuesOverTimeQueryProcessor<P> {
     async fn calculate_means(
         mut tile_stream: BoxStream<'_, Result<RasterTile2D<P>>>,
+        query_bounds: GridBoundingBox2D,
         position: MeanRasterPixelValuesOverTimePosition,
     ) -> Result<BTreeMap<TimeInstance, MeanCalculator>> {
         let mut means: BTreeMap<TimeInstance, MeanCalculator> = BTreeMap::new();
@@ -193,10 +198,10 @@ impl<P: Pixel> MeanRasterPixelValuesOverTimeQueryProcessor<P> {
             let tile = tile?;
 
             match tile.grid_array {
-                geoengine_datatypes::raster::GridOrEmpty::Grid(g) => {
+                geoengine_datatypes::raster::GridOrEmpty::Grid(_) => {
                     let time = Self::time_interval_projection(tile.time, position);
                     let mean = means.entry(time).or_default();
-                    mean.add(g.masked_element_deref_iterator());
+                    mean.add(masked_pixels_in_query(&tile, &query_bounds));
                 }
                 geoengine_datatypes::raster::GridOrEmpty::Empty(_) => (),
             }
@@ -405,7 +410,7 @@ mod tests {
         assert_eq!(
             vega_json,
             json!({
-                "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json",
+                "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
                 "data": {
                     "values": [{
                         "x": "1995-01-01T00:00:00+00:00",
@@ -431,6 +436,67 @@ mod tests {
                     "point": true
                 }
             })
+        );
+    }
+
+    #[tokio::test]
+    async fn it_uses_only_pixels_in_query_rectangle() {
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            tile_size_in_pixels,
+        };
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
+        let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
+            params: MeanRasterPixelValuesOverTimeParams {
+                time_position: MeanRasterPixelValuesOverTimePosition::Start,
+                area: false,
+            },
+            sources: SingleRasterSource {
+                raster: generate_mock_raster_source(
+                    vec![
+                        TimeInterval::new(
+                            TimeInstance::from(DateTime::new_utc(1990, 1, 1, 0, 0, 0)),
+                            TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)),
+                        )
+                        .unwrap(),
+                    ],
+                    vec![vec![1, 2, 3, 4, 5, 6]],
+                ),
+            },
+        };
+
+        let processor = temporal_raster_mean_plot
+            .boxed()
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .json_vega()
+            .unwrap();
+
+        // the tile covers x in [0, 2) and y in (-3, 0], the query only the pixels with values 1 and 3
+        let result = processor
+            .plot_query(
+                PlotQueryRectangle::new(
+                    BoundingBox2D::new((0.2, -1.8).into(), (0.8, -0.2).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
+            )
+            .await
+            .unwrap();
+
+        let vega_json: Value = serde_json::from_str(&result.vega_string).unwrap();
+
+        assert_eq!(
+            vega_json["data"]["values"],
+            json!([{
+                "x": "1990-01-01T00:00:00+00:00",
+                "y": 2.0
+            }])
         );
     }
 

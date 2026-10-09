@@ -154,7 +154,7 @@ impl Plot for Histogram2D {
         }
 
         let vega_spec = serde_json::json!({
-            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+            "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
             "width": "container",
             "height": "container",
             "data": {

@@ -8,13 +8,13 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import type { MultipleRasterOrSingleVectorSource } from './MultipleRasterOrSingleVectorSource';
 import type { StatisticsParameters } from './StatisticsParameters';
+import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
 /**
  * The `Statistics` operator is a _plot operator_ that computes count statistics over
  *
  * - a selection of numerical columns of a single vector dataset, or
- * - multiple raster datasets.
+ * - a selection of bands of a single raster dataset.
  *
  * The output is a JSON description.
  *
@@ -28,7 +28,8 @@ import type { StatisticsParameters } from './StatisticsParameters';
  *
  * ## Raster Data
  *
- * For raster data, the operator generates one statistic for each input raster.
+ * For raster data, the operator generates one statistic for each of the selected bands.
+ * It only considers the pixels that intersect the query rectangle.
  *
  * ## Errors
  *
@@ -36,13 +37,13 @@ import type { StatisticsParameters } from './StatisticsParameters';
  *
  * - Vector data: The `attribute` for one of the given `columnNames` is not numeric.
  * - Vector data: The `attribute` for one of the given `columnNames` does not exist.
- * - Raster data: The length of the `columnNames` parameter does not match the number of input rasters.
+ * - Raster data: The band for one of the given `columnNames` does not exist.
  *
  * ### Example Output
  *
  * ```json
  * {
- *   "A": {
+ *   "ndvi": {
  *     "valueCount": 6,
  *     "validCount": 6,
  *     "min": 1.0,
@@ -85,10 +86,10 @@ export interface Statistics {
     params: StatisticsParameters;
     /**
      *
-     * @type {MultipleRasterOrSingleVectorSource}
+     * @type {SingleRasterOrVectorSource}
      * @memberof Statistics
      */
-    sources: MultipleRasterOrSingleVectorSource;
+    sources: SingleRasterOrVectorSource;
 }
 /**
  * @export

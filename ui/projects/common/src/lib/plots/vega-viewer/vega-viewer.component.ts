@@ -73,7 +73,8 @@ export class VegaViewerComponent {
 
         const div = this.chartContainer().nativeElement;
 
-        const width = this.width() ?? div.clientWidth ?? this.element.nativeElement.offsetWidth;
+        // vega-embed turns `div` into an `inline-block` that collapses to zero width when emptied for a re-render
+        const width = this.width() ?? (div.clientWidth || this.element.nativeElement.clientWidth);
         const height = this.height() ?? width / 2;
 
         const spec = JSON.parse(chartData.vegaString) as /* fingers crossed */ VisualizationSpec;

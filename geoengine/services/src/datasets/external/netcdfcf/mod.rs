@@ -2418,7 +2418,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(result, PlotData {
-            vega_string: "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"x\":\"2015-01-01T00:00:00+00:00\",\"y\":46.68000000000007},{\"x\":\"2055-01-01T00:00:00+00:00\",\"y\":43.72000000000009}]},\"description\":\"Area Plot\",\"encoding\":{\"x\":{\"field\":\"x\",\"title\":\"Time\",\"type\":\"temporal\"},\"y\":{\"field\":\"y\",\"title\":\"\",\"type\":\"quantitative\"}},\"mark\":{\"line\":true,\"point\":true,\"type\":\"line\"}}".to_string(),
+            vega_string: "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v6.json\",\"data\":{\"values\":[{\"x\":\"2015-01-01T00:00:00+00:00\",\"y\":46.68000000000007},{\"x\":\"2055-01-01T00:00:00+00:00\",\"y\":43.72000000000009}]},\"description\":\"Area Plot\",\"encoding\":{\"x\":{\"field\":\"x\",\"title\":\"Time\",\"type\":\"temporal\"},\"y\":{\"field\":\"y\",\"title\":\"\",\"type\":\"quantitative\"}},\"mark\":{\"line\":true,\"point\":true,\"type\":\"line\"}}".to_string(),
             metadata: PlotMetaData::None,
         });
     }

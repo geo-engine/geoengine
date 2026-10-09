@@ -73,7 +73,7 @@ impl Plot for PieChart {
         let radius = if self.donut { 50 } else { 0 };
 
         let vega_spec = serde_json::json!({
-          "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+          "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
           "width": "container",
           "data": {
             "values": values,
@@ -111,7 +111,7 @@ mod tests {
             chart.to_vega_embeddable(false).unwrap(),
             PlotData {
                 vega_string: serde_json::json!({
-                  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
                   "width": "container",
                   "data": {
                     "values": [
@@ -146,7 +146,7 @@ mod tests {
             chart.to_vega_embeddable(false).unwrap(),
             PlotData {
                 vega_string: serde_json::json!({
-                  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
                   "width": "container",
                   "data": {
                     "values": [
@@ -179,7 +179,7 @@ mod tests {
             chart.to_vega_embeddable(false).unwrap(),
             PlotData {
                 vega_string: serde_json::json!({
-                  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
                   "width": "container",
                   "data": {
                     "values": []

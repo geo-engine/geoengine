@@ -34,7 +34,7 @@ impl Plot for BarChart {
         }
 
         let vega_spec = serde_json::json!({
-            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+            "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
             "width": "container",
             "data": {
                 "values": values,
@@ -84,7 +84,7 @@ mod tests {
             bar_chart.to_vega_embeddable(false).unwrap(),
             PlotData {
                 vega_string: serde_json::json!({
-                  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
                   "width": "container",
                   "data": {
                     "values": [

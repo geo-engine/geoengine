@@ -5,7 +5,7 @@ import {geoengineValidators} from '../../util/form.validators';
 import {SymbologyQueryParams, MultiBandRasterColorizer} from '../symbology.model';
 import {Color, TRANSPARENT} from '../../colors/color';
 import {WorkflowsService} from '../../workflows/workflows.service';
-import {Expression, Statistics} from '@geoengine/api-client';
+import {Statistics} from '@geoengine/api-client';
 import {PlotsService} from '../../plots/plots.service';
 import {UUID} from '../../datasets/dataset.model';
 import {MatCard, MatCardHeader, MatCardTitleGroup, MatCardTitle, MatCardSubtitle, MatCardContent} from '@angular/material/card';
@@ -229,32 +229,15 @@ export class RasterMultibandSymbologyEditorComponent implements OnDestroy {
             throw new Error('Expected a raster workflow for multiband statistics.');
         }
 
-        // TODO: remove expressions when Statistics Operator supports multiple bands
-        const subExpression = ({name, index}: {name: string; index: number}): Expression => {
-            return {
-                type: 'Expression',
-                params: {
-                    expression: String.fromCharCode('A'.charCodeAt(0) + index),
-                    outputType: 'F64',
-                    outputBand: {
-                        name,
-                        measurement: {type: 'unitless'},
-                    },
-                    mapNoData: false,
-                },
-                sources: {
-                    raster: workflow.operator,
-                },
-            };
-        };
+        const bands = {red: this.band1(), green: this.band2(), blue: this.band3()};
 
         const statsWorkflowId = await this.workflowsService.registerWorkflow({
             type: 'Plot',
             operator: {
                 type: 'Statistics',
-                params: {columnNames: ['red', 'green', 'blue']},
+                params: {columnNames: [...new Set(Object.values(bands).map((band) => band.name))]},
                 sources: {
-                    source: [subExpression(this.band1()), subExpression(this.band2()), subExpression(this.band3())],
+                    source: workflow.operator,
                 },
             } as Statistics,
         });
@@ -267,25 +250,13 @@ export class RasterMultibandSymbologyEditorComponent implements OnDestroy {
             queryParams.spatialReference,
         );
 
-        const plotData = plot.data as {
-            red: {
-                min: number;
-                max: number;
-            };
-            green: {
-                min: number;
-                max: number;
-            };
-            blue: {
-                min: number;
-                max: number;
-            };
-        };
+        const plotData = plot.data as Record<string, {min: number; max: number}>;
 
         const colors: Array<RgbColorName> = ['red', 'green', 'blue'];
         for (const color of colors) {
-            this.form.controls[color].controls.min.setValue(plotData[color].min);
-            this.form.controls[color].controls.max.setValue(plotData[color].max);
+            const bandStatistics = plotData[bands[color].name];
+            this.form.controls[color].controls.min.setValue(bandStatistics.min);
+            this.form.controls[color].controls.max.setValue(bandStatistics.max);
         }
 
         this.form.updateValueAndValidity();

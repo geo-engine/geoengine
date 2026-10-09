@@ -189,8 +189,6 @@ docs/MultiBandRasterColorizer.md
 docs/MultiLineString.md
 docs/MultiPoint.md
 docs/MultiPolygon.md
-docs/MultipleRasterOrSingleVectorOperator.md
-docs/MultipleRasterOrSingleVectorSource.md
 docs/MultipleRasterSources.md
 docs/Names.md
 docs/NeighborhoodAggregate.md
@@ -657,8 +655,6 @@ src/models/multi_band_raster_colorizer.rs
 src/models/multi_line_string.rs
 src/models/multi_point.rs
 src/models/multi_polygon.rs
-src/models/multiple_raster_or_single_vector_operator.rs
-src/models/multiple_raster_or_single_vector_source.rs
 src/models/multiple_raster_sources.rs
 src/models/names.rs
 src/models/neighborhood_aggregate.rs

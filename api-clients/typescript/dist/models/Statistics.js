@@ -18,8 +18,8 @@ exports.StatisticsFromJSON = StatisticsFromJSON;
 exports.StatisticsFromJSONTyped = StatisticsFromJSONTyped;
 exports.StatisticsToJSON = StatisticsToJSON;
 exports.StatisticsToJSONTyped = StatisticsToJSONTyped;
-const MultipleRasterOrSingleVectorSource_1 = require("./MultipleRasterOrSingleVectorSource");
 const StatisticsParameters_1 = require("./StatisticsParameters");
+const SingleRasterOrVectorSource_1 = require("./SingleRasterOrVectorSource");
 /**
  * @export
  */
@@ -48,7 +48,7 @@ function StatisticsFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'type': json['type'],
         'params': (0, StatisticsParameters_1.StatisticsParametersFromJSON)(json['params']),
-        'sources': (0, MultipleRasterOrSingleVectorSource_1.MultipleRasterOrSingleVectorSourceFromJSON)(json['sources']),
+        'sources': (0, SingleRasterOrVectorSource_1.SingleRasterOrVectorSourceFromJSON)(json['sources']),
     };
 }
 function StatisticsToJSON(json) {
@@ -61,6 +61,6 @@ function StatisticsToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'type': value['type'],
         'params': (0, StatisticsParameters_1.StatisticsParametersToJSON)(value['params']),
-        'sources': (0, MultipleRasterOrSingleVectorSource_1.MultipleRasterOrSingleVectorSourceToJSON)(value['sources']),
+        'sources': (0, SingleRasterOrVectorSource_1.SingleRasterOrVectorSourceToJSON)(value['sources']),
     };
 }

@@ -344,8 +344,6 @@ All URIs are relative to *https://geoengine.io/api*
 - [MultiLineString](docs/MultiLineString.md)
 - [MultiPoint](docs/MultiPoint.md)
 - [MultiPolygon](docs/MultiPolygon.md)
-- [MultipleRasterOrSingleVectorOperator](docs/MultipleRasterOrSingleVectorOperator.md)
-- [MultipleRasterOrSingleVectorSource](docs/MultipleRasterOrSingleVectorSource.md)
 - [MultipleRasterSources](docs/MultipleRasterSources.md)
 - [Names](docs/Names.md)
 - [NeighborhoodAggregate](docs/NeighborhoodAggregate.md)

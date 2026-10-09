@@ -26,7 +26,7 @@ class StatisticsParameters(BaseModel):
     """
     The parameter spec for `Statistics`
     """ # noqa: E501
-    column_names: Optional[List[StrictStr]] = Field(default=None, description="# Vector data The names of the attributes to generate statistics for.  # Raster data _Optional_: An alias for each input source. The operator will automatically name the rasters `Raster-1`, `Raster-2`, … if this parameter is empty. If aliases are given, the number of aliases must match the number of input rasters. Otherwise an error is returned.", alias="columnNames")
+    column_names: Optional[List[StrictStr]] = Field(default=None, description="# Vector data The names of the attributes to generate statistics for.  # Raster data _Optional_: The names of the bands to generate statistics for. The operator generates statistics for all bands if this parameter is empty.", alias="columnNames")
     percentiles: Optional[List[Union[StrictFloat, StrictInt]]] = Field(default=None, description="The percentiles to compute for each attribute.")
     __properties: ClassVar[List[str]] = ["columnNames", "percentiles"]
 

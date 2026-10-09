@@ -642,10 +642,9 @@ mod tests {
     };
     use geoengine_operators::{
         engine::{
-            MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
-            RasterBandDescriptors, RasterResultDescriptor, StaticMetaData, TimeDescriptor,
-            TypedOperator, TypedResultDescriptor, VectorColumnInfo, VectorOperator,
-            VectorResultDescriptor,
+            MetaData, MetaDataProvider, PlotOperator, RasterBandDescriptors,
+            RasterResultDescriptor, StaticMetaData, TimeDescriptor, TypedOperator,
+            TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
         },
         machine_learning::MlModelMetadata,
         mock::{MockPointSource, MockPointSourceParams, SpatialBoundsDerive},
@@ -657,7 +656,6 @@ mod tests {
             OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
             OgrSourceTimeFormat,
         },
-        util::input::MultiRasterOrVectorOperator::Raster,
     };
     use httptest::Server;
     use oauth2::{AccessToken, RefreshToken};
@@ -868,9 +866,11 @@ mod tests {
                         column_names: vec![],
                         percentiles: vec![],
                     },
-                    sources: MultipleRasterOrSingleVectorSource {
-                        source: Raster(vec![]),
-                    },
+                    sources: MockPointSource {
+                        params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
+                    }
+                    .boxed()
+                    .into(),
                 }
                 .boxed()
                 .into(),

@@ -20,17 +20,17 @@ import json
 from pydantic import BaseModel, ConfigDict, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List
 from geoengine_api_client.models.box_plot_parameters import BoxPlotParameters
-from geoengine_api_client.models.multiple_raster_or_single_vector_source import MultipleRasterOrSingleVectorSource
+from geoengine_api_client.models.single_raster_or_vector_source import SingleRasterOrVectorSource
 from typing import Optional, Set
 from typing_extensions import Self
 
 class BoxPlot(BaseModel):
     """
-    The `BoxPlot` is a _plot operator_ that computes a box plot over  - a selection of numerical columns of a single vector dataset, or - multiple raster datasets.  Thereby, the operator considers all data in the given query rectangle.  The boxes of the plot span the 1st and 3rd quartile and highlight the median. The whiskers indicate the minimum and maximum values of the corresponding attribute or raster.  ## Errors  The operator returns an error in the following cases.  - Vector data: The `attribute` for one of the given `columnNames` is not numeric. - Vector data: The `attribute` for one of the given `columnNames` does not exist. - Raster data: The length of the `columnNames` parameter does not match the number of input rasters.  ## Notes  If your dataset contains `infinite` or `NAN` values, they are ignored for the computation. Moreover, if your dataset contains more than `10.000`values (which is likely for rasters), the median and quartiles are estimated using the P^2 algorithm described in:  R. Jain and I. Chlamtac, The P^2 algorithm for dynamic calculation of quantiles and histograms without storing observations, Communications of the ACM, Volume 28 (October), Number 10, 1985, p. 1076-1085. <https://www.cse.wustl.edu/~jain/papers/ftp/psqr.pdf>
+    The `BoxPlot` is a _plot operator_ that computes a box plot over  - a selection of numerical columns of a single vector dataset, or - a selection of bands of a single raster dataset.  Thereby, the operator considers all data in the given query rectangle. For raster data, these are the pixels that intersect the query rectangle.  The boxes of the plot span the 1st and 3rd quartile and highlight the median. The whiskers indicate the minimum and maximum values of the corresponding attribute or band.  ## Errors  The operator returns an error in the following cases.  - Vector data: The `attribute` for one of the given `columnNames` is not numeric. - Vector data: The `attribute` for one of the given `columnNames` does not exist. - Raster data: The band for one of the given `columnNames` does not exist. - Raster data: More than 8 bands are selected.  ## Notes  If your dataset contains `infinite` or `NAN` values, they are ignored for the computation. Moreover, if your dataset contains more than `10.000`values (which is likely for rasters), the median and quartiles are estimated using the P^2 algorithm described in:  R. Jain and I. Chlamtac, The P^2 algorithm for dynamic calculation of quantiles and histograms without storing observations, Communications of the ACM, Volume 28 (October), Number 10, 1985, p. 1076-1085. <https://www.cse.wustl.edu/~jain/papers/ftp/psqr.pdf>
     """ # noqa: E501
     type: StrictStr
     params: BoxPlotParameters
-    sources: MultipleRasterOrSingleVectorSource
+    sources: SingleRasterOrVectorSource
     __properties: ClassVar[List[str]] = ["type", "params", "sources"]
 
     @field_validator('type')
@@ -99,7 +99,7 @@ class BoxPlot(BaseModel):
         _obj = cls.model_validate({
             "type": obj.get("type"),
             "params": BoxPlotParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
-            "sources": MultipleRasterOrSingleVectorSource.from_dict(obj["sources"]) if obj.get("sources") is not None else None
+            "sources": SingleRasterOrVectorSource.from_dict(obj["sources"]) if obj.get("sources") is not None else None
         })
         return _obj
 

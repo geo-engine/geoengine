@@ -47,7 +47,7 @@ impl ScatterPlot {
 impl Plot for ScatterPlot {
     fn to_vega_embeddable(&self, _allow_interactions: bool) -> Result<PlotData> {
         let vega_spec = serde_json::json!({
-            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+            "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
             "width": "container",
             "height": "container",
             "data": { "values": self.values },
@@ -101,7 +101,7 @@ mod tests {
         let ser = sp.to_vega_embeddable(false).unwrap().vega_string;
 
         let expected = serde_json::json!({
-            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+            "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
             "width": "container",
             "height": "container",
             "data": { "values": [

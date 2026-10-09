@@ -19,18 +19,18 @@ import json
 
 from pydantic import BaseModel, ConfigDict, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List
-from geoengine_api_client.models.multiple_raster_or_single_vector_source import MultipleRasterOrSingleVectorSource
+from geoengine_api_client.models.single_raster_or_vector_source import SingleRasterOrVectorSource
 from geoengine_api_client.models.statistics_parameters import StatisticsParameters
 from typing import Optional, Set
 from typing_extensions import Self
 
 class Statistics(BaseModel):
     """
-    The `Statistics` operator is a _plot operator_ that computes count statistics over  - a selection of numerical columns of a single vector dataset, or - multiple raster datasets.  The output is a JSON description.  For instance, you want to get an overview of a raster data source. Then, you can use this operator to get basic count statistics.  ## Vector Data  In the case of vector data, the operator generates one statistic for each of the selected numerical attributes. The operator returns an error if one of the selected attributes is not numeric.  ## Raster Data  For raster data, the operator generates one statistic for each input raster.  ## Errors  The operator returns an error in the following cases.  - Vector data: The `attribute` for one of the given `columnNames` is not numeric. - Vector data: The `attribute` for one of the given `columnNames` does not exist. - Raster data: The length of the `columnNames` parameter does not match the number of input rasters.  ### Example Output  ```json {   \"A\": {     \"valueCount\": 6,     \"validCount\": 6,     \"min\": 1.0,     \"max\": 6.0,     \"mean\": 3.5,     \"stddev\": 1.707,     \"percentiles\": [       {         \"percentile\": 0.25,         \"value\": 2.0       },       {         \"percentile\": 0.5,         \"value\": 3.5       },       {         \"percentile\": 0.75,         \"value\": 5.0       }     ]   } } ``` 
+    The `Statistics` operator is a _plot operator_ that computes count statistics over  - a selection of numerical columns of a single vector dataset, or - a selection of bands of a single raster dataset.  The output is a JSON description.  For instance, you want to get an overview of a raster data source. Then, you can use this operator to get basic count statistics.  ## Vector Data  In the case of vector data, the operator generates one statistic for each of the selected numerical attributes. The operator returns an error if one of the selected attributes is not numeric.  ## Raster Data  For raster data, the operator generates one statistic for each of the selected bands. It only considers the pixels that intersect the query rectangle.  ## Errors  The operator returns an error in the following cases.  - Vector data: The `attribute` for one of the given `columnNames` is not numeric. - Vector data: The `attribute` for one of the given `columnNames` does not exist. - Raster data: The band for one of the given `columnNames` does not exist.  ### Example Output  ```json {   \"ndvi\": {     \"valueCount\": 6,     \"validCount\": 6,     \"min\": 1.0,     \"max\": 6.0,     \"mean\": 3.5,     \"stddev\": 1.707,     \"percentiles\": [       {         \"percentile\": 0.25,         \"value\": 2.0       },       {         \"percentile\": 0.5,         \"value\": 3.5       },       {         \"percentile\": 0.75,         \"value\": 5.0       }     ]   } } ``` 
     """ # noqa: E501
     type: StrictStr
     params: StatisticsParameters
-    sources: MultipleRasterOrSingleVectorSource
+    sources: SingleRasterOrVectorSource
     __properties: ClassVar[List[str]] = ["type", "params", "sources"]
 
     @field_validator('type')
@@ -99,7 +99,7 @@ class Statistics(BaseModel):
         _obj = cls.model_validate({
             "type": obj.get("type"),
             "params": StatisticsParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
-            "sources": MultipleRasterOrSingleVectorSource.from_dict(obj["sources"]) if obj.get("sources") is not None else None
+            "sources": SingleRasterOrVectorSource.from_dict(obj["sources"]) if obj.get("sources") is not None else None
         })
         return _obj
 

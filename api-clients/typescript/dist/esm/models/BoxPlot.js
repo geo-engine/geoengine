@@ -10,8 +10,8 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import { MultipleRasterOrSingleVectorSourceFromJSON, MultipleRasterOrSingleVectorSourceToJSON, } from './MultipleRasterOrSingleVectorSource';
 import { BoxPlotParametersFromJSON, BoxPlotParametersToJSON, } from './BoxPlotParameters';
+import { SingleRasterOrVectorSourceFromJSON, SingleRasterOrVectorSourceToJSON, } from './SingleRasterOrVectorSource';
 /**
  * @export
  */
@@ -40,7 +40,7 @@ export function BoxPlotFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'type': json['type'],
         'params': BoxPlotParametersFromJSON(json['params']),
-        'sources': MultipleRasterOrSingleVectorSourceFromJSON(json['sources']),
+        'sources': SingleRasterOrVectorSourceFromJSON(json['sources']),
     };
 }
 export function BoxPlotToJSON(json) {
@@ -53,6 +53,6 @@ export function BoxPlotToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'type': value['type'],
         'params': BoxPlotParametersToJSON(value['params']),
-        'sources': MultipleRasterOrSingleVectorSourceToJSON(value['sources']),
+        'sources': SingleRasterOrVectorSourceToJSON(value['sources']),
     };
 }

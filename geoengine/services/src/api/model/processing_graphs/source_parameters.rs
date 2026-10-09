@@ -69,7 +69,7 @@ pub struct SingleRasterOrVectorSource {
     pub source: SingleRasterOrVectorOperator,
 }
 
-/// It is either a set of `RasterOperator` or a single `VectorOperator`
+/// It is either a single `RasterOperator` or a single `VectorOperator`
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[schema(no_recursion)]
 #[serde(untagged)]
@@ -123,48 +123,6 @@ impl TryFrom<SingleVectorMultipleRasterSources>
     }
 }
 
-/// Either one or more raster operators or a single vector operator as source for this operator.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[schema(no_recursion)]
-#[serde(rename_all = "camelCase")]
-pub struct MultipleRasterOrSingleVectorSource {
-    #[serde(alias = "vector", alias = "raster")]
-    pub source: MultipleRasterOrSingleVectorOperator,
-}
-
-/// It is either a set of `RasterOperator` or a single `VectorOperator`
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[schema(no_recursion)]
-#[serde(untagged)]
-pub enum MultipleRasterOrSingleVectorOperator {
-    Raster(Vec<RasterOperator>),
-    Vector(VectorOperator),
-}
-
-impl TryFrom<MultipleRasterOrSingleVectorSource>
-    for geoengine_operators::engine::MultipleRasterOrSingleVectorSource
-{
-    type Error = anyhow::Error;
-
-    fn try_from(value: MultipleRasterOrSingleVectorSource) -> Result<Self, Self::Error> {
-        use geoengine_operators::util::input::MultiRasterOrVectorOperator as OperatorsMultiRasterOrVectorOperator;
-        let source = match value.source {
-            MultipleRasterOrSingleVectorOperator::Raster(rasters) => {
-                OperatorsMultiRasterOrVectorOperator::Raster(
-                    rasters
-                        .into_iter()
-                        .map(std::convert::TryInto::try_into)
-                        .collect::<Result<_, _>>()?,
-                )
-            }
-            MultipleRasterOrSingleVectorOperator::Vector(vector) => {
-                OperatorsMultiRasterOrVectorOperator::Vector(vector.try_into()?)
-            }
-        };
-        Ok(Self { source })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,39 +165,6 @@ mod tests {
         assert!(matches!(
             raster.source,
             SingleRasterOrVectorOperator::Raster(_)
-        ));
-    }
-
-    #[test]
-    fn it_deserializes_multiple_raster_or_single_vector_source_aliases() {
-        let vector: MultipleRasterOrSingleVectorSource =
-            serde_json::from_value(serde_json::json!({
-                "vector": {
-                    "type": "OgrSource",
-                    "params": {
-                        "data": "example_data"
-                    }
-                }
-            }))
-            .expect("vector alias must deserialize");
-        assert!(matches!(
-            vector.source,
-            MultipleRasterOrSingleVectorOperator::Vector(_)
-        ));
-
-        let raster: MultipleRasterOrSingleVectorSource =
-            serde_json::from_value(serde_json::json!({
-                "raster": [{
-                    "type": "GdalSource",
-                    "params": {
-                        "data": "example_data"
-                    }
-                }]
-            }))
-            .expect("raster alias must deserialize");
-        assert!(matches!(
-            raster.source,
-            MultipleRasterOrSingleVectorOperator::Raster(_)
         ));
     }
 
@@ -318,25 +243,5 @@ mod tests {
             api.try_into().expect("conversion failed");
 
         assert_eq!(eng.rasters.len(), 1);
-    }
-
-    #[test]
-    fn it_converts_multiple_raster_or_single_vector_source() {
-        let api = MultipleRasterOrSingleVectorSource {
-            source: MultipleRasterOrSingleVectorOperator::Raster(vec![RasterOperator::GdalSource(
-                GdalSource {
-                    r#type: Default::default(),
-                    params: GdalSourceParameters {
-                        data: NamedData::with_system_name("example_data"),
-                        overview_level: None,
-                    },
-                },
-            )]),
-        };
-
-        let eng: geoengine_operators::engine::MultipleRasterOrSingleVectorSource =
-            api.try_into().expect("conversion failed");
-
-        assert!(eng.raster().is_some());
     }
 }
