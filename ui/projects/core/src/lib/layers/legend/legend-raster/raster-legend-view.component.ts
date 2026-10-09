@@ -9,13 +9,7 @@ import {
     RasterLayerMetadata,
     SingleBandRasterColorizer,
 } from '@geoengine/common';
-import {
-    RasterBandDescriptor,
-    Measurement,
-    ContinuousMeasurement,
-    ClassificationMeasurement,
-    UnitlessMeasurement,
-} from '@geoengine/api-client';
+import {RasterBandDescriptor, Measurement, ContinuousMeasurement, ClassificationMeasurement} from '@geoengine/api-client';
 import {MatProgressSpinner} from '@angular/material/progress-spinner';
 import {CommonModule as AngularCommonModule} from '@angular/common';
 
@@ -68,17 +62,27 @@ export class CastMeasurementToContinuousPipe implements PipeTransform {
     }
 }
 
+/**
+ * Human readable text of a band measurement, e.g. `Reflectance (in %)`
+ */
+export function measurementText(measurement: Measurement): string {
+    switch (measurement.type) {
+        case 'continuous':
+            return measurement.unit ? `${measurement.measurement} (in ${measurement.unit})` : measurement.measurement;
+        case 'classification':
+            return measurement.measurement;
+        case 'unitless':
+            return 'unitless';
+    }
+}
+
 @Pipe({
-    name: 'unitlessMeasurement',
+    name: 'legendMeasurementText',
     pure: true,
 })
-export class CastMeasurementToUnitlessPipe implements PipeTransform {
-    transform(value: Measurement, _args?: unknown): UnitlessMeasurement | null {
-        if (value.type == 'unitless') {
-            return value;
-        } else {
-            return null;
-        }
+export class LegendMeasurementTextPipe implements PipeTransform {
+    transform(value: Measurement, _args?: unknown): string {
+        return measurementText(value);
     }
 }
 
@@ -144,6 +148,48 @@ export function selectBands(bands: Array<RasterBandDescriptor>, rasterColorizer:
     }
 }
 
+export interface RgbLegendChannel {
+    label: 'Red' | 'Green' | 'Blue';
+    cssColor: string;
+    band: RasterBandDescriptor;
+    min: number;
+    max: number;
+    scale: number;
+}
+
+/**
+ * Describe the red, green and blue channels of a multi band raster colorizer for the legend.
+ * Returns `undefined` for other colorizers.
+ */
+export function selectRgbChannels(
+    bands: Array<RasterBandDescriptor>,
+    rasterColorizer: RasterColorizer,
+): Array<RgbLegendChannel> | undefined {
+    if (!(rasterColorizer instanceof MultiBandRasterColorizer)) {
+        return undefined;
+    }
+
+    const channel = (
+        label: RgbLegendChannel['label'],
+        cssColor: string,
+        bandIndex: number,
+        min: number,
+        max: number,
+        scale: number,
+    ): RgbLegendChannel => {
+        // limit to significant digits to avoid long floating point tails like `0.30000000000000004`
+        const round = (value: number): number => Number(value.toPrecision(6));
+        return {label, cssColor, band: bands[bandIndex], min: round(min), max: round(max), scale: round(scale)};
+    };
+
+    const c = rasterColorizer;
+    return [
+        channel('Red', '#e5484d', c.redBand, c.redMin, c.redMax, c.redScale),
+        channel('Green', '#30a46c', c.greenBand, c.greenMin, c.greenMax, c.greenScale),
+        channel('Blue', '#3e63dd', c.blueBand, c.blueMin, c.blueMax, c.blueScale),
+    ];
+}
+
 /**
  * The raster legend view component.
  * It displays the legend for a raster layer with the given metadata and has no service dependencies.
@@ -158,8 +204,7 @@ export function selectBands(bands: Array<RasterBandDescriptor>, rasterColorizer:
         AngularCommonModule,
         BreakpointToCssStringPipe,
         CastMeasurementToClassificationPipe,
-        CastMeasurementToContinuousPipe,
-        CastMeasurementToUnitlessPipe,
+        LegendMeasurementTextPipe,
         MatProgressSpinner,
         RasterColorizerCssGradientPipe,
     ],
@@ -177,6 +222,13 @@ export class RasterLegendViewComponent {
         }
         return selectBands(metadata.bands, this.layer().symbology.rasterColorizer);
     });
+    readonly rgbChannels = computed<Array<RgbLegendChannel> | undefined>(() => {
+        const metadata = this.metadata();
+        if (!metadata) {
+            return undefined;
+        }
+        return selectRgbChannels(metadata.bands, this.layer().symbology.rasterColorizer);
+    });
     readonly displayedBreakpoints = computed<Array<number>>(() =>
         calculateDisplayedBreakpoints(this.layer(), this.orderValuesDescending()),
     );
@@ -189,6 +241,10 @@ export class RasterLegendViewComponent {
         }
     });
     readonly gradientAngle = computed<number>(() => (this.orderValuesDescending() ? 0 : 180));
+    readonly bandNamesText = computed<string>(() => (this.selectedBands() ?? []).map((band) => band.name).join(', '));
+    readonly measurementsText = computed<string>(() =>
+        (this.selectedBands() ?? []).map((band) => measurementText(band.measurement)).join(', '),
+    );
     readonly bandsHaveUnits = computed<boolean>(() => {
         const selectedBands = this.selectedBands();
         if (!selectedBands) {
