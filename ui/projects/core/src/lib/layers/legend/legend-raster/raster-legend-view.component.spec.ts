@@ -4,7 +4,9 @@ import {
     calculateNumberPipeParameters,
     CastMeasurementToClassificationPipe,
     CastMeasurementToContinuousPipe,
+    measurementText,
     selectBands,
+    selectRgbChannels,
     unifyDecimals,
 } from './raster-legend-view.component';
 
@@ -158,5 +160,30 @@ describe('RasterLegend', () => {
 
         const multiBand = new MultiBandRasterColorizer(3, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, BLACK);
         expect(selectBands(bands, multiBand).map((band) => band.name)).toEqual(['d', 'a', 'b']);
+    });
+
+    it('selectRgbChannels', () => {
+        const bands: Array<RasterBandDescriptor> = ['a', 'b', 'c', 'd'].map((name) => ({name, measurement: {type: 'unitless'}}));
+
+        const singleBand = new SingleBandRasterColorizer(
+            2,
+            new LinearGradient([new ColorBreakpoint(0, BLACK), new ColorBreakpoint(1, WHITE)], BLACK, BLACK, BLACK),
+        );
+        expect(selectRgbChannels(bands, singleBand)).toBeUndefined();
+
+        const multiBand = new MultiBandRasterColorizer(3, 0, 1, 0, 3000, 1, 0.5, 1.25, 1, 0.1 + 0.2, 10, 2, BLACK);
+        const channels = selectRgbChannels(bands, multiBand);
+        expect(channels?.map((c) => [c.label, c.band.name, c.min, c.max, c.scale])).toEqual([
+            ['Red', 'd', 0, 3000, 1],
+            ['Green', 'a', 0.5, 1.25, 1],
+            ['Blue', 'b', 0.3, 10, 2],
+        ]);
+    });
+
+    it('measurementText', () => {
+        expect(measurementText({type: 'continuous', measurement: 'Reflectance', unit: '%'})).toBe('Reflectance (in %)');
+        expect(measurementText({type: 'continuous', measurement: 'Reflectance'})).toBe('Reflectance');
+        expect(measurementText({type: 'classification', measurement: 'Land cover', classes: {}})).toBe('Land cover');
+        expect(measurementText({type: 'unitless'})).toBe('unitless');
     });
 });

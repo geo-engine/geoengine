@@ -187,9 +187,9 @@
                         </div>
                     }
                     @case (ST.RASTER) {
-                        <div fxLayoutAlign="space-between stretch" fxLayout="row" class="legend no-drag">
-                            <geoengine-raster-legend fxFlex="grow" [layer]="$any(layer())"></geoengine-raster-legend>
-                            <button mat-icon-button (click)="toggleLegend(layer())">
+                        <div class="legend raster-legend no-drag">
+                            <geoengine-raster-legend [layer]="$any(layer())"></geoengine-raster-legend>
+                            <button mat-icon-button class="legend-toggle" (click)="toggleLegend(layer())">
                                 <mat-icon>expand_less</mat-icon>
                             </button>
                         </div>
