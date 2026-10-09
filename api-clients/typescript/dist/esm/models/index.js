@@ -320,6 +320,7 @@ export * from './SpatialResolution';
 export * from './StacApiRetries';
 export * from './StacAssetBand';
 export * from './StacDataProviderDefinition';
+export * from './StacGrid';
 export * from './StacProviderAuthentication';
 export * from './StacProviderDataset';
 export * from './StacProviderDatasetBand';

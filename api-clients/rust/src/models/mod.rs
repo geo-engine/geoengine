@@ -638,6 +638,8 @@ pub mod stac_asset_band;
 pub use self::stac_asset_band::StacAssetBand;
 pub mod stac_data_provider_definition;
 pub use self::stac_data_provider_definition::StacDataProviderDefinition;
+pub mod stac_grid;
+pub use self::stac_grid::StacGrid;
 pub mod stac_provider_authentication;
 pub use self::stac_provider_authentication::StacProviderAuthentication;
 pub mod stac_provider_dataset;

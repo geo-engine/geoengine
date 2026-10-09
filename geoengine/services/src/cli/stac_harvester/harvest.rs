@@ -1760,6 +1760,7 @@ mod tests {
             query_timeout_secs: 60,
             page_limit: 10,
             cache_ttl_secs: None,
+            stac_grid: None,
         };
 
         let items: stac::ItemCollection = serde_json::from_str(include_str!(

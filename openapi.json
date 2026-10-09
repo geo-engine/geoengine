@@ -14232,6 +14232,33 @@
                 "description": "Optional output cache lifetime; omitted values use the global cache default."
               }
             ]
+          },
+          "stacGrid": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StacGrid",
+                "description": "Target number of square search cells per dataset CRS projected area of use; omitted values use 512."
+              }
+            ]
+          }
+        }
+      },
+      "StacGrid": {
+        "type": "object",
+        "required": [
+          "targetNumberOfCells"
+        ],
+        "properties": {
+          "targetNumberOfCells": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Target number of square cells; actual count may differ due to square geometry.",
+            "default": 512,
+            "maximum": 2147483647,
+            "minimum": 1
           }
         }
       },

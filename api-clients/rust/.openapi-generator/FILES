@@ -335,6 +335,7 @@ docs/StRectangle.md
 docs/StacApiRetries.md
 docs/StacAssetBand.md
 docs/StacDataProviderDefinition.md
+docs/StacGrid.md
 docs/StacProviderAuthentication.md
 docs/StacProviderDataset.md
 docs/StacProviderDatasetBand.md
@@ -794,6 +795,7 @@ src/models/st_rectangle.rs
 src/models/stac_api_retries.rs
 src/models/stac_asset_band.rs
 src/models/stac_data_provider_definition.rs
+src/models/stac_grid.rs
 src/models/stac_provider_authentication.rs
 src/models/stac_provider_dataset.rs
 src/models/stac_provider_dataset_band.rs

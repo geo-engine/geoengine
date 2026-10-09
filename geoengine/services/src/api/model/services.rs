@@ -1171,6 +1171,16 @@ pub struct StacDataProviderDefinition {
     pub page_limit: i64,
     /// Optional output cache lifetime; omitted values use the global cache default.
     pub cache_ttl_secs: Option<CacheTtlSeconds>,
+    /// Target number of square search cells per dataset CRS projected area of use; omitted values use 512.
+    pub stac_grid: Option<StacGrid>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StacGrid {
+    /// Target number of square cells; actual count may differ due to square geometry.
+    #[schema(default = 512, minimum = 1, maximum = 2_147_483_647)]
+    pub target_number_of_cells: i32,
 }
 
 fn default_query_timeout() -> i64 {
@@ -1199,6 +1209,7 @@ impl From<StacDataProviderDefinition>
             page_limit: value.page_limit,
             query_timeout_secs: value.query_timeout_secs,
             cache_ttl_secs: value.cache_ttl_secs.map(Into::into),
+            stac_grid: value.stac_grid.map(Into::into),
         }
     }
 }
@@ -1222,6 +1233,23 @@ impl From<crate::datasets::external::stac::StacDataProviderDefinition>
             page_limit: value.page_limit,
             query_timeout_secs: value.query_timeout_secs,
             cache_ttl_secs: value.cache_ttl_secs.map(Into::into),
+            stac_grid: value.stac_grid.map(Into::into),
+        }
+    }
+}
+
+impl From<StacGrid> for crate::datasets::external::stac::StacGrid {
+    fn from(value: StacGrid) -> Self {
+        Self {
+            target_number_of_cells: value.target_number_of_cells,
+        }
+    }
+}
+
+impl From<crate::datasets::external::stac::StacGrid> for StacGrid {
+    fn from(value: crate::datasets::external::stac::StacGrid) -> Self {
+        Self {
+            target_number_of_cells: value.target_number_of_cells,
         }
     }
 }

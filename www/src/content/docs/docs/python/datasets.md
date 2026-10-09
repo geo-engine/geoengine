@@ -499,3 +499,32 @@ def dataset_metadata_by_name(
 ```
 
 Get dataset information.
+
+## STAC provider grid
+
+STAC provider definitions accept an optional `stacGrid` object that sets the
+target number of square search cells for each dataset's projected CRS area of use:
+
+```json
+{
+    "stacGrid": {
+        "targetNumberOfCells": 512
+    }
+}
+```
+
+The default target is 512 cells. The derived count can differ from the target
+because the cells have equal sides and cover the CRS projected extent. Cell
+dimensions use the CRS native units, so square cells in EPSG:4326 are square in
+degrees and do not represent equal ground distances everywhere. A query crossing a cell
+boundary searches each intersected cell. Successful searches are cached by
+full dataset definition, integer cell index, and the layer's regular time step,
+including its configured origin and granularity, so repeated queries and
+concurrent requests can share the same cell metadata. Larger targets reduce
+the cell size and increase the number of searches. The target must be a positive
+32-bit integer. Each selected cell's projected footprint is clipped to the
+fixed CRS area of use, converted to WGS84, and searched; existing HTTP retries
+apply to each cell's pages.
+
+Time-only queries derive their steps directly from the provider's regular
+`timeDimension`, including steps without data, and do not contact STAC.

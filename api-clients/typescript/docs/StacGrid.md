@@ -1,26 +1,22 @@
 
-# GdalMultiBand
+# StacGrid
 
 
 ## Properties
 
 Name | Type
 ------------ | -------------
-`type` | string
-`resultDescriptor` | [RasterResultDescriptor](RasterResultDescriptor.md)
-`cacheTtl` | number
+`targetNumberOfCells` | number
 
 ## Example
 
 ```typescript
-import type { GdalMultiBand } from '@geoengine/api-client'
+import type { StacGrid } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "type": null,
-  "resultDescriptor": null,
-  "cacheTtl": null,
-} satisfies GdalMultiBand
+  "targetNumberOfCells": null,
+} satisfies StacGrid
 
 console.log(example)
 
@@ -29,7 +25,7 @@ const exampleJSON: string = JSON.stringify(example)
 console.log(exampleJSON)
 
 // Parse the JSON string back to an object
-const exampleParsed = JSON.parse(exampleJSON) as GdalMultiBand
+const exampleParsed = JSON.parse(exampleJSON) as StacGrid
 console.log(exampleParsed)
 ```
 

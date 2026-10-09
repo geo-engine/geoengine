@@ -17,28 +17,18 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Any, ClassVar, Dict, List
 from typing_extensions import Annotated
-from geoengine_api_client.models.raster_result_descriptor import RasterResultDescriptor
 from typing import Optional, Set
 from typing_extensions import Self
 
-class GdalMultiBand(BaseModel):
+class StacGrid(BaseModel):
     """
-    GdalMultiBand
+    StacGrid
     """ # noqa: E501
-    type: StrictStr
-    result_descriptor: RasterResultDescriptor = Field(alias="resultDescriptor")
-    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, description="Dataset-level TTL fallback used when no tile-level TTL is provided.", alias="cacheTtl")
-    __properties: ClassVar[List[str]] = ["type", "resultDescriptor", "cacheTtl"]
-
-    @field_validator('type')
-    def type_validate_enum(cls, value):
-        """Validates the enum"""
-        if value not in set(['GdalMultiBand']):
-            raise ValueError("must be one of enum values ('GdalMultiBand')")
-        return value
+    target_number_of_cells: Annotated[int, Field(le=2147483647, strict=True, ge=1)] = Field(description="Target number of square cells; actual count may differ due to square geometry.", alias="targetNumberOfCells")
+    __properties: ClassVar[List[str]] = ["targetNumberOfCells"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -58,7 +48,7 @@ class GdalMultiBand(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of GdalMultiBand from a JSON string"""
+        """Create an instance of StacGrid from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -79,19 +69,11 @@ class GdalMultiBand(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of result_descriptor
-        if self.result_descriptor:
-            _dict['resultDescriptor'] = self.result_descriptor.to_dict()
-        # set to None if cache_ttl (nullable) is None
-        # and model_fields_set contains the field
-        if self.cache_ttl is None and "cache_ttl" in self.model_fields_set:
-            _dict['cacheTtl'] = None
-
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of GdalMultiBand from a dict"""
+        """Create an instance of StacGrid from a dict"""
         if obj is None:
             return None
 
@@ -99,9 +81,7 @@ class GdalMultiBand(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "type": obj.get("type"),
-            "resultDescriptor": RasterResultDescriptor.from_dict(obj["resultDescriptor"]) if obj.get("resultDescriptor") is not None else None,
-            "cacheTtl": obj.get("cacheTtl")
+            "targetNumberOfCells": obj.get("targetNumberOfCells") if obj.get("targetNumberOfCells") is not None else 512
         })
         return _obj
 

@@ -916,6 +916,10 @@ CREATE TYPE "StacProviderDataset" AS (
     bands "StacProviderDatasetBand" []
 );
 
+CREATE TYPE "StacGrid" AS (
+    target_number_of_cells integer
+);
+
 CREATE TYPE "StacDataProviderDefinition" AS (
     "name" text,
     id uuid,
@@ -929,7 +933,8 @@ CREATE TYPE "StacDataProviderDefinition" AS (
     query_timeout_secs bigint,
     page_limit bigint,
     authentication "StacProviderAuthentication",
-    cache_ttl_secs int
+    cache_ttl_secs int,
+    stac_grid "StacGrid"
 );
 
 CREATE TYPE "DataProviderDefinition" AS (

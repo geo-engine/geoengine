@@ -103,5 +103,6 @@
   ],
   "pageLimit": 100,
   "queryTimeoutSecs": 60,
-  "cacheTtlSecs": null
+  "cacheTtlSecs": null,
+  "stacGrid": null
 }
