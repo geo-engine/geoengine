@@ -16,17 +16,19 @@ use crate::util::statistics::{SafePSquareQuantileEstimator, StatisticsError};
 use async_trait::async_trait;
 use futures::{StreamExt, TryFutureExt, TryStreamExt};
 use geoengine_datatypes::collections::FeatureCollectionInfos;
+use geoengine_datatypes::plots::{Plot, PlotData, Table, TableColumn};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, PlotQueryRectangle,
     RasterQueryRectangle, SpatialResolution,
 };
 use geoengine_datatypes::raster::ConvertDataTypeParallel;
 use geoengine_datatypes::raster::GridOrEmpty;
+use itertools::Itertools;
 use num_traits::AsPrimitive;
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 pub const STATISTICS_OPERATOR_NAME: &str = "Statistics";
 
@@ -66,6 +68,18 @@ impl PlotOperator for Statistics {
             self.params.percentiles.len() <= 8,
             error::InvalidOperatorSpec {
                 reason: "Only up to 8 percentiles can be computed at the same time.".to_string(),
+            }
+        );
+
+        ensure!(
+            self.params
+                .percentiles
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+                == self.params.percentiles.len(),
+            error::InvalidOperatorSpec {
+                reason: "The percentiles must be unique.".to_string(),
             }
         );
 
@@ -116,6 +130,7 @@ impl PlotOperator for Statistics {
                         .into_iter()
                         .filter(|(_, info)| info.data_type.is_numeric())
                         .map(|(name, _)| name)
+                        .sorted() // the columns are a `HashMap`, so sort them for a stable row order
                         .collect()
                 } else {
                     for cn in &self.params.column_names {
@@ -206,7 +221,7 @@ impl InitializedPlotOperator for InitializedStatistics<Box<dyn InitializedVector
     }
 
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
-        Ok(TypedPlotQueryProcessor::JsonPlain(
+        Ok(TypedPlotQueryProcessor::JsonVega(
             StatisticsVectorQueryProcessor {
                 vector: self.source.query_processor()?,
                 column_names: self.columns.clone(),
@@ -242,7 +257,7 @@ impl InitializedPlotOperator
     }
 
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
-        Ok(TypedPlotQueryProcessor::JsonPlain(
+        Ok(TypedPlotQueryProcessor::JsonVega(
             StatisticsRasterQueryProcessor {
                 raster: self.source.query_processor()?,
                 bands: self.columns.clone(),
@@ -280,7 +295,7 @@ pub struct StatisticsVectorQueryProcessor {
 
 #[async_trait]
 impl PlotQueryProcessor for StatisticsVectorQueryProcessor {
-    type OutputFormat = serde_json::Value;
+    type OutputFormat = PlotData;
 
     fn plot_type(&self) -> &'static str {
         STATISTICS_OPERATOR_NAME
@@ -291,7 +306,7 @@ impl PlotQueryProcessor for StatisticsVectorQueryProcessor {
         query: PlotQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
-        let mut statistics: BTreeMap<String, StatisticsAggregator<f64>> = self
+        let mut statistics: Vec<(String, StatisticsAggregator<f64>)> = self
             .column_names
             .iter()
             .map(|column| {
@@ -325,13 +340,15 @@ impl PlotQueryProcessor for StatisticsVectorQueryProcessor {
             }
         });
 
-        let output: BTreeMap<String, StatisticsOutput> = statistics
-            .iter()
-            .map(|(column, number_statistics)| {
-                (column.clone(), StatisticsOutput::from(number_statistics))
-            })
-            .collect();
-        serde_json::to_value(output).map_err(Into::into)
+        statistics_table(
+            statistics
+                .iter()
+                .map(|(column, number_statistics)| {
+                    StatisticsOutput::new(column.clone(), number_statistics)
+                })
+                .collect(),
+            &self.percentiles,
+        )
     }
 }
 
@@ -344,7 +361,7 @@ pub struct StatisticsRasterQueryProcessor {
 
 #[async_trait]
 impl PlotQueryProcessor for StatisticsRasterQueryProcessor {
-    type OutputFormat = serde_json::Value;
+    type OutputFormat = PlotData;
 
     fn plot_type(&self) -> &'static str {
         STATISTICS_OPERATOR_NAME
@@ -409,13 +426,14 @@ impl PlotQueryProcessor for StatisticsRasterQueryProcessor {
             )
             .await?;
 
-        let output: BTreeMap<String, StatisticsOutput> = self
-            .bands
-            .iter()
-            .zip(&statistics)
-            .map(|(band, stat)| (band.name.clone(), StatisticsOutput::from(stat)))
-            .collect();
-        serde_json::to_value(output).map_err(Into::into)
+        statistics_table(
+            self.bands
+                .iter()
+                .zip(&statistics)
+                .map(|(band, stat)| StatisticsOutput::new(band.name.clone(), stat))
+                .collect(),
+            &self.percentiles,
+        )
     }
 }
 
@@ -513,10 +531,44 @@ impl<T: AsPrimitive<f64>> PercentileEstimator<T> {
     }
 }
 
+/// Creates a table with one row of `statistics` per band or column.
+///
+/// The rows contain the raw statistics in the `data.values` of the Vega spec,
+/// the columns display them and one computed column per percentile.
+fn statistics_table(statistics: Vec<StatisticsOutput>, percentiles: &[f64]) -> Result<PlotData> {
+    let rows = statistics
+        .into_iter()
+        .map(|row| match serde_json::to_value(row)? {
+            serde_json::Value::Object(row) => Ok(row),
+            _ => unreachable!("statistics output should serialize to a JSON object"),
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let mut columns = vec![
+        TableColumn::new("valueCount").with_format(",d"),
+        TableColumn::new("validCount").with_format(",d"),
+        TableColumn::new("min").with_format(".2f"),
+        TableColumn::new("max").with_format(".2f"),
+        TableColumn::new("mean").with_format(".2f"),
+        TableColumn::new("stddev").with_format(".2f"),
+    ];
+    columns.extend(percentiles.iter().enumerate().map(|(i, percentile)| {
+        // round to avoid titles like `p33.300000000000004`
+        let title = format!("p{}", (percentile * 100_000.).round() / 1_000.);
+        TableColumn::computed(format!("p{i}"), format!("datum.percentiles[{i}].value"))
+            .with_title(title)
+            .with_format(".2f")
+    }));
+
+    Ok(Table::new("name", rows, columns)?.to_vega_embeddable(false)?)
+}
+
 /// The statistics summary output type for each raster input/vector input column
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StatisticsOutput {
+    /// The name of the band or column
+    pub name: String,
     pub value_count: usize,
     pub valid_count: usize,
     pub min: f64,
@@ -532,10 +584,11 @@ struct PercentileOutput {
     value: f64,
 }
 
-impl From<&StatisticsAggregator<f64>> for StatisticsOutput {
-    fn from(statistics: &StatisticsAggregator<f64>) -> Self {
+impl StatisticsOutput {
+    fn new(name: String, statistics: &StatisticsAggregator<f64>) -> Self {
         let number_statistics = statistics.number_statistics;
         Self {
+            name,
             value_count: number_statistics.count() + number_statistics.nan_count(),
             valid_count: number_statistics.count(),
             min: number_statistics.min(),
@@ -685,7 +738,7 @@ mod tests {
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await?;
 
-        let processor = statistics.query_processor()?.json_plain().unwrap();
+        let processor = statistics.query_processor()?.json_vega().unwrap();
 
         processor
             .plot_query(
@@ -693,6 +746,86 @@ mod tests {
                 &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
+            .map(|plot| table_rows(&plot))
+    }
+
+    /// The rows of the statistics table, i.e., the `data.values` of the Vega spec
+    fn table_rows(plot: &PlotData) -> serde_json::Value {
+        let spec: serde_json::Value = serde_json::from_str(&plot.vega_string).unwrap();
+        spec["data"]["values"].clone()
+    }
+
+    #[tokio::test]
+    async fn it_creates_a_column_per_percentile() {
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(GridShape2D::new_2d(3, 2)),
+        );
+        let plot = Statistics {
+            params: StatisticsParams {
+                column_names: vec![],
+                percentiles: vec![NotNan::new(0.25).unwrap(), NotNan::new(1. / 3.).unwrap()],
+            },
+            sources: multi_band_raster_source(vec![vec![1, 2, 3, 4, 5, 6]]).into(),
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .await
+        .unwrap()
+        .query_processor()
+        .unwrap()
+        .json_vega()
+        .unwrap()
+        .plot_query(
+            PlotQueryRectangle::new(
+                world_bbox(),
+                TimeInterval::default(),
+                PlotSeriesSelection::all(),
+            ),
+            &execution_context.mock_query_context(ChunkByteSize::MIN),
+        )
+        .await
+        .unwrap();
+
+        let spec: serde_json::Value = serde_json::from_str(&plot.vega_string).unwrap();
+
+        assert_eq!(
+            spec["encoding"]["x"]["sort"],
+            json!([
+                "valueCount",
+                "validCount",
+                "min",
+                "max",
+                "mean",
+                "stddev",
+                "p25",
+                "p33.333"
+            ])
+        );
+        assert_eq!(
+            spec["transform"][0],
+            json!({"calculate": "datum.percentiles[0].value", "as": "p0"})
+        );
+        assert_eq!(
+            spec["transform"][1],
+            json!({"calculate": "datum.percentiles[1].value", "as": "p1"})
+        );
+    }
+
+    #[tokio::test]
+    async fn it_rejects_duplicate_percentiles() {
+        let result = raster_statistics(
+            multi_band_raster_source(vec![vec![1, 2, 3, 4, 5, 6]]),
+            StatisticsParams {
+                column_names: vec![],
+                percentiles: vec![NotNan::new(0.5).unwrap(), NotNan::new(0.5).unwrap()],
+            },
+            world_bbox(),
+        )
+        .await;
+
+        assert!(
+            matches!(result, Err(error::Error::InvalidOperatorSpec{reason}) if reason == *"The percentiles must be unique.")
+        );
     }
 
     fn world_bbox() -> BoundingBox2D {
@@ -714,8 +847,9 @@ mod tests {
 
         assert_eq!(
             result,
-            json!({
-                "band_0": {
+            json!([
+                {
+                    "name": "band_0",
                     "valueCount": 65_341, // 361*181: the query bounds include the pixels at the right and lower edge
                     "validCount": 6,
                     "min": 1.0,
@@ -724,7 +858,7 @@ mod tests {
                     "stddev": 1.707_825_127_659_933,
                     "percentiles": [],
                 }
-            })
+            ])
         );
     }
 
@@ -743,8 +877,9 @@ mod tests {
 
         assert_eq!(
             result,
-            json!({
-                "band_0": {
+            json!([
+                {
+                    "name": "band_0",
                     "valueCount": 65_341, // 361*181: the query bounds include the pixels at the right and lower edge
                     "validCount": 6,
                     "min": 1.0,
@@ -753,7 +888,8 @@ mod tests {
                     "stddev": 1.707_825_127_659_933,
                     "percentiles": [],
                 },
-                "band_1": {
+                {
+                    "name": "band_1",
                     "valueCount": 65_341,
                     "validCount": 6,
                     "min": 7.0,
@@ -762,7 +898,7 @@ mod tests {
                     "stddev": 1.707_825_127_659_933,
                     "percentiles": [],
                 },
-            })
+            ])
         );
     }
 
@@ -785,8 +921,9 @@ mod tests {
 
         assert_eq!(
             result,
-            json!({
-                "band_0": {
+            json!([
+                {
+                    "name": "band_0",
                     "valueCount": 65_341,
                     "validCount": 6,
                     "min": 1.0,
@@ -795,7 +932,8 @@ mod tests {
                     "stddev": 1.707_825_127_659_933,
                     "percentiles": [],
                 },
-                "band_2": {
+                {
+                    "name": "band_2",
                     "valueCount": 65_341,
                     "validCount": 6,
                     "min": 13.0,
@@ -804,7 +942,7 @@ mod tests {
                     "stddev": 1.707_825_127_659_933,
                     "percentiles": [],
                 },
-            })
+            ])
         );
     }
 
@@ -841,8 +979,9 @@ mod tests {
 
         assert_eq!(
             result,
-            json!({
-                "band_0": {
+            json!([
+                {
+                    "name": "band_0",
                     "valueCount": 2,
                     "validCount": 2,
                     "min": 1.0,
@@ -851,7 +990,7 @@ mod tests {
                     "stddev": 1.0,
                     "percentiles": [],
                 }
-            })
+            ])
         );
     }
 
@@ -913,7 +1052,7 @@ mod tests {
             .await
             .unwrap();
 
-        let processor = statistics.query_processor().unwrap().json_plain().unwrap();
+        let processor = statistics.query_processor().unwrap().json_vega().unwrap();
 
         let result = processor
             .plot_query(
@@ -926,20 +1065,13 @@ mod tests {
             )
             .await
             .unwrap();
+        let result = table_rows(&result);
 
         assert_eq!(
             result,
-            json!({
-                "foo": {
-                    "valueCount": 7,
-                    "validCount": 3,
-                    "min": 1.0,
-                    "max": 6.0,
-                    "mean": 3.333_333_333_333_333,
-                    "stddev": 2.054_804_667_656_325_6,
-                    "percentiles": [],
-                },
-                "bar": {
+            json!([
+                {
+                    "name": "bar",
                     "valueCount": 7,
                     "validCount": 3,
                     "min": 1.0,
@@ -948,7 +1080,17 @@ mod tests {
                     "stddev": 1.699_673_171_197_595,
                     "percentiles": [],
                 },
-            })
+                {
+                    "name": "foo",
+                    "valueCount": 7,
+                    "validCount": 3,
+                    "min": 1.0,
+                    "max": 6.0,
+                    "mean": 3.333_333_333_333_333,
+                    "stddev": 2.054_804_667_656_325_6,
+                    "percentiles": [],
+                },
+            ])
         );
     }
 
@@ -1010,7 +1152,7 @@ mod tests {
             .await
             .unwrap();
 
-        let processor = statistics.query_processor().unwrap().json_plain().unwrap();
+        let processor = statistics.query_processor().unwrap().json_vega().unwrap();
 
         let result = processor
             .plot_query(
@@ -1023,11 +1165,13 @@ mod tests {
             )
             .await
             .unwrap();
+        let result = table_rows(&result);
 
         assert_eq!(
             result.to_string(),
-            json!({
-                "foo": {
+            json!([
+                {
+                    "name": "foo",
                     "valueCount": 7,
                     "validCount": 3,
                     "min": 1.0,
@@ -1036,7 +1180,7 @@ mod tests {
                     "stddev": 2.054_804_667_656_325_6,
                     "percentiles": [],
                 },
-            })
+            ])
             .to_string()
         );
     }
@@ -1099,7 +1243,7 @@ mod tests {
             .await
             .unwrap();
 
-        let processor = statistics.query_processor().unwrap().json_plain().unwrap();
+        let processor = statistics.query_processor().unwrap().json_vega().unwrap();
 
         let result = processor
             .plot_query(
@@ -1112,11 +1256,13 @@ mod tests {
             )
             .await
             .unwrap();
+        let result = table_rows(&result);
 
         assert_eq!(
             result,
-            json!({
-                "foo": {
+            json!([
+                {
+                    "name": "foo",
                     "valueCount": 7,
                     "validCount": 3,
                     "min": 1.0,
@@ -1125,7 +1271,8 @@ mod tests {
                     "stddev": 2.054_804_667_656_325_6,
                     "percentiles": [],
                 },
-                "bar": {
+                {
+                    "name": "bar",
                     "valueCount": 7,
                     "validCount": 3,
                     "min": 1.0,
@@ -1134,7 +1281,7 @@ mod tests {
                     "stddev": 1.699_673_171_197_595,
                     "percentiles": [],
                 },
-            })
+            ])
         );
     }
 
@@ -1192,7 +1339,7 @@ mod tests {
             .await
             .unwrap();
 
-        let processor = statistics.query_processor().unwrap().json_plain().unwrap();
+        let processor = statistics.query_processor().unwrap().json_vega().unwrap();
 
         let result = processor
             .plot_query(
@@ -1205,11 +1352,13 @@ mod tests {
             )
             .await
             .unwrap();
+        let result = table_rows(&result);
 
         assert_eq!(
             result.to_string(),
-            json!({
-                "band": {
+            json!([
+                {
+                    "name": "band",
                     "valueCount": 65_341, // 361*181: the query bounds include the pixels at the right and lower edge
                     "validCount": 6,
                     "min": 1.0,
@@ -1221,7 +1370,7 @@ mod tests {
                         {"percentile": 0.75, "value": 3.0},
                     ],
                 }
-            })
+            ])
             .to_string()
         );
     }
@@ -1284,7 +1433,7 @@ mod tests {
             .await
             .unwrap();
 
-        let processor = statistics.query_processor().unwrap().json_plain().unwrap();
+        let processor = statistics.query_processor().unwrap().json_vega().unwrap();
 
         let result = processor
             .plot_query(
@@ -1297,11 +1446,13 @@ mod tests {
             )
             .await
             .unwrap();
+        let result = table_rows(&result);
 
         assert_eq!(
             result.to_string(),
-            json!({
-                "foo": {
+            json!([
+                {
+                    "name": "foo",
                     "valueCount": 7,
                     "validCount": 3,
                     "min": 1.0,
@@ -1313,7 +1464,7 @@ mod tests {
                         {"percentile": 0.75, "value": 6.0},
                     ],
                 },
-            })
+            ])
             .to_string()
         );
     }

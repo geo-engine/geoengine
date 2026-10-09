@@ -74,17 +74,11 @@ pub(crate) struct GetPlot {
     responses(
         (status = 200, description = "OK", body = WrappedPlotOutput,
             example = json!({
-                "outputFormat": "JsonPlain",
+                "outputFormat": "JsonVega",
                 "plotType": "Statistics",
                 "data": {
-                    "a": {
-                        "max": 2.0,
-                        "mean": 1.5,
-                        "min": 1.0,
-                        "stddev": 0.5,
-                        "validCount": 2,
-                        "valueCount": 2
-                    }
+                    "vegaString": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v6.json\",\"data\":{\"values\":[{\"name\":\"a\",\"valueCount\":2,\"validCount\":2,\"min\":1.0,\"max\":2.0,\"mean\":1.5,\"stddev\":0.5,\"percentiles\":[]}]},…}",
+                    "metadata": null
                 }
            })
         )
@@ -314,23 +308,26 @@ mod tests {
             body = read_body_string(res).await
         );
 
+        let response = read_body_json(res).await;
+
+        assert_eq!(response["outputFormat"], "JsonVega");
+        assert_eq!(response["plotType"], "Statistics");
+
+        let vega_json: Value =
+            serde_json::from_str(response["data"]["vegaString"].as_str().unwrap()).unwrap();
+
         assert_eq!(
-            read_body_json(res).await,
-            json!({
-                "outputFormat": "JsonPlain",
-                "plotType": "Statistics",
-                "data": {
-                    "ndvi": {
-                        "valueCount": 121, // 11*11 pixels of the query rectangle (including its edges)
-                        "validCount": 121,
-                        "min": 29.0,
-                        "max": 255.0,
-                        "mean": 224.280_991_735_537_24,
-                        "stddev": 73.572_163_162_468_53,
-                        "percentiles": []
-                    }
-                }
-            })
+            vega_json["data"]["values"],
+            json!([{
+                "name": "ndvi",
+                "valueCount": 121, // 11*11 pixels of the query rectangle (including its edges)
+                "validCount": 121,
+                "min": 29.0,
+                "max": 255.0,
+                "mean": 224.280_991_735_537_24,
+                "stddev": 73.572_163_162_468_53,
+                "percentiles": []
+            }])
         );
     }
 
@@ -423,7 +420,7 @@ mod tests {
         assert_eq!(
             vega_json,
             json!({
-                "$schema": "https://vega.github.io/schema/vega-lite/v4.json",
+                "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
                 "data": {
                     "values": [{
                         "binStart": 0.0,

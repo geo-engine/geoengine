@@ -22,9 +22,11 @@ import {
     RasterResultDescriptor,
     RasterSymbology,
     SingleBandRasterColorizer,
+    statisticsFromPlotData,
     Time,
     TRANSPARENT,
     UserService,
+    VegaChartData,
     FxFlexDirective,
 } from '@geoengine/common';
 import {MatFormField, MatLabel, MatHint, MatInput} from '@angular/material/input';
@@ -266,19 +268,12 @@ export class SymbologyCreatorComponent implements OnInit, OnDestroy, ControlValu
                     throw new Error('Expected `Statistics` plot.');
                 }
 
-                const statistics = plot.data as Record<
-                    string,
-                    {
-                        valueCount: number;
-                        validCount: number;
-                        min: number;
-                        max: number;
-                        mean: number;
-                        stddev: number;
-                    }
-                >;
+                const bandStatistics = statisticsFromPlotData(plot.data as VegaChartData).get(bandName);
+                if (!bandStatistics) {
+                    throw new Error(`Band ${bandName} not found in statistics`);
+                }
 
-                return statistics[bandName];
+                return bandStatistics;
             }),
             map((bandStatistics) => {
                 const min = bandStatistics.min;

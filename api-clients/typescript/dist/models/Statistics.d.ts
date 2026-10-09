@@ -16,7 +16,9 @@ import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
  * - a selection of numerical columns of a single vector dataset, or
  * - a selection of bands of a single raster dataset.
  *
- * The output is a JSON description.
+ * The output is a Vega-Lite table with one row per attribute or band.
+ * The raw statistics of each row are in the `data.values` of the Vega-Lite spec,
+ * with the attribute or band in `name`.
  *
  * For instance, you want to get an overview of a raster data source.
  * Then, you can use this operator to get basic count statistics.
@@ -41,9 +43,12 @@ import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
  *
  * ### Example Output
  *
+ * The `data.values` of the Vega-Lite spec:
+ *
  * ```json
- * {
- *   "ndvi": {
+ * [
+ *   {
+ *     "name": "ndvi",
  *     "valueCount": 6,
  *     "validCount": 6,
  *     "min": 1.0,
@@ -65,7 +70,7 @@ import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
  *       }
  *     ]
  *   }
- * }
+ * ]
  * ```
  *
  * @export

@@ -7,6 +7,8 @@ import {Color, TRANSPARENT} from '../../colors/color';
 import {WorkflowsService} from '../../workflows/workflows.service';
 import {Statistics} from '@geoengine/api-client';
 import {PlotsService} from '../../plots/plots.service';
+import {statisticsFromPlotData} from '../../plots/statistics';
+import {VegaChartData} from '../../plots/plot.model';
 import {UUID} from '../../datasets/dataset.model';
 import {MatCard, MatCardHeader, MatCardTitleGroup, MatCardTitle, MatCardSubtitle, MatCardContent} from '@angular/material/card';
 import {MatIcon} from '@angular/material/icon';
@@ -250,11 +252,14 @@ export class RasterMultibandSymbologyEditorComponent implements OnDestroy {
             queryParams.spatialReference,
         );
 
-        const plotData = plot.data as Record<string, {min: number; max: number}>;
+        const statistics = statisticsFromPlotData(plot.data as VegaChartData);
 
         const colors: Array<RgbColorName> = ['red', 'green', 'blue'];
         for (const color of colors) {
-            const bandStatistics = plotData[bands[color].name];
+            const bandStatistics = statistics.get(bands[color].name);
+            if (bandStatistics?.min == null || bandStatistics.max == null) {
+                throw new Error(`Band ${bands[color].name} has no valid min/max values in the statistics`);
+            }
             this.form.controls[color].controls.min.setValue(bandStatistics.min);
             this.form.controls[color].controls.max.setValue(bandStatistics.max);
         }

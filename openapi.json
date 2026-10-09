@@ -3368,17 +3368,11 @@
                   "$ref": "#/components/schemas/WrappedPlotOutput"
                 },
                 "example": {
-                  "outputFormat": "JsonPlain",
+                  "outputFormat": "JsonVega",
                   "plotType": "Statistics",
                   "data": {
-                    "a": {
-                      "max": 2.0,
-                      "mean": 1.5,
-                      "min": 1.0,
-                      "stddev": 0.5,
-                      "validCount": 2,
-                      "valueCount": 2
-                    }
+                    "vegaString": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v6.json\",\"data\":{\"values\":[{\"name\":\"a\",\"valueCount\":2,\"validCount\":2,\"min\":1.0,\"max\":2.0,\"mean\":1.5,\"stddev\":0.5,\"percentiles\":[]}]},…}",
+                    "metadata": null
                   }
                 }
               }
@@ -14368,7 +14362,7 @@
       "Statistics": {
         "type": "object",
         "title": "Statistics",
-        "description": "The `Statistics` operator is a _plot operator_ that computes count statistics over\n\n- a selection of numerical columns of a single vector dataset, or\n- a selection of bands of a single raster dataset.\n\nThe output is a JSON description.\n\nFor instance, you want to get an overview of a raster data source.\nThen, you can use this operator to get basic count statistics.\n\n## Vector Data\n\nIn the case of vector data, the operator generates one statistic for each of the selected numerical attributes.\nThe operator returns an error if one of the selected attributes is not numeric.\n\n## Raster Data\n\nFor raster data, the operator generates one statistic for each of the selected bands.\nIt only considers the pixels that intersect the query rectangle.\n\n## Errors\n\nThe operator returns an error in the following cases.\n\n- Vector data: The `attribute` for one of the given `columnNames` is not numeric.\n- Vector data: The `attribute` for one of the given `columnNames` does not exist.\n- Raster data: The band for one of the given `columnNames` does not exist.\n\n### Example Output\n\n```json\n{\n  \"ndvi\": {\n    \"valueCount\": 6,\n    \"validCount\": 6,\n    \"min\": 1.0,\n    \"max\": 6.0,\n    \"mean\": 3.5,\n    \"stddev\": 1.707,\n    \"percentiles\": [\n      {\n        \"percentile\": 0.25,\n        \"value\": 2.0\n      },\n      {\n        \"percentile\": 0.5,\n        \"value\": 3.5\n      },\n      {\n        \"percentile\": 0.75,\n        \"value\": 5.0\n      }\n    ]\n  }\n}\n```\n",
+        "description": "The `Statistics` operator is a _plot operator_ that computes count statistics over\n\n- a selection of numerical columns of a single vector dataset, or\n- a selection of bands of a single raster dataset.\n\nThe output is a Vega-Lite table with one row per attribute or band.\nThe raw statistics of each row are in the `data.values` of the Vega-Lite spec,\nwith the attribute or band in `name`.\n\nFor instance, you want to get an overview of a raster data source.\nThen, you can use this operator to get basic count statistics.\n\n## Vector Data\n\nIn the case of vector data, the operator generates one statistic for each of the selected numerical attributes.\nThe operator returns an error if one of the selected attributes is not numeric.\n\n## Raster Data\n\nFor raster data, the operator generates one statistic for each of the selected bands.\nIt only considers the pixels that intersect the query rectangle.\n\n## Errors\n\nThe operator returns an error in the following cases.\n\n- Vector data: The `attribute` for one of the given `columnNames` is not numeric.\n- Vector data: The `attribute` for one of the given `columnNames` does not exist.\n- Raster data: The band for one of the given `columnNames` does not exist.\n\n### Example Output\n\nThe `data.values` of the Vega-Lite spec:\n\n```json\n[\n  {\n    \"name\": \"ndvi\",\n    \"valueCount\": 6,\n    \"validCount\": 6,\n    \"min\": 1.0,\n    \"max\": 6.0,\n    \"mean\": 3.5,\n    \"stddev\": 1.707,\n    \"percentiles\": [\n      {\n        \"percentile\": 0.25,\n        \"value\": 2.0\n      },\n      {\n        \"percentile\": 0.5,\n        \"value\": 3.5\n      },\n      {\n        \"percentile\": 0.75,\n        \"value\": 5.0\n      }\n    ]\n  }\n]\n```\n",
         "required": [
           "type",
           "params",
