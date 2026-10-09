@@ -9,7 +9,7 @@ Geo Engine supports different types of data, reflected by a `DataId`, which refe
 ## Internal dataset
 
 An internal dataset is a dataset that is stored in the Geo Engine.
-Thus, it is efficiently accessible and can be used in workflows.
+Thus, it is efficiently accessible and can be used in processing graphs.
 The dataset is identified by a `DatasetName` and contains a `DatasetDefinition` that describes the data.
 
 The `DatasetName` is a string that consists of a _namespace_ (optional) and a _name_, separated by a colon.

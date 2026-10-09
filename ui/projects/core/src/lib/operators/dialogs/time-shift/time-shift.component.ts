@@ -200,14 +200,14 @@ export class TimeShiftComponent implements AfterViewInit {
 
         this.loading$.next(true);
 
-        from(this.projectService.getWorkflow(sourceLayer.workflowId))
+        from(this.projectService.getProcessingGraph(sourceLayer.workflowId))
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) => {
                     if (inputWorkflow.type === 'Raster') {
                         const sourceOperator: RasterOperator = inputWorkflow.operator;
 
                         return from(
-                            this.projectService.registerWorkflow({
+                            this.projectService.registerProcessingGraph({
                                 type: 'Raster',
                                 operator: {
                                     type: 'TimeShift',
@@ -224,7 +224,7 @@ export class TimeShiftComponent implements AfterViewInit {
                         const sourceOperator: VectorOperator = inputWorkflow.operator;
 
                         return from(
-                            this.projectService.registerWorkflow({
+                            this.projectService.registerProcessingGraph({
                                 type: 'Vector',
                                 operator: {
                                     type: 'TimeShift',
@@ -237,13 +237,13 @@ export class TimeShiftComponent implements AfterViewInit {
                         );
                     }
 
-                    throw new Error(`Invalid workflow type ${inputWorkflow.type}.`);
+                    throw new Error(`Invalid processing graph type ${inputWorkflow.type}.`);
                 }),
                 mergeMap((workflowId: string) => {
                     if (layerType === 'Vector') {
                         return this.projectService.addLayer(
                             new VectorLayer({
-                                workflowId,
+                                processingGraphId: workflowId,
                                 name: outputName,
                                 symbology: sourceLayer.symbology as VectorSymbology,
                                 isLegendVisible: false,
@@ -253,7 +253,7 @@ export class TimeShiftComponent implements AfterViewInit {
                     } else if (layerType === 'Raster') {
                         return this.projectService.addLayer(
                             new RasterLayer({
-                                workflowId,
+                                processingGraphId: workflowId,
                                 name: outputName,
                                 symbology: sourceLayer.symbology as RasterSymbology,
                                 isLegendVisible: false,

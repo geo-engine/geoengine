@@ -4,13 +4,13 @@ All URIs are relative to *https://geoengine.io/api*
 
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
-| [**wcsHandler**](OGCWCSApi.md#wcshandler) | **GET** /wcs/{workflow} | OGC WCS endpoint |
+| [**wcsHandler**](OGCWCSApi.md#wcshandler) | **GET** /wcs/{processingGraph} | OGC WCS endpoint |
 
 
 
 ## wcsHandler
 
-> string wcsHandler(workflow, request, boundingbox, format, gridbasecrs, gridoffsets, gridorigin, identifier, identifiers, nodatavalue, resx, resy, service, time, version)
+> string wcsHandler(processingGraph, request, boundingbox, format, gridbasecrs, gridoffsets, gridorigin, identifier, identifiers, nodatavalue, resx, resy, service, time, version)
 
 OGC WCS endpoint
 
@@ -32,8 +32,8 @@ async function example() {
   const api = new OGCWCSApi(config);
 
   const body = {
-    // string | Workflow id
-    workflow: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | Processing graph id
+    processingGraph: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
     // WcsRequest | type of WCS request
     request: ...,
     // string (optional)
@@ -47,9 +47,9 @@ async function example() {
     // string (optional)
     gridorigin: 90,-180,
     // string (optional)
-    identifier: <Workflow Id>,
+    identifier: <Processing Graph Id>,
     // string (optional)
-    identifiers: <Workflow Id>,
+    identifiers: <Processing Graph Id>,
     // number (optional)
     nodatavalue: 1.2,
     // number (optional)
@@ -81,7 +81,7 @@ example().catch(console.error);
 
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
-| **workflow** | `string` | Workflow id | [Defaults to `undefined`] |
+| **processingGraph** | `string` | Processing graph id | [Defaults to `undefined`] |
 | **request** | `WcsRequest` | type of WCS request | [Defaults to `undefined`] [Enum: GetCapabilities, DescribeCoverage, GetCoverage] |
 | **boundingbox** | `string` |  | [Optional] [Defaults to `undefined`] |
 | **format** | `GetCoverageFormat` |  | [Optional] [Defaults to `undefined`] [Enum: image/tiff] |

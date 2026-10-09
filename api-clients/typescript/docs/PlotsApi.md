@@ -14,7 +14,7 @@ All URIs are relative to *https://geoengine.io/api*
 
 Generates a plot.
 
-# Example  1. Upload the file &#x60;plain_data.csv&#x60; with the following content:  &#x60;&#x60;&#x60;csv a 1 2 &#x60;&#x60;&#x60; 2. Create a dataset from it using the \&quot;Plain Data\&quot; example at &#x60;/dataset&#x60;. 3. Create a statistics workflow using the \&quot;Statistics Plot\&quot; example at &#x60;/workflow&#x60;. 4. Generate the plot with this handler.
+# Example  1. Upload the file &#x60;plain_data.csv&#x60; with the following content:  &#x60;&#x60;&#x60;csv a 1 2 &#x60;&#x60;&#x60; 2. Create a dataset from it using the \&quot;Plain Data\&quot; example at &#x60;/dataset&#x60;. 3. Create a statistics processing graph using the \&quot;Statistics Plot\&quot; example at &#x60;/processingGraphs&#x60;. 4. Generate the plot with this handler.
 
 ### Example
 
@@ -40,7 +40,7 @@ async function example() {
     time: 2020-01-01T00:00:00.0Z,
     // string
     spatialResolution: 0.1,0.1,
-    // string | Workflow id
+    // string | Processing graph id
     id: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
     // string (optional)
     crs: EPSG:4326,
@@ -66,7 +66,7 @@ example().catch(console.error);
 | **bbox** | `string` |  | [Defaults to `undefined`] |
 | **time** | `string` |  | [Defaults to `undefined`] |
 | **spatialResolution** | `string` |  | [Defaults to `undefined`] |
-| **id** | `string` | Workflow id | [Defaults to `undefined`] |
+| **id** | `string` | Processing graph id | [Defaults to `undefined`] |
 | **crs** | `string` |  | [Optional] [Defaults to `undefined`] |
 
 ### Return type

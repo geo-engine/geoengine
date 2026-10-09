@@ -4,7 +4,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**workflow** | **uuid::Uuid** |  | 
+**processing_graph** | **uuid::Uuid** |  | 
 **name** | **String** |  | 
 **visibility** | [**models::LayerVisibility**](LayerVisibility.md) |  | 
 **symbology** | [**models::Symbology**](Symbology.md) |  | 

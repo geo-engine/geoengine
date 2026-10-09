@@ -67,7 +67,7 @@ pub struct GetMap {
     #[serde(alias = "FORMAT")]
     pub format: WmsResponseFormat,
     #[serde(alias = "LAYERS")]
-    #[param(example = "<Workflow Id>")]
+    #[param(example = "<Processing Graph Id>")]
     pub layers: String,
     #[serde(alias = "CRS")]
     #[param(example = "EPSG:4326", value_type = Option<String>)]
@@ -132,7 +132,7 @@ pub struct GetLegendGraphic {
     pub version: WmsVersion,
     #[serde(alias = "SERVICE")]
     pub service: WmsService,
-    #[param(example = "<Workflow Id>")]
+    #[param(example = "<Processing Graph Id>")]
     pub layer: String,
     // TODO: remaining fields
 }

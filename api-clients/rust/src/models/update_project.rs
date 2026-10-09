@@ -19,9 +19,9 @@ pub struct UpdateProject {
     #[serde(rename = "description", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub description: Option<Option<String>>,
     #[serde(rename = "layers", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub layers: Option<Option<Vec<models::VecUpdate>>>,
+    pub layers: Option<Option<Vec<models::LayerUpdate>>>,
     #[serde(rename = "plots", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub plots: Option<Option<Vec<models::VecUpdate>>>,
+    pub plots: Option<Option<Vec<models::PlotUpdate>>>,
     #[serde(rename = "bounds", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub bounds: Option<Option<Box<models::StRectangle>>>,
     #[serde(rename = "timeStep", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]

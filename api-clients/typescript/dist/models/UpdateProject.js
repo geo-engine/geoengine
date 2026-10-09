@@ -18,8 +18,9 @@ exports.UpdateProjectFromJSONTyped = UpdateProjectFromJSONTyped;
 exports.UpdateProjectToJSON = UpdateProjectToJSON;
 exports.UpdateProjectToJSONTyped = UpdateProjectToJSONTyped;
 const TimeStep_1 = require("./TimeStep");
+const PlotUpdate_1 = require("./PlotUpdate");
 const STRectangle_1 = require("./STRectangle");
-const VecUpdate_1 = require("./VecUpdate");
+const LayerUpdate_1 = require("./LayerUpdate");
 /**
  * Check if a given object implements the UpdateProject interface.
  */
@@ -39,8 +40,8 @@ function UpdateProjectFromJSONTyped(json, ignoreDiscriminator) {
         'id': json['id'],
         'name': json['name'] == null ? undefined : json['name'],
         'description': json['description'] == null ? undefined : json['description'],
-        'layers': json['layers'] == null ? undefined : (json['layers'].map(VecUpdate_1.VecUpdateFromJSON)),
-        'plots': json['plots'] == null ? undefined : (json['plots'].map(VecUpdate_1.VecUpdateFromJSON)),
+        'layers': json['layers'] == null ? undefined : (json['layers'].map(LayerUpdate_1.LayerUpdateFromJSON)),
+        'plots': json['plots'] == null ? undefined : (json['plots'].map(PlotUpdate_1.PlotUpdateFromJSON)),
         'bounds': json['bounds'] == null ? undefined : (0, STRectangle_1.STRectangleFromJSON)(json['bounds']),
         'timeStep': json['timeStep'] == null ? undefined : (0, TimeStep_1.TimeStepFromJSON)(json['timeStep']),
     };
@@ -56,8 +57,8 @@ function UpdateProjectToJSONTyped(value, ignoreDiscriminator = false) {
         'id': value['id'],
         'name': value['name'],
         'description': value['description'],
-        'layers': value['layers'] == null ? undefined : (value['layers'].map(VecUpdate_1.VecUpdateToJSON)),
-        'plots': value['plots'] == null ? undefined : (value['plots'].map(VecUpdate_1.VecUpdateToJSON)),
+        'layers': value['layers'] == null ? undefined : (value['layers'].map(LayerUpdate_1.LayerUpdateToJSON)),
+        'plots': value['plots'] == null ? undefined : (value['plots'].map(PlotUpdate_1.PlotUpdateToJSON)),
         'bounds': (0, STRectangle_1.STRectangleToJSON)(value['bounds']),
         'timeStep': (0, TimeStep_1.TimeStepToJSON)(value['timeStep']),
     };

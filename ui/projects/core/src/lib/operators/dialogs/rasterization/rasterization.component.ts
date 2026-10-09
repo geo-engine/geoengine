@@ -164,7 +164,7 @@ export class RasterizationComponent implements OnDestroy {
             .pipe(
                 mergeMap(([points]) => {
                     if (points.type !== 'Vector') {
-                        throw new Error('Expected a vector workflow for rasterization.');
+                        throw new Error('Expected a vector processing graph for rasterization.');
                     }
 
                     const workflow: ProcessingGraph = {
@@ -177,7 +177,7 @@ export class RasterizationComponent implements OnDestroy {
                             },
                         },
                     };
-                    return from(this.projectService.registerWorkflow(workflow));
+                    return from(this.projectService.registerProcessingGraph(workflow));
                 }),
                 mergeMap((workflowId: UUID) => {
                     const symbology$: Observable<RasterSymbology> = this.symbologyCreator().symbologyForRasterLayer(workflowId);
@@ -186,7 +186,7 @@ export class RasterizationComponent implements OnDestroy {
                 mergeMap(([workflowId, symbology]: [UUID, RasterSymbology]) =>
                     this.projectService.addLayer(
                         new RasterLayer({
-                            workflowId,
+                            processingGraphId: workflowId,
                             name: layerName,
                             symbology,
                             isLegendVisible: false,

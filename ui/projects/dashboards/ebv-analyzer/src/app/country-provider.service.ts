@@ -53,12 +53,12 @@ export class CountryProviderService {
             },
         };
 
-        from(this.projectService.registerWorkflow(workflow))
+        from(this.projectService.registerProcessingGraph(workflow))
             .pipe(
                 mergeMap((workflowId) =>
                     this.dataSelectionService.setPolygonLayer(
                         new VectorLayer({
-                            workflowId,
+                            processingGraphId: workflowId,
                             name: country.name,
                             symbology: PolygonSymbology.fromPolygonSymbologyDict({
                                 type: 'polygon',

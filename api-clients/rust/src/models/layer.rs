@@ -18,8 +18,8 @@ pub struct Layer {
     pub name: String,
     #[serde(rename = "description")]
     pub description: String,
-    #[serde(rename = "workflow")]
-    pub workflow: Box<models::ProcessingGraph>,
+    #[serde(rename = "processingGraph")]
+    pub processing_graph: Box<models::ProcessingGraph>,
     #[serde(rename = "symbology", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub symbology: Option<Option<Box<models::Symbology>>>,
     /// properties, for instance, to be rendered in the UI
@@ -31,12 +31,12 @@ pub struct Layer {
 }
 
 impl Layer {
-    pub fn new(id: models::ProviderLayerId, name: String, description: String, workflow: models::ProcessingGraph) -> Layer {
+    pub fn new(id: models::ProviderLayerId, name: String, description: String, processing_graph: models::ProcessingGraph) -> Layer {
         Layer {
             id: Box::new(id),
             name,
             description,
-            workflow: Box::new(workflow),
+            processing_graph: Box::new(processing_graph),
             symbology: None,
             properties: None,
             metadata: None,

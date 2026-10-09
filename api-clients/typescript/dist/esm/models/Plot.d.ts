@@ -19,7 +19,7 @@ export interface Plot {
      * @type {string}
      * @memberof Plot
      */
-    workflow: string;
+    processingGraph: string;
     /**
      *
      * @type {string}

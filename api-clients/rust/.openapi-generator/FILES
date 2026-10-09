@@ -155,6 +155,7 @@ docs/LayerCollectionResource.md
 docs/LayerListing.md
 docs/LayerProviderListing.md
 docs/LayerResource.md
+docs/LayerUpdate.md
 docs/LayerVisibility.md
 docs/LayersApi.md
 docs/LineSimplification.md
@@ -245,12 +246,14 @@ docs/Plot.md
 docs/PlotOperator.md
 docs/PlotOutputFormat.md
 docs/PlotResultDescriptor.md
+docs/PlotUpdate.md
 docs/PlotsApi.md
 docs/PointInPolygonFilter.md
 docs/PointInPolygonFilterSource.md
 docs/PointSymbology.md
 docs/PolygonSymbology.md
 docs/ProcessingGraph.md
+docs/ProcessingGraphsApi.md
 docs/Project.md
 docs/ProjectLayer.md
 docs/ProjectListing.md
@@ -269,7 +272,7 @@ docs/Radiance.md
 docs/RasterBandDescriptor.md
 docs/RasterColorizer.md
 docs/RasterDataType.md
-docs/RasterDatasetFromWorkflow.md
+docs/RasterDatasetFromProcessingGraph.md
 docs/RasterOperator.md
 docs/RasterPropertiesEntryType.md
 docs/RasterPropertiesKey.md
@@ -291,8 +294,10 @@ docs/Reflectance.md
 docs/ReflectanceParameters.md
 docs/Regular.md
 docs/RegularTimeDimension.md
-docs/Rename.md
 docs/RenameBands.md
+docs/RenameBandsDefault.md
+docs/RenameBandsRename.md
+docs/RenameBandsSuffix.md
 docs/Reprojection.md
 docs/ReprojectionParameters.md
 docs/Resource.md
@@ -424,7 +429,6 @@ docs/UserInfo.md
 docs/UserRegistration.md
 docs/UserSession.md
 docs/VariableMatrixWidth.md
-docs/VecUpdate.md
 docs/VectorColumnInfo.md
 docs/VectorDataType.md
 docs/VectorExpression.md
@@ -450,7 +454,6 @@ docs/WmsRequest.md
 docs/WmsResponseFormat.md
 docs/WmsService.md
 docs/WmsVersion.md
-docs/WorkflowsApi.md
 docs/WrappedPlotOutput.md
 git_push.sh
 src/apis/configuration.rs
@@ -465,13 +468,13 @@ src/apis/ogcwfs_api.rs
 src/apis/ogcwms_api.rs
 src/apis/permissions_api.rs
 src/apis/plots_api.rs
+src/apis/processing_graphs_api.rs
 src/apis/projects_api.rs
 src/apis/session_api.rs
 src/apis/spatial_references_api.rs
 src/apis/tasks_api.rs
 src/apis/uploads_api.rs
 src/apis/user_api.rs
-src/apis/workflows_api.rs
 src/lib.rs
 src/models/access_constraints.rs
 src/models/add_dataset.rs
@@ -624,6 +627,7 @@ src/models/layer_collection_resource.rs
 src/models/layer_listing.rs
 src/models/layer_provider_listing.rs
 src/models/layer_resource.rs
+src/models/layer_update.rs
 src/models/layer_visibility.rs
 src/models/line_simplification.rs
 src/models/line_simplification_algorithm.rs
@@ -708,6 +712,7 @@ src/models/plot.rs
 src/models/plot_operator.rs
 src/models/plot_output_format.rs
 src/models/plot_result_descriptor.rs
+src/models/plot_update.rs
 src/models/point_in_polygon_filter.rs
 src/models/point_in_polygon_filter_source.rs
 src/models/point_symbology.rs
@@ -730,7 +735,7 @@ src/models/radiance.rs
 src/models/raster_band_descriptor.rs
 src/models/raster_colorizer.rs
 src/models/raster_data_type.rs
-src/models/raster_dataset_from_workflow.rs
+src/models/raster_dataset_from_processing_graph.rs
 src/models/raster_operator.rs
 src/models/raster_properties_entry_type.rs
 src/models/raster_properties_key.rs
@@ -752,8 +757,10 @@ src/models/reflectance.rs
 src/models/reflectance_parameters.rs
 src/models/regular.rs
 src/models/regular_time_dimension.rs
-src/models/rename.rs
 src/models/rename_bands.rs
+src/models/rename_bands_default.rs
+src/models/rename_bands_rename.rs
+src/models/rename_bands_suffix.rs
 src/models/reprojection.rs
 src/models/reprojection_parameters.rs
 src/models/resource.rs
@@ -880,7 +887,6 @@ src/models/user_info.rs
 src/models/user_registration.rs
 src/models/user_session.rs
 src/models/variable_matrix_width.rs
-src/models/vec_update.rs
 src/models/vector_column_info.rs
 src/models/vector_data_type.rs
 src/models/vector_expression.rs

@@ -260,10 +260,10 @@ export class ColumnRangeFilterComponent implements OnDestroy {
         const inputLayer = this.form.controls['layer'].value!;
         const filterValues = this.filters.value;
 
-        from(this.projectService.getWorkflow(inputLayer.workflowId))
+        from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) =>
-                    from(this.projectService.registerWorkflow(this.createWorkflow(filterValues, 0, inputWorkflow))),
+                    from(this.projectService.registerProcessingGraph(this.createWorkflow(filterValues, 0, inputWorkflow))),
                 ),
                 mergeMap((workflowId) => this.createLayer(workflowId, name)),
             )
@@ -331,7 +331,7 @@ export class ColumnRangeFilterComponent implements OnDestroy {
     createLayer(workflowId: string, name: string): Observable<void> {
         return this.projectService.addLayer(
             new VectorLayer({
-                workflowId,
+                processingGraphId: workflowId,
                 name,
                 isVisible: true,
                 isLegendVisible: false,
@@ -383,9 +383,9 @@ export class ColumnRangeFilterComponent implements OnDestroy {
     private createHistogramWorkflowId(attribute: string): Observable<UUID> {
         const inputLayer = this.form.controls['layer'].value!;
         const attributeName = attribute;
-        return from(this.projectService.getWorkflow(inputLayer.workflowId)).pipe(
+        return from(this.projectService.getProcessingGraph(inputLayer.workflowId)).pipe(
             mergeMap((workflow: ProcessingGraph) =>
-                this.projectService.registerWorkflow({
+                this.projectService.registerProcessingGraph({
                     type: 'Plot',
                     operator: {
                         type: 'Histogram',

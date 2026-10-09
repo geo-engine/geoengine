@@ -354,7 +354,8 @@ def __init__(bands: list[RasterBandDescriptor],
              data_type: RasterDataType,
              spatial_reference: str,
              grid_or_geo_transform: SpatialGridDescriptor | GeoTransform,
-             time: TimeDescriptor | None = None) -> None
+             time: TimeDescriptor | None = None,
+             cache_ttl: int | None = None) -> None
 ```
 
 Create a `GdalMultiBandMetaData` object.
@@ -365,6 +366,8 @@ placeholder source grid is used; the Geo Engine derives the final grid
 when tiles are added to the dataset. The placeholder grid uses the
 given `geo_transform` (or a 1 by 1 unit grid), as the tile files&#x27; geo
 transforms must be compatible with the dataset grid&#x27;s geo transform.
+`cache_ttl` sets the dataset-level cache lifetime in seconds. `None`
+uses the server default and `0` disables caching.
 
 #### to\_api\_dict
 
@@ -426,9 +429,10 @@ Create a `MultiBandGdalSource` dataset, grant optional permissions and add the g
 By default the dataset is created as external data, so GDAL resolves the
 files (e.g. https or s3 links) when they are queried. A volume name or a
 `Volume` can be given to store the files in a Geo Engine volume. No
-permissions are granted unless `share_with` is given. `cache_ttl` optionally sets the
-dataset-level cache lifetime in seconds as a fallback for tiles without their own TTL.
-When `cache_ttl` is `None`, the server default is used; `0` disables caching.
+permissions are granted unless `share_with` is given.
+`cache_ttl` sets the dataset-level cache lifetime in seconds as a fallback
+for tiles without their own TTL. `None` uses the server default and `0`
+disables caching.
 
 #### add\_or\_replace\_dataset\_with\_permissions
 

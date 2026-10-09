@@ -32,8 +32,8 @@ class OGCWMSApi extends runtime.BaseAPI {
      */
     wmsHandlerRequestOpts(requestParameters) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (requestParameters['workflow'] == null) {
-                throw new runtime.RequiredError('workflow', 'Required parameter "workflow" was null or undefined when calling wmsHandler().');
+            if (requestParameters['processingGraph'] == null) {
+                throw new runtime.RequiredError('processingGraph', 'Required parameter "processingGraph" was null or undefined when calling wmsHandler().');
             }
             if (requestParameters['request'] == null) {
                 throw new runtime.RequiredError('request', 'Required parameter "request" was null or undefined when calling wmsHandler().');
@@ -107,8 +107,8 @@ class OGCWMSApi extends runtime.BaseAPI {
                     headerParameters["Authorization"] = `Bearer ${tokenString}`;
                 }
             }
-            let urlPath = `/wms/{workflow}`;
-            urlPath = urlPath.replace(`{${"workflow"}}`, encodeURIComponent(String(requestParameters['workflow'])));
+            let urlPath = `/wms/{processingGraph}`;
+            urlPath = urlPath.replace(`{${"processingGraph"}}`, encodeURIComponent(String(requestParameters['processingGraph'])));
             return {
                 path: urlPath,
                 method: 'GET',

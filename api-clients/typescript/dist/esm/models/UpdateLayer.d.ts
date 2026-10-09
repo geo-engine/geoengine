@@ -33,7 +33,7 @@ export interface UpdateLayer {
      * @type {ProcessingGraph}
      * @memberof UpdateLayer
      */
-    workflow: ProcessingGraph;
+    processingGraph: ProcessingGraph;
     /**
      *
      * @type {Symbology}

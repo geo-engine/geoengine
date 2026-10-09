@@ -9,8 +9,8 @@ Name | Type
 `id` | string
 `name` | string
 `description` | string
-`layers` | [Array&lt;VecUpdate&gt;](VecUpdate.md)
-`plots` | [Array&lt;VecUpdate&gt;](VecUpdate.md)
+`layers` | [Array&lt;LayerUpdate&gt;](LayerUpdate.md)
+`plots` | [Array&lt;PlotUpdate&gt;](PlotUpdate.md)
 `bounds` | [STRectangle](STRectangle.md)
 `timeStep` | [TimeStep](TimeStep.md)
 

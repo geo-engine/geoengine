@@ -45,7 +45,7 @@ class PlotsApi:
         bbox: StrictStr,
         time: StrictStr,
         spatial_resolution: StrictStr,
-        id: Annotated[UUID, Field(description="Workflow id")],
+        id: Annotated[UUID, Field(description="Processing graph id")],
         crs: Optional[StrictStr] = None,
         _request_timeout: Union[
             None,
@@ -62,7 +62,7 @@ class PlotsApi:
     ) -> WrappedPlotOutput:
         """Generates a plot.
 
-        # Example  1. Upload the file `plain_data.csv` with the following content:  ```csv a 1 2 ``` 2. Create a dataset from it using the \"Plain Data\" example at `/dataset`. 3. Create a statistics workflow using the \"Statistics Plot\" example at `/workflow`. 4. Generate the plot with this handler.
+        # Example  1. Upload the file `plain_data.csv` with the following content:  ```csv a 1 2 ``` 2. Create a dataset from it using the \"Plain Data\" example at `/dataset`. 3. Create a statistics processing graph using the \"Statistics Plot\" example at `/processingGraphs`. 4. Generate the plot with this handler.
 
         :param bbox: (required)
         :type bbox: str
@@ -70,7 +70,7 @@ class PlotsApi:
         :type time: str
         :param spatial_resolution: (required)
         :type spatial_resolution: str
-        :param id: Workflow id (required)
+        :param id: Processing graph id (required)
         :type id: UUID
         :param crs:
         :type crs: str
@@ -128,7 +128,7 @@ class PlotsApi:
         bbox: StrictStr,
         time: StrictStr,
         spatial_resolution: StrictStr,
-        id: Annotated[UUID, Field(description="Workflow id")],
+        id: Annotated[UUID, Field(description="Processing graph id")],
         crs: Optional[StrictStr] = None,
         _request_timeout: Union[
             None,
@@ -145,7 +145,7 @@ class PlotsApi:
     ) -> ApiResponse[WrappedPlotOutput]:
         """Generates a plot.
 
-        # Example  1. Upload the file `plain_data.csv` with the following content:  ```csv a 1 2 ``` 2. Create a dataset from it using the \"Plain Data\" example at `/dataset`. 3. Create a statistics workflow using the \"Statistics Plot\" example at `/workflow`. 4. Generate the plot with this handler.
+        # Example  1. Upload the file `plain_data.csv` with the following content:  ```csv a 1 2 ``` 2. Create a dataset from it using the \"Plain Data\" example at `/dataset`. 3. Create a statistics processing graph using the \"Statistics Plot\" example at `/processingGraphs`. 4. Generate the plot with this handler.
 
         :param bbox: (required)
         :type bbox: str
@@ -153,7 +153,7 @@ class PlotsApi:
         :type time: str
         :param spatial_resolution: (required)
         :type spatial_resolution: str
-        :param id: Workflow id (required)
+        :param id: Processing graph id (required)
         :type id: UUID
         :param crs:
         :type crs: str
@@ -211,7 +211,7 @@ class PlotsApi:
         bbox: StrictStr,
         time: StrictStr,
         spatial_resolution: StrictStr,
-        id: Annotated[UUID, Field(description="Workflow id")],
+        id: Annotated[UUID, Field(description="Processing graph id")],
         crs: Optional[StrictStr] = None,
         _request_timeout: Union[
             None,
@@ -228,7 +228,7 @@ class PlotsApi:
     ) -> RESTResponseType:
         """Generates a plot.
 
-        # Example  1. Upload the file `plain_data.csv` with the following content:  ```csv a 1 2 ``` 2. Create a dataset from it using the \"Plain Data\" example at `/dataset`. 3. Create a statistics workflow using the \"Statistics Plot\" example at `/workflow`. 4. Generate the plot with this handler.
+        # Example  1. Upload the file `plain_data.csv` with the following content:  ```csv a 1 2 ``` 2. Create a dataset from it using the \"Plain Data\" example at `/dataset`. 3. Create a statistics processing graph using the \"Statistics Plot\" example at `/processingGraphs`. 4. Generate the plot with this handler.
 
         :param bbox: (required)
         :type bbox: str
@@ -236,7 +236,7 @@ class PlotsApi:
         :type time: str
         :param spatial_resolution: (required)
         :type spatial_resolution: str
-        :param id: Workflow id (required)
+        :param id: Processing graph id (required)
         :type id: UUID
         :param crs:
         :type crs: str

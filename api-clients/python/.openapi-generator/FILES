@@ -156,6 +156,7 @@ docs/LayerCollectionResource.md
 docs/LayerListing.md
 docs/LayerProviderListing.md
 docs/LayerResource.md
+docs/LayerUpdate.md
 docs/LayerVisibility.md
 docs/LayersApi.md
 docs/LineSimplification.md
@@ -246,12 +247,14 @@ docs/Plot.md
 docs/PlotOperator.md
 docs/PlotOutputFormat.md
 docs/PlotResultDescriptor.md
+docs/PlotUpdate.md
 docs/PlotsApi.md
 docs/PointInPolygonFilter.md
 docs/PointInPolygonFilterSource.md
 docs/PointSymbology.md
 docs/PolygonSymbology.md
 docs/ProcessingGraph.md
+docs/ProcessingGraphsApi.md
 docs/Project.md
 docs/ProjectLayer.md
 docs/ProjectListing.md
@@ -270,7 +273,7 @@ docs/Radiance.md
 docs/RasterBandDescriptor.md
 docs/RasterColorizer.md
 docs/RasterDataType.md
-docs/RasterDatasetFromWorkflow.md
+docs/RasterDatasetFromProcessingGraph.md
 docs/RasterOperator.md
 docs/RasterPropertiesEntryType.md
 docs/RasterPropertiesKey.md
@@ -292,8 +295,10 @@ docs/Reflectance.md
 docs/ReflectanceParameters.md
 docs/Regular.md
 docs/RegularTimeDimension.md
-docs/Rename.md
 docs/RenameBands.md
+docs/RenameBandsDefault.md
+docs/RenameBandsRename.md
+docs/RenameBandsSuffix.md
 docs/Reprojection.md
 docs/ReprojectionParameters.md
 docs/Resource.md
@@ -425,7 +430,6 @@ docs/UserInfo.md
 docs/UserRegistration.md
 docs/UserSession.md
 docs/VariableMatrixWidth.md
-docs/VecUpdate.md
 docs/VectorColumnInfo.md
 docs/VectorDataType.md
 docs/VectorExpression.md
@@ -451,7 +455,6 @@ docs/WmsRequest.md
 docs/WmsResponseFormat.md
 docs/WmsService.md
 docs/WmsVersion.md
-docs/WorkflowsApi.md
 docs/WrappedPlotOutput.md
 geoengine_api_client/__init__.py
 geoengine_api_client/api/__init__.py
@@ -465,13 +468,13 @@ geoengine_api_client/api/ogcwfs_api.py
 geoengine_api_client/api/ogcwms_api.py
 geoengine_api_client/api/permissions_api.py
 geoengine_api_client/api/plots_api.py
+geoengine_api_client/api/processing_graphs_api.py
 geoengine_api_client/api/projects_api.py
 geoengine_api_client/api/session_api.py
 geoengine_api_client/api/spatial_references_api.py
 geoengine_api_client/api/tasks_api.py
 geoengine_api_client/api/uploads_api.py
 geoengine_api_client/api/user_api.py
-geoengine_api_client/api/workflows_api.py
 geoengine_api_client/api_client.py
 geoengine_api_client/api_response.py
 geoengine_api_client/configuration.py
@@ -628,6 +631,7 @@ geoengine_api_client/models/layer_collection_resource.py
 geoengine_api_client/models/layer_listing.py
 geoengine_api_client/models/layer_provider_listing.py
 geoengine_api_client/models/layer_resource.py
+geoengine_api_client/models/layer_update.py
 geoengine_api_client/models/layer_visibility.py
 geoengine_api_client/models/line_simplification.py
 geoengine_api_client/models/line_simplification_algorithm.py
@@ -711,6 +715,7 @@ geoengine_api_client/models/plot.py
 geoengine_api_client/models/plot_operator.py
 geoengine_api_client/models/plot_output_format.py
 geoengine_api_client/models/plot_result_descriptor.py
+geoengine_api_client/models/plot_update.py
 geoengine_api_client/models/point_in_polygon_filter.py
 geoengine_api_client/models/point_in_polygon_filter_source.py
 geoengine_api_client/models/point_symbology.py
@@ -733,7 +738,7 @@ geoengine_api_client/models/radiance.py
 geoengine_api_client/models/raster_band_descriptor.py
 geoengine_api_client/models/raster_colorizer.py
 geoengine_api_client/models/raster_data_type.py
-geoengine_api_client/models/raster_dataset_from_workflow.py
+geoengine_api_client/models/raster_dataset_from_processing_graph.py
 geoengine_api_client/models/raster_operator.py
 geoengine_api_client/models/raster_properties_entry_type.py
 geoengine_api_client/models/raster_properties_key.py
@@ -755,8 +760,10 @@ geoengine_api_client/models/reflectance.py
 geoengine_api_client/models/reflectance_parameters.py
 geoengine_api_client/models/regular.py
 geoengine_api_client/models/regular_time_dimension.py
-geoengine_api_client/models/rename.py
 geoengine_api_client/models/rename_bands.py
+geoengine_api_client/models/rename_bands_default.py
+geoengine_api_client/models/rename_bands_rename.py
+geoengine_api_client/models/rename_bands_suffix.py
 geoengine_api_client/models/reprojection.py
 geoengine_api_client/models/reprojection_parameters.py
 geoengine_api_client/models/resource.py
@@ -883,7 +890,6 @@ geoengine_api_client/models/user_info.py
 geoengine_api_client/models/user_registration.py
 geoengine_api_client/models/user_session.py
 geoengine_api_client/models/variable_matrix_width.py
-geoengine_api_client/models/vec_update.py
 geoengine_api_client/models/vector_column_info.py
 geoengine_api_client/models/vector_data_type.py
 geoengine_api_client/models/vector_expression.py
@@ -1072,6 +1078,7 @@ test/test_layer_collection_resource.py
 test/test_layer_listing.py
 test/test_layer_provider_listing.py
 test/test_layer_resource.py
+test/test_layer_update.py
 test/test_layer_visibility.py
 test/test_layers_api.py
 test/test_line_simplification.py
@@ -1162,12 +1169,14 @@ test/test_plot.py
 test/test_plot_operator.py
 test/test_plot_output_format.py
 test/test_plot_result_descriptor.py
+test/test_plot_update.py
 test/test_plots_api.py
 test/test_point_in_polygon_filter.py
 test/test_point_in_polygon_filter_source.py
 test/test_point_symbology.py
 test/test_polygon_symbology.py
 test/test_processing_graph.py
+test/test_processing_graphs_api.py
 test/test_project.py
 test/test_project_layer.py
 test/test_project_listing.py
@@ -1186,7 +1195,7 @@ test/test_radiance.py
 test/test_raster_band_descriptor.py
 test/test_raster_colorizer.py
 test/test_raster_data_type.py
-test/test_raster_dataset_from_workflow.py
+test/test_raster_dataset_from_processing_graph.py
 test/test_raster_operator.py
 test/test_raster_properties_entry_type.py
 test/test_raster_properties_key.py
@@ -1208,8 +1217,10 @@ test/test_reflectance.py
 test/test_reflectance_parameters.py
 test/test_regular.py
 test/test_regular_time_dimension.py
-test/test_rename.py
 test/test_rename_bands.py
+test/test_rename_bands_default.py
+test/test_rename_bands_rename.py
+test/test_rename_bands_suffix.py
 test/test_reprojection.py
 test/test_reprojection_parameters.py
 test/test_resource.py
@@ -1341,7 +1352,6 @@ test/test_user_info.py
 test/test_user_registration.py
 test/test_user_session.py
 test/test_variable_matrix_width.py
-test/test_vec_update.py
 test/test_vector_column_info.py
 test/test_vector_data_type.py
 test/test_vector_expression.py
@@ -1367,6 +1377,5 @@ test/test_wms_request.py
 test/test_wms_response_format.py
 test/test_wms_service.py
 test/test_wms_version.py
-test/test_workflows_api.py
 test/test_wrapped_plot_output.py
 tox.ini

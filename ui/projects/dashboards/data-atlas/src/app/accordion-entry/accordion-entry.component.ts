@@ -93,8 +93,8 @@ export class AccordionEntryComponent implements OnInit {
 
         from(this.layersService.getLayer(id.providerId, id.layerId))
             .pipe(
-                mergeMap((layer) => combineLatest([of(layer), this.projectService.registerWorkflow(layer.workflow)])),
-                mergeMap(([layer, workflowId]) => {
+                mergeMap((layer) => combineLatest([of(layer), this.projectService.registerProcessingGraph(layer.processingGraph)])),
+                mergeMap(([layer, processingGraphId]) => {
                     if (!layer.symbology) {
                         throw new Error('Layer has no symbology');
                     }
@@ -121,7 +121,7 @@ export class AccordionEntryComponent implements OnInit {
 
                     const rasterLayer = new RasterLayer({
                         name: 'EBV',
-                        workflowId,
+                        processingGraphId,
                         isVisible: true,
                         isLegendVisible: false,
                         symbology: RasterSymbology.fromDict(layer.symbology) as RasterSymbology,

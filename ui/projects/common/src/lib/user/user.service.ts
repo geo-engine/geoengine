@@ -11,7 +11,7 @@ import {
     SessionApi,
     UserApi,
     UserSession,
-    WorkflowsApi,
+    ProcessingGraphsApi,
 } from '@geoengine/api-client';
 import {BehaviorSubject, Observable, ReplaySubject, filter, first, firstValueFrom, from, map, mergeMap} from 'rxjs';
 import {Location} from '@angular/common';
@@ -81,10 +81,10 @@ export class UserService {
         if (!sessionToken) return new GeneralApi(); // to prevent undefined
         return new GeneralApi(apiConfigurationWithAccessKey(sessionToken));
     });
-    readonly processingGraphAPI = computed<WorkflowsApi>(() => {
+    readonly processingGraphAPI = computed<ProcessingGraphsApi>(() => {
         const sessionToken = this.sessionToken();
-        if (!sessionToken) return new WorkflowsApi(); // to prevent undefined
-        return new WorkflowsApi(apiConfigurationWithAccessKey(sessionToken));
+        if (!sessionToken) return new ProcessingGraphsApi(); // to prevent undefined
+        return new ProcessingGraphsApi(apiConfigurationWithAccessKey(sessionToken));
     });
 
     protected readonly roleDescriptions = resource({

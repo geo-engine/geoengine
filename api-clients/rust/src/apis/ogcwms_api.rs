@@ -22,9 +22,9 @@ pub enum WmsHandlerError {
 }
 
 
-pub async fn wms_handler(configuration: &configuration::Configuration, workflow: &str, request: models::WmsRequest, bbox: Option<&str>, bgcolor: Option<&str>, crs: Option<&str>, elevation: Option<&str>, exceptions: Option<&str>, format: Option<&str>, height: Option<i32>, info_format: Option<&str>, layer: Option<&str>, layers: Option<&str>, query_layers: Option<&str>, service: Option<models::WmsService>, sld: Option<&str>, sld_body: Option<&str>, styles: Option<&str>, time: Option<&str>, transparent: Option<bool>, version: Option<&str>, width: Option<i32>) -> Result<reqwest::Response, Error<WmsHandlerError>> {
+pub async fn wms_handler(configuration: &configuration::Configuration, processing_graph: &str, request: models::WmsRequest, bbox: Option<&str>, bgcolor: Option<&str>, crs: Option<&str>, elevation: Option<&str>, exceptions: Option<&str>, format: Option<&str>, height: Option<i32>, info_format: Option<&str>, layer: Option<&str>, layers: Option<&str>, query_layers: Option<&str>, service: Option<models::WmsService>, sld: Option<&str>, sld_body: Option<&str>, styles: Option<&str>, time: Option<&str>, transparent: Option<bool>, version: Option<&str>, width: Option<i32>) -> Result<reqwest::Response, Error<WmsHandlerError>> {
     // add a prefix to parameters to efficiently prevent name collisions
-    let p_path_workflow = workflow;
+    let p_path_processing_graph = processing_graph;
     let p_query_request = request;
     let p_query_bbox = bbox;
     let p_query_bgcolor = bgcolor;
@@ -46,7 +46,7 @@ pub async fn wms_handler(configuration: &configuration::Configuration, workflow:
     let p_query_version = version;
     let p_query_width = width;
 
-    let uri_str = format!("{}/wms/{workflow}", configuration.base_path, workflow=crate::apis::urlencode(p_path_workflow));
+    let uri_str = format!("{}/wms/{processingGraph}", configuration.base_path, processingGraph=crate::apis::urlencode(p_path_processing_graph));
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref param_value) = p_query_bbox {

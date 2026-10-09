@@ -148,11 +148,11 @@ export class BandNeighborhoodAggregateComponent {
 
         const aggregate = this.getAggregate();
 
-        from(this.projectService.getWorkflow(rasterLayer.workflowId))
+        from(this.projectService.getProcessingGraph(rasterLayer.workflowId))
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) => {
                     if (inputWorkflow.type !== 'Raster') {
-                        throw new Error('Expected a raster workflow for band neighborhood aggregate.');
+                        throw new Error('Expected a raster processing graph for band neighborhood aggregate.');
                     }
 
                     const workflow: TypedRasterOperator = {
@@ -168,7 +168,7 @@ export class BandNeighborhoodAggregateComponent {
                         },
                     };
 
-                    return this.projectService.registerWorkflow(workflow);
+                    return this.projectService.registerProcessingGraph(workflow);
                 }),
                 mergeMap((workflowId: UUID) => {
                     const symbology$: Observable<RasterSymbology> = this.symbologyCreator().symbologyForRasterLayer(
@@ -182,7 +182,7 @@ export class BandNeighborhoodAggregateComponent {
                         const outSymbology = new RasterSymbology(symbology.opacity, symbology.rasterColorizer.replaceBand(0));
                         return this.projectService.addLayer(
                             new RasterLayer({
-                                workflowId,
+                                processingGraphId: workflowId,
                                 name,
                                 symbology: outSymbology,
                                 isLegendVisible: false,

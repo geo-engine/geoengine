@@ -121,12 +121,12 @@ pub mod ogcwfs_api;
 pub mod ogcwms_api;
 pub mod permissions_api;
 pub mod plots_api;
+pub mod processing_graphs_api;
 pub mod projects_api;
 pub mod session_api;
 pub mod spatial_references_api;
 pub mod tasks_api;
 pub mod uploads_api;
 pub mod user_api;
-pub mod workflows_api;
 
 pub mod configuration;

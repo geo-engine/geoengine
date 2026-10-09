@@ -13,7 +13,7 @@ Authorization: Bearer {{anonymousSession.response.body.$.id}}
 ###
 
 # @name workflow
-POST http://localhost:3030/api/workflow
+POST http://localhost:3030/api/processingGraphs
 Authorization: Bearer {{anonymousSession.response.body.$.id}}
 Content-Type: application/json
 

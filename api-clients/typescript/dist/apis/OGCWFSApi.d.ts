@@ -11,7 +11,7 @@
 import * as runtime from '../runtime';
 import type { GeoJson, WfsRequest, WfsService, WfsVersion } from '../models/index';
 export interface WfsHandlerRequest {
-    workflow: string;
+    processingGraph: string;
     request: WfsRequest;
     bbox?: string;
     count?: number | null;

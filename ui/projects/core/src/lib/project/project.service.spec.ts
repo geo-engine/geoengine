@@ -438,7 +438,7 @@ describe('test project methods in projectService', () => {
             new RasterLayer({
                 id: 1,
                 name: 'test',
-                workflowId: 'ffffffff-ffff-4fff-afff-ffffffffffff',
+                processingGraphId: 'ffffffff-ffff-4fff-afff-ffffffffffff',
                 isVisible: true,
                 isLegendVisible: true,
                 symbology: {opacity: 1} as RasterSymbology,

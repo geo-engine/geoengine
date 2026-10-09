@@ -105,7 +105,7 @@ export interface LayerToDatasetRequest {
     layer: string;
 }
 
-export interface LayerToWorkflowIdHandlerRequest {
+export interface LayerToProcessingGraphIdHandlerRequest {
     provider: string;
     layer: string;
 }
@@ -812,20 +812,20 @@ export class LayersApi extends runtime.BaseAPI {
     }
 
     /**
-     * Creates request options for layerToWorkflowIdHandler without sending the request
+     * Creates request options for layerToProcessingGraphIdHandler without sending the request
      */
-    async layerToWorkflowIdHandlerRequestOpts(requestParameters: LayerToWorkflowIdHandlerRequest): Promise<runtime.RequestOpts> {
+    async layerToProcessingGraphIdHandlerRequestOpts(requestParameters: LayerToProcessingGraphIdHandlerRequest): Promise<runtime.RequestOpts> {
         if (requestParameters['provider'] == null) {
             throw new runtime.RequiredError(
                 'provider',
-                'Required parameter "provider" was null or undefined when calling layerToWorkflowIdHandler().'
+                'Required parameter "provider" was null or undefined when calling layerToProcessingGraphIdHandler().'
             );
         }
 
         if (requestParameters['layer'] == null) {
             throw new runtime.RequiredError(
                 'layer',
-                'Required parameter "layer" was null or undefined when calling layerToWorkflowIdHandler().'
+                'Required parameter "layer" was null or undefined when calling layerToProcessingGraphIdHandler().'
             );
         }
 
@@ -842,7 +842,7 @@ export class LayersApi extends runtime.BaseAPI {
             }
         }
 
-        let urlPath = `/layers/{provider}/{layer}/workflowId`;
+        let urlPath = `/layers/{provider}/{layer}/processingGraphId`;
         urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
         urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
 
@@ -855,20 +855,20 @@ export class LayersApi extends runtime.BaseAPI {
     }
 
     /**
-     * Registers a layer from a provider as a workflow and returns the workflow id
+     * Registers a layer from a provider as a processing graph and returns the processing graph id
      */
-    async layerToWorkflowIdHandlerRaw(requestParameters: LayerToWorkflowIdHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<IdResponse>> {
-        const requestOptions = await this.layerToWorkflowIdHandlerRequestOpts(requestParameters);
+    async layerToProcessingGraphIdHandlerRaw(requestParameters: LayerToProcessingGraphIdHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<IdResponse>> {
+        const requestOptions = await this.layerToProcessingGraphIdHandlerRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
         return new runtime.JSONApiResponse(response, (jsonValue) => IdResponseFromJSON(jsonValue));
     }
 
     /**
-     * Registers a layer from a provider as a workflow and returns the workflow id
+     * Registers a layer from a provider as a processing graph and returns the processing graph id
      */
-    async layerToWorkflowIdHandler(requestParameters: LayerToWorkflowIdHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<IdResponse> {
-        const response = await this.layerToWorkflowIdHandlerRaw(requestParameters, initOverrides);
+    async layerToProcessingGraphIdHandler(requestParameters: LayerToProcessingGraphIdHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<IdResponse> {
+        const response = await this.layerToProcessingGraphIdHandlerRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

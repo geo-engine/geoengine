@@ -50,7 +50,7 @@ pub struct DescribeCoverage {
     #[serde(alias = "SERVICE")]
     pub service: WcsService,
     #[serde(alias = "IDENTIFIERS")]
-    #[param(example = "<Workflow Id>")]
+    #[param(example = "<Processing Graph Id>")]
     pub identifiers: String,
 }
 
@@ -64,7 +64,7 @@ pub struct GetCoverage {
     #[serde(alias = "FORMAT")]
     pub format: GetCoverageFormat,
     #[serde(alias = "IDENTIFIER")]
-    #[param(example = "<Workflow Id>")]
+    #[param(example = "<Processing Graph Id>")]
     pub identifier: String,
     #[serde(alias = "BOUNDINGBOX")]
     #[serde(deserialize_with = "parse_wcs_bbox")]

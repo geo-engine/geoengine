@@ -8,7 +8,7 @@ Content-Type: application/json
 ### 
 
 # @name workflow
-POST https://geoengine.biois.app.geoengine.io/api/workflow
+POST https://geoengine.biois.app.geoengine.io/api/processingGraphs
 Authorization: Bearer {{anonymousSession.response.body.$.id}}
 Content-Type: application/json
 
@@ -16,7 +16,7 @@ Content-Type: application/json
 
 ### 
 
-GET https://geoengine.biois.app.geoengine.io/api/workflow/{{workflow.response.body.$.id}}/metadata
+GET https://geoengine.biois.app.geoengine.io/api/processingGraphs/{{workflow.response.body.$.id}}/metadata
 Authorization: Bearer {{anonymousSession.response.body.$.id}}
 Content-Type: application/json
 

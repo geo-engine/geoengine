@@ -1,3 +1,4 @@
+use crate::api::model::processing_graphs::ProcessingGraphId;
 use crate::{
     api::{
         model::{
@@ -48,7 +49,7 @@ where
     C: ApplicationContext,
     C::Session: FromRequest,
 {
-    cfg.service(web::resource("/wms/{workflow}").route(web::get().to(wms_handler::<C>)));
+    cfg.service(web::resource("/wms/{processingGraph}").route(web::get().to(wms_handler::<C>)));
 }
 
 #[derive(Debug, Deserialize)]
@@ -115,7 +116,7 @@ impl IntoParams for WmsQueryParams {
 #[utoipa::path(
     tag = "OGC WMS",
     get,
-    path = "/wms/{workflow}",
+    path = "/wms/{processingGraph}",
     responses(
         (status = 200, description = "OK", content_type = "text/xml", body = String,
             // TODO: add example when utoipa supports more than just json examples
@@ -158,7 +159,7 @@ impl IntoParams for WmsQueryParams {
             //     </Exception>
             //     <Layer queryable="1">
             //       <Name>b709b27b-dea5-5a27-a074-ae3366c49498</Name>
-            //       <Title>Workflow b709b27b-dea5-5a27-a074-ae3366c49498</Title>
+            //       <Title>Processing Graph b709b27b-dea5-5a27-a074-ae3366c49498</Title>
             //       <CRS>EPSG:3857</CRS>
             //       <EX_GeographicBoundingBox>
             //         <westBoundLongitude>-180</westBoundLongitude>
@@ -174,7 +175,7 @@ impl IntoParams for WmsQueryParams {
         (status = 200, response = crate::api::model::responses::PngResponse),
     ),
     params(
-        ("workflow" = WorkflowId, description = "Workflow id"),
+        ("processingGraph" = ProcessingGraphId, description = "Processing graph id"),
         WmsQueryParams
     ),
     security(
@@ -183,7 +184,7 @@ impl IntoParams for WmsQueryParams {
 )]
 async fn wms_handler<C>(
     req: HttpRequest,
-    workflow: web::Path<WorkflowId>,
+    processing_graph: web::Path<ProcessingGraphId>,
     request: OgcQueryExtractor<WmsQueryParams>,
     app_ctx: web::Data<C>,
     session: C::Session,
@@ -193,10 +194,17 @@ where
 {
     match request.into_inner() {
         WmsQueryParams::GetCapabilities(_) => {
-            wms_get_capabilities(workflow.into_inner(), app_ctx, session).await
+            wms_get_capabilities(processing_graph.into_inner().into(), app_ctx, session).await
         }
         WmsQueryParams::GetMap(get_map) => {
-            wms_get_map(req, workflow.into_inner(), get_map, app_ctx, session).await
+            wms_get_map(
+                req,
+                processing_graph.into_inner().into(),
+                get_map,
+                app_ctx,
+                session,
+            )
+            .await
         }
         WmsQueryParams::GetFeatureInfo(_)
         | WmsQueryParams::GetStyles(_)
@@ -269,7 +277,7 @@ where
         </Exception>
         <Layer queryable="1">
             <Name>{workflow}</Name>
-            <Title>Workflow {workflow}</Title>
+            <Title>Processing Graph {workflow}</Title>
             <CRS>{srs_authority}:{srs_code}</CRS>
             <EX_GeographicBoundingBox>
                 <westBoundLongitude>-180</westBoundLongitude>

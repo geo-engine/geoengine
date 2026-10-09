@@ -164,11 +164,11 @@ export class DashboardComponent implements AfterViewInit, AfterContentInit {
     }
 
     async loadClassification(): Promise<void> {
-        const workflowId = await this.projectService.registerWorkflow(CLASSIFICATION_WORKFLOW);
+        const workflowId = await this.projectService.registerProcessingGraph(CLASSIFICATION_WORKFLOW);
 
         const rasterLayer = new RasterLayer({
             name: 'ESG Classification',
-            workflowId,
+            processingGraphId: workflowId,
             isVisible: true,
             isLegendVisible: false,
             symbology: CLASSIFICATION_SYMBOLOGY,
@@ -178,11 +178,11 @@ export class DashboardComponent implements AfterViewInit, AfterContentInit {
     }
 
     async loadProperties(): Promise<void> {
-        const workflowId = await this.projectService.registerWorkflow(PROPERTIES_WORKFLOW);
+        const workflowId = await this.projectService.registerProcessingGraph(PROPERTIES_WORKFLOW);
 
         const polygonLayer = new VectorLayer({
             name: 'Bahn Properties',
-            workflowId,
+            processingGraphId: workflowId,
             isVisible: true,
             isLegendVisible: false,
             symbology: PROPERTIES_SYMBOLOGY,
@@ -242,7 +242,7 @@ export class DashboardComponent implements AfterViewInit, AfterContentInit {
             operator: rasterVectorJoin,
         };
 
-        const workflowId = await this.projectService.registerWorkflow(workflow);
+        const workflowId = await this.projectService.registerProcessingGraph(workflow);
 
         const time = await this.projectService.getTimeOnce();
 

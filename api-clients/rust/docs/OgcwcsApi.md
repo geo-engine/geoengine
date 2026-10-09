@@ -4,13 +4,13 @@ All URIs are relative to *https://geoengine.io/api*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**wcs_handler**](OgcwcsApi.md#wcs_handler) | **GET** /wcs/{workflow} | OGC WCS endpoint
+[**wcs_handler**](OgcwcsApi.md#wcs_handler) | **GET** /wcs/{processingGraph} | OGC WCS endpoint
 
 
 
 ## wcs_handler
 
-> String wcs_handler(workflow, request, boundingbox, format, gridbasecrs, gridoffsets, gridorigin, identifier, identifiers, nodatavalue, resx, resy, service, time, version)
+> String wcs_handler(processing_graph, request, boundingbox, format, gridbasecrs, gridoffsets, gridorigin, identifier, identifiers, nodatavalue, resx, resy, service, time, version)
 OGC WCS endpoint
 
 ### Parameters
@@ -18,7 +18,7 @@ OGC WCS endpoint
 
 Name | Type | Description  | Required | Notes
 ------------- | ------------- | ------------- | ------------- | -------------
-**workflow** | **uuid::Uuid** | Workflow id | [required] |
+**processing_graph** | **uuid::Uuid** | Processing graph id | [required] |
 **request** | [**WcsRequest**](WcsRequest.md) | type of WCS request | [required] |
 **boundingbox** | Option<**String**> |  |  |
 **format** | Option<[**GetCoverageFormat**](GetCoverageFormat.md)> |  |  |

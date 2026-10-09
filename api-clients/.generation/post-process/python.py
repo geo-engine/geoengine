@@ -9,7 +9,6 @@ from typing import Literal
 from collections.abc import Generator
 from textwrap import dedent, indent
 from util import FileModifier, modify_files, version
-from enum import Flag, auto
 
 INDENT = "    "
 HALF_INDENT = "  "
@@ -27,7 +26,6 @@ def file_modifications() -> Generator[tuple[Path, FileModifier], None, None]:
     yield Path("models/task_status_with_id.py"), task_status_with_id_py
     yield Path("models/time_step.py"), time_step_py
     yield Path("models/vector_result_descriptor.py"), vector_result_descriptor_py
-    yield Path("models/workflow.py"), workflow_py
 
 
 def main():
@@ -37,36 +35,6 @@ def main():
         Path("python/geoengine_api_client"),
         Path("python/diffs"),
     )
-
-
-def workflow_py(file_contents: list[str]) -> Generator[str, None, None]:
-    """Modify the workflow.py file."""
-
-    class Method(Flag):
-        ACTUAL_INSTANCE_MUST_VALIDATE_ONEOF = auto()
-        FROM_JSON = auto()
-        OTHER = auto()
-
-    method = Method.OTHER
-
-    for line in file_contents:
-        dedented_line = dedent(line)
-
-        if dedented_line.startswith("def actual_instance_must_validate_oneof"):
-            method = Method.ACTUAL_INSTANCE_MUST_VALIDATE_ONEOF
-        elif dedented_line.startswith("def from_json("):
-            method = Method.FROM_JSON
-        elif dedented_line.startswith("def "):
-            method = Method.OTHER
-        elif (
-            method == Method.ACTUAL_INSTANCE_MUST_VALIDATE_ONEOF
-            and dedented_line.startswith("match += 1")
-        ):
-            line = indent("return v", 3 * INDENT) + "\n"
-        elif method == Method.FROM_JSON and dedented_line.startswith("match += 1"):
-            line = indent("return instance", 3 * INDENT) + "\n"
-
-        yield line
 
 
 def api_client_py(file_contents: list[str]) -> Generator[str, None, None]:

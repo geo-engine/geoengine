@@ -30,7 +30,7 @@ class LayerTests(unittest.TestCase):
             provider_id=LAYER_DB_PROVIDER_ID,
             metadata={},
             properties=[],
-            workflow={
+            processing_graph={
                 "operator": {
                     "params": {"renameBands": {"type": "rename", "values": ["blue", "green", "red"]}},
                     "sources": {
@@ -150,7 +150,7 @@ class LayerTests(unittest.TestCase):
             test_collection.add_layer(
                 name="ports clone",
                 description="test description",
-                workflow={
+                processing_graph={
                     "type": "Vector",
                     "operator": {
                         "type": "PointInPolygonFilter",
@@ -219,7 +219,7 @@ class LayerTests(unittest.TestCase):
                 description="Test Error Raster Layer Description",
                 layer_id=ge.LayerId(UUID("86c81654-e572-42ed-96ee-8b38ebcd84ab")),
                 provider_id=ge.LayerProviderId(UUID("ac50ed0d-c9a0-41f8-9ce8-35fc9e38299b")),
-                workflow={
+                processing_graph={
                     "operator": {"params": {"data": "ndvi", "overviewLevel": None}, "type": "GdalSource"},
                     "type": "Raster",
                 },
@@ -239,7 +239,7 @@ class LayerTests(unittest.TestCase):
             description="Test Raster Layer Description",
             layer_id=LayerId(UUID("9ee3619e-d0f9-4ced-9c44-3d407c3aed69")),
             provider_id=LayerProviderId(UUID("ac50ed0d-c9a0-41f8-9ce8-35fc9e38299b")),
-            workflow={
+            processing_graph={
                 "operator": {"params": {"data": "ndvi", "overviewLevel": None}, "type": "GdalSource"},
                 "type": "Raster",
             },
@@ -371,7 +371,7 @@ class LayerTests(unittest.TestCase):
             new_layer = overwrite_collection.add_layer_with_permissions(
                 name="ports clone",
                 description="test description",
-                workflow={
+                processing_graph={
                     "type": "Vector",
                     "operator": {
                         "type": "PointInPolygonFilter",

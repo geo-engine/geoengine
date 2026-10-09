@@ -141,7 +141,7 @@ pub enum Error {
 
     InvalidWfsTypeNames,
 
-    NoWorkflowForGivenId,
+    NoProcessingGraphForGivenId,
 
     TokioPostgres {
         source: bb8_postgres::tokio_postgres::Error,
@@ -422,8 +422,8 @@ pub enum Error {
     InvalidLayerId,
 
     #[snafu(context(false))]
-    WorkflowApi {
-        source: crate::api::handlers::workflows::WorkflowApiError,
+    ProcessingGraphApi {
+        source: crate::api::handlers::processing_graphs::ProcessingGraphApiError,
     },
 
     Api {
@@ -490,8 +490,6 @@ pub enum Error {
     ProviderDoesNotSupportBrowsing,
 
     InvalidPath,
-
-    InvalidWorkflowOutputType,
 
     #[snafu(display("Functionality is not implemented: '{}'", message))]
     NotImplemented {

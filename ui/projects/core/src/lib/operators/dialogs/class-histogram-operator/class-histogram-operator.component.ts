@@ -173,14 +173,14 @@ export class ClassHistogramOperatorComponent implements AfterViewInit, OnDestroy
 
         const outputName: string = this.form.controls['name'].value;
 
-        from(this.projectService.getWorkflow(inputLayer.workflowId))
+        from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) => {
                     if (inputWorkflow.type === 'Plot') {
-                        throw new Error('Expected a raster or vector workflow for class histogram.');
+                        throw new Error('Expected a raster or vector processing graph for class histogram.');
                     }
 
-                    return this.projectService.registerWorkflow({
+                    return this.projectService.registerProcessingGraph({
                         type: 'Plot',
                         operator: {
                             type: 'ClassHistogram',

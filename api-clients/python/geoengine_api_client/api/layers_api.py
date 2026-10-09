@@ -2830,7 +2830,7 @@ class LayersApi:
 
 
     @validate_call
-    def layer_to_workflow_id_handler(
+    def layer_to_processing_graph_id_handler(
         self,
         provider: Annotated[UUID, Field(description="Data provider id")],
         layer: Annotated[StrictStr, Field(description="Layer id")],
@@ -2847,7 +2847,7 @@ class LayersApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> IdResponse:
-        """Registers a layer from a provider as a workflow and returns the workflow id
+        """Registers a layer from a provider as a processing graph and returns the processing graph id
 
 
         :param provider: Data provider id (required)
@@ -2876,7 +2876,7 @@ class LayersApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._layer_to_workflow_id_handler_serialize(
+        _param = self._layer_to_processing_graph_id_handler_serialize(
             provider=provider,
             layer=layer,
             _request_auth=_request_auth,
@@ -2900,7 +2900,7 @@ class LayersApi:
 
 
     @validate_call
-    def layer_to_workflow_id_handler_with_http_info(
+    def layer_to_processing_graph_id_handler_with_http_info(
         self,
         provider: Annotated[UUID, Field(description="Data provider id")],
         layer: Annotated[StrictStr, Field(description="Layer id")],
@@ -2917,7 +2917,7 @@ class LayersApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> ApiResponse[IdResponse]:
-        """Registers a layer from a provider as a workflow and returns the workflow id
+        """Registers a layer from a provider as a processing graph and returns the processing graph id
 
 
         :param provider: Data provider id (required)
@@ -2946,7 +2946,7 @@ class LayersApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._layer_to_workflow_id_handler_serialize(
+        _param = self._layer_to_processing_graph_id_handler_serialize(
             provider=provider,
             layer=layer,
             _request_auth=_request_auth,
@@ -2970,7 +2970,7 @@ class LayersApi:
 
 
     @validate_call
-    def layer_to_workflow_id_handler_without_preload_content(
+    def layer_to_processing_graph_id_handler_without_preload_content(
         self,
         provider: Annotated[UUID, Field(description="Data provider id")],
         layer: Annotated[StrictStr, Field(description="Layer id")],
@@ -2987,7 +2987,7 @@ class LayersApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> RESTResponseType:
-        """Registers a layer from a provider as a workflow and returns the workflow id
+        """Registers a layer from a provider as a processing graph and returns the processing graph id
 
 
         :param provider: Data provider id (required)
@@ -3016,7 +3016,7 @@ class LayersApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._layer_to_workflow_id_handler_serialize(
+        _param = self._layer_to_processing_graph_id_handler_serialize(
             provider=provider,
             layer=layer,
             _request_auth=_request_auth,
@@ -3035,7 +3035,7 @@ class LayersApi:
         return response_data.response
 
 
-    def _layer_to_workflow_id_handler_serialize(
+    def _layer_to_processing_graph_id_handler_serialize(
         self,
         provider,
         layer,
@@ -3086,7 +3086,7 @@ class LayersApi:
 
         return self.api_client.param_serialize(
             method='POST',
-            resource_path='/layers/{provider}/{layer}/workflowId',
+            resource_path='/layers/{provider}/{layer}/processingGraphId',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,

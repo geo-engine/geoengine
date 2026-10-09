@@ -1,10 +1,11 @@
+use crate::api::model::projects::{Project, UpdateProject};
 use crate::api::model::responses::{ErrorResponse, IdResponse};
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
 use crate::projects::error::ProjectDbError;
 use crate::projects::{
-    CreateProject, LoadVersion, Project, ProjectDb, ProjectId, ProjectListOptions, ProjectListing,
-    ProjectVersion, ProjectVersionId, UpdateProject,
+    CreateProject, LoadVersion, ProjectDb, ProjectId, ProjectListOptions, ProjectListing,
+    ProjectVersion, ProjectVersionId,
 };
 use crate::util::extractors::{ValidatedJson, ValidatedQuery};
 use actix_web::{FromRequest, HttpResponse, Responder, ResponseError, web};
@@ -184,7 +185,7 @@ pub(crate) async fn update_project_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     update: ValidatedJson<UpdateProject>,
 ) -> Result<impl Responder, ProjectHandlerError> {
-    let mut update = update.into_inner();
+    let mut update: crate::projects::UpdateProject = update.into_inner().into();
     update.id = project.into_inner(); // TODO: avoid passing project id in path AND body
     app_ctx
         .session_context(session)
@@ -286,7 +287,7 @@ pub(crate) async fn load_project_version_handler<C: ApplicationContext>(
         .load_project_version(project.0, LoadVersion::Version(project.1))
         .await
         .context(error::LoadProjectVersion)?;
-    Ok(web::Json(id))
+    Ok(web::Json(Project::from(id)))
 }
 
 /// Retrieves details about the latest version of a project.
@@ -349,7 +350,7 @@ pub(crate) async fn load_project_latest_handler<C: ApplicationContext>(
         .load_project_version(project.into_inner(), LoadVersion::Latest)
         .await
         .context(error::LoadLatestProjectVersion)?;
-    Ok(web::Json(id))
+    Ok(web::Json(Project::from(id)))
 }
 
 /// Lists all available versions of a project.
@@ -397,19 +398,19 @@ pub(crate) async fn project_versions_handler<C: ApplicationContext>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::model::processing_graphs::ProcessingGraphId;
+    use crate::api::model::projects::{LayerUpdate, Plot, PlotUpdate, ProjectLayer};
     use crate::contexts::PostgresContext;
     use crate::contexts::Session;
     use crate::ge_context;
     use crate::projects::{
-        LayerUpdate, LayerVisibility, Plot, PlotUpdate, Project, ProjectId, ProjectLayer,
-        ProjectListing, RasterSymbology, STRectangle, Symbology, UpdateProject,
+        LayerVisibility, ProjectId, ProjectListing, RasterSymbology, STRectangle, Symbology,
     };
     use crate::users::{UserAuth, UserSession};
     use crate::util::Identifier;
     use crate::util::tests::{
         check_allowed_http_methods, create_project_helper, send_test_request, update_project_helper,
     };
-    use crate::workflows::workflow::WorkflowId;
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::Method, http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -696,7 +697,7 @@ mod tests {
         let session = ctx.session().clone();
         let project = create_project_helper(&ctx).await;
 
-        let update = update_project_helper(project);
+        let update = UpdateProject::from(update_project_helper(project));
 
         let req = test::TestRequest::default()
             .method(method)
@@ -762,7 +763,7 @@ mod tests {
             "name": "TestUpdate",
             "description": None::<String>,
             "layers": vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
-                workflow: WorkflowId::new(),
+                processing_graph: ProcessingGraphId::new(),
                 name: "L1".to_string(),
                 visibility: Default::default(),
                 symbology: Symbology::Raster(RasterSymbology {
@@ -788,7 +789,7 @@ mod tests {
             res,
             400,
             "BodyDeserializeError",
-            "Error in user input: missing field `id` at line 1 column 492",
+            "Error in user input: missing field `id` at line 1 column 499",
         )
         .await;
     }
@@ -817,7 +818,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            loaded.layers
+            loaded.layers.into_iter().map(Into::into).collect()
         }
 
         let session = app_ctx.create_anonymous_session().await.unwrap();
@@ -827,7 +828,7 @@ mod tests {
         let project = create_project_helper(&ctx).await;
 
         let layer_1 = ProjectLayer {
-            workflow: WorkflowId::new(),
+            processing_graph: ProcessingGraphId::new(),
             name: "L1".to_string(),
             visibility: LayerVisibility {
                 data: true,
@@ -844,7 +845,7 @@ mod tests {
         };
 
         let layer_2 = ProjectLayer {
-            workflow: WorkflowId::new(),
+            processing_graph: ProcessingGraphId::new(),
             name: "L2".to_string(),
             visibility: LayerVisibility {
                 data: false,
@@ -971,7 +972,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            loaded.plots
+            loaded.plots.into_iter().map(Into::into).collect()
         }
 
         let session = app_ctx.create_anonymous_session().await.unwrap();
@@ -981,12 +982,12 @@ mod tests {
         let project = create_project_helper(&ctx).await;
 
         let plot_1 = Plot {
-            workflow: WorkflowId::new(),
+            processing_graph: ProcessingGraphId::new(),
             name: "P1".to_string(),
         };
 
         let plot_2 = Plot {
-            workflow: WorkflowId::new(),
+            processing_graph: ProcessingGraphId::new(),
             name: "P2".to_string(),
         };
 

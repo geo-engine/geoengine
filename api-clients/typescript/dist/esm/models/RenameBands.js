@@ -10,9 +10,9 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import { instanceOfDefault, DefaultFromJSONTyped, DefaultToJSON, } from './Default';
-import { instanceOfRename, RenameFromJSONTyped, RenameToJSON, } from './Rename';
-import { instanceOfSuffix, SuffixFromJSONTyped, SuffixToJSON, } from './Suffix';
+import { RenameBandsDefaultFromJSONTyped, RenameBandsDefaultToJSON, } from './RenameBandsDefault';
+import { RenameBandsRenameFromJSONTyped, RenameBandsRenameToJSON, } from './RenameBandsRename';
+import { RenameBandsSuffixFromJSONTyped, RenameBandsSuffixToJSON, } from './RenameBandsSuffix';
 export function RenameBandsFromJSON(json) {
     return RenameBandsFromJSONTyped(json, false);
 }
@@ -20,19 +20,16 @@ export function RenameBandsFromJSONTyped(json, ignoreDiscriminator) {
     if (json == null) {
         return json;
     }
-    if (typeof json !== 'object') {
-        return json;
+    switch (json['type']) {
+        case 'default':
+            return Object.assign({}, RenameBandsDefaultFromJSONTyped(json, true), { type: 'default' });
+        case 'rename':
+            return Object.assign({}, RenameBandsRenameFromJSONTyped(json, true), { type: 'rename' });
+        case 'suffix':
+            return Object.assign({}, RenameBandsSuffixFromJSONTyped(json, true), { type: 'suffix' });
+        default:
+            return json;
     }
-    if (instanceOfDefault(json)) {
-        return DefaultFromJSONTyped(json, true);
-    }
-    if (instanceOfRename(json)) {
-        return RenameFromJSONTyped(json, true);
-    }
-    if (instanceOfSuffix(json)) {
-        return SuffixFromJSONTyped(json, true);
-    }
-    return {};
 }
 export function RenameBandsToJSON(json) {
     return RenameBandsToJSONTyped(json, false);
@@ -41,17 +38,14 @@ export function RenameBandsToJSONTyped(value, ignoreDiscriminator = false) {
     if (value == null) {
         return value;
     }
-    if (typeof value !== 'object') {
-        return value;
+    switch (value['type']) {
+        case 'default':
+            return Object.assign({}, RenameBandsDefaultToJSON(value), { type: 'default' });
+        case 'rename':
+            return Object.assign({}, RenameBandsRenameToJSON(value), { type: 'rename' });
+        case 'suffix':
+            return Object.assign({}, RenameBandsSuffixToJSON(value), { type: 'suffix' });
+        default:
+            return value;
     }
-    if (instanceOfDefault(value)) {
-        return DefaultToJSON(value);
-    }
-    if (instanceOfRename(value)) {
-        return RenameToJSON(value);
-    }
-    if (instanceOfSuffix(value)) {
-        return SuffixToJSON(value);
-    }
-    return {};
 }

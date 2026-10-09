@@ -251,7 +251,7 @@ export class RasterStackerComponent implements AfterViewInit {
             }
 
             const metadataPromises = rasterLayers.map((l) => firstValueFrom(this.projectService.getRasterLayerMetadata(l)));
-            const workflowPromises = rasterLayers.map((l) => this.projectService.getWorkflow(l.workflowId));
+            const workflowPromises = rasterLayers.map((l) => this.projectService.getProcessingGraph(l.workflowId));
 
             void Promise.all([Promise.all(metadataPromises), Promise.all(workflowPromises)]).then(
                 ([metadata, workflows]: [Array<RasterLayerMetadata>, Array<ProcessingGraph>]) => {
@@ -344,7 +344,7 @@ export class RasterStackerComponent implements AfterViewInit {
             }
 
             // Get workflows for all layers and create reprojected operators
-            const workflowPromises = rasterLayers.map((layer) => this.projectService.getWorkflow(layer.workflowId));
+            const workflowPromises = rasterLayers.map((layer) => this.projectService.getProcessingGraph(layer.workflowId));
 
             void Promise.all(workflowPromises).then((workflows) => {
                 // Create reprojected operators
@@ -370,13 +370,13 @@ export class RasterStackerComponent implements AfterViewInit {
 
                 // Register temporary workflows and fetch their metadata
                 const metadataPromises = reprojectedOperators.map((operator) => {
-                    const workflowPromise = this.projectService.registerWorkflow({
+                    const workflowPromise = this.projectService.registerProcessingGraph({
                         type: 'Raster',
                         operator,
                     });
 
                     return workflowPromise.then((workflowId) =>
-                        firstValueFrom(this.projectService.getWorkflowMetaData(workflowId)).then((descriptor) => {
+                        firstValueFrom(this.projectService.getProcessingGraphMetaData(workflowId)).then((descriptor) => {
                             if (descriptor.type !== 'raster') {
                                 throw new Error('Expected raster result descriptor');
                             }
@@ -570,13 +570,13 @@ export class RasterStackerComponent implements AfterViewInit {
                     },
                 },
             };
-            const workflowId = await this.projectService.registerWorkflow(workflow);
+            const workflowId = await this.projectService.registerProcessingGraph(workflow);
 
             // Add the layer to the project
             await firstValueFrom(
                 this.projectService.addLayer(
                     new RasterLayer({
-                        workflowId,
+                        processingGraphId: workflowId,
                         name,
                         symbology: rasterLayers[0].symbology.clone(),
                         isLegendVisible: false,

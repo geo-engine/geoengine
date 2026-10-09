@@ -35,12 +35,12 @@ class TestPlot(unittest.TestCase):
         model = Plot()
         if include_optional:
             return Plot(
-                workflow = '',
+                processing_graph = '',
                 name = ''
             )
         else:
             return Plot(
-                workflow = '',
+                processing_graph = '',
                 name = '',
         )
         """
