@@ -247,7 +247,7 @@ impl Plot for Table {
         });
 
         Ok(PlotData {
-            vega_string: vega_spec.to_string(),
+            vega_spec,
             metadata: PlotMetaData::None,
         })
     }
@@ -286,8 +286,7 @@ mod tests {
         )
         .unwrap();
 
-        let spec: Value =
-            serde_json::from_str(&table.to_vega_embeddable(false).unwrap().vega_string).unwrap();
+        let spec = table.to_vega_embeddable(false).unwrap().vega_spec;
 
         // the rows stay unchanged and in order
         assert_eq!(

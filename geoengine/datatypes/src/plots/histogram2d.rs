@@ -187,7 +187,7 @@ impl Plot for Histogram2D {
         });
 
         Ok(PlotData {
-            vega_string: vega_spec.to_string(),
+            vega_spec,
             metadata: PlotMetaData::None,
         })
     }

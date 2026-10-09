@@ -244,7 +244,7 @@ describe('ComputeComponent', () => {
         const plotOutput: WrappedPlotOutput = {
             outputFormat: PlotOutputFormat.JsonVega,
             plotType: 'histogram',
-            data: {vegaString: '{"mark":"bar"}', metadata: {selectionName: 'selection'}},
+            data: {vegaSpec: {mark: 'bar'}, metadata: {selectionName: 'selection'}},
         };
 
         component.plotData.set(plotOutput);
@@ -262,7 +262,7 @@ describe('ComputeComponent', () => {
             maxHeight: '100vh',
         });
         expect(dialogConfig?.data).toMatchObject({
-            vegaString: '{"mark":"bar"}',
+            vegaSpec: {mark: 'bar'},
             metadata: {selectionName: 'selection'},
         });
     });

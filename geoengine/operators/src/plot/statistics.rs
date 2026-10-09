@@ -751,7 +751,7 @@ mod tests {
 
     /// The rows of the statistics table, i.e., the `data.values` of the Vega spec
     fn table_rows(plot: &PlotData) -> serde_json::Value {
-        let spec: serde_json::Value = serde_json::from_str(&plot.vega_string).unwrap();
+        let spec: serde_json::Value = plot.vega_spec.clone();
         spec["data"]["values"].clone()
     }
 
@@ -786,7 +786,7 @@ mod tests {
         .await
         .unwrap();
 
-        let spec: serde_json::Value = serde_json::from_str(&plot.vega_string).unwrap();
+        let spec: serde_json::Value = plot.vega_spec.clone();
 
         assert_eq!(
             spec["encoding"]["x"]["sort"],

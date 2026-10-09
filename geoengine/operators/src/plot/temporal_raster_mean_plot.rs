@@ -405,7 +405,7 @@ mod tests {
 
         assert!(matches!(result.metadata, PlotMetaData::None));
 
-        let vega_json: Value = serde_json::from_str(&result.vega_string).unwrap();
+        let vega_json: Value = result.vega_spec.clone();
 
         assert_eq!(
             vega_json,
@@ -489,7 +489,7 @@ mod tests {
             .await
             .unwrap();
 
-        let vega_json: Value = serde_json::from_str(&result.vega_string).unwrap();
+        let vega_json: Value = result.vega_spec.clone();
 
         assert_eq!(
             vega_json["data"]["values"],

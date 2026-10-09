@@ -77,7 +77,21 @@ pub(crate) struct GetPlot {
                 "outputFormat": "JsonVega",
                 "plotType": "Statistics",
                 "data": {
-                    "vegaString": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v6.json\",\"data\":{\"values\":[{\"name\":\"a\",\"valueCount\":2,\"validCount\":2,\"min\":1.0,\"max\":2.0,\"mean\":1.5,\"stddev\":0.5,\"percentiles\":[]}]},…}",
+                    "vegaSpec": {
+                        "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+                        "data": {
+                            "values": [{
+                                "name": "a",
+                                "valueCount": 2,
+                                "validCount": 2,
+                                "min": 1.0,
+                                "max": 2.0,
+                                "mean": 1.5,
+                                "stddev": 0.5,
+                                "percentiles": []
+                            }]
+                        }
+                    },
                     "metadata": null
                 }
            })
@@ -313,8 +327,7 @@ mod tests {
         assert_eq!(response["outputFormat"], "JsonVega");
         assert_eq!(response["plotType"], "Statistics");
 
-        let vega_json: Value =
-            serde_json::from_str(response["data"]["vegaString"].as_str().unwrap()).unwrap();
+        let vega_json: Value = response["data"]["vegaSpec"].clone();
 
         assert_eq!(
             vega_json["data"]["values"],
@@ -414,8 +427,7 @@ mod tests {
         assert_eq!(response["plotType"], "Histogram");
         assert!(response["plotType"]["metadata"].is_null());
 
-        let vega_json: Value =
-            serde_json::from_str(response["data"]["vegaString"].as_str().unwrap()).unwrap();
+        let vega_json: Value = response["data"]["vegaSpec"].clone();
 
         assert_eq!(
             vega_json,

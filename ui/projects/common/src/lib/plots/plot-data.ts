@@ -5,8 +5,8 @@ import {VegaChartData} from './plot.model';
  * Reads the inline data of a Vega spec, i.e., its `data.values`, or returns `undefined` if there is none.
  */
 export function vegaDataValues(data: VegaChartData): Array<Record<string, unknown>> | undefined {
-    const spec = JSON.parse(data.vegaString) as {data?: {values?: unknown}};
-    const values = spec.data?.values;
+    // only inline data has `values`
+    const values = (data.vegaSpec.data as {values?: unknown} | undefined)?.values;
 
     if (!Array.isArray(values) || !values.every((value) => typeof value === 'object' && value !== null && !Array.isArray(value))) {
         return undefined;

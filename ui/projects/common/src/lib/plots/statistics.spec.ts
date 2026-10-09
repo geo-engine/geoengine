@@ -14,7 +14,7 @@ describe('statisticsFromPlotData', () => {
 
     it('reads the rows from the spec', () => {
         const statistics = statisticsFromPlotData({
-            vegaString: JSON.stringify({data: {values: [row('red', 1), row('green', 2)]}, mark: 'text'}),
+            vegaSpec: {data: {values: [row('red', 1), row('green', 2)]}, mark: 'text'},
         });
 
         expect([...statistics.keys()]).toEqual(['red', 'green']);
@@ -23,23 +23,24 @@ describe('statisticsFromPlotData', () => {
     });
 
     it('fails without rows', () => {
-        expect(() => statisticsFromPlotData({vegaString: JSON.stringify({mark: 'bar'})})).toThrowError();
+        expect(() => statisticsFromPlotData({vegaSpec: {data: {url: 'data.csv'}, mark: 'text'}})).toThrowError();
     });
 
     it('fails for rows without a name', () => {
-        expect(() => statisticsFromPlotData({vegaString: JSON.stringify({data: {values: [{min: 1}]}})})).toThrowError();
+        expect(() => statisticsFromPlotData({vegaSpec: {data: {values: [{min: 1}]}, mark: 'text'}})).toThrowError();
     });
 
     it('creates a table with one column per percentile', () => {
         const statistics = statisticsFromPlotData({
-            vegaString: JSON.stringify({
+            vegaSpec: {
                 data: {
                     values: [
                         {...row('red', 1.123456789), percentiles: [{percentile: 1 / 3, value: 4.5}]},
                         {...row('blue', 2), min: null, percentiles: [{percentile: 1 / 3, value: null}]},
                     ],
                 },
-            }),
+                mark: 'text',
+            },
         });
 
         expect(statisticsTable(statistics)).toEqual({

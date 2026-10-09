@@ -1,5 +1,5 @@
 import {Component, ChangeDetectionStrategy, ElementRef, inject, input, output, viewChild, signal, effect, untracked} from '@angular/core';
-import vegaEmbed, {VisualizationSpec} from 'vega-embed';
+import vegaEmbed from 'vega-embed';
 import {View} from 'vega';
 import {TopLevelSpec as VlSpec} from 'vega-lite';
 import {Spec as VgSpec} from 'vega';
@@ -77,7 +77,8 @@ export class VegaViewerComponent {
         const width = this.width() ?? (div.clientWidth || this.element.nativeElement.clientWidth);
         const height = this.height() ?? width / 2;
 
-        const spec = JSON.parse(chartData.vegaString) as /* fingers crossed */ VisualizationSpec;
+        // copy the spec, so that embedding it cannot alter the input
+        const spec = structuredClone(chartData.vegaSpec);
 
         vegaEmbed(div, spec, {
             actions: false,

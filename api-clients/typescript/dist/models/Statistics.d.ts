@@ -17,7 +17,7 @@ import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
  * - a selection of bands of a single raster dataset.
  *
  * The output is a Vega-Lite table with one row per attribute or band.
- * The raw statistics of each row are in the `data.values` of the Vega-Lite spec,
+ * The raw statistics of each row are in the `data.values` of the Vega-Lite spec in `vegaSpec`,
  * with the attribute or band in `name`.
  *
  * For instance, you want to get an overview of a raster data source.

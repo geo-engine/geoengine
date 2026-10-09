@@ -59,7 +59,7 @@ impl Plot for ScatterPlot {
         });
 
         Ok(PlotData {
-            vega_string: vega_spec.to_string(),
+            vega_spec,
             metadata: PlotMetaData::None,
         })
     }
@@ -98,7 +98,7 @@ mod tests {
             sp.update(Coordinate2D::new(f64::from(i), f64::from(i)));
         }
 
-        let ser = sp.to_vega_embeddable(false).unwrap().vega_string;
+        let spec = sp.to_vega_embeddable(false).unwrap().vega_spec;
 
         let expected = serde_json::json!({
             "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
@@ -114,6 +114,6 @@ mod tests {
              }
         });
 
-        assert_eq!(expected.to_string(), ser);
+        assert_eq!(expected, spec);
     }
 }
