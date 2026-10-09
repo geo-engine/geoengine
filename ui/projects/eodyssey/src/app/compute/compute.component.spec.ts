@@ -35,7 +35,6 @@ describe('ComputeComponent', () => {
     let component: ComputeComponent;
     let overlayLayer: ReturnType<typeof signal<OlLayerVector<OlSourceVector<OlFeature>> | undefined>>;
     let selectedLayerSignal: WritableSignal<DataSourceLayer | undefined>;
-    let layerService: EOdysseyLayerService;
 
     const createBoxOverlay = (): OlLayerVector<OlSourceVector<OlFeature>> => {
         const geometry = new OlGeomPolygon([
@@ -72,6 +71,7 @@ describe('ComputeComponent', () => {
         };
 
         const layersService = {
+            getLayerCollectionItems: vi.fn().mockResolvedValue({items: []}),
             registerAndGetLayerWorkflowId: vi.fn().mockResolvedValue('workflow-id'),
             getWorkflowIdMetadata: vi
                 .fn()
@@ -89,14 +89,14 @@ describe('ComputeComponent', () => {
                         ),
                     ),
                 ),
-        } satisfies Pick<LayersService, 'registerAndGetLayerWorkflowId' | 'getWorkflowIdMetadata'>;
+        } satisfies Pick<LayersService, 'getLayerCollectionItems' | 'registerAndGetLayerWorkflowId' | 'getWorkflowIdMetadata'>;
 
         await TestBed.configureTestingModule({
             providers: [
                 provideZonelessChangeDetection(),
                 {provide: BackendService, useValue: {}},
                 {provide: LayersService, useValue: layersService},
-                EOdysseyLayerService,
+                {provide: EOdysseyLayerService, useValue: {mapTileLayer: selectedLayerSignal}},
                 {
                     provide: MapService,
                     useValue: {
@@ -117,9 +117,6 @@ describe('ComputeComponent', () => {
             ],
             imports: [ComputeComponent, MatDialogModule],
         }).compileComponents();
-
-        layerService = TestBed.inject(EOdysseyLayerService);
-        vi.spyOn(layerService.mapTileLayerResource, 'value').mockImplementation(() => selectedLayerSignal());
 
         fixture = TestBed.createComponent(ComputeComponent);
         component = fixture.componentInstance;
