@@ -29,7 +29,10 @@ use crate::error;
 use crate::machine_learning::{
     MlModelLoadingInfo,
     detection_decoder::{BoxFormat, DetectionDecoder, YoloBoxesDecoder, nms},
-    error::{InputResolutionMismatch, InputSizeMismatch, InputTypeMismatch, Ort},
+    error::{
+        InputResolutionMismatch, InputSizeMismatch, InputTypeMismatch, Ort,
+        UnsupportedDetectionOutputShape,
+    },
     onnx_util::load_onnx_model_from_loading_info,
 };
 use crate::optimization::OptimizationError;
@@ -367,10 +370,30 @@ impl QueryProcessor for OnnxObjectDetectionProcessor {
                 .context(Ort)
                 .map_err(error::Error::from)?;
             let predictions = outputs[0].try_extract_tensor::<f32>().context(Ort)?;
-            let (_shape, raw) = predictions.to_owned();
-            let output_data = Vec::from(raw);
+            let (shape, raw) = predictions.to_owned();
 
-            let detections = decoder.decode(&output_data);
+            // The decoder flattens the tensor and recovers the candidate count by
+            // integer division, so a channel count that disagrees with the shape
+            // yields plausible but wrong detections. Reject instead.
+            // Detectors export either `[channels, N]` or `[1, channels, N]`;
+            // both are seen in practice, so accept either and derive the pair.
+            let expected_channels = decoder.num_channels();
+            let dims: Vec<i64> = shape.iter().copied().collect();
+            let actual_channels = match dims.as_slice() {
+                [channels, _] | [1, channels, _] => *channels,
+                _ => -1,
+            };
+            ensure!(
+                actual_channels == expected_channels as i64
+                    && expected_channels > 0
+                    && raw.len() % expected_channels == 0,
+                UnsupportedDetectionOutputShape {
+                    shape: dims.iter().map(|d| *d as usize).collect::<Vec<_>>(),
+                    expected_channels,
+                }
+            );
+
+            let detections = decoder.decode(&Vec::from(raw));
             let filtered = detections
                 .into_iter()
                 .filter(|det| det.score >= conf_threshold)
@@ -676,6 +699,29 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     async fn detect_objects(source_overlap: TileOverlap) {
+        detect_objects_with_classes(source_overlap, 2)
+            .await
+            .unwrap();
+    }
+
+    /// The test model emits 6 channels for 2 classes. Declaring a different
+    /// class count must be rejected instead of silently decoding garbage.
+    #[tokio::test]
+    async fn it_rejects_a_num_classes_that_disagrees_with_the_model() {
+        let err = detect_objects_with_classes(TileOverlap::zero(), 5)
+            .await
+            .expect_err("num_classes must match the model's channel count");
+        assert!(
+            err.to_string().contains("not a single batch of"),
+            "expected an output-shape rejection, got: {err}"
+        );
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn detect_objects_with_classes(
+        source_overlap: TileOverlap,
+        num_classes: u32,
+    ) -> Result<usize> {
         // A single 4x4-core single-band f32 source tile at global position [0,0].
         // Pixel values are irrelevant: the test model emits a constant output,
         // so the assertions pin the *window* and its georeference, not the data.
@@ -729,7 +775,7 @@ mod tests {
                 expected_resolution: 1.0,
                 resolution_epsilon: 0.01,
                 layout: DetectionLayout::YoloBoxes { objectness: false },
-                num_classes: 2,
+                num_classes,
                 conf_threshold: 0.5,
                 iou_threshold: 0.5,
                 class_names: vec!["a".into(), "b".into()],
@@ -760,8 +806,7 @@ mod tests {
 
         let initialized = op
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .unwrap();
+            .await?;
         let qp = initialized
             .query_processor()
             .unwrap()
@@ -777,13 +822,11 @@ mod tests {
 
         let collections = qp
             .vector_query(query_rect, &query_ctx)
-            .await
-            .unwrap()
+            .await?
             .collect::<Vec<_>>()
             .await
             .into_iter()
-            .collect::<Result<Vec<MultiPolygonCollection>>>()
-            .unwrap();
+            .collect::<Result<Vec<MultiPolygonCollection>>>()?;
 
         assert_eq!(collections.len(), 1);
         let collection = &collections[0];
@@ -833,5 +876,7 @@ mod tests {
         // Scores round-trip through f32 in the model, so compare with a relaxed epsilon.
         assert_abs_diff_eq!(scores[0], 0.9, epsilon = 1e-6);
         assert_abs_diff_eq!(scores[1], 0.85, epsilon = 1e-6);
+
+        Ok(collection.len())
     }
 }

@@ -149,6 +149,15 @@ pub enum MachineLearningError {
     },
     #[snafu(display("Unsupported detection output layout: {:?}.", layout))]
     UnsupportedDetectionLayout { layout: DetectionLayout },
+    #[snafu(display(
+        "Model output shape {:?} is not a single batch of {} channels x N candidates. The decoder derives N by integer division, so a mismatch would silently yield wrong detections. Set `num_classes` to the model's class count.",
+        shape,
+        expected_channels,
+    ))]
+    UnsupportedDetectionOutputShape {
+        shape: Vec<usize>,
+        expected_channels: usize,
+    },
 }
 
 impl From<MachineLearningError> for crate::error::Error {
