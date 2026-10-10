@@ -10,18 +10,19 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import { instanceOfColumnRangeFilter, ColumnRangeFilterFromJSONTyped, ColumnRangeFilterToJSON, } from './ColumnRangeFilter';
-import { instanceOfLineSimplification, LineSimplificationFromJSONTyped, LineSimplificationToJSON, } from './LineSimplification';
+import { ColumnRangeFilterFromJSONTyped, ColumnRangeFilterToJSON, } from './ColumnRangeFilter';
+import { LineSimplificationFromJSONTyped, LineSimplificationToJSON, } from './LineSimplification';
 import { instanceOfMockPointSource, MockPointSourceFromJSONTyped, MockPointSourceToJSON, } from './MockPointSource';
-import { instanceOfOgrSource, OgrSourceFromJSONTyped, OgrSourceToJSON, } from './OgrSource';
-import { instanceOfPointInPolygonFilter, PointInPolygonFilterFromJSONTyped, PointInPolygonFilterToJSON, } from './PointInPolygonFilter';
+import { OgrSourceFromJSONTyped, OgrSourceToJSON, } from './OgrSource';
+import { OnnxObjectDetectionFromJSONTyped, OnnxObjectDetectionToJSON, } from './OnnxObjectDetection';
+import { PointInPolygonFilterFromJSONTyped, PointInPolygonFilterToJSON, } from './PointInPolygonFilter';
 import { instanceOfRasterVectorJoin, RasterVectorJoinFromJSONTyped, RasterVectorJoinToJSON, } from './RasterVectorJoin';
-import { instanceOfReprojection, ReprojectionFromJSONTyped, ReprojectionToJSON, } from './Reprojection';
-import { instanceOfTimeProjection, TimeProjectionFromJSONTyped, TimeProjectionToJSON, } from './TimeProjection';
-import { instanceOfTimeShift, TimeShiftFromJSONTyped, TimeShiftToJSON, } from './TimeShift';
-import { instanceOfVectorExpression, VectorExpressionFromJSONTyped, VectorExpressionToJSON, } from './VectorExpression';
-import { instanceOfVectorJoin, VectorJoinFromJSONTyped, VectorJoinToJSON, } from './VectorJoin';
-import { instanceOfVisualPointClustering, VisualPointClusteringFromJSONTyped, VisualPointClusteringToJSON, } from './VisualPointClustering';
+import { ReprojectionFromJSONTyped, ReprojectionToJSON, } from './Reprojection';
+import { TimeProjectionFromJSONTyped, TimeProjectionToJSON, } from './TimeProjection';
+import { TimeShiftFromJSONTyped, TimeShiftToJSON, } from './TimeShift';
+import { VectorExpressionFromJSONTyped, VectorExpressionToJSON, } from './VectorExpression';
+import { VectorJoinFromJSONTyped, VectorJoinToJSON, } from './VectorJoin';
+import { VisualPointClusteringFromJSONTyped, VisualPointClusteringToJSON, } from './VisualPointClustering';
 export function VectorOperatorFromJSON(json) {
     return VectorOperatorFromJSONTyped(json, false);
 }
@@ -38,6 +39,8 @@ export function VectorOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, MockPointSourceFromJSONTyped(json, true), { type: 'MockPointSource' });
         case 'OgrSource':
             return Object.assign({}, OgrSourceFromJSONTyped(json, true), { type: 'OgrSource' });
+        case 'OnnxObjectDetection':
+            return Object.assign({}, OnnxObjectDetectionFromJSONTyped(json, true), { type: 'OnnxObjectDetection' });
         case 'PointInPolygonFilter':
             return Object.assign({}, PointInPolygonFilterFromJSONTyped(json, true), { type: 'PointInPolygonFilter' });
         case 'RasterVectorJoin':
@@ -98,16 +101,6 @@ export function VectorOperatorToJSONTyped(value, ignoreDiscriminator = false) {
 * Check if a given object implements the VectorOperator interface.
 */
 export function instanceOfVectorOperator(value) {
-    return instanceOfColumnRangeFilter(value)
-        || instanceOfLineSimplification(value)
-        || instanceOfMockPointSource(value)
-        || instanceOfOgrSource(value)
-        || instanceOfPointInPolygonFilter(value)
-        || instanceOfRasterVectorJoin(value)
-        || instanceOfReprojection(value)
-        || instanceOfTimeProjection(value)
-        || instanceOfTimeShift(value)
-        || instanceOfVectorExpression(value)
-        || instanceOfVectorJoin(value)
-        || instanceOfVisualPointClustering(value);
+    return instanceOfMockPointSource(value)
+        || instanceOfRasterVectorJoin(value);
 }
