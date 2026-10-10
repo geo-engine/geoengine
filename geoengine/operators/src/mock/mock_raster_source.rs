@@ -18,8 +18,8 @@ use geoengine_datatypes::primitives::{
     TryRegularTimeFillIterExt,
 };
 use geoengine_datatypes::raster::{
-    GridBoundingBox2D, GridOrEmpty, GridShapeAccess, Pixel, RasterTile2D,
-    TileIdxBandCrossProductIter, TileSize, TilingSpecification,
+    GridBoundingBox2D, GridOrEmpty, Pixel, RasterTile2D, TileIdxBandCrossProductIter, TileSize,
+    TilingSpecification,
 };
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -117,11 +117,12 @@ where
     T: Pixel,
 {
     for tile in tiles {
-        if tile.grid_shape() != tiling_spec.grid_shape() {
-            return Some(TileSize::new_y_x(
-                tiling_spec.tile_size.axis_size_y(),
-                tiling_spec.tile_size.axis_size_x(),
-            ));
+        // The tiling specification describes the *core*. A tile that carries an
+        // overlap halo stores `overlap + core + overlap` pixels, so compare
+        // against the core size rather than the stored grid.
+        let [core_y, core_x] = tile.core_axis_size();
+        if TileSize::new_y_x(core_y, core_x) != tiling_spec.tile_size {
+            return Some(TileSize::new_y_x(core_y, core_x));
         }
     }
 
