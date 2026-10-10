@@ -77,9 +77,17 @@ where
     /// The axis sizes `[y, x]` of the tile's core region: the grid shape minus
     /// twice the overlap halo.
     pub fn core_axis_size(&self) -> [usize; 2] {
-        let y = self.grid_array.axis_size_y() - 2 * self.overlap.axis_size_y();
-        let x = self.grid_array.axis_size_x() - 2 * self.overlap.axis_size_x();
-        [y, x]
+        // Saturating, not wrapping: a tile whose halo exceeds its stored grid
+        // would otherwise produce a huge core size that propagates into
+        // `tile_position * core_size` and every bounds computation.
+        [
+            self.grid_array
+                .axis_size_y()
+                .saturating_sub(2 * self.overlap.axis_size_y()),
+            self.grid_array
+                .axis_size_x()
+                .saturating_sub(2 * self.overlap.axis_size_x()),
+        ]
     }
 
     /// The global pixel index of the upper left pixel of the tile's *core*.
@@ -314,6 +322,11 @@ where
     D: GridSize + Clone + PartialEq,
 {
     /// create a new `RasterTile` from tile information, inheriting its overlap
+    ///
+    /// # Panics
+    /// Panics if the tile's core plus twice its overlap halo does not exactly
+    /// account for the stored grid, i.e. the caller passed an inconsistent
+    /// [`TileInformation`] and `data` pair.
     pub fn new_with_tile_info(
         time: TimeInterval,
         tile_info: TileInformation,
@@ -324,14 +337,16 @@ where
     where
         D: GridSize,
     {
-        debug_assert_eq!(
+        assert_eq!(
             tile_info.tile_size.axis_size_x() + 2 * tile_info.overlap.axis_size_x(),
-            data.shape_ref().axis_size_x()
+            data.shape_ref().axis_size_x(),
+            "tile core + halo must account for the whole stored grid"
         );
 
-        debug_assert_eq!(
+        assert_eq!(
             tile_info.tile_size.axis_size_y() + 2 * tile_info.overlap.axis_size_y(),
-            data.shape_ref().axis_size_y()
+            data.shape_ref().axis_size_y(),
+            "tile core + halo must account for the whole stored grid"
         );
 
         Self {
