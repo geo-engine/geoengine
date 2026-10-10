@@ -14,6 +14,7 @@ import { ColumnRangeFilterFromJSONTyped, ColumnRangeFilterToJSON, } from './Colu
 import { LineSimplificationFromJSONTyped, LineSimplificationToJSON, } from './LineSimplification';
 import { instanceOfMockPointSource, MockPointSourceFromJSONTyped, MockPointSourceToJSON, } from './MockPointSource';
 import { OgrSourceFromJSONTyped, OgrSourceToJSON, } from './OgrSource';
+import { OnnxObjectDetectionFromJSONTyped, OnnxObjectDetectionToJSON, } from './OnnxObjectDetection';
 import { PointInPolygonFilterFromJSONTyped, PointInPolygonFilterToJSON, } from './PointInPolygonFilter';
 import { instanceOfRasterVectorJoin, RasterVectorJoinFromJSONTyped, RasterVectorJoinToJSON, } from './RasterVectorJoin';
 import { ReprojectionFromJSONTyped, ReprojectionToJSON, } from './Reprojection';
@@ -38,6 +39,8 @@ export function VectorOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, MockPointSourceFromJSONTyped(json, true), { type: 'MockPointSource' });
         case 'OgrSource':
             return Object.assign({}, OgrSourceFromJSONTyped(json, true), { type: 'OgrSource' });
+        case 'OnnxObjectDetection':
+            return Object.assign({}, OnnxObjectDetectionFromJSONTyped(json, true), { type: 'OnnxObjectDetection' });
         case 'PointInPolygonFilter':
             return Object.assign({}, PointInPolygonFilterFromJSONTyped(json, true), { type: 'PointInPolygonFilter' });
         case 'RasterVectorJoin':
@@ -74,6 +77,8 @@ export function VectorOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, MockPointSourceToJSON(value), { type: 'MockPointSource' });
         case 'OgrSource':
             return Object.assign({}, OgrSourceToJSON(value), { type: 'OgrSource' });
+        case 'OnnxObjectDetection':
+            return Object.assign({}, OnnxObjectDetectionToJSON(value), { type: 'OnnxObjectDetection' });
         case 'PointInPolygonFilter':
             return Object.assign({}, PointInPolygonFilterToJSON(value), { type: 'PointInPolygonFilter' });
         case 'RasterVectorJoin':
