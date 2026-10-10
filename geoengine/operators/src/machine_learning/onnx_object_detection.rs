@@ -7,8 +7,8 @@ use geoengine_datatypes::collections::{MultiPolygonCollection, VectorDataType};
 use geoengine_datatypes::machine_learning::MlModelName;
 use geoengine_datatypes::primitives::{
     BandSelection, BoundingBox2D, CacheHint, ColumnSelection, FeatureData, FeatureDataType,
-    Measurement, MultiPolygon, RasterQueryRectangle, SpatialResolution, TimeInterval,
-    VectorQueryRectangle,
+    Measurement, MultiPolygon, MultiPolygonAccess, RasterQueryRectangle, SpatialResolution,
+    TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GridIdx2D, GridIndexAccess, GridSize, RasterDataType};
 use ndarray::Array4;
@@ -110,12 +110,6 @@ impl VectorOperator for OnnxObjectDetection {
             .raster;
 
         let in_descriptor = source.result_descriptor();
-        // Detections are emitted per tile with no cross-tile deduplication, and
-        // `AddTileOverlap`/`RemoveTileOverlap` are raster-only, so overlapped
-        // tiles would report the same object once per tile. Reject instead of
-        // silently duplicating.
-        in_descriptor.ensure_no_tile_overlap(OnnxObjectDetection::TYPE_NAME)?;
-
         let model_loading_info = context.ml_model_loading_info(&params.model).await?;
         let metadata = &model_loading_info.metadata;
 
@@ -384,6 +378,10 @@ impl QueryProcessor for OnnxObjectDetectionProcessor {
             }
         }
 
+        // An object inside an overlap halo is detected once per tile, so
+        // deduplicate across tiles here. Per-tile `nms` above cannot see this.
+        let records = deduplicate_across_tiles(&records, iou_threshold);
+
         let collection = build_collection(&records)?;
         Ok(futures::stream::iter([Ok(collection)]).boxed())
     }
@@ -403,6 +401,67 @@ fn decoder_from_params(params: &OnnxObjectDetectionParams) -> YoloBoxesDecoder {
         has_objectness,
         BoxFormat::Center,
     )
+}
+
+/// Axis-aligned bounds of a detection's exterior ring, in the CRS of the data.
+///
+/// Kept in `f64`: CRS coordinates reach ~2e7 (Web Mercator), where `f32`
+/// resolves only ~1 m and would merge or split boxes that are metres apart.
+fn ring_bounds(geometry: &MultiPolygon) -> Option<(f64, f64, f64, f64)> {
+    let ring = geometry.polygons().first()?.first()?;
+    Some(ring.iter().fold(
+        (
+            f64::INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NEG_INFINITY,
+        ),
+        |(x1, y1, x2, y2), c| (x1.min(c.x), y1.min(c.y), x2.max(c.x), y2.max(c.y)),
+    ))
+}
+
+/// Intersection over union of two `f64` boxes.
+fn bbox_iou_f64(a: (f64, f64, f64, f64), b: (f64, f64, f64, f64)) -> f64 {
+    let (ax1, ay1, ax2, ay2) = a;
+    let (bx1, by1, bx2, by2) = b;
+    let inter_w = (ax2.min(bx2) - ax1.max(bx1)).max(0.0);
+    let inter_h = (ay2.min(by2) - ay1.max(by1)).max(0.0);
+    let inter = inter_w * inter_h;
+    let area_a = (ax2 - ax1).max(0.0) * (ay2 - ay1).max(0.0);
+    let area_b = (bx2 - bx1).max(0.0) * (by2 - by1).max(0.0);
+    let union = area_a + area_b - inter;
+    if union > 0.0 { inter / union } else { 0.0 }
+}
+
+/// Drop detections that repeat an already-kept detection of the same class.
+///
+/// This is `nms` again, but across the detections of all tiles rather than
+/// within one tile: with an overlap halo the same object is detected in every
+/// tile that sees it. Highest score wins, matching per-tile `nms`.
+fn deduplicate_across_tiles(
+    records: &[(MultiPolygon, u8, f64)],
+    iou_threshold: f32,
+) -> Vec<(MultiPolygon, u8, f64)> {
+    let mut with_bounds: Vec<&(MultiPolygon, u8, f64)> = records.iter().collect();
+    with_bounds.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut kept: Vec<&(MultiPolygon, u8, f64)> = Vec::new();
+    let mut kept_bounds: Vec<(u8, (f64, f64, f64, f64))> = Vec::new();
+    for record in with_bounds {
+        let Some(bounds) = ring_bounds(&record.0) else {
+            kept.push(record);
+            continue;
+        };
+        let duplicate = kept_bounds.iter().any(|(class, kept_bounds)| {
+            *class == record.1 && bbox_iou_f64(*kept_bounds, bounds) > f64::from(iou_threshold)
+        });
+        if !duplicate {
+            kept_bounds.push((record.1, bounds));
+            kept.push(record);
+        }
+    }
+
+    kept.into_iter().cloned().collect()
 }
 
 fn build_collection(records: &[(MultiPolygon, u8, f64)]) -> Result<MultiPolygonCollection> {
@@ -461,79 +520,58 @@ mod tests {
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::test::TestDefault;
 
-    use super::{DetectionLayout, OnnxObjectDetection, OnnxObjectDetectionParams};
+    use super::{DetectionLayout, MultiPolygon, OnnxObjectDetection, OnnxObjectDetectionParams};
 
-    #[tokio::test]
-    async fn it_rejects_overlapped_input_tiles() {
-        // Detections are emitted per tile and `AddTileOverlap`/`RemoveTileOverlap`
-        // are raster-only, so overlapped tiles would report an object once per tile.
-        let data: Vec<RasterTile2D<f32>> = vec![RasterTile2D {
-            time: TimeInterval::new_unchecked(0, 5),
-            tile_position: TileIdx::new_y_x(0, 0),
-            band: 0,
-            global_geo_transform: TestDefault::test_default(),
-            grid_array: Grid::new([4, 4].into(), vec![1.0f32; 16]).unwrap().into(),
-            properties: Default::default(),
-            cache_hint: CacheHint::no_cache(),
-            overlap: TileOverlap::new(1, 1),
-        }];
+    fn box_record(
+        x1: f64,
+        y1: f64,
+        x2: f64,
+        y2: f64,
+        class_id: u8,
+        score: f64,
+    ) -> (MultiPolygon, u8, f64) {
+        let ring = vec![
+            (x1, y1).into(),
+            (x2, y1).into(),
+            (x2, y2).into(),
+            (x1, y2).into(),
+            (x1, y1).into(),
+        ];
+        (
+            MultiPolygon::new(vec![vec![ring]]).unwrap(),
+            class_id,
+            score,
+        )
+    }
 
-        let source = MockRasterSource {
-            params: MockRasterSourceParams {
-                data,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::F32,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeDescriptor::new_regular_with_epoch(
-                        None,
-                        TimeStep::millis(5).unwrap(),
-                    ),
-                    spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        TestDefault::test_default(),
-                        GridBoundingBox2D::new_min_max(0, 3, 0, 3).unwrap(),
-                        TileSize::new_y_x(4, 4),
-                    )
-                    .with_tile_overlap(TileOverlap::new(1, 1)),
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
-            },
-        }
-        .boxed();
+    #[test]
+    fn dedup_collapses_the_same_object_from_two_overlapping_tiles() {
+        // Same object detected in two tiles that both see it through their halo.
+        let records = vec![
+            box_record(10.0, 10.0, 20.0, 20.0, 0, 0.9),
+            box_record(10.2, 10.1, 20.2, 20.1, 0, 0.8),
+        ];
 
-        let model_name = MlModelName {
-            namespace: None,
-            name: "test_detection".into(),
-        };
+        let deduped = super::deduplicate_across_tiles(&records, 0.5);
 
-        let op = OnnxObjectDetection {
-            params: OnnxObjectDetectionParams {
-                model: model_name,
-                expected_resolution: 1.0,
-                resolution_epsilon: 0.01,
-                layout: DetectionLayout::YoloBoxes { objectness: false },
-                num_classes: 2,
-                conf_threshold: 0.5,
-                iou_threshold: 0.5,
-                class_names: vec!["a".into(), "b".into()],
-            },
-            sources: SingleRasterSource { raster: source },
-        }
-        .boxed();
+        assert_eq!(deduped.len(), 1, "duplicate across tiles must collapse");
+        assert!((deduped[0].2 - 0.9).abs() < 1e-9, "highest score must win");
+    }
 
-        let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(4, 4);
+    #[test]
+    fn dedup_keeps_different_classes_and_disjoint_objects() {
+        let records = vec![
+            box_record(0.0, 0.0, 10.0, 10.0, 0, 0.9),
+            box_record(0.0, 0.0, 10.0, 10.0, 1, 0.8),
+            box_record(100.0, 100.0, 110.0, 110.0, 0, 0.7),
+        ];
 
-        let Err(err) = op
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await
-        else {
-            panic!("overlapped input tiles must be rejected");
-        };
+        let deduped = super::deduplicate_across_tiles(&records, 0.5);
 
-        assert!(
-            err.to_string()
-                .contains("does not support overlapping tiles"),
-            "expected an overlap rejection, got: {err}"
+        assert_eq!(
+            deduped.len(),
+            3,
+            "distinct classes and disjoint boxes are kept"
         );
     }
 
