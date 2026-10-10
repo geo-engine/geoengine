@@ -127,6 +127,9 @@ __all__ = [
     "DeriveOutRasterSpecsSource",
     "DerivedColor",
     "DerivedNumber",
+    "DetectionLayout",
+    "DetectionLayoutOneOf",
+    "DetectionLayoutOneOfYoloBoxes",
     "Downsampling",
     "DownsamplingMethod",
     "DownsamplingParameters",
@@ -264,6 +267,8 @@ __all__ = [
     "OgrSourceTimeFormatCustom",
     "OgrSourceTimeFormatUnixTimeStamp",
     "Onnx",
+    "OnnxObjectDetection",
+    "OnnxObjectDetectionParameters",
     "OnnxParameters",
     "OperatorQuota",
     "OrderBy",
@@ -599,6 +604,9 @@ from geoengine_api_client.models.density_params import DensityParams as DensityP
 from geoengine_api_client.models.derive_out_raster_specs_source import DeriveOutRasterSpecsSource as DeriveOutRasterSpecsSource
 from geoengine_api_client.models.derived_color import DerivedColor as DerivedColor
 from geoengine_api_client.models.derived_number import DerivedNumber as DerivedNumber
+from geoengine_api_client.models.detection_layout import DetectionLayout as DetectionLayout
+from geoengine_api_client.models.detection_layout_one_of import DetectionLayoutOneOf as DetectionLayoutOneOf
+from geoengine_api_client.models.detection_layout_one_of_yolo_boxes import DetectionLayoutOneOfYoloBoxes as DetectionLayoutOneOfYoloBoxes
 from geoengine_api_client.models.downsampling import Downsampling as Downsampling
 from geoengine_api_client.models.downsampling_method import DownsamplingMethod as DownsamplingMethod
 from geoengine_api_client.models.downsampling_parameters import DownsamplingParameters as DownsamplingParameters
@@ -736,6 +744,8 @@ from geoengine_api_client.models.ogr_source_time_format_auto import OgrSourceTim
 from geoengine_api_client.models.ogr_source_time_format_custom import OgrSourceTimeFormatCustom as OgrSourceTimeFormatCustom
 from geoengine_api_client.models.ogr_source_time_format_unix_time_stamp import OgrSourceTimeFormatUnixTimeStamp as OgrSourceTimeFormatUnixTimeStamp
 from geoengine_api_client.models.onnx import Onnx as Onnx
+from geoengine_api_client.models.onnx_object_detection import OnnxObjectDetection as OnnxObjectDetection
+from geoengine_api_client.models.onnx_object_detection_parameters import OnnxObjectDetectionParameters as OnnxObjectDetectionParameters
 from geoengine_api_client.models.onnx_parameters import OnnxParameters as OnnxParameters
 from geoengine_api_client.models.operator_quota import OperatorQuota as OperatorQuota
 from geoengine_api_client.models.order_by import OrderBy as OrderBy

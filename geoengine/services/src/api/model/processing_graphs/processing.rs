@@ -18,7 +18,15 @@ use crate::api::model::{
 use geoengine_datatypes::raster::{TileOverlap, TileSize};
 use geoengine_macros::{api_operator, type_tag};
 use geoengine_operators::{
-    machine_learning::{onnx::Onnx as OperatorsOnnx, onnx::OnnxParams as OperatorsOnnxParameters},
+    machine_learning::{
+        onnx::Onnx as OperatorsOnnx,
+        onnx::OnnxParams as OperatorsOnnxParameters,
+        onnx_object_detection::{
+            DetectionLayout as OperatorsDetectionLayout,
+            OnnxObjectDetection as OperatorsOnnxObjectDetection,
+            OnnxObjectDetectionParams as OperatorsOnnxObjectDetectionParams,
+        },
+    },
     processing::{
         AddTileOverlap as OperatorsAddTileOverlap,
         AddTileOverlapParams as OperatorsAddTileOverlapParameters,
@@ -1847,6 +1855,110 @@ impl TryFrom<Onnx> for OperatorsOnnx {
         Ok(OperatorsOnnx {
             params: OperatorsOnnxParameters {
                 model: value.params.model.into(),
+            },
+            sources: (*value.sources).try_into()?,
+        })
+    }
+}
+
+/// The `OnnxObjectDetection` operator runs an object-detection model on a raster
+/// and emits the detections as polygons with a `class` and a `score` column.
+///
+/// ## Inputs
+///
+/// The `OnnxObjectDetection` operator expects exactly one _raster_ input. Its
+/// pixel size must match the model's input shape and its spatial resolution must
+/// match the resolution the model was trained at; neither is resampled.
+///
+/// ## Outputs
+///
+/// The output features carry the columns `class` (category) and `score` (float),
+/// and the time interval of the source tile that produced them.
+#[api_operator(
+    title = "OnnxObjectDetection",
+    examples(json!({
+        "type": "OnnxObjectDetection",
+        "params": {
+            "model": "my-detection-model",
+            "expectedResolution": 0.1,
+            "resolutionEpsilon": 0.01,
+            "numClasses": 80
+        },
+        "sources": {
+            "raster": {
+                "type": "GdalSource",
+                "params": { "data": "example" }
+            }
+        }
+    }))
+)]
+pub struct OnnxObjectDetection {
+    pub params: OnnxObjectDetectionParameters,
+    pub sources: Box<SingleRasterSource>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OnnxObjectDetectionParameters {
+    /// The object-detection model to run.
+    pub model: crate::api::model::datatypes::MlModelName,
+    /// The spatial resolution (in linear units per pixel) the model was trained at.
+    pub expected_resolution: f64,
+    /// Relative tolerance for the resolution check. A source is accepted when
+    /// `|actual - expected| / expected <= resolution_epsilon`.
+    pub resolution_epsilon: f64,
+    /// How the model's raw output tensor is interpreted.
+    pub layout: DetectionLayout,
+    /// Number of object classes the model can predict.
+    #[schema(examples(json!(80)))]
+    pub num_classes: u32,
+    /// Confidence threshold applied to decoded detections.
+    pub conf_threshold: f32,
+    /// `IoU` threshold for non-maximum suppression.
+    pub iou_threshold: f32,
+    /// Optional human-readable class labels, indexed by class id.
+    #[serde(default)]
+    pub class_names: Vec<String>,
+}
+
+/// How to interpret the raw output tensor of a detection model.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum DetectionLayout {
+    /// YOLO raw (pre-NMS) detect output, channel-major `[4(+1 obj), C, N]`.
+    /// `objectness` selects YOLOv5/v6/v7 (`true`, objectness at channel 4)
+    /// vs YOLOv8/v9/v10 (`false`, class scores start at channel 4).
+    YoloBoxes { objectness: bool },
+    /// Output already carries decoded boxes, scores and classes
+    /// (e.g. the TensorFlow object-detection API).
+    PreDecoded,
+}
+
+impl From<DetectionLayout> for OperatorsDetectionLayout {
+    fn from(value: DetectionLayout) -> Self {
+        match value {
+            DetectionLayout::YoloBoxes { objectness } => {
+                OperatorsDetectionLayout::YoloBoxes { objectness }
+            }
+            DetectionLayout::PreDecoded => OperatorsDetectionLayout::PreDecoded,
+        }
+    }
+}
+
+impl TryFrom<OnnxObjectDetection> for OperatorsOnnxObjectDetection {
+    type Error = anyhow::Error;
+
+    fn try_from(value: OnnxObjectDetection) -> Result<Self, Self::Error> {
+        Ok(OperatorsOnnxObjectDetection {
+            params: OperatorsOnnxObjectDetectionParams {
+                model: value.params.model.into(),
+                expected_resolution: value.params.expected_resolution,
+                resolution_epsilon: value.params.resolution_epsilon,
+                layout: value.params.layout.into(),
+                num_classes: value.params.num_classes,
+                conf_threshold: value.params.conf_threshold,
+                iou_threshold: value.params.iou_threshold,
+                class_names: value.params.class_names,
             },
             sources: (*value.sources).try_into()?,
         })

@@ -86,6 +86,9 @@ docs/DensityParams.md
 docs/DeriveOutRasterSpecsSource.md
 docs/DerivedColor.md
 docs/DerivedNumber.md
+docs/DetectionLayout.md
+docs/DetectionLayoutOneOf.md
+docs/DetectionLayoutOneOfYoloBoxes.md
 docs/Downsampling.md
 docs/DownsamplingMethod.md
 docs/DownsamplingParameters.md
@@ -230,6 +233,8 @@ docs/OgrSourceTimeFormatAuto.md
 docs/OgrSourceTimeFormatCustom.md
 docs/OgrSourceTimeFormatUnixTimeStamp.md
 docs/Onnx.md
+docs/OnnxObjectDetection.md
+docs/OnnxObjectDetectionParameters.md
 docs/OnnxParameters.md
 docs/OperatorQuota.md
 docs/OrderBy.md
@@ -562,6 +567,9 @@ src/models/density_params.rs
 src/models/derive_out_raster_specs_source.rs
 src/models/derived_color.rs
 src/models/derived_number.rs
+src/models/detection_layout.rs
+src/models/detection_layout_one_of.rs
+src/models/detection_layout_one_of_yolo_boxes.rs
 src/models/downsampling.rs
 src/models/downsampling_method.rs
 src/models/downsampling_parameters.rs
@@ -700,6 +708,8 @@ src/models/ogr_source_time_format_auto.rs
 src/models/ogr_source_time_format_custom.rs
 src/models/ogr_source_time_format_unix_time_stamp.rs
 src/models/onnx.rs
+src/models/onnx_object_detection.rs
+src/models/onnx_object_detection_parameters.rs
 src/models/onnx_parameters.rs
 src/models/operator_quota.rs
 src/models/order_by.rs

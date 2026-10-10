@@ -8009,6 +8009,39 @@
           }
         }
       },
+      "DetectionLayout": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "YOLO raw (pre-NMS) detect output, channel-major `[4(+1 obj), C, N]`.\n`objectness` selects YOLOv5/v6/v7 (`true`, objectness at channel 4)\nvs YOLOv8/v9/v10 (`false`, class scores start at channel 4).",
+            "required": [
+              "yoloBoxes"
+            ],
+            "properties": {
+              "yoloBoxes": {
+                "type": "object",
+                "description": "YOLO raw (pre-NMS) detect output, channel-major `[4(+1 obj), C, N]`.\n`objectness` selects YOLOv5/v6/v7 (`true`, objectness at channel 4)\nvs YOLOv8/v9/v10 (`false`, class scores start at channel 4).",
+                "required": [
+                  "objectness"
+                ],
+                "properties": {
+                  "objectness": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "string",
+            "description": "Output already carries decoded boxes, scores and classes\n(e.g. the TensorFlow object-detection API).",
+            "enum": [
+              "preDecoded"
+            ]
+          }
+        ],
+        "description": "How to interpret the raw output tensor of a detection model."
+      },
       "Downsampling": {
         "type": "object",
         "title": "Downsampling",
@@ -11626,6 +11659,107 @@
             }
           }
         ]
+      },
+      "OnnxObjectDetection": {
+        "type": "object",
+        "title": "OnnxObjectDetection",
+        "description": "The `OnnxObjectDetection` operator runs an object-detection model on a raster\nand emits the detections as polygons with a `class` and a `score` column.\n\n## Inputs\n\nThe `OnnxObjectDetection` operator expects exactly one _raster_ input. Its\npixel size must match the model's input shape and its spatial resolution must\nmatch the resolution the model was trained at; neither is resampled.\n\n## Outputs\n\nThe output features carry the columns `class` (category) and `score` (float),\nand the time interval of the source tile that produced them.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "OnnxObjectDetection"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/OnnxObjectDetectionParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "OnnxObjectDetection",
+            "params": {
+              "model": "my-detection-model",
+              "expectedResolution": 0.1,
+              "resolutionEpsilon": 0.01,
+              "numClasses": 80
+            },
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "example"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "OnnxObjectDetectionParameters": {
+        "type": "object",
+        "required": [
+          "model",
+          "expectedResolution",
+          "resolutionEpsilon",
+          "layout",
+          "numClasses",
+          "confThreshold",
+          "iouThreshold"
+        ],
+        "properties": {
+          "model": {
+            "$ref": "#/components/schemas/MlModelName",
+            "description": "The object-detection model to run."
+          },
+          "expectedResolution": {
+            "type": "number",
+            "format": "double",
+            "description": "The spatial resolution (in linear units per pixel) the model was trained at."
+          },
+          "resolutionEpsilon": {
+            "type": "number",
+            "format": "double",
+            "description": "Relative tolerance for the resolution check. A source is accepted when\n`|actual - expected| / expected <= resolution_epsilon`."
+          },
+          "layout": {
+            "$ref": "#/components/schemas/DetectionLayout",
+            "description": "How the model's raw output tensor is interpreted."
+          },
+          "numClasses": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of object classes the model can predict.",
+            "examples": [
+              80
+            ],
+            "minimum": 0
+          },
+          "confThreshold": {
+            "type": "number",
+            "format": "float",
+            "description": "Confidence threshold applied to decoded detections."
+          },
+          "iouThreshold": {
+            "type": "number",
+            "format": "float",
+            "description": "`IoU` threshold for non-maximum suppression."
+          },
+          "classNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional human-readable class labels, indexed by class id."
+          }
+        }
       },
       "OnnxParameters": {
         "type": "object",
@@ -17113,6 +17247,9 @@
             "$ref": "#/components/schemas/OgrSource"
           },
           {
+            "$ref": "#/components/schemas/OnnxObjectDetection"
+          },
+          {
             "$ref": "#/components/schemas/PointInPolygonFilter"
           },
           {
@@ -17145,6 +17282,7 @@
             "LineSimplification": "#/components/schemas/LineSimplification",
             "MockPointSource": "#/components/schemas/MockPointSource",
             "OgrSource": "#/components/schemas/OgrSource",
+            "OnnxObjectDetection": "#/components/schemas/OnnxObjectDetection",
             "PointInPolygonFilter": "#/components/schemas/PointInPolygonFilter",
             "RasterVectorJoin": "#/components/schemas/RasterVectorJoin",
             "Reprojection": "#/components/schemas/Reprojection",

@@ -3,7 +3,10 @@ use geoengine_operators::{
         PlotOperator as OperatorsPlotOperator, RasterOperator as OperatorsRasterOperator,
         TypedOperator as OperatorsTypedOperator, VectorOperator as OperatorsVectorOperator,
     },
-    machine_learning::onnx::Onnx as OperatorsOnnx,
+    machine_learning::{
+        onnx::Onnx as OperatorsOnnx,
+        onnx_object_detection::OnnxObjectDetection as OperatorsOnnxObjectDetection,
+    },
     mock::MockPointSource as OperatorsMockPointSource,
     plot::{
         BoxPlot as OperatorsBoxPlot, ClassHistogram as OperatorsClassHistogram,
@@ -71,18 +74,18 @@ pub use crate::api::model::processing_graphs::{
         InterpolationMethod, InterpolationParameters, InterpolationResolution,
         InterpolationResolutionFraction, LineSimplification, LineSimplificationAlgorithm,
         LineSimplificationParameters, NeighborhoodAggregate, NeighborhoodAggregateParameters,
-        NeighborhoodKernel, Onnx, OnnxParameters, PointInPolygonFilter,
-        PointInPolygonFilterParameters, PointInPolygonFilterSource, Radiance, RadianceParameters,
-        RasterScaling, RasterScalingParameters, RasterStacker, RasterStackerParameters,
-        RasterTypeConversion, RasterTypeConversionParameters, RasterVectorJoin,
-        RasterVectorJoinParameters, Rasterization, RasterizationParameters, ReTile,
-        ReTileParameters, Reflectance, ReflectanceParameters, RemoveTileOverlap,
-        RemoveTileOverlapParameters, RenameBands, Reprojection, ReprojectionParameters,
-        Temperature, TemperatureParameters, TemporalRasterAggregation,
-        TemporalRasterAggregationParameters, TimeProjection, TimeProjectionParameters, TimeShift,
-        TimeShiftParameters, VectorExpression, VectorExpressionParameters, VectorJoin,
-        VectorJoinParameters, VectorJoinSources, VisualPointClustering,
-        VisualPointClusteringParameters,
+        NeighborhoodKernel, Onnx, OnnxObjectDetection, OnnxObjectDetectionParameters,
+        OnnxParameters, PointInPolygonFilter, PointInPolygonFilterParameters,
+        PointInPolygonFilterSource, Radiance, RadianceParameters, RasterScaling,
+        RasterScalingParameters, RasterStacker, RasterStackerParameters, RasterTypeConversion,
+        RasterTypeConversionParameters, RasterVectorJoin, RasterVectorJoinParameters,
+        Rasterization, RasterizationParameters, ReTile, ReTileParameters, Reflectance,
+        ReflectanceParameters, RemoveTileOverlap, RemoveTileOverlapParameters, RenameBands,
+        Reprojection, ReprojectionParameters, Temperature, TemperatureParameters,
+        TemporalRasterAggregation, TemporalRasterAggregationParameters, TimeProjection,
+        TimeProjectionParameters, TimeShift, TimeShiftParameters, VectorExpression,
+        VectorExpressionParameters, VectorJoin, VectorJoinParameters, VectorJoinSources,
+        VisualPointClustering, VisualPointClusteringParameters,
     },
     source::{
         AttributeFilter, GdalSource, GdalSourceParameters, MockPointSource,
@@ -196,6 +199,7 @@ pub enum VectorOperator {
     LineSimplification(LineSimplification),
     MockPointSource(MockPointSource),
     OgrSource(OgrSource),
+    OnnxObjectDetection(OnnxObjectDetection),
     PointInPolygonFilter(PointInPolygonFilter),
     RasterVectorJoin(RasterVectorJoin),
     Reprojection(Reprojection),
@@ -324,6 +328,10 @@ impl TryFrom<VectorOperator> for Box<dyn OperatorsVectorOperator> {
             VectorOperator::PointInPolygonFilter(op) => {
                 OperatorsPointInPolygonFilter::try_from(op).map(OperatorsVectorOperator::boxed)
             }
+            VectorOperator::OnnxObjectDetection(detection) => {
+                OperatorsOnnxObjectDetection::try_from(detection)
+                    .map(OperatorsVectorOperator::boxed)
+            }
             VectorOperator::RasterVectorJoin(rvj) => {
                 OperatorsRasterVectorJoin::try_from(rvj).map(OperatorsVectorOperator::boxed)
             }
@@ -444,6 +452,8 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     NeighborhoodAggregateParameters,
     NeighborhoodKernel,
     Onnx,
+    OnnxObjectDetection,
+    OnnxObjectDetectionParameters,
     OnnxParameters,
     PointInPolygonFilter,
     PointInPolygonFilterParameters,

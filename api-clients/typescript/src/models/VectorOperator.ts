@@ -39,6 +39,13 @@ import {
     OgrSourceFromJSONTyped,
     OgrSourceToJSON,
 } from './OgrSource';
+import type { OnnxObjectDetection } from './OnnxObjectDetection';
+import {
+    instanceOfOnnxObjectDetection,
+    OnnxObjectDetectionFromJSON,
+    OnnxObjectDetectionFromJSONTyped,
+    OnnxObjectDetectionToJSON,
+} from './OnnxObjectDetection';
 import type { PointInPolygonFilter } from './PointInPolygonFilter';
 import {
     instanceOfPointInPolygonFilter,
@@ -101,7 +108,7 @@ import {
  * An operator that produces vector data.
  * @export
  */
-export type VectorOperator = { type: 'ColumnRangeFilter' } & ColumnRangeFilter | { type: 'LineSimplification' } & LineSimplification | { type: 'MockPointSource' } & MockPointSource | { type: 'OgrSource' } & OgrSource | { type: 'PointInPolygonFilter' } & PointInPolygonFilter | { type: 'RasterVectorJoin' } & RasterVectorJoin | { type: 'Reprojection' } & Reprojection | { type: 'TimeProjection' } & TimeProjection | { type: 'TimeShift' } & TimeShift | { type: 'VectorExpression' } & VectorExpression | { type: 'VectorJoin' } & VectorJoin | { type: 'VisualPointClustering' } & VisualPointClustering;
+export type VectorOperator = { type: 'ColumnRangeFilter' } & ColumnRangeFilter | { type: 'LineSimplification' } & LineSimplification | { type: 'MockPointSource' } & MockPointSource | { type: 'OgrSource' } & OgrSource | { type: 'OnnxObjectDetection' } & OnnxObjectDetection | { type: 'PointInPolygonFilter' } & PointInPolygonFilter | { type: 'RasterVectorJoin' } & RasterVectorJoin | { type: 'Reprojection' } & Reprojection | { type: 'TimeProjection' } & TimeProjection | { type: 'TimeShift' } & TimeShift | { type: 'VectorExpression' } & VectorExpression | { type: 'VectorJoin' } & VectorJoin | { type: 'VisualPointClustering' } & VisualPointClustering;
 
 export function VectorOperatorFromJSON(json: any): VectorOperator {
     return VectorOperatorFromJSONTyped(json, false);
@@ -120,6 +127,8 @@ export function VectorOperatorFromJSONTyped(json: any, ignoreDiscriminator: bool
             return Object.assign({}, MockPointSourceFromJSONTyped(json, true), { type: 'MockPointSource' } as const);
         case 'OgrSource':
             return Object.assign({}, OgrSourceFromJSONTyped(json, true), { type: 'OgrSource' } as const);
+        case 'OnnxObjectDetection':
+            return Object.assign({}, OnnxObjectDetectionFromJSONTyped(json, true), { type: 'OnnxObjectDetection' } as const);
         case 'PointInPolygonFilter':
             return Object.assign({}, PointInPolygonFilterFromJSONTyped(json, true), { type: 'PointInPolygonFilter' } as const);
         case 'RasterVectorJoin':
@@ -158,6 +167,8 @@ export function VectorOperatorToJSONTyped(value?: VectorOperator | null, ignoreD
             return Object.assign({}, MockPointSourceToJSON(value), { type: 'MockPointSource' } as const);
         case 'OgrSource':
             return Object.assign({}, OgrSourceToJSON(value), { type: 'OgrSource' } as const);
+        case 'OnnxObjectDetection':
+            return Object.assign({}, OnnxObjectDetectionToJSON(value), { type: 'OnnxObjectDetection' } as const);
         case 'PointInPolygonFilter':
             return Object.assign({}, PointInPolygonFilterToJSON(value), { type: 'PointInPolygonFilter' } as const);
         case 'RasterVectorJoin':
