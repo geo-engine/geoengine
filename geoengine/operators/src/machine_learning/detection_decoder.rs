@@ -53,7 +53,7 @@ impl YoloBoxesDecoder {
         }
     }
 
-    fn num_channels(&self) -> usize {
+    pub fn num_channels(&self) -> usize {
         4 + usize::from(self.has_objectness) + self.num_classes
     }
 }
