@@ -110,6 +110,12 @@ impl VectorOperator for OnnxObjectDetection {
             .raster;
 
         let in_descriptor = source.result_descriptor();
+        // Detections are emitted per tile with no cross-tile deduplication, and
+        // `AddTileOverlap`/`RemoveTileOverlap` are raster-only, so overlapped
+        // tiles would report the same object once per tile. Reject instead of
+        // silently duplicating.
+        in_descriptor.ensure_no_tile_overlap(OnnxObjectDetection::TYPE_NAME)?;
+
         let model_loading_info = context.ml_model_loading_info(&params.model).await?;
         let metadata = &model_loading_info.metadata;
 
@@ -349,21 +355,22 @@ impl QueryProcessor for OnnxObjectDetectionProcessor {
                 .collect::<Vec<_>>();
             let kept = nms(&filtered, iou_threshold);
 
-            let base = reference_tile
+            // Tile-local transform: same pixel size, origin moved to the tile's
+            // data upper-left corner. Detection coordinates are fractional pixels
+            // relative to that corner, so they are scaled rather than indexed.
+            let tile_gt = reference_tile
                 .global_geo_transform
-                .grid_idx_to_pixel_upper_left_coordinate_2d(
-                    reference_tile.global_data_upper_left_pixel_idx(),
-                );
-            let gt = &reference_tile.global_geo_transform;
+                .shift_by_pixel_offset(reference_tile.global_data_upper_left_pixel_idx());
+            let origin = tile_gt.origin_coordinate();
             for &i in &kept {
                 let det = &filtered[i];
                 let (x1, y1) = (
-                    base.x + f64::from(det.x1) * gt.x_pixel_size(),
-                    base.y + f64::from(det.y1) * gt.y_pixel_size(),
+                    origin.x + f64::from(det.x1) * tile_gt.x_pixel_size(),
+                    origin.y + f64::from(det.y1) * tile_gt.y_pixel_size(),
                 );
                 let (x2, y2) = (
-                    base.x + f64::from(det.x2) * gt.x_pixel_size(),
-                    base.y + f64::from(det.y2) * gt.y_pixel_size(),
+                    origin.x + f64::from(det.x2) * tile_gt.x_pixel_size(),
+                    origin.y + f64::from(det.y2) * tile_gt.y_pixel_size(),
                 );
                 let ring = vec![
                     (x1, y1).into(),
@@ -455,6 +462,80 @@ mod tests {
     use geoengine_datatypes::util::test::TestDefault;
 
     use super::{DetectionLayout, OnnxObjectDetection, OnnxObjectDetectionParams};
+
+    #[tokio::test]
+    async fn it_rejects_overlapped_input_tiles() {
+        // Detections are emitted per tile and `AddTileOverlap`/`RemoveTileOverlap`
+        // are raster-only, so overlapped tiles would report an object once per tile.
+        let data: Vec<RasterTile2D<f32>> = vec![RasterTile2D {
+            time: TimeInterval::new_unchecked(0, 5),
+            tile_position: TileIdx::new_y_x(0, 0),
+            band: 0,
+            global_geo_transform: TestDefault::test_default(),
+            grid_array: Grid::new([4, 4].into(), vec![1.0f32; 16]).unwrap().into(),
+            properties: Default::default(),
+            cache_hint: CacheHint::no_cache(),
+            overlap: TileOverlap::new(1, 1),
+        }];
+
+        let source = MockRasterSource {
+            params: MockRasterSourceParams {
+                data,
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::F32,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new_min_max(0, 3, 0, 3).unwrap(),
+                        TileSize::new_y_x(4, 4),
+                    )
+                    .with_tile_overlap(TileOverlap::new(1, 1)),
+                    bands: RasterBandDescriptors::new_single_band(),
+                },
+            },
+        }
+        .boxed();
+
+        let model_name = MlModelName {
+            namespace: None,
+            name: "test_detection".into(),
+        };
+
+        let op = OnnxObjectDetection {
+            params: OnnxObjectDetectionParams {
+                model: model_name,
+                expected_resolution: 1.0,
+                resolution_epsilon: 0.01,
+                layout: DetectionLayout::YoloBoxes { objectness: false },
+                num_classes: 2,
+                conf_threshold: 0.5,
+                iou_threshold: 0.5,
+                class_names: vec!["a".into(), "b".into()],
+            },
+            sources: SingleRasterSource { raster: source },
+        }
+        .boxed();
+
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(4, 4);
+
+        let Err(err) = op
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+        else {
+            panic!("overlapped input tiles must be rejected");
+        };
+
+        assert!(
+            err.to_string()
+                .contains("does not support overlapping tiles"),
+            "expected an overlap rejection, got: {err}"
+        );
+    }
 
     fn assert_ring(got: &[Coordinate2D], expected: &[(f64, f64)]) {
         assert_eq!(got.len(), expected.len());
