@@ -735,14 +735,13 @@ mod tests {
         test,
     };
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::{
-        raster::{GridShape2D, TilingSpecification},
-        test_data,
+    use geoengine_datatypes::raster::{TileSize, TilingSpecification};
+    use geoengine_datatypes::test_data;
+    use geoengine_operators::engine::{
+        TypedOperator as OperatorsTypedOperator, VectorOperator as _,
     };
-    use geoengine_operators::{
-        engine::{TypedOperator as OperatorsTypedOperator, VectorOperator as _},
-        source::{CsvGeometrySpecification, CsvSource, CsvSourceParameters, CsvTimeSpecification},
-    };
+    use geoengine_operators::source::CsvSourceParameters;
+    use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
     use serde_json::json;
     use std::io::{Seek, SeekFrom, Write};
     use tokio_postgres::NoTls;
@@ -1173,7 +1172,7 @@ x;y
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn raster_vector_join_tiling_spec() -> TilingSpecification {
         TilingSpecification {
-            tile_size_in_pixels: GridShape2D::new([600, 600]),
+            tile_size: TileSize::new_y_x(600, 600),
         }
     }
 

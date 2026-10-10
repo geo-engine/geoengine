@@ -55,7 +55,7 @@ impl ReaderState {
             actual_gdal_dataset_spatial_grid_definition
                 .geo_transform()
                 .origin_coordinate,
-        )?; // TODO: raise error if this fails!
+        )?;
 
         // Then, calculate the intersection between the datataset and the tile. Again, the intersection is relative to the first elements orrigin coordinate.
         let tile_gdal_dataset_intersection =
