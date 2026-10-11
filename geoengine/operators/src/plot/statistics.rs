@@ -20,8 +20,7 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, PlotQueryRectangle,
     RasterQueryRectangle, SpatialResolution, partitions_extent, time_interval_extent,
 };
-use geoengine_datatypes::raster::ConvertDataTypeParallel;
-use geoengine_datatypes::raster::{GridOrEmpty, GridSize};
+use geoengine_datatypes::raster::{ConvertDataTypeParallel, GridOrEmpty, GridSize};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use num_traits::AsPrimitive;
 use ordered_float::NotNan;
@@ -93,6 +92,12 @@ impl PlotOperator for Statistics {
                         .map(|(i, op)| op.initialize(path.clone_and_append(i as u8), context)),
                 )
                 .await?;
+
+                // statistics count pixels: halo pixels would count multiple times
+                rasters.iter().try_for_each(|r| {
+                    r.result_descriptor()
+                        .ensure_no_tile_overlap(Statistics::TYPE_NAME)
+                })?;
 
                 let in_descriptors = rasters
                     .iter()
@@ -599,7 +604,7 @@ impl From<&StatisticsAggregator<f64>> for StatisticsOutput {
 mod tests {
     use geoengine_datatypes::collections::DataCollection;
     use geoengine_datatypes::primitives::{CacheHint, Coordinate2D, PlotSeriesSelection};
-    use geoengine_datatypes::raster::TileSize;
+    use geoengine_datatypes::raster::{TileIdx, TileSize};
     use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
@@ -614,7 +619,7 @@ mod tests {
     use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, NoGeometry, TimeInterval};
     use geoengine_datatypes::raster::{
         BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, RasterTile2D,
-        TileIdx, TileInformation, TilingSpecification,
+        TileInformation, TileOverlap, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
 
@@ -703,6 +708,7 @@ mod tests {
                 data: vec![RasterTile2D::new_with_tile_info(
                     TimeInterval::default(),
                     TileInformation {
+                        overlap: TileOverlap::zero(),
                         global_geo_transform: TestDefault::test_default(),
                         tile_position: TileIdx::new_y_x(0, 0),
                         tile_size,
@@ -788,6 +794,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size,
@@ -807,6 +814,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size,
@@ -901,6 +909,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size,
@@ -920,6 +929,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size,
@@ -1013,6 +1023,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size,
@@ -1032,6 +1043,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size,
@@ -1367,6 +1379,7 @@ mod tests {
                 data: vec![RasterTile2D::new_with_tile_info(
                     TimeInterval::default(),
                     TileInformation {
+                        overlap: TileOverlap::zero(),
                         global_geo_transform: TestDefault::test_default(),
                         tile_position: TileIdx::new_y_x(0, 0),
                         tile_size,

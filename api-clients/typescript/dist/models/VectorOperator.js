@@ -21,6 +21,7 @@ const ColumnRangeFilter_1 = require("./ColumnRangeFilter");
 const LineSimplification_1 = require("./LineSimplification");
 const MockPointSource_1 = require("./MockPointSource");
 const OgrSource_1 = require("./OgrSource");
+const OnnxObjectDetection_1 = require("./OnnxObjectDetection");
 const PointInPolygonFilter_1 = require("./PointInPolygonFilter");
 const RasterVectorJoin_1 = require("./RasterVectorJoin");
 const Reprojection_1 = require("./Reprojection");
@@ -45,6 +46,8 @@ function VectorOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, (0, MockPointSource_1.MockPointSourceFromJSONTyped)(json, true), { type: 'MockPointSource' });
         case 'OgrSource':
             return Object.assign({}, (0, OgrSource_1.OgrSourceFromJSONTyped)(json, true), { type: 'OgrSource' });
+        case 'OnnxObjectDetection':
+            return Object.assign({}, (0, OnnxObjectDetection_1.OnnxObjectDetectionFromJSONTyped)(json, true), { type: 'OnnxObjectDetection' });
         case 'PointInPolygonFilter':
             return Object.assign({}, (0, PointInPolygonFilter_1.PointInPolygonFilterFromJSONTyped)(json, true), { type: 'PointInPolygonFilter' });
         case 'RasterVectorJoin':
@@ -81,6 +84,8 @@ function VectorOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, (0, MockPointSource_1.MockPointSourceToJSON)(value), { type: 'MockPointSource' });
         case 'OgrSource':
             return Object.assign({}, (0, OgrSource_1.OgrSourceToJSON)(value), { type: 'OgrSource' });
+        case 'OnnxObjectDetection':
+            return Object.assign({}, (0, OnnxObjectDetection_1.OnnxObjectDetectionToJSON)(value), { type: 'OnnxObjectDetection' });
         case 'PointInPolygonFilter':
             return Object.assign({}, (0, PointInPolygonFilter_1.PointInPolygonFilterToJSON)(value), { type: 'PointInPolygonFilter' });
         case 'RasterVectorJoin':

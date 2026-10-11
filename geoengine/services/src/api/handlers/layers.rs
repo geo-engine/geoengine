@@ -1364,8 +1364,8 @@ mod tests {
             TimeGranularity, TimeInterval,
         },
         raster::{
-            GeoTransform, Grid, GridBoundingBox2D, RasterDataType, RasterTile2D, TileIdx, TileSize,
-            TilingSpecification,
+            GeoTransform, Grid, GridBoundingBox2D, RasterDataType, RasterTile2D, TileIdx,
+            TileOverlap, TileSize, TilingSpecification,
         },
         spatial_reference::SpatialReference,
         util::{Identifier, test::TestDefault},
@@ -2596,6 +2596,7 @@ mod tests {
                     grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                     properties: Default::default(),
                     cache_hint: CacheHint::no_cache(),
+                    overlap: TileOverlap::zero(),
                 },
                 RasterTile2D {
                     time: TimeInterval::new_unchecked(1_671_955_200_000, 1_672_041_600_000),
@@ -2605,6 +2606,7 @@ mod tests {
                     grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                     properties: Default::default(),
                     cache_hint: CacheHint::no_cache(),
+                    overlap: TileOverlap::zero(),
                 },
             ];
 

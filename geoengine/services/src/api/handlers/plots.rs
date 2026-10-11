@@ -245,6 +245,7 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::primitives::DateTime;
     use geoengine_datatypes::raster::TilingSpecification;
+    use geoengine_datatypes::spatial_reference::SpatialReference;
     use serde_json::{Value, json};
     use tokio_postgres::NoTls;
 

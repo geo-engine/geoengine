@@ -1027,7 +1027,7 @@ where
 
                             let source_query = self.source.query(
                                 RasterQueryRectangle::new(
-                                    job.tile_info.global_pixel_bounds(),
+                                    job.tile_info.core_pixel_bounds(),
                                     time_interval,
                                     BandSelection::new_single(job.band)
                                 ),
@@ -1163,7 +1163,7 @@ mod tests {
     use geoengine_datatypes::primitives::{Coordinate2D, TimeInstance};
     use geoengine_datatypes::raster::{
         BoundedGrid, GeoTransform, Grid2D, GridIdx2D, GridOrEmpty2D, MaskedGrid2D, RasterDataType,
-        TileIdx, TileSize, TilingSpecification,
+        TileIdx, TileOverlap, TileSize, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use std::str::FromStr;
@@ -1582,6 +1582,7 @@ mod tests {
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: geo_transform,
                 tile_position: TileIdx::new_y_x(0, 0),
                 tile_size,

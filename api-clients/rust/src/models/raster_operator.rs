@@ -40,6 +40,10 @@ pub enum RasterOperator {
     RasterStacker(Box<models::RasterStacker>),
     #[serde(rename="RasterTypeConversion")]
     RasterTypeConversion(Box<models::RasterTypeConversion>),
+    #[serde(rename="RemoveTileOverlap")]
+    RemoveTileOverlap(Box<models::RemoveTileOverlap>),
+    #[serde(rename="AddTileOverlap")]
+    AddTileOverlap(Box<models::AddTileOverlap>),
     #[serde(rename="ReTile")]
     ReTile(Box<models::ReTile>),
     #[serde(rename="Rasterization")]

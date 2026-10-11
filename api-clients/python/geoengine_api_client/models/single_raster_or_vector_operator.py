@@ -113,6 +113,11 @@ class SingleRasterOrVectorOperator(BaseModel):
             instance.actual_instance = OgrSource.from_json(json_str)
             return instance
 
+        # check if data type is `OnnxObjectDetection`
+        if _data_type == "OnnxObjectDetection":
+            instance.actual_instance = OnnxObjectDetection.from_json(json_str)
+            return instance
+
         # check if data type is `PointInPolygonFilter`
         if _data_type == "PointInPolygonFilter":
             instance.actual_instance = PointInPolygonFilter.from_json(json_str)

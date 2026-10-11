@@ -19,6 +19,8 @@ from geoengine_api_client.models.add_dataset_tile import AddDatasetTile
 from geoengine_api_client.models.add_layer import AddLayer
 from geoengine_api_client.models.add_layer_collection import AddLayerCollection
 from geoengine_api_client.models.add_role import AddRole
+from geoengine_api_client.models.add_tile_overlap import AddTileOverlap
+from geoengine_api_client.models.add_tile_overlap_parameters import AddTileOverlapParameters
 from geoengine_api_client.models.aggregation import Aggregation
 from geoengine_api_client.models.aggregation_count import AggregationCount
 from geoengine_api_client.models.aggregation_first import AggregationFirst
@@ -94,6 +96,9 @@ from geoengine_api_client.models.density_params import DensityParams
 from geoengine_api_client.models.derive_out_raster_specs_source import DeriveOutRasterSpecsSource
 from geoengine_api_client.models.derived_color import DerivedColor
 from geoengine_api_client.models.derived_number import DerivedNumber
+from geoengine_api_client.models.detection_layout import DetectionLayout
+from geoengine_api_client.models.detection_layout_one_of import DetectionLayoutOneOf
+from geoengine_api_client.models.detection_layout_one_of_yolo_boxes import DetectionLayoutOneOfYoloBoxes
 from geoengine_api_client.models.downsampling import Downsampling
 from geoengine_api_client.models.downsampling_method import DownsamplingMethod
 from geoengine_api_client.models.downsampling_parameters import DownsamplingParameters
@@ -231,6 +236,8 @@ from geoengine_api_client.models.ogr_source_time_format_auto import OgrSourceTim
 from geoengine_api_client.models.ogr_source_time_format_custom import OgrSourceTimeFormatCustom
 from geoengine_api_client.models.ogr_source_time_format_unix_time_stamp import OgrSourceTimeFormatUnixTimeStamp
 from geoengine_api_client.models.onnx import Onnx
+from geoengine_api_client.models.onnx_object_detection import OnnxObjectDetection
+from geoengine_api_client.models.onnx_object_detection_parameters import OnnxObjectDetectionParameters
 from geoengine_api_client.models.onnx_parameters import OnnxParameters
 from geoengine_api_client.models.operator_quota import OperatorQuota
 from geoengine_api_client.models.order_by import OrderBy
@@ -293,6 +300,8 @@ from geoengine_api_client.models.reflectance import Reflectance
 from geoengine_api_client.models.reflectance_parameters import ReflectanceParameters
 from geoengine_api_client.models.regular import Regular
 from geoengine_api_client.models.regular_time_dimension import RegularTimeDimension
+from geoengine_api_client.models.remove_tile_overlap import RemoveTileOverlap
+from geoengine_api_client.models.remove_tile_overlap_parameters import RemoveTileOverlapParameters
 from geoengine_api_client.models.rename import Rename
 from geoengine_api_client.models.rename_bands import RenameBands
 from geoengine_api_client.models.reprojection import Reprojection

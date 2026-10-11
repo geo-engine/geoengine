@@ -630,10 +630,10 @@ mod tests {
     use geoengine_datatypes::dataset::{DataId, DatasetId};
     use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D, TimeInstance};
     use geoengine_datatypes::raster::{
-        GeoTransform, GridBoundingBox2D, GridIdx2D, GridSize, RasterDataType, TileIdx, TileSize,
+        GeoTransform, GridBoundingBox2D, GridIdx2D, GridSize, RasterDataType,
+        RasterPropertiesEntryType, RasterPropertiesKey, TileIdx, TileInformation, TileOverlap,
+        TileSize, TilingStrategy,
     };
-    use geoengine_datatypes::raster::{RasterPropertiesEntryType, RasterPropertiesKey};
-    use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::Identifier;
     use geoengine_datatypes::util::test::{TestDefault, assert_eq_two_list_of_tiles};
@@ -675,6 +675,7 @@ mod tests {
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size,
             geo_transform: dataset_geo_transform,
+            overlap: TileOverlap::zero(),
         };
 
         assert_eq!(
@@ -713,6 +714,7 @@ mod tests {
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size,
             geo_transform: central_geo_transform,
+            overlap: TileOverlap::zero(),
         };
 
         assert_eq!(
@@ -751,6 +753,7 @@ mod tests {
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size,
             geo_transform: central_geo_transform,
+            overlap: TileOverlap::zero(),
         };
 
         let vres: Vec<GridIdx2D> = origin_split_tileing_strategy
@@ -782,6 +785,7 @@ mod tests {
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size,
             geo_transform: central_geo_transform,
+            overlap: TileOverlap::zero(),
         };
 
         let vres: Vec<TileInformation> = origin_split_tileing_strategy

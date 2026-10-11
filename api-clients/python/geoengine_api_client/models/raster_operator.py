@@ -23,7 +23,7 @@ from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-RASTEROPERATOR_ONE_OF_SCHEMAS = ["BandFilter", "BandNeighborhoodAggregate", "BandwiseExpression", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "NeighborhoodAggregate", "Onnx", "Radiance", "RasterScaling", "RasterStacker", "RasterTypeConversion", "Rasterization", "ReTile", "Reflectance", "Reprojection", "Temperature", "TemporalRasterAggregation", "TimeShift"]
+RASTEROPERATOR_ONE_OF_SCHEMAS = ["AddTileOverlap", "BandFilter", "BandNeighborhoodAggregate", "BandwiseExpression", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "NeighborhoodAggregate", "Onnx", "Radiance", "RasterScaling", "RasterStacker", "RasterTypeConversion", "Rasterization", "ReTile", "Reflectance", "RemoveTileOverlap", "Reprojection", "Temperature", "TemporalRasterAggregation", "TimeShift"]
 
 class RasterOperator(BaseModel):
     """
@@ -55,24 +55,28 @@ class RasterOperator(BaseModel):
     oneof_schema_12_validator: Optional[RasterStacker] = None
     # data type: RasterTypeConversion
     oneof_schema_13_validator: Optional[RasterTypeConversion] = None
+    # data type: RemoveTileOverlap
+    oneof_schema_14_validator: Optional[RemoveTileOverlap] = None
+    # data type: AddTileOverlap
+    oneof_schema_15_validator: Optional[AddTileOverlap] = None
     # data type: ReTile
-    oneof_schema_14_validator: Optional[ReTile] = None
+    oneof_schema_16_validator: Optional[ReTile] = None
     # data type: Rasterization
-    oneof_schema_15_validator: Optional[Rasterization] = None
+    oneof_schema_17_validator: Optional[Rasterization] = None
     # data type: Reprojection
-    oneof_schema_16_validator: Optional[Reprojection] = None
+    oneof_schema_18_validator: Optional[Reprojection] = None
     # data type: Reflectance
-    oneof_schema_17_validator: Optional[Reflectance] = None
+    oneof_schema_19_validator: Optional[Reflectance] = None
     # data type: Radiance
-    oneof_schema_18_validator: Optional[Radiance] = None
+    oneof_schema_20_validator: Optional[Radiance] = None
     # data type: TemporalRasterAggregation
-    oneof_schema_19_validator: Optional[TemporalRasterAggregation] = None
+    oneof_schema_21_validator: Optional[TemporalRasterAggregation] = None
     # data type: Temperature
-    oneof_schema_20_validator: Optional[Temperature] = None
+    oneof_schema_22_validator: Optional[Temperature] = None
     # data type: TimeShift
-    oneof_schema_21_validator: Optional[TimeShift] = None
-    actual_instance: Optional[Union[BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift]] = None
-    one_of_schemas: Set[str] = { "BandFilter", "BandNeighborhoodAggregate", "BandwiseExpression", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "NeighborhoodAggregate", "Onnx", "Radiance", "RasterScaling", "RasterStacker", "RasterTypeConversion", "Rasterization", "ReTile", "Reflectance", "Reprojection", "Temperature", "TemporalRasterAggregation", "TimeShift" }
+    oneof_schema_23_validator: Optional[TimeShift] = None
+    actual_instance: Optional[Union[AddTileOverlap, BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, RemoveTileOverlap, Reprojection, Temperature, TemporalRasterAggregation, TimeShift]] = None
+    one_of_schemas: Set[str] = { "AddTileOverlap", "BandFilter", "BandNeighborhoodAggregate", "BandwiseExpression", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "NeighborhoodAggregate", "Onnx", "Radiance", "RasterScaling", "RasterStacker", "RasterTypeConversion", "Rasterization", "ReTile", "Reflectance", "RemoveTileOverlap", "Reprojection", "Temperature", "TemporalRasterAggregation", "TimeShift" }
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -163,6 +167,16 @@ class RasterOperator(BaseModel):
             error_messages.append(f"Error! Input type `{type(v)}` is not `RasterTypeConversion`")
         else:
             match += 1
+        # validate data type: RemoveTileOverlap
+        if not isinstance(v, RemoveTileOverlap):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `RemoveTileOverlap`")
+        else:
+            match += 1
+        # validate data type: AddTileOverlap
+        if not isinstance(v, AddTileOverlap):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `AddTileOverlap`")
+        else:
+            match += 1
         # validate data type: ReTile
         if not isinstance(v, ReTile):
             error_messages.append(f"Error! Input type `{type(v)}` is not `ReTile`")
@@ -205,10 +219,10 @@ class RasterOperator(BaseModel):
             match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in RasterOperator with oneOf schemas: AddTileOverlap, BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, RemoveTileOverlap, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in RasterOperator with oneOf schemas: AddTileOverlap, BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, RemoveTileOverlap, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -227,6 +241,11 @@ class RasterOperator(BaseModel):
         _data_type = json.loads(json_str).get("type")
         if not _data_type:
             raise ValueError("Failed to lookup data type from the field `type` in the input.")
+
+        # check if data type is `AddTileOverlap`
+        if _data_type == "AddTileOverlap":
+            instance.actual_instance = AddTileOverlap.from_json(json_str)
+            return instance
 
         # check if data type is `BandFilter`
         if _data_type == "BandFilter":
@@ -311,6 +330,11 @@ class RasterOperator(BaseModel):
         # check if data type is `Reflectance`
         if _data_type == "Reflectance":
             instance.actual_instance = Reflectance.from_json(json_str)
+            return instance
+
+        # check if data type is `RemoveTileOverlap`
+        if _data_type == "RemoveTileOverlap":
+            instance.actual_instance = RemoveTileOverlap.from_json(json_str)
             return instance
 
         # check if data type is `Reprojection`
@@ -411,6 +435,18 @@ class RasterOperator(BaseModel):
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
+        # deserialize data into RemoveTileOverlap
+        try:
+            instance.actual_instance = RemoveTileOverlap.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
+        # deserialize data into AddTileOverlap
+        try:
+            instance.actual_instance = AddTileOverlap.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
         # deserialize data into ReTile
         try:
             instance.actual_instance = ReTile.from_json(json_str)
@@ -462,10 +498,10 @@ class RasterOperator(BaseModel):
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into RasterOperator with oneOf schemas: AddTileOverlap, BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, RemoveTileOverlap, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into RasterOperator with oneOf schemas: AddTileOverlap, BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, RemoveTileOverlap, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -479,7 +515,7 @@ class RasterOperator(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], AddTileOverlap, BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, RemoveTileOverlap, Reprojection, Temperature, TemporalRasterAggregation, TimeShift]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None
@@ -494,6 +530,7 @@ class RasterOperator(BaseModel):
         """Returns the string representation of the actual instance"""
         return pprint.pformat(self.model_dump())
 
+from geoengine_api_client.models.add_tile_overlap import AddTileOverlap
 from geoengine_api_client.models.band_filter import BandFilter
 from geoengine_api_client.models.band_neighborhood_aggregate import BandNeighborhoodAggregate
 from geoengine_api_client.models.bandwise_expression import BandwiseExpression
@@ -509,6 +546,7 @@ from geoengine_api_client.models.raster_type_conversion import RasterTypeConvers
 from geoengine_api_client.models.rasterization import Rasterization
 from geoengine_api_client.models.re_tile import ReTile
 from geoengine_api_client.models.reflectance import Reflectance
+from geoengine_api_client.models.remove_tile_overlap import RemoveTileOverlap
 from geoengine_api_client.models.reprojection import Reprojection
 from geoengine_api_client.models.temperature import Temperature
 from geoengine_api_client.models.temporal_raster_aggregation import TemporalRasterAggregation

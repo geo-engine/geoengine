@@ -23,7 +23,7 @@ from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-VECTOROPERATOR_ONE_OF_SCHEMAS = ["ColumnRangeFilter", "LineSimplification", "MockPointSource", "OgrSource", "PointInPolygonFilter", "RasterVectorJoin", "Reprojection", "TimeProjection", "TimeShift", "VectorExpression", "VectorJoin", "VisualPointClustering"]
+VECTOROPERATOR_ONE_OF_SCHEMAS = ["ColumnRangeFilter", "LineSimplification", "MockPointSource", "OgrSource", "OnnxObjectDetection", "PointInPolygonFilter", "RasterVectorJoin", "Reprojection", "TimeProjection", "TimeShift", "VectorExpression", "VectorJoin", "VisualPointClustering"]
 
 class VectorOperator(BaseModel):
     """
@@ -37,24 +37,26 @@ class VectorOperator(BaseModel):
     oneof_schema_3_validator: Optional[MockPointSource] = None
     # data type: OgrSource
     oneof_schema_4_validator: Optional[OgrSource] = None
+    # data type: OnnxObjectDetection
+    oneof_schema_5_validator: Optional[OnnxObjectDetection] = None
     # data type: PointInPolygonFilter
-    oneof_schema_5_validator: Optional[PointInPolygonFilter] = None
+    oneof_schema_6_validator: Optional[PointInPolygonFilter] = None
     # data type: RasterVectorJoin
-    oneof_schema_6_validator: Optional[RasterVectorJoin] = None
+    oneof_schema_7_validator: Optional[RasterVectorJoin] = None
     # data type: Reprojection
-    oneof_schema_7_validator: Optional[Reprojection] = None
+    oneof_schema_8_validator: Optional[Reprojection] = None
     # data type: TimeProjection
-    oneof_schema_8_validator: Optional[TimeProjection] = None
+    oneof_schema_9_validator: Optional[TimeProjection] = None
     # data type: TimeShift
-    oneof_schema_9_validator: Optional[TimeShift] = None
+    oneof_schema_10_validator: Optional[TimeShift] = None
     # data type: VectorExpression
-    oneof_schema_10_validator: Optional[VectorExpression] = None
+    oneof_schema_11_validator: Optional[VectorExpression] = None
     # data type: VectorJoin
-    oneof_schema_11_validator: Optional[VectorJoin] = None
+    oneof_schema_12_validator: Optional[VectorJoin] = None
     # data type: VisualPointClustering
-    oneof_schema_12_validator: Optional[VisualPointClustering] = None
-    actual_instance: Optional[Union[ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering]] = None
-    one_of_schemas: Set[str] = { "ColumnRangeFilter", "LineSimplification", "MockPointSource", "OgrSource", "PointInPolygonFilter", "RasterVectorJoin", "Reprojection", "TimeProjection", "TimeShift", "VectorExpression", "VectorJoin", "VisualPointClustering" }
+    oneof_schema_13_validator: Optional[VisualPointClustering] = None
+    actual_instance: Optional[Union[ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, OnnxObjectDetection, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering]] = None
+    one_of_schemas: Set[str] = { "ColumnRangeFilter", "LineSimplification", "MockPointSource", "OgrSource", "OnnxObjectDetection", "PointInPolygonFilter", "RasterVectorJoin", "Reprojection", "TimeProjection", "TimeShift", "VectorExpression", "VectorJoin", "VisualPointClustering" }
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -100,6 +102,11 @@ class VectorOperator(BaseModel):
             error_messages.append(f"Error! Input type `{type(v)}` is not `OgrSource`")
         else:
             match += 1
+        # validate data type: OnnxObjectDetection
+        if not isinstance(v, OnnxObjectDetection):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `OnnxObjectDetection`")
+        else:
+            match += 1
         # validate data type: PointInPolygonFilter
         if not isinstance(v, PointInPolygonFilter):
             error_messages.append(f"Error! Input type `{type(v)}` is not `PointInPolygonFilter`")
@@ -142,10 +149,10 @@ class VectorOperator(BaseModel):
             match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, OnnxObjectDetection, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, OnnxObjectDetection, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -183,6 +190,11 @@ class VectorOperator(BaseModel):
         # check if data type is `OgrSource`
         if _data_type == "OgrSource":
             instance.actual_instance = OgrSource.from_json(json_str)
+            return instance
+
+        # check if data type is `OnnxObjectDetection`
+        if _data_type == "OnnxObjectDetection":
+            instance.actual_instance = OnnxObjectDetection.from_json(json_str)
             return instance
 
         # check if data type is `PointInPolygonFilter`
@@ -249,6 +261,12 @@ class VectorOperator(BaseModel):
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
+        # deserialize data into OnnxObjectDetection
+        try:
+            instance.actual_instance = OnnxObjectDetection.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
         # deserialize data into PointInPolygonFilter
         try:
             instance.actual_instance = PointInPolygonFilter.from_json(json_str)
@@ -300,10 +318,10 @@ class VectorOperator(BaseModel):
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, OnnxObjectDetection, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into VectorOperator with oneOf schemas: ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, OnnxObjectDetection, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -317,7 +335,7 @@ class VectorOperator(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], ColumnRangeFilter, LineSimplification, MockPointSource, OgrSource, OnnxObjectDetection, PointInPolygonFilter, RasterVectorJoin, Reprojection, TimeProjection, TimeShift, VectorExpression, VectorJoin, VisualPointClustering]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None
@@ -334,6 +352,7 @@ class VectorOperator(BaseModel):
 
 from geoengine_api_client.models.column_range_filter import ColumnRangeFilter
 from geoengine_api_client.models.line_simplification import LineSimplification
+from geoengine_api_client.models.onnx_object_detection import OnnxObjectDetection
 from geoengine_api_client.models.point_in_polygon_filter import PointInPolygonFilter
 from geoengine_api_client.models.raster_vector_join import RasterVectorJoin
 from geoengine_api_client.models.reprojection import Reprojection

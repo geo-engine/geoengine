@@ -115,6 +115,7 @@ impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
         tiling_specification: TilingSpecification,
     ) -> Result<Self> {
         let in_descriptor = raster_source.result_descriptor();
+        in_descriptor.ensure_no_tile_overlap(Interpolation::TYPE_NAME)?;
         let in_spatial_grid = in_descriptor.spatial_grid_descriptor();
 
         let output_resolution = match params.output_resolution {
@@ -477,7 +478,7 @@ where
     ) -> Result<Option<RasterQueryRectangle>> {
         // enlarge the spatial bounds in order to have the neighbor pixels for the interpolation
 
-        let tile_pixel_bounds = tile_info.global_pixel_bounds();
+        let tile_pixel_bounds = tile_info.core_pixel_bounds();
         let tile_spatial_bounds = self
             .output_geo_transform
             .grid_to_spatial_bounds(&tile_pixel_bounds);
@@ -554,7 +555,7 @@ impl<T: Pixel, I: InterpolationAlgorithm<GridBoundingBox2D, T>> FoldTileAccu
                 self.input_geo_transform,
                 &self.input_tile,
                 self.output_info.global_geo_transform,
-                self.output_info.global_pixel_bounds(),
+                self.output_info.core_pixel_bounds(),
             )
         })
         .await??;
@@ -601,7 +602,7 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<GridBoundingBox2D, T>>(
     let time_interval = query_rect.time_interval();
 
     crate::util::spawn_blocking(move || {
-        let tile_pixel_bounds = tile_info.global_pixel_bounds();
+        let tile_pixel_bounds = tile_info.core_pixel_bounds();
         let tile_spatial_bounds = output_geo_transform.grid_to_spatial_bounds(&tile_pixel_bounds);
         let input_pixel_bounds = input_geo_transform.spatial_to_grid_bounds(&tile_spatial_bounds);
         let enlarged_input_pixel_bounds = GridBoundingBox2D::new(
@@ -673,8 +674,7 @@ where
 mod tests {
     use super::*;
     use futures::StreamExt;
-    use geoengine_datatypes::raster::TileIdx;
-    use geoengine_datatypes::raster::TileSize;
+    use geoengine_datatypes::raster::{TileIdx, TileOverlap, TileSize};
     use geoengine_datatypes::{
         primitives::{
             Coordinate2D, RasterQueryRectangle, SpatialResolution, TimeInterval, TimeStep,
@@ -814,6 +814,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-2, -1),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -825,6 +826,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-2, 0),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -836,6 +838,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-2, 1),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -847,6 +850,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-2, 2),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -858,6 +862,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, -1),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -869,6 +874,7 @@ mod tests {
             RasterTile2D::<i8>::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -880,6 +886,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -891,6 +898,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 2),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -902,6 +910,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(0, -1),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -913,6 +922,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(0, 0),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -924,6 +934,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(0, 1),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -935,6 +946,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(0, 2),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -946,6 +958,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-2, -1),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -957,6 +970,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-2, 0),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -968,6 +982,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-2, 1),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -979,6 +994,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-2, 2),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -990,6 +1006,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, -1),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -1001,6 +1018,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 0),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -1012,6 +1030,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 1),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -1023,6 +1042,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(-1, 2),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -1034,6 +1054,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(0, -1),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -1045,6 +1066,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(0, 0),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -1056,6 +1078,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(0, 1),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),
@@ -1067,6 +1090,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
+                    overlap: TileOverlap::zero(),
                     tile_position: TileIdx::new_y_x(0, 2),
                     tile_size: TileSize::new_y_x(2, 2),
                     global_geo_transform: TestDefault::test_default(),

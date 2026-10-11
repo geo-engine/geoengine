@@ -256,7 +256,7 @@ mod tests {
     use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval};
     use geoengine_datatypes::raster::{
         Grid2D, GridBoundingBox2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D,
-        RenameBands, TileIdx, TileInformation, TileSize, TilingSpecification,
+        RenameBands, TileIdx, TileInformation, TileOverlap, TileSize, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -861,6 +861,7 @@ mod tests {
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 tile_position: TileIdx::new_y_x(-1, 0),
                 tile_size: TileSize::new_y_x(3, 2),
                 global_geo_transform: TestDefault::test_default(),
