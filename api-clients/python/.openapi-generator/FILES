@@ -288,6 +288,8 @@ docs/RasterVectorJoin.md
 docs/RasterVectorJoinParameters.md
 docs/Rasterization.md
 docs/RasterizationParameters.md
+docs/ReTile.md
+docs/ReTileParameters.md
 docs/Reflectance.md
 docs/ReflectanceParameters.md
 docs/Regular.md
@@ -751,6 +753,8 @@ geoengine_api_client/models/raster_vector_join.py
 geoengine_api_client/models/raster_vector_join_parameters.py
 geoengine_api_client/models/rasterization.py
 geoengine_api_client/models/rasterization_parameters.py
+geoengine_api_client/models/re_tile.py
+geoengine_api_client/models/re_tile_parameters.py
 geoengine_api_client/models/reflectance.py
 geoengine_api_client/models/reflectance_parameters.py
 geoengine_api_client/models/regular.py
@@ -1204,6 +1208,8 @@ test/test_raster_vector_join.py
 test/test_raster_vector_join_parameters.py
 test/test_rasterization.py
 test/test_rasterization_parameters.py
+test/test_re_tile.py
+test/test_re_tile_parameters.py
 test/test_reflectance.py
 test/test_reflectance_parameters.py
 test/test_regular.py

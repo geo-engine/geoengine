@@ -236,6 +236,7 @@ impl TryFrom<&OperatorsRasterStacker> for RasterStacker {
         Ok(Self {
             r#type: Default::default(),
             params: RasterStackerParameters {
+                output_origin: value.params.output_origin.map(Into::into),
                 rename_bands: match &value.params.rename_bands {
                     geoengine_datatypes::raster::RenameBands::Default => RenameBands::Default,
                     geoengine_datatypes::raster::RenameBands::Suffix(values) => {
@@ -816,6 +817,7 @@ mod tests {
                 Box::new(OperatorsRasterStacker {
                     params: OperatorsRasterStackerParams {
                         rename_bands: RuntimeRenameBands::Default,
+                        output_origin: None,
                     },
                     sources: MultipleRasterSources {
                         rasters: vec![raster_source(), raster_source()],

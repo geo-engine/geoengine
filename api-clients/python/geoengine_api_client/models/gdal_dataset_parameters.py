@@ -41,7 +41,8 @@ class GdalDatasetParameters(BaseModel):
     gdal_open_options: Optional[List[StrictStr]] = Field(default=None, alias="gdalOpenOptions")
     gdal_config_options: Optional[List[Annotated[List[StrictStr], Field(min_length=2, max_length=2)]]] = Field(default=None, alias="gdalConfigOptions")
     allow_alphaband_as_mask: Optional[StrictBool] = Field(default=None, alias="allowAlphabandAsMask")
-    __properties: ClassVar[List[str]] = ["filePath", "rasterbandChannel", "geoTransform", "width", "height", "fileNotFoundHandling", "noDataValue", "propertiesMapping", "gdalOpenOptions", "gdalConfigOptions", "allowAlphabandAsMask"]
+    tile_size: Optional[Dict[str, Any]] = Field(default=None, description="Optional per-dataset tile size override.", alias="tileSize")
+    __properties: ClassVar[List[str]] = ["filePath", "rasterbandChannel", "geoTransform", "width", "height", "fileNotFoundHandling", "noDataValue", "propertiesMapping", "gdalOpenOptions", "gdalConfigOptions", "allowAlphabandAsMask", "tileSize"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -134,7 +135,8 @@ class GdalDatasetParameters(BaseModel):
             "propertiesMapping": [GdalMetadataMapping.from_dict(_item) for _item in obj["propertiesMapping"]] if obj.get("propertiesMapping") is not None else None,
             "gdalOpenOptions": obj.get("gdalOpenOptions"),
             "gdalConfigOptions": obj.get("gdalConfigOptions"),
-            "allowAlphabandAsMask": obj.get("allowAlphabandAsMask")
+            "allowAlphabandAsMask": obj.get("allowAlphabandAsMask"),
+            "tileSize": obj.get("tileSize")
         })
         return _obj
 

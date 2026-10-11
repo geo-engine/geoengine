@@ -117,6 +117,7 @@ async fn all_bands_at_once(runs: usize, bands: u32) {
 
     let stacker = RasterStacker {
         params: RasterStackerParams {
+            output_origin: None,
             rename_bands: RenameBands::Default,
         },
         sources: MultipleRasterSources {

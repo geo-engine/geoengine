@@ -21,7 +21,7 @@ use futures::{
     stream::{self, BoxStream, StreamExt},
 };
 use gdal::raster::GdalType;
-use geoengine_datatypes::raster::ChangeGridBounds;
+use geoengine_datatypes::raster::{ChangeGridBounds, TileSize};
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
@@ -31,7 +31,7 @@ use geoengine_datatypes::{
     },
     raster::{
         EmptyGrid, GridBoundingBox2D, Pixel, RasterDataType, RasterProperties, RasterTile2D,
-        SpatialGridDefinition, TileInformation, TilingSpecification, TilingStrategy,
+        SpatialGridDefinition, TileInformation, TilingGrid, TilingStrategy,
     },
 };
 use itertools::Itertools;
@@ -236,7 +236,7 @@ where
     T: Pixel,
 {
     pub produced_result_descriptor: RasterResultDescriptor,
-    pub tiling_specification: TilingSpecification,
+    pub tiling_grid: TilingGrid,
     pub meta_data: GdalMetaData,
     pub overview_level: u32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
@@ -250,14 +250,14 @@ where
 {
     pub fn new(
         produced_result_descriptor: RasterResultDescriptor,
-        tiling_specification: TilingSpecification,
+        tiling_grid: TilingGrid,
         meta_data: GdalMetaData,
         overview_level: u32,
         original_resolution_spatial_grid: Option<SpatialGridDefinition>,
     ) -> Self {
         Self {
             produced_result_descriptor,
-            tiling_specification,
+            tiling_grid,
             meta_data,
             overview_level,
             original_resolution_spatial_grid,
@@ -268,16 +268,10 @@ where
 
     pub fn new_no_overview(
         produced_result_descriptor: RasterResultDescriptor,
-        tiling_specification: TilingSpecification,
+        tiling_grid: TilingGrid,
         meta_data: GdalMetaData,
     ) -> Self {
-        Self::new(
-            produced_result_descriptor,
-            tiling_specification,
-            meta_data,
-            0,
-            None,
-        )
+        Self::new(produced_result_descriptor, tiling_grid, meta_data, 0, None)
     }
 }
 
@@ -308,29 +302,12 @@ where
         // this is the result descriptor of the operator. It already incorporates the overview level AND shifts the origin to the tiling origin
         let result_descriptor = self.result_descriptor();
 
-        let grid_produced_by_source_desc = result_descriptor.spatial_grid;
-        let grid_produced_by_source = grid_produced_by_source_desc
+        let grid_produced_by_source = result_descriptor
+            .spatial_grid
             .source_spatial_grid_definition()
             .expect("the source grid definition should be present in a source...");
-        // A `GeoTransform` maps pixel space to world space.
-        // Usually a SRS has axis directions pointing "up" (y-axis) and "up" (y-axis).
-        // We are not aware of spatial reference systems where the x-axis points to the right.
-        // However, there are spatial reference systems where the y-axis points downwards.
-        // The standard "pixel-space" starts at the top-left corner of a `GeoTransform` and points down-right.
-        // Therefore, the pixel size on the x-axis is always increasing
-        let pixel_size_x = grid_produced_by_source.geo_transform().x_pixel_size();
-        debug_assert!(pixel_size_x.is_sign_positive());
-        // and the y-axis should only be positive if the y-axis of the spatial reference system also "points down".
-        // NOTE: at the moment we do not allow "down pointing" y-axis.
-        let pixel_size_y = grid_produced_by_source.geo_transform().y_pixel_size();
-        debug_assert!(pixel_size_y.is_sign_negative());
 
-        // The data origin is not neccessarily the origin of the tileing we want to use.
-        // TODO: maybe derive tilling origin reference from the data projection
-        let produced_tiling_grid =
-            grid_produced_by_source_desc.tiling_grid_definition(self.tiling_specification);
-
-        let tiling_strategy = produced_tiling_grid.generate_data_tiling_strategy();
+        let tiling_strategy = self.tiling_grid.tiling_strategy();
 
         let reader_mode = match self.original_resolution_spatial_grid {
             None => GdalReaderMode::OriginalResolution(ReaderState {
@@ -350,7 +327,7 @@ where
             "Reader mode: {:?}. Original grid: {:?} and target grid: {:?}. Loadinginfo  start_time_of_output_stream: {:?}, end_time_of_output_stream: {:?}",
             reader_mode,
             self.original_resolution_spatial_grid,
-            produced_tiling_grid,
+            self.tiling_grid,
             loading_info.start_time_of_output_stream,
             loading_info.end_time_of_output_stream
         );
@@ -426,14 +403,14 @@ where
     async fn _time_query<'a>(
         &'a self,
         query: TimeInterval,
-        ctx: &'a dyn crate::engine::QueryContext,
+        _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
         let rdt = self.raster_result_descriptor().time;
 
         let q_bounds = self
             .raster_result_descriptor()
-            .tiling_grid_definition(ctx.tiling_specification())
-            .tiling_grid_bounds();
+            .tiling_grid_definition()
+            .pixel_bounds;
         let q_rect = RasterQueryRectangle::new(q_bounds, query, BandSelection::first());
         let ldif = self.meta_data.loading_info(q_rect).await?;
         let unique_times = ldif.info.map(|s| s.map(|s| s.time));
@@ -524,6 +501,9 @@ impl RasterOperator for GdalSource {
 
         let meta_data_result_descriptor = meta_data.result_descriptor().await?;
 
+        let tile_size = meta_data
+            .tile_size()
+            .unwrap_or_else(|| context.tiling_specification().tile_size);
         let op_name = CanonicOperatorName::from(&self);
         let op = if self.params.overview_level.is_none() {
             InitializedGdalSourceOperator::initialize_original_resolution(
@@ -532,7 +512,7 @@ impl RasterOperator for GdalSource {
                 self.params.data,
                 meta_data,
                 meta_data_result_descriptor,
-                context.tiling_specification(),
+                tile_size,
                 context.default_cache_ttl(),
             )
         } else {
@@ -543,7 +523,7 @@ impl RasterOperator for GdalSource {
                 self.params.data,
                 meta_data,
                 meta_data_result_descriptor,
-                context.tiling_specification(),
+                tile_size,
                 self.params.overview_level.unwrap_or(0),
                 context.default_cache_ttl(),
             )
@@ -561,7 +541,7 @@ pub struct InitializedGdalSourceOperator {
     path: WorkflowOperatorPath,
     pub meta_data: GdalMetaData,
     pub produced_result_descriptor: RasterResultDescriptor,
-    pub tiling_specification: TilingSpecification,
+    pub tiling_grid: TilingGrid,
     pub data_name: NamedData,
     // the overview level to use. 0/1 means the highest resolution
     pub overview_level: u32,
@@ -576,16 +556,26 @@ impl InitializedGdalSourceOperator {
         data_name: NamedData,
         meta_data: GdalMetaData,
         result_descriptor: RasterResultDescriptor,
-        tiling_specification: TilingSpecification,
+        tile_size: TileSize,
         default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
+        // The output tiling is driven by the (config-provided) tile size, not by the
+        // dataset's default tiling. Keep the dataset's geo-transform and bounds.
+        let result_descriptor = RasterResultDescriptor {
+            spatial_grid: SpatialGridDescriptor::new_source(
+                result_descriptor.spatial_grid.spatial_grid,
+                tile_size,
+            ),
+            ..result_descriptor
+        };
+        let tiling_grid = result_descriptor.spatial_grid.tiling_grid_definition();
         InitializedGdalSourceOperator {
             name,
             path,
             data_name,
             produced_result_descriptor: result_descriptor,
             meta_data,
-            tiling_specification,
+            tiling_grid,
             overview_level: 0,
             original_resolution_spatial_grid: None,
             default_cache_ttl,
@@ -605,7 +595,7 @@ impl InitializedGdalSourceOperator {
         data_name: NamedData,
         meta_data: GdalMetaData,
         result_descriptor: RasterResultDescriptor,
-        tiling_specification: TilingSpecification,
+        tile_size: TileSize,
         overview_level: u32,
         default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
@@ -620,20 +610,31 @@ impl InitializedGdalSourceOperator {
                 overview_level,
             ) {
             let ovr_res = RasterResultDescriptor {
-                spatial_grid: SpatialGridDescriptor::new_source(ovr_spatial_grid),
+                spatial_grid: SpatialGridDescriptor::new_source(ovr_spatial_grid, tile_size),
                 ..result_descriptor
             };
             (ovr_res, Some(source_resolution_spatial_grid))
         } else {
-            (result_descriptor, None)
+            (
+                RasterResultDescriptor {
+                    spatial_grid: SpatialGridDescriptor::new_source(
+                        result_descriptor.spatial_grid.spatial_grid,
+                        tile_size,
+                    ),
+                    ..result_descriptor
+                },
+                None,
+            )
         };
+
+        let tiling_grid = result_descriptor.spatial_grid.tiling_grid_definition();
 
         InitializedGdalSourceOperator {
             name,
             path,
             produced_result_descriptor: result_descriptor,
             meta_data,
-            tiling_specification,
+            tiling_grid,
             data_name,
             overview_level,
             original_resolution_spatial_grid: original_grid,
@@ -653,7 +654,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             RasterDataType::U8 => TypedRasterQueryProcessor::U8(
                 GdalSourceProcessor {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
+                    tiling_grid: self.tiling_grid,
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
@@ -665,7 +666,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             RasterDataType::U16 => TypedRasterQueryProcessor::U16(
                 GdalSourceProcessor {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
+                    tiling_grid: self.tiling_grid,
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
@@ -677,7 +678,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             RasterDataType::U32 => TypedRasterQueryProcessor::U32(
                 GdalSourceProcessor {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
+                    tiling_grid: self.tiling_grid,
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
@@ -699,7 +700,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             RasterDataType::I16 => TypedRasterQueryProcessor::I16(
                 GdalSourceProcessor {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
+                    tiling_grid: self.tiling_grid,
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
@@ -711,7 +712,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             RasterDataType::I32 => TypedRasterQueryProcessor::I32(
                 GdalSourceProcessor {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
+                    tiling_grid: self.tiling_grid,
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
@@ -728,7 +729,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             RasterDataType::F32 => TypedRasterQueryProcessor::F32(
                 GdalSourceProcessor {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
+                    tiling_grid: self.tiling_grid,
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
@@ -740,7 +741,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             RasterDataType::F64 => TypedRasterQueryProcessor::F64(
                 GdalSourceProcessor {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
+                    tiling_grid: self.tiling_grid,
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
@@ -1040,6 +1041,7 @@ mod tests {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         };
         let replaced = params
             .replace_time_placeholders(
@@ -1288,6 +1290,7 @@ mod tests {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         };
 
         let dataset_parameters_json = serde_json::to_value(&dataset_parameters).unwrap();
@@ -1336,6 +1339,7 @@ mod tests {
                 "gdalConfigOptions": null,
                 "allowAlphabandAsMask": true,
                 "retry": null,
+                "tileSize": null,
             })
         );
 

@@ -28,14 +28,14 @@ pub use self::raster_tile::{
     RasterTile, RasterTile2D, RasterTile3D, TilesEqualIgnoringCacheHint, display_raster_tile_2d,
 };
 pub use self::tiling::{
-    TileIdx, TileIdx2DIter, TileInformation, TileInformationIter, TileSize, TilingSpecification,
-    TilingStrategy,
+    TileIdx, TileIdx2DIter, TileInformation, TileInformationIter, TileSize, TilingGrid,
+    TilingSpecification, TilingStrategy,
 };
 pub use self::typed_raster_conversion::TypedRasterConversion;
 pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
 pub use self::{grid_traits::ChangeGridBounds, grid_traits::GridShapeAccess};
 pub use db_types::GridBoundingBox2DDbType;
-pub use grid_spatial::{SpatialGridDefinition, TilingSpatialGridDefinition};
+pub use grid_spatial::SpatialGridDefinition;
 pub use masked_grid::{MaskedGrid, MaskedGrid1D, MaskedGrid2D, MaskedGrid3D};
 pub use no_data_value_grid::{
     NoDataValueGrid, NoDataValueGrid1D, NoDataValueGrid2D, NoDataValueGrid3D,

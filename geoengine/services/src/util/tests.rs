@@ -51,7 +51,9 @@ use geoengine_datatypes::{
     dataset::{DataProviderId, DatasetId, LayerId, NamedData},
     operations::image::{Colorizer, RasterColorizer, RgbaColor},
     primitives::{CacheTtlSeconds, Coordinate2D, DateTime},
-    raster::{GeoTransform, GridBoundingBox2D, RasterDataType, RenameBands, TilingSpecification},
+    raster::{
+        GeoTransform, GridBoundingBox2D, RasterDataType, RenameBands, TileSize, TilingSpecification,
+    },
     spatial_reference::{SpatialReference, SpatialReferenceOption},
     test_data,
     util::test::TestDefault,
@@ -302,6 +304,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
                 gdal_config_options: None,
                 allow_alphaband_as_mask: false,
                 retry: None,
+                tile_size: None,
             },
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
@@ -310,6 +313,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                  GeoTransform::new(Coordinate2D::new(-180.,  90.), 0.1, -0.1),
                  GridBoundingBox2D::new_min_max(0,1799, 0, 1599).unwrap(),
+                 TileSize::default_512(),
                 ),
                 bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new("band".into(), geoengine_datatypes::primitives::Measurement::classification("Land Cover".to_string(), 
                 [
@@ -369,6 +373,7 @@ pub async fn register_ne2_multiband_workflow(
         operator: TypedOperator::Raster(
             RasterStacker {
                 params: RasterStackerParams {
+                    output_origin: None,
                     rename_bands: RenameBands::Rename(vec![
                         "blue".into(),
                         "green".into(),

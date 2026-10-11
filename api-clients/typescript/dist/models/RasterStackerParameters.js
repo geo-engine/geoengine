@@ -17,6 +17,7 @@ exports.RasterStackerParametersFromJSON = RasterStackerParametersFromJSON;
 exports.RasterStackerParametersFromJSONTyped = RasterStackerParametersFromJSONTyped;
 exports.RasterStackerParametersToJSON = RasterStackerParametersToJSON;
 exports.RasterStackerParametersToJSONTyped = RasterStackerParametersToJSONTyped;
+const Coordinate2D_1 = require("./Coordinate2D");
 const RenameBands_1 = require("./RenameBands");
 /**
  * Check if a given object implements the RasterStackerParameters interface.
@@ -35,6 +36,7 @@ function RasterStackerParametersFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'renameBands': (0, RenameBands_1.RenameBandsFromJSON)(json['renameBands']),
+        'outputOrigin': json['outputOrigin'] == null ? undefined : (0, Coordinate2D_1.Coordinate2DFromJSON)(json['outputOrigin']),
     };
 }
 function RasterStackerParametersToJSON(json) {
@@ -46,5 +48,6 @@ function RasterStackerParametersToJSONTyped(value, ignoreDiscriminator = false) 
     }
     return {
         'renameBands': (0, RenameBands_1.RenameBandsToJSON)(value['renameBands']),
+        'outputOrigin': (0, Coordinate2D_1.Coordinate2DToJSON)(value['outputOrigin']),
     };
 }

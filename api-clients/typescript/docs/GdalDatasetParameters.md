@@ -18,6 +18,7 @@ Name | Type
 `gdalOpenOptions` | Array&lt;string&gt;
 `gdalConfigOptions` | Array&lt;Array&lt;string&gt;&gt;
 `allowAlphabandAsMask` | boolean
+`tileSize` | object
 
 ## Example
 
@@ -37,6 +38,7 @@ const example = {
   "gdalOpenOptions": null,
   "gdalConfigOptions": null,
   "allowAlphabandAsMask": null,
+  "tileSize": null,
 } satisfies GdalDatasetParameters
 
 console.log(example)

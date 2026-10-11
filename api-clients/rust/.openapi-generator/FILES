@@ -287,6 +287,8 @@ docs/RasterVectorJoin.md
 docs/RasterVectorJoinParameters.md
 docs/Rasterization.md
 docs/RasterizationParameters.md
+docs/ReTile.md
+docs/ReTileParameters.md
 docs/Reflectance.md
 docs/ReflectanceParameters.md
 docs/Regular.md
@@ -748,6 +750,8 @@ src/models/raster_vector_join.rs
 src/models/raster_vector_join_parameters.rs
 src/models/rasterization.rs
 src/models/rasterization_parameters.rs
+src/models/re_tile.rs
+src/models/re_tile_parameters.rs
 src/models/reflectance.rs
 src/models/reflectance_parameters.rs
 src/models/regular.rs

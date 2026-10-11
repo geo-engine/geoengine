@@ -40,6 +40,8 @@ pub enum RasterOperator {
     RasterStacker(Box<models::RasterStacker>),
     #[serde(rename="RasterTypeConversion")]
     RasterTypeConversion(Box<models::RasterTypeConversion>),
+    #[serde(rename="ReTile")]
+    ReTile(Box<models::ReTile>),
     #[serde(rename="Rasterization")]
     Rasterization(Box<models::Rasterization>),
     #[serde(rename="Reprojection")]

@@ -25,8 +25,8 @@ use geoengine_operators::{
         RasterScaling as OperatorsRasterScaling, RasterStacker as OperatorsRasterStacker,
         RasterTypeConversion as OperatorsRasterTypeConversion,
         RasterVectorJoin as OperatorsRasterVectorJoin, Rasterization as OperatorsRasterization,
-        Reflectance as OperatorsReflectance, Reprojection as OperatorsReprojection,
-        Temperature as OperatorsTemperature,
+        ReTile as OperatorsReTile, Reflectance as OperatorsReflectance,
+        Reprojection as OperatorsReprojection, Temperature as OperatorsTemperature,
         TemporalRasterAggregation as OperatorsTemporalRasterAggregation,
         TimeProjection as OperatorsTimeProjection, TimeShift as OperatorsTimeShift,
         VectorExpression as OperatorsVectorExpression, VectorJoin as OperatorsVectorJoin,
@@ -73,12 +73,13 @@ pub use crate::api::model::processing_graphs::{
         PointInPolygonFilterParameters, PointInPolygonFilterSource, Radiance, RadianceParameters,
         RasterScaling, RasterScalingParameters, RasterStacker, RasterStackerParameters,
         RasterTypeConversion, RasterTypeConversionParameters, RasterVectorJoin,
-        RasterVectorJoinParameters, Rasterization, RasterizationParameters, Reflectance,
-        ReflectanceParameters, RenameBands, Reprojection, ReprojectionParameters, Temperature,
-        TemperatureParameters, TemporalRasterAggregation, TemporalRasterAggregationParameters,
-        TimeProjection, TimeProjectionParameters, TimeShift, TimeShiftParameters, VectorExpression,
-        VectorExpressionParameters, VectorJoin, VectorJoinParameters, VectorJoinSources,
-        VisualPointClustering, VisualPointClusteringParameters,
+        RasterVectorJoinParameters, Rasterization, RasterizationParameters, ReTile,
+        ReTileParameters, Reflectance, ReflectanceParameters, RenameBands, Reprojection,
+        ReprojectionParameters, Temperature, TemperatureParameters, TemporalRasterAggregation,
+        TemporalRasterAggregationParameters, TimeProjection, TimeProjectionParameters, TimeShift,
+        TimeShiftParameters, VectorExpression, VectorExpressionParameters, VectorJoin,
+        VectorJoinParameters, VectorJoinSources, VisualPointClustering,
+        VisualPointClusteringParameters,
     },
     source::{
         AttributeFilter, GdalSource, GdalSourceParameters, MockPointSource,
@@ -170,6 +171,7 @@ pub enum RasterOperator {
     RasterScaling(RasterScaling),
     RasterStacker(RasterStacker),
     RasterTypeConversion(RasterTypeConversion),
+    ReTile(ReTile),
     Rasterization(Rasterization),
     Reprojection(Reprojection),
     Reflectance(Reflectance),
@@ -255,6 +257,9 @@ impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
             }
             RasterOperator::RasterStacker(raster_stacker) => {
                 OperatorsRasterStacker::try_from(raster_stacker).map(OperatorsRasterOperator::boxed)
+            }
+            RasterOperator::ReTile(re_tile) => {
+                OperatorsReTile::try_from(re_tile).map(OperatorsRasterOperator::boxed)
             }
             RasterOperator::RasterTypeConversion(type_conversion) => {
                 OperatorsRasterTypeConversion::try_from(type_conversion)
@@ -444,6 +449,8 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     ReflectanceParameters,
     Radiance,
     RadianceParameters,
+    ReTile,
+    ReTileParameters,
     RenameBands,
     Reprojection,
     ReprojectionParameters,

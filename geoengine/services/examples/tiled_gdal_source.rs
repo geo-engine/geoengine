@@ -270,6 +270,7 @@ async fn add_ndvi_multi_tile_dataset(app_ctx: &PostgresContext<NoTls>) -> Datase
                 gdal_open_options: None,
                 gdal_config_options: None,
                 allow_alphaband_as_mask: true,
+                tile_size: None,
             },
         })
         .collect();
