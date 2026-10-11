@@ -338,7 +338,7 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
-        _query_rect: RasterQueryRectangle,
+        query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
         let output_grid = GridOrEmpty::new_empty_shape(tile_info.global_pixel_bounds());
@@ -349,7 +349,11 @@ where
                 output_tile_info: tile_info,
                 output_grid,
                 input_geo_transform,
-                time: None,
+                // An output tile can fall outside every input's extent (e.g. the
+                // union grid of a `RasterStacker`), in which case the fold sees no
+                // input tiles. Fall back to the query interval like
+                // `AddTileOverlap` rather than failing the query.
+                time: Some(query_rect.time_interval()),
                 cache_hint: CacheHint::max_duration(),
                 pool,
             })
@@ -409,11 +413,7 @@ impl<T: Pixel> FoldTileAccu for ReTileAccu<T> {
     type RasterType = T;
 
     async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>> {
-        let time = self
-            .time
-            .ok_or_else(|| crate::error::Error::InvalidOperatorSpec {
-                reason: "ReTile: no input tiles were folded".into(),
-            })?;
+        let time = self.time.unwrap_or_default();
         let output_tile = RasterTile2D::new_with_tile_info(
             time,
             self.output_tile_info,
@@ -592,6 +592,35 @@ mod tests {
             grid.inner_grid.data,
             &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
         );
+    }
+
+    /// An output tile whose sub-query matched no input tile (e.g. outside the
+    /// source extent, or in a `RasterStacker` union grid) must still produce a
+    /// tile rather than fail the query.
+    #[tokio::test]
+    async fn it_folds_to_an_empty_tile_when_no_input_tiles_arrive() {
+        use geoengine_datatypes::raster::GridSize;
+
+        let accu = ReTileAccu::<u8> {
+            output_tile_info: TileInformation {
+                global_geo_transform: GeoTransform::test_default(),
+                tile_position: TileIdx::new_y_x(0, 0),
+                tile_size: TileSize::new_y_x(4, 4),
+            },
+            output_grid: GridOrEmpty::new_empty_shape(
+                GridBoundingBox2D::new_min_max(0, 3, 0, 3).unwrap(),
+            ),
+            input_geo_transform: GeoTransform::test_default(),
+            time: None,
+            cache_hint: CacheHint::max_duration(),
+            pool: std::sync::Arc::new(rayon::ThreadPoolBuilder::new().build().unwrap()),
+        };
+
+        let tile = accu.into_tile().await.expect("must not fail");
+
+        assert_eq!(tile.time, TimeInterval::default());
+        assert_eq!(tile.grid_array.shape_ref().axis_size_y(), 4);
+        assert_eq!(tile.grid_array.shape_ref().axis_size_x(), 4);
     }
 
     #[tokio::test]
