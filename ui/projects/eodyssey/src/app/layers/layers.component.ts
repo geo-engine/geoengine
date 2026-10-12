@@ -7,7 +7,7 @@ import {MatListModule} from '@angular/material/list';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, RasterSymbology, Time} from '@geoengine/common';
 import {toSignal} from '@angular/core/rxjs-interop';
-import type {DataSourceDefinition, VisualizationPreset} from './data-sources';
+import type {DataSourceDefinition} from './data-sources';
 import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatSelectModule} from '@angular/material/select';
@@ -16,21 +16,21 @@ import {MatSelectModule} from '@angular/material/select';
     selector: 'geoengine-layers',
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
-        @if (catalogueError(); as error) {
+        @if (eodysseyLayerService.catalogueError(); as error) {
             <div class="catalogue-notice" role="alert">
                 <p class="catalogue-message catalogue-error">{{ error }}</p>
-                <button mat-stroked-button type="button" (click)="retryCatalogue()">Retry</button>
+                <button mat-stroked-button type="button" (click)="eodysseyLayerService.retryCatalogue()">Retry</button>
             </div>
-        } @else if (!catalogueLoading() && dataSources().length === 0) {
+        } @else if (!eodysseyLayerService.catalogueLoading() && eodysseyLayerService.dataSources().length === 0) {
             <div class="catalogue-notice" role="status">
                 <p class="catalogue-message">No data sources are available for this configuration.</p>
-                <button mat-stroked-button type="button" (click)="retryCatalogue()">Retry</button>
+                <button mat-stroked-button type="button" (click)="eodysseyLayerService.retryCatalogue()">Retry</button>
             </div>
         }
 
         <section class="panel-section" aria-labelledby="data-source-heading">
             <h2 id="data-source-heading">Data Source</h2>
-            @if (catalogueLoading()) {
+            @if (eodysseyLayerService.catalogueLoading()) {
                 <div class="catalogue-loading" role="status">
                     <mat-spinner diameter="24" aria-label="Loading data sources"></mat-spinner>
                     <span>Loading data sources…</span>
@@ -39,13 +39,13 @@ import {MatSelectModule} from '@angular/material/select';
             <mat-selection-list
                 [multiple]="false"
                 class="data-sources"
-                [attr.aria-busy]="catalogueLoading()"
+                [attr.aria-busy]="eodysseyLayerService.catalogueLoading()"
                 (selectionChange)="onDataSourceSelectionChange($event.options)"
             >
-                @for (dataSource of dataSources(); track dataSource.key) {
+                @for (dataSource of eodysseyLayerService.dataSources(); track dataSource.key) {
                     <mat-list-option
                         [value]="dataSource.key"
-                        [selected]="selectedDataSource()?.key === dataSource.key"
+                        [selected]="eodysseyLayerService.selectedDataSource()?.key === dataSource.key"
                         [matTooltip]="dataSource.name"
                     >
                         <span matListItemTitle>{{ dataSource.name }}</span>
@@ -55,32 +55,36 @@ import {MatSelectModule} from '@angular/material/select';
         </section>
         <mat-divider></mat-divider>
 
-        @if (currentVariants().length > 1) {
+        @if (eodysseyLayerService.currentVariants().length > 1) {
             <section class="panel-section" aria-labelledby="region-heading">
                 <h2 id="region-heading">Region</h2>
                 <mat-form-field appearance="outline" subscriptSizing="dynamic" class="region-select">
                     <mat-label>Available region</mat-label>
-                    <mat-select panelWidth="320px" [value]="selectedVariant().key" (selectionChange)="setSelectedVariant($event.value)">
-                        @for (variant of sortedVariants(); track variant.key) {
+                    <mat-select
+                        panelWidth="320px"
+                        [value]="eodysseyLayerService.selectedVariant().key"
+                        (selectionChange)="eodysseyLayerService.setSelectedVariant($event.value)"
+                    >
+                        @for (variant of eodysseyLayerService.sortedVariants(); track variant.key) {
                             <mat-option [value]="variant.key">{{ variant.name }} ({{ variant.crs }})</mat-option>
                         }
                     </mat-select>
                 </mat-form-field>
-                @if (hasCoverageVariants()) {
+                @if (eodysseyLayerService.hasCoverageVariants()) {
                     <button
                         mat-stroked-button
                         type="button"
                         class="map-center-action"
                         aria-label="Select region at map center"
                         aria-describedby="map-center-hint"
-                        [disabled]="!mapCenterVariantKey()"
-                        (click)="selectMapCenterVariant()"
+                        [disabled]="!eodysseyLayerService.mapCenterVariantKey()"
+                        (click)="eodysseyLayerService.selectMapCenterVariant()"
                     >
                         <mat-icon>my_location</mat-icon>
                         Select at map center
                     </button>
                     <p id="map-center-hint" class="catalogue-message">Choose the region covering the center of the map.</p>
-                    @if (mapCenterSelectionMessage(); as message) {
+                    @if (eodysseyLayerService.mapCenterSelectionMessage(); as message) {
                         <p class="catalogue-message" role="status">{{ message }}</p>
                     }
                 } @else {
@@ -131,30 +135,35 @@ import {MatSelectModule} from '@angular/material/select';
 
         <section class="panel-section" aria-labelledby="presets-heading">
             <h2 id="presets-heading">Visualization Presets</h2>
-            @if (catalogueLoading() || variantLoading()) {
+            @if (eodysseyLayerService.catalogueLoading() || eodysseyLayerService.variantLoading()) {
                 <div class="catalogue-loading" role="status">
                     <mat-spinner diameter="24" aria-label="Loading visualization presets"></mat-spinner>
                     <span>Loading visualization presets…</span>
                 </div>
             }
-            @if (variantError(); as error) {
+            @if (eodysseyLayerService.variantError(); as error) {
                 <div role="alert">
                     <p class="catalogue-message catalogue-error">{{ error }}</p>
-                    <button mat-stroked-button type="button" class="retry-variant" (click)="retryVariant()">Retry</button>
+                    <button mat-stroked-button type="button" class="retry-variant" (click)="eodysseyLayerService.retryVariant()">
+                        Retry
+                    </button>
                 </div>
             }
-            <mat-nav-list class="visualization-presets" [attr.aria-busy]="catalogueLoading() || variantLoading()">
-                @for (preset of currentPresets(); track preset.key) {
+            <mat-nav-list
+                class="visualization-presets"
+                [attr.aria-busy]="eodysseyLayerService.catalogueLoading() || eodysseyLayerService.variantLoading()"
+            >
+                @for (preset of eodysseyLayerService.currentPresets(); track preset.key) {
                     <mat-list-item
-                        [activated]="preset === selectedPreset()"
-                        [class.preset-active]="preset === selectedPreset()"
-                        [attr.aria-current]="preset === selectedPreset() ? 'true' : null"
-                        (click)="selectPreset(preset)"
+                        [activated]="preset === eodysseyLayerService.selectedPreset()"
+                        [class.preset-active]="preset === eodysseyLayerService.selectedPreset()"
+                        [attr.aria-current]="preset === eodysseyLayerService.selectedPreset() ? 'true' : null"
+                        (click)="eodysseyLayerService.setSelectedPreset(preset.key)"
                         [matTooltip]="preset.displayName"
                         [style.backgroundImage]="'linear-gradient(transparent, rgba(0, 0, 0, 0.65)), url(' + preset.backgroundImage + ')'"
                     >
                         <span matListItemTitle>{{ preset.displayName }}</span>
-                        @if (preset === selectedPreset()) {
+                        @if (preset === eodysseyLayerService.selectedPreset()) {
                             <span matListItemMeta class="preset-selected-indicator" aria-hidden="true">
                                 <mat-icon>check</mat-icon>
                             </span>
@@ -163,7 +172,13 @@ import {MatSelectModule} from '@angular/material/select';
                 }
             </mat-nav-list>
             <div class="apply-preset-action">
-                <button mat-flat-button color="primary" type="button" [disabled]="!canApplyPreset()" (click)="applySelectedPreset()">
+                <button
+                    mat-flat-button
+                    color="primary"
+                    type="button"
+                    [disabled]="!eodysseyLayerService.canApplyPreset()"
+                    (click)="applySelectedPreset()"
+                >
                     Apply visualization
                 </button>
             </div>
@@ -480,26 +495,8 @@ export class LayersComponent {
         if (!time) return undefined;
         return time.start.toDate();
     });
-    readonly dataSources = this.eodysseyLayerService.dataSources;
-    readonly catalogueLoading = this.eodysseyLayerService.catalogueLoading;
-    readonly catalogueError = this.eodysseyLayerService.catalogueError;
-    readonly variantLoading = this.eodysseyLayerService.variantLoading;
-    readonly variantError = this.eodysseyLayerService.variantError;
 
     readonly autoSelectTime = signal<boolean>(true);
-
-    readonly selectedDataSource = this.eodysseyLayerService.selectedDataSource;
-    readonly currentVariants = this.eodysseyLayerService.currentVariants;
-    readonly sortedVariants = this.eodysseyLayerService.sortedVariants;
-    readonly hasCoverageVariants = this.eodysseyLayerService.hasCoverageVariants;
-    readonly mapCenterVariantKey = this.eodysseyLayerService.mapCenterVariantKey;
-    readonly mapCenterSelectionMessage = this.eodysseyLayerService.mapCenterSelectionMessage;
-    readonly selectedVariant = this.eodysseyLayerService.selectedVariant;
-    readonly currentPresets = this.eodysseyLayerService.currentPresets;
-    readonly selectedPresetIndex = this.eodysseyLayerService.selectedPresetIndex;
-    readonly selectedPreset = this.eodysseyLayerService.selectedPreset;
-    readonly canApplyPreset = this.eodysseyLayerService.canApplyPreset;
-    readonly mapTileLayer = this.eodysseyLayerService.mapTileLayer;
 
     readonly legendLayer = resource({
         params: () => ({layerId: this.eodysseyLayerService.mapTileLayer()}),
@@ -535,35 +532,14 @@ export class LayersComponent {
 
     /** Only show the legend if there is a map tile layer and the legend is either loading, in error state, or has a value. */
     readonly isLegendVisible = computed(
-        () => !!this.mapTileLayer() && (this.legendLayer.isLoading() || this.legendLayer.status() === 'error' || !!this.legend()),
+        () =>
+            !!this.eodysseyLayerService.mapTileLayer() &&
+            (this.legendLayer.isLoading() || this.legendLayer.status() === 'error' || !!this.legend()),
     );
-
-    readonly retryCatalogue = (): void => this.eodysseyLayerService.retryCatalogue();
-    readonly retryVariant = (): void => this.eodysseyLayerService.retryVariant();
 
     onDataSourceSelectionChange(options: readonly {value: string}[]): void {
         const selected = options[0]?.value;
-        if (!selected) return;
-        void this.setSelectedDataSource(selected);
-    }
-
-    setSelectedDataSource(key: string): void {
-        const dataSource = this.dataSources().find((d) => d.key === key);
-        if (!dataSource) return;
-        this.eodysseyLayerService.setSelectedDataSource(dataSource.key);
-    }
-
-    onVariantSelectionChange(options: readonly {value: string}[]): void {
-        const selected = options[0]?.value;
-        if (selected) this.eodysseyLayerService.setSelectedVariant(selected);
-    }
-
-    setSelectedVariant(key: string): void {
-        this.eodysseyLayerService.setSelectedVariant(key);
-    }
-
-    selectMapCenterVariant(): void {
-        this.eodysseyLayerService.selectMapCenterVariant();
+        if (selected) this.eodysseyLayerService.setSelectedDataSource(selected);
     }
 
     private async applyDataSourceTime(dataSource: DataSourceDefinition): Promise<void> {
@@ -571,14 +547,10 @@ export class LayersComponent {
         if (dataSource.defaultTimeStep) this.projectService.setTimeStepDuration(dataSource.defaultTimeStep);
     }
 
-    selectPreset(preset: VisualizationPreset): void {
-        this.eodysseyLayerService.setSelectedPreset(preset.key);
-    }
-
     applySelectedPreset(): void {
-        if (!this.canApplyPreset()) return;
+        if (!this.eodysseyLayerService.canApplyPreset()) return;
 
-        const source = this.selectedDataSource();
+        const source = this.eodysseyLayerService.selectedDataSource();
         const sourceChanged = source !== this.eodysseyLayerService.appliedDataSource();
         this.eodysseyLayerService.applySelectedPreset();
         if (source && sourceChanged) void this.applyDataSourceTime(source);

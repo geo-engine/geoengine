@@ -349,7 +349,7 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         expect(element.textContent).toContain('Catalogue unavailable');
         expect(element.querySelectorAll('mat-spinner').length).toBe(0);
-        fixture.componentInstance.retryCatalogue();
+        eodysseyLayerService.retryCatalogue();
         fixture.detectChanges();
         expect(element.querySelectorAll('mat-spinner').length).toBe(2);
         await fixture.whenStable();
@@ -389,30 +389,30 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         const element = fixture.nativeElement as HTMLElement;
         const button = [...element.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('Apply visualization'))!;
-        expect(fixture.componentInstance.dataSources().map((source) => source.key)).toEqual(['sentinel']);
-        expect(fixture.componentInstance.mapTileLayer()).toBeUndefined();
+        expect(eodysseyLayerService.dataSources().map((source) => source.key)).toEqual(['sentinel']);
+        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
         expect(button.disabled).toBe(true);
         expect(setTime).not.toHaveBeenCalled();
         expect(setTimeStepDuration).not.toHaveBeenCalled();
 
-        fixture.componentInstance.selectPreset(fixture.componentInstance.currentPresets()[0]);
+        eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[0].key);
         fixture.detectChanges();
         expect(button.disabled).toBe(false);
         button.click();
         fixture.detectChanges();
-        expect(fixture.componentInstance.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
+        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
         expect(button.disabled).toBe(true);
         await fixture.whenStable();
         expect(setTime).toHaveBeenCalledWith(new Time(new Date(1775001600000)));
         expect(setTimeStepDuration).toHaveBeenCalledWith({durationAmount: 1, durationUnit: 'day'});
 
-        fixture.componentInstance.selectPreset(fixture.componentInstance.currentPresets()[1]);
+        eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[1].key);
         fixture.detectChanges();
         expect(button.disabled).toBe(false);
-        expect(fixture.componentInstance.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
+        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
         button.click();
         fixture.detectChanges();
-        expect(fixture.componentInstance.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'alternate'});
+        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'alternate'});
         expect(button.disabled).toBe(true);
         await fixture.whenStable();
         expect(setTime).toHaveBeenCalledTimes(1);
@@ -464,11 +464,11 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         await fixture.whenStable();
         const component = fixture.componentInstance;
-        component.selectPreset(component.currentPresets()[0]);
+        eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[0].key);
         component.applySelectedPreset();
         fixture.detectChanges();
         await fixture.whenStable();
-        const appliedLayer = component.mapTileLayer();
+        const appliedLayer = eodysseyLayerService.mapTileLayer();
         const appliedSource = eodysseyLayerService.appliedDataSource();
         expect(appliedLayer).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
         expect(setTime).toHaveBeenCalledWith(new Time(new Date(1775001600000)));
@@ -476,20 +476,20 @@ describe('LayersComponent', () => {
         setTimeStepDuration.mockClear();
         getLayer.mockClear();
 
-        component.setSelectedDataSource('other');
+        eodysseyLayerService.setSelectedDataSource('other');
         fixture.detectChanges();
         await fixture.whenStable();
-        await vi.waitFor(() => expect(component.currentPresets()).toHaveLength(1));
-        expect(component.selectedDataSource()?.key).toBe('other');
-        expect(component.mapTileLayer()).toBe(appliedLayer);
+        await vi.waitFor(() => expect(eodysseyLayerService.currentPresets()).toHaveLength(1));
+        expect(eodysseyLayerService.selectedDataSource()?.key).toBe('other');
+        expect(eodysseyLayerService.mapTileLayer()).toBe(appliedLayer);
         expect(eodysseyLayerService.appliedDataSource()).toBe(appliedSource);
-        expect(component.selectedPreset()).toBeUndefined();
-        expect(component.canApplyPreset()).toBe(false);
-        component.selectPreset(component.currentPresets()[0]);
+        expect(eodysseyLayerService.selectedPreset()).toBeUndefined();
+        expect(eodysseyLayerService.canApplyPreset()).toBe(false);
+        eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[0].key);
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(component.canApplyPreset()).toBe(true);
-        expect(component.mapTileLayer()).toBe(appliedLayer);
+        expect(eodysseyLayerService.canApplyPreset()).toBe(true);
+        expect(eodysseyLayerService.mapTileLayer()).toBe(appliedLayer);
         expect(setTime).not.toHaveBeenCalled();
         expect(setTimeStepDuration).not.toHaveBeenCalled();
         expect(getLayer).not.toHaveBeenCalled();
@@ -497,7 +497,7 @@ describe('LayersComponent', () => {
         component.applySelectedPreset();
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(component.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'other'});
+        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'other'});
         expect(eodysseyLayerService.appliedDataSource()?.key).toBe('other');
         expect(setTime).toHaveBeenCalledWith(new Time(new Date(1775088000000)));
         expect(setTimeStepDuration).toHaveBeenCalledWith({durationAmount: 2, durationUnit: 'days'});
@@ -507,21 +507,21 @@ describe('LayersComponent', () => {
         component.autoSelectTime.set(false);
         fixture.detectChanges();
         await fixture.whenStable();
-        component.setSelectedDataSource('sentinel');
+        eodysseyLayerService.setSelectedDataSource('sentinel');
         fixture.detectChanges();
         await fixture.whenStable();
-        component.selectPreset(component.currentPresets()[0]);
+        eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[0].key);
         component.applySelectedPreset();
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(component.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
+        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
         expect(setTime).not.toHaveBeenCalled();
     });
 
     it('preserves the applied layer and time when returning to the layers panel', async () => {
         fixture.detectChanges();
         await fixture.whenStable();
-        fixture.componentInstance.selectPreset(fixture.componentInstance.currentPresets()[0]);
+        eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[0].key);
         fixture.componentInstance.applySelectedPreset();
         fixture.detectChanges();
         await fixture.whenStable();
@@ -533,7 +533,7 @@ describe('LayersComponent', () => {
         fixture = TestBed.createComponent(LayersComponent);
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(fixture.componentInstance.mapTileLayer()).toBe(appliedLayer);
+        expect(eodysseyLayerService.mapTileLayer()).toBe(appliedLayer);
         expect(setTime).not.toHaveBeenCalled();
         expect(setTimeStepDuration).not.toHaveBeenCalled();
     });
@@ -544,7 +544,7 @@ describe('LayersComponent', () => {
         await fixture.whenStable();
         const component = fixture.componentInstance;
         const element = fixture.nativeElement as HTMLElement;
-        component.selectPreset(component.currentPresets()[0]);
+        eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[0].key);
         fixture.detectChanges();
         await fixture.whenStable();
         expect(getLayer).not.toHaveBeenCalled();
@@ -556,9 +556,9 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         expect(getLayer).toHaveBeenCalledWith('provider', 'vv');
         expect(element.querySelector('.legend-error')?.textContent).toContain('Failed to load legend');
-        expect(component.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
+        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
 
-        component.selectPreset(component.currentPresets()[1]);
+        eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[1].key);
         fixture.detectChanges();
         await fixture.whenStable();
         expect(getLayer).toHaveBeenCalledTimes(1);
@@ -571,9 +571,9 @@ describe('LayersComponent', () => {
     it('loads source and region collections and fetches presets from the single selected region', async () => {
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(fixture.componentInstance.dataSources()).toHaveLength(1);
+        expect(eodysseyLayerService.dataSources()).toHaveLength(1);
         expect(eodysseyLayerService.selectedVariant()?.collectionId).toBe('region');
-        expect(fixture.componentInstance.currentPresets().map((preset) => preset.displayName)).toEqual(['Default', 'Alternate']);
+        expect(eodysseyLayerService.currentPresets().map((preset) => preset.displayName)).toEqual(['Default', 'Alternate']);
         expect(getLayerCollectionItems.mock.calls.map((call) => call[1])).toEqual([
             LAYER_DB_ROOT_COLLECTION_ID,
             'edv',
