@@ -1,6 +1,6 @@
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {BehaviorSubject, Observable, of} from 'rxjs';
+import {Observable, of} from 'rxjs';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {MapService, ProjectService} from '@geoengine/core';
 import type {CollectionItem} from '@geoengine/api-client';
@@ -20,7 +20,7 @@ describe('LayersComponent', () => {
     const setTime = vi.fn().mockResolvedValue(undefined);
     const setTimeStepDuration = vi.fn();
     let mapView: View;
-    let mapViews: BehaviorSubject<View>;
+    let mapService: MapService;
     const listings: Record<string, {items: unknown[]}> = {
         [LAYER_DB_ROOT_COLLECTION_ID]: {
             items: [{type: 'collection', name: 'EDV', id: {providerId: 'provider', collectionId: 'edv'}, description: ''}],
@@ -138,7 +138,6 @@ describe('LayersComponent', () => {
         registerAndGetLayerWorkflowId.mockReset().mockResolvedValue('workflow-id');
         getWorkflowIdMetadata.mockReset();
         mapView = new View({projection: 'EPSG:4326'});
-        mapViews = new BehaviorSubject(mapView);
         await TestBed.configureTestingModule({
             imports: [LayersComponent],
             providers: [
@@ -148,10 +147,7 @@ describe('LayersComponent', () => {
                     useValue: {getLayerCollectionItems, getLayer, registerAndGetLayerWorkflowId, getWorkflowIdMetadata},
                 },
                 EOdysseyLayerService,
-                {
-                    provide: MapService,
-                    useValue: {getViewStream: (): Observable<View> => mapViews.asObservable(), getView: (): View => mapViews.value},
-                },
+                MapService,
                 {
                     provide: ProjectService,
                     useValue: {
@@ -163,6 +159,8 @@ describe('LayersComponent', () => {
                 },
             ],
         }).compileComponents();
+        mapService = TestBed.inject(MapService);
+        mapService.setView(mapView);
         eodysseyLayerService = TestBed.inject(EOdysseyLayerService);
         fixture = TestBed.createComponent(LayersComponent);
     });
@@ -194,7 +192,8 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         await fixture.whenStable();
         const replacement = new View({projection: 'EPSG:4326'});
-        mapViews.next(replacement);
+        mapService.setView(replacement);
+        fixture.detectChanges();
         expect(eodysseyLayerService.mapCenter()).toBeUndefined();
         mapView.setCenter([148.5, -35.5]);
         expect(eodysseyLayerService.mapCenter()).toBeUndefined();
@@ -206,6 +205,17 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         await fixture.whenStable();
         expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:32655');
+    });
+
+    it('removes the map center listener when the service is destroyed', async () => {
+        mapView.setCenter([9, 50]);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.mapCenter()).toEqual({longitude: 9, latitude: 50});
+
+        TestBed.resetTestingModule();
+        mapView.setCenter([148.5, -35.5]);
+        expect(eodysseyLayerService.mapCenter()).toEqual({longitude: 9, latitude: 50});
     });
 
     it('preserves a manual variant chosen before the map initializes', async () => {

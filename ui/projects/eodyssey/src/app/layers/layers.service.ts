@@ -1,11 +1,9 @@
-import {computed, DestroyRef, effect, inject, resource, ResourceRef, Service, signal, untracked} from '@angular/core';
-import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
+import {computed, effect, inject, resource, ResourceRef, Service, signal, untracked} from '@angular/core';
 import {CollectionItem, TimeStepFromJSON} from '@geoengine/api-client';
 import {MapService} from '@geoengine/core';
 import {LAYER_DB_PROVIDER_ID, LAYER_DB_ROOT_COLLECTION_ID, LayersService, timeStepDictTotimeStepDuration} from '@geoengine/common';
 import {toLonLat} from 'ol/proj';
 import {unByKey} from 'ol/Observable';
-import type {EventsKey} from 'ol/events';
 import {coverageContains, parseCoverage} from './coverage';
 import type {GeographicCenter} from './coverage';
 import {DataSourceDefinition, DataSourceLayer, DataSourceVariant, VisualizationPreset} from './data-sources';
@@ -17,7 +15,6 @@ import {DataSourceDefinition, DataSourceLayer, DataSourceVariant, VisualizationP
 export class EOdysseyLayerService {
     readonly layerService = inject(LayersService);
     private readonly mapService = inject(MapService);
-    private readonly destroyRef = inject(DestroyRef);
 
     readonly selectedDataSource = signal<DataSourceDefinition | undefined>(undefined);
     readonly selectedVariantKey = signal<string | undefined>(undefined);
@@ -25,7 +22,6 @@ export class EOdysseyLayerService {
     readonly selectedPresetIndex = signal(0);
     readonly mapCenter = signal<GeographicCenter | undefined>(undefined);
     private pendingCenterSelection = true;
-    private viewCenterListener?: EventsKey;
     /** Snapshot of the visualization on the map, independent of the pending catalogue selection. */
     private readonly appliedVisualization = signal<{source: DataSourceDefinition; preset: VisualizationPreset} | undefined>(undefined);
     readonly appliedDataSource = computed(() => this.appliedVisualization()?.source);
@@ -115,16 +111,11 @@ export class EOdysseyLayerService {
     });
 
     constructor() {
-        this.mapService
-            .getViewStream()
-            .pipe(takeUntilDestroyed(this.destroyRef))
-            .subscribe((view) => {
-                if (this.viewCenterListener) unByKey(this.viewCenterListener);
-                this.viewCenterListener = view.on('change:center', () => this.updateMapCenter());
-                this.updateMapCenter();
-            });
-        this.destroyRef.onDestroy(() => {
-            if (this.viewCenterListener) unByKey(this.viewCenterListener);
+        effect((onCleanup) => {
+            const view = this.mapService.view();
+            const listener = view.on('change:center', () => this.updateMapCenter());
+            untracked(() => this.updateMapCenter());
+            onCleanup(() => unByKey(listener));
         });
         effect(() => {
             if (this.catalogueLoading()) {
