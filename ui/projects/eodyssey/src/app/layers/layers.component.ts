@@ -326,6 +326,7 @@ import {MatSelectModule} from '@angular/material/select';
                 .time-controls {
                     display: flex;
                     align-items: center;
+                    justify-content: center;
                     gap: 0.25rem;
                 }
 
@@ -340,7 +341,6 @@ import {MatSelectModule} from '@angular/material/select';
                 }
 
                 .calendar-open {
-                    flex: 1;
                     min-width: 0;
                     padding: 0 0.5rem;
                     border-radius: 0.5rem;
@@ -348,8 +348,11 @@ import {MatSelectModule} from '@angular/material/select';
                 }
 
                 button[matIconButton] {
-                    display: inline-flex; /* Icons are vertically centered differently otherwise. */
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
                     flex-shrink: 0;
+                    padding: 0;
                     --mat-icon-button-state-layer-size: 2.5rem;
                 }
             }
