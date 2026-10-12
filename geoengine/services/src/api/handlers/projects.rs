@@ -8,7 +8,7 @@ use crate::projects::{
     ProjectVersion, ProjectVersionId,
 };
 use crate::util::extractors::{ValidatedJson, ValidatedQuery};
-use actix_web::{FromRequest, HttpResponse, Responder, ResponseError, web};
+use actix_web::{FromRequest, HttpResponse, ResponseError, web};
 use geoengine_datatypes::util::helpers::ge_report;
 use snafu::ResultExt;
 use snafu::prelude::*;
@@ -151,7 +151,7 @@ pub(crate) async fn list_projects_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     options: ValidatedQuery<ProjectListOptions>,
-) -> Result<impl Responder, ProjectHandlerError> {
+) -> Result<web::Json<Vec<ProjectListing>>, ProjectHandlerError> {
     let options = options.into_inner();
     let listing = app_ctx
         .session_context(session)
@@ -184,7 +184,7 @@ pub(crate) async fn update_project_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     update: ValidatedJson<UpdateProject>,
-) -> Result<impl Responder, ProjectHandlerError> {
+) -> Result<HttpResponse, ProjectHandlerError> {
     let mut update: crate::projects::UpdateProject = update.into_inner().into();
     update.id = project.into_inner(); // TODO: avoid passing project id in path AND body
     app_ctx
@@ -193,7 +193,7 @@ pub(crate) async fn update_project_handler<C: ApplicationContext>(
         .update_project(update)
         .await
         .context(error::UpdateProject)?;
-    Ok(HttpResponse::Ok())
+    Ok(HttpResponse::Ok().finish())
 }
 
 /// Deletes a project.
@@ -215,14 +215,14 @@ pub(crate) async fn delete_project_handler<C: ApplicationContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder, ProjectHandlerError> {
+) -> Result<HttpResponse, ProjectHandlerError> {
     app_ctx
         .session_context(session)
         .db()
         .delete_project(*project)
         .await
         .context(error::DeleteProject)?;
-    Ok(HttpResponse::Ok())
+    Ok(HttpResponse::Ok().finish())
 }
 
 /// Retrieves details about the given version of a project.
@@ -279,7 +279,7 @@ pub(crate) async fn load_project_version_handler<C: ApplicationContext>(
     project: web::Path<(ProjectId, ProjectVersionId)>,
     session: C::Session,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder, ProjectHandlerError> {
+) -> Result<web::Json<Project>, ProjectHandlerError> {
     let project = project.into_inner();
     let id = app_ctx
         .session_context(session)
@@ -343,7 +343,7 @@ pub(crate) async fn load_project_latest_handler<C: ApplicationContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder, ProjectHandlerError> {
+) -> Result<web::Json<Project>, ProjectHandlerError> {
     let id = app_ctx
         .session_context(session)
         .db()
@@ -385,7 +385,7 @@ pub(crate) async fn project_versions_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     project: web::Path<ProjectId>,
-) -> Result<impl Responder, ProjectHandlerError> {
+) -> Result<web::Json<Vec<ProjectVersion>>, ProjectHandlerError> {
     let versions = app_ctx
         .session_context(session)
         .db()
