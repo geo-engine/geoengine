@@ -1024,6 +1024,16 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         expect(eodysseyLayerService.selectedPresetKey()).toBeUndefined();
         expect(eodysseyLayerService.canApplyPreset()).toBe(false);
+
+        // A cached region allows choosing a preset before effects run.
+        eodysseyLayerService.setSelectedVariant('EPSG:32632');
+        expect(eodysseyLayerService.selectedPreset()).toBeUndefined();
+        eodysseyLayerService.setSelectedPreset('ndvi');
+        expect(eodysseyLayerService.selectedPresetIndex()).toBe(1);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.selectedPresetKey()).toBe('ndvi');
+        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('red33');
     });
 
     it('keeps an in-flight variant load alive when retrying another variant', async () => {

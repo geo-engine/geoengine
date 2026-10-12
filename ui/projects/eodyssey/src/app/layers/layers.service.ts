@@ -1,4 +1,4 @@
-import {computed, effect, inject, resource, ResourceRef, Service, signal, untracked} from '@angular/core';
+import {computed, effect, inject, linkedSignal, resource, ResourceRef, Service, signal, untracked} from '@angular/core';
 import {CollectionItem, TimeStepFromJSON} from '@geoengine/api-client';
 import {MapService} from '@geoengine/core';
 import {LAYER_DB_PROVIDER_ID, LAYER_DB_ROOT_COLLECTION_ID, LayersService, timeStepDictTotimeStepDuration} from '@geoengine/common';
@@ -16,12 +16,38 @@ export class EOdysseyLayerService {
     readonly layerService = inject(LayersService);
     private readonly mapService = inject(MapService);
 
-    readonly selectedDataSource = signal<DataSourceDefinition | undefined>(undefined);
-    readonly selectedVariantKey = signal<string | undefined>(undefined);
-    readonly selectedPresetKey = signal<string | undefined>(undefined);
-    readonly selectedPresetIndex = signal(0);
+    readonly selectedDataSource = linkedSignal<DataSourceDefinition[] | undefined, DataSourceDefinition | undefined>({
+        source: () => (this.catalogueLoading() ? undefined : this.dataSources()),
+        computation: (sources, previous) => {
+            if (!sources) return previous?.value;
+            return sources.find((source) => source.key === previous?.value?.key) ?? sources[0];
+        },
+    });
+    readonly selectedVariantKey = linkedSignal<DataSourceDefinition | undefined, string | undefined>({
+        source: () => this.selectedDataSource(),
+        computation: (source, previous) => {
+            if (!source) return undefined;
+            const preferredKey =
+                previous?.source?.key === source.key ? previous.value : untracked(() => this.getMapCenterVariantKey(source));
+            return source.variants.find((variant) => variant.key === preferredKey)?.key ?? source.variants[0]?.key;
+        },
+    });
+    readonly selectedPresetKey = linkedSignal<string | undefined>(() => {
+        this.selectedDataSource();
+        this.selectedVariantKey();
+        return undefined;
+    });
+    readonly selectedPresetIndex = computed(() =>
+        Math.max(
+            0,
+            this.currentPresets().findIndex((preset) => preset.key === this.selectedPresetKey()),
+        ),
+    );
     readonly mapCenter = signal<GeographicCenter | undefined>(undefined);
-    private pendingCenterSelection = true;
+    private readonly pendingCenterSelection = linkedSignal({
+        source: () => this.selectedDataSource()?.key,
+        computation: () => !untracked(this.mapCenter),
+    });
     /** Snapshot of the visualization on the map, independent of the pending catalogue selection. */
     private readonly appliedVisualization = signal<{source: DataSourceDefinition; preset: VisualizationPreset} | undefined>(undefined);
     readonly appliedDataSource = computed(() => this.appliedVisualization()?.source);
@@ -122,34 +148,9 @@ export class EOdysseyLayerService {
                 this.invalidateVariantPresets();
                 return;
             }
-            const sources = this.dataSources();
-            if (!sources.length) {
-                this.selectedDataSource.set(undefined);
-                this.selectedVariantKey.set(undefined);
-                this.selectedPresetKey.set(undefined);
-                this.selectedPresetIndex.set(0);
-                return;
-            }
-
-            const current = this.selectedDataSource();
-            const next = current ? sources.find((source) => source.key === current.key) : undefined;
-            const selected = next ?? sources[0];
-            const sourceChanged = current?.key !== selected.key;
-            if (sourceChanged) this.pendingCenterSelection = true;
-            this.selectedDataSource.set(selected);
-
-            const wantedVariantKey = sourceChanged ? undefined : this.selectedVariantKey();
-            const centerVariantKey = sourceChanged ? this.getMapCenterVariantKey(selected) : undefined;
-            const variant =
-                selected.variants.find((candidate) => candidate.key === centerVariantKey) ??
-                selected.variants.find((candidate) => candidate.key === wantedVariantKey) ??
-                selected.variants[0];
-            this.selectedVariantKey.set(variant?.key);
-            if (sourceChanged && this.mapCenter()) this.pendingCenterSelection = false;
-
-            this.selectedPresetKey.set(undefined);
-            this.selectedPresetIndex.set(0);
-            if (variant) untracked(() => void this.ensureVariantPresets(selected, variant));
+            const source = this.selectedDataSource();
+            const variant = this.selectedVariant();
+            if (source && variant) untracked(() => void this.ensureVariantPresets(source, variant));
         });
     }
 
@@ -174,12 +175,6 @@ export class EOdysseyLayerService {
             return;
         }
         this.selectedDataSource.set(dataSource);
-        this.pendingCenterSelection = true;
-        const centerVariantKey = this.getMapCenterVariantKey(dataSource);
-        this.selectedVariantKey.set(centerVariantKey ?? dataSource.variants[0]?.key);
-        if (this.mapCenter()) this.pendingCenterSelection = false;
-        this.selectedPresetKey.set(undefined);
-        this.selectedPresetIndex.set(0);
     }
 
     setSelectedVariant(key: string): void {
@@ -187,12 +182,8 @@ export class EOdysseyLayerService {
         if (!variant) {
             return;
         }
-        if (this.selectedVariantKey() !== variant.key) {
-            this.selectedPresetKey.set(undefined);
-        }
-        this.pendingCenterSelection = false;
+        this.pendingCenterSelection.set(false);
         this.selectedVariantKey.set(variant.key);
-        this.selectedPresetIndex.set(0);
     }
 
     selectMapCenterVariant(): void {
@@ -207,7 +198,6 @@ export class EOdysseyLayerService {
             return;
         }
         this.selectedPresetKey.set(key);
-        this.selectedPresetIndex.set(index);
     }
 
     applySelectedPreset(): void {
@@ -394,6 +384,9 @@ export class EOdysseyLayerService {
     }
 
     private updateMapCenter(): void {
+        // Resolve the initial choice before updating the center so later pans preserve it.
+        const pendingCenterSelection = this.pendingCenterSelection();
+        this.selectedVariantKey();
         const view = this.mapService.getView();
         const center = view.getCenter();
         if (!center) {
@@ -408,10 +401,10 @@ export class EOdysseyLayerService {
         const geographicCenter = {longitude, latitude};
         this.mapCenter.set(geographicCenter);
         const source = this.selectedDataSource();
-        if (this.pendingCenterSelection && source) {
+        if (pendingCenterSelection && source) {
             const key = this.getMapCenterVariantKey(source);
             if (key && key !== this.selectedVariantKey()) this.setAutomaticVariant(key);
-            this.pendingCenterSelection = false;
+            this.pendingCenterSelection.set(false);
         }
     }
 
@@ -429,9 +422,7 @@ export class EOdysseyLayerService {
     }
 
     private setAutomaticVariant(key: string): void {
-        if (this.selectedVariantKey() !== key) this.selectedPresetKey.set(undefined);
         this.selectedVariantKey.set(key);
-        this.selectedPresetIndex.set(0);
     }
 }
 
