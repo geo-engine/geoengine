@@ -2,8 +2,8 @@ use gdal::raster::GdalType;
 use geoengine_datatypes::{
     primitives::{CacheTtlSeconds, TimeInterval},
     raster::{
-        ChangeGridBounds, EmptyGrid, GridBoundingBox2D, GridOrEmpty, Pixel, RasterProperties,
-        RasterTile2D, TileInformation,
+        ChangeGridBounds, EmptyGrid, GridBoundingBox2D, GridOrEmpty, Pixel, RasterTile2D,
+        TileInformation,
     },
 };
 use num::FromPrimitive;
@@ -61,6 +61,7 @@ impl GdalPoolReader {
         dataset_params: GdalDatasetParameters,
         reader_mode: GdalReaderMode,
         tile_information: TileInformation,
+        tile_raster: &GridOrEmpty<GridBoundingBox2D, T>,
     ) -> Result<Option<GridAndProperties<T, GridBoundingBox2D>>, GdalProcessPoolError> {
         let ds_spatial_grid = dataset_params.spatial_grid_definition();
         let tile_spatial_grid = tile_information.spatial_grid_definition();
@@ -73,6 +74,17 @@ impl GdalPoolReader {
             );
             return Ok(None);
         };
+
+        if tile_raster
+            .as_masked_grid()
+            .is_some_and(|grid| grid.all_valid_in_bbox(&local_read_advise.read_window_bounds))
+        {
+            trace!(
+                file = %dataset_params.file_path.display(),
+                "skipping file whose read area is covered by higher-z valid pixels"
+            );
+            return Ok(None);
+        }
 
         let file_tile = self
             .load_tile_data_process::<T>(dataset_params, local_read_advise)
@@ -109,18 +121,22 @@ impl GdalPoolReader {
         let mut tile_raster: GridOrEmpty<GridBoundingBox2D, T> =
             GridOrEmpty::from(EmptyGrid::new(tile_information.global_pixel_bounds()));
 
-        let mut properties = RasterProperties::default();
+        let mut properties = None;
         let cache_hint = loading_info.cache_hint(default_cache_ttl);
 
         let reader = Self::from(gdal_worker);
 
-        for dataset_params in tile_files {
+        // Highest z-index wins at each valid pixel. Read lower-priority files
+        // only where higher-priority files left gaps in the output mask.
+        // TODO: Use available coverage/no-data metadata to choose between parallel
+        // prefetching and lazy loading, while preserving per-pixel z-index priority.
+        for dataset_params in tile_files.into_iter().rev() {
             if let Some(file_tile) = reader
-                .load_tile_grid_props(dataset_params, reader_mode, tile_information)
+                .load_tile_grid_props(dataset_params, reader_mode, tile_information, &tile_raster)
                 .await?
             {
-                tile_raster.grid_blit_valid_only(&file_tile.grid);
-                properties = file_tile.properties;
+                tile_raster.grid_blit_fill_no_data(&file_tile.grid);
+                properties.get_or_insert(file_tile.properties);
             }
         }
 
@@ -130,7 +146,7 @@ impl GdalPoolReader {
             band,
             tile_information.global_geo_transform,
             tile_raster.unbounded(),
-            properties,
+            properties.unwrap_or_default(),
             cache_hint,
         ))
     }
