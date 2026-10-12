@@ -11,7 +11,7 @@
 import * as runtime from '../runtime';
 import type { GetMapExceptionFormat, WmsRequest, WmsResponseFormat, WmsService, WmsVersion } from '../models/index';
 export interface WmsHandlerRequest {
-    workflow: string;
+    processingGraph: string;
     request: WmsRequest;
     bbox?: string;
     bgcolor?: string | null;

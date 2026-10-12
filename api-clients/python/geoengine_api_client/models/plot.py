@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List
 from uuid import UUID
 from typing import Optional, Set
@@ -27,9 +27,9 @@ class Plot(BaseModel):
     """
     Plot
     """ # noqa: E501
-    workflow: UUID
+    processing_graph: UUID = Field(alias="processingGraph")
     name: StrictStr
-    __properties: ClassVar[List[str]] = ["workflow", "name"]
+    __properties: ClassVar[List[str]] = ["processingGraph", "name"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -82,7 +82,7 @@ class Plot(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "workflow": obj.get("workflow"),
+            "processingGraph": obj.get("processingGraph"),
             "name": obj.get("name")
         })
         return _obj

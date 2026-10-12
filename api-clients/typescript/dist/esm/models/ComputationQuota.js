@@ -18,7 +18,7 @@ export function instanceOfComputationQuota(value) {
         return false;
     if (!('computationId' in value) || value['computationId'] === undefined)
         return false;
-    if (!('workflowId' in value) || value['workflowId'] === undefined)
+    if (!('processingGraphId' in value) || value['processingGraphId'] === undefined)
         return false;
     if (!('count' in value) || value['count'] === undefined)
         return false;
@@ -34,7 +34,7 @@ export function ComputationQuotaFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'timestamp': (new Date(json['timestamp'])),
         'computationId': json['computationId'],
-        'workflowId': json['workflowId'],
+        'processingGraphId': json['processingGraphId'],
         'count': json['count'],
     };
 }
@@ -48,7 +48,7 @@ export function ComputationQuotaToJSONTyped(value, ignoreDiscriminator = false) 
     return {
         'timestamp': value['timestamp'].toISOString(),
         'computationId': value['computationId'],
-        'workflowId': value['workflowId'],
+        'processingGraphId': value['processingGraphId'],
         'count': value['count'],
     };
 }

@@ -44,7 +44,7 @@ class OGCWCSApi:
     @validate_call
     def wcs_handler(
         self,
-        workflow: Annotated[UUID, Field(description="Workflow id")],
+        processing_graph: Annotated[UUID, Field(description="Processing graph id")],
         request: Annotated[WcsRequest, Field(description="type of WCS request")],
         boundingbox: Optional[StrictStr] = None,
         format: Optional[GetCoverageFormat] = None,
@@ -75,8 +75,8 @@ class OGCWCSApi:
         """OGC WCS endpoint
 
 
-        :param workflow: Workflow id (required)
-        :type workflow: UUID
+        :param processing_graph: Processing graph id (required)
+        :type processing_graph: UUID
         :param request: type of WCS request (required)
         :type request: WcsRequest
         :param boundingbox:
@@ -128,7 +128,7 @@ class OGCWCSApi:
         """ # noqa: E501
 
         _param = self._wcs_handler_serialize(
-            workflow=workflow,
+            processing_graph=processing_graph,
             request=request,
             boundingbox=boundingbox,
             format=format,
@@ -166,7 +166,7 @@ class OGCWCSApi:
     @validate_call
     def wcs_handler_with_http_info(
         self,
-        workflow: Annotated[UUID, Field(description="Workflow id")],
+        processing_graph: Annotated[UUID, Field(description="Processing graph id")],
         request: Annotated[WcsRequest, Field(description="type of WCS request")],
         boundingbox: Optional[StrictStr] = None,
         format: Optional[GetCoverageFormat] = None,
@@ -197,8 +197,8 @@ class OGCWCSApi:
         """OGC WCS endpoint
 
 
-        :param workflow: Workflow id (required)
-        :type workflow: UUID
+        :param processing_graph: Processing graph id (required)
+        :type processing_graph: UUID
         :param request: type of WCS request (required)
         :type request: WcsRequest
         :param boundingbox:
@@ -250,7 +250,7 @@ class OGCWCSApi:
         """ # noqa: E501
 
         _param = self._wcs_handler_serialize(
-            workflow=workflow,
+            processing_graph=processing_graph,
             request=request,
             boundingbox=boundingbox,
             format=format,
@@ -288,7 +288,7 @@ class OGCWCSApi:
     @validate_call
     def wcs_handler_without_preload_content(
         self,
-        workflow: Annotated[UUID, Field(description="Workflow id")],
+        processing_graph: Annotated[UUID, Field(description="Processing graph id")],
         request: Annotated[WcsRequest, Field(description="type of WCS request")],
         boundingbox: Optional[StrictStr] = None,
         format: Optional[GetCoverageFormat] = None,
@@ -319,8 +319,8 @@ class OGCWCSApi:
         """OGC WCS endpoint
 
 
-        :param workflow: Workflow id (required)
-        :type workflow: UUID
+        :param processing_graph: Processing graph id (required)
+        :type processing_graph: UUID
         :param request: type of WCS request (required)
         :type request: WcsRequest
         :param boundingbox:
@@ -372,7 +372,7 @@ class OGCWCSApi:
         """ # noqa: E501
 
         _param = self._wcs_handler_serialize(
-            workflow=workflow,
+            processing_graph=processing_graph,
             request=request,
             boundingbox=boundingbox,
             format=format,
@@ -405,7 +405,7 @@ class OGCWCSApi:
 
     def _wcs_handler_serialize(
         self,
-        workflow,
+        processing_graph,
         request,
         boundingbox,
         format,
@@ -441,8 +441,8 @@ class OGCWCSApi:
         _body_params: Optional[bytes] = None
 
         # process the path parameters
-        if workflow is not None:
-            _path_params['workflow'] = workflow
+        if processing_graph is not None:
+            _path_params['processingGraph'] = processing_graph
         # process the query parameters
         if boundingbox is not None:
             
@@ -521,7 +521,7 @@ class OGCWCSApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/wcs/{workflow}',
+            resource_path='/wcs/{processingGraph}',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,

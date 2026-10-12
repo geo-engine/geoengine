@@ -40,7 +40,7 @@ export interface Layer {
      * @type {ProcessingGraph}
      * @memberof Layer
      */
-    workflow: ProcessingGraph;
+    processingGraph: ProcessingGraph;
     /**
      *
      * @type {Symbology}

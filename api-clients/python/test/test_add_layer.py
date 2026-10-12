@@ -37,7 +37,7 @@ class TestAddLayer(unittest.TestCase):
             return AddLayer(
                 name = 'Example Layer',
                 description = 'Example layer description',
-                workflow = None,
+                processing_graph = None,
                 symbology = None,
                 properties = [
                     [
@@ -52,7 +52,7 @@ class TestAddLayer(unittest.TestCase):
             return AddLayer(
                 name = 'Example Layer',
                 description = 'Example layer description',
-                workflow = None,
+                processing_graph = None,
         )
         """
 

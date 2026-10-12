@@ -300,11 +300,14 @@ export class LayersComponent {
 
             const layer = await this.layerService.getLayer(layerId.dataConnectorId, layerId.layerId);
 
-            const processingGraphId = await this.layerService.registerAndGetLayerWorkflowId(layerId.dataConnectorId, layerId.layerId);
+            const processingGraphId = await this.layerService.registerAndGetLayerProcessingGraphId(
+                layerId.dataConnectorId,
+                layerId.layerId,
+            );
 
             if (layer.symbology?.type !== 'raster') return undefined;
 
-            const metadata = await this.layerService.getWorkflowIdMetadata(processingGraphId);
+            const metadata = await this.layerService.getProcessingGraphIdMetadata(processingGraphId);
 
             if (!(metadata instanceof RasterLayerMetadata)) return undefined;
 
@@ -312,7 +315,7 @@ export class LayersComponent {
 
             const rasterLayer = new RasterLayer({
                 name: layer.name,
-                workflowId: processingGraphId,
+                processingGraphId,
                 isVisible: true,
                 isLegendVisible: true,
                 symbology: new RasterSymbology(rasterSymbology.opacity, RasterColorizer.fromDict(rasterSymbology.rasterColorizer)),

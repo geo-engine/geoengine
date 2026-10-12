@@ -17,8 +17,9 @@ impl Drop for DroppingServer {
 impl DroppingServer {
     fn new(schema_name: &str) -> Self {
         let process = Command::new(cargo_bin!("geoengine-server"))
-            .env("GEOENGINE_WEB__BACKEND", "postgres")
-            .env("GEOENGINE_POSTGRES__SCHEMA", schema_name)
+            .env("GEOENGINE__POSTGRES__SCHEMA", schema_name)
+            // the startup check only reads a limited number of lines
+            .env("GEOENGINE__LOGGING__LOG_SPEC", "info")
             .stderr(Stdio::piped())
             .spawn()
             .unwrap();
@@ -112,7 +113,7 @@ async fn it_starts_without_warnings_and_accepts_connections() {
     });
 
     client
-        .batch_execute(&format!("DROP SCHEMA {SCHEMA_NAME};"))
+        .batch_execute(&format!("DROP SCHEMA {SCHEMA_NAME} CASCADE;"))
         .await
         .unwrap();
 

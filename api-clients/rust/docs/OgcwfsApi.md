@@ -4,13 +4,13 @@ All URIs are relative to *https://geoengine.io/api*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**wfs_handler**](OgcwfsApi.md#wfs_handler) | **GET** /wfs/{workflow} | OGC WFS endpoint
+[**wfs_handler**](OgcwfsApi.md#wfs_handler) | **GET** /wfs/{processingGraph} | OGC WFS endpoint
 
 
 
 ## wfs_handler
 
-> models::GeoJson wfs_handler(workflow, request, bbox, count, filter, namespaces, property_name, result_type, service, sort_by, srs_name, time, type_names, version)
+> models::GeoJson wfs_handler(processing_graph, request, bbox, count, filter, namespaces, property_name, result_type, service, sort_by, srs_name, time, type_names, version)
 OGC WFS endpoint
 
 ### Parameters
@@ -18,7 +18,7 @@ OGC WFS endpoint
 
 Name | Type | Description  | Required | Notes
 ------------- | ------------- | ------------- | ------------- | -------------
-**workflow** | **uuid::Uuid** | Workflow id | [required] |
+**processing_graph** | **uuid::Uuid** | Processing graph id | [required] |
 **request** | [**WfsRequest**](WfsRequest.md) | type of WFS request | [required] |
 **bbox** | Option<**String**> |  |  |
 **count** | Option<**i64**> |  |  |

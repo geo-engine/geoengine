@@ -65,7 +65,7 @@ pub(crate) struct GetPlot {
 /// 2
 /// ```
 /// 2. Create a dataset from it using the "Plain Data" example at `/dataset`.
-/// 3. Create a statistics workflow using the "Statistics Plot" example at `/workflow`.
+/// 3. Create a statistics processing graph using the "Statistics Plot" example at `/processingGraphs`.
 /// 4. Generate the plot with this handler.
 #[utoipa::path(
     tag = "Plots",
@@ -91,7 +91,7 @@ pub(crate) struct GetPlot {
     ),
     params(
         GetPlot,
-        ("id", description = "Workflow id")
+        ("id", description = "Processing graph id")
     ),
     security(
         ("session_token" = [])
