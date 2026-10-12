@@ -358,6 +358,31 @@ describe('LayersComponent', () => {
         expect(element.textContent).not.toContain('Catalogue unavailable');
     });
 
+    it('offers retry for an empty catalogue and discovers sources added later', async () => {
+        let emptyCatalogue = true;
+        getLayerCollectionItems.mockImplementation((_provider, collection) =>
+            Promise.resolve(collection === 'edv' && emptyCatalogue ? {items: []} : (listings[collection] ?? {items: []})),
+        );
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        const element = fixture.nativeElement as HTMLElement;
+        expect(element.textContent).toContain('No data sources are available');
+        const retry = element.querySelector<HTMLButtonElement>('.catalogue-notice button');
+        expect(retry).not.toBeNull();
+
+        emptyCatalogue = false;
+        retry!.click();
+        fixture.detectChanges();
+        expect(element.querySelector('.data-sources')?.getAttribute('aria-busy')).toBe('true');
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(element.textContent).not.toContain('No data sources are available');
+        expect(element.textContent).toContain('Sentinel');
+        expect(eodysseyLayerService.dataSources()).toHaveLength(1);
+        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
+    });
+
     it('requires a preset selection and explicit apply, with the button tracking changes', async () => {
         fixture.detectChanges();
         await fixture.whenStable();

@@ -22,7 +22,10 @@ import {MatSelectModule} from '@angular/material/select';
                 <button mat-stroked-button type="button" (click)="retryCatalogue()">Retry</button>
             </div>
         } @else if (!catalogueLoading() && dataSources().length === 0) {
-            <p class="catalogue-message">No data sources are available for this configuration.</p>
+            <div class="catalogue-notice" role="status">
+                <p class="catalogue-message">No data sources are available for this configuration.</p>
+                <button mat-stroked-button type="button" (click)="retryCatalogue()">Retry</button>
+            </div>
         }
 
         <section class="panel-section" aria-labelledby="data-source-heading">
