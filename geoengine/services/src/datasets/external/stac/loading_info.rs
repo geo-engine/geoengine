@@ -14,7 +14,7 @@ use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::operations::reproject::ReprojectClipped;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, CacheTtlSeconds, RasterQueryRectangle, SpatialPartition2D,
-    TimeDimension, TimeInstance, TimeInterval, VectorQueryRectangle,
+    TimeDimension, TimeInstance, TimeInterval, TimeStepIter, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
 use geoengine_datatypes::spatial_reference::{
@@ -182,7 +182,7 @@ impl
             // Regular layers expose every step, including steps without any assets.
             // Their time axis is defined by the provider, so no STAC search is needed.
             return Ok(MultiBandGdalLoadingInfo::new(
-                RegularTimeStepIter::new(self.time_dimension, time_interval)?
+                regular_time_steps(self.time_dimension, time_interval)?
                     .collect::<geoengine_operators::util::Result<Vec<_>>>()?,
                 Vec::new(),
                 self.cache_ttl_secs,
@@ -209,7 +209,7 @@ impl
         let (grid, cells) = self.grid_cells(spatial_bounds)?;
         if cells.clone().next().is_none() {
             // Preserve the existing empty result for queries outside the CRS area of use.
-            let time_steps = RegularTimeStepIter::new(self.time_dimension, time_interval)?
+            let time_steps = regular_time_steps(self.time_dimension, time_interval)?
                 .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
             return Ok(MultiBandGdalLoadingInfo::new(
                 time_steps,
@@ -220,7 +220,7 @@ impl
 
         let mut time_steps = Vec::new();
         let mut tile_files = Vec::new();
-        for step in RegularTimeStepIter::new(self.time_dimension, time_interval)? {
+        for step in regular_time_steps(self.time_dimension, time_interval)? {
             let step = step?;
             time_steps.push(step);
 
@@ -735,97 +735,52 @@ fn stac_query_bbox(
     })
 }
 
-/// Lazily walks the regular steps contained by an interval and reports alignment or overflow errors.
-///
-/// Tile queries consume this iterator as they search cells, so long time ranges do
-/// not allocate a second full list before the result itself is assembled.
-struct RegularTimeStepIter {
-    next_start: TimeInstance,
-    interval_end: TimeInstance,
-    step: geoengine_datatypes::primitives::TimeStep,
-    finished: bool,
-}
-
-impl RegularTimeStepIter {
-    fn new(
-        time_dimension: TimeDimension,
-        interval: TimeInterval,
-    ) -> geoengine_operators::util::Result<Self> {
-        let TimeDimension::Regular(regular) = time_dimension else {
-            return Err(
-                geoengine_operators::error::Error::InvalidDataProviderConfig {
-                    reason: "irregular STAC time dimensions are not supported".to_owned(),
-                },
-            );
-        };
-        if regular.step.step == 0 {
-            return Err(
-                geoengine_operators::error::Error::InvalidDataProviderConfig {
-                    reason: "STAC regular time step must be positive".to_owned(),
-                },
-            );
-        }
-
-        Ok(Self {
-            next_start: interval.start(),
-            interval_end: interval.end(),
-            step: regular.step,
-            finished: false,
-        })
+/// Lazily converts the datatype time-step iterator into STAC query intervals.
+fn regular_time_steps(
+    time_dimension: TimeDimension,
+    interval: TimeInterval,
+) -> geoengine_operators::util::Result<
+    impl Iterator<Item = geoengine_operators::util::Result<TimeInterval>>,
+> {
+    let TimeDimension::Regular(regular) = time_dimension else {
+        return Err(
+            geoengine_operators::error::Error::InvalidDataProviderConfig {
+                reason: "irregular STAC time dimensions are not supported".to_owned(),
+            },
+        );
+    };
+    if regular.step.step == 0 {
+        return Err(
+            geoengine_operators::error::Error::InvalidDataProviderConfig {
+                reason: "STAC regular time step must be positive".to_owned(),
+            },
+        );
     }
-}
 
-impl Iterator for RegularTimeStepIter {
-    type Item = geoengine_operators::util::Result<TimeInterval>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.finished || self.next_start >= self.interval_end {
-            return None;
+    let iter = TimeStepIter::new_with_interval(interval, regular.step).map_err(|error| {
+        geoengine_operators::error::Error::InvalidDataProviderConfig {
+            reason: format!("could not iterate STAC regular time steps: {error}"),
         }
-
-        let start = self.next_start;
-        let end = match (start + self.step).map_err(|error| {
+    })?;
+    Ok(iter.map(move |start| {
+        let end = (start + regular.step).map_err(|error| {
             geoengine_operators::error::Error::InvalidDataProviderConfig {
                 reason: format!("STAC regular time step overflow: {error}"),
             }
-        }) {
-            Ok(end) if end > start => end,
-            Ok(_) => {
-                self.finished = true;
-                return Some(Err(
-                    geoengine_operators::error::Error::InvalidDataProviderConfig {
-                        reason: "STAC regular time step did not advance time".to_owned(),
-                    },
-                ));
-            }
-            Err(error) => {
-                self.finished = true;
-                return Some(Err(error));
-            }
-        };
-        if end > self.interval_end {
-            self.finished = true;
-            return Some(Err(
+        })?;
+        if end > interval.end() {
+            return Err(
                 geoengine_operators::error::Error::InvalidDataProviderConfig {
                     reason: "STAC time interval does not end on a regular step boundary".to_owned(),
                 },
-            ));
+            );
         }
-
-        let step = match TimeInterval::new(start, end) {
-            Ok(step) => step,
-            Err(error) => {
-                self.finished = true;
-                return Some(Err(
-                    geoengine_operators::error::Error::InvalidDataProviderConfig {
-                        reason: format!("invalid STAC time step interval: {error}"),
-                    },
-                ));
+        TimeInterval::new(start, end).map_err(|error| {
+            geoengine_operators::error::Error::InvalidDataProviderConfig {
+                reason: format!("invalid STAC time step interval: {error}"),
             }
-        };
-        self.next_start = end;
-        Some(Ok(step))
-    }
+        })
+    }))
 }
 
 fn stac_query_time_interval(
@@ -1066,7 +1021,7 @@ mod tests {
             }));
         let start = DateTime::new_utc(2026, 1, 1, 0, 0, 0);
         let end = DateTime::new_utc(2026, 4, 1, 0, 0, 0);
-        let steps = RegularTimeStepIter::new(monthly, TimeInterval::new(start, end).unwrap())
+        let steps = regular_time_steps(monthly, TimeInterval::new(start, end).unwrap())
             .unwrap()
             .collect::<geoengine_operators::util::Result<Vec<_>>>()
             .unwrap();
@@ -1074,11 +1029,19 @@ mod tests {
         assert_eq!(steps.first().unwrap().start(), TimeInstance::from(start));
         assert_eq!(steps.last().unwrap().end(), TimeInstance::from(end));
 
+        let unaligned_end = DateTime::new_utc(2026, 3, 15, 0, 0, 0);
+        assert!(
+            regular_time_steps(monthly, TimeInterval::new(start, unaligned_end).unwrap())
+                .unwrap()
+                .collect::<geoengine_operators::util::Result<Vec<_>>>()
+                .is_err()
+        );
+
         let zero = TimeDimension::Regular(RegularTimeDimension::new_with_epoch_origin(TimeStep {
             granularity: TimeGranularity::Days,
             step: 0,
         }));
-        assert!(RegularTimeStepIter::new(zero, TimeInterval::new(start, end).unwrap()).is_err());
+        assert!(regular_time_steps(zero, TimeInterval::new(start, end).unwrap()).is_err());
 
         let daily = TimeDimension::Regular(RegularTimeDimension::new_with_epoch_origin(TimeStep {
             granularity: TimeGranularity::Days,
@@ -1086,13 +1049,7 @@ mod tests {
         }));
         let min_end = TimeInstance::from_millis(TimeInstance::MIN.inner() + 1).unwrap();
         let sentinel_interval = TimeInterval::new(TimeInstance::MIN, min_end).unwrap();
-        assert!(
-            RegularTimeStepIter::new(daily, sentinel_interval)
-                .unwrap()
-                .next()
-                .unwrap()
-                .is_err()
-        );
+        assert!(regular_time_steps(daily, sentinel_interval).is_err());
 
         let near_max = TimeInstance::from_millis(TimeInstance::MAX.inner() - 86_400_000).unwrap();
         let overflow_interval = TimeInterval::new(near_max, TimeInstance::MAX).unwrap();
@@ -1101,13 +1058,7 @@ mod tests {
                 granularity: TimeGranularity::Months,
                 step: 1,
             }));
-        assert!(
-            RegularTimeStepIter::new(monthly, overflow_interval)
-                .unwrap()
-                .next()
-                .unwrap()
-                .is_err()
-        );
+        assert!(regular_time_steps(monthly, overflow_interval).is_err());
     }
 
     fn identity_tile() -> TileFile {
