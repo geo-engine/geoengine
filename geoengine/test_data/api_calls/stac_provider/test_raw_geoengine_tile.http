@@ -16,7 +16,7 @@ Content-Type: application/json
 ###
 
 # @name workflow
-POST http://localhost:3030/api/workflow
+POST http://localhost:3030/api/processingGraphs
 Authorization: Bearer {{anonymousSession.response.body.$.id}}
 Content-Type: application/json
 
@@ -33,7 +33,7 @@ Content-Type: application/json
 
 ###
 
-GET http://localhost:3030/api/workflow/{{workflow.response.body.$.id}}/metadata
+GET http://localhost:3030/api/processingGraphs/{{workflow.response.body.$.id}}/metadata
 Authorization: Bearer {{anonymousSession.response.body.$.id}}
 
 ###

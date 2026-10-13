@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List
 from uuid import UUID
 from geoengine_api_client.models.layer_visibility import LayerVisibility
@@ -29,11 +29,11 @@ class ProjectLayer(BaseModel):
     """
     ProjectLayer
     """ # noqa: E501
-    workflow: UUID
+    processing_graph: UUID = Field(alias="processingGraph")
     name: StrictStr
     visibility: LayerVisibility
     symbology: Symbology
-    __properties: ClassVar[List[str]] = ["workflow", "name", "visibility", "symbology"]
+    __properties: ClassVar[List[str]] = ["processingGraph", "name", "visibility", "symbology"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -92,7 +92,7 @@ class ProjectLayer(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "workflow": obj.get("workflow"),
+            "processingGraph": obj.get("processingGraph"),
             "name": obj.get("name"),
             "visibility": LayerVisibility.from_dict(obj["visibility"]) if obj.get("visibility") is not None else None,
             "symbology": Symbology.from_dict(obj["symbology"]) if obj.get("symbology") is not None else None

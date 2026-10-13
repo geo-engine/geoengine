@@ -4,13 +4,13 @@ All URIs are relative to *https://geoengine.io/api*
 
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
-| [**wmsHandler**](OGCWMSApi.md#wmshandler) | **GET** /wms/{workflow} | OGC WMS endpoint |
+| [**wmsHandler**](OGCWMSApi.md#wmshandler) | **GET** /wms/{processingGraph} | OGC WMS endpoint |
 
 
 
 ## wmsHandler
 
-> Blob wmsHandler(workflow, request, bbox, bgcolor, crs, elevation, exceptions, format, height, infoFormat, layer, layers, queryLayers, service, sld, sldBody, styles, time, transparent, version, width)
+> Blob wmsHandler(processingGraph, request, bbox, bgcolor, crs, elevation, exceptions, format, height, infoFormat, layer, layers, queryLayers, service, sld, sldBody, styles, time, transparent, version, width)
 
 OGC WMS endpoint
 
@@ -32,8 +32,8 @@ async function example() {
   const api = new OGCWMSApi(config);
 
   const body = {
-    // string | Workflow id
-    workflow: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | Processing graph id
+    processingGraph: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
     // WmsRequest | type of WMS request
     request: ...,
     // string (optional)
@@ -55,7 +55,7 @@ async function example() {
     // string (optional)
     layer: layer_example,
     // string (optional)
-    layers: <Workflow Id>,
+    layers: <Processing Graph Id>,
     // string (optional)
     queryLayers: queryLayers_example,
     // WmsService (optional)
@@ -93,7 +93,7 @@ example().catch(console.error);
 
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
-| **workflow** | `string` | Workflow id | [Defaults to `undefined`] |
+| **processingGraph** | `string` | Processing graph id | [Defaults to `undefined`] |
 | **request** | `WmsRequest` | type of WMS request | [Defaults to `undefined`] [Enum: GetCapabilities, GetMap, GetFeatureInfo, GetStyles, GetLegendGraphic] |
 | **bbox** | `string` |  | [Optional] [Defaults to `undefined`] |
 | **bgcolor** | `string` |  | [Optional] [Defaults to `undefined`] |

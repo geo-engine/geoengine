@@ -8,7 +8,7 @@ Name | Type
 ------------ | -------------
 `name` | string
 `description` | string
-`workflow` | [ProcessingGraph](ProcessingGraph.md)
+`processingGraph` | [ProcessingGraph](ProcessingGraph.md)
 `symbology` | [Symbology](Symbology.md)
 `properties` | Array&lt;Array&lt;string&gt;&gt;
 `metadata` | { [key: string]: string; }
@@ -22,7 +22,7 @@ import type { AddLayer } from '@geoengine/api-client'
 const example = {
   "name": Example Layer,
   "description": Example layer description,
-  "workflow": null,
+  "processingGraph": null,
   "symbology": null,
   "properties": null,
   "metadata": null,

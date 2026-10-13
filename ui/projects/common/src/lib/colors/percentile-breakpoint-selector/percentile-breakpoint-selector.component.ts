@@ -5,7 +5,7 @@ import {Color, RgbaTuple} from '../color';
 import {ColorBreakpoint} from '../color-breakpoint.model';
 import {geoengineValidators} from '../../util/form.validators';
 import {UUID} from '../../datasets/dataset.model';
-import {WorkflowsService} from '../../workflows/workflows.service';
+import {ProcessingGraphsService} from '../../processing-graphs/processing-graphs.service';
 import {RasterOperator, Statistics} from '@geoengine/api-client';
 import {SymbologyQueryParams} from '../../symbology/symbology.model';
 import {PlotsService} from '../../plots/plots.service';
@@ -44,7 +44,7 @@ import {RgbaArrayCssGradientPipe} from '../../util/pipes/color-gradients.pipe';
 export class PercentileBreakpointSelectorComponent {
     protected readonly changeDetectorRef = inject(ChangeDetectorRef);
     protected readonly formBuilder = inject(UntypedFormBuilder);
-    protected readonly workflowsService = inject(WorkflowsService);
+    protected readonly processingGraphsService = inject(ProcessingGraphsService);
     protected readonly plotsService = inject(PlotsService);
 
     readonly band = input.required<string>();
@@ -259,14 +259,14 @@ export class PercentileBreakpointSelectorComponent {
     }
 
     protected createStatisticsWorkflow(percentiles: number[]): Promise<UUID> {
-        return this.workflowsService.getWorkflow(this.workflowId()).then((workflow) => {
+        return this.processingGraphsService.getProcessingGraph(this.workflowId()).then((workflow) => {
             if (workflow.type !== 'Raster') {
-                throw new Error('Expected a raster workflow for percentile statistics.');
+                throw new Error('Expected a raster processing graph for percentile statistics.');
             }
 
             const sourceOperator: RasterOperator = workflow.operator;
 
-            return this.workflowsService.registerWorkflow({
+            return this.processingGraphsService.registerProcessingGraph({
                 type: 'Plot',
                 operator: {
                     type: 'Statistics',

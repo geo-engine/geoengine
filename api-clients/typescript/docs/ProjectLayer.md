@@ -6,7 +6,7 @@
 
 Name | Type
 ------------ | -------------
-`workflow` | string
+`processingGraph` | string
 `name` | string
 `visibility` | [LayerVisibility](LayerVisibility.md)
 `symbology` | [Symbology](Symbology.md)
@@ -18,7 +18,7 @@ import type { ProjectLayer } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "workflow": null,
+  "processingGraph": null,
   "name": null,
   "visibility": null,
   "symbology": null,

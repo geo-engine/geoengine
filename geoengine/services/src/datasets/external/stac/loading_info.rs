@@ -576,7 +576,7 @@ impl StacMultiBandMetaData {
                     width,
                     height,
                     file_not_found_handling: FileNotFoundHandling::Error,
-                    no_data_value: None,
+                    no_data_value: common::no_data_value_for_rasterband(asset, rasterband_channel),
                     properties_mapping: None,
                     gdal_open_options: None,
                     gdal_config_options: gdal_config_options.clone(),
@@ -828,6 +828,126 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_preserves_sentinel_no_data_in_loading_info_and_cache() {
+        use geoengine_datatypes::raster::RasterDataType;
+
+        for (collection, data_type, stac_data_type, no_data, band_names) in [
+            (
+                "sentinel-1-global-mosaics",
+                RasterDataType::F32,
+                "float32",
+                -32768.,
+                vec!["VV", "VH"],
+            ),
+            (
+                "sentinel-2-l2a",
+                RasterDataType::U16,
+                "uint16",
+                0.,
+                vec!["B04", "B08"],
+            ),
+            (
+                "sentinel-2-l2a",
+                RasterDataType::U8,
+                "uint8",
+                0.,
+                vec!["B04", "B03", "B02"],
+            ),
+        ] {
+            let server = Server::run();
+            let definition = make_stac_provider_def(DataProviderId::new(), server.url_str("/"));
+            let mut dataset = definition.datasets[0].clone();
+            dataset.data_type = data_type;
+            dataset.bands = band_names
+                .iter()
+                .map(
+                    |name| crate::datasets::external::stac::StacProviderDatasetBand {
+                        asset_band: crate::datasets::external::stac::StacAssetBand {
+                            asset_title: "Sentinel raster".to_owned(),
+                            band_name: Some((*name).to_owned()),
+                        },
+                        band_descriptor: RasterBandDescriptor::new_unitless((*name).to_owned()),
+                    },
+                )
+                .collect();
+            server.expect(
+                Expectation::matching(all_of![
+                    request::method_path("GET", format!("/collections/{collection}/items")),
+                    request::query(url_decoded(contains(("fields", common::STAC_ITEM_FIELDS)))),
+                ])
+                .times(1)
+                .respond_with(responders::json_encoded(serde_json::json!({
+                    "type": "FeatureCollection",
+                    "features": [{
+                        "type": "Feature",
+                        "stac_version": "1.1.0",
+                        "id": "sentinel-no-data",
+                        "geometry": null,
+                        "properties": {"datetime": "2026-04-01T00:00:00Z"},
+                        "links": [],
+                        "assets": {"raster": {
+                            "href": "s3://example/sentinel.jp2",
+                            "title": "Sentinel raster",
+                            "data_type": stac_data_type,
+                            "nodata": no_data,
+                            "bands": band_names.iter().map(|name| serde_json::json!({"name": name})).collect::<Vec<_>>(),
+                            "proj:code": "EPSG:32632",
+                            "proj:shape": [2, 2],
+                            "proj:transform": [10, 0, 500_000, 0, -10, 5_800_000],
+                        }},
+                    }],
+                    "links": [],
+                }))),
+            );
+            let meta = StacMultiBandMetaData {
+                api_url: definition.api_url,
+                collection_name: collection.to_owned(),
+                s3_config: None,
+                time_dimension: definition.time_dimension,
+                dataset,
+                page_limit: definition.page_limit,
+                client: StacClient::new(reqwest::Client::new()),
+                query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
+                cache_ttl_secs: None,
+            };
+            let bounds = SpatialPartition2D::new(
+                (500_000., 5_800_000.).into(),
+                (500_020., 5_799_980.).into(),
+            )
+            .unwrap();
+            let time = TimeInterval::new(
+                DateTime::new_utc(2026, 4, 1, 0, 0, 0),
+                DateTime::new_utc(2026, 4, 2, 0, 0, 0),
+            )
+            .unwrap();
+            let tile = TileInformation::new(
+                GridIdx2D::new([0, 0]),
+                GridShape::new([2, 2]),
+                GeoTransform::new(bounds.upper_left(), 10., -10.),
+            );
+            // The second lookup must reuse the cached file parameters without another request.
+            for _ in 0..2 {
+                let info = meta
+                    .loading_info(MultiBandGdalLoadingInfoQueryRectangle::new(
+                        bounds,
+                        time,
+                        BandSelection::first(),
+                        true,
+                    ))
+                    .await
+                    .unwrap();
+                for band in 0..band_names.len() {
+                    let files = info.tile_files(time, tile, band as u32);
+                    assert_eq!(files.len(), 1);
+                    assert_eq!(files[0].rasterband_channel, band + 1);
+                    assert_eq!(files[0].no_data_value, Some(no_data));
+                }
+            }
+        }
     }
 
     #[tokio::test]

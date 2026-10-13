@@ -35,7 +35,7 @@ describe('MultiLayerSelectionComponent', () => {
     /** Mock Layers **/
     const layer1: Layer = new RasterLayer({
         name: 'test-layer1',
-        workflowId: '1',
+        processingGraphId: '1',
         isLegendVisible: true,
         isVisible: true,
         symbology: RasterSymbology.fromRasterSymbologyDict({
@@ -59,7 +59,7 @@ describe('MultiLayerSelectionComponent', () => {
     });
     const layer2: Layer = new RasterLayer({
         name: 'test-layer2',
-        workflowId: '2',
+        processingGraphId: '2',
         isLegendVisible: true,
         isVisible: true,
         symbology: RasterSymbology.fromRasterSymbologyDict({
@@ -83,7 +83,7 @@ describe('MultiLayerSelectionComponent', () => {
     });
     const layer3: Layer = new RasterLayer({
         name: 'test-layer3',
-        workflowId: '3',
+        processingGraphId: '3',
         isLegendVisible: true,
         isVisible: true,
         symbology: RasterSymbology.fromRasterSymbologyDict({

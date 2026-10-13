@@ -9,5 +9,6 @@ pub use project::{
     Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project, ProjectId, ProjectLayer,
     ProjectListOptions, ProjectListing, ProjectVersion, ProjectVersionId, RasterSymbology,
     STRectangle, StaticColor, StaticNumber, StrokeParam, Symbology, TextSymbology, UpdateProject,
+    VecUpdate,
 };
 pub use projectdb::ProjectDb;

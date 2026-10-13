@@ -119,7 +119,7 @@ Class | Method | HTTP request | Description
 *LayersApi* | [**get_provider_definition**](docs/LayersApi.md#get_provider_definition) | **GET** /layerDb/providers/{provider} | Get an existing provider&#39;s definition
 *LayersApi* | [**layer_handler**](docs/LayersApi.md#layer_handler) | **GET** /layers/{provider}/{layer} | Retrieves the layer of the given provider
 *LayersApi* | [**layer_to_dataset**](docs/LayersApi.md#layer_to_dataset) | **POST** /layers/{provider}/{layer}/dataset | Persist a raster layer from a provider as a dataset.
-*LayersApi* | [**layer_to_workflow_id_handler**](docs/LayersApi.md#layer_to_workflow_id_handler) | **POST** /layers/{provider}/{layer}/workflowId | Registers a layer from a provider as a workflow and returns the workflow id
+*LayersApi* | [**layer_to_processing_graph_id_handler**](docs/LayersApi.md#layer_to_processing_graph_id_handler) | **POST** /layers/{provider}/{layer}/processingGraphId | Registers a layer from a provider as a processing graph and returns the processing graph id
 *LayersApi* | [**list_collection_handler**](docs/LayersApi.md#list_collection_handler) | **GET** /layers/collections/{provider}/{collection} | List the contents of the collection of the given provider
 *LayersApi* | [**list_providers**](docs/LayersApi.md#list_providers) | **GET** /layerDb/providers | List all providers
 *LayersApi* | [**list_root_collections_handler**](docs/LayersApi.md#list_root_collections_handler) | **GET** /layers/collections | List all layer collections
@@ -144,13 +144,20 @@ Class | Method | HTTP request | Description
 *OGCAPIApi* | [**tile**](docs/OGCAPIApi.md#tile) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol} | OGC API Tile
 *OGCAPIApi* | [**tile_matrix_set**](docs/OGCAPIApi.md#tile_matrix_set) | **GET** /ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId} | OGC API Tile Matrix Set Definition
 *OGCAPIApi* | [**tile_matrix_sets**](docs/OGCAPIApi.md#tile_matrix_sets) | **GET** /ogc/{dataConnectorId}/{layerId}/tileMatrixSets | OGC API Tile Matrix Set List
-*OGCWCSApi* | [**wcs_handler**](docs/OGCWCSApi.md#wcs_handler) | **GET** /wcs/{workflow} | OGC WCS endpoint
-*OGCWFSApi* | [**wfs_handler**](docs/OGCWFSApi.md#wfs_handler) | **GET** /wfs/{workflow} | OGC WFS endpoint
-*OGCWMSApi* | [**wms_handler**](docs/OGCWMSApi.md#wms_handler) | **GET** /wms/{workflow} | OGC WMS endpoint
+*OGCWCSApi* | [**wcs_handler**](docs/OGCWCSApi.md#wcs_handler) | **GET** /wcs/{processingGraph} | OGC WCS endpoint
+*OGCWFSApi* | [**wfs_handler**](docs/OGCWFSApi.md#wfs_handler) | **GET** /wfs/{processingGraph} | OGC WFS endpoint
+*OGCWMSApi* | [**wms_handler**](docs/OGCWMSApi.md#wms_handler) | **GET** /wms/{processingGraph} | OGC WMS endpoint
 *PermissionsApi* | [**add_permission_handler**](docs/PermissionsApi.md#add_permission_handler) | **PUT** /permissions | Adds a new permission.
 *PermissionsApi* | [**get_resource_permissions_handler**](docs/PermissionsApi.md#get_resource_permissions_handler) | **GET** /permissions/resources/{resource_type}/{resource_id} | Lists permission for a given resource.
 *PermissionsApi* | [**remove_permission_handler**](docs/PermissionsApi.md#remove_permission_handler) | **DELETE** /permissions | Removes an existing permission.
 *PlotsApi* | [**get_plot_handler**](docs/PlotsApi.md#get_plot_handler) | **GET** /plot/{id} | Generates a plot.
+*ProcessingGraphsApi* | [**dataset_from_processing_graph_handler**](docs/ProcessingGraphsApi.md#dataset_from_processing_graph_handler) | **POST** /datasetFromProcessingGraph/{id} | Create a task for creating a new dataset from the result of the processing graph given by its &#x60;id&#x60; and the dataset parameters in the request body. Returns the id of the created task
+*ProcessingGraphsApi* | [**get_processing_graph_all_metadata_zip_handler**](docs/ProcessingGraphsApi.md#get_processing_graph_all_metadata_zip_handler) | **GET** /processingGraphs/{id}/allMetadata/zip | Gets a ZIP archive of the processing graph, its provenance and the output metadata.
+*ProcessingGraphsApi* | [**get_processing_graph_metadata_handler**](docs/ProcessingGraphsApi.md#get_processing_graph_metadata_handler) | **GET** /processingGraphs/{id}/metadata | Gets the result metadata of a processing graph
+*ProcessingGraphsApi* | [**get_processing_graph_provenance_handler**](docs/ProcessingGraphsApi.md#get_processing_graph_provenance_handler) | **GET** /processingGraphs/{id}/provenance | Gets the provenance of all datasets used in a processing graph.
+*ProcessingGraphsApi* | [**load_processing_graph_handler**](docs/ProcessingGraphsApi.md#load_processing_graph_handler) | **GET** /processingGraphs/{id} | Retrieves an existing processing graph.
+*ProcessingGraphsApi* | [**raster_stream_websocket**](docs/ProcessingGraphsApi.md#raster_stream_websocket) | **GET** /processingGraphs/{id}/rasterStream | Query a processing graph raster result as a stream of tiles via a websocket connection.
+*ProcessingGraphsApi* | [**register_processing_graph_handler**](docs/ProcessingGraphsApi.md#register_processing_graph_handler) | **POST** /processingGraphs | Registers a new processing graph.
 *ProjectsApi* | [**create_project_handler**](docs/ProjectsApi.md#create_project_handler) | **POST** /project | Create a new project for the user.
 *ProjectsApi* | [**delete_project_handler**](docs/ProjectsApi.md#delete_project_handler) | **DELETE** /project/{project} | Deletes a project.
 *ProjectsApi* | [**list_projects_handler**](docs/ProjectsApi.md#list_projects_handler) | **GET** /projects | List all projects accessible to the user that match the selected criteria.
@@ -187,13 +194,6 @@ Class | Method | HTTP request | Description
 *UserApi* | [**remove_role_handler**](docs/UserApi.md#remove_role_handler) | **DELETE** /roles/{role} | Remove a role. Requires admin privilige.
 *UserApi* | [**revoke_role_handler**](docs/UserApi.md#revoke_role_handler) | **DELETE** /users/{user}/roles/{role} | Revoke a role from a user. Requires admin privilige.
 *UserApi* | [**update_user_quota_handler**](docs/UserApi.md#update_user_quota_handler) | **POST** /quotas/{user} | Update the available quota of a specific user.
-*WorkflowsApi* | [**dataset_from_workflow_handler**](docs/WorkflowsApi.md#dataset_from_workflow_handler) | **POST** /datasetFromWorkflow/{id} | Create a task for creating a new dataset from the result of the workflow given by its &#x60;id&#x60; and the dataset parameters in the request body. Returns the id of the created task
-*WorkflowsApi* | [**get_workflow_all_metadata_zip_handler**](docs/WorkflowsApi.md#get_workflow_all_metadata_zip_handler) | **GET** /workflow/{id}/allMetadata/zip | Gets a ZIP archive of the worklow, its provenance and the output metadata.
-*WorkflowsApi* | [**get_workflow_metadata_handler**](docs/WorkflowsApi.md#get_workflow_metadata_handler) | **GET** /workflow/{id}/metadata | Gets the metadata of a workflow
-*WorkflowsApi* | [**get_workflow_provenance_handler**](docs/WorkflowsApi.md#get_workflow_provenance_handler) | **GET** /workflow/{id}/provenance | Gets the provenance of all datasets used in a workflow.
-*WorkflowsApi* | [**load_workflow_handler**](docs/WorkflowsApi.md#load_workflow_handler) | **GET** /workflow/{id} | Retrieves an existing Workflow.
-*WorkflowsApi* | [**raster_stream_websocket**](docs/WorkflowsApi.md#raster_stream_websocket) | **GET** /workflow/{id}/rasterStream | Query a workflow raster result as a stream of tiles via a websocket connection.
-*WorkflowsApi* | [**register_workflow_handler**](docs/WorkflowsApi.md#register_workflow_handler) | **POST** /workflow | Registers a new Workflow.
 
 
 ## Documentation For Models
@@ -349,6 +349,7 @@ Class | Method | HTTP request | Description
  - [LayerListing](docs/LayerListing.md)
  - [LayerProviderListing](docs/LayerProviderListing.md)
  - [LayerResource](docs/LayerResource.md)
+ - [LayerUpdate](docs/LayerUpdate.md)
  - [LayerVisibility](docs/LayerVisibility.md)
  - [LineSimplification](docs/LineSimplification.md)
  - [LineSimplificationAlgorithm](docs/LineSimplificationAlgorithm.md)
@@ -432,6 +433,7 @@ Class | Method | HTTP request | Description
  - [PlotOperator](docs/PlotOperator.md)
  - [PlotOutputFormat](docs/PlotOutputFormat.md)
  - [PlotResultDescriptor](docs/PlotResultDescriptor.md)
+ - [PlotUpdate](docs/PlotUpdate.md)
  - [PointInPolygonFilter](docs/PointInPolygonFilter.md)
  - [PointInPolygonFilterSource](docs/PointInPolygonFilterSource.md)
  - [PointSymbology](docs/PointSymbology.md)
@@ -454,7 +456,7 @@ Class | Method | HTTP request | Description
  - [RasterBandDescriptor](docs/RasterBandDescriptor.md)
  - [RasterColorizer](docs/RasterColorizer.md)
  - [RasterDataType](docs/RasterDataType.md)
- - [RasterDatasetFromWorkflow](docs/RasterDatasetFromWorkflow.md)
+ - [RasterDatasetFromProcessingGraph](docs/RasterDatasetFromProcessingGraph.md)
  - [RasterOperator](docs/RasterOperator.md)
  - [RasterPropertiesEntryType](docs/RasterPropertiesEntryType.md)
  - [RasterPropertiesKey](docs/RasterPropertiesKey.md)
@@ -476,8 +478,10 @@ Class | Method | HTTP request | Description
  - [ReflectanceParameters](docs/ReflectanceParameters.md)
  - [Regular](docs/Regular.md)
  - [RegularTimeDimension](docs/RegularTimeDimension.md)
- - [Rename](docs/Rename.md)
  - [RenameBands](docs/RenameBands.md)
+ - [RenameBandsDefault](docs/RenameBandsDefault.md)
+ - [RenameBandsRename](docs/RenameBandsRename.md)
+ - [RenameBandsSuffix](docs/RenameBandsSuffix.md)
  - [Reprojection](docs/Reprojection.md)
  - [ReprojectionParameters](docs/ReprojectionParameters.md)
  - [Resource](docs/Resource.md)
@@ -604,7 +608,6 @@ Class | Method | HTTP request | Description
  - [UserRegistration](docs/UserRegistration.md)
  - [UserSession](docs/UserSession.md)
  - [VariableMatrixWidth](docs/VariableMatrixWidth.md)
- - [VecUpdate](docs/VecUpdate.md)
  - [VectorColumnInfo](docs/VectorColumnInfo.md)
  - [VectorDataType](docs/VectorDataType.md)
  - [VectorExpression](docs/VectorExpression.md)

@@ -1,11 +1,11 @@
 use crate::{
-    api::model::responses::IdResponse,
+    api::model::{quota::ComputationQuota, responses::IdResponse},
     config,
     contexts::{ApplicationContext, SessionContext},
     error::{self, Result},
     permissions::{RoleDescription, RoleId},
     projects::{ProjectId, STRectangle},
-    quota::{ComputationId, ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota},
+    quota::{ComputationId, DataUsage, DataUsageSummary, OperatorQuota},
     users::{
         AuthCodeRequestURL, AuthCodeResponse, RoleDb, UserAuth, UserCredentials, UserDb, UserId,
         UserRegistration, UserSession,
@@ -348,9 +348,12 @@ pub(crate) async fn computations_quota_handler<C: ApplicationContext>(
     let params = params.into_inner();
 
     let db = app_ctx.session_context(session).db();
-    let computations_quota = db
+    let computations_quota: Vec<ComputationQuota> = db
         .quota_used_by_computations(params.offset, params.limit)
-        .await?;
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
 
     Ok(web::Json(computations_quota))
 }

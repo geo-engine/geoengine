@@ -15,7 +15,8 @@ from geoengine_api_client.exceptions import (
 from pydantic import ValidationError
 from requests import utils
 
-from . import workflow_builder
+from . import processing_graph_builder
+from ._deprecation import deprecated_module_getattr
 from .auth import Session, get_session, initialize, reset
 from .colorizer import (
     ColorBreakpoint,
@@ -76,8 +77,21 @@ from .permissions import (
     remove_role,
     revoke_role,
 )
+from .processing_graph import (
+    ProcessingGraph,
+    ProcessingGraphId,
+    data_usage,
+    data_usage_for_computation,
+    data_usage_summary,
+    get_quota,
+    processing_graph_by_id,
+    register_processing_graph,
+    register_workflow,  # deprecated
+    update_quota,
+    workflow_by_id,  # deprecated
+)
 from .raster import RasterTile2D
-from .raster_workflow_rio_writer import RasterWorkflowRioWriter
+from .raster_processing_graph_rio_writer import RasterProcessingGraphRioWriter
 from .resource_identifier import (
     LAYER_DB_PROVIDER_ID,
     LAYER_DB_ROOT_COLLECTION_ID,
@@ -128,16 +142,16 @@ from .types import (
     VectorSymbology,
 )
 from .util import clamp_datetime_ms_ns
-from .workflow import (
-    Workflow,
-    WorkflowId,
-    data_usage,
-    data_usage_for_computation,
-    data_usage_summary,
-    get_quota,
-    register_workflow,
-    update_quota,
-    workflow_by_id,
+
+# deprecated names that are resolved lazily and emit a `DeprecationWarning` on access
+__getattr__ = deprecated_module_getattr(
+    __name__,
+    {
+        "Workflow": "geoengine.processing_graph.ProcessingGraph",
+        "WorkflowId": "geoengine.processing_graph.ProcessingGraphId",
+        "RasterWorkflowRioWriter": "geoengine.raster_processing_graph_rio_writer.RasterProcessingGraphRioWriter",
+        "workflow_builder": "geoengine.processing_graph_builder",
+    },
 )
 
 DEFAULT_USER_AGENT = f"geoengine-python/{geoengine_api_client.__version__}"

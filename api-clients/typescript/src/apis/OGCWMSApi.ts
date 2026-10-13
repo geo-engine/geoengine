@@ -34,7 +34,7 @@ import {
 } from '../models/index';
 
 export interface WmsHandlerRequest {
-    workflow: string;
+    processingGraph: string;
     request: WmsRequest;
     bbox?: string;
     bgcolor?: string | null;
@@ -66,10 +66,10 @@ export class OGCWMSApi extends runtime.BaseAPI {
      * Creates request options for wmsHandler without sending the request
      */
     async wmsHandlerRequestOpts(requestParameters: WmsHandlerRequest): Promise<runtime.RequestOpts> {
-        if (requestParameters['workflow'] == null) {
+        if (requestParameters['processingGraph'] == null) {
             throw new runtime.RequiredError(
-                'workflow',
-                'Required parameter "workflow" was null or undefined when calling wmsHandler().'
+                'processingGraph',
+                'Required parameter "processingGraph" was null or undefined when calling wmsHandler().'
             );
         }
 
@@ -173,8 +173,8 @@ export class OGCWMSApi extends runtime.BaseAPI {
             }
         }
 
-        let urlPath = `/wms/{workflow}`;
-        urlPath = urlPath.replace(`{${"workflow"}}`, encodeURIComponent(String(requestParameters['workflow'])));
+        let urlPath = `/wms/{processingGraph}`;
+        urlPath = urlPath.replace(`{${"processingGraph"}}`, encodeURIComponent(String(requestParameters['processingGraph'])));
 
         return {
             path: urlPath,
