@@ -10,7 +10,7 @@ use crate::{
                     parse_datetime_option, raster_workflow_metadata, to_ogc_bbox,
                 },
             },
-            workflows::{ProvenanceEntry, workflow_provenance},
+            processing_graphs::{ProvenanceEntry, workflow_provenance},
         },
         model::datatypes::{DataProviderId, LayerId},
     },

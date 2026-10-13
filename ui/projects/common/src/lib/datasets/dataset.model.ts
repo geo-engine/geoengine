@@ -49,7 +49,7 @@ export class Dataset {
         return new Dataset(dict);
     }
 
-    createSourceWorkflow(): ProcessingGraph {
+    createSourceProcessingGraph(): ProcessingGraph {
         const operator = {
             type: this.sourceOperator,
             params: {

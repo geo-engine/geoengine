@@ -18,7 +18,8 @@ def file_modifications() -> Generator[tuple[Path, FileModifier], None, None]:
     yield Path("models/RasterOperator.ts"), raster_operator_ts
     yield Path("models/VectorOperator.ts"), vector_operator_ts
     yield Path("models/TaskStatusWithId.ts"), task_status_with_id_ts
-    yield Path("models/VecUpdate.ts"), vec_update_ts
+    yield Path("models/LayerUpdate.ts"), layer_update_ts
+    yield Path("models/PlotUpdate.ts"), plot_update_ts
     yield Path("models/TypedOperator.ts"), typed_operator_ts
     yield Path("models/HistogramBounds.ts"), histogram_bounds_ts
     yield Path("runtime.ts"), runtime_ts
@@ -109,40 +110,6 @@ def runtime_ts(file_contents: list[str]) -> Generator[str, None, None]:
         yield line
 
 
-# fixes due to https://github.com/OpenAPITools/openapi-generator/issues/14831
-def plot_update_ts(file_contents: list[str]) -> Generator[str, None, None]:
-    """Modify the PlotUpdate.ts file."""
-    for line in file_contents:
-        dedented_line = dedent(line)
-
-        if dedented_line.startswith("if (instanceOfPlot(value))"):
-            line = indent(
-                dedent("""\
-            if (typeof value === 'object' && instanceOfPlot(value)) {
-            """),
-                INDENT,
-            )
-
-        yield line
-
-
-# fixes due to https://github.com/OpenAPITools/openapi-generator/issues/14831
-def layer_update_ts(file_contents: list[str]) -> Generator[str, None, None]:
-    """Modify the LayerUpdate.ts file."""
-    for line in file_contents:
-        dedented_line = dedent(line)
-
-        if dedented_line.startswith("if (instanceOfProjectLayer(value))"):
-            line = indent(
-                dedent("""\
-            if (typeof value === 'object' && instanceOfProjectLayer(value)) {
-            """),
-                INDENT,
-            )
-
-        yield line
-
-
 # Fix: interface cannot inherit union type
 def task_status_with_id_ts(file_contents: list[str]) -> Generator[str, None, None]:
     """Modify the TaskStatusWithId.ts file."""
@@ -161,14 +128,29 @@ def task_status_with_id_ts(file_contents: list[str]) -> Generator[str, None, Non
         yield line
 
 
-def vec_update_ts(file_contents: list[str]) -> Generator[str, None, None]:
-    """Modify the VecUpdate.ts file."""
+# fixes due to https://github.com/OpenAPITools/openapi-generator/issues/14831
+def layer_update_ts(file_contents: list[str]) -> Generator[str, None, None]:
+    """Modify the LayerUpdate.ts file."""
+    yield from vec_update_ts(file_contents, "instanceOfProjectLayer")
+
+
+# fixes due to https://github.com/OpenAPITools/openapi-generator/issues/14831
+def plot_update_ts(file_contents: list[str]) -> Generator[str, None, None]:
+    """Modify the PlotUpdate.ts file."""
+    yield from vec_update_ts(file_contents, "instanceOfPlot")
+
+
+def vec_update_ts(
+    file_contents: list[str], instance_of_content: str
+) -> Generator[str, None, None]:
+    """Guard the content check of a `VecUpdate` against the string tokens."""
     for line in file_contents:
         dedented_line = dedent(line)
 
-        if dedented_line.startswith("if (instanceOfPlot(value)) {"):
+        if dedented_line.startswith(f"if ({instance_of_content}(value)) {{"):
             line = indent(
-                "if (typeof value === 'object' && instanceOfPlot(value)) {\n", INDENT
+                f"if (typeof value === 'object' && {instance_of_content}(value)) {{\n",
+                INDENT,
             )
 
         yield line

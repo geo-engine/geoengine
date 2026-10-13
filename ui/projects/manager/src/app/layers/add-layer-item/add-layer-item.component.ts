@@ -158,7 +158,7 @@ export class AddLayerItemComponent {
                 const layer = await this.layersService.addLayer(this.parentCollectionId.collectionId, {
                     name: this.form.controls.name.value,
                     description: this.form.controls.description.value,
-                    workflow: JSON.parse(this.form.controls.workflow.value ?? '{}') as ProcessingGraph,
+                    processingGraph: JSON.parse(this.form.controls.workflow.value ?? '{}') as ProcessingGraph,
                 });
 
                 const res: ItemId = {type: ItemType.Layer, layer: layer};

@@ -51,7 +51,7 @@ export interface LayerToDatasetRequest {
     provider: string;
     layer: string;
 }
-export interface LayerToWorkflowIdHandlerRequest {
+export interface LayerToProcessingGraphIdHandlerRequest {
     provider: string;
     layer: string;
 }
@@ -231,17 +231,17 @@ export declare class LayersApi extends runtime.BaseAPI {
      */
     layerToDataset(requestParameters: LayerToDatasetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TaskResponse>;
     /**
-     * Creates request options for layerToWorkflowIdHandler without sending the request
+     * Creates request options for layerToProcessingGraphIdHandler without sending the request
      */
-    layerToWorkflowIdHandlerRequestOpts(requestParameters: LayerToWorkflowIdHandlerRequest): Promise<runtime.RequestOpts>;
+    layerToProcessingGraphIdHandlerRequestOpts(requestParameters: LayerToProcessingGraphIdHandlerRequest): Promise<runtime.RequestOpts>;
     /**
-     * Registers a layer from a provider as a workflow and returns the workflow id
+     * Registers a layer from a provider as a processing graph and returns the processing graph id
      */
-    layerToWorkflowIdHandlerRaw(requestParameters: LayerToWorkflowIdHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<IdResponse>>;
+    layerToProcessingGraphIdHandlerRaw(requestParameters: LayerToProcessingGraphIdHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<IdResponse>>;
     /**
-     * Registers a layer from a provider as a workflow and returns the workflow id
+     * Registers a layer from a provider as a processing graph and returns the processing graph id
      */
-    layerToWorkflowIdHandler(requestParameters: LayerToWorkflowIdHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<IdResponse>;
+    layerToProcessingGraphIdHandler(requestParameters: LayerToProcessingGraphIdHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<IdResponse>;
     /**
      * Creates request options for listCollectionHandler without sending the request
      */

@@ -1357,7 +1357,9 @@ fn try_create_tile_for_band(
             width,
             height,
             file_not_found_handling: crate::api::model::operators::FileNotFoundHandling::Error,
-            no_data_value: params.no_data_value,
+            no_data_value: params
+                .no_data_value
+                .or_else(|| common::no_data_value_for_rasterband(asset, rasterband_channel)),
             properties_mapping: None,
             gdal_open_options: None,
             gdal_config_options: gdal_config_options.map(|opts| {
@@ -1537,6 +1539,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn test_process_harvest_item_produces_correct_tiles() {
         let api_mapping: crate::api::model::services::StacDataProviderDefinition =
             serde_json::from_str(include_str!(
@@ -1545,12 +1548,16 @@ mod tests {
             .expect("valid mapping fixture");
         let mapping: StacDataProviderDefinition = api_mapping.into();
 
-        let items: stac::ItemCollection = serde_json::from_str(include_str!(
+        let mut items: stac::ItemCollection = serde_json::from_str(include_str!(
             "../../../../test_data/stac_responses/items/code-de-harvest-test.json"
         ))
         .expect("valid items fixture");
 
-        let params = StacHarvest {
+        for asset in items.items[0].assets.values_mut() {
+            asset.nodata = Some(0.);
+        }
+
+        let mut params = StacHarvest {
             mapping: mapping.clone(),
             time_start: None,
             time_end: None,
@@ -1588,6 +1595,7 @@ mod tests {
                 "dataset {dataset_name} should have tiles"
             );
             for tile in tiles {
+                assert_eq!(tile.params.no_data_value, Some(0.));
                 assert!(tile.band < 10, "band index should be reasonable");
                 assert!(
                     tile.params.width > 0 && tile.params.height > 0,
@@ -1622,6 +1630,14 @@ mod tests {
             total_tiles_20m, 2,
             "first item should produce 2 tiles for 20m bands"
         );
+
+        // An explicit CLI override still takes precedence over STAC metadata.
+        params.no_data_value = Some(123.);
+        tiles_by_dataset.clear();
+        process_harvest_item(item, &mapping, &mut tiles_by_dataset, &params).unwrap();
+        for tile in tiles_by_dataset.values().flatten() {
+            assert_eq!(tile.params.no_data_value, Some(123.));
+        }
     }
 
     #[test]

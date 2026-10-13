@@ -31,7 +31,7 @@ import {
 } from '../models/index';
 
 export interface WcsHandlerRequest {
-    workflow: string;
+    processingGraph: string;
     request: WcsRequest;
     boundingbox?: string;
     format?: GetCoverageFormat;
@@ -57,10 +57,10 @@ export class OGCWCSApi extends runtime.BaseAPI {
      * Creates request options for wcsHandler without sending the request
      */
     async wcsHandlerRequestOpts(requestParameters: WcsHandlerRequest): Promise<runtime.RequestOpts> {
-        if (requestParameters['workflow'] == null) {
+        if (requestParameters['processingGraph'] == null) {
             throw new runtime.RequiredError(
-                'workflow',
-                'Required parameter "workflow" was null or undefined when calling wcsHandler().'
+                'processingGraph',
+                'Required parameter "processingGraph" was null or undefined when calling wcsHandler().'
             );
         }
 
@@ -140,8 +140,8 @@ export class OGCWCSApi extends runtime.BaseAPI {
             }
         }
 
-        let urlPath = `/wcs/{workflow}`;
-        urlPath = urlPath.replace(`{${"workflow"}}`, encodeURIComponent(String(requestParameters['workflow'])));
+        let urlPath = `/wcs/{processingGraph}`;
+        urlPath = urlPath.replace(`{${"processingGraph"}}`, encodeURIComponent(String(requestParameters['processingGraph'])));
 
         return {
             path: urlPath,

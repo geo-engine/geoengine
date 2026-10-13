@@ -37,7 +37,7 @@ class TestUpdateLayer(unittest.TestCase):
             return UpdateLayer(
                 name = 'Example Layer',
                 description = 'Example layer description',
-                workflow = None,
+                processing_graph = None,
                 symbology = None,
                 properties = [
                     [
@@ -52,7 +52,7 @@ class TestUpdateLayer(unittest.TestCase):
             return UpdateLayer(
                 name = 'Example Layer',
                 description = 'Example layer description',
-                workflow = None,
+                processing_graph = None,
         )
         """
 

@@ -3,7 +3,7 @@ import {HttpHeaders} from '@angular/common/http';
 /**
  * Extracts the filename from HTTP header's Content-Disposition field.
  */
-export function filenameFromHttpHeaders(headers: HttpHeaders): string | undefined {
+export function filenameFromHttpHeaders(headers: Pick<HttpHeaders | Headers, 'get'>): string | undefined {
     const contentDisposition = headers.get('Content-Disposition');
 
     if (!contentDisposition) {

@@ -59,11 +59,6 @@ export type ProjectFilterDict = 'None' | {name: {term: string}} | {description: 
 
 export type ProjectOrderByDict = 'DateAsc' | 'DateDesc' | 'NameAsc' | 'NameDesc';
 
-export interface PlotDict {
-    workflow: UUID;
-    name: string;
-}
-
 export interface BackendInfoDict {
     buildDate?: Date;
     commitHash?: string;
@@ -102,18 +97,6 @@ export interface TimeStepDict {
 }
 
 export type TimeStepGranularityDict = 'millis' | 'seconds' | 'minutes' | 'hours' | 'days' | 'months' | 'years';
-
-type DataIdDict = InternalDataIdDict | ExternalDataIdDict;
-
-interface InternalDataIdDict {
-    type: 'internal';
-    datasetId: UUID;
-}
-interface ExternalDataIdDict {
-    type: 'external';
-    providerId: UUID;
-    layerId: string;
-}
 
 export type DatasetOrderByDict = 'NameAsc' | 'NameDesc';
 
@@ -206,11 +189,6 @@ export interface ProvenanceDict {
     citation: string;
     license: string;
     uri: string;
-}
-
-export interface ProvenanceEntryDict {
-    provenance: ProvenanceDict;
-    data: Array<DataIdDict>;
 }
 
 export interface SpatialReferenceSpecificationDict {

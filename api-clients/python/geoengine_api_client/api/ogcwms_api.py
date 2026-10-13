@@ -43,7 +43,7 @@ class OGCWMSApi:
     @validate_call
     def wms_handler(
         self,
-        workflow: Annotated[UUID, Field(description="Workflow id")],
+        processing_graph: Annotated[UUID, Field(description="Processing graph id")],
         request: Annotated[WmsRequest, Field(description="type of WMS request")],
         bbox: Optional[StrictStr] = None,
         bgcolor: Optional[StrictStr] = None,
@@ -80,8 +80,8 @@ class OGCWMSApi:
         """OGC WMS endpoint
 
 
-        :param workflow: Workflow id (required)
-        :type workflow: UUID
+        :param processing_graph: Processing graph id (required)
+        :type processing_graph: UUID
         :param request: type of WMS request (required)
         :type request: WmsRequest
         :param bbox:
@@ -145,7 +145,7 @@ class OGCWMSApi:
         """ # noqa: E501
 
         _param = self._wms_handler_serialize(
-            workflow=workflow,
+            processing_graph=processing_graph,
             request=request,
             bbox=bbox,
             bgcolor=bgcolor,
@@ -189,7 +189,7 @@ class OGCWMSApi:
     @validate_call
     def wms_handler_with_http_info(
         self,
-        workflow: Annotated[UUID, Field(description="Workflow id")],
+        processing_graph: Annotated[UUID, Field(description="Processing graph id")],
         request: Annotated[WmsRequest, Field(description="type of WMS request")],
         bbox: Optional[StrictStr] = None,
         bgcolor: Optional[StrictStr] = None,
@@ -226,8 +226,8 @@ class OGCWMSApi:
         """OGC WMS endpoint
 
 
-        :param workflow: Workflow id (required)
-        :type workflow: UUID
+        :param processing_graph: Processing graph id (required)
+        :type processing_graph: UUID
         :param request: type of WMS request (required)
         :type request: WmsRequest
         :param bbox:
@@ -291,7 +291,7 @@ class OGCWMSApi:
         """ # noqa: E501
 
         _param = self._wms_handler_serialize(
-            workflow=workflow,
+            processing_graph=processing_graph,
             request=request,
             bbox=bbox,
             bgcolor=bgcolor,
@@ -335,7 +335,7 @@ class OGCWMSApi:
     @validate_call
     def wms_handler_without_preload_content(
         self,
-        workflow: Annotated[UUID, Field(description="Workflow id")],
+        processing_graph: Annotated[UUID, Field(description="Processing graph id")],
         request: Annotated[WmsRequest, Field(description="type of WMS request")],
         bbox: Optional[StrictStr] = None,
         bgcolor: Optional[StrictStr] = None,
@@ -372,8 +372,8 @@ class OGCWMSApi:
         """OGC WMS endpoint
 
 
-        :param workflow: Workflow id (required)
-        :type workflow: UUID
+        :param processing_graph: Processing graph id (required)
+        :type processing_graph: UUID
         :param request: type of WMS request (required)
         :type request: WmsRequest
         :param bbox:
@@ -437,7 +437,7 @@ class OGCWMSApi:
         """ # noqa: E501
 
         _param = self._wms_handler_serialize(
-            workflow=workflow,
+            processing_graph=processing_graph,
             request=request,
             bbox=bbox,
             bgcolor=bgcolor,
@@ -476,7 +476,7 @@ class OGCWMSApi:
 
     def _wms_handler_serialize(
         self,
-        workflow,
+        processing_graph,
         request,
         bbox,
         bgcolor,
@@ -518,8 +518,8 @@ class OGCWMSApi:
         _body_params: Optional[bytes] = None
 
         # process the path parameters
-        if workflow is not None:
-            _path_params['workflow'] = workflow
+        if processing_graph is not None:
+            _path_params['processingGraph'] = processing_graph
         # process the query parameters
         if bbox is not None:
             
@@ -622,7 +622,7 @@ class OGCWMSApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/wms/{workflow}',
+            resource_path='/wms/{processingGraph}',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,

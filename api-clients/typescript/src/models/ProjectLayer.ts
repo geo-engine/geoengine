@@ -38,7 +38,7 @@ export interface ProjectLayer {
      * @type {string}
      * @memberof ProjectLayer
      */
-    workflow: string;
+    processingGraph: string;
     /**
      * 
      * @type {string}
@@ -63,7 +63,7 @@ export interface ProjectLayer {
  * Check if a given object implements the ProjectLayer interface.
  */
 export function instanceOfProjectLayer(value: object): value is ProjectLayer {
-    if (!('workflow' in value) || value['workflow'] === undefined) return false;
+    if (!('processingGraph' in value) || value['processingGraph'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('visibility' in value) || value['visibility'] === undefined) return false;
     if (!('symbology' in value) || value['symbology'] === undefined) return false;
@@ -80,7 +80,7 @@ export function ProjectLayerFromJSONTyped(json: any, ignoreDiscriminator: boolea
     }
     return {
         
-        'workflow': json['workflow'],
+        'processingGraph': json['processingGraph'],
         'name': json['name'],
         'visibility': LayerVisibilityFromJSON(json['visibility']),
         'symbology': SymbologyFromJSON(json['symbology']),
@@ -98,7 +98,7 @@ export function ProjectLayerToJSONTyped(value?: ProjectLayer | null, ignoreDiscr
 
     return {
         
-        'workflow': value['workflow'],
+        'processingGraph': value['processingGraph'],
         'name': value['name'],
         'visibility': LayerVisibilityToJSON(value['visibility']),
         'symbology': SymbologyToJSON(value['symbology']),

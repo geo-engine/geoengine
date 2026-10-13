@@ -264,7 +264,7 @@ export class RasterVectorJoinComponent implements OnDestroy {
                 mergeMap((projectedOperators) => {
                     const vectorWorkflow = projectedOperators[0];
                     if (vectorWorkflow.type !== 'Vector') {
-                        throw new Error('Expected a vector workflow for raster-vector join.');
+                        throw new Error('Expected a vector processing graph for raster-vector join.');
                     }
 
                     const validRasterOperators = projectedOperators
@@ -273,7 +273,7 @@ export class RasterVectorJoinComponent implements OnDestroy {
                         .map((rasterWorkflow) => rasterWorkflow.operator);
 
                     return from(
-                        this.projectService.registerWorkflow({
+                        this.projectService.registerProcessingGraph({
                             type: 'Vector',
                             operator: {
                                 type: 'RasterVectorJoin',
@@ -288,7 +288,7 @@ export class RasterVectorJoinComponent implements OnDestroy {
                         mergeMap((workflowId) =>
                             this.projectService.addLayer(
                                 new VectorLayer({
-                                    workflowId,
+                                    processingGraphId: workflowId,
                                     name: outputLayerName,
                                     symbology: this.symbologyWithNewColor(vectorLayer.symbology as PointSymbology),
                                     isLegendVisible: false,

@@ -189,7 +189,7 @@ export class StatisticsPlotComponent implements AfterViewInit, OnDestroy {
             .getAutomaticallyProjectedOperatorsFromLayers(sources)
             .pipe(
                 mergeMap((inputOperators: Array<TypedOperator>) =>
-                    this.projectService.registerWorkflow({
+                    this.projectService.registerProcessingGraph({
                         type: 'Plot',
                         operator: {
                             type: 'Statistics',

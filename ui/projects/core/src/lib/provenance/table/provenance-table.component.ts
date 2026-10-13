@@ -86,7 +86,7 @@ export class ProvenanceTableComponent implements OnInit, OnChanges {
     }
 
     selectLayer(layer: Layer): void {
-        this.projectService.getWorkflowProvenance(layer.workflowId).subscribe((provenance) => {
+        this.projectService.getProcessingGraphProvenance(layer.workflowId).subscribe((provenance) => {
             this.loading = false;
 
             const table = [];

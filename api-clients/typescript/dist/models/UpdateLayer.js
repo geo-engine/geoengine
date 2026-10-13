@@ -27,7 +27,7 @@ function instanceOfUpdateLayer(value) {
         return false;
     if (!('description' in value) || value['description'] === undefined)
         return false;
-    if (!('workflow' in value) || value['workflow'] === undefined)
+    if (!('processingGraph' in value) || value['processingGraph'] === undefined)
         return false;
     return true;
 }
@@ -41,7 +41,7 @@ function UpdateLayerFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'name': json['name'],
         'description': json['description'],
-        'workflow': (0, ProcessingGraph_1.ProcessingGraphFromJSON)(json['workflow']),
+        'processingGraph': (0, ProcessingGraph_1.ProcessingGraphFromJSON)(json['processingGraph']),
         'symbology': json['symbology'] == null ? undefined : (0, Symbology_1.SymbologyFromJSON)(json['symbology']),
         'properties': json['properties'] == null ? undefined : json['properties'],
         'metadata': json['metadata'] == null ? undefined : json['metadata'],
@@ -57,7 +57,7 @@ function UpdateLayerToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'name': value['name'],
         'description': value['description'],
-        'workflow': (0, ProcessingGraph_1.ProcessingGraphToJSON)(value['workflow']),
+        'processingGraph': (0, ProcessingGraph_1.ProcessingGraphToJSON)(value['processingGraph']),
         'symbology': (0, Symbology_1.SymbologyToJSON)(value['symbology']),
         'properties': value['properties'],
         'metadata': value['metadata'],
