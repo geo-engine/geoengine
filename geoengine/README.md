@@ -28,8 +28,6 @@ Cf. [Settings-default.toml](Settings-default.toml) for all available configurati
 
 ## Tests & Formatting
 
-TIFF comparison tests require GDAL >= 3.12 with the `gdal raster compare` command available.
-
 - Format code: `just backend fmt`
 - Run Clippy lints: `just backend lint`
 - Run unit and integration tests: `just backend test`
