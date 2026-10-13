@@ -22,7 +22,7 @@ export class Plot implements HasPlotId, ToDict<PlotDict> {
     static fromDict(dict: PlotDict): Plot {
         return new Plot({
             name: dict.name,
-            workflowId: dict.workflow,
+            workflowId: dict.processingGraph,
         });
     }
 
@@ -45,7 +45,7 @@ export class Plot implements HasPlotId, ToDict<PlotDict> {
     toDict(): PlotDict {
         return {
             name: this.name,
-            workflow: this.workflowId,
+            processingGraph: this.workflowId,
         };
     }
 }

@@ -21,7 +21,7 @@ import {
     UUID,
     VectorSymbology,
     WHITE,
-    WorkflowsService,
+    ProcessingGraphsService,
     createVectorSymbology as createDefaultVectorSymbology,
     errorToText,
     geoengineValidators,
@@ -89,7 +89,7 @@ export interface DatasetForm {
 })
 export class DatasetEditorComponent {
     private readonly datasetsService = inject(DatasetsService);
-    private readonly workflowsService = inject(WorkflowsService);
+    private readonly processingGraphsService = inject(ProcessingGraphsService);
     private readonly snackBar = inject(MatSnackBar);
     private readonly dialog = inject(MatDialog);
     private readonly config = inject(AppConfig);
@@ -345,7 +345,7 @@ export class DatasetEditorComponent {
 
     private getWorkflowId(dataset: Dataset): Promise<UUID> {
         if (dataset.resultDescriptor.type === 'raster') {
-            return this.workflowsService.registerWorkflow({
+            return this.processingGraphsService.registerProcessingGraph({
                 type: 'Raster',
                 operator: {
                     type: 'GdalSource',
@@ -357,7 +357,7 @@ export class DatasetEditorComponent {
         }
 
         if (dataset.resultDescriptor.type === 'vector') {
-            return this.workflowsService.registerWorkflow({
+            return this.processingGraphsService.registerProcessingGraph({
                 type: 'Vector',
                 operator: {
                     type: 'OgrSource',

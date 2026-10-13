@@ -28,13 +28,13 @@ __all__ = [
     "OGCWMSApi",
     "PermissionsApi",
     "PlotsApi",
+    "ProcessingGraphsApi",
     "ProjectsApi",
     "SessionApi",
     "SpatialReferencesApi",
     "TasksApi",
     "UploadsApi",
     "UserApi",
-    "WorkflowsApi",
     "ApiResponse",
     "ApiClient",
     "Configuration",
@@ -195,6 +195,7 @@ __all__ = [
     "LayerListing",
     "LayerProviderListing",
     "LayerResource",
+    "LayerUpdate",
     "LayerVisibility",
     "LineSimplification",
     "LineSimplificationAlgorithm",
@@ -276,6 +277,7 @@ __all__ = [
     "PlotOperator",
     "PlotOutputFormat",
     "PlotResultDescriptor",
+    "PlotUpdate",
     "PointInPolygonFilter",
     "PointInPolygonFilterSource",
     "PointSymbology",
@@ -298,7 +300,7 @@ __all__ = [
     "RasterBandDescriptor",
     "RasterColorizer",
     "RasterDataType",
-    "RasterDatasetFromWorkflow",
+    "RasterDatasetFromProcessingGraph",
     "RasterOperator",
     "RasterPropertiesEntryType",
     "RasterPropertiesKey",
@@ -320,8 +322,10 @@ __all__ = [
     "ReflectanceParameters",
     "Regular",
     "RegularTimeDimension",
-    "Rename",
     "RenameBands",
+    "RenameBandsDefault",
+    "RenameBandsRename",
+    "RenameBandsSuffix",
     "Reprojection",
     "ReprojectionParameters",
     "Resource",
@@ -448,7 +452,6 @@ __all__ = [
     "UserRegistration",
     "UserSession",
     "VariableMatrixWidth",
-    "VecUpdate",
     "VectorColumnInfo",
     "VectorDataType",
     "VectorExpression",
@@ -488,13 +491,13 @@ from geoengine_api_client.api.ogcwfs_api import OGCWFSApi as OGCWFSApi
 from geoengine_api_client.api.ogcwms_api import OGCWMSApi as OGCWMSApi
 from geoengine_api_client.api.permissions_api import PermissionsApi as PermissionsApi
 from geoengine_api_client.api.plots_api import PlotsApi as PlotsApi
+from geoengine_api_client.api.processing_graphs_api import ProcessingGraphsApi as ProcessingGraphsApi
 from geoengine_api_client.api.projects_api import ProjectsApi as ProjectsApi
 from geoengine_api_client.api.session_api import SessionApi as SessionApi
 from geoengine_api_client.api.spatial_references_api import SpatialReferencesApi as SpatialReferencesApi
 from geoengine_api_client.api.tasks_api import TasksApi as TasksApi
 from geoengine_api_client.api.uploads_api import UploadsApi as UploadsApi
 from geoengine_api_client.api.user_api import UserApi as UserApi
-from geoengine_api_client.api.workflows_api import WorkflowsApi as WorkflowsApi
 
 # import ApiClient
 from geoengine_api_client.api_response import ApiResponse as ApiResponse
@@ -659,6 +662,7 @@ from geoengine_api_client.models.layer_collection_resource import LayerCollectio
 from geoengine_api_client.models.layer_listing import LayerListing as LayerListing
 from geoengine_api_client.models.layer_provider_listing import LayerProviderListing as LayerProviderListing
 from geoengine_api_client.models.layer_resource import LayerResource as LayerResource
+from geoengine_api_client.models.layer_update import LayerUpdate as LayerUpdate
 from geoengine_api_client.models.layer_visibility import LayerVisibility as LayerVisibility
 from geoengine_api_client.models.line_simplification import LineSimplification as LineSimplification
 from geoengine_api_client.models.line_simplification_algorithm import LineSimplificationAlgorithm as LineSimplificationAlgorithm
@@ -740,6 +744,7 @@ from geoengine_api_client.models.plot import Plot as Plot
 from geoengine_api_client.models.plot_operator import PlotOperator as PlotOperator
 from geoengine_api_client.models.plot_output_format import PlotOutputFormat as PlotOutputFormat
 from geoengine_api_client.models.plot_result_descriptor import PlotResultDescriptor as PlotResultDescriptor
+from geoengine_api_client.models.plot_update import PlotUpdate as PlotUpdate
 from geoengine_api_client.models.point_in_polygon_filter import PointInPolygonFilter as PointInPolygonFilter
 from geoengine_api_client.models.point_in_polygon_filter_source import PointInPolygonFilterSource as PointInPolygonFilterSource
 from geoengine_api_client.models.point_symbology import PointSymbology as PointSymbology
@@ -762,7 +767,7 @@ from geoengine_api_client.models.radiance import Radiance as Radiance
 from geoengine_api_client.models.raster_band_descriptor import RasterBandDescriptor as RasterBandDescriptor
 from geoengine_api_client.models.raster_colorizer import RasterColorizer as RasterColorizer
 from geoengine_api_client.models.raster_data_type import RasterDataType as RasterDataType
-from geoengine_api_client.models.raster_dataset_from_workflow import RasterDatasetFromWorkflow as RasterDatasetFromWorkflow
+from geoengine_api_client.models.raster_dataset_from_processing_graph import RasterDatasetFromProcessingGraph as RasterDatasetFromProcessingGraph
 from geoengine_api_client.models.raster_operator import RasterOperator as RasterOperator
 from geoengine_api_client.models.raster_properties_entry_type import RasterPropertiesEntryType as RasterPropertiesEntryType
 from geoengine_api_client.models.raster_properties_key import RasterPropertiesKey as RasterPropertiesKey
@@ -784,8 +789,10 @@ from geoengine_api_client.models.reflectance import Reflectance as Reflectance
 from geoengine_api_client.models.reflectance_parameters import ReflectanceParameters as ReflectanceParameters
 from geoengine_api_client.models.regular import Regular as Regular
 from geoengine_api_client.models.regular_time_dimension import RegularTimeDimension as RegularTimeDimension
-from geoengine_api_client.models.rename import Rename as Rename
 from geoengine_api_client.models.rename_bands import RenameBands as RenameBands
+from geoengine_api_client.models.rename_bands_default import RenameBandsDefault as RenameBandsDefault
+from geoengine_api_client.models.rename_bands_rename import RenameBandsRename as RenameBandsRename
+from geoengine_api_client.models.rename_bands_suffix import RenameBandsSuffix as RenameBandsSuffix
 from geoengine_api_client.models.reprojection import Reprojection as Reprojection
 from geoengine_api_client.models.reprojection_parameters import ReprojectionParameters as ReprojectionParameters
 from geoengine_api_client.models.resource import Resource as Resource
@@ -912,7 +919,6 @@ from geoengine_api_client.models.user_info import UserInfo as UserInfo
 from geoengine_api_client.models.user_registration import UserRegistration as UserRegistration
 from geoengine_api_client.models.user_session import UserSession as UserSession
 from geoengine_api_client.models.variable_matrix_width import VariableMatrixWidth as VariableMatrixWidth
-from geoengine_api_client.models.vec_update import VecUpdate as VecUpdate
 from geoengine_api_client.models.vector_column_info import VectorColumnInfo as VectorColumnInfo
 from geoengine_api_client.models.vector_data_type import VectorDataType as VectorDataType
 from geoengine_api_client.models.vector_expression import VectorExpression as VectorExpression

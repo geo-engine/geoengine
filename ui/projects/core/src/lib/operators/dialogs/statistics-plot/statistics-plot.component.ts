@@ -152,14 +152,8 @@ export class StatisticsPlotComponent implements AfterViewInit, OnDestroy {
 
         from(this.projectService.getWorkflow(inputLayer.workflowId))
             .pipe(
-                mergeMap((inputWorkflow: ProcessingGraph) => {
-                    if (inputWorkflow.type !== 'Raster' && inputWorkflow.type !== 'Vector') {
-                        throw new Error(`Invalid workflow type ${inputWorkflow.type}.`);
-                    }
-
-                    const source: RasterOperator | VectorOperator = inputWorkflow.operator;
-
-                    return this.projectService.registerWorkflow({
+                mergeMap((inputOperators: Array<TypedOperator>) =>
+                    this.projectService.registerProcessingGraph({
                         type: 'Plot',
                         operator: {
                             type: 'Statistics',

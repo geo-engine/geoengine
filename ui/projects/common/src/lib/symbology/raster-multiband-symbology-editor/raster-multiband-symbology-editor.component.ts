@@ -4,8 +4,8 @@ import {FormBuilder, FormControl, FormGroup, Validators, FormsModule, ReactiveFo
 import {geoengineValidators} from '../../util/form.validators';
 import {SymbologyQueryParams, MultiBandRasterColorizer} from '../symbology.model';
 import {Color, TRANSPARENT} from '../../colors/color';
-import {WorkflowsService} from '../../workflows/workflows.service';
-import {Statistics} from '@geoengine/api-client';
+import {ProcessingGraphsService} from '../../processing-graphs/processing-graphs.service';
+import {Expression, Statistics} from '@geoengine/api-client';
 import {PlotsService} from '../../plots/plots.service';
 import {statisticsFromPlotData} from '../../plots/statistics';
 import {VegaChartData} from '../../plots/plot.model';
@@ -67,7 +67,7 @@ type RgbColorName = 'red' | 'green' | 'blue';
 })
 export class RasterMultibandSymbologyEditorComponent implements OnDestroy {
     private readonly formBuilder = inject(FormBuilder);
-    private readonly workflowsService = inject(WorkflowsService);
+    private readonly processingGraphsService = inject(ProcessingGraphsService);
     private readonly plotsService = inject(PlotsService);
 
     readonly workflowId = input.required<UUID>();
@@ -225,15 +225,15 @@ export class RasterMultibandSymbologyEditorComponent implements OnDestroy {
 
         this.isLoadingRasterStats.set(true);
 
-        const workflow = await this.workflowsService.getWorkflow(this.workflowId());
+        const workflow = await this.processingGraphsService.getProcessingGraph(this.workflowId());
 
         if (workflow.type !== 'Raster') {
-            throw new Error('Expected a raster workflow for multiband statistics.');
+            throw new Error('Expected a raster processing graph for multiband statistics.');
         }
 
         const bands = {red: this.band1(), green: this.band2(), blue: this.band3()};
 
-        const statsWorkflowId = await this.workflowsService.registerWorkflow({
+        const statsWorkflowId = await this.processingGraphsService.registerProcessingGraph({
             type: 'Plot',
             operator: {
                 type: 'Statistics',

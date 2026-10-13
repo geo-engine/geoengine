@@ -73,28 +73,32 @@ export class DatasetService {
     }
 
     addDatasetToMap(dataset: Dataset): Observable<void> {
-        const workflow = dataset.createSourceWorkflow();
-        return this.addDatasetToMapWithSourceWorkflow(dataset, workflow);
+        const processingGraph = dataset.createSourceProcessingGraph();
+        return this.addDatasetToMapWithSourceProcessingGraph(dataset, processingGraph);
     }
 
-    addDatasetToMapWithSourceWorkflow(dataset: Dataset, workflow: ProcessingGraph): Observable<void> {
-        return this.createLayerFromDatasetWithWorkflow(dataset, workflow).pipe(mergeMap((layer) => this.projectService.addLayer(layer)));
+    addDatasetToMapWithSourceProcessingGraph(dataset: Dataset, processingGraph: ProcessingGraph): Observable<void> {
+        return this.createLayerFromDatasetWithProcessingGraph(dataset, processingGraph).pipe(
+            mergeMap((layer) => this.projectService.addLayer(layer)),
+        );
     }
 
     createLayerFromDataset(dataset: Dataset): Observable<Layer> {
-        const workflow = dataset.createSourceWorkflow();
-        return this.createLayerFromDatasetWithWorkflow(dataset, workflow);
+        const processingGraph = dataset.createSourceProcessingGraph();
+        return this.createLayerFromDatasetWithProcessingGraph(dataset, processingGraph);
     }
 
-    createLayerFromDatasetWithWorkflow(dataset: Dataset, workflow: ProcessingGraph): Observable<Layer> {
-        return from(this.projectService.registerWorkflow(workflow)).pipe(map((workflowId) => this.createLayer(workflowId, dataset)));
+    createLayerFromDatasetWithProcessingGraph(dataset: Dataset, processingGraph: ProcessingGraph): Observable<Layer> {
+        return from(this.projectService.registerProcessingGraph(processingGraph)).pipe(
+            map((processingGraphId) => this.createLayer(processingGraphId, dataset)),
+        );
     }
 
-    createLayer(workflowId: string, dataset: Dataset): Layer {
+    createLayer(processingGraphId: string, dataset: Dataset): Layer {
         if (dataset.resultDescriptor.getTypeString() === 'Raster') {
             const symbology = dataset.symbology as RasterSymbology;
             return new RasterLayer({
-                workflowId,
+                processingGraphId,
                 name: dataset.displayName,
                 symbology: symbology
                     ? symbology
@@ -192,7 +196,7 @@ export class DatasetService {
             }
 
             return new VectorLayer({
-                workflowId,
+                processingGraphId: processingGraphId,
                 name: dataset.displayName,
                 symbology,
                 isLegendVisible: false,

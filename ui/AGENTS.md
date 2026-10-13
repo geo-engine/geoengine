@@ -10,6 +10,7 @@ UI-specific guidance. Repo-wide context (generated-code chain, PR rules) is in t
     - `nightly` proxies to the hosted nightly backend, so no local backend is needed.
 - Build: `just ui build <project>` (e.g. `gis`, `eodyssey`, `core`, `common`). Building `core` or `common` writes to `dist/`; delete that output afterwards (see below).
 - Lint: `just ui lint [--project=gis] [--fix]` (prettier + eslint)
+- Run ESLint via `just ui lint` or `npm run lint`, not plain `ng lint`. The npm script sets `TSESTREE_SINGLE_RUN=true`; without it typescript-eslint uses watch programs under `ng lint` and runs out of memory.
 - Test: `just ui test [--project=gis] [--include=<path>] [--ci] [filter]` (vitest). By default tests run in jsdom. `--ci` runs them in headless Chromium via Playwright, as CI does. Use it when a test passes locally but fails in CI.
 
 ## Structure

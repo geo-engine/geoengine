@@ -174,7 +174,7 @@ export class BoxPlotOperatorComponent implements AfterViewInit, OnDestroy {
 
                     const source: RasterOperator | VectorOperator = inputWorkflow.operator;
 
-                    return this.projectService.registerWorkflow({
+                    return this.projectService.registerProcessingGraph({
                         type: 'Plot',
                         operator: {
                             type: 'BoxPlot',

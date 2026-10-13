@@ -202,13 +202,13 @@ export class SymbologyCreatorComponent implements OnInit, OnDestroy, ControlValu
             .getWorkflowMetaData(workflowId)
             .pipe(map((resultDescriptor) => (resultDescriptor as RasterResultDescriptorDict).bands[0].name));
 
-        const statisticsWorkflow$ = combineLatest([from(this.projectService.getWorkflow(workflowId)), bandName$]).pipe(
-            mergeMap(([workflow, bandName]) => {
+        const statisticsWorkflow$ = from(this.projectService.getProcessingGraph(workflowId)).pipe(
+            mergeMap((workflow) => {
                 if (workflow.type !== 'Raster') {
-                    throw new Error('Expected a raster workflow for symbology statistics.');
+                    throw new Error('Expected a raster processing graph for symbology statistics.');
                 }
 
-                return this.projectService.registerWorkflow({
+                return this.projectService.registerProcessingGraph({
                     type: 'Plot',
                     operator: {
                         type: 'Statistics',
@@ -230,7 +230,7 @@ export class SymbologyCreatorComponent implements OnInit, OnDestroy, ControlValu
             spatialResolution: [number, number];
         }> = combineLatest([
             this.projectService
-                .getWorkflowMetaData(workflowId)
+                .getProcessingGraphMetaData(workflowId)
                 .pipe(map((resultDescriptor) => RasterResultDescriptor.fromDict(resultDescriptor as RasterResultDescriptorDict))),
             this.projectService.getTimeOnce(),
         ]).pipe(

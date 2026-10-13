@@ -11,34 +11,34 @@
  * Do not edit the class manually.
  */
 
-import type { Default } from './Default';
+import type { RenameBandsDefault } from './RenameBandsDefault';
 import {
-    instanceOfDefault,
-    DefaultFromJSON,
-    DefaultFromJSONTyped,
-    DefaultToJSON,
-} from './Default';
-import type { Rename } from './Rename';
+    instanceOfRenameBandsDefault,
+    RenameBandsDefaultFromJSON,
+    RenameBandsDefaultFromJSONTyped,
+    RenameBandsDefaultToJSON,
+} from './RenameBandsDefault';
+import type { RenameBandsRename } from './RenameBandsRename';
 import {
-    instanceOfRename,
-    RenameFromJSON,
-    RenameFromJSONTyped,
-    RenameToJSON,
-} from './Rename';
-import type { Suffix } from './Suffix';
+    instanceOfRenameBandsRename,
+    RenameBandsRenameFromJSON,
+    RenameBandsRenameFromJSONTyped,
+    RenameBandsRenameToJSON,
+} from './RenameBandsRename';
+import type { RenameBandsSuffix } from './RenameBandsSuffix';
 import {
-    instanceOfSuffix,
-    SuffixFromJSON,
-    SuffixFromJSONTyped,
-    SuffixToJSON,
-} from './Suffix';
+    instanceOfRenameBandsSuffix,
+    RenameBandsSuffixFromJSON,
+    RenameBandsSuffixFromJSONTyped,
+    RenameBandsSuffixToJSON,
+} from './RenameBandsSuffix';
 
 /**
  * @type RenameBands
  * 
  * @export
  */
-export type RenameBands = Default | Rename | Suffix;
+export type RenameBands = { type: 'default' } & RenameBandsDefault | { type: 'rename' } & RenameBandsRename | { type: 'suffix' } & RenameBandsSuffix;
 
 export function RenameBandsFromJSON(json: any): RenameBands {
     return RenameBandsFromJSONTyped(json, false);
@@ -48,19 +48,16 @@ export function RenameBandsFromJSONTyped(json: any, ignoreDiscriminator: boolean
     if (json == null) {
         return json;
     }
-    if (typeof json !== 'object') {
-        return json;
+    switch (json['type']) {
+        case 'default':
+            return Object.assign({}, RenameBandsDefaultFromJSONTyped(json, true), { type: 'default' } as const);
+        case 'rename':
+            return Object.assign({}, RenameBandsRenameFromJSONTyped(json, true), { type: 'rename' } as const);
+        case 'suffix':
+            return Object.assign({}, RenameBandsSuffixFromJSONTyped(json, true), { type: 'suffix' } as const);
+        default:
+            return json;
     }
-    if (instanceOfDefault(json)) {
-        return DefaultFromJSONTyped(json, true);
-    }
-    if (instanceOfRename(json)) {
-        return RenameFromJSONTyped(json, true);
-    }
-    if (instanceOfSuffix(json)) {
-        return SuffixFromJSONTyped(json, true);
-    }
-    return {} as any;
 }
 
 export function RenameBandsToJSON(json: any): any {
@@ -71,18 +68,15 @@ export function RenameBandsToJSONTyped(value?: RenameBands | null, ignoreDiscrim
     if (value == null) {
         return value;
     }
-    if (typeof value !== 'object') {
-        return value;
+    switch (value['type']) {
+        case 'default':
+            return Object.assign({}, RenameBandsDefaultToJSON(value), { type: 'default' } as const);
+        case 'rename':
+            return Object.assign({}, RenameBandsRenameToJSON(value), { type: 'rename' } as const);
+        case 'suffix':
+            return Object.assign({}, RenameBandsSuffixToJSON(value), { type: 'suffix' } as const);
+        default:
+            return value;
     }
-    if (instanceOfDefault(value)) {
-        return DefaultToJSON(value as Default);
-    }
-    if (instanceOfRename(value)) {
-        return RenameToJSON(value as Rename);
-    }
-    if (instanceOfSuffix(value)) {
-        return SuffixToJSON(value as Suffix);
-    }
-    return {};
 }
 

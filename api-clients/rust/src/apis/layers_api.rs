@@ -84,10 +84,10 @@ pub enum LayerToDatasetError {
     UnknownValue(serde_json::Value),
 }
 
-/// struct for typed errors of method [`layer_to_workflow_id_handler`]
+/// struct for typed errors of method [`layer_to_processing_graph_id_handler`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum LayerToWorkflowIdHandlerError {
+pub enum LayerToProcessingGraphIdHandlerError {
     UnknownValue(serde_json::Value),
 }
 
@@ -551,12 +551,12 @@ pub async fn layer_to_dataset(configuration: &configuration::Configuration, prov
     }
 }
 
-pub async fn layer_to_workflow_id_handler(configuration: &configuration::Configuration, provider: &str, layer: &str) -> Result<models::IdResponse, Error<LayerToWorkflowIdHandlerError>> {
+pub async fn layer_to_processing_graph_id_handler(configuration: &configuration::Configuration, provider: &str, layer: &str) -> Result<models::IdResponse, Error<LayerToProcessingGraphIdHandlerError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_provider = provider;
     let p_path_layer = layer;
 
-    let uri_str = format!("{}/layers/{provider}/{layer}/workflowId", configuration.base_path, provider=crate::apis::urlencode(p_path_provider), layer=crate::apis::urlencode(p_path_layer));
+    let uri_str = format!("{}/layers/{provider}/{layer}/processingGraphId", configuration.base_path, provider=crate::apis::urlencode(p_path_provider), layer=crate::apis::urlencode(p_path_layer));
     let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {
@@ -586,7 +586,7 @@ pub async fn layer_to_workflow_id_handler(configuration: &configuration::Configu
         }
     } else {
         let content = resp.text().await?;
-        let entity: Option<LayerToWorkflowIdHandlerError> = serde_json::from_str(&content).ok();
+        let entity: Option<LayerToProcessingGraphIdHandlerError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent { status, content, entity }))
     }
 }

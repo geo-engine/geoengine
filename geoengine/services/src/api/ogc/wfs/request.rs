@@ -56,7 +56,7 @@ pub struct GetFeature {
     pub version: Option<WfsVersion>,
     pub service: WfsService,
     #[serde(deserialize_with = "parse_type_names", alias = "typenames")]
-    #[param(example = "<Workflow Id>")]
+    #[param(example = "<Processing Graph Id>")]
     pub type_names: TypeNames,
     // TODO: fifths parameter can be CRS
     #[serde(deserialize_with = "parse_ogc_bbox")]

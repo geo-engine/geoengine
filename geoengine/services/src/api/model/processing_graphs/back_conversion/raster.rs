@@ -236,15 +236,7 @@ impl TryFrom<&OperatorsRasterStacker> for RasterStacker {
         Ok(Self {
             r#type: Default::default(),
             params: RasterStackerParameters {
-                rename_bands: match &value.params.rename_bands {
-                    geoengine_datatypes::raster::RenameBands::Default => RenameBands::Default,
-                    geoengine_datatypes::raster::RenameBands::Suffix(values) => {
-                        RenameBands::Suffix(values.clone())
-                    }
-                    geoengine_datatypes::raster::RenameBands::Rename(values) => {
-                        RenameBands::Rename(values.clone())
-                    }
-                },
+                rename_bands: RenameBands::from(&value.params.rename_bands),
             },
             sources:
                 crate::api::model::processing_graphs::source_parameters::MultipleRasterSources {

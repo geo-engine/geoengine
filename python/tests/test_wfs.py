@@ -41,13 +41,13 @@ class WfsTests(unittest.TestCase):
             )
 
             m.post(
-                "http://mock-instance/workflow",
+                "http://mock-instance/processingGraphs",
                 json={"id": "956d3656-2d14-5951-96a0-f962b92371cd"},
                 request_headers={"Authorization": "Bearer e327d9c3-a4f3-4bd7-a5e1-30b26cae8064"},
             )
 
             m.get(
-                "http://mock-instance/workflow/956d3656-2d14-5951-96a0-f962b92371cd/metadata",
+                "http://mock-instance/processingGraphs/956d3656-2d14-5951-96a0-f962b92371cd/metadata",
                 json={
                     "type": "vector",
                     "dataType": "MultiPoint",
@@ -217,7 +217,7 @@ class WfsTests(unittest.TestCase):
 
             ge.initialize("http://mock-instance")
 
-            workflow_definition = {
+            processing_graph_definition = {
                 "type": "Vector",
                 "operator": {
                     "type": "RasterVectorJoin",
@@ -247,19 +247,19 @@ class WfsTests(unittest.TestCase):
 
             time = datetime.strptime("2014-04-01T12:00:00.000Z", ge.DEFAULT_ISO_TIME_FORMAT)
 
-            workflow = ge.register_workflow(workflow_definition)
+            processing_graph = ge.register_processing_graph(processing_graph_definition)
 
             # TODO: remove resolution when not mocked
-            df = workflow.get_dataframe(
+            df = processing_graph.get_dataframe(
                 ge.QueryRectangle(ge.BoundingBox2D(-60.0, 5.0, 61.0, 6.0), ge.TimeInterval(time, time))
             )
 
             self.assertEqual(len(m.request_history), 4)
 
-            workflow_request = m.request_history[1]
-            self.assertEqual(workflow_request["method"], "POST")
-            self.assertEqual(workflow_request["url"], "http://mock-instance/workflow")
-            self.assertEqual(json.loads(workflow_request["body"]), workflow_definition)
+            processing_graph_request = m.request_history[1]
+            self.assertEqual(processing_graph_request["method"], "POST")
+            self.assertEqual(processing_graph_request["url"], "http://mock-instance/processingGraphs")
+            self.assertEqual(json.loads(processing_graph_request["body"]), processing_graph_definition)
 
             # note: the result descriptor is retrieved upon workflow registration (constructor),
             # thus the actual WFS request is in the 4th history slot
@@ -328,13 +328,13 @@ class WfsTests(unittest.TestCase):
             )
 
             m.post(
-                "http://mock-instance/workflow",
+                "http://mock-instance/processingGraphs",
                 json={"id": "956d3656-2d14-5951-96a0-f962b92371cd"},
                 request_headers={"Authorization": "Bearer e327d9c3-a4f3-4bd7-a5e1-30b26cae8064"},
             )
 
             m.get(
-                "http://mock-instance/workflow/956d3656-2d14-5951-96a0-f962b92371cd/metadata",
+                "http://mock-instance/processingGraphs/956d3656-2d14-5951-96a0-f962b92371cd/metadata",
                 json={
                     "type": "vector",
                     "dataType": "MultiPoint",
@@ -386,7 +386,7 @@ class WfsTests(unittest.TestCase):
 
             ge.initialize("http://mock-instance")
 
-            workflow_definition = {
+            processing_graph_definition = {
                 "type": "Vector",
                 "operator": {
                     "type": "RasterVectorJoin",
@@ -416,11 +416,11 @@ class WfsTests(unittest.TestCase):
 
             time = datetime.strptime("2004-04-01T12:00:00.000Z", ge.DEFAULT_ISO_TIME_FORMAT)
 
-            workflow = ge.register_workflow(workflow_definition)
+            processing_graph = ge.register_processing_graph(processing_graph_definition)
 
             with self.assertRaises(ge.BadRequestException) as ctx:
                 # TODO: remove resolution when not mocked
-                workflow.get_dataframe(
+                processing_graph.get_dataframe(
                     ge.QueryRectangle(ge.BoundingBox2D(-60.0, 5.0, 61.0, 6.0), ge.TimeInterval(time))
                 )
 
@@ -449,7 +449,7 @@ class WfsTests(unittest.TestCase):
             )
 
             m.get(
-                f"http://mock-instance/workflow/{uuid}/metadata",
+                f"http://mock-instance/processingGraphs/{uuid}/metadata",
                 json={
                     "type": "vector",
                     "dataType": "MultiPoint",
@@ -489,9 +489,9 @@ class WfsTests(unittest.TestCase):
 
             ge.initialize("http://mock-instance")
 
-            workflow = ge.workflow_by_id(uuid)
+            processing_graph = ge.processing_graph_by_id(uuid)
 
-            self.assertEqual(repr(workflow), str(uuid))
+            self.assertEqual(repr(processing_graph), str(uuid))
 
     def test_result_descriptor(self):
         with UrllibMocker() as m:
@@ -510,7 +510,7 @@ class WfsTests(unittest.TestCase):
             )
 
             m.get(
-                "http://mock-instance/workflow/4cdf1ffe-cb67-5de2-a1f3-3357ae0112bd/metadata",
+                "http://mock-instance/processingGraphs/4cdf1ffe-cb67-5de2-a1f3-3357ae0112bd/metadata",
                 json={
                     "type": "vector",
                     "dataType": "MultiPoint",
@@ -549,7 +549,7 @@ class WfsTests(unittest.TestCase):
             )
 
             m.get(
-                f"http://mock-instance/workflow/{NOT_FOUND_UUID}/metadata",
+                f"http://mock-instance/processingGraphs/{NOT_FOUND_UUID}/metadata",
                 status_code=404,
                 json={
                     "error": "NotFound",
@@ -560,9 +560,9 @@ class WfsTests(unittest.TestCase):
 
             ge.initialize("http://mock-instance")
 
-            workflow = ge.workflow_by_id("4cdf1ffe-cb67-5de2-a1f3-3357ae0112bd")
+            processing_graph = ge.processing_graph_by_id("4cdf1ffe-cb67-5de2-a1f3-3357ae0112bd")
 
-            result_descriptor = workflow.get_result_descriptor()
+            result_descriptor = processing_graph.get_result_descriptor()
 
             expected_repr = """\
                 Data type:         MultiPoint
@@ -591,14 +591,14 @@ class WfsTests(unittest.TestCase):
             self.assertEqual(repr(result_descriptor), textwrap.dedent(expected_repr))
 
             with self.assertRaises(ge.NotFoundException) as exception:
-                workflow = ge.workflow_by_id(NOT_FOUND_UUID)
+                processing_graph = ge.processing_graph_by_id(NOT_FOUND_UUID)
 
-                result_descriptor = workflow.get_result_descriptor()
+                result_descriptor = processing_graph.get_result_descriptor()
 
             self.assertEqual(str(exception.exception), "NotFound: Not Found")
 
-    def test_workflow_retrieval(self):
-        workflow_definition = {
+    def test_processing_graph_retrieval(self):
+        processing_graph_definition = {
             "type": "Vector",
             "operator": {
                 "type": "RasterVectorJoin",
@@ -633,13 +633,13 @@ class WfsTests(unittest.TestCase):
             )
 
             m.post(
-                "http://mock-instance/workflow",
+                "http://mock-instance/processingGraphs",
                 json={"id": "4a2cb6e0-a3e3-53e4-9a0f-ed1cf2e4c3b7"},
                 request_headers={"Authorization": "Bearer c4983c3e-9b53-47ae-bda9-382223bd5081"},
             )
 
             m.get(
-                "http://mock-instance/workflow/4a2cb6e0-a3e3-53e4-9a0f-ed1cf2e4c3b7/metadata",
+                "http://mock-instance/processingGraphs/4a2cb6e0-a3e3-53e4-9a0f-ed1cf2e4c3b7/metadata",
                 json={
                     "type": "vector",
                     "dataType": "MultiPoint",
@@ -678,16 +678,16 @@ class WfsTests(unittest.TestCase):
             )
 
             m.get(
-                "http://mock-instance/workflow/4a2cb6e0-a3e3-53e4-9a0f-ed1cf2e4c3b7",
-                json=workflow_definition,
+                "http://mock-instance/processingGraphs/4a2cb6e0-a3e3-53e4-9a0f-ed1cf2e4c3b7",
+                json=processing_graph_definition,
                 request_headers={"Authorization": "Bearer c4983c3e-9b53-47ae-bda9-382223bd5081"},
             )
 
             ge.initialize("http://mock-instance")
 
-            workflow = ge.register_workflow(workflow_definition)
+            processing_graph = ge.register_processing_graph(processing_graph_definition)
 
-            self.assertEqual(workflow.workflow_definition().to_dict(), workflow_definition)
+            self.assertEqual(processing_graph.definition().to_dict(), processing_graph_definition)
 
     def test_owslib_user_agent(self):
         with UrllibMocker() as m:
@@ -706,13 +706,13 @@ class WfsTests(unittest.TestCase):
             )
 
             m.post(
-                "http://mock-instance/workflow",
+                "http://mock-instance/processingGraphs",
                 json={"id": "956d3656-2d14-5951-96a0-f962b92371cd"},
                 request_headers={"Authorization": "Bearer e327d9c3-a4f3-4bd7-a5e1-30b26cae8064"},
             )
 
             m.get(
-                "http://mock-instance/workflow/956d3656-2d14-5951-96a0-f962b92371cd/metadata",
+                "http://mock-instance/processingGraphs/956d3656-2d14-5951-96a0-f962b92371cd/metadata",
                 json={"type": "vector", "dataType": "MultiPoint", "spatialReference": "EPSG:4326", "columns": {}},
                 request_headers={"Authorization": "Bearer e327d9c3-a4f3-4bd7-a5e1-30b26cae8064"},
             )
@@ -750,7 +750,7 @@ class WfsTests(unittest.TestCase):
 
             ge.initialize("http://mock-instance")
 
-            workflow_definition = {
+            processing_graph_definition = {
                 "type": "Vector",
                 "operator": {
                     "type": "OgrSource",
@@ -762,9 +762,9 @@ class WfsTests(unittest.TestCase):
 
             time = datetime.strptime("2004-04-01T12:00:00.000Z", ge.DEFAULT_ISO_TIME_FORMAT)
 
-            workflow = ge.register_workflow(workflow_definition)
+            processing_graph = ge.register_processing_graph(processing_graph_definition)
 
-            df = workflow.get_dataframe(
+            df = processing_graph.get_dataframe(
                 ge.QueryRectangle(ge.BoundingBox2D(-60.0, 5.0, 61.0, 6.0), ge.TimeInterval(time))
             )
 

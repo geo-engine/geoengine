@@ -50,8 +50,11 @@ export class LayerCollectionLayerComponent implements OnChanges {
             this.description = layer.description;
             if (!this.layerMetadata) {
                 this.loading = true;
-                const workflowId = await this.layerService.registerAndGetLayerWorkflowId(layer.id.providerId, layer.id.layerId);
-                const resultDescriptor = await this.layerService.getWorkflowIdMetadata(workflowId);
+                const processingGraphId = await this.layerService.registerAndGetLayerProcessingGraphId(
+                    layer.id.providerId,
+                    layer.id.layerId,
+                );
+                const resultDescriptor = await this.layerService.getProcessingGraphIdMetadata(processingGraphId);
 
                 this.layerMetadata = resultDescriptor;
                 this.loading = false;

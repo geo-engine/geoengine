@@ -8,15 +8,21 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import type { Default } from './Default';
-import type { Rename } from './Rename';
-import type { Suffix } from './Suffix';
+import type { RenameBandsDefault } from './RenameBandsDefault';
+import type { RenameBandsRename } from './RenameBandsRename';
+import type { RenameBandsSuffix } from './RenameBandsSuffix';
 /**
  * @type RenameBands
  *
  * @export
  */
-export type RenameBands = Default | Rename | Suffix;
+export type RenameBands = {
+    type: 'default';
+} & RenameBandsDefault | {
+    type: 'rename';
+} & RenameBandsRename | {
+    type: 'suffix';
+} & RenameBandsSuffix;
 export declare function RenameBandsFromJSON(json: any): RenameBands;
 export declare function RenameBandsFromJSONTyped(json: any, ignoreDiscriminator: boolean): RenameBands;
 export declare function RenameBandsToJSON(json: any): any;

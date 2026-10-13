@@ -123,11 +123,11 @@ export class DashboardComponent implements AfterViewInit {
         const indicator = event.value as Indicator;
         this.selectedIndicator.set(indicator);
 
-        const workflowId = await this.projectService.registerWorkflow(indicator.workflow);
+        const workflowId = await this.projectService.registerProcessingGraph(indicator.workflow);
 
         const rasterLayer = new RasterLayer({
             name: 'EBV',
-            workflowId,
+            processingGraphId: workflowId,
             isVisible: true,
             isLegendVisible: false,
             symbology: indicator.symbology,
@@ -175,7 +175,7 @@ export class DashboardComponent implements AfterViewInit {
 
                 const dataset = await firstValueFrom(this.datasetService.autoCreateDataset(create));
 
-                const workflowId = await this.projectService.registerWorkflow({
+                const workflowId = await this.projectService.registerProcessingGraph({
                     type: 'Vector',
                     operator: {
                         type: 'OgrSource',
@@ -187,7 +187,7 @@ export class DashboardComponent implements AfterViewInit {
 
                 const observable = this.dataSelectionService.setPolygonLayer(
                     new VectorLayer({
-                        workflowId,
+                        processingGraphId: workflowId,
                         name: 'drawn area',
                         symbology: PolygonSymbology.fromPolygonSymbologyDict({
                             type: 'polygon',
@@ -304,7 +304,7 @@ export class DashboardComponent implements AfterViewInit {
 
         this.plotLoading.set(true);
 
-        const workflowId = await this.projectService.registerWorkflow(workflow);
+        const workflowId = await this.projectService.registerProcessingGraph(workflow);
         const sessionId = await firstValueFrom(this.userService.getSessionTokenForRequest());
 
         const time = await this.projectService.getTimeOnce();

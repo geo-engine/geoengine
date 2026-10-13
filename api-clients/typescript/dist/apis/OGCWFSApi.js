@@ -33,8 +33,8 @@ class OGCWFSApi extends runtime.BaseAPI {
      */
     wfsHandlerRequestOpts(requestParameters) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (requestParameters['workflow'] == null) {
-                throw new runtime.RequiredError('workflow', 'Required parameter "workflow" was null or undefined when calling wfsHandler().');
+            if (requestParameters['processingGraph'] == null) {
+                throw new runtime.RequiredError('processingGraph', 'Required parameter "processingGraph" was null or undefined when calling wfsHandler().');
             }
             if (requestParameters['request'] == null) {
                 throw new runtime.RequiredError('request', 'Required parameter "request" was null or undefined when calling wfsHandler().');
@@ -87,8 +87,8 @@ class OGCWFSApi extends runtime.BaseAPI {
                     headerParameters["Authorization"] = `Bearer ${tokenString}`;
                 }
             }
-            let urlPath = `/wfs/{workflow}`;
-            urlPath = urlPath.replace(`{${"workflow"}}`, encodeURIComponent(String(requestParameters['workflow'])));
+            let urlPath = `/wfs/{processingGraph}`;
+            urlPath = urlPath.replace(`{${"processingGraph"}}`, encodeURIComponent(String(requestParameters['processingGraph'])));
             return {
                 path: urlPath,
                 method: 'GET',
