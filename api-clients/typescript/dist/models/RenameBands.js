@@ -16,9 +16,9 @@ exports.RenameBandsFromJSON = RenameBandsFromJSON;
 exports.RenameBandsFromJSONTyped = RenameBandsFromJSONTyped;
 exports.RenameBandsToJSON = RenameBandsToJSON;
 exports.RenameBandsToJSONTyped = RenameBandsToJSONTyped;
-const Default_1 = require("./Default");
-const Rename_1 = require("./Rename");
-const Suffix_1 = require("./Suffix");
+const RenameBandsDefault_1 = require("./RenameBandsDefault");
+const RenameBandsRename_1 = require("./RenameBandsRename");
+const RenameBandsSuffix_1 = require("./RenameBandsSuffix");
 function RenameBandsFromJSON(json) {
     return RenameBandsFromJSONTyped(json, false);
 }
@@ -26,19 +26,16 @@ function RenameBandsFromJSONTyped(json, ignoreDiscriminator) {
     if (json == null) {
         return json;
     }
-    if (typeof json !== 'object') {
-        return json;
+    switch (json['type']) {
+        case 'default':
+            return Object.assign({}, (0, RenameBandsDefault_1.RenameBandsDefaultFromJSONTyped)(json, true), { type: 'default' });
+        case 'rename':
+            return Object.assign({}, (0, RenameBandsRename_1.RenameBandsRenameFromJSONTyped)(json, true), { type: 'rename' });
+        case 'suffix':
+            return Object.assign({}, (0, RenameBandsSuffix_1.RenameBandsSuffixFromJSONTyped)(json, true), { type: 'suffix' });
+        default:
+            return json;
     }
-    if ((0, Default_1.instanceOfDefault)(json)) {
-        return (0, Default_1.DefaultFromJSONTyped)(json, true);
-    }
-    if ((0, Rename_1.instanceOfRename)(json)) {
-        return (0, Rename_1.RenameFromJSONTyped)(json, true);
-    }
-    if ((0, Suffix_1.instanceOfSuffix)(json)) {
-        return (0, Suffix_1.SuffixFromJSONTyped)(json, true);
-    }
-    return {};
 }
 function RenameBandsToJSON(json) {
     return RenameBandsToJSONTyped(json, false);
@@ -47,17 +44,14 @@ function RenameBandsToJSONTyped(value, ignoreDiscriminator = false) {
     if (value == null) {
         return value;
     }
-    if (typeof value !== 'object') {
-        return value;
+    switch (value['type']) {
+        case 'default':
+            return Object.assign({}, (0, RenameBandsDefault_1.RenameBandsDefaultToJSON)(value), { type: 'default' });
+        case 'rename':
+            return Object.assign({}, (0, RenameBandsRename_1.RenameBandsRenameToJSON)(value), { type: 'rename' });
+        case 'suffix':
+            return Object.assign({}, (0, RenameBandsSuffix_1.RenameBandsSuffixToJSON)(value), { type: 'suffix' });
+        default:
+            return value;
     }
-    if ((0, Default_1.instanceOfDefault)(value)) {
-        return (0, Default_1.DefaultToJSON)(value);
-    }
-    if ((0, Rename_1.instanceOfRename)(value)) {
-        return (0, Rename_1.RenameToJSON)(value);
-    }
-    if ((0, Suffix_1.instanceOfSuffix)(value)) {
-        return (0, Suffix_1.SuffixToJSON)(value);
-    }
-    return {};
 }

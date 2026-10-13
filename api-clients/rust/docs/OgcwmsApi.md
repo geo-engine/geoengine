@@ -4,13 +4,13 @@ All URIs are relative to *https://geoengine.io/api*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**wms_handler**](OgcwmsApi.md#wms_handler) | **GET** /wms/{workflow} | OGC WMS endpoint
+[**wms_handler**](OgcwmsApi.md#wms_handler) | **GET** /wms/{processingGraph} | OGC WMS endpoint
 
 
 
 ## wms_handler
 
-> std::path::PathBuf wms_handler(workflow, request, bbox, bgcolor, crs, elevation, exceptions, format, height, info_format, layer, layers, query_layers, service, sld, sld_body, styles, time, transparent, version, width)
+> std::path::PathBuf wms_handler(processing_graph, request, bbox, bgcolor, crs, elevation, exceptions, format, height, info_format, layer, layers, query_layers, service, sld, sld_body, styles, time, transparent, version, width)
 OGC WMS endpoint
 
 ### Parameters
@@ -18,7 +18,7 @@ OGC WMS endpoint
 
 Name | Type | Description  | Required | Notes
 ------------- | ------------- | ------------- | ------------- | -------------
-**workflow** | **uuid::Uuid** | Workflow id | [required] |
+**processing_graph** | **uuid::Uuid** | Processing graph id | [required] |
 **request** | [**WmsRequest**](WmsRequest.md) | type of WMS request | [required] |
 **bbox** | Option<**String**> |  |  |
 **bgcolor** | Option<**String**> |  |  |

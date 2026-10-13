@@ -15,8 +15,8 @@ describe('LayersComponent', () => {
     const getLayerCollectionItems =
         vi.fn<(_provider: string, collection: string, offset?: number, limit?: number) => Promise<{items: unknown[]}>>();
     const getLayer = vi.fn();
-    const registerAndGetLayerWorkflowId = vi.fn();
-    const getWorkflowIdMetadata = vi.fn();
+    const registerAndGetLayerProcessingGraphId = vi.fn();
+    const getProcessingGraphIdMetadata = vi.fn();
     const setTime = vi.fn().mockResolvedValue(undefined);
     const setTimeStepDuration = vi.fn();
     let mapView: View;
@@ -135,8 +135,8 @@ describe('LayersComponent', () => {
             .mockImplementation((_provider, collection) => Promise.resolve(listings[collection] ?? {items: []}));
         // no raster symbology, so no legend is loaded
         getLayer.mockReset().mockResolvedValue({name: 'Layer', symbology: undefined});
-        registerAndGetLayerWorkflowId.mockReset().mockResolvedValue('workflow-id');
-        getWorkflowIdMetadata.mockReset();
+        registerAndGetLayerProcessingGraphId.mockReset().mockResolvedValue('workflow-id');
+        getProcessingGraphIdMetadata.mockReset();
         mapView = new View({projection: 'EPSG:4326'});
         await TestBed.configureTestingModule({
             imports: [LayersComponent],
@@ -144,7 +144,7 @@ describe('LayersComponent', () => {
                 provideNativeDateAdapter(),
                 {
                     provide: LayersService,
-                    useValue: {getLayerCollectionItems, getLayer, registerAndGetLayerWorkflowId, getWorkflowIdMetadata},
+                    useValue: {getLayerCollectionItems, getLayer, registerAndGetLayerProcessingGraphId, getProcessingGraphIdMetadata},
                 },
                 EOdysseyLayerService,
                 MapService,

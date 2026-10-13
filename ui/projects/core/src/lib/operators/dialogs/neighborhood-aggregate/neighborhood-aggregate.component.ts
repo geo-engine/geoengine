@@ -240,7 +240,7 @@ export class NeighborhoodAggregateComponent implements AfterViewInit, OnDestroy 
                 mergeMap((projectedLayers) => {
                     const raster = projectedLayers[0];
                     if (raster?.type !== 'Raster') {
-                        throw new Error('Expected a raster workflow for neighborhood aggregate.');
+                        throw new Error('Expected a raster processing graph for neighborhood aggregate.');
                     }
 
                     const rasterOperator: RasterOperator = raster.operator;
@@ -263,7 +263,7 @@ export class NeighborhoodAggregateComponent implements AfterViewInit, OnDestroy 
                         } as NeighborhoodAggregate,
                     };
 
-                    return this.projectService.registerWorkflow(workflow);
+                    return this.projectService.registerProcessingGraph(workflow);
                 }),
                 mergeMap((workflowId: UUID) => {
                     const symbology$: Observable<RasterSymbology> = this.symbologyCreator().symbologyForRasterLayer(
@@ -275,7 +275,7 @@ export class NeighborhoodAggregateComponent implements AfterViewInit, OnDestroy 
                 mergeMap(([workflowId, symbology]: [UUID, RasterSymbology]) =>
                     this.projectService.addLayer(
                         new RasterLayer({
-                            workflowId,
+                            processingGraphId: workflowId,
                             name,
                             symbology,
                             isLegendVisible: false,

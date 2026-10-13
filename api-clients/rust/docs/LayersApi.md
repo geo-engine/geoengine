@@ -14,7 +14,7 @@ Method | HTTP request | Description
 [**get_provider_definition**](LayersApi.md#get_provider_definition) | **GET** /layerDb/providers/{provider} | Get an existing provider's definition
 [**layer_handler**](LayersApi.md#layer_handler) | **GET** /layers/{provider}/{layer} | Retrieves the layer of the given provider
 [**layer_to_dataset**](LayersApi.md#layer_to_dataset) | **POST** /layers/{provider}/{layer}/dataset | Persist a raster layer from a provider as a dataset.
-[**layer_to_workflow_id_handler**](LayersApi.md#layer_to_workflow_id_handler) | **POST** /layers/{provider}/{layer}/workflowId | Registers a layer from a provider as a workflow and returns the workflow id
+[**layer_to_processing_graph_id_handler**](LayersApi.md#layer_to_processing_graph_id_handler) | **POST** /layers/{provider}/{layer}/processingGraphId | Registers a layer from a provider as a processing graph and returns the processing graph id
 [**list_collection_handler**](LayersApi.md#list_collection_handler) | **GET** /layers/collections/{provider}/{collection} | List the contents of the collection of the given provider
 [**list_providers**](LayersApi.md#list_providers) | **GET** /layerDb/providers | List all providers
 [**list_root_collections_handler**](LayersApi.md#list_root_collections_handler) | **GET** /layers/collections | List all layer collections
@@ -321,10 +321,10 @@ Name | Type | Description  | Required | Notes
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 
-## layer_to_workflow_id_handler
+## layer_to_processing_graph_id_handler
 
-> models::IdResponse layer_to_workflow_id_handler(provider, layer)
-Registers a layer from a provider as a workflow and returns the workflow id
+> models::IdResponse layer_to_processing_graph_id_handler(provider, layer)
+Registers a layer from a provider as a processing graph and returns the processing graph id
 
 ### Parameters
 

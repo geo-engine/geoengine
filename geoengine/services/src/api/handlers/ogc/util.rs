@@ -3,7 +3,7 @@ use crate::{
     api::{
         handlers::{
             ogc::{OgcApiResult, error::OgcApiError},
-            workflows::workflow_metadata,
+            processing_graphs::workflow_metadata,
         },
         model::{
             datatypes::{DataProviderId, LayerId},

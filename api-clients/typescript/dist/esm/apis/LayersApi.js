@@ -538,15 +538,15 @@ export class LayersApi extends runtime.BaseAPI {
         });
     }
     /**
-     * Creates request options for layerToWorkflowIdHandler without sending the request
+     * Creates request options for layerToProcessingGraphIdHandler without sending the request
      */
-    layerToWorkflowIdHandlerRequestOpts(requestParameters) {
+    layerToProcessingGraphIdHandlerRequestOpts(requestParameters) {
         return __awaiter(this, void 0, void 0, function* () {
             if (requestParameters['provider'] == null) {
-                throw new runtime.RequiredError('provider', 'Required parameter "provider" was null or undefined when calling layerToWorkflowIdHandler().');
+                throw new runtime.RequiredError('provider', 'Required parameter "provider" was null or undefined when calling layerToProcessingGraphIdHandler().');
             }
             if (requestParameters['layer'] == null) {
-                throw new runtime.RequiredError('layer', 'Required parameter "layer" was null or undefined when calling layerToWorkflowIdHandler().');
+                throw new runtime.RequiredError('layer', 'Required parameter "layer" was null or undefined when calling layerToProcessingGraphIdHandler().');
             }
             const queryParameters = {};
             const headerParameters = {};
@@ -557,7 +557,7 @@ export class LayersApi extends runtime.BaseAPI {
                     headerParameters["Authorization"] = `Bearer ${tokenString}`;
                 }
             }
-            let urlPath = `/layers/{provider}/{layer}/workflowId`;
+            let urlPath = `/layers/{provider}/{layer}/processingGraphId`;
             urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
             urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
             return {
@@ -569,21 +569,21 @@ export class LayersApi extends runtime.BaseAPI {
         });
     }
     /**
-     * Registers a layer from a provider as a workflow and returns the workflow id
+     * Registers a layer from a provider as a processing graph and returns the processing graph id
      */
-    layerToWorkflowIdHandlerRaw(requestParameters, initOverrides) {
+    layerToProcessingGraphIdHandlerRaw(requestParameters, initOverrides) {
         return __awaiter(this, void 0, void 0, function* () {
-            const requestOptions = yield this.layerToWorkflowIdHandlerRequestOpts(requestParameters);
+            const requestOptions = yield this.layerToProcessingGraphIdHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
             return new runtime.JSONApiResponse(response, (jsonValue) => IdResponseFromJSON(jsonValue));
         });
     }
     /**
-     * Registers a layer from a provider as a workflow and returns the workflow id
+     * Registers a layer from a provider as a processing graph and returns the processing graph id
      */
-    layerToWorkflowIdHandler(requestParameters, initOverrides) {
+    layerToProcessingGraphIdHandler(requestParameters, initOverrides) {
         return __awaiter(this, void 0, void 0, function* () {
-            const response = yield this.layerToWorkflowIdHandlerRaw(requestParameters, initOverrides);
+            const response = yield this.layerToProcessingGraphIdHandlerRaw(requestParameters, initOverrides);
             return yield response.value();
         });
     }

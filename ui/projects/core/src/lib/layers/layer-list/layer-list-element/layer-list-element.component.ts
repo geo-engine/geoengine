@@ -6,14 +6,12 @@ import {CoreConfig} from '../../../config.service';
 import {MapService} from '../../../map/map.service';
 import {ProjectService} from '../../../project/project.service';
 import {LayoutService} from '../../../layout.service';
-import {last, map, mergeMap, Observable, startWith, tap} from 'rxjs';
+import {last, map, Observable, startWith} from 'rxjs';
 import {ProvenanceTableComponent} from '../../../provenance/table/provenance-table.component';
 import {DataTableComponent} from '../../../datatable/table/table.component';
 import {RenameLayerComponent} from '../../rename-layer/rename-layer.component';
 import {LineageGraphComponent} from '../../../provenance/lineage-graph/lineage-graph.component';
 import {LoadingState} from '../../../project/loading-state.model';
-import {BackendService} from '../../../backend/backend.service';
-import {HttpEventType} from '@angular/common/http';
 import {filenameFromHttpHeaders} from '../../../util/http';
 import {
     IconStyle,
@@ -23,7 +21,7 @@ import {
     RasterSymbology,
     Symbology,
     SymbologyType,
-    UserService,
+    ProcessingGraphsService,
     FxLayoutDirective,
     FxLayoutAlignDirective,
     PointIconComponent,
@@ -80,8 +78,7 @@ export class LayerListElementComponent {
     readonly mapService = inject(MapService);
     readonly config = inject(CoreConfig);
     readonly changeDetectorRef = inject(ChangeDetectorRef);
-    protected readonly backend = inject(BackendService);
-    protected readonly userService = inject(UserService);
+    protected readonly processingGraphsService = inject(ProcessingGraphsService);
     protected readonly tabsService = inject(TabsService);
     protected readonly clipboard = inject(Clipboard);
     protected readonly notificationService = inject(NotificationService);
@@ -176,45 +173,26 @@ export class LayerListElementComponent {
 
     copyWorkflowIdToClipboard(layer: Layer): void {
         this.clipboard.copy(layer.workflowId);
-        this.notificationService.info('Copied workflow id to clipboard');
+        this.notificationService.info('Copied processing graph id to clipboard');
     }
 
-    downloadMetadata(layer: Layer): void {
+    async downloadMetadata(layer: Layer): Promise<void> {
         this.notificationService.info(`Downloading metadata for layer ${layer.name}`);
 
-        this.userService
-            .getSessionTokenForRequest()
-            .pipe(
-                mergeMap((token) => this.backend.downloadWorkflowMetadata(layer.workflowId, token)),
-                tap((event) => {
-                    if (event.type !== HttpEventType.DownloadProgress) {
-                        return;
-                    }
+        try {
+            const {blob, headers} = await this.processingGraphsService.getMetadataZip(layer.workflowId);
 
-                    const fraction = event.total ? event.loaded / event.total : 1;
-                    this.notificationService.info(`Metadata download: ${100 * fraction}%`);
-                }),
-                last(),
-            )
-            .subscribe({
-                next: (event) => {
-                    if (event.type !== HttpEventType.Response || event.body === null) {
-                        return;
-                    }
+            const zipArchive = new File([blob], filenameFromHttpHeaders(headers) ?? 'metadata.zip');
+            const url = window.URL.createObjectURL(zipArchive);
 
-                    const zipArchive = new File([event.body], filenameFromHttpHeaders(event.headers) ?? 'metadata.zip');
-                    const url = window.URL.createObjectURL(zipArchive);
-
-                    // trigger download
-                    const anchor = document.createElement('a');
-                    anchor.href = url;
-                    anchor.download = zipArchive.name;
-                    anchor.click();
-                },
-                error: (error) => {
-                    this.notificationService.error(`File download failed: ${error.message}`);
-                },
-            });
+            // trigger download
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = zipArchive.name;
+            anchor.click();
+        } catch (error) {
+            this.notificationService.error(`File download failed: ${(error as Error).message}`);
+        }
     }
 
     showDownload(layer: Layer): void {

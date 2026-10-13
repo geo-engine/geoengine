@@ -679,7 +679,9 @@ pub fn create_test_app(
         .configure(handlers::wcs::init_wcs_routes::<PostgresContext<NoTls>>)
         .configure(handlers::wfs::init_wfs_routes::<PostgresContext<NoTls>>)
         .configure(handlers::wms::init_wms_routes::<PostgresContext<NoTls>>)
-        .configure(handlers::workflows::init_workflow_routes::<PostgresContext<NoTls>>)
+        .configure(
+            handlers::processing_graphs::init_processing_graph_routes::<PostgresContext<NoTls>>,
+        )
         .configure(handlers::machine_learning::init_ml_routes::<PostgresContext<NoTls>>)
         .configure(handlers::ogc::init_ogc_routes::<PostgresContext<NoTls>>)
         .service(dummy_handler)

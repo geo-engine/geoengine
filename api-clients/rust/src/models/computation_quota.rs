@@ -16,18 +16,18 @@ pub struct ComputationQuota {
     pub timestamp: String,
     #[serde(rename = "computationId")]
     pub computation_id: uuid::Uuid,
-    #[serde(rename = "workflowId")]
-    pub workflow_id: uuid::Uuid,
+    #[serde(rename = "processingGraphId")]
+    pub processing_graph_id: uuid::Uuid,
     #[serde(rename = "count")]
     pub count: i64,
 }
 
 impl ComputationQuota {
-    pub fn new(timestamp: String, computation_id: uuid::Uuid, workflow_id: uuid::Uuid, count: i64) -> ComputationQuota {
+    pub fn new(timestamp: String, computation_id: uuid::Uuid, processing_graph_id: uuid::Uuid, count: i64) -> ComputationQuota {
         ComputationQuota {
             timestamp,
             computation_id,
-            workflow_id,
+            processing_graph_id,
             count,
         }
     }

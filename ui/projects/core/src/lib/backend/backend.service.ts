@@ -5,7 +5,6 @@ import {CoreConfig} from '../config.service';
 import {
     BBoxDict,
     CreateProjectResponseDict,
-    PlotDict,
     ProjectFilterDict,
     ProjectListingDict,
     ProjectOrderByDict,
@@ -21,7 +20,6 @@ import {
     DatasetNameResponseDict,
     SpatialReferenceSpecificationDict,
     DataSetProviderListingDict,
-    ProvenanceEntryDict,
     DatasetOrderByDict,
     LayerCollectionDict,
     BackendInfoDict,
@@ -39,7 +37,7 @@ import {
     Project as ProjectDict,
     Dataset as DatasetDict,
     Layer as LayerDict,
-    TypedResultDescriptor,
+    Plot as PlotDict,
 } from '@geoengine/api-client';
 import {bboxDictToExtent, unixTimestampToIsoString} from '@geoengine/common';
 
@@ -133,33 +131,12 @@ export class BackendService {
         });
     }
 
-    getWorkflowMetadata(workflowId: UUID, sessionId: UUID): Observable<TypedResultDescriptor> {
-        return this.http.get<TypedResultDescriptor>(this.config.API_URL + `/workflow/${workflowId}/metadata`, {
-            headers: BackendService.authorizationHeader(sessionId),
-        });
-    }
-
     getBackendInfo(): Observable<BackendInfoDict> {
         return this.http.get<BackendInfoDict>(this.config.API_URL + '/info');
     }
 
     getBackendAvailable(): Observable<void> {
         return this.http.get<void>(this.config.API_URL + '/available');
-    }
-
-    getWorkflowProvenance(workflowId: UUID, sessionId: UUID): Observable<Array<ProvenanceEntryDict>> {
-        return this.http.get<Array<ProvenanceEntryDict>>(this.config.API_URL + `/workflow/${workflowId}/provenance`, {
-            headers: BackendService.authorizationHeader(sessionId),
-        });
-    }
-
-    downloadWorkflowMetadata(workflowId: UUID, sessionId: UUID): Observable<HttpEvent<Blob>> {
-        return this.http.get(this.config.API_URL + `/workflow/${workflowId}/allMetadata/zip`, {
-            headers: BackendService.authorizationHeader(sessionId),
-            responseType: 'blob',
-            reportProgress: true,
-            observe: 'events',
-        });
     }
 
     downloadRasterLayer(workflowId: UUID, sessionId: UUID, wcsParams: WcsParamsDict): Observable<HttpEvent<Blob>> {

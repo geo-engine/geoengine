@@ -2,7 +2,8 @@ use crate::{
     api::model::{
         datatypes::{
             CacheTtlSeconds, DataId, DataProviderId, DatasetId, GdalConfigOption, LayerId,
-            MlModelName, RasterDataType, SpatialReference, SpatialResolution, TimeGranularity,
+            MlModelName, RasterDataType, RasterToDatasetQueryRectangle, SpatialReference,
+            SpatialResolution, TimeGranularity,
         },
         operators::{
             GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
@@ -1530,12 +1531,45 @@ impl TryIntoHeaderPair for ComputationId {
     }
 }
 
+/// parameter for the dataset from processing graph handler (body)
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
+#[schema(example = json!({"name": "foo", "displayName": "a new dataset", "description": null, "query": {"spatialBounds": {"upperLeftCoordinate": {"x": -10.0, "y": 80.0}, "lowerRightCoordinate": {"x": 50.0, "y": 20.0}}, "timeInterval": {"start": 1_388_534_400_000_i64, "end": 1_388_534_401_000_i64}}}))]
+#[serde(rename_all = "camelCase")]
+pub struct RasterDatasetFromProcessingGraph {
+    pub name: Option<DatasetName>,
+    pub display_name: String,
+    pub description: Option<String>,
+    pub query: RasterToDatasetQueryRectangle,
+    #[schema(default = default_as_cog)]
+    #[serde(default = "default_as_cog")]
+    pub as_cog: bool,
+}
+
+/// By default, we set [`RasterDatasetFromProcessingGraph::as_cog`] to true to produce cloud-optmized `GeoTiff`s.
+#[inline]
+const fn default_as_cog() -> bool {
+    true
+}
+
+impl From<RasterDatasetFromProcessingGraph> for crate::datasets::RasterDatasetFromWorkflow {
+    fn from(value: RasterDatasetFromProcessingGraph) -> Self {
+        Self {
+            name: value.name,
+            display_name: value.display_name,
+            description: value.description,
+            query: value.query,
+            as_cog: value.as_cog,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 pub struct Layer {
     pub id: ProviderLayerId,
     pub name: String,
     pub description: String,
-    pub workflow: ProcessingGraph,
+    #[serde(rename = "processingGraph")]
+    pub processing_graph: ProcessingGraph,
     pub symbology: Option<Symbology>,
     /// properties, for instance, to be rendered in the UI
     #[serde(default)]
@@ -1552,7 +1586,8 @@ pub struct AddLayer {
     pub name: String,
     #[schema(example = "Example layer description")]
     pub description: String,
-    pub workflow: ProcessingGraph,
+    #[serde(rename = "processingGraph")]
+    pub processing_graph: ProcessingGraph,
     pub symbology: Option<Symbology>,
     /// properties, for instance, to be rendered in the UI
     #[serde(default)]
@@ -1569,7 +1604,8 @@ pub struct UpdateLayer {
     pub name: String,
     #[schema(example = "Example layer description")]
     pub description: String,
-    pub workflow: ProcessingGraph,
+    #[serde(rename = "processingGraph")]
+    pub processing_graph: ProcessingGraph,
     #[serde(default)]
     pub symbology: Option<Symbology>,
     /// properties, for instance, to be rendered in the UI
@@ -1585,7 +1621,8 @@ pub struct LayerDefinition {
     pub id: LayerId,
     pub name: String,
     pub description: String,
-    pub workflow: ProcessingGraph,
+    #[serde(rename = "processingGraph")]
+    pub processing_graph: ProcessingGraph,
     pub symbology: Option<Symbology>,
     /// properties, for instance, to be rendered in the UI
     #[serde(default)]
@@ -1603,7 +1640,23 @@ impl TryFrom<Layer> for crate::layers::layer::Layer {
             id: value.id,
             name: value.name,
             description: value.description,
-            workflow: value.workflow.try_into().context(error::Api)?,
+            workflow: value.processing_graph.try_into().context(error::Api)?,
+            symbology: value.symbology,
+            properties: value.properties,
+            metadata: value.metadata,
+        })
+    }
+}
+
+impl TryFrom<crate::layers::layer::Layer> for Layer {
+    type Error = Error;
+
+    fn try_from(value: crate::layers::layer::Layer) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: value.id,
+            name: value.name,
+            description: value.description,
+            processing_graph: ProcessingGraph::try_from(&value.workflow).context(error::Api)?,
             symbology: value.symbology,
             properties: value.properties,
             metadata: value.metadata,
@@ -1618,7 +1671,7 @@ impl TryFrom<AddLayer> for crate::layers::layer::AddLayer {
         Ok(Self {
             name: value.name,
             description: value.description,
-            workflow: value.workflow.try_into().context(error::Api)?,
+            workflow: value.processing_graph.try_into().context(error::Api)?,
             symbology: value.symbology,
             properties: value.properties,
             metadata: value.metadata,
@@ -1633,7 +1686,7 @@ impl TryFrom<UpdateLayer> for crate::layers::layer::UpdateLayer {
         Ok(Self {
             name: value.name,
             description: value.description,
-            workflow: value.workflow.try_into().context(error::Api)?,
+            workflow: value.processing_graph.try_into().context(error::Api)?,
             symbology: value.symbology,
             properties: value.properties,
             metadata: value.metadata,
@@ -1649,7 +1702,7 @@ impl TryFrom<LayerDefinition> for crate::layers::layer::LayerDefinition {
             id: value.id.into(),
             name: value.name,
             description: value.description,
-            workflow: value.workflow.try_into().context(error::Api)?,
+            workflow: value.processing_graph.try_into().context(error::Api)?,
             symbology: value.symbology,
             properties: value.properties,
             metadata: value.metadata,

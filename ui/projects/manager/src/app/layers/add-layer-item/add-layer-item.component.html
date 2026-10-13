@@ -56,15 +56,15 @@
                     @if (form.controls.itemType.value === ItemType.Layer) {
                         <mat-card>
                             <mat-card-header>
-                                <mat-card-title>Workflow</mat-card-title>
+                                <mat-card-title>Processing Graph</mat-card-title>
                             </mat-card-header>
                             <mat-card-content>
                                 <geoengine-code-editor formControlName="workflow" language="JSON"></geoengine-code-editor>
                                 @if (form.controls.workflow.errors?.invalidJson) {
-                                    <mat-error> The workflow is not a valid JSON object. </mat-error>
+                                    <mat-error> The processing graph is not a valid JSON object. </mat-error>
                                 }
                                 @if (form.controls.workflow.errors?.required) {
-                                    <mat-error> The workflow must not be empty </mat-error>
+                                    <mat-error> The processing graph must not be empty </mat-error>
                                 }
                             </mat-card-content>
                         </mat-card>

@@ -17,7 +17,7 @@ import {
 import {ReplaySubject} from 'rxjs';
 import {BLACK, WHITE} from '../../colors/color';
 import {FeatureDataType} from '@geoengine/api-client';
-import {WorkflowsService} from '../../workflows/workflows.service';
+import {ProcessingGraphsService} from '../../processing-graphs/processing-graphs.service';
 import {MatCard, MatCardHeader, MatCardAvatar, MatCardTitle, MatCardContent} from '@angular/material/card';
 import {MatIcon} from '@angular/material/icon';
 import {MatSlideToggle} from '@angular/material/slide-toggle';
@@ -58,7 +58,7 @@ import {AsyncValueDefault} from '../../util/pipes/async-converters.pipe';
     ],
 })
 export class VectorSymbologyEditorComponent implements OnChanges, OnInit {
-    private readonly workflowsService = inject(WorkflowsService);
+    private readonly processingGraphsService = inject(ProcessingGraphsService);
 
     readonly symbologyWorkflow = input.required<SymbologyWorkflow<VectorSymbology>>();
 
@@ -485,7 +485,7 @@ export class VectorSymbologyEditorComponent implements OnChanges, OnInit {
     }
 
     protected async initializeAttributes(): Promise<void> {
-        await this.workflowsService.getMetadata(this.symbologyWorkflow().workflowId).then((metadata) => {
+        await this.processingGraphsService.getMetadata(this.symbologyWorkflow().workflowId).then((metadata) => {
             if (!(metadata.type === 'vector')) {
                 return;
             }

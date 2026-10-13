@@ -13,9 +13,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum RenameBands {
-    Default(Box<models::Default>),
-    Suffix(Box<models::Suffix>),
-    Rename(Box<models::Rename>),
+    #[serde(rename="default")]
+    Default(Box<models::RenameBandsDefault>),
+    #[serde(rename="suffix")]
+    Suffix(Box<models::RenameBandsSuffix>),
+    #[serde(rename="rename")]
+    Rename(Box<models::RenameBandsRename>),
 }
 
 impl Default for RenameBands {
@@ -23,20 +26,5 @@ impl Default for RenameBands {
         Self::Default(Default::default())
     }
 }
-/// 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum Type {
-    #[serde(rename = "default")]
-    Default,
-    #[serde(rename = "suffix")]
-    Suffix,
-    #[serde(rename = "rename")]
-    Rename,
-}
 
-impl Default for Type {
-    fn default() -> Type {
-        Self::Default
-    }
-}
 

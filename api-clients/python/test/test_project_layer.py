@@ -35,7 +35,7 @@ class TestProjectLayer(unittest.TestCase):
         model = ProjectLayer()
         if include_optional:
             return ProjectLayer(
-                workflow = '',
+                processing_graph = '',
                 name = '',
                 visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
                     data = True, 
@@ -44,7 +44,7 @@ class TestProjectLayer(unittest.TestCase):
             )
         else:
             return ProjectLayer(
-                workflow = '',
+                processing_graph = '',
                 name = '',
                 visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
                     data = True, 
