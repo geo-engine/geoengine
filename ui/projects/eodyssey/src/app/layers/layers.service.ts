@@ -32,10 +32,25 @@ export class EOdysseyLayerService {
             return source.variants.find((variant) => variant.key === preferredKey)?.key ?? source.variants[0]?.key;
         },
     });
-    readonly selectedPresetKey = linkedSignal<string | undefined>(() => {
-        this.selectedDataSource();
-        this.selectedVariantKey();
-        return undefined;
+    readonly selectedPresetKey = linkedSignal<
+        {sourceKey: string | undefined; variantKey: string | undefined; presets: VisualizationPreset[]},
+        string | undefined
+    >({
+        source: () => ({
+            sourceKey: this.selectedDataSource()?.key,
+            variantKey: this.selectedVariantKey(),
+            presets: this.currentPresets(),
+        }),
+        computation: (selection, previous) => {
+            if (
+                selection.sourceKey === previous?.source.sourceKey &&
+                selection.variantKey === previous?.source.variantKey &&
+                selection.presets.some((preset) => preset.key === previous?.value)
+            ) {
+                return previous?.value;
+            }
+            return selection.presets[0]?.key;
+        },
     });
     readonly selectedPresetIndex = computed(() =>
         Math.max(

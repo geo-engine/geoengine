@@ -383,7 +383,7 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
     });
 
-    it('requires a preset selection and explicit apply, with the button tracking changes', async () => {
+    it('selects the default preset and requires explicit apply, with the button tracking changes', async () => {
         fixture.detectChanges();
         await fixture.whenStable();
         fixture.detectChanges();
@@ -391,7 +391,8 @@ describe('LayersComponent', () => {
         const button = [...element.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('Apply visualization'))!;
         expect(eodysseyLayerService.dataSources().map((source) => source.key)).toEqual(['sentinel']);
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
-        expect(button.disabled).toBe(true);
+        expect(eodysseyLayerService.selectedPresetKey()).toBe('Default');
+        expect(button.disabled).toBe(false);
         expect(setTime).not.toHaveBeenCalled();
         expect(setTimeStepDuration).not.toHaveBeenCalled();
 
@@ -416,6 +417,37 @@ describe('LayersComponent', () => {
         expect(button.disabled).toBe(true);
         await fixture.whenStable();
         expect(setTime).toHaveBeenCalledTimes(1);
+    });
+
+    it('defaults to True Color Image by catalogue order and preserves a manual choice', async () => {
+        const preset = (key: string, name: string, order: number): unknown => ({
+            type: 'layer',
+            name,
+            id: {providerId: 'provider', layerId: key},
+            description: '',
+            properties: [
+                ['edv:presetKey', key],
+                ['edv:order', String(order)],
+            ],
+        });
+        getLayerCollectionItems.mockImplementation((_provider, collection) =>
+            Promise.resolve(
+                collection === 'region'
+                    ? {items: [preset('ndvi', 'NDVI', 30), preset('true_color_tci', 'True Color Image', 10)]}
+                    : (listings[collection] ?? {items: []}),
+            ),
+        );
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.selectedPreset()?.displayName).toBe('True Color Image');
+        expect(eodysseyLayerService.selectedPresetIndex()).toBe(0);
+        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
+
+        eodysseyLayerService.setSelectedPreset('ndvi');
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.selectedPresetKey()).toBe('ndvi');
+        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
     });
 
     it('keeps the applied layer and time while selecting another source until apply is clicked', async () => {
@@ -483,8 +515,8 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.selectedDataSource()?.key).toBe('other');
         expect(eodysseyLayerService.mapTileLayer()).toBe(appliedLayer);
         expect(eodysseyLayerService.appliedDataSource()).toBe(appliedSource);
-        expect(eodysseyLayerService.selectedPreset()).toBeUndefined();
-        expect(eodysseyLayerService.canApplyPreset()).toBe(false);
+        expect(eodysseyLayerService.selectedPresetKey()).toBe('other');
+        expect(eodysseyLayerService.canApplyPreset()).toBe(true);
         eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[0].key);
         fixture.detectChanges();
         await fixture.whenStable();
@@ -792,7 +824,7 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:32633');
         expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'data0', layerId: 'red33-0'});
-        expect(eodysseyLayerService.selectedPresetKey()).toBeUndefined();
+        expect(eodysseyLayerService.selectedPresetKey()).toBe('red_band');
     });
 
     it('ignores a stale preset response after switching variants', async () => {
@@ -1022,12 +1054,12 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('red33');
         eodysseyLayerService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
-        expect(eodysseyLayerService.selectedPresetKey()).toBeUndefined();
+        expect(eodysseyLayerService.selectedPresetKey()).toBe('red_band');
         expect(eodysseyLayerService.canApplyPreset()).toBe(false);
 
         // A cached region allows choosing a preset before effects run.
         eodysseyLayerService.setSelectedVariant('EPSG:32632');
-        expect(eodysseyLayerService.selectedPreset()).toBeUndefined();
+        expect(eodysseyLayerService.selectedPresetKey()).toBe('red_band');
         eodysseyLayerService.setSelectedPreset('ndvi');
         expect(eodysseyLayerService.selectedPresetIndex()).toBe(1);
         fixture.detectChanges();
