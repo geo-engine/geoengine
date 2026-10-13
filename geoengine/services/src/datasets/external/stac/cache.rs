@@ -14,6 +14,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+use tracing::trace;
 
 pub(crate) type StacQueryCacheResult = Result<Arc<Vec<TileFile>>, Arc<Error>>;
 
@@ -140,6 +141,15 @@ impl StacQueryCache {
 
         // Keep warm hits off the task-spawn and try_get_with paths.
         if let Some(result) = self.cache.get(&key).await {
+            trace!(
+                event = "cache_hit",
+                dataset_id = key.dataset_id,
+                cell_y = key.cell.0[0],
+                cell_x = key.cell.0[1],
+                time_start = key.time_start,
+                time_end = key.time_end,
+                "STAC cell lookup reused a completed search"
+            );
             return Ok(result);
         }
 
@@ -156,6 +166,13 @@ impl StacQueryCache {
 
     /// Runs Moka's shared initializer, translating fetch panics and uncached successes
     /// into values that current waiters can share without retaining them in the cache.
+    #[tracing::instrument(
+        name = "stac_cell_lookup",
+        level = "trace",
+        skip_all,
+        fields(dataset_id = key.dataset_id, cell_y = key.cell.0[0], cell_x = key.cell.0[1],
+            time_start = key.time_start, time_end = key.time_end)
+    )]
     async fn get_or_initialize<F, Fut>(&self, key: Key, fetch: F) -> StacQueryCacheResult
     where
         F: FnOnce() -> Fut + Send + 'static,
@@ -165,8 +182,13 @@ impl StacQueryCache {
         let max_bytes = self.max_bytes;
         let ttl = self.ttl;
 
-        match cache
+        trace!(
+            event = "lookup_started",
+            "STAC cell lookup awaiting a shared search"
+        );
+        let output = match cache
             .try_get_with(key, async move {
+                trace!(event = "fetch_started", "STAC cell search started");
                 // Invocation is inside the caught async body, so both a
                 // synchronous panic and a panic while polling the future are
                 // published as one shared terminal error.
@@ -183,6 +205,12 @@ impl StacQueryCache {
                     }
                 };
 
+                trace!(
+                    event = "fetch_finished",
+                    result_id = Arc::as_ptr(&result) as usize,
+                    files = result.len(),
+                    "STAC cell search finished"
+                );
                 let bytes = result_bytes(result.as_slice());
                 // These successful values must reach current waiters while
                 // remaining absent from the reusable cache.
@@ -203,7 +231,15 @@ impl StacQueryCache {
                 InitError::Fetch(error) => Err(error.clone()),
                 InitError::Uncached(result) => Ok(result.clone()),
             },
+        };
+        if let Ok(result) = &output {
+            trace!(
+                event = "lookup_finished",
+                result_id = Arc::as_ptr(result) as usize,
+                "STAC cell lookup received a shared search result"
+            );
         }
+        output
     }
 
     fn dataset_id(&self, dataset: StacProviderDataset) -> u64 {

@@ -38,6 +38,10 @@ use std::sync::Arc;
 use tracing::debug;
 use url::Url;
 
+#[cfg(test)]
+#[path = "benchmark.rs"]
+mod benchmark;
+
 #[derive(Debug, Clone)]
 struct StacMultiBandMetaData {
     api_url: String,

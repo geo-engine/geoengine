@@ -153,6 +153,10 @@ impl ProjectedStacGrid {
 
         let transform = self.raster.geo_transform();
         let query_bounds = if clipped.size_x() > 0. && clipped.size_y() > 0. {
+            // Validation and clipping ensure finite, ordered bounds; the positive
+            // dimensions above satisfy the partition's strict ordering invariants.
+            // `new_unchecked` only stores the coordinates and performs no unsafe
+            // operations, so this construction cannot cause undefined behavior.
             let partition =
                 SpatialPartition2D::new_unchecked(clipped.upper_left(), clipped.lower_right());
             transform.spatial_to_grid_bounds(&partition)
