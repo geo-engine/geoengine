@@ -53,7 +53,11 @@ fn assert_image_equals_helper(left: &DynamicImage, right: &DynamicImage, expecte
     assert!(left == right, "Images differ: {}", expected.display());
 }
 
-/// Compare two tiff images using GDAL compare
+/// Compare two tiff images using `gdal raster compare` (GDAL >= 3.12).
+///
+/// Binary content and metadata are ignored because they depend on the GDAL
+/// version (e.g. overview `RESAMPLING` metadata). Pixels, overviews, spatial
+/// reference and geotransform are still compared.
 ///
 /// # Panics
 /// - if the `found` bytes cannot be stored as a temporary file
@@ -67,19 +71,19 @@ pub fn assert_image_equals_tiff(expected: &Path, found: &[u8]) {
         .write_all(found)
         .expect("Failed to write `found` bytes to temporary file");
 
-    // TODO: use GDALRasterCompareAlgorithm in `gdal 3.11`
-    let output = std::process::Command::new("gdalcompare.py")
-        .arg("-skip_binary") // skip comparison of exact binary content
+    let output = std::process::Command::new("gdal")
+        .args(["raster", "compare", "--skip-binary", "--skip-metadata"])
         .arg(expected)
         .arg(tmp_file.path())
         .output()
-        .expect("Failed to execute gdalcompare.py");
+        .expect("Failed to execute gdal raster compare (requires GDAL >= 3.12)");
 
     assert!(
         output.status.success(),
-        "Images differ: {}\n{}",
+        "Images differ: {}\n{}\n{}",
         expected.display(),
-        String::from_utf8_lossy(&output.stdout) // somehow, the error messages are in stdout
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
     );
 }
 
@@ -103,7 +107,73 @@ impl From<ImageFormat> for image::ImageFormat {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_data;
+    use gdal::{Dataset, DatasetOptions, DriverManager, GdalOpenFlags, Metadata};
     use std::io::Cursor;
+
+    fn tiff_with_overview_metadata(key: &str, value: &str) -> tempfile::NamedTempFile {
+        let tmp_file = tempfile::NamedTempFile::new().unwrap();
+        let expected = Dataset::open(test_data!(
+            "raster/cloud_optimized_geotiff_from_stream_compressed.tiff"
+        ))
+        .unwrap();
+        let found = expected
+            .create_copy(
+                &DriverManager::get_driver_by_name("GTiff").unwrap(),
+                tmp_file.path(),
+                &gdal::raster::RasterCreationOptions::from_iter(["COPY_SRC_OVERVIEWS=YES"]),
+            )
+            .unwrap();
+        found
+            .rasterband(1)
+            .unwrap()
+            .overview(0)
+            .unwrap()
+            .set_metadata_item(key, value, "")
+            .unwrap();
+        drop(found);
+        tmp_file
+    }
+
+    #[test]
+    fn it_allows_missing_tiff_overview_resampling_metadata() {
+        let expected =
+            test_data!("raster/cloud_optimized_geotiff_from_stream_compressed.tiff").to_path_buf();
+        let found = tiff_with_overview_metadata("RESAMPLING", "NEAREST");
+        assert_image_equals_tiff(&expected, &std::fs::read(found.path()).unwrap());
+        assert_image_equals_tiff(found.path(), &std::fs::read(expected).unwrap());
+    }
+
+    #[test]
+    fn it_detects_different_tiff_overview_pixels() {
+        let found = tiff_with_overview_metadata("RESAMPLING", "NEAREST");
+        let dataset = Dataset::open_ex(
+            found.path(),
+            DatasetOptions {
+                open_flags: GdalOpenFlags::GDAL_OF_UPDATE,
+                open_options: Some(&["IGNORE_COG_LAYOUT_BREAK=YES"]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        dataset
+            .rasterband(1)
+            .unwrap()
+            .overview(0)
+            .unwrap()
+            .fill(255., None)
+            .unwrap();
+        drop(dataset);
+        assert!(
+            std::panic::catch_unwind(|| {
+                assert_image_equals_tiff(
+                    test_data!("raster/cloud_optimized_geotiff_from_stream_compressed.tiff"),
+                    &std::fs::read(found.path()).unwrap(),
+                );
+            })
+            .is_err()
+        );
+    }
 
     #[test]
     fn it_asserts_images() {
