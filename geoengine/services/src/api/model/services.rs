@@ -1170,8 +1170,10 @@ pub struct StacDataProviderDefinition {
     #[serde(default = "default_page_limit")]
     pub page_limit: i64,
     /// Optional output cache lifetime; omitted values use the global cache default.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_ttl_secs: Option<CacheTtlSeconds>,
     /// Target number of square search cells per dataset CRS projected area of use; omitted values use 512.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub stac_grid: Option<StacGrid>,
 }
 
