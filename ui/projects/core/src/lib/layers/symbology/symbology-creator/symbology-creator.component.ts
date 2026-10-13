@@ -199,27 +199,30 @@ export class SymbologyCreatorComponent implements OnInit, OnDestroy, ControlValu
     protected computeSymbologyForRasterLayer(workflowId: UUID): Observable<RasterSymbology> {
         // the symbology colorizes the first band
         const bandName$ = this.projectService
-            .getWorkflowMetaData(workflowId)
+            .getProcessingGraphMetaData(workflowId)
             .pipe(map((resultDescriptor) => (resultDescriptor as RasterResultDescriptorDict).bands[0].name));
 
-        const statisticsWorkflow$ = from(this.projectService.getProcessingGraph(workflowId)).pipe(
-            mergeMap((workflow) => {
+        const statistics$ = combineLatest([bandName$, from(this.projectService.getProcessingGraph(workflowId))]).pipe(
+            first(),
+            mergeMap(([bandName, workflow]) => {
                 if (workflow.type !== 'Raster') {
                     throw new Error('Expected a raster processing graph for symbology statistics.');
                 }
 
-                return this.projectService.registerProcessingGraph({
-                    type: 'Plot',
-                    operator: {
-                        type: 'Statistics',
-                        params: {
-                            columnNames: [bandName],
+                return from(
+                    this.projectService.registerProcessingGraph({
+                        type: 'Plot',
+                        operator: {
+                            type: 'Statistics',
+                            params: {
+                                columnNames: [bandName],
+                            },
+                            sources: {
+                                source: workflow.operator,
+                            },
                         },
-                        sources: {
-                            source: workflow.operator,
-                        },
-                    },
-                });
+                    }),
+                ).pipe(map((statisticsWorkflow) => ({statisticsWorkflow, bandName})));
             }),
         );
 
@@ -258,9 +261,9 @@ export class SymbologyCreatorComponent implements OnInit, OnDestroy, ControlValu
             }),
         );
 
-        return combineLatest([statisticsWorkflow$, bandName$, queryParams$, this.userService.getSessionOnce()]).pipe(
+        return combineLatest([statistics$, queryParams$, this.userService.getSessionOnce()]).pipe(
             first(),
-            mergeMap(([statisticsWorkflow, bandName, queryParams, session]) =>
+            mergeMap(([{statisticsWorkflow, bandName}, queryParams, session]) =>
                 this.backend.getPlot(statisticsWorkflow, queryParams, session.sessionToken).pipe(map((plot) => ({plot, bandName}))),
             ),
             map(({plot, bandName}) => {

@@ -1,13 +1,13 @@
-import {Component, ChangeDetectionStrategy, AfterViewInit, OnDestroy, inject} from '@angular/core';
-import {Validators, FormBuilder, FormControl, FormArray, FormGroup, FormsModule, ReactiveFormsModule} from '@angular/forms';
-
+import {Component, ChangeDetectionStrategy, inject, computed, effect, signal, untracked} from '@angular/core';
+import {rxResource} from '@angular/core/rxjs-interop';
+import {applyEach, form, FormField, FormRoot, minLength, required} from '@angular/forms/signals';
 import {ProjectService} from '../../../project/project.service';
-
-import {from, Observable, of, ReplaySubject, Subscription} from 'rxjs';
-import {map, mergeMap, tap} from 'rxjs/operators';
+import {Observable, of} from 'rxjs';
+import {map} from 'rxjs/operators';
 import {
     geoengineValidators,
     Layer,
+    NotificationService,
     Plot,
     ResultTypes,
     VectorColumnDataTypes,
@@ -17,7 +17,7 @@ import {
     FxFlexDirective,
     FxLayoutAlignDirective,
 } from '@geoengine/common';
-import {ProcessingGraph, RasterOperator, Statistics, StatisticsParameters, VectorOperator} from '@geoengine/api-client';
+import {Statistics, StatisticsParameters} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -28,12 +28,11 @@ import {MatFormField, MatHint} from '@angular/material/input';
 import {MatSelect} from '@angular/material/select';
 import {MatOption} from '@angular/material/autocomplete';
 import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
-import {AsyncPipe} from '@angular/common';
 
-interface StatisticsPlotForm {
-    layer: FormControl<Layer | null>;
-    name: FormControl<string>;
-    columnNames: FormArray<FormControl<string | null>>;
+interface StatisticsPlotModel {
+    layer: Layer | null;
+    name: string;
+    columnNames: Array<string | null>;
 }
 
 /**
@@ -53,8 +52,8 @@ const isVectorLayer = (layer: Layer | null): boolean => {
     changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         SidenavHeaderComponent,
-        FormsModule,
-        ReactiveFormsModule,
+        FormRoot,
+        FormField,
         OperatorDialogContainerComponent,
         MatIconButton,
         MatIcon,
@@ -69,126 +68,113 @@ const isVectorLayer = (layer: Layer | null): boolean => {
         MatOption,
         OperatorOutputNameComponent,
         MatHint,
-        AsyncPipe,
     ],
 })
-export class StatisticsPlotComponent implements AfterViewInit, OnDestroy {
-    private formBuilder = inject(FormBuilder);
-    private projectService = inject(ProjectService);
+export class StatisticsPlotComponent {
+    private readonly projectService = inject(ProjectService);
+    private readonly notificationService = inject(NotificationService);
 
     readonly allowedLayerTypes = ResultTypes.LAYER_TYPES;
 
-    attributes$ = new ReplaySubject<Array<string>>(1);
+    readonly model = signal<StatisticsPlotModel>({
+        layer: null,
+        name: 'Statistics',
+        columnNames: [],
+    });
 
-    isVectorLayer$: Observable<boolean>;
+    readonly form = form(
+        this.model,
+        (schemaPath) => {
+            required(schemaPath.layer);
+            required(schemaPath.name);
+            geoengineValidators.notOnlyWhitespace2(schemaPath.name);
+            minLength(schemaPath.columnNames, 1, {when: (ctx) => isVectorLayer(ctx.valueOf(schemaPath.layer))});
+            applyEach(schemaPath.columnNames, (column) => required(column));
+        },
+        {
+            submission: {
+                action: async (): Promise<void> => this.add(),
+            },
+        },
+    );
 
-    form: FormGroup<StatisticsPlotForm>;
+    readonly layer = computed(() => this.model().layer);
+    readonly isVectorLayer = computed(() => isVectorLayer(this.layer()));
+    readonly nameSuggestion = computed(() => {
+        const layer = this.layer();
+        return layer ? `Statistics of ${layer.name}` : 'Statistics';
+    });
+    readonly isFormInvalid = computed(() => this.form().invalid());
+    readonly hasInvalidName = computed(() => this.form.name().invalid());
 
-    private subscriptions: Array<Subscription> = [];
+    readonly attributes = rxResource({
+        defaultValue: [] as Array<string>,
+        params: () => ({layer: this.layer()}),
+        stream: ({params}): Observable<Array<string>> => {
+            if (!(params.layer instanceof VectorLayer)) {
+                return of([]);
+            }
+            return this.projectService.getVectorLayerMetadata(params.layer).pipe(
+                map((metadata: VectorLayerMetadata) =>
+                    metadata.dataTypes
+                        .filter((columnType) => columnType === VectorColumnDataTypes.Float || columnType === VectorColumnDataTypes.Int)
+                        .keySeq()
+                        .toArray(),
+                ),
+            );
+        },
+    });
 
     constructor() {
-        const layerControl = this.formBuilder.control<Layer | null>(null, Validators.required);
-        this.form = this.formBuilder.group({
-            layer: layerControl,
-            name: this.formBuilder.nonNullable.control<string>('Statistics', [Validators.required, geoengineValidators.notOnlyWhitespace]),
-            columnNames: this.formBuilder.array<string>(
-                [],
-                geoengineValidators.conditionalValidator(Validators.required, () => isVectorLayer(layerControl.value)),
-            ),
-        });
-        this.subscriptions.push(
-            this.form.controls['layer'].valueChanges
-                .pipe(
-                    // reset
-                    tap(() => {
-                        this.columnNames.clear();
-                        if (isVectorLayer(layerControl.value)) {
-                            this.addColumn();
-                        }
-                    }),
-                    // get vector attributes or []
-                    mergeMap((layer: Layer | null) => {
-                        if (layer instanceof VectorLayer) {
-                            return this.projectService.getVectorLayerMetadata(layer).pipe(
-                                map((metadata: VectorLayerMetadata) =>
-                                    metadata.dataTypes
-                                        .filter(
-                                            (columnType) =>
-                                                columnType === VectorColumnDataTypes.Float || columnType === VectorColumnDataTypes.Int,
-                                        )
-                                        .keySeq()
-                                        .toArray(),
-                                ),
-                            );
-                        } else {
-                            return of([]);
-                        }
-                    }),
-                )
-                .subscribe((attributes) => {
-                    this.attributes$.next(attributes);
-                }),
-        );
-        this.isVectorLayer$ = this.form.controls['layer']?.valueChanges.pipe(map((layer) => isVectorLayer(layer)));
-    }
+        // reset the column selection whenever the layer changes
+        effect(() => {
+            const layer = this.layer();
 
-    get columnNames(): FormArray<FormControl<string | null>> {
-        return this.form.get('columnNames') as FormArray<FormControl<string | null>>;
+            untracked(() => {
+                this.form.columnNames().value.set(isVectorLayer(layer) ? [null] : []);
+            });
+        });
     }
 
     addColumn(): void {
-        this.columnNames.push(this.formBuilder.control<string | null>(null, Validators.required));
+        this.form.columnNames().value.update((columnNames) => [...columnNames, null]);
     }
 
     removeColumn(i: number): void {
-        this.columnNames.removeAt(i);
+        this.form.columnNames().value.update((columnNames) => columnNames.filter((_, index) => index !== i));
     }
 
-    add(): void {
-        const inputLayer = this.form.controls['layer'].value!;
+    async add(): Promise<void> {
+        const {layer, name, columnNames} = this.model();
+        if (!layer) {
+            return;
+        }
 
         // for rasters, an empty list selects all bands
-        const columnNames = isVectorLayer(inputLayer) ? this.columnNames.controls.map((fc) => (fc ? fc.value?.toString() : '')) : [];
+        const statisticsColumnNames = isVectorLayer(layer) ? columnNames.map((columnName) => columnName ?? '') : [];
 
-        from(this.projectService.getWorkflow(inputLayer.workflowId))
-            .pipe(
-                mergeMap((inputOperators: Array<TypedOperator>) =>
-                    this.projectService.registerProcessingGraph({
-                        type: 'Plot',
-                        operator: {
-                            type: 'Statistics',
-                            params: {
-                                columnNames,
-                            } as StatisticsParameters,
-                            sources: {
-                                source,
-                            },
-                        } as Statistics,
-                    });
-                }),
-                mergeMap((workflowId) =>
-                    this.projectService.addPlot(
-                        new Plot({
-                            workflowId,
-                            name: this.form.controls['name'].value.toString(),
-                        }),
-                    ),
-                ),
-            )
-            .subscribe();
-    }
+        try {
+            const inputWorkflow = await this.projectService.getProcessingGraph(layer.workflowId);
+            if (inputWorkflow.type !== 'Raster' && inputWorkflow.type !== 'Vector') {
+                throw new Error(`Invalid processing graph type ${inputWorkflow.type}.`);
+            }
 
-    ngOnDestroy(): void {
-        this.subscriptions.forEach((subscription) => subscription.unsubscribe());
-    }
-
-    ngAfterViewInit(): void {
-        setTimeout(() => {
-            this.form.updateValueAndValidity({
-                onlySelf: false,
-                emitEvent: true,
+            const workflowId = await this.projectService.registerProcessingGraph({
+                type: 'Plot',
+                operator: {
+                    type: 'Statistics',
+                    params: {
+                        columnNames: statisticsColumnNames,
+                    } satisfies StatisticsParameters,
+                    sources: {
+                        source: inputWorkflow.operator,
+                    },
+                } as Statistics,
             });
-            this.form.controls['layer'].updateValueAndValidity();
-        });
+
+            await this.projectService.addPlot(new Plot({workflowId, name}));
+        } catch (error) {
+            this.notificationService.error(error instanceof Error ? error.message : String(error));
+        }
     }
 }

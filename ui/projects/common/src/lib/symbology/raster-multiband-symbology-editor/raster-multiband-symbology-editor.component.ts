@@ -5,7 +5,7 @@ import {geoengineValidators} from '../../util/form.validators';
 import {SymbologyQueryParams, MultiBandRasterColorizer} from '../symbology.model';
 import {Color, TRANSPARENT} from '../../colors/color';
 import {ProcessingGraphsService} from '../../processing-graphs/processing-graphs.service';
-import {Expression, Statistics} from '@geoengine/api-client';
+import {Statistics} from '@geoengine/api-client';
 import {PlotsService} from '../../plots/plots.service';
 import {statisticsFromPlotData} from '../../plots/statistics';
 import {VegaChartData} from '../../plots/plot.model';

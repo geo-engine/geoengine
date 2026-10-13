@@ -66,6 +66,14 @@ export abstract class Layer implements HasLayerId, HasLayerType, ToDict<ProjectL
     abstract equals(other: Layer): boolean;
 
     abstract toDict(): ProjectLayerDict;
+
+    get isVectorLayer(): boolean {
+        return this.layerType === 'vector';
+    }
+
+    get isRasterLayer(): boolean {
+        return this.layerType === 'raster';
+    }
 }
 
 export class VectorLayer extends Layer {
