@@ -30,11 +30,21 @@ import {
 /**
  * The `MeanRasterPixelValuesOverTime` is a _plot operator_ that computes a time series plot of mean raster values.
  * 
- * For each time step in the raster time series, it computes one mean value.
+ * For each time step in the raster time series, it computes one mean value per band.
  * The output is a plot in Vega-Lite specification.
+ * For a single band, it is an area or line plot.
+ * For multiple bands, it is a line plot with one line per band.
  * 
  * For instance, you want to plot the mean temperature of a monthly raster time series.
  * Then, you can use this operator to generate a time series plot.
+ * 
+ * ## Errors
+ * 
+ * The operator returns an error if one of the selected bands (`bandNames`) does not exist.
+ * 
+ * ## Notes
+ * 
+ * If the selected bands have different [`Measurement`](../datatypes/measurement)s, the y-axis has no unit.
  * @export
  * @interface MeanRasterPixelValuesOverTime
  */

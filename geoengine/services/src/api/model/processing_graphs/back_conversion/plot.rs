@@ -224,6 +224,7 @@ impl TryFrom<&OperatorsMeanRasterPixelValuesOverTime> for MeanRasterPixelValuesO
                     }
                 },
                 area: value.params.area,
+                band_names: value.params.band_names.clone(),
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
                 raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
@@ -402,6 +403,7 @@ mod tests {
                     params: MeanRasterPixelValuesOverTimeParams {
                         time_position: MeanRasterPixelValuesOverTimePosition::Start,
                         area: true,
+                        band_names: vec![],
                     },
                     sources: SingleRasterSource {
                         raster: raster_source(),

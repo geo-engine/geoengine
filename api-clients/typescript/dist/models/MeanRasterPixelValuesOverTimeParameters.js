@@ -36,6 +36,7 @@ function MeanRasterPixelValuesOverTimeParametersFromJSONTyped(json, ignoreDiscri
     return {
         'timePosition': (0, MeanRasterPixelValuesOverTimePosition_1.MeanRasterPixelValuesOverTimePositionFromJSON)(json['timePosition']),
         'area': json['area'] == null ? undefined : json['area'],
+        'bandNames': json['bandNames'] == null ? undefined : json['bandNames'],
     };
 }
 function MeanRasterPixelValuesOverTimeParametersToJSON(json) {
@@ -48,5 +49,6 @@ function MeanRasterPixelValuesOverTimeParametersToJSONTyped(value, ignoreDiscrim
     return {
         'timePosition': (0, MeanRasterPixelValuesOverTimePosition_1.MeanRasterPixelValuesOverTimePositionToJSON)(value['timePosition']),
         'area': value['area'],
+        'bandNames': value['bandNames'],
     };
 }

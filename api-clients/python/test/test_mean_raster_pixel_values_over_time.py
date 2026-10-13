@@ -38,7 +38,10 @@ class TestMeanRasterPixelValuesOverTime(unittest.TestCase):
                 type = 'MeanRasterPixelValuesOverTime',
                 params = geoengine_api_client.models.mean_raster_pixel_values_over_time_parameters.MeanRasterPixelValuesOverTimeParameters(
                     time_position = null, 
-                    area = True, ),
+                    area = True, 
+                    band_names = [
+                        ''
+                        ], ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
                     raster = null, )
             )
@@ -47,7 +50,10 @@ class TestMeanRasterPixelValuesOverTime(unittest.TestCase):
                 type = 'MeanRasterPixelValuesOverTime',
                 params = geoengine_api_client.models.mean_raster_pixel_values_over_time_parameters.MeanRasterPixelValuesOverTimeParameters(
                     time_position = null, 
-                    area = True, ),
+                    area = True, 
+                    band_names = [
+                        ''
+                        ], ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
                     raster = null, ),
         )

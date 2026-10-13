@@ -52,6 +52,17 @@ impl Plot for BarChart {
                     "field": self.y_label,
                     "type": "quantitative",
                 },
+                // show the full tick label, since long labels are truncated
+                "tooltip": [
+                    {
+                        "field": self.x_label,
+                        "type": "nominal",
+                    },
+                    {
+                        "field": self.y_label,
+                        "type": "quantitative",
+                    },
+                ],
             },
         });
 
@@ -114,7 +125,17 @@ mod tests {
                     "y": {
                       "field": "Frequency",
                       "type": "quantitative"
-                    }
+                    },
+                    "tooltip": [
+                      {
+                        "field": "foobar",
+                        "type": "nominal"
+                      },
+                      {
+                        "field": "Frequency",
+                        "type": "quantitative"
+                      }
+                    ]
                   }
                 }),
                 metadata: PlotMetaData::None

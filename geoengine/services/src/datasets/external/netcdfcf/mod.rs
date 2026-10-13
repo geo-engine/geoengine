@@ -2318,6 +2318,7 @@ mod tests {
             params: MeanRasterPixelValuesOverTimeParams {
                 time_position: MeanRasterPixelValuesOverTimePosition::Start,
                 area: false,
+                band_names: vec![],
             },
             sources: Expression {
                 params: ExpressionParams {

@@ -34,10 +34,18 @@ export interface MeanRasterPixelValuesOverTimeParameters {
     timePosition: MeanRasterPixelValuesOverTimePosition;
     /**
      * Whether to fill the area under the curve. Defaults to `true`.
+     * Only applies to a single band, multiple bands are drawn as lines.
      * @type {boolean}
      * @memberof MeanRasterPixelValuesOverTimeParameters
      */
     area?: boolean;
+    /**
+     * _Optional_: The names of the bands to compute the means for.
+     * The operator uses all bands if this parameter is empty.
+     * @type {Array<string>}
+     * @memberof MeanRasterPixelValuesOverTimeParameters
+     */
+    bandNames?: Array<string>;
 }
 
 
@@ -62,6 +70,7 @@ export function MeanRasterPixelValuesOverTimeParametersFromJSONTyped(json: any, 
         
         'timePosition': MeanRasterPixelValuesOverTimePositionFromJSON(json['timePosition']),
         'area': json['area'] == null ? undefined : json['area'],
+        'bandNames': json['bandNames'] == null ? undefined : json['bandNames'],
     };
 }
 
@@ -78,6 +87,7 @@ export function MeanRasterPixelValuesOverTimeParametersToJSONTyped(value?: MeanR
         
         'timePosition': MeanRasterPixelValuesOverTimePositionToJSON(value['timePosition']),
         'area': value['area'],
+        'bandNames': value['bandNames'],
     };
 }
 

@@ -11,7 +11,7 @@
 import type { ClassHistogramParameters } from './ClassHistogramParameters';
 import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
 /**
- * The `ClassHistogram` is a _plot operator_ that computes a histogram plot either over categorical attributes of a vector dataset or categorical values of a raster source.
+ * The `ClassHistogram` is a _plot operator_ that computes a histogram plot either over categorical attributes of a vector dataset or categorical values of a raster band.
  * The output is a plot in [Vega-Lite](https://vega.github.io/vega-lite/) specification.
  *
  * For instance, you want to plot the frequencies of the classes of a categorical attribute of a feature collection.
@@ -21,11 +21,9 @@ import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
  *
  * The operator returns an error if…
  *
- * - the selected column (`columnName`) does not exist or is not numeric,
- * - the source is a raster and the property `columnName` is set, or
+ * - the selected column or band (`columnName`) does not exist or is not numeric,
+ * - the source is a vector and the property `columnName` is not set, or
  * - the input [`Measurement`](../datatypes/measurement) is not categorical.
- *
- * The operator returns an error if
  *
  * ## Notes
  *

@@ -6819,7 +6819,7 @@
       "ClassHistogram": {
         "type": "object",
         "title": "ClassHistogram",
-        "description": "The `ClassHistogram` is a _plot operator_ that computes a histogram plot either over categorical attributes of a vector dataset or categorical values of a raster source.\nThe output is a plot in [Vega-Lite](https://vega.github.io/vega-lite/) specification.\n\nFor instance, you want to plot the frequencies of the classes of a categorical attribute of a feature collection.\nThen you can use a class histogram to visualize and assess this.\n\n## Errors\n\nThe operator returns an error if…\n\n- the selected column (`columnName`) does not exist or is not numeric,\n- the source is a raster and the property `columnName` is set, or\n- the input [`Measurement`](../datatypes/measurement) is not categorical.\n\nThe operator returns an error if\n\n## Notes\n\nThe operator only uses values of the categorical [`Measurement`](../datatypes/measurement).\nIt ignores missing or no-data values and values that are not covered by the [`Measurement`](../datatypes/measurement).\n",
+        "description": "The `ClassHistogram` is a _plot operator_ that computes a histogram plot either over categorical attributes of a vector dataset or categorical values of a raster band.\nThe output is a plot in [Vega-Lite](https://vega.github.io/vega-lite/) specification.\n\nFor instance, you want to plot the frequencies of the classes of a categorical attribute of a feature collection.\nThen you can use a class histogram to visualize and assess this.\n\n## Errors\n\nThe operator returns an error if…\n\n- the selected column or band (`columnName`) does not exist or is not numeric,\n- the source is a vector and the property `columnName` is not set, or\n- the input [`Measurement`](../datatypes/measurement) is not categorical.\n\n## Notes\n\nThe operator only uses values of the categorical [`Measurement`](../datatypes/measurement).\nIt ignores missing or no-data values and values that are not covered by the [`Measurement`](../datatypes/measurement).\n",
         "required": [
           "type",
           "params",
@@ -6865,7 +6865,7 @@
               "string",
               "null"
             ],
-            "description": "The name of the attribute making up the x-axis of the histogram.\nMust be set for a vector sources, must not be set for rasters.",
+            "description": "The name of the attribute or raster band making up the x-axis of the histogram.\nMust be set for vector sources. For raster sources, it defaults to the first band.",
             "examples": [
               "class"
             ]
@@ -10128,7 +10128,7 @@
       "MeanRasterPixelValuesOverTime": {
         "type": "object",
         "title": "MeanRasterPixelValuesOverTime",
-        "description": "The `MeanRasterPixelValuesOverTime` is a _plot operator_ that computes a time series plot of mean raster values.\n\nFor each time step in the raster time series, it computes one mean value.\nThe output is a plot in Vega-Lite specification.\n\nFor instance, you want to plot the mean temperature of a monthly raster time series.\nThen, you can use this operator to generate a time series plot.",
+        "description": "The `MeanRasterPixelValuesOverTime` is a _plot operator_ that computes a time series plot of mean raster values.\n\nFor each time step in the raster time series, it computes one mean value per band.\nThe output is a plot in Vega-Lite specification.\nFor a single band, it is an area or line plot.\nFor multiple bands, it is a line plot with one line per band.\n\nFor instance, you want to plot the mean temperature of a monthly raster time series.\nThen, you can use this operator to generate a time series plot.\n\n## Errors\n\nThe operator returns an error if one of the selected bands (`bandNames`) does not exist.\n\n## Notes\n\nIf the selected bands have different [`Measurement`](../datatypes/measurement)s, the y-axis has no unit.",
         "required": [
           "type",
           "params",
@@ -10179,10 +10179,22 @@
           },
           "area": {
             "type": "boolean",
-            "description": "Whether to fill the area under the curve. Defaults to `true`.",
+            "description": "Whether to fill the area under the curve. Defaults to `true`.\nOnly applies to a single band, multiple bands are drawn as lines.",
             "examples": [
               false
             ]
+          },
+          "bandNames": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "examples": [
+                [
+                  "ndvi"
+                ]
+              ]
+            },
+            "description": "_Optional_: The names of the bands to compute the means for.\nThe operator uses all bands if this parameter is empty."
           }
         }
       },

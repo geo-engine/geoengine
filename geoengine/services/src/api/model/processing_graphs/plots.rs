@@ -369,7 +369,7 @@ impl TryFrom<BoxPlot> for geoengine_operators::plot::BoxPlot {
     }
 }
 
-/// The `ClassHistogram` is a _plot operator_ that computes a histogram plot either over categorical attributes of a vector dataset or categorical values of a raster source.
+/// The `ClassHistogram` is a _plot operator_ that computes a histogram plot either over categorical attributes of a vector dataset or categorical values of a raster band.
 /// The output is a plot in [Vega-Lite](https://vega.github.io/vega-lite/) specification.
 ///
 /// For instance, you want to plot the frequencies of the classes of a categorical attribute of a feature collection.
@@ -379,11 +379,9 @@ impl TryFrom<BoxPlot> for geoengine_operators::plot::BoxPlot {
 ///
 /// The operator returns an error if…
 ///
-/// - the selected column (`columnName`) does not exist or is not numeric,
-/// - the source is a raster and the property `columnName` is set, or
+/// - the selected column or band (`columnName`) does not exist or is not numeric,
+/// - the source is a vector and the property `columnName` is not set, or
 /// - the input [`Measurement`](../datatypes/measurement) is not categorical.
-///
-/// The operator returns an error if
 ///
 /// ## Notes
 ///
@@ -413,8 +411,8 @@ pub struct ClassHistogram {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ClassHistogramParameters {
-    /// The name of the attribute making up the x-axis of the histogram.
-    /// Must be set for a vector sources, must not be set for rasters.
+    /// The name of the attribute or raster band making up the x-axis of the histogram.
+    /// Must be set for vector sources. For raster sources, it defaults to the first band.
     #[schema(examples("class"))]
     pub column_name: Option<String>,
 }
@@ -505,11 +503,21 @@ impl TryFrom<FeatureAttributeValuesOverTime>
 
 /// The `MeanRasterPixelValuesOverTime` is a _plot operator_ that computes a time series plot of mean raster values.
 ///
-/// For each time step in the raster time series, it computes one mean value.
+/// For each time step in the raster time series, it computes one mean value per band.
 /// The output is a plot in Vega-Lite specification.
+/// For a single band, it is an area or line plot.
+/// For multiple bands, it is a line plot with one line per band.
 ///
 /// For instance, you want to plot the mean temperature of a monthly raster time series.
 /// Then, you can use this operator to generate a time series plot.
+///
+/// ## Errors
+///
+/// The operator returns an error if one of the selected bands (`bandNames`) does not exist.
+///
+/// ## Notes
+///
+/// If the selected bands have different [`Measurement`](../datatypes/measurement)s, the y-axis has no unit.
 #[api_operator(examples(json!({
     "type": "MeanRasterPixelValuesOverTime",
     "params": {
@@ -538,9 +546,15 @@ pub struct MeanRasterPixelValuesOverTimeParameters {
     #[schema(examples("start"))]
     pub time_position: MeanRasterPixelValuesOverTimePosition,
     /// Whether to fill the area under the curve. Defaults to `true`.
+    /// Only applies to a single band, multiple bands are drawn as lines.
     #[serde(default = "default_true")]
     #[schema(examples(false))]
     pub area: bool,
+    /// _Optional_: The names of the bands to compute the means for.
+    /// The operator uses all bands if this parameter is empty.
+    #[serde(default)]
+    #[schema(examples(json!(["ndvi"])))]
+    pub band_names: Vec<String>,
 }
 
 const fn default_true() -> bool {
@@ -573,6 +587,7 @@ impl TryFrom<MeanRasterPixelValuesOverTime>
                 }
             },
             area: value.params.area,
+            band_names: value.params.band_names,
         };
         let sources = value.sources.try_into()?;
         Ok(Self { params, sources })
@@ -1135,6 +1150,7 @@ mod tests {
             params: MeanRasterPixelValuesOverTimeParameters {
                 time_position: MeanRasterPixelValuesOverTimePosition::Center,
                 area: true,
+                band_names: vec!["temperature".to_string()],
             },
             sources: SingleRasterSource {
                 raster: RasterOperator::GdalSource(GdalSource {

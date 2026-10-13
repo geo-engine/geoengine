@@ -21,7 +21,7 @@ use geoengine_datatypes::primitives::{
 };
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
-use snafu::{OptionExt, ensure};
+use snafu::OptionExt;
 use std::collections::HashMap;
 
 pub const CLASS_HISTOGRAM_OPERATOR_NAME: &str = "ClassHistogram";
@@ -29,6 +29,7 @@ pub const CLASS_HISTOGRAM_OPERATOR_NAME: &str = "ClassHistogram";
 /// A class histogram plot about either a raster or a vector input.
 ///
 /// For vector inputs, it calculates the histogram on one of its attributes.
+/// For raster inputs, it calculates the histogram on one of its bands.
 ///
 pub type ClassHistogram = Operator<ClassHistogramParams, SingleRasterOrVectorSource>;
 
@@ -40,7 +41,8 @@ impl OperatorName for ClassHistogram {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClassHistogramParams {
-    /// Name of the (numeric) attribute to compute the histogram on. Fails if set for rasters.
+    /// Name of the (numeric) attribute or raster band to compute the histogram on.
+    /// Must be set for vectors. For rasters, it defaults to the first band.
     pub column_name: Option<String>,
 }
 
@@ -56,28 +58,24 @@ impl PlotOperator for ClassHistogram {
 
         Ok(match self.sources.source {
             RasterOrVectorOperator::Raster(raster_source) => {
-                ensure!(
-                    self.params.column_name.is_none(),
-                    error::InvalidOperatorSpec {
-                        reason: "Histogram on raster input must not have `columnName` field set"
-                            .to_string(),
-                    }
-                );
-
                 let raster_source = raster_source
                     .initialize(path.clone_and_append(0), context)
                     .await?;
 
                 let in_desc = raster_source.result_descriptor();
 
-                ensure!(
-                    in_desc.bands.len() == 1,
-                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                        operator: ClassHistogram::TYPE_NAME
-                    }
-                );
+                let band_index = match &self.params.column_name {
+                    None => 0,
+                    Some(band_name) => in_desc
+                        .bands
+                        .iter()
+                        .position(|band| &band.name == band_name)
+                        .context(error::InvalidOperatorSpec {
+                            reason: format!("Band '{band_name}' does not exist."),
+                        })?,
+                };
 
-                let source_measurement = match &in_desc.bands[0].measurement {
+                let source_measurement = match &in_desc.bands[band_index].measurement {
                     Measurement::Classification(measurement) => measurement.clone(),
                     _ => {
                         return Err(Error::InvalidOperatorSpec {
@@ -96,7 +94,10 @@ impl PlotOperator for ClassHistogram {
                     },
                     self.params.column_name,
                     source_measurement,
-                    raster_source,
+                    RasterBandSource {
+                        raster: raster_source,
+                        band_index: band_index as u32,
+                    },
                 )
                 .boxed()
             }
@@ -164,6 +165,12 @@ impl PlotOperator for ClassHistogram {
     span_fn!(ClassHistogram);
 }
 
+/// A raster source together with the band to compute the histogram on.
+pub struct RasterBandSource {
+    raster: Box<dyn InitializedRasterOperator>,
+    band_index: u32,
+}
+
 /// The initialization of `Histogram`
 pub struct InitializedClassHistogram<Op> {
     name: CanonicOperatorName,
@@ -191,10 +198,11 @@ impl<Op> InitializedClassHistogram<Op> {
     }
 }
 
-impl InitializedPlotOperator for InitializedClassHistogram<Box<dyn InitializedRasterOperator>> {
+impl InitializedPlotOperator for InitializedClassHistogram<RasterBandSource> {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let processor = ClassHistogramRasterQueryProcessor {
-            input: self.source.query_processor()?,
+            input: self.source.raster.query_processor()?,
+            band_index: self.source.band_index,
             measurement: self.source_measurement.clone(),
         };
 
@@ -218,7 +226,9 @@ impl InitializedPlotOperator for InitializedClassHistogram<Box<dyn InitializedRa
                 column_name: self.column_name.clone(),
             },
             sources: SingleRasterOrVectorSource {
-                source: RasterOrVectorOperator::Raster(self.source.optimize(target_resolution)?),
+                source: RasterOrVectorOperator::Raster(
+                    self.source.raster.optimize(target_resolution)?,
+                ),
             },
         }
         .boxed())
@@ -263,6 +273,7 @@ impl InitializedPlotOperator for InitializedClassHistogram<Box<dyn InitializedVe
 /// A query processor that calculates the Histogram about its raster inputs.
 pub struct ClassHistogramRasterQueryProcessor {
     input: TypedRasterQueryProcessor,
+    band_index: u32,
     measurement: ClassificationMeasurement,
 }
 
@@ -324,7 +335,7 @@ impl ClassHistogramRasterQueryProcessor {
 
         let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
             &query,
-            BandSelection::first(),
+            BandSelection::new_single(self.band_index),
             rd.tiling_grid_definition(ctx.tiling_specification())
                 .tiling_geo_transform(),
         );
@@ -507,7 +518,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn column_name_for_raster_source() {
+    async fn it_fails_on_unknown_raster_band() {
         let histogram = ClassHistogram {
             params: ClassHistogramParams {
                 column_name: Some("foo".to_string()),
@@ -515,15 +526,142 @@ mod tests {
             sources: mock_raster_source().into(),
         };
 
-        let execution_context = MockExecutionContext::test_default();
+        let execution_context = MockExecutionContext::new_with_tiling_spec(TilingSpecification {
+            tile_size_in_pixels: [3, 2].into(),
+        });
 
-        assert!(
-            histogram
-                .boxed()
-                .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
-                .await
-                .is_err()
+        let result = histogram
+            .boxed()
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(Error::InvalidOperatorSpec { reason }) if reason == "Band 'foo' does not exist."
+        ));
+    }
+
+    /// A source with the bands `values` (unitless, values 1..=6) and `classes` (classification, values `[1, 1, 2, 2, 2, 9]`).
+    fn mock_multiband_raster_source() -> Box<dyn RasterOperator> {
+        let tiles = [vec![1, 2, 3, 4, 5, 6], vec![1, 1, 2, 2, 2, 9]]
+            .into_iter()
+            .enumerate()
+            .map(|(band, values)| {
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::default(),
+                    TileInformation {
+                        global_geo_transform: TestDefault::test_default(),
+                        global_tile_position: [0, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                    },
+                    band as u32,
+                    Grid2D::new([3, 2].into(), values)
+                        .expect("grid should match the tile size")
+                        .into(),
+                    CacheHint::no_cache(),
+                )
+            })
+            .collect();
+
+        MockRasterSource {
+            params: MockRasterSourceParams {
+                data: tiles,
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                        GridShape2D::new_2d(3, 2).bounding_box(),
+                    ),
+                    bands: RasterBandDescriptors::new(vec![
+                        RasterBandDescriptor::new("values".into(), Measurement::Unitless),
+                        RasterBandDescriptor::new(
+                            "classes".into(),
+                            Measurement::classification(
+                                "land-cover".to_string(),
+                                [(1, "Forest".to_string()), (2, "Water".to_string())]
+                                    .into_iter()
+                                    .collect(),
+                            ),
+                        ),
+                    ])
+                    .expect("band names should be unique"),
+                },
+            },
+        }
+        .boxed()
+    }
+
+    #[tokio::test]
+    async fn it_computes_the_histogram_of_the_selected_raster_band() {
+        let execution_context = MockExecutionContext::new_with_tiling_spec(TilingSpecification {
+            tile_size_in_pixels: [3, 2].into(),
+        });
+
+        let query_processor = ClassHistogram {
+            params: ClassHistogramParams {
+                column_name: Some("classes".to_string()),
+            },
+            sources: mock_multiband_raster_source().into(),
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .await
+        .expect("band `classes` should exist and be a classification")
+        .query_processor()
+        .expect("the query processor should be created")
+        .json_vega()
+        .expect("the operator should produce a vega plot");
+
+        let result = query_processor
+            .plot_query(
+                PlotQueryRectangle::new(
+                    BoundingBox2D::new((0., -3.).into(), (2., 0.).into())
+                        .expect("bounding box should be valid"),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
+            )
+            .await
+            .expect("the query should work");
+
+        // value 9 is no class and is ignored
+        assert_eq!(
+            result,
+            BarChart::new(
+                [("Forest".to_string(), 2), ("Water".to_string(), 3)]
+                    .into_iter()
+                    .collect(),
+                "land-cover".to_string(),
+                "Frequency".to_string()
+            )
+            .to_vega_embeddable(true)
+            .expect("the chart should be serializable")
         );
+    }
+
+    #[tokio::test]
+    async fn it_fails_on_raster_band_without_classification() {
+        // without `columnName`, the first band is used, which is not a classification
+        let result = ClassHistogram {
+            params: ClassHistogramParams { column_name: None },
+            sources: mock_multiband_raster_source().into(),
+        }
+        .boxed()
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::new_with_tiling_spec(TilingSpecification {
+                tile_size_in_pixels: [3, 2].into(),
+            }),
+        )
+        .await;
+
+        assert!(matches!(
+            result,
+            Err(Error::InvalidOperatorSpec { reason }) if reason == "Source measurement mut be classification"
+        ));
     }
 
     fn mock_raster_source() -> Box<dyn RasterOperator> {

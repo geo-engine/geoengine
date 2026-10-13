@@ -6,6 +6,13 @@ import {Spec as VgSpec} from 'vega';
 import {VegaChartData} from '../plot.model';
 import {CommonConfig} from '../../config.service';
 
+/**
+ * The maximum length of axis labels in pixels for a chart of the given `height`.
+ * Long labels are truncated, so that they leave space for the data on small charts.
+ * It is capped at Vega-Lite's default of 200 pixels.
+ */
+export const axisLabelLimit = (height: number): number => Math.min(200, height * 0.5);
+
 interface VegaHandle {
     view: View;
     spec: VlSpec | VgSpec;
@@ -88,6 +95,9 @@ export class VegaViewerComponent {
                 autosize: {
                     type: 'fit',
                     contains: 'padding',
+                },
+                axis: {
+                    labelLimit: axisLabelLimit(height),
                 },
             },
             // This is required, since width and height are ignored for vega-lite specs see https://github.com/vega/vega-embed Options -> Width

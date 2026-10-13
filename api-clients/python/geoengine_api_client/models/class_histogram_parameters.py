@@ -26,7 +26,7 @@ class ClassHistogramParameters(BaseModel):
     """
     The parameter spec for `ClassHistogram`.
     """ # noqa: E501
-    column_name: Optional[StrictStr] = Field(default=None, description="The name of the attribute making up the x-axis of the histogram. Must be set for a vector sources, must not be set for rasters.", alias="columnName")
+    column_name: Optional[StrictStr] = Field(default=None, description="The name of the attribute or raster band making up the x-axis of the histogram. Must be set for vector sources. For raster sources, it defaults to the first band.", alias="columnName")
     __properties: ClassVar[List[str]] = ["columnName"]
 
     model_config = ConfigDict(

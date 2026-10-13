@@ -16,9 +16,12 @@ pub struct MeanRasterPixelValuesOverTimeParameters {
     /// Where should the x-axis (time) tick be positioned? At either time start, time end or in the center.
     #[serde(rename = "timePosition")]
     pub time_position: models::MeanRasterPixelValuesOverTimePosition,
-    /// Whether to fill the area under the curve. Defaults to `true`.
+    /// Whether to fill the area under the curve. Defaults to `true`. Only applies to a single band, multiple bands are drawn as lines.
     #[serde(rename = "area", skip_serializing_if = "Option::is_none")]
     pub area: Option<bool>,
+    /// _Optional_: The names of the bands to compute the means for. The operator uses all bands if this parameter is empty.
+    #[serde(rename = "bandNames", skip_serializing_if = "Option::is_none")]
+    pub band_names: Option<Vec<String>>,
 }
 
 impl MeanRasterPixelValuesOverTimeParameters {
@@ -27,6 +30,7 @@ impl MeanRasterPixelValuesOverTimeParameters {
         MeanRasterPixelValuesOverTimeParameters {
             time_position,
             area: None,
+            band_names: None,
         }
     }
 }
