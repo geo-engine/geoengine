@@ -21,7 +21,7 @@ import {CoreConfig} from '../config.service';
 import {LoadingState} from './loading-state.model';
 import {HttpErrorResponse} from '@angular/common/http';
 import {BackendService} from '../backend/backend.service';
-import {BBoxDict, PlotDict, ProvenanceEntryDict, ToDict, UUID} from '../backend/backend.model';
+import {BBoxDict, ToDict, UUID} from '../backend/backend.model';
 import {MapService, ViewportSize} from '../map/map.service';
 import {Session} from '../users/session.model';
 import OlFeature from 'ol/Feature';
@@ -64,20 +64,22 @@ import {
     VectorData,
     VectorLayer,
     VectorLayerMetadata,
-    WorkflowsService,
+    ProcessingGraphsService,
 } from '@geoengine/common';
 import {
     CollectionItem,
     GeoJson,
     OGCWFSApi,
+    Plot as PlotDict,
     PlotOperator,
     ProjectLayer as ProjectLayerDict,
     ProviderLayerId,
     ProcessingGraph,
+    ProvenanceEntry,
     RasterOperator,
     TypedResultDescriptor,
     VectorOperator,
-    WorkflowsApi,
+    ProcessingGraphsApi,
     LineSimplification,
     TypedOperator,
 } from '@geoengine/api-client';
@@ -102,7 +104,7 @@ export class ProjectService implements OnDestroy {
     protected userService = inject(UserService);
     protected spatialReferenceService = inject(SpatialReferenceService);
     protected layersService = inject(LayersService);
-    protected readonly workflowsService = inject(WorkflowsService);
+    protected readonly processingGraphsService = inject(ProcessingGraphsService);
 
     private project$ = new ReplaySubject<Project | undefined>(1);
 
@@ -129,10 +131,10 @@ export class ProjectService implements OnDestroy {
 
     private readonly sessionToken = toSignal(this.userService.getSessionTokenStream());
     private readonly ogcWfsApi = new ReplaySubject<OGCWFSApi>(1);
-    private readonly processingGraphAPI = computed<WorkflowsApi>(() => {
+    private readonly processingGraphAPI = computed<ProcessingGraphsApi>(() => {
         const sessionToken = this.sessionToken();
-        if (!sessionToken) return new WorkflowsApi();
-        return new WorkflowsApi(apiConfigurationWithAccessKey(sessionToken));
+        if (!sessionToken) return new ProcessingGraphsApi();
+        return new ProcessingGraphsApi(apiConfigurationWithAccessKey(sessionToken));
     });
 
     constructor() {
@@ -454,39 +456,35 @@ export class ProjectService implements OnDestroy {
         );
     }
 
-    async registerWorkflow(processingGraph: ProcessingGraph): Promise<UUID> {
-        const response = await this.processingGraphAPI().registerWorkflowHandler({processingGraph});
+    async registerProcessingGraph(processingGraph: ProcessingGraph): Promise<UUID> {
+        const response = await this.processingGraphAPI().registerProcessingGraphHandler({processingGraph});
         return response.id;
     }
 
-    async getWorkflow(processingGraphId: UUID): Promise<ProcessingGraph> {
-        return await this.processingGraphAPI().loadWorkflowHandler({id: processingGraphId});
+    async getProcessingGraph(processingGraphId: UUID): Promise<ProcessingGraph> {
+        return await this.processingGraphAPI().loadProcessingGraphHandler({id: processingGraphId});
     }
 
-    getWorkflowMetaData(workflowId: UUID): Observable<TypedResultDescriptor> {
-        return this.userService
-            .getSessionTokenForRequest()
-            .pipe(mergeMap((sessionToken) => this.backend.getWorkflowMetadata(workflowId, sessionToken)));
+    getProcessingGraphMetaData(processingGraphId: UUID): Observable<TypedResultDescriptor> {
+        return from(this.processingGraphsService.getMetadata(processingGraphId));
     }
 
-    getWorkflowProvenance(workflowId: UUID): Observable<Array<ProvenanceEntryDict>> {
-        return this.userService
-            .getSessionTokenForRequest()
-            .pipe(mergeMap((sessionToken) => this.backend.getWorkflowProvenance(workflowId, sessionToken)));
+    getProcessingGraphProvenance(processingGraphId: UUID): Observable<Array<ProvenanceEntry>> {
+        return from(this.processingGraphsService.getProvenance(processingGraphId));
     }
 
     /**
      * Determines a common projection for all layers and return their operator with an added a projection if necessary
      */
     getAutomaticallyProjectedOperatorsFromLayers(layers: Array<Layer>): Observable<Array<TypedOperator>> {
-        const meta: Array<Observable<TypedResultDescriptor>> = layers.map((l) => this.getWorkflowMetaData(l.workflowId));
+        const meta: Array<Observable<TypedResultDescriptor>> = layers.map((l) => this.getProcessingGraphMetaData(l.workflowId));
 
         return combineLatest(meta).pipe(
             mergeMap((descriptors: Array<TypedResultDescriptor>) => {
                 const srefs = descriptors.map((l) => SpatialReference.fromSrsString(l.spatialReference));
                 const targetSref = getProjectionTarget(srefs);
 
-                const workflowsObservable = layers.map((l) => from(this.getWorkflow(l.workflowId)));
+                const workflowsObservable = layers.map((l) => from(this.getProcessingGraph(l.workflowId)));
 
                 return combineLatest(workflowsObservable).pipe(
                     map((workflows: Array<ProcessingGraph>) => {
@@ -1331,7 +1329,7 @@ export class ProjectService implements OnDestroy {
             .getSessionTokenForRequest()
             .pipe(
                 tap(() => loadingState$.next(LoadingState.LOADING)),
-                mergeMap((sessionToken) => this.backend.getWorkflowMetadata(layer.workflowId, sessionToken)),
+                mergeMap(() => this.processingGraphsService.getMetadata(layer.workflowId)),
                 map((workflowMetadataDict) => LayerMetadata.fromDict(workflowMetadataDict)),
                 tap({
                     next: () => loadingState$.next(LoadingState.OK),
@@ -1377,7 +1375,7 @@ export class ProjectService implements OnDestroy {
             viewport: this.mapService.getViewportSizeStream(),
             isClusteredOrSimplified: isClusteredOrSimplified$,
             workflowMetadata: this.getVectorLayerMetadata(layer),
-            originalWorkflow: this.workflowsService.getWorkflow(layer.workflowId), // TODO: capture possible changes to the layers's workflow?
+            originalWorkflow: this.processingGraphsService.getProcessingGraph(layer.workflowId), // TODO: capture possible changes to the layers's workflow?
         })
             .pipe(
                 debounceTime(this.config.DELAYS.DEBOUNCE),
@@ -1413,7 +1411,7 @@ export class ProjectService implements OnDestroy {
                                 throw new Error(`Unsupported symbology type for simplification: ${layer.symbology.getSymbologyType()}`);
                         }
 
-                        workflowId = await this.workflowsService.registerWorkflow(workflow);
+                        workflowId = await this.processingGraphsService.registerProcessingGraph(workflow);
 
                         workflowIdCache.set([spatialReference, viewport.resolution], workflowId);
                     } else {
@@ -1427,7 +1425,7 @@ export class ProjectService implements OnDestroy {
                         service: 'WFS',
                         version: '2.0.0',
                         request: 'GetFeature',
-                        workflow: workflowId,
+                        processingGraph: workflowId,
                         typeNames: workflowId,
                         bbox: bboxDictToExtent(extentToBboxDict(viewport.extent)).join(','),
                         time: `${unixTimestampToIsoString(time.toDict().start)}/${unixTimestampToIsoString(time.toDict().end)}`,
@@ -1603,7 +1601,7 @@ function createClusteredPointLayerQueryWorkflow(
     resolution: number,
 ): ProcessingGraph {
     if (workflow.type !== 'Vector') {
-        throw new Error('Cannot create clustered point layer for a non-Vector workflow.');
+        throw new Error('Cannot create clustered point layer for a non-Vector processing graph.');
     }
 
     const columnAggregates: Record<
@@ -1666,7 +1664,7 @@ function createSimplifiedLinesOrPolygonsLayerQueryWorkflow(
     resolution: number,
 ): ProcessingGraph {
     if (workflow.type === 'Plot') {
-        throw new Error('Cannot create simplified lines or polygons layer for a Plot workflow.');
+        throw new Error('Cannot create simplified lines or polygons layer for a Plot processing graph.');
     }
 
     return {

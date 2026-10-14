@@ -40,7 +40,7 @@ class TestLayer(unittest.TestCase):
                     layer_id = '', ),
                 name = '',
                 description = '',
-                workflow = None,
+                processing_graph = None,
                 symbology = None,
                 properties = [
                     [
@@ -58,7 +58,7 @@ class TestLayer(unittest.TestCase):
                     layer_id = '', ),
                 name = '',
                 description = '',
-                workflow = None,
+                processing_graph = None,
         )
         """
 

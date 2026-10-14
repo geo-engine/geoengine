@@ -1,3 +1,4 @@
+use crate::api::model::processing_graphs::ProcessingGraphId;
 use crate::{
     api::{
         handlers::spatial_references::spatial_reference_specification,
@@ -44,7 +45,7 @@ where
     C: ApplicationContext,
     C::Session: FromRequest,
 {
-    cfg.service(web::resource("/wcs/{workflow}").route(web::get().to(wcs_handler::<C>)));
+    cfg.service(web::resource("/wcs/{processingGraph}").route(web::get().to(wcs_handler::<C>)));
 }
 
 #[derive(Debug, Deserialize)]
@@ -107,14 +108,14 @@ fn wcs_url(workflow: WorkflowId) -> Result<Url> {
 #[utoipa::path(
     tag = "OGC WCS",
     get,
-    path = "/wcs/{workflow}",
+    path = "/wcs/{processingGraph}",
     responses(
         (status = 200, description = "OK", content_type = "text/xml", body = String,
             // TODO: add example when utoipa supports more than just json examples
         )
     ),
     params(
-        ("workflow" = WorkflowId, description = "Workflow id"),
+        ("processingGraph" = ProcessingGraphId, description = "Processing graph id"),
         WcsQueryParams
     ),
     security(
@@ -124,18 +125,20 @@ fn wcs_url(workflow: WorkflowId) -> Result<Url> {
 
 async fn wcs_handler<C: ApplicationContext>(
     req: HttpRequest,
-    workflow: web::Path<WorkflowId>,
+    processing_graph: web::Path<ProcessingGraphId>,
     request: OgcQueryExtractor<WcsQueryParams>,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
+    let workflow: WorkflowId = processing_graph.into_inner().into();
+
     match request.into_inner() {
         WcsQueryParams::GetCapabilities(r) => wcs_get_capabilities::<C>(workflow, r, session).await,
         WcsQueryParams::DescribeCoverage(r) => {
-            wcs_describe_coverage::<C>(workflow.into_inner(), r, app_ctx, session).await
+            wcs_describe_coverage::<C>(workflow, r, app_ctx, session).await
         }
         WcsQueryParams::GetCoverage(r) => {
-            wcs_get_coverage::<C>(req, workflow.into_inner(), r, app_ctx, session).await
+            wcs_get_coverage::<C>(req, workflow, r, app_ctx, session).await
         }
     }
 }
@@ -145,7 +148,7 @@ async fn wcs_handler<C: ApplicationContext>(
     clippy::no_effect_underscore_binding // need `_session` to quire authentication
 )]
 async fn wcs_get_capabilities<C: ApplicationContext>(
-    workflow: web::Path<WorkflowId>,
+    workflow: WorkflowId,
     request: GetCapabilities,
     _session: C::Session,
 ) -> Result<HttpResponse> {
@@ -154,8 +157,6 @@ async fn wcs_get_capabilities<C: ApplicationContext>(
     // TODO: workflow bounding box
     // TODO: host schema file(?)
     // TODO: load ServiceIdentification and ServiceProvider from config
-
-    let workflow = workflow.into_inner();
 
     let wcs_url = wcs_url(workflow)?;
     let mock = format!(
@@ -202,7 +203,7 @@ async fn wcs_get_capabilities<C: ApplicationContext>(
             </ows:OperationsMetadata>
             <wcs:Contents>
                 <wcs:CoverageSummary>
-                    <ows:Title>Workflow {workflow}</ows:Title>
+                    <ows:Title>Processing Graph {workflow}</ows:Title>
                     <ows:WGS84BoundingBox>
                         <ows:LowerCorner>-180.0 -90.0</ows:LowerCorner>
                         <ows:UpperCorner>180.0 90.0</ows:UpperCorner>
@@ -295,7 +296,7 @@ async fn wcs_describe_coverage<C: ApplicationContext>(
         xmlns:gml="http://www.opengis.net/gml"
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 {wcs_url}/schemas/wcs/1.1.1/wcsDescribeCoverage.xsd">
         <wcs:CoverageDescription>
-            <ows:Title>Workflow {workflow_id}</ows:Title>
+            <ows:Title>Processing Graph {workflow_id}</ows:Title>
             <wcs:Identifier>{workflow_id}</wcs:Identifier>
             <wcs:Domain>
                 <wcs:SpatialDomain>
@@ -582,7 +583,7 @@ mod tests {
             </ows:OperationsMetadata>
             <wcs:Contents>
                 <wcs:CoverageSummary>
-                    <ows:Title>Workflow {workflow_id}</ows:Title>
+                    <ows:Title>Processing Graph {workflow_id}</ows:Title>
                     <ows:WGS84BoundingBox>
                         <ows:LowerCorner>-180.0 -90.0</ows:LowerCorner>
                         <ows:UpperCorner>180.0 90.0</ows:UpperCorner>
@@ -632,7 +633,7 @@ mod tests {
         xmlns:gml="http://www.opengis.net/gml"
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://127.0.0.1:3030/api/wcs/{workflow_id}/schemas/wcs/1.1.1/wcsDescribeCoverage.xsd">
         <wcs:CoverageDescription>
-            <ows:Title>Workflow {workflow_id}</ows:Title>
+            <ows:Title>Processing Graph {workflow_id}</ows:Title>
             <wcs:Identifier>{workflow_id}</wcs:Identifier>
             <wcs:Domain>
                 <wcs:SpatialDomain>

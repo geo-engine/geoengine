@@ -326,11 +326,11 @@ export class VectorExpressionComponent implements AfterViewInit, OnDestroy {
 
         const layerName = this.form.controls.layerName.value;
 
-        from(this.projectService.getWorkflow(sourceLayer.workflowId))
+        from(this.projectService.getProcessingGraph(sourceLayer.workflowId))
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) =>
                     from(
-                        this.projectService.registerWorkflow({
+                        this.projectService.registerProcessingGraph({
                             type: 'Vector',
                             operator: {
                                 type: 'VectorExpression',
@@ -351,7 +351,7 @@ export class VectorExpressionComponent implements AfterViewInit, OnDestroy {
                 mergeMap((workflowId) =>
                     this.projectService.addLayer(
                         new VectorLayer({
-                            workflowId,
+                            processingGraphId: workflowId,
                             name: layerName,
                             symbology: createSymbology(
                                 this.randomColorService,

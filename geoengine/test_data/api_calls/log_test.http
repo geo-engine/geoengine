@@ -91,7 +91,7 @@ Content-Type: application/json
 
 # Should succeed.
 # @name registerWorkflow
-POST {{baseUrl}}/workflow
+POST {{baseUrl}}/processingGraphs
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -110,7 +110,7 @@ Content-Type: application/json
 @workflowId = {{registerWorkflow.response.body.$.id}}
 
 # Should throw invalid operator type.
-GET {{baseUrl}}/workflow/{{workflowId}}/vectorStream?spatialBounds=0,0,0,0&timeInterval=2012-12-12T12%3A12%3A12Z&spatialResolution=1,1&resultType=arrow
+GET {{baseUrl}}/processingGraphs/{{workflowId}}/vectorStream?spatialBounds=0,0,0,0&timeInterval=2012-12-12T12%3A12%3A12Z&spatialResolution=1,1&resultType=arrow
 Authorization: Bearer {{token}}
 
 ###

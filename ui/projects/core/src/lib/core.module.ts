@@ -95,7 +95,7 @@ import {FeatureAttributeOvertimeComponent} from './operators/dialogs/feature-att
 import {NotificationsComponent} from './project/notifications/notifications.component';
 import {TemporalRasterAggregationComponent} from './operators/dialogs/temporal-raster-aggregation/temporal-raster-aggregation.component';
 import {DragAndDropComponent} from './datasets/drag-and-drop/drag-and-drop.component';
-import {AddWorkflowComponent} from './datasets/add-workflow/add-workflow.component';
+import {AddProcessingGraphComponent} from './datasets/add-processing-graph/add-processing-graph.component';
 import {ProvenanceTableComponent} from './provenance/table/provenance-table.component';
 import {ScrollingModule} from '@angular/cdk/scrolling';
 import {LayerListMenuComponent} from './layers/layer-list/layer-list-menu/layer-list-menu.component';
@@ -174,7 +174,7 @@ const CORE_PIPES = [CssStringToRgbaPipe, HighlightPipe, RgbaToCssStringPipe, Saf
 
 const CORE_COMPONENTS = [
     AddDataComponent,
-    AddWorkflowComponent,
+    AddProcessingGraphComponent,
     BackendStatusPageComponent,
     BoxPlotOperatorComponent,
     ChangeSpatialReferenceComponent,

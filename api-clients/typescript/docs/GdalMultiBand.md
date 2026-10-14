@@ -8,7 +8,7 @@ Name | Type
 ------------ | -------------
 `type` | string
 `resultDescriptor` | [RasterResultDescriptor](RasterResultDescriptor.md)
-`cacheTtl` | number \| null
+`cacheTtl` | number
 
 ## Example
 
@@ -19,7 +19,7 @@ import type { GdalMultiBand } from '@geoengine/api-client'
 const example = {
   "type": null,
   "resultDescriptor": null,
-  "cacheTtl": 300,
+  "cacheTtl": null,
 } satisfies GdalMultiBand
 
 console.log(example)

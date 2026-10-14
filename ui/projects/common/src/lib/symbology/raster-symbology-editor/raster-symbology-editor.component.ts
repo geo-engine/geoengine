@@ -22,7 +22,7 @@ import {BLACK, Color, TRANSPARENT, WHITE} from '../../colors/color';
 import {ColorBreakpoint} from '../../colors/color-breakpoint.model';
 import {BehaviorSubject} from 'rxjs';
 import {RasterBandDescriptor} from '@geoengine/api-client';
-import {WorkflowsService} from '../../workflows/workflows.service';
+import {ProcessingGraphsService} from '../../processing-graphs/processing-graphs.service';
 import {FxLayoutDirective, FxFlexDirective} from '../../util/directives/flexbox-legacy.directive';
 import {MatCard, MatCardHeader, MatCardTitleGroup, MatCardTitle, MatCardSubtitle, MatCardContent} from '@angular/material/card';
 import {MatIcon} from '@angular/material/icon';
@@ -83,7 +83,7 @@ const FAUX_RASTER_SYMBOLOGY = new RasterSymbology(
     ],
 })
 export class RasterSymbologyEditorComponent {
-    private readonly workflowsService = inject(WorkflowsService);
+    private readonly processingGraphsService = inject(ProcessingGraphsService);
 
     readonly symbologyWorkflow = input.required<SymbologyWorkflow<RasterSymbology>>();
     readonly queryParams = input<SymbologyQueryParams>();
@@ -303,7 +303,7 @@ export class RasterSymbologyEditorComponent {
         const symbology = symbologyWorkflow.symbology.clone();
 
         // TODO: loading indicator
-        const _resultDescriptor = await this.workflowsService.getMetadata(symbologyWorkflow.workflowId);
+        const _resultDescriptor = await this.processingGraphsService.getMetadata(symbologyWorkflow.workflowId);
 
         if (_resultDescriptor.type !== 'raster') {
             throw Error('expected raster result descriptor');

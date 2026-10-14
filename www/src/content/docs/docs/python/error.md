@@ -75,7 +75,7 @@ Exception for calling a plot method on a, e.g., vector layer
 class SpatialReferenceMismatchException(Exception)
 ```
 
-Exception for calling a method on a workflow with a query rectangle that has a different spatial reference
+Exception for calling a method on a processing graph with a query rectangle that has a different spatial reference
 
 ## InvalidUrlException Objects
 

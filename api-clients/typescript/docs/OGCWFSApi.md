@@ -4,13 +4,13 @@ All URIs are relative to *https://geoengine.io/api*
 
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
-| [**wfsHandler**](OGCWFSApi.md#wfshandler) | **GET** /wfs/{workflow} | OGC WFS endpoint |
+| [**wfsHandler**](OGCWFSApi.md#wfshandler) | **GET** /wfs/{processingGraph} | OGC WFS endpoint |
 
 
 
 ## wfsHandler
 
-> GeoJson wfsHandler(workflow, request, bbox, count, filter, namespaces, propertyName, resultType, service, sortBy, srsName, time, typeNames, version)
+> GeoJson wfsHandler(processingGraph, request, bbox, count, filter, namespaces, propertyName, resultType, service, sortBy, srsName, time, typeNames, version)
 
 OGC WFS endpoint
 
@@ -32,8 +32,8 @@ async function example() {
   const api = new OGCWFSApi(config);
 
   const body = {
-    // string | Workflow id
-    workflow: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | Processing graph id
+    processingGraph: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
     // WfsRequest | type of WFS request
     request: ...,
     // string (optional)
@@ -57,7 +57,7 @@ async function example() {
     // string (optional)
     time: 2014-04-01T12:00:00.000Z,
     // string (optional)
-    typeNames: <Workflow Id>,
+    typeNames: <Processing Graph Id>,
     // WfsVersion (optional)
     version: ...,
   } satisfies WfsHandlerRequest;
@@ -79,7 +79,7 @@ example().catch(console.error);
 
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
-| **workflow** | `string` | Workflow id | [Defaults to `undefined`] |
+| **processingGraph** | `string` | Processing graph id | [Defaults to `undefined`] |
 | **request** | `WfsRequest` | type of WFS request | [Defaults to `undefined`] [Enum: GetCapabilities, GetFeature] |
 | **bbox** | `string` |  | [Optional] [Defaults to `undefined`] |
 | **count** | `number` |  | [Optional] [Defaults to `undefined`] |

@@ -78,10 +78,10 @@ export class RasterTypeConversionComponent implements AfterViewInit {
 
         const outputDataType: RasterDataType = this.form.controls['dataType'].value;
 
-        from(this.projectService.getWorkflow(inputLayer.workflowId))
+        from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) =>
-                    this.projectService.registerWorkflow({
+                    this.projectService.registerProcessingGraph({
                         type: 'Raster',
                         operator: {
                             type: 'RasterTypeConversion',
@@ -98,7 +98,7 @@ export class RasterTypeConversionComponent implements AfterViewInit {
                 mergeMap((workflowId) =>
                     this.projectService.addLayer(
                         new RasterLayer({
-                            workflowId,
+                            processingGraphId: workflowId,
                             name: outputName,
                             symbology: inputLayer.symbology.clone(),
                             isLegendVisible: false,

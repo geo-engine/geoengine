@@ -1,6 +1,7 @@
 loaders:
     - type: python
       search_path: ['../python/geoengine']
+      ignore_when_discovered: ['_deprecation']
 processors:
     - type: filter
       skip_empty_modules: true

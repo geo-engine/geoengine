@@ -43,7 +43,7 @@ class TestProject(unittest.TestCase):
                 description = '',
                 layers = [
                     geoengine_api_client.models.project_layer.ProjectLayer(
-                        workflow = '', 
+                        processing_graph = '', 
                         name = '', 
                         visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
                             data = True, 
@@ -52,7 +52,7 @@ class TestProject(unittest.TestCase):
                     ],
                 plots = [
                     geoengine_api_client.models.plot.Plot(
-                        workflow = '', 
+                        processing_graph = '', 
                         name = '', )
                     ],
                 bounds = geoengine_api_client.models.st_rectangle.STRectangle(
@@ -81,7 +81,7 @@ class TestProject(unittest.TestCase):
                 description = '',
                 layers = [
                     geoengine_api_client.models.project_layer.ProjectLayer(
-                        workflow = '', 
+                        processing_graph = '', 
                         name = '', 
                         visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
                             data = True, 
@@ -90,7 +90,7 @@ class TestProject(unittest.TestCase):
                     ],
                 plots = [
                     geoengine_api_client.models.plot.Plot(
-                        workflow = '', 
+                        processing_graph = '', 
                         name = '', )
                     ],
                 bounds = geoengine_api_client.models.st_rectangle.STRectangle(

@@ -21,7 +21,7 @@ export interface ProjectLayer {
      * @type {string}
      * @memberof ProjectLayer
      */
-    workflow: string;
+    processingGraph: string;
     /**
      *
      * @type {string}

@@ -11,7 +11,7 @@
 import * as runtime from '../runtime';
 import type { GetCoverageFormat, WcsRequest, WcsService, WcsVersion } from '../models/index';
 export interface WcsHandlerRequest {
-    workflow: string;
+    processingGraph: string;
     request: WcsRequest;
     boundingbox?: string;
     format?: GetCoverageFormat;
