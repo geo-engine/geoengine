@@ -270,7 +270,7 @@ impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
                 values.into_iter().map(move |value| DataPoint {
                     series: id.clone(),
                     time: value.time.start(),
-                    value: value.value,
+                    value: Some(value.value),
                 })
             })
             .collect::<Vec<_>>();

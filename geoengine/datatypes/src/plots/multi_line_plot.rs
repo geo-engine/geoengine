@@ -2,14 +2,15 @@ use crate::plots::{Plot, PlotData, PlotMetaData};
 use crate::primitives::{Measurement, TimeInstance};
 use crate::util::Result;
 
+/// A point of a series. A `None` value is rendered as `null` and interrupts the line.
 pub struct DataPoint {
     pub series: String,
     pub time: TimeInstance,
-    pub value: f64,
+    pub value: Option<f64>,
 }
 
-impl From<(String, TimeInstance, f64)> for DataPoint {
-    fn from(p: (String, TimeInstance, f64)) -> Self {
+impl From<(String, TimeInstance, Option<f64>)> for DataPoint {
+    fn from(p: (String, TimeInstance, Option<f64>)) -> Self {
         Self {
             series: p.0,
             time: p.1,
@@ -94,12 +95,12 @@ mod tests {
     fn serialization() {
         let chart = MultiLineChart::new(
             vec![
-                ("S0".to_owned(), TimeInstance::from_millis_unchecked(0), 0.).into(),
-                ("S1".to_owned(), TimeInstance::from_millis_unchecked(0), 2.).into(),
+                ("S0".to_owned(), TimeInstance::from_millis_unchecked(0), Some(0.)).into(),
+                ("S1".to_owned(), TimeInstance::from_millis_unchecked(0), Some(2.)).into(),
                 (
                     "S0".to_owned(),
                     TimeInstance::from_millis_unchecked(1000),
-                    1.,
+                    Some(1.),
                 )
                     .into(),
             ],

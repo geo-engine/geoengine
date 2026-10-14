@@ -244,6 +244,7 @@ impl<P: Pixel> MeanRasterPixelValuesOverTimeQueryProcessor<P> {
                     ),
                 })?;
 
+            // empty tiles also fill the time gaps of the source, so they must not add time steps
             match tile.grid_array {
                 geoengine_datatypes::raster::GridOrEmpty::Grid(_) => {
                     let time = Self::time_interval_projection(tile.time, position);
@@ -311,15 +312,10 @@ impl<P: Pixel> MeanRasterPixelValuesOverTimeQueryProcessor<P> {
     }
 }
 
+#[derive(Default)]
 struct MeanCalculator {
     mean: f64,
     n: usize,
-}
-
-impl Default for MeanCalculator {
-    fn default() -> Self {
-        Self { mean: 0., n: 0 }
-    }
 }
 
 impl MeanCalculator {
@@ -343,9 +339,10 @@ impl MeanCalculator {
         self.mean += delta / (self.n as f64);
     }
 
+    /// Returns `None` if there are no valid values.
     #[inline]
-    fn mean(&self) -> f64 {
-        self.mean
+    fn mean(&self) -> Option<f64> {
+        (self.n > 0).then_some(self.mean)
     }
 }
 
@@ -376,7 +373,9 @@ mod tests {
     };
     use geoengine_datatypes::{raster::TilingSpecification, spatial_reference::SpatialReference};
     use geoengine_datatypes::{
-        raster::{Grid2D, RasterDataType, TileInformation},
+        raster::{
+            EmptyGrid2D, Grid2D, GridOrEmpty2D, MaskedGrid2D, RasterDataType, TileInformation,
+        },
         util::test::TestDefault,
     };
     use serde_json::{Value, json};
@@ -697,7 +696,7 @@ mod tests {
                     TimeInstance::from(DateTime::new_utc(1995, 1, 1, 0, 0, 0)),
                     TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0))
                 ],
-                vec![3.5, 8.5, 5.5],
+                vec![Some(3.5), Some(8.5), Some(5.5)],
                 Measurement::Unitless,
                 true,
             )
@@ -817,12 +816,12 @@ mod tests {
                     DataPoint {
                         series: "a".to_string(),
                         time: start,
-                        value: 3.5,
+                        value: Some(3.5),
                     },
                     DataPoint {
                         series: "b".to_string(),
                         time: start,
-                        value: 9.5,
+                        value: Some(9.5),
                     },
                 ],
                 measurement,
@@ -860,7 +859,7 @@ mod tests {
             result,
             AreaLineChart::new(
                 vec![TimeInstance::from(DateTime::new_utc(1990, 1, 1, 0, 0, 0))],
-                vec![9.5],
+                vec![Some(9.5)],
                 Measurement::Unitless,
                 true,
             )
@@ -882,5 +881,69 @@ mod tests {
             result,
             Err(Error::InvalidOperatorSpec { reason }) if reason == "Band 'c' does not exist."
         ));
+    }
+
+    #[tokio::test]
+    async fn it_has_no_mean_for_time_steps_without_valid_pixels_and_skips_empty_tiles() {
+        let time_steps: Vec<TimeInterval> = (0..3)
+            .map(|i| {
+                TimeInterval::new(i * 1000, (i + 1) * 1000).expect("time interval should be valid")
+            })
+            .collect();
+        let shape: GridShape2D = [3, 2].into();
+
+        let valid: GridOrEmpty2D<u8> = Grid2D::new(shape, vec![1, 2, 3, 4, 5, 6])
+            .expect("grid should match the shape")
+            .into();
+        let empty: GridOrEmpty2D<u8> = EmptyGrid2D::new(shape).into();
+        let masked: GridOrEmpty2D<u8> = MaskedGrid2D::new(
+            Grid2D::new(shape, vec![1; 6]).expect("grid should match the shape"),
+            Grid2D::new(shape, vec![false; 6]).expect("mask should match the shape"),
+        )
+        .expect("mask should match the grid")
+        .into();
+
+        let tiles = time_steps
+            .iter()
+            .zip([valid, empty, masked])
+            .map(|(time, grid)| {
+                Ok(RasterTile2D::new_with_tile_info(
+                    *time,
+                    TileInformation {
+                        global_geo_transform: TestDefault::test_default(),
+                        global_tile_position: [0, 0].into(),
+                        tile_size_in_pixels: shape,
+                    },
+                    0,
+                    grid,
+                    CacheHint::no_cache(),
+                ))
+            })
+            .collect::<Vec<_>>();
+
+        let means = MeanRasterPixelValuesOverTimeQueryProcessor::<u8>::calculate_means(
+            futures::stream::iter(tiles).boxed(),
+            &[SelectedBand {
+                index: 0,
+                name: "band".to_string(),
+            }],
+            shape.bounding_box(),
+            MeanRasterPixelValuesOverTimePosition::Start,
+        )
+        .await
+        .expect("calculating the means should work");
+
+        let means = means[0]
+            .iter()
+            .map(|(time, mean)| (*time, mean.mean()))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            means,
+            vec![
+                (time_steps[0].start(), Some(3.5)),
+                (time_steps[2].start(), None),
+            ]
+        );
     }
 }
