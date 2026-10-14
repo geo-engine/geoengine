@@ -83,7 +83,10 @@ mod tests {
         tx.commit().await.unwrap();
 
         let aruna_provider_count: i64 = conn
-            .query_one("SELECT COUNT(*) FROM layer_providers WHERE type_name = 'Aruna'", &[])
+            .query_one(
+                "SELECT COUNT(*) FROM layer_providers WHERE type_name = 'Aruna'",
+                &[],
+            )
             .await
             .unwrap()
             .get(0);
