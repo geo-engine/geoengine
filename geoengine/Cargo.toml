@@ -114,8 +114,8 @@ flexi_logger = { version = "0.31", features = ["trc"] }
 float-cmp = "0.10"
 futures = "0.3"
 futures-util = "0.3"
-gdal = {version="0.19", features=["bindgen"]}
-gdal-sys = {version="0.12", features=["bindgen"]}
+gdal = "0.19"
+gdal-sys = "0.12"
 # when changing geo version also adapt the Cargo.toml in the expression "deps-workspace"!
 geo = "0.33.1"
 geo-types = "0.7.19"                                      # important for compatibility when linking expressions
