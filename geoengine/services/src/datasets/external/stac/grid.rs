@@ -8,7 +8,7 @@ use geoengine_datatypes::{
 };
 use serde::{Deserialize, Serialize};
 
-/// Provider-wide target count. Square cells and boundary coverage can require more cells.
+/// Connector-wide target cell count. Square cells and boundary coverage can require more cells.
 #[derive(
     Clone,
     Copy,

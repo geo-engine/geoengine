@@ -1182,6 +1182,7 @@ pub struct StacDataProviderDefinition {
 #[serde(rename_all = "camelCase")]
 pub struct StacGrid {
     /// Target number of square cells; actual count may differ due to square geometry.
+    // TODO: find better default value
     #[schema(default = 512, minimum = 1, maximum = 2_147_483_647)]
     pub target_number_of_cells: i32,
 }

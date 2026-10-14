@@ -19,6 +19,7 @@ use tracing::trace;
 pub(crate) type StacQueryCacheResult = Result<Arc<Vec<TileFile>>, Arc<Error>>;
 
 /// Approximate result payload, key, and value size for Moka's weighted capacity.
+/// This is a lower vound for the actual byte size.
 /// It includes the actual key and Arc value sizes plus known nested allocations.
 /// It excludes cache internals, allocator overhead, the dataset registry, and active requests.
 pub(crate) fn result_bytes(result: &[TileFile]) -> usize {
