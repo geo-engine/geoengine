@@ -1261,6 +1261,7 @@ mod tests {
                 client: StacClient::new(reqwest::Client::new()),
                 query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
                 cache_ttl_secs: None,
+                grid: StacGrid::default(),
             };
             let bounds = SpatialPartition2D::new(
                 (500_000., 5_800_000.).into(),
