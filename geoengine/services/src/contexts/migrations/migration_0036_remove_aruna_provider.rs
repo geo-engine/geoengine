@@ -68,15 +68,25 @@ mod tests {
             .await
             .unwrap();
 
+        let aruna_provider_count: i64 = conn
+            .query_one(
+                "SELECT COUNT(*) FROM layer_providers WHERE ((definition).aruna_data_provider_definition).id IS NOT NULL",
+                &[],
+            )
+            .await
+            .unwrap()
+            .get(0);
+        assert_eq!(aruna_provider_count, 1);
+
         let tx = conn.transaction().await.unwrap();
         Migration0036RemoveArunaProvider.migrate(&tx).await.unwrap();
         tx.commit().await.unwrap();
 
-        let provider_count: i64 = conn
-            .query_one("SELECT COUNT(*) FROM layer_providers", &[])
+        let aruna_provider_count: i64 = conn
+            .query_one("SELECT COUNT(*) FROM layer_providers WHERE type_name = 'Aruna'", &[])
             .await
             .unwrap()
             .get(0);
-        assert_eq!(provider_count, 0);
+        assert_eq!(aruna_provider_count, 0);
     }
 }
