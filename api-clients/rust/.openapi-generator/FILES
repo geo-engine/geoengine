@@ -17,7 +17,6 @@ docs/AggregationMean.md
 docs/AggregationMin.md
 docs/AggregationPercentileEstimate.md
 docs/AggregationSum.md
-docs/ArunaDataProviderDefinition.md
 docs/AttributeAggregateDef.md
 docs/AttributeAggregateType.md
 docs/AttributeFilter.md
@@ -491,7 +490,6 @@ src/models/aggregation_mean.rs
 src/models/aggregation_min.rs
 src/models/aggregation_percentile_estimate.rs
 src/models/aggregation_sum.rs
-src/models/aruna_data_provider_definition.rs
 src/models/attribute_aggregate_def.rs
 src/models/attribute_aggregate_type.rs
 src/models/attribute_filter.rs

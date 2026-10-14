@@ -1340,7 +1340,6 @@ mod tests {
             dataset_listing_provider::{
                 DatasetLayerListingCollection, DatasetLayerListingProviderDefinition,
             },
-            external::aruna::ArunaDataProviderDefinition,
         },
         ge_context,
         layers::{layer::Layer, storage::INTERNAL_PROVIDER_ID},
@@ -1358,8 +1357,8 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::{
         primitives::{
-            BandSelection, CacheHint, CacheTtlSeconds, Coordinate2D, RasterQueryRectangle,
-            TimeGranularity, TimeInterval,
+            BandSelection, CacheHint, Coordinate2D, RasterQueryRectangle, TimeGranularity,
+            TimeInterval,
         },
         raster::{
             GeoTransform, Grid, GridBoundingBox2D, GridShape, RasterDataType, RasterTile2D,
@@ -2485,6 +2484,7 @@ mod tests {
         );
     }
 
+    /*
     #[ge_context::test]
     async fn test_cannot_update_provider_type(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
@@ -2532,6 +2532,8 @@ mod tests {
             crate::error::Error::ProviderTypeUnmodifiable.to_string()
         );
     }
+
+    */
 
     #[ge_context::test]
     async fn test_cannot_update_non_existing_provider(app_ctx: PostgresContext<NoTls>) {

@@ -2,7 +2,6 @@ use crate::api::model::datatypes::{
     DatasetId, SpatialReference, SpatialReferenceOption, TimeInstance, TimeInterval,
 };
 use crate::api::model::responses::ErrorResponse;
-use crate::datasets::external::aruna::error::ArunaProviderError;
 use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
 use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
 use actix_web::HttpResponse;
@@ -374,11 +373,6 @@ pub enum Error {
         height: u32,
         max_width: u32,
         max_height: u32,
-    },
-
-    #[snafu(context(false))]
-    ArunaProvider {
-        source: ArunaProviderError,
     },
 
     #[snafu(context(false))]

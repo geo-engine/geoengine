@@ -715,18 +715,6 @@ CREATE TABLE collection_children (
     PRIMARY KEY (parent, child)
 );
 
-CREATE TYPE "ArunaDataProviderDefinition" AS (
-    id uuid,
-    "name" text,
-    api_url text,
-    project_id text,
-    api_token text,
-    filter_label text,
-    cache_ttl int,
-    description text,
-    priority smallint
-);
-
 CREATE TYPE "DatabaseConnectionConfig" AS (
     host text,
     port int,
@@ -934,7 +922,6 @@ CREATE TYPE "StacDataProviderDefinition" AS (
 
 CREATE TYPE "DataProviderDefinition" AS (
     -- one of
-    aruna_data_provider_definition "ArunaDataProviderDefinition",
     gbif_data_provider_definition "GbifDataProviderDefinition",
     gfbio_abcd_data_provider_definition "GfbioAbcdDataProviderDefinition",
     gfbio_collections_data_provider_definition

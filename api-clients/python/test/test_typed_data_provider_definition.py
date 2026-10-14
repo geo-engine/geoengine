@@ -35,16 +35,10 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
         model = TypedDataProviderDefinition()
         if include_optional:
             return TypedDataProviderDefinition(
-                type = 'Aruna',
-                id = '',
+                type = 'CopernicusDataspace',
                 name = '',
                 description = '',
-                priority = 56,
-                api_url = '',
-                project_id = '',
-                api_token = '',
-                filter_label = '',
-                cache_ttl = 0,
+                id = '',
                 stac_url = '',
                 s3_url = '',
                 s3_access_key = '',
@@ -54,6 +48,7 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                         ''
                         ]
                     ],
+                priority = 56,
                 collections = [
                     geoengine_api_client.models.dataset_layer_listing_collection.DatasetLayerListingCollection(
                         name = '', 
@@ -65,6 +60,7 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                 base_url = '',
                 data = '',
                 overviews = '',
+                cache_ttl = 0,
                 vector_spec = geoengine_api_client.models.edr_vector_spec.EdrVectorSpec(
                     x = '', 
                     y = '', 
@@ -99,6 +95,7 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                     user = '', 
                     password = '', ),
                 pangaea_url = '',
+                api_url = '',
                 stac_api_retries = geoengine_api_client.models.stac_api_retries.StacApiRetries(
                     number_of_retries = 0, 
                     initial_delay_ms = 0, 
@@ -158,14 +155,10 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
             )
         else:
             return TypedDataProviderDefinition(
-                type = 'Aruna',
-                id = '',
+                type = 'CopernicusDataspace',
                 name = '',
                 description = '',
-                api_url = '',
-                project_id = '',
-                api_token = '',
-                filter_label = '',
+                id = '',
                 stac_url = '',
                 s3_url = '',
                 s3_access_key = '',
@@ -207,6 +200,7 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                     user = '', 
                     password = '', ),
                 pangaea_url = '',
+                api_url = '',
                 collection_name = '',
                 time_dimension = None,
                 datasets = [

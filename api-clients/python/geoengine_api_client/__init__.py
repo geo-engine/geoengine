@@ -59,7 +59,6 @@ __all__ = [
     "AggregationMin",
     "AggregationPercentileEstimate",
     "AggregationSum",
-    "ArunaDataProviderDefinition",
     "AttributeAggregateDef",
     "AttributeAggregateType",
     "AttributeFilter",
@@ -528,7 +527,6 @@ from geoengine_api_client.models.aggregation_mean import AggregationMean as Aggr
 from geoengine_api_client.models.aggregation_min import AggregationMin as AggregationMin
 from geoengine_api_client.models.aggregation_percentile_estimate import AggregationPercentileEstimate as AggregationPercentileEstimate
 from geoengine_api_client.models.aggregation_sum import AggregationSum as AggregationSum
-from geoengine_api_client.models.aruna_data_provider_definition import ArunaDataProviderDefinition as ArunaDataProviderDefinition
 from geoengine_api_client.models.attribute_aggregate_def import AttributeAggregateDef as AttributeAggregateDef
 from geoengine_api_client.models.attribute_aggregate_type import AttributeAggregateType as AttributeAggregateType
 from geoengine_api_client.models.attribute_filter import AttributeFilter as AttributeFilter

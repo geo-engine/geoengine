@@ -18,7 +18,6 @@ docs/AggregationMean.md
 docs/AggregationMin.md
 docs/AggregationPercentileEstimate.md
 docs/AggregationSum.md
-docs/ArunaDataProviderDefinition.md
 docs/AttributeAggregateDef.md
 docs/AttributeAggregateType.md
 docs/AttributeFilter.md
@@ -495,7 +494,6 @@ geoengine_api_client/models/aggregation_mean.py
 geoengine_api_client/models/aggregation_min.py
 geoengine_api_client/models/aggregation_percentile_estimate.py
 geoengine_api_client/models/aggregation_sum.py
-geoengine_api_client/models/aruna_data_provider_definition.py
 geoengine_api_client/models/attribute_aggregate_def.py
 geoengine_api_client/models/attribute_aggregate_type.py
 geoengine_api_client/models/attribute_filter.py
@@ -940,7 +938,6 @@ test/test_aggregation_mean.py
 test/test_aggregation_min.py
 test/test_aggregation_percentile_estimate.py
 test/test_aggregation_sum.py
-test/test_aruna_data_provider_definition.py
 test/test_attribute_aggregate_def.py
 test/test_attribute_aggregate_type.py
 test/test_attribute_filter.py
