@@ -477,6 +477,27 @@ mod tests {
              .await
              .unwrap();
 
+        for path in [
+            "/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_AOT_10m.jp2",
+            "/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_WVP_10m.jp2",
+        ] {
+            mock_server.expect(
+                Expectation::matching(all_of![
+                    request::method("GET"),
+                    request::path(path),
+                    request::headers(contains(("range", "bytes=0-16383"))),
+                ])
+                .times(0..=1)
+                .respond_with(
+                    status_code(206)
+                        .append_header("content-type", "binary/octet-stream")
+                        .append_header("content-length", "16384")
+                        .append_header("content-range", "bytes 0-16383/132214802")
+                        .body(b02_jp2_head_body.clone()),
+                ),
+            );
+        }
+
         add_partial_responses(
             &mock_server,
             "/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B02_10m.jp2",
