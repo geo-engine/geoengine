@@ -31,7 +31,7 @@ import {
 } from '../models/index';
 
 export interface WfsHandlerRequest {
-    workflow: string;
+    processingGraph: string;
     request: WfsRequest;
     bbox?: string;
     count?: number | null;
@@ -56,10 +56,10 @@ export class OGCWFSApi extends runtime.BaseAPI {
      * Creates request options for wfsHandler without sending the request
      */
     async wfsHandlerRequestOpts(requestParameters: WfsHandlerRequest): Promise<runtime.RequestOpts> {
-        if (requestParameters['workflow'] == null) {
+        if (requestParameters['processingGraph'] == null) {
             throw new runtime.RequiredError(
-                'workflow',
-                'Required parameter "workflow" was null or undefined when calling wfsHandler().'
+                'processingGraph',
+                'Required parameter "processingGraph" was null or undefined when calling wfsHandler().'
             );
         }
 
@@ -135,8 +135,8 @@ export class OGCWFSApi extends runtime.BaseAPI {
             }
         }
 
-        let urlPath = `/wfs/{workflow}`;
-        urlPath = urlPath.replace(`{${"workflow"}}`, encodeURIComponent(String(requestParameters['workflow'])));
+        let urlPath = `/wfs/{processingGraph}`;
+        urlPath = urlPath.replace(`{${"processingGraph"}}`, encodeURIComponent(String(requestParameters['processingGraph'])));
 
         return {
             path: urlPath,

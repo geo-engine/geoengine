@@ -124,7 +124,7 @@ class MethodNotCalledOnPlotException(Exception):
 
 class SpatialReferenceMismatchException(Exception):
     """
-    Exception for calling a method on a workflow with a query rectangle that has a different spatial reference
+    Exception for calling a method on a processing graph with a query rectangle that has a different spatial reference
     """
 
     def __init__(self, spatial_reference_a: str, spatial_reference_b: str) -> None:

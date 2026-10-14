@@ -37,14 +37,14 @@ class TestComputationQuota(unittest.TestCase):
             return ComputationQuota(
                 timestamp = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
                 computation_id = '',
-                workflow_id = '',
+                processing_graph_id = '',
                 count = 0
             )
         else:
             return ComputationQuota(
                 timestamp = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
                 computation_id = '',
-                workflow_id = '',
+                processing_graph_id = '',
                 count = 0,
         )
         """

@@ -24,15 +24,15 @@ export class AppDatasetService extends DatasetService {
     }
 
     override addDatasetToMap(dataset: Dataset): Observable<void> {
-        const workflow = dataset.createSourceWorkflow();
+        const workflow = dataset.createSourceProcessingGraph();
 
-        return from(this.projectService.registerWorkflow(workflow)).pipe(
+        return from(this.projectService.registerProcessingGraph(workflow)).pipe(
             mergeMap((workflowId) => {
                 if (dataset.resultDescriptor.getTypeString() === 'Raster') {
                     const symbology = dataset.symbology as RasterSymbology;
 
                     const rasterLayer = new RasterLayer({
-                        workflowId,
+                        processingGraphId: workflowId,
                         name: dataset.name,
                         symbology: symbology
                             ? symbology

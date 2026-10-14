@@ -28,7 +28,7 @@ class AuthTests(unittest.TestCase):
 
     def test_uninitialized(self):
         with self.assertRaises(ge.UninitializedException) as exception:
-            ge.workflow_by_id(NOT_FOUND_UUID).get_dataframe(
+            ge.processing_graph_by_id(NOT_FOUND_UUID).get_dataframe(
                 QueryRectangle(
                     ge.BoundingBox2D(-180, -90, 180, 90),
                     ge.TimeInterval(datetime.now()),

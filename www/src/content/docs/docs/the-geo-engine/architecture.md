@@ -18,7 +18,7 @@ Moreover, it defines plots and basic operations, e.g., projections.
 The `Operators` block contains the processing engine and operators, i.e., source operators, raster- and vector time series processing.
 Furthermore, there are raster time series stream adapters, which can be used as building blocks for operators.
 The `Services` block contains protocols, e.g., OGC standard interfaces, as well as Geo Engine specific interfaces.
-These can be workflow registration, plot queries, and data upload.
+These can be processing graph registration, plot queries, and data upload.
 Each of the subcomponents can have additions in Geo Engine Pro, for instance, User Management, which is only available in Geo Engine Pro.
 
 Frontends for the Geo Engine are `geoengine-ui` for building web applications on top of Geo Engine.

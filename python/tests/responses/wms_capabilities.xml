@@ -37,7 +37,7 @@
         </Exception>
         <Layer queryable="1">
             <Name>5b9508a8-bd34-5a1c-acd6-75bb832d2d38</Name>
-            <Title>Workflow 5b9508a8-bd34-5a1c-acd6-75bb832d2d38</Title>
+            <Title>Processing Graph 5b9508a8-bd34-5a1c-acd6-75bb832d2d38</Title>
             <EX_GeographicBoundingBox>
                 <westBoundLongitude>-180</westBoundLongitude>
                 <eastBoundLongitude>180</eastBoundLongitude>

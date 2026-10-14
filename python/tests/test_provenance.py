@@ -23,13 +23,13 @@ class ProvenanceTests(unittest.TestCase):
             )
 
             m.post(
-                "http://mock-instance/workflow",
+                "http://mock-instance/processingGraphs",
                 json={"id": "5b9508a8-bd34-5a1c-acd6-75bb832d2d38"},
                 request_headers={"Authorization": "Bearer c4983c3e-9b53-47ae-bda9-382223bd5081"},
             )
 
             m.get(
-                "http://mock-instance/workflow/5b9508a8-bd34-5a1c-acd6-75bb832d2d38/metadata",
+                "http://mock-instance/processingGraphs/5b9508a8-bd34-5a1c-acd6-75bb832d2d38/metadata",
                 json={
                     "type": "raster",
                     "dataType": "U8",
@@ -59,7 +59,7 @@ class ProvenanceTests(unittest.TestCase):
 
             m.get(
                 # pylint: disable=line-too-long
-                "http://mock-instance/workflow/5b9508a8-bd34-5a1c-acd6-75bb832d2d38/provenance",
+                "http://mock-instance/processingGraphs/5b9508a8-bd34-5a1c-acd6-75bb832d2d38/provenance",
                 json=[
                     {
                         "data": [{"type": "internal", "datasetId": "36574dc3-560a-4b09-9d22-d5945f2b8093"}],
@@ -75,7 +75,7 @@ class ProvenanceTests(unittest.TestCase):
 
             ge.initialize("http://mock-instance")
 
-            workflow_definition = {
+            processing_graph_definition = {
                 "type": "Raster",
                 "operator": {
                     "type": "GdalSource",
@@ -83,9 +83,9 @@ class ProvenanceTests(unittest.TestCase):
                 },
             }
 
-            workflow = ge.register_workflow(workflow_definition)
+            processing_graph = ge.register_processing_graph(processing_graph_definition)
 
-            provenance = workflow.get_provenance()
+            provenance = processing_graph.get_provenance()
 
             self.assertEqual(
                 provenance,

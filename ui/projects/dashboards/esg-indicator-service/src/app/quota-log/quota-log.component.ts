@@ -36,7 +36,7 @@ export class QuotaLogComponent implements AfterViewInit, OnInit, OnDestroy {
 
     source!: QuotaLogDataSource;
 
-    displayedColumns: string[] = ['timestamp', 'computationId', 'workflowId', 'count', 'details'];
+    displayedColumns: string[] = ['timestamp', 'computationId', 'processingGraphId', 'count', 'details'];
     displayedDetailsColumns: string[] = ['name', 'path', 'count'];
 
     readonly detailsVisible = signal(false);

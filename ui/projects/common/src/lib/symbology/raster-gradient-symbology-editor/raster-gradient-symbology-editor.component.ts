@@ -19,7 +19,7 @@ import {Color} from '../../colors/color';
 import {ColorTableEditorComponent} from '../../colors/color-table-editor/color-table-editor.component';
 import {UUID} from '../../datasets/dataset.model';
 import {VegaChartData} from '../../plots/plot.model';
-import {WorkflowsService} from '../../workflows/workflows.service';
+import {ProcessingGraphsService} from '../../processing-graphs/processing-graphs.service';
 import {Histogram, RasterOperator} from '@geoengine/api-client';
 import {PlotsService} from '../../plots/plots.service';
 import {SymbologyQueryParams} from '../symbology.model';
@@ -67,7 +67,7 @@ import {ColorizerCssGradientPipe} from '../../util/pipes/color-gradients.pipe';
     ],
 })
 export class RasterGradientSymbologyEditorComponent {
-    private readonly workflowsService = inject(WorkflowsService);
+    private readonly processingGraphsService = inject(ProcessingGraphsService);
     private readonly plotsService = inject(PlotsService);
     private changeDetectorRef = inject(ChangeDetectorRef);
 
@@ -288,14 +288,14 @@ export class RasterGradientSymbologyEditorComponent {
     }
 
     private createHistogramWorkflowId(): Promise<UUID> {
-        return this.workflowsService.getWorkflow(this.workflowId()).then((workflow) => {
+        return this.processingGraphsService.getProcessingGraph(this.workflowId()).then((workflow) => {
             if (workflow.type !== 'Raster') {
-                throw new Error('Expected a raster workflow for histogram plotting.');
+                throw new Error('Expected a raster processing graph for histogram plotting.');
             }
 
             const sourceOperator: RasterOperator = workflow.operator;
 
-            return this.workflowsService.registerWorkflow({
+            return this.processingGraphsService.registerProcessingGraph({
                 type: 'Plot',
                 operator: {
                     type: 'Histogram',

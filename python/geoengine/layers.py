@@ -13,15 +13,17 @@ from typing import Any, Generic, Literal, TypeVar, cast
 
 import geoengine_api_client
 from strenum import LowercaseStrEnum
+from typing_extensions import deprecated
 
+from geoengine._deprecation import renamed_parameter
 from geoengine.auth import get_session
 from geoengine.error import InputException, ModificationNotOnLayerDbException
 from geoengine.permissions import Permission, RoleId, add_permission
+from geoengine.processing_graph import ProcessingGraph, ProcessingGraphId
+from geoengine.processing_graph_builder.operators import Operator as ProcessingGraphBuilderOperator
 from geoengine.resource_identifier import LAYER_DB_PROVIDER_ID, LayerCollectionId, LayerId, LayerProviderId, Resource
 from geoengine.tasks import Task, TaskId
 from geoengine.types import Symbology
-from geoengine.workflow import Workflow, WorkflowId
-from geoengine.workflow_builder.operators import Operator as WorkflowBuilderOperator
 
 
 class LayerCollectionListingType(LowercaseStrEnum):
@@ -286,12 +288,13 @@ class LayerCollection:
 
         self.items.pop(index)
 
+    @renamed_parameter("workflow", "processing_graph")
     def add_layer(
         self,
         name: str,
         description: str,
         # TODO: improve type
-        workflow: dict[str, Any] | WorkflowBuilderOperator,
+        processing_graph: dict[str, Any] | ProcessingGraphBuilderOperator,
         symbology: Symbology | None,
         replace_existing: bool = False,
         timeout: int = 60,
@@ -309,7 +312,7 @@ class LayerCollection:
                     item._remove(self.collection_id, self.provider_id, timeout)
             self.items = [item for item in self.items if not (isinstance(item, LayerListing) and item.name == name)]
 
-        layer_id = _add_layer_to_collection(name, description, workflow, symbology, self.collection_id, timeout)
+        layer_id = _add_layer_to_collection(name, description, processing_graph, symbology, self.collection_id, timeout)
 
         self.items.append(
             LayerListing(
@@ -322,12 +325,13 @@ class LayerCollection:
 
         return layer_id
 
+    @renamed_parameter("workflow", "processing_graph")
     def add_layer_with_permissions(
         self,
         name: str,
         description: str,
         # TODO: improve type
-        workflow: dict[str, Any] | WorkflowBuilderOperator,
+        processing_graph: dict[str, Any] | ProcessingGraphBuilderOperator,
         symbology: Symbology | None,
         permission_tuples: list[tuple[RoleId, Permission]] | None = None,
         replace_existing: bool = False,
@@ -341,7 +345,7 @@ class LayerCollection:
         layer_id = self.add_layer(
             name,
             description,
-            workflow,
+            processing_graph,
             symbology,
             replace_existing=replace_existing,
             timeout=timeout,
@@ -585,18 +589,19 @@ class Layer:
     description: str
     layer_id: LayerId
     provider_id: LayerProviderId
-    workflow: dict[str, Any]  # TODO: specify in more detail
+    processing_graph: dict[str, Any]  # TODO: specify in more detail
     symbology: Symbology | None
     properties: list[Any]  # TODO: specify in more detail
     metadata: dict[str, Any]  # TODO: specify in more detail
 
+    @renamed_parameter("workflow", "processing_graph")
     def __init__(
         self,
         name: str,
         description: str,
         layer_id: LayerId,
         provider_id: LayerProviderId,
-        workflow: dict[str, Any],
+        processing_graph: dict[str, Any],
         symbology: Symbology | None,
         properties: list[Any],
         metadata: dict[Any, Any],
@@ -608,10 +613,16 @@ class Layer:
         self.description = description
         self.layer_id = layer_id
         self.provider_id = provider_id
-        self.workflow = workflow
+        self.processing_graph = processing_graph
         self.symbology = symbology
         self.properties = properties
         self.metadata = metadata
+
+    @property
+    @deprecated("Use `Layer.processing_graph` instead.", category=DeprecationWarning)
+    def workflow(self) -> dict[str, Any]:
+        """Deprecated: use `Layer.processing_graph` instead."""
+        return self.processing_graph
 
     @classmethod
     def from_response(cls, response: geoengine_api_client.Layer) -> Layer:
@@ -620,14 +631,14 @@ class Layer:
         if response.symbology is not None:
             symbology = Symbology.from_response(response.symbology)
 
-        workflow_dict = cast(dict[str, Any], response.workflow.to_dict())  # silence mypy here
+        processing_graph_dict = cast(dict[str, Any], response.processing_graph.to_dict())  # silence mypy here
 
         return Layer(
             name=response.name,
             description=response.description,
             layer_id=LayerId(response.id.layer_id),
             provider_id=LayerProviderId(response.id.provider_id),
-            workflow=workflow_dict,
+            processing_graph=processing_graph_dict,
             symbology=symbology,
             properties=cast(list[Any], response.properties),
             metadata=cast(dict[Any, Any], response.metadata),
@@ -643,8 +654,8 @@ class Layer:
         buf.write(f"description: {self.description}{os.linesep}")
         buf.write(f"id: {self.layer_id}{os.linesep}")
         buf.write(f"provider id: {self.provider_id}{os.linesep}")
-        # TODO: better representation of workflow, symbology, properties, metadata
-        buf.write(f"workflow: {self.workflow}{os.linesep}")
+        # TODO: better representation of processing graph, symbology, properties, metadata
+        buf.write(f"processing graph: {self.processing_graph}{os.linesep}")
         buf.write(f"symbology: {self.symbology}{os.linesep}")
         buf.write(f"properties: {self.properties}{os.linesep}")
         buf.write(f"metadata: {self.metadata}{os.linesep}")
@@ -664,9 +675,9 @@ class Layer:
         buf.write(f"<tr><th>id</th><td>{self.layer_id}</td></tr>")
         buf.write(f"<tr><th>provider id</th><td>{self.provider_id}</td></tr>")
 
-        # TODO: better representation of workflow, symbology, properties, metadata
-        buf.write('<tr><th>workflow</th><td align="left">')
-        buf.write(f"<pre>{json.dumps(self.workflow, indent=4)}{os.linesep}</pre></td></tr>")
+        # TODO: better representation of processing graph, symbology, properties, metadata
+        buf.write('<tr><th>processing graph</th><td align="left">')
+        buf.write(f"<pre>{json.dumps(self.processing_graph, indent=4)}{os.linesep}</pre></td></tr>")
         buf.write("<tr><th>symbology</th>")
         if self.symbology is None:
             buf.write('<td align="left">None</td></tr>')
@@ -701,33 +712,43 @@ class Layer:
                 layer_id=str(self.layer_id),
                 provider_id=str(self.provider_id),
             ),
-            workflow=self.workflow,
+            processing_graph=geoengine_api_client.ProcessingGraph.from_dict(self.processing_graph),
             symbology=self.symbology.to_api_dict() if self.symbology is not None else None,
             properties=self.properties,
             metadata=self.metadata,
         )
 
-    def as_workflow_id(self, timeout: int = 60) -> WorkflowId:
+    def as_processing_graph_id(self, timeout: int = 60) -> ProcessingGraphId:
         """
-        Register a layer as a workflow and returns its workflowId
+        Register a layer as a processing graph and returns its `ProcessingGraphId`
         """
         session = get_session()
 
         with geoengine_api_client.ApiClient(session.configuration) as api_client:
             layers_api = geoengine_api_client.LayersApi(api_client)
-            response = layers_api.layer_to_workflow_id_handler(
+            response = layers_api.layer_to_processing_graph_id_handler(
                 self.provider_id, self.layer_id, _request_timeout=timeout
             )
 
-        return WorkflowId.from_response(response)
+        return ProcessingGraphId.from_response(response)
 
-    def as_workflow(self, timeout: int = 60) -> Workflow:
+    def as_processing_graph(self, timeout: int = 60) -> ProcessingGraph:
         """
-        Register a layer as a workflow and returns the workflow
+        Register a layer as a processing graph and returns the processing graph
         """
-        workflow_id = self.as_workflow_id(timeout=timeout)
+        processing_graph_id = self.as_processing_graph_id(timeout=timeout)
 
-        return Workflow(workflow_id)
+        return ProcessingGraph(processing_graph_id)
+
+    @deprecated("Use `Layer.as_processing_graph_id` instead.", category=DeprecationWarning)
+    def as_workflow_id(self, timeout: int = 60) -> ProcessingGraphId:
+        """Deprecated: use `Layer.as_processing_graph_id` instead."""
+        return self.as_processing_graph_id(timeout=timeout)
+
+    @deprecated("Use `Layer.as_processing_graph` instead.", category=DeprecationWarning)
+    def as_workflow(self, timeout: int = 60) -> ProcessingGraph:
+        """Deprecated: use `Layer.as_processing_graph` instead."""
+        return self.as_processing_graph(timeout=timeout)
 
 
 def layer_collection(
@@ -850,7 +871,7 @@ def _add_existing_layer_collection_to_collection(
 def _add_layer_to_collection(
     name: str,
     description: str,
-    workflow: dict[str, Any] | WorkflowBuilderOperator,  # TODO: improve type
+    processing_graph: dict[str, Any] | ProcessingGraphBuilderOperator,  # TODO: improve type
     symbology: Symbology | None,
     collection_id: LayerCollectionId,
     timeout: int = 60,
@@ -858,9 +879,9 @@ def _add_layer_to_collection(
     """Add a new layer"""
     # pylint: disable=too-many-arguments,too-many-positional-arguments
 
-    # convert workflow to dict if necessary
-    if isinstance(workflow, WorkflowBuilderOperator):
-        workflow = workflow.to_workflow_dict()
+    # convert processing graph to dict if necessary
+    if isinstance(processing_graph, ProcessingGraphBuilderOperator):
+        processing_graph = processing_graph.to_processing_graph_dict()
 
     symbology_dict = symbology.to_api_dict() if symbology is not None and isinstance(symbology, Symbology) else None
 
@@ -873,7 +894,7 @@ def _add_layer_to_collection(
             geoengine_api_client.AddLayer(
                 name=name,
                 description=description,
-                workflow=geoengine_api_client.ProcessingGraph.from_dict(workflow),
+                processing_graph=geoengine_api_client.ProcessingGraph.from_dict(processing_graph),
                 symbology=symbology_dict,
             ),
             _request_timeout=timeout,

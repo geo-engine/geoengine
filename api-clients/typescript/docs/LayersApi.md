@@ -14,7 +14,7 @@ All URIs are relative to *https://geoengine.io/api*
 | [**getProviderDefinition**](LayersApi.md#getproviderdefinition) | **GET** /layerDb/providers/{provider} | Get an existing provider\&#39;s definition |
 | [**layerHandler**](LayersApi.md#layerhandler) | **GET** /layers/{provider}/{layer} | Retrieves the layer of the given provider |
 | [**layerToDataset**](LayersApi.md#layertodataset) | **POST** /layers/{provider}/{layer}/dataset | Persist a raster layer from a provider as a dataset. |
-| [**layerToWorkflowIdHandler**](LayersApi.md#layertoworkflowidhandler) | **POST** /layers/{provider}/{layer}/workflowId | Registers a layer from a provider as a workflow and returns the workflow id |
+| [**layerToProcessingGraphIdHandler**](LayersApi.md#layertoprocessinggraphidhandler) | **POST** /layers/{provider}/{layer}/processingGraphId | Registers a layer from a provider as a processing graph and returns the processing graph id |
 | [**listCollectionHandler**](LayersApi.md#listcollectionhandler) | **GET** /layers/collections/{provider}/{collection} | List the contents of the collection of the given provider |
 | [**listProviders**](LayersApi.md#listproviders) | **GET** /layerDb/providers | List all providers |
 | [**listRootCollectionsHandler**](LayersApi.md#listrootcollectionshandler) | **GET** /layers/collections | List all layer collections |
@@ -753,11 +753,11 @@ example().catch(console.error);
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
-## layerToWorkflowIdHandler
+## layerToProcessingGraphIdHandler
 
-> IdResponse layerToWorkflowIdHandler(provider, layer)
+> IdResponse layerToProcessingGraphIdHandler(provider, layer)
 
-Registers a layer from a provider as a workflow and returns the workflow id
+Registers a layer from a provider as a processing graph and returns the processing graph id
 
 ### Example
 
@@ -766,7 +766,7 @@ import {
   Configuration,
   LayersApi,
 } from '@geoengine/api-client';
-import type { LayerToWorkflowIdHandlerRequest } from '@geoengine/api-client';
+import type { LayerToProcessingGraphIdHandlerRequest } from '@geoengine/api-client';
 
 async function example() {
   console.log("🚀 Testing @geoengine/api-client SDK...");
@@ -781,10 +781,10 @@ async function example() {
     provider: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
     // string | Layer id
     layer: layer_example,
-  } satisfies LayerToWorkflowIdHandlerRequest;
+  } satisfies LayerToProcessingGraphIdHandlerRequest;
 
   try {
-    const data = await api.layerToWorkflowIdHandler(body);
+    const data = await api.layerToProcessingGraphIdHandler(body);
     console.log(data);
   } catch (error) {
     console.error(error);

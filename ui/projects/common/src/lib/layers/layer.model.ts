@@ -23,7 +23,7 @@ export abstract class Layer implements HasLayerId, HasLayerType, ToDict<ProjectL
     protected constructor(config: {
         id?: number;
         name: string;
-        workflowId: string;
+        processingGraphId: string;
         isVisible: boolean;
         isLegendVisible: boolean;
         symbology: Symbology;
@@ -31,7 +31,7 @@ export abstract class Layer implements HasLayerId, HasLayerType, ToDict<ProjectL
         this.id = config.id ?? Layer.nextLayerId++;
 
         this.name = config.name;
-        this.workflowId = config.workflowId;
+        this.workflowId = config.processingGraphId;
         this.isVisible = config.isVisible;
         this.isLegendVisible = config.isLegendVisible;
         this.symbology = config.symbology;
@@ -76,7 +76,7 @@ export class VectorLayer extends Layer {
     constructor(config: {
         id?: number;
         name: string;
-        workflowId: string;
+        processingGraphId: string;
         isVisible: boolean;
         isLegendVisible: boolean;
         symbology: VectorSymbology;
@@ -89,7 +89,7 @@ export class VectorLayer extends Layer {
         if (dict.symbology.type === 'point' || dict.symbology.type === 'line' || dict.symbology.type === 'polygon') {
             return new VectorLayer({
                 name: dict.name,
-                workflowId: dict.workflow,
+                processingGraphId: dict.processingGraph,
                 isLegendVisible: dict.visibility.legend,
                 isVisible: dict.visibility.data,
                 symbology: VectorSymbology.fromVectorSymbologyDict(dict.symbology),
@@ -101,7 +101,7 @@ export class VectorLayer extends Layer {
     toDict(): ProjectLayerDict {
         return {
             name: this.name,
-            workflow: this.workflowId,
+            processingGraph: this.workflowId,
             visibility: {
                 data: this.isVisible,
                 legend: this.isLegendVisible,
@@ -121,7 +121,7 @@ export class VectorLayer extends Layer {
         return new VectorLayer({
             id: changes.id ?? this.id,
             name: changes.name ?? this.name,
-            workflowId: changes.workflowId ?? this.workflowId,
+            processingGraphId: changes.workflowId ?? this.workflowId,
             isVisible: changes.isVisible ?? this.isVisible,
             isLegendVisible: changes.isLegendVisible ?? this.isLegendVisible,
             symbology: changes.symbology ?? this.symbology,
@@ -152,7 +152,7 @@ export class RasterLayer extends Layer {
     constructor(config: {
         id?: number;
         name: string;
-        workflowId: string;
+        processingGraphId: string;
         isVisible: boolean;
         isLegendVisible: boolean;
         symbology: RasterSymbology;
@@ -167,7 +167,7 @@ export class RasterLayer extends Layer {
                 name: dict.name,
                 isLegendVisible: dict.visibility.legend,
                 isVisible: dict.visibility.data,
-                workflowId: dict.workflow,
+                processingGraphId: dict.processingGraph,
                 symbology: RasterSymbology.fromRasterSymbologyDict(dict.symbology),
             });
         }
@@ -185,7 +185,7 @@ export class RasterLayer extends Layer {
         return new RasterLayer({
             id: changes.id ?? this.id,
             name: changes.name ?? this.name,
-            workflowId: changes.workflowId ?? this.workflowId,
+            processingGraphId: changes.workflowId ?? this.workflowId,
             isVisible: changes.isVisible ?? this.isVisible,
             isLegendVisible: changes.isLegendVisible ?? this.isLegendVisible,
             symbology: changes.symbology ?? this.symbology,
@@ -210,7 +210,7 @@ export class RasterLayer extends Layer {
     toDict(): ProjectLayerDict {
         return {
             name: this.name,
-            workflow: this.workflowId,
+            processingGraph: this.workflowId,
             visibility: {
                 data: this.isVisible,
                 legend: this.isLegendVisible,
