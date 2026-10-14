@@ -1333,6 +1333,7 @@ mod tests {
                 SpatialBoundsDerive, TypedOperator, VectorOperator,
             },
             responses::ErrorResponse,
+            services::CopernicusDataspaceDataProviderDefinition,
         },
         contexts::{PostgresContext, Session, SessionId},
         datasets::{
@@ -2484,7 +2485,6 @@ mod tests {
         );
     }
 
-    /*
     #[ge_context::test]
     async fn test_cannot_update_provider_type(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
@@ -2502,23 +2502,24 @@ mod tests {
             )
             .await.unwrap();
 
-        let aruna_provider = ArunaDataProviderDefinition {
-            id: DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85),
-            name: "Aruna".to_string(),
+        let copernicus_provider = CopernicusDataspaceDataProviderDefinition {
+            r#type: Default::default(),
+            name: "Copernicus Dataspace".to_string(),
             description: String::new(),
+            id: DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85).into(),
+            stac_url: String::new(),
+            s3_url: String::new(),
+            s3_access_key: String::new(),
+            s3_secret_key: String::new(),
+            gdal_config: vec![],
             priority: None,
-            api_url: String::new(),
-            project_id: String::new(),
-            api_token: String::new(),
-            filter_label: String::new(),
-            cache_ttl: Some(CacheTtlSeconds::new(0)),
         };
 
         let req = test::TestRequest::put()
             .uri("/layerDb/providers/cbb21ee3-d15d-45c5-a175-66964adf4e85")
             .set_json(serde_json::json!(
-                &TypedDataProviderDefinition::ArunaDataProviderDefinition(
-                    aruna_provider.clone().into(),
+                &TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(
+                    copernicus_provider
                 )
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
@@ -2532,8 +2533,6 @@ mod tests {
             crate::error::Error::ProviderTypeUnmodifiable.to_string()
         );
     }
-
-    */
 
     #[ge_context::test]
     async fn test_cannot_update_non_existing_provider(app_ctx: PostgresContext<NoTls>) {
