@@ -137,7 +137,6 @@ allowed_drivers = [
     "JP2OpenJPEG",
     "KML",
     "MEM",
-    "Memory",
     "MSGN",
     "netCDF",
     "OGCAPI",
