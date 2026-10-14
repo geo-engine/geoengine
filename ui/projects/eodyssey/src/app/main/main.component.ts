@@ -1,16 +1,4 @@
-import {
-    ChangeDetectionStrategy,
-    Component,
-    ElementRef,
-    afterNextRender,
-    computed,
-    inject,
-    booleanAttribute,
-    input,
-    signal,
-    viewChild,
-    effect,
-} from '@angular/core';
+import {ChangeDetectionStrategy, Component, ElementRef, afterNextRender, computed, inject, signal, viewChild} from '@angular/core';
 import {MatSidenavModule} from '@angular/material/sidenav';
 import {ProjectService, MapService, MapContainerComponent, CoreModule, SpatialReferenceService, WGS_84} from '@geoengine/core';
 import {AppConfig} from '../app-config.service';
@@ -62,9 +50,6 @@ export class MainComponent {
 
     private readonly spatialReferenceService = inject(SpatialReferenceService);
 
-    // Bound from the debug query parameter and passed to the layers controls.
-    readonly debug = input(false, {transform: booleanAttribute});
-
     readonly topToolbar = viewChild.required<MatToolbar, ElementRef<HTMLElement>>('topToolbar', {read: ElementRef});
     readonly mapComponent = viewChild.required(MapContainerComponent);
 
@@ -82,7 +67,7 @@ export class MainComponent {
 
     readonly mapTileLayer = computed(() => this.eodysseyLayerService.mapTileLayer());
     readonly tileLoading = signal(false);
-    readonly isLoading = computed(() => (this.eodysseyLayerService.mapTileLayerResource.isLoading() ?? false) || this.tileLoading());
+    readonly isLoading = computed(() => this.eodysseyLayerService.catalogueLoading() || this.tileLoading());
 
     readonly isLayersActive = isActive('/map/layers', this.router);
     readonly isComputeActive = isActive('/map/compute', this.router);
@@ -106,10 +91,6 @@ export class MainComponent {
                 const topToolbarObserver = new ResizeObserver(() => this.onToolbarResize());
                 topToolbarObserver.observe(this.topToolbar().nativeElement);
             },
-        });
-
-        effect(() => {
-            this.eodysseyLayerService.debug.set(this.debug());
         });
     }
 
@@ -154,7 +135,7 @@ export class MainComponent {
         const [currentDate] = (this.currentTime()?.toString() ?? new Date().toISOString()).split('T');
         const currentLayer = this.layersReverse().at(-1)?.name ?? 'eodyssey-map';
         const citation = replaceCitationPlaceholders(
-            this.eodysseyLayerService.selectedDataSource().citation ?? '',
+            this.eodysseyLayerService.appliedDataSource()?.citation ?? '',
             this.currentTime() ?? new Date(),
         );
 
