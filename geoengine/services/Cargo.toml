@@ -13,6 +13,10 @@ default-run = "geoengine-server"
 [lib]
 bench = false
 
+[[bench]]
+name = "stac_grid"
+harness = false
+
 [[bin]]
 name = "geoengine-server"
 path = "src/bin/geoengine-server.rs"
@@ -114,6 +118,7 @@ nix = { version = "0.31", features = ["socket"] }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
+criterion = { workspace = true }
 httptest = { workspace = true }
 pretty_assertions = { workspace = true }
 prost = { workspace = true }             # must be compatbile with aruna-rust-api

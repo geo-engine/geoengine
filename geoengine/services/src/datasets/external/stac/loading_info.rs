@@ -38,12 +38,9 @@ use std::sync::Arc;
 use tracing::debug;
 use url::Url;
 
-#[cfg(test)]
-#[path = "benchmark.rs"]
-mod benchmark;
-
+/// Multi-band raster metadata queried from a STAC provider.
 #[derive(Debug, Clone)]
-struct StacMultiBandMetaData {
+pub struct StacMultiBandMetaData {
     api_url: String,
     collection_name: String,
     s3_config: Option<StacProviderS3Config>,
@@ -353,6 +350,27 @@ impl
 }
 
 impl StacMultiBandMetaData {
+    /// Create metadata for a dataset using the provider's shared client and cache.
+    pub fn new(provider: &StacDataProvider, dataset: StacProviderDataset) -> Self {
+        Self {
+            api_url: provider.api_url.clone(),
+            collection_name: provider.collection_name.clone(),
+            s3_config: provider.s3_config.clone(),
+            time_dimension: provider.time_dimension,
+            dataset,
+            page_limit: provider.page_limit,
+            client: provider.client.clone(),
+            cache_ttl_secs: provider.cache_ttl_secs,
+            query_cache: provider.query_cache.clone(),
+            grid: provider.grid,
+        }
+    }
+
+    /// Estimate the metadata cache weight of a complete query result, in bytes.
+    pub fn cache_weight(files: &[TileFile]) -> usize {
+        super::cache::result_bytes(files)
+    }
+
     /// Projects the dataset area of use and selects all grid cells touching the query.
     fn grid_cells(
         &self,
@@ -384,11 +402,11 @@ impl StacMultiBandMetaData {
         Ok((grid, cells))
     }
 
-    /// Searches one complete projected grid cell for a single regular time step.
+    /// Search a WGS84 bounding box for a time interval, following all result pages.
     ///
     /// Pagination must finish before this result enters the cache, so failed
     /// pages never publish partial tile files.
-    async fn search_bbox(
+    pub async fn search_bbox(
         &self,
         items_url: Url,
         bbox: geoengine_datatypes::primitives::BoundingBox2D,
@@ -456,7 +474,8 @@ impl StacMultiBandMetaData {
         Ok(query_params)
     }
 
-    fn process_stac_item(&self, item: &Item, files: &mut Vec<TileFile>) -> Result<()> {
+    /// Append matching assets from a STAC item to the dataset's tile file list.
+    pub fn process_stac_item(&self, item: &Item, files: &mut Vec<TileFile>) -> Result<()> {
         let Some((time, z_index)) = self.item_time_and_z_index(item)? else {
             return Ok(());
         };
@@ -859,18 +878,7 @@ impl
     > {
         let dataset = self.dataset_from_data_id(id)?;
 
-        Ok(Box::new(StacMultiBandMetaData {
-            api_url: self.api_url.clone(),
-            collection_name: self.collection_name.clone(),
-            s3_config: self.s3_config.clone(),
-            time_dimension: self.time_dimension,
-            dataset: dataset.clone(),
-            page_limit: self.page_limit,
-            cache_ttl_secs: self.cache_ttl_secs,
-            client: self.client.clone(),
-            query_cache: self.query_cache.clone(),
-            grid: self.grid,
-        }))
+        Ok(Box::new(StacMultiBandMetaData::new(self, dataset.clone())))
     }
 }
 

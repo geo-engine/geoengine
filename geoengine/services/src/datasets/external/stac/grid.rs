@@ -48,10 +48,7 @@ impl StacGrid {
     ///
     /// The target count controls approximate cell area; the returned row and
     /// column counts can differ because the extent need not be square.
-    pub(crate) fn for_extent(
-        self,
-        extent: BoundingBox2D,
-    ) -> Result<ProjectedStacGrid, &'static str> {
+    pub fn for_extent(self, extent: BoundingBox2D) -> Result<ProjectedStacGrid, &'static str> {
         if self.target_number_of_cells < 1 {
             return Err("STAC target number of cells must be positive");
         }
@@ -97,22 +94,24 @@ impl StacGrid {
     }
 }
 
+/// A square metadata search cell in the dataset's CRS.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct StacGridCell {
+pub struct StacGridCell {
     /// Shared raster index in `[row(y), column(x)]` order; rows increase southward.
     pub index: GridIdx2D,
     /// Complete square in native CRS units; search footprints are clipped separately.
     pub bbox: BoundingBox2D,
 }
 
+/// A metadata search grid covering a projected CRS area of use.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct ProjectedStacGrid {
+pub struct ProjectedStacGrid {
     extent: BoundingBox2D,
     raster: SpatialGridDefinition,
 }
 
 /// Maps shared one-pixel tile geometry to the cell record consumed by STAC callers.
-pub(crate) type StacGridCells = std::iter::Map<
+pub type StacGridCells = std::iter::Map<
     std::iter::Flatten<std::option::IntoIter<TileInformationIter>>,
     fn(TileInformation) -> StacGridCell,
 >;
@@ -128,14 +127,14 @@ impl From<TileInformation> for StacGridCell {
 
 impl ProjectedStacGrid {
     /// Clips a full grid cell to the projected area of use for the HTTP search.
-    pub(crate) fn clip_cell_to_extent(self, bbox: BoundingBox2D) -> Option<BoundingBox2D> {
+    pub fn clip_cell_to_extent(self, bbox: BoundingBox2D) -> Option<BoundingBox2D> {
         bbox.intersection(&self.extent)
     }
 
     /// Returns the lazily traversed cells touching a query rectangle.
     ///
     /// Cell membership follows the shared raster spatial-to-grid conversion.
-    pub(crate) fn cells_for_bbox(self, bbox: BoundingBox2D) -> Result<StacGridCells, &'static str> {
+    pub fn cells_for_bbox(self, bbox: BoundingBox2D) -> Result<StacGridCells, &'static str> {
         let lower = bbox.lower_left();
         let upper = bbox.upper_right();
         if ![lower.x, lower.y, upper.x, upper.y]

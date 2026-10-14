@@ -3,7 +3,6 @@ use crate::contexts::GeoEngineDb;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::layers::external::{DataProvider, DataProviderDefinition, TypedDataProviderDefinition};
 use async_trait::async_trait;
-use cache::StacQueryCache;
 use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::primitives::{CacheTtlSeconds, SpatialResolution, TimeDimension};
 use geoengine_datatypes::raster::RasterDataType;
@@ -20,7 +19,9 @@ mod grid;
 mod listing;
 mod loading_info;
 mod storage;
-pub use grid::StacGrid;
+use cache::StacQueryCache;
+pub use grid::{ProjectedStacGrid, StacGrid, StacGridCell, StacGridCells};
+pub use loading_info::StacMultiBandMetaData;
 
 const DEFAULT_QUERY_TIMEOUT_SECS: i64 = 60;
 const DEFAULT_PAGE_LIMIT: i64 = 100;
@@ -316,7 +317,7 @@ impl StacDataProvider {
     /// Builds a provider from its persisted definition after validating its configuration.
     ///
     /// Authentication is installed asynchronously by [`StacDataProviderDefinition::initialize`].
-    fn from_definition(definition: StacDataProviderDefinition) -> crate::error::Result<Self> {
+    pub fn from_definition(definition: StacDataProviderDefinition) -> crate::error::Result<Self> {
         validate_s3_config(definition.s3_config.as_ref())?;
         validate_time_dimension(definition.time_dimension)?;
         let grid = definition.stac_grid.unwrap_or_default().validate()?;
@@ -343,6 +344,14 @@ impl StacDataProvider {
             query_cache: Arc::new(StacQueryCache::default()),
             grid,
         })
+    }
+
+    /// Replace the provider's shared metadata cache with the specified capacity and lifetime.
+    /// A zero capacity retains in-flight sharing without caching completed results.
+    #[must_use]
+    pub fn with_query_cache_capacity(mut self, max_bytes: usize, ttl: std::time::Duration) -> Self {
+        self.query_cache = Arc::new(StacQueryCache::new(max_bytes, ttl));
+        self
     }
 }
 

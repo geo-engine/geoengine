@@ -2971,6 +2971,7 @@ dependencies = [
  "chrono",
  "clap",
  "clap_derive",
+ "codspeed-criterion-compat",
  "config",
  "convert_case 0.11.0",
  "csv",
