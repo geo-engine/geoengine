@@ -552,15 +552,50 @@ fn statistics_table(statistics: Vec<StatisticsOutput>, percentiles: &[f64]) -> R
         TableColumn::new("mean").with_format(".2f"),
         TableColumn::new("stddev").with_format(".2f"),
     ];
-    columns.extend(percentiles.iter().enumerate().map(|(i, percentile)| {
-        // round to avoid titles like `p33.300000000000004`
-        let title = format!("p{}", (percentile * 100_000.).round() / 1_000.);
-        TableColumn::computed(format!("p{i}"), format!("datum.percentiles[{i}].value"))
-            .with_title(title)
-            .with_format(".2f")
-    }));
+    columns.extend(
+        percentile_titles(percentiles)
+            .into_iter()
+            .enumerate()
+            .map(|(i, title)| {
+                TableColumn::computed(format!("p{i}"), format!("datum.percentiles[{i}].value"))
+                    .with_title(title)
+                    .with_format(".2f")
+            }),
+    );
 
     Ok(Table::new("name", rows, columns)?.to_vega_embeddable(false)?)
+}
+
+/// Creates the column titles for the `percentiles`, e.g., `p33.3` for `0.333`.
+///
+/// It uses the fewest decimal places, but at least three, that keep the titles of different percentiles apart.
+/// This avoids titles like `p33.300000000000004`.
+fn percentile_titles(percentiles: &[f64]) -> Vec<String> {
+    const MIN_DECIMAL_PLACES: usize = 3;
+    const MAX_DECIMAL_PLACES: usize = 17;
+
+    let titles_with_decimal_places = |decimal_places: usize| -> Vec<String> {
+        percentiles
+            .iter()
+            .map(|percentile| {
+                let title = format!("{:.decimal_places$}", percentile * 100.);
+                let title = title.trim_end_matches('0').trim_end_matches('.');
+                format!("p{title}")
+            })
+            .collect()
+    };
+
+    (MIN_DECIMAL_PLACES..=MAX_DECIMAL_PLACES)
+        .map(titles_with_decimal_places)
+        .find(|titles| titles.iter().all_unique())
+        // percentiles that are equal after scaling them to percent can only be told apart by their position
+        .unwrap_or_else(|| {
+            titles_with_decimal_places(MAX_DECIMAL_PLACES)
+                .into_iter()
+                .enumerate()
+                .map(|(i, title)| format!("{title} ({})", i + 1))
+                .collect()
+        })
 }
 
 /// The statistics summary output type for each raster input/vector input column
@@ -1466,6 +1501,32 @@ mod tests {
                 },
             ])
             .to_string()
+        );
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)] // the test needs percentiles that are exactly equal in percent
+    fn it_creates_unique_percentile_titles() {
+        // short titles
+        assert_eq!(
+            percentile_titles(&[0.25, 0.5, 1. / 3., 0.333]),
+            vec!["p25", "p50", "p33.333", "p33.3"]
+        );
+
+        // more decimal places to tell the percentiles apart
+        assert_eq!(
+            percentile_titles(&[0.123_451, 0.123_452, 0.5]),
+            vec!["p12.3451", "p12.3452", "p50"]
+        );
+
+        // numbered percentiles that are equal in percent
+        let percentile: f64 = 0.7;
+        let next_percentile = f64::from_bits(percentile.to_bits() + 1);
+        assert_eq!(percentile * 100., next_percentile * 100.);
+
+        assert_eq!(
+            percentile_titles(&[percentile, next_percentile]),
+            vec!["p70 (1)", "p70 (2)"]
         );
     }
 }
