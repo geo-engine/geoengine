@@ -99,6 +99,35 @@ describe('RasterLegend', () => {
         const values10: number[] = [81.123123, 81.123456, 81.123987];
         const expect10: number[] = [81.12312, 81.12345, 81.12398];
         expect(unifyDecimals(values10)).toEqual(expect10);
+
+        // keep a minimum number of decimals if the integer parts are one apart
+        const values11: number[] = [0.5, 255];
+        expect(unifyDecimals(values11)).toEqual([0, 255]);
+        const expect11: number[] = [0.5, 255];
+        expect(unifyDecimals(values11, 1)).toEqual(expect11);
+
+        const values12: number[] = [0.1 + 0.2, 1];
+        const expect12: number[] = [0.3, 1];
+        expect(unifyDecimals(values12, 1)).toEqual(expect12);
+
+        // negative values
+        const values13: number[] = [-0.5, 0.5];
+        const expect13: number[] = [-0.5, 0.5];
+        expect(unifyDecimals(values13, 1)).toEqual(expect13);
+
+        const values14: number[] = [-1.25, -1.5];
+        const expect14: number[] = [-1.25, -1.5];
+        expect(unifyDecimals(values14)).toEqual(expect14);
+
+        // no lost digits due to floating point errors
+        const values15: number[] = [0.29, 0.5];
+        const expect15: number[] = [0.29, 0.5];
+        expect(unifyDecimals(values15)).toEqual(expect15);
+
+        // values in exponential notation
+        const values16: number[] = [1e-7, 2e-7];
+        const expect16: number[] = [1e-7, 2e-7];
+        expect(unifyDecimals(values16)).toEqual(expect16);
     });
 
     it('convertsToContinuousMeasurement', () => {

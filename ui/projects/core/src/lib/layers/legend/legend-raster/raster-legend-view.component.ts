@@ -86,23 +86,43 @@ export class LegendMeasurementTextPipe implements PipeTransform {
     }
 }
 
-export function unifyDecimals(values: number[]): number[] {
+/**
+ * The number of significant decimal digits a double represents without error (`DBL_DIG` in C).
+ * Floating point errors like `0.29 * 100 = 28.999999999999996` only show up in the 16th or 17th digit,
+ * so rounding to this precision removes them without changing any real digit.
+ */
+const DOUBLE_SIGNIFICANT_DIGITS = 15;
+
+export function unifyDecimals(values: number[], minDecimals = 0): number[] {
+    const minRoundAt = Math.pow(10, minDecimals);
+    // values in exponential notation (e.g. `1e-7`) cannot be compared digit by digit, so they stay the same
+    const isExponential = (x: number): boolean => x.toString().includes('e');
+    // remove floating point errors before flooring, e.g. `0.29 * 100 = 28.999999999999996`
+    const floorAt = (x: number, roundAt: number): number =>
+        Math.floor(Number((x * roundAt).toPrecision(DOUBLE_SIGNIFICANT_DIGITS))) / roundAt;
+
     // Early return if all values differ by more than 1
     if (oneApart(values.map((x) => Math.floor(x)).sort((a, b) => a - b))) {
-        return values.map((x) => Math.floor(x));
+        return values.map((x) => (isExponential(x) ? x : floorAt(x, minRoundAt)));
     }
 
     // Find highest overlap for cut-off point
     let maxOverlap = 0;
     for (let i = 0; i < values.length - 1; i++) {
+        if (isExponential(values[i]) || isExponential(values[i + 1])) {
+            continue;
+        }
         const overlap: number = overlappingDigits(values[i], values[i + 1]);
         maxOverlap = overlap > maxOverlap ? overlap : maxOverlap;
     }
 
     return values.map((x) => {
+        if (isExponential(x)) {
+            return x;
+        }
         const preDecimals = Math.floor(x).toString().length;
-        const roundAt = Math.pow(10, Math.max(0, maxOverlap + 2 - preDecimals));
-        return Math.floor(x * roundAt) / roundAt;
+        const roundAt = Math.max(minRoundAt, Math.pow(10, Math.max(0, maxOverlap + 2 - preDecimals)));
+        return floorAt(x, roundAt);
     });
 }
 
@@ -177,9 +197,8 @@ export function selectRgbChannels(
         max: number,
         scale: number,
     ): RgbLegendChannel => {
-        // limit to significant digits to avoid long floating point tails like `0.30000000000000004`
-        const round = (value: number): number => Number(value.toPrecision(6));
-        return {label, cssColor, band: bands[bandIndex], min: round(min), max: round(max), scale: round(scale)};
+        const [unifiedMin, unifiedMax] = unifyDecimals([min, max], 2);
+        return {label, cssColor, band: bands[bandIndex], min: unifiedMin, max: unifiedMax, scale};
     };
 
     const c = rasterColorizer;
