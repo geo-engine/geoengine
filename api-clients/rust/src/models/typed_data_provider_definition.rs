@@ -13,8 +13,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum TypedDataProviderDefinition {
-    #[serde(rename="Aruna")]
-    Aruna(Box<models::ArunaDataProviderDefinition>),
     #[serde(rename="CopernicusDataspace")]
     CopernicusDataspace(Box<models::CopernicusDataspaceDataProviderDefinition>),
     #[serde(rename="DatasetLayerListing")]
@@ -43,7 +41,7 @@ pub enum TypedDataProviderDefinition {
 
 impl Default for TypedDataProviderDefinition {
     fn default() -> Self {
-        Self::Aruna(Default::default())
+        Self::CopernicusDataspace(Default::default())
     }
 }
 

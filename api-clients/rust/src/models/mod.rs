@@ -28,8 +28,6 @@ pub mod aggregation_percentile_estimate;
 pub use self::aggregation_percentile_estimate::AggregationPercentileEstimate;
 pub mod aggregation_sum;
 pub use self::aggregation_sum::AggregationSum;
-pub mod aruna_data_provider_definition;
-pub use self::aruna_data_provider_definition::ArunaDataProviderDefinition;
 pub mod attribute_aggregate_def;
 pub use self::attribute_aggregate_def::AttributeAggregateDef;
 pub mod attribute_aggregate_type;

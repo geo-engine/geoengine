@@ -52,7 +52,6 @@ rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
-serial_test = { workspace = true }
 snafu = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
@@ -74,6 +73,8 @@ criterion = { workspace = true }
 httptest = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["json"] }
 rand = { workspace = true }
+serial_test = { workspace = true }
+tempfile = { workspace = true }
 
 [[bench]]
 name = "ci_operators"

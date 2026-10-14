@@ -2,15 +2,6 @@
     @if (providerType() !== ProviderType.OTHER) {
         <mat-tab label="Form">
             @switch (providerType()) {
-                @case (ProviderType.ARUNA) {
-                    <geoengine-manager-aruna-editor-form
-                        [createNew]="createNew()"
-                        [provider]="provider()"
-                        [visible]="!jsonInputVisible"
-                        [readonly]="readonly()"
-                        (changed)="setChangedFormDefinition($event)"
-                    />
-                }
                 @case (ProviderType.WildLIVE) {
                     <geoengine-manager-wildlive-editor-form
                         [isNew]="createNew()"

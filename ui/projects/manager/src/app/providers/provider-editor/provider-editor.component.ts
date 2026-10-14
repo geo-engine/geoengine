@@ -18,7 +18,6 @@ import {PermissionsComponent} from '../../permissions/permissions.component';
 import {ProviderInputComponent} from '../provider-input/provider-input.component';
 
 export enum ProviderType {
-    ARUNA = 'Aruna',
     WildLIVE = 'WildLIVE',
     OTHER = 'Other / JSON',
 }
@@ -59,8 +58,6 @@ export class ProviderEditorComponent {
     readonly providerType: Signal<ProviderType> = computed(() => {
         const type = this.provider.value()?.type;
         switch (type) {
-            case 'Aruna':
-                return ProviderType.ARUNA;
             case WildliveDataConnectorDefinitionTypeEnum.WildLive:
                 return ProviderType.WildLIVE;
             default:

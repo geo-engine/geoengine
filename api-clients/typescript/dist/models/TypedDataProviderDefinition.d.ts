@@ -8,7 +8,6 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import type { ArunaDataProviderDefinition } from './ArunaDataProviderDefinition';
 import type { CopernicusDataspaceDataProviderDefinition } from './CopernicusDataspaceDataProviderDefinition';
 import type { DatasetLayerListingProviderDefinition } from './DatasetLayerListingProviderDefinition';
 import type { EbvPortalDataProviderDefinition } from './EbvPortalDataProviderDefinition';
@@ -27,8 +26,6 @@ import type { WildliveDataConnectorDefinition } from './WildliveDataConnectorDef
  * @export
  */
 export type TypedDataProviderDefinition = {
-    type: 'Aruna';
-} & ArunaDataProviderDefinition | {
     type: 'CopernicusDataspace';
 } & CopernicusDataspaceDataProviderDefinition | {
     type: 'DatasetLayerListing';
