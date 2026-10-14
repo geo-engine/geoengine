@@ -12,6 +12,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { AttributeSelection } from './AttributeSelection';
+import {
+    AttributeSelectionFromJSON,
+    AttributeSelectionFromJSONTyped,
+    AttributeSelectionToJSON,
+    AttributeSelectionToJSONTyped,
+} from './AttributeSelection';
+
 /**
  * The parameter spec for `Statistics`
  * @export
@@ -19,16 +27,13 @@ import { mapValues } from '../runtime';
  */
 export interface StatisticsParameters {
     /**
-     * # Vector data
-     * The names of the attributes to generate statistics for.
-     * 
-     * # Raster data
-     * _Optional_: The names of the bands to generate statistics for.
-     * The operator generates statistics for all bands if this parameter is empty.
-     * @type {Array<string>}
+     * _Optional_: The attributes to generate statistics for.
+     * For vector data, these are numeric columns, for raster data, these are bands.
+     * Defaults to `all`, i.e., all numeric columns or all bands.
+     * @type {AttributeSelection}
      * @memberof StatisticsParameters
      */
-    columnNames?: Array<string>;
+    attributes?: AttributeSelection;
     /**
      * The percentiles to compute for each attribute.
      * @type {Array<number>}
@@ -54,7 +59,7 @@ export function StatisticsParametersFromJSONTyped(json: any, ignoreDiscriminator
     }
     return {
         
-        'columnNames': json['columnNames'] == null ? undefined : json['columnNames'],
+        'attributes': json['attributes'] == null ? undefined : AttributeSelectionFromJSON(json['attributes']),
         'percentiles': json['percentiles'] == null ? undefined : json['percentiles'],
     };
 }
@@ -70,7 +75,7 @@ export function StatisticsParametersToJSONTyped(value?: StatisticsParameters | n
 
     return {
         
-        'columnNames': value['columnNames'],
+        'attributes': AttributeSelectionToJSON(value['attributes']),
         'percentiles': value['percentiles'],
     };
 }

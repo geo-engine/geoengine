@@ -19,9 +19,9 @@ pub struct MeanRasterPixelValuesOverTimeParameters {
     /// Whether to fill the area under the curve. Defaults to `true`. Only applies to a single band, multiple bands are drawn as lines.
     #[serde(rename = "area", skip_serializing_if = "Option::is_none")]
     pub area: Option<bool>,
-    /// _Optional_: The names of the bands to compute the means for. The operator uses all bands if this parameter is empty.
-    #[serde(rename = "bandNames", skip_serializing_if = "Option::is_none")]
-    pub band_names: Option<Vec<String>>,
+    /// _Optional_: The bands to compute the means for. Defaults to `all`.
+    #[serde(rename = "attributes", skip_serializing_if = "Option::is_none")]
+    pub attributes: Option<Box<models::AttributeSelection>>,
 }
 
 impl MeanRasterPixelValuesOverTimeParameters {
@@ -30,7 +30,7 @@ impl MeanRasterPixelValuesOverTimeParameters {
         MeanRasterPixelValuesOverTimeParameters {
             time_position,
             area: None,
-            band_names: None,
+            attributes: None,
         }
     }
 }

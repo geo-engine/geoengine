@@ -37,9 +37,7 @@ class TestPlotOperator(unittest.TestCase):
             return PlotOperator(
                 type = 'BoxPlot',
                 params = geoengine_api_client.models.statistics_parameters.StatisticsParameters(
-                    column_names = [
-                        ''
-                        ], 
+                    attributes = null, 
                     percentiles = [
                         1.337
                         ], ),
@@ -50,9 +48,7 @@ class TestPlotOperator(unittest.TestCase):
             return PlotOperator(
                 type = 'BoxPlot',
                 params = geoengine_api_client.models.statistics_parameters.StatisticsParameters(
-                    column_names = [
-                        ''
-                        ], 
+                    attributes = null, 
                     percentiles = [
                         1.337
                         ], ),

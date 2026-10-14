@@ -17,9 +17,10 @@ The whiskers indicate the minimum and maximum values of the corresponding attrib
 
 The operator returns an error in the following cases.
 
-- Vector data: The `attribute` for one of the given `columnNames` is not numeric.
-- Vector data: The `attribute` for one of the given `columnNames` does not exist.
-- Raster data: The band for one of the given `columnNames` does not exist.
+- Vector data: `attributes` is `all`.
+- Vector data: One of the selected `attributes` is not numeric.
+- Vector data: One of the selected `attributes` does not exist.
+- Raster data: One of the selected `attributes` (bands) does not exist.
 - Raster data: More than 8 bands are selected.
 
 ## Notes
@@ -35,9 +36,9 @@ Volume 28 (October), Number 10, 1985, p. 1076-1085.
 
 ## Parameters
 
-| Name        | Type  | Description                                                                                                                                                                                                                       | Examples                                          |
-| ----------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| columnNames | array | ## Vector Data<br>The names of the attributes to generate boxes for.<br><br>## Raster Data<br>_Optional_: The names of the bands to generate boxes for.<br>The operator generates boxes for all bands if this parameter is empty. | `["temperature","humidity"]`<br>`["red","green"]` |
+| Name       | Type               | Description                                                                                                                                                              | Examples                                                                            |
+| ---------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| attributes | AttributeSelection | The attributes to generate boxes for.<br>For vector data, these are numeric columns and must be given by name.<br>For raster data, these are bands and default to `all`. | `{"type":"names","values":["ndvi"]}`<br>`{"type":"names","values":["red","green"]}` |
 
 ## Sources
 
@@ -51,7 +52,10 @@ Volume 28 (October), Number 10, 1985, p. 1076-1085.
 {
     "type": "BoxPlot",
     "params": {
-        "columnNames": ["x", "y"]
+        "attributes": {
+            "type": "names",
+            "values": ["x", "y"]
+        }
     },
     "sources": {
         "source": {
@@ -68,7 +72,10 @@ Volume 28 (October), Number 10, 1985, p. 1076-1085.
 {
     "type": "BoxPlot",
     "params": {
-        "columnNames": ["red", "green"]
+        "attributes": {
+            "type": "names",
+            "values": ["red", "green"]
+        }
     },
     "sources": {
         "source": {

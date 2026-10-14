@@ -28,9 +28,9 @@ It only considers the pixels that intersect the query rectangle.
 
 The operator returns an error in the following cases.
 
-- Vector data: The `attribute` for one of the given `columnNames` is not numeric.
-- Vector data: The `attribute` for one of the given `columnNames` does not exist.
-- Raster data: The band for one of the given `columnNames` does not exist.
+- Vector data: One of the selected `attributes` is not numeric.
+- Vector data: One of the selected `attributes` does not exist.
+- Raster data: One of the selected `attributes` (bands) does not exist.
 
 ### Example Output
 
@@ -66,10 +66,10 @@ The `data.values` of the Vega-Lite spec:
 
 ## Parameters
 
-| Name        | Type  | Description                                                                                                                                                                                                                                    | Examples                  |
-| ----------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| columnNames | array | # Vector data<br>The names of the attributes to generate statistics for.<br><br># Raster data<br>_Optional_: The names of the bands to generate statistics for.<br>The operator generates statistics for all bands if this parameter is empty. | `["x","y"]`<br>`["ndvi"]` |
-| percentiles | array | The percentiles to compute for each attribute.                                                                                                                                                                                                 | `[0.25,0.5,0.75]`         |
+| Name        | Type               | Description                                                                                                                                                                                           | Examples                             |
+| ----------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| attributes  | AttributeSelection | _Optional_: The attributes to generate statistics for.<br>For vector data, these are numeric columns, for raster data, these are bands.<br>Defaults to `all`, i.e., all numeric columns or all bands. | `{"type":"names","values":["ndvi"]}` |
+| percentiles | array              | The percentiles to compute for each attribute.                                                                                                                                                        | `[0.25,0.5,0.75]`                    |
 
 ## Sources
 
@@ -83,7 +83,10 @@ The `data.values` of the Vega-Lite spec:
 {
     "type": "Statistics",
     "params": {
-        "columnNames": ["ndvi"],
+        "attributes": {
+            "type": "names",
+            "values": ["ndvi"]
+        },
         "percentiles": [0.25, 0.5, 0.75]
     },
     "sources": {

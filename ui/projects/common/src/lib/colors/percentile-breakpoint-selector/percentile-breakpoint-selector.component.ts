@@ -269,7 +269,7 @@ export class PercentileBreakpointSelectorComponent {
                 operator: {
                     type: 'Statistics',
                     params: {
-                        columnNames: [this.band()],
+                        attributes: {type: 'names', values: [this.band()]},
                         percentiles,
                     },
                     sources: {

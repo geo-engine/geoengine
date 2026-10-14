@@ -7,7 +7,7 @@ The parameter spec for [`BoxPlot`].  ## Vector Data  In the case of vector data,
 
 Name | Type
 ------------ | -------------
-`columnNames` | Array&lt;string&gt;
+`attributes` | [AttributeSelection](AttributeSelection.md)
 
 ## Example
 
@@ -16,7 +16,7 @@ import type { BoxPlotParameters } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "columnNames": null,
+  "attributes": null,
 } satisfies BoxPlotParameters
 
 console.log(example)

@@ -37,9 +37,9 @@ import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
  *
  * The operator returns an error in the following cases.
  *
- * - Vector data: The `attribute` for one of the given `columnNames` is not numeric.
- * - Vector data: The `attribute` for one of the given `columnNames` does not exist.
- * - Raster data: The band for one of the given `columnNames` does not exist.
+ * - Vector data: One of the selected `attributes` is not numeric.
+ * - Vector data: One of the selected `attributes` does not exist.
+ * - Raster data: One of the selected `attributes` (bands) does not exist.
  *
  * ### Example Output
  *

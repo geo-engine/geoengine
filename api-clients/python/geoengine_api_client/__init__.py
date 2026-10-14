@@ -63,6 +63,9 @@ __all__ = [
     "AttributeAggregateDef",
     "AttributeAggregateType",
     "AttributeFilter",
+    "AttributeSelection",
+    "AttributeSelectionAll",
+    "AttributeSelectionNames",
     "AuthCodeRequestURL",
     "AuthCodeResponse",
     "AutoCreateDataset",
@@ -530,6 +533,9 @@ from geoengine_api_client.models.aruna_data_provider_definition import ArunaData
 from geoengine_api_client.models.attribute_aggregate_def import AttributeAggregateDef as AttributeAggregateDef
 from geoengine_api_client.models.attribute_aggregate_type import AttributeAggregateType as AttributeAggregateType
 from geoengine_api_client.models.attribute_filter import AttributeFilter as AttributeFilter
+from geoengine_api_client.models.attribute_selection import AttributeSelection as AttributeSelection
+from geoengine_api_client.models.attribute_selection_all import AttributeSelectionAll as AttributeSelectionAll
+from geoengine_api_client.models.attribute_selection_names import AttributeSelectionNames as AttributeSelectionNames
 from geoengine_api_client.models.auth_code_request_url import AuthCodeRequestURL as AuthCodeRequestURL
 from geoengine_api_client.models.auth_code_response import AuthCodeResponse as AuthCodeResponse
 from geoengine_api_client.models.auto_create_dataset import AutoCreateDataset as AutoCreateDataset

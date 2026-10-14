@@ -17,7 +17,7 @@ import {
     FxFlexDirective,
     FxLayoutAlignDirective,
 } from '@geoengine/common';
-import {Statistics, StatisticsParameters} from '@geoengine/api-client';
+import {AttributeSelection, Statistics, StatisticsParameters} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -150,8 +150,10 @@ export class StatisticsPlotComponent {
             return;
         }
 
-        // for rasters, an empty list selects all bands
-        const statisticsColumnNames = isVectorLayer(layer) ? columnNames.map((columnName) => columnName ?? '') : [];
+        // for rasters, select all bands
+        const attributes: AttributeSelection = isVectorLayer(layer)
+            ? {type: 'names', values: [...new Set(columnNames.map((columnName) => columnName ?? ''))]}
+            : {type: 'all'};
 
         try {
             const inputWorkflow = await this.projectService.getProcessingGraph(layer.workflowId);
@@ -164,7 +166,7 @@ export class StatisticsPlotComponent {
                 operator: {
                     type: 'Statistics',
                     params: {
-                        columnNames: statisticsColumnNames,
+                        attributes,
                     } satisfies StatisticsParameters,
                     sources: {
                         source: inputWorkflow.operator,

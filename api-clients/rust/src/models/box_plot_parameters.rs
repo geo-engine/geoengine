@@ -13,16 +13,16 @@ use serde::{Deserialize, Serialize};
 /// BoxPlotParameters : The parameter spec for [`BoxPlot`].  ## Vector Data  In the case of vector data, the operator generates one box for each of the selected numerical attributes. The operator returns an error if one of the selected attributes is not numeric.  ## Raster Data  For raster data, the operator generates one box for each of the selected bands. 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BoxPlotParameters {
-    /// ## Vector Data The names of the attributes to generate boxes for.  ## Raster Data _Optional_: The names of the bands to generate boxes for. The operator generates boxes for all bands if this parameter is empty.
-    #[serde(rename = "columnNames", skip_serializing_if = "Option::is_none")]
-    pub column_names: Option<Vec<String>>,
+    /// The attributes to generate boxes for. For vector data, these are numeric columns and must be given by name. For raster data, these are bands and default to `all`.
+    #[serde(rename = "attributes", skip_serializing_if = "Option::is_none")]
+    pub attributes: Option<Box<models::AttributeSelection>>,
 }
 
 impl BoxPlotParameters {
     /// The parameter spec for [`BoxPlot`].  ## Vector Data  In the case of vector data, the operator generates one box for each of the selected numerical attributes. The operator returns an error if one of the selected attributes is not numeric.  ## Raster Data  For raster data, the operator generates one box for each of the selected bands. 
     pub fn new() -> BoxPlotParameters {
         BoxPlotParameters {
-            column_names: None,
+            attributes: None,
         }
     }
 }

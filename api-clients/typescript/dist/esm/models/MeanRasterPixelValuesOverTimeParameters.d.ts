@@ -9,6 +9,7 @@
  * Do not edit the class manually.
  */
 import type { MeanRasterPixelValuesOverTimePosition } from './MeanRasterPixelValuesOverTimePosition';
+import type { AttributeSelection } from './AttributeSelection';
 /**
  * The parameter spec for `MeanRasterPixelValuesOverTime`.
  * @export
@@ -29,12 +30,12 @@ export interface MeanRasterPixelValuesOverTimeParameters {
      */
     area?: boolean;
     /**
-     * _Optional_: The names of the bands to compute the means for.
-     * The operator uses all bands if this parameter is empty.
-     * @type {Array<string>}
+     * _Optional_: The bands to compute the means for.
+     * Defaults to `all`.
+     * @type {AttributeSelection}
      * @memberof MeanRasterPixelValuesOverTimeParameters
      */
-    bandNames?: Array<string>;
+    attributes?: AttributeSelection;
 }
 /**
  * Check if a given object implements the MeanRasterPixelValuesOverTimeParameters interface.

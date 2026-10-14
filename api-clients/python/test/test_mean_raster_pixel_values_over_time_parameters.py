@@ -37,9 +37,7 @@ class TestMeanRasterPixelValuesOverTimeParameters(unittest.TestCase):
             return MeanRasterPixelValuesOverTimeParameters(
                 time_position = 'start',
                 area = True,
-                band_names = [
-                    ''
-                    ]
+                attributes = None
             )
         else:
             return MeanRasterPixelValuesOverTimeParameters(

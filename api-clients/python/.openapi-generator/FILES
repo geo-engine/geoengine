@@ -22,6 +22,9 @@ docs/ArunaDataProviderDefinition.md
 docs/AttributeAggregateDef.md
 docs/AttributeAggregateType.md
 docs/AttributeFilter.md
+docs/AttributeSelection.md
+docs/AttributeSelectionAll.md
+docs/AttributeSelectionNames.md
 docs/AuthCodeRequestURL.md
 docs/AuthCodeResponse.md
 docs/AutoCreateDataset.md
@@ -497,6 +500,9 @@ geoengine_api_client/models/aruna_data_provider_definition.py
 geoengine_api_client/models/attribute_aggregate_def.py
 geoengine_api_client/models/attribute_aggregate_type.py
 geoengine_api_client/models/attribute_filter.py
+geoengine_api_client/models/attribute_selection.py
+geoengine_api_client/models/attribute_selection_all.py
+geoengine_api_client/models/attribute_selection_names.py
 geoengine_api_client/models/auth_code_request_url.py
 geoengine_api_client/models/auth_code_response.py
 geoengine_api_client/models/auto_create_dataset.py
@@ -940,6 +946,9 @@ test/test_aruna_data_provider_definition.py
 test/test_attribute_aggregate_def.py
 test/test_attribute_aggregate_type.py
 test/test_attribute_filter.py
+test/test_attribute_selection.py
+test/test_attribute_selection_all.py
+test/test_attribute_selection_names.py
 test/test_auth_code_request_url.py
 test/test_auth_code_response.py
 test/test_auto_create_dataset.py

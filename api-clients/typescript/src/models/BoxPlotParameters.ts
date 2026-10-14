@@ -12,6 +12,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { AttributeSelection } from './AttributeSelection';
+import {
+    AttributeSelectionFromJSON,
+    AttributeSelectionFromJSONTyped,
+    AttributeSelectionToJSON,
+    AttributeSelectionToJSONTyped,
+} from './AttributeSelection';
+
 /**
  * The parameter spec for [`BoxPlot`].
  * 
@@ -29,16 +37,13 @@ import { mapValues } from '../runtime';
  */
 export interface BoxPlotParameters {
     /**
-     * ## Vector Data
-     * The names of the attributes to generate boxes for.
-     * 
-     * ## Raster Data
-     * _Optional_: The names of the bands to generate boxes for.
-     * The operator generates boxes for all bands if this parameter is empty.
-     * @type {Array<string>}
+     * The attributes to generate boxes for.
+     * For vector data, these are numeric columns and must be given by name.
+     * For raster data, these are bands and default to `all`.
+     * @type {AttributeSelection}
      * @memberof BoxPlotParameters
      */
-    columnNames?: Array<string>;
+    attributes?: AttributeSelection;
 }
 
 /**
@@ -58,7 +63,7 @@ export function BoxPlotParametersFromJSONTyped(json: any, ignoreDiscriminator: b
     }
     return {
         
-        'columnNames': json['columnNames'] == null ? undefined : json['columnNames'],
+        'attributes': json['attributes'] == null ? undefined : AttributeSelectionFromJSON(json['attributes']),
     };
 }
 
@@ -73,7 +78,7 @@ export function BoxPlotParametersToJSONTyped(value?: BoxPlotParameters | null, i
 
     return {
         
-        'columnNames': value['columnNames'],
+        'attributes': AttributeSelectionToJSON(value['attributes']),
     };
 }
 

@@ -1,3 +1,4 @@
+use crate::api::model::processing_graphs::parameters::AttributeSelection;
 use crate::api::model::processing_graphs::source_parameters::{
     SingleRasterOrVectorSource, SingleRasterSource, SingleVectorSource,
 };
@@ -179,9 +180,9 @@ impl TryFrom<Histogram> for geoengine_operators::plot::Histogram {
 ///
 /// The operator returns an error in the following cases.
 ///
-/// - Vector data: The `attribute` for one of the given `columnNames` is not numeric.
-/// - Vector data: The `attribute` for one of the given `columnNames` does not exist.
-/// - Raster data: The band for one of the given `columnNames` does not exist.
+/// - Vector data: One of the selected `attributes` is not numeric.
+/// - Vector data: One of the selected `attributes` does not exist.
+/// - Raster data: One of the selected `attributes` (bands) does not exist.
 ///
 /// ### Example Output
 ///
@@ -218,7 +219,10 @@ impl TryFrom<Histogram> for geoengine_operators::plot::Histogram {
 #[api_operator(examples(json!({
     "type": "Statistics",
     "params": {
-        "columnNames": ["ndvi"],
+        "attributes": {
+            "type": "names",
+            "values": ["ndvi"]
+        },
         "percentiles": [0.25, 0.5, 0.75]
     },
     "sources": {
@@ -239,15 +243,12 @@ pub struct Statistics {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct StatisticsParameters {
-    /// # Vector data
-    /// The names of the attributes to generate statistics for.
-    ///
-    /// # Raster data
-    /// _Optional_: The names of the bands to generate statistics for.
-    /// The operator generates statistics for all bands if this parameter is empty.
-    #[schema(examples(json!(["x", "y"])))]
+    /// _Optional_: The attributes to generate statistics for.
+    /// For vector data, these are numeric columns, for raster data, these are bands.
+    /// Defaults to `all`, i.e., all numeric columns or all bands.
+    #[schema(examples(json!({ "type": "names", "values": ["x", "y"] })))]
     #[serde(default)]
-    pub column_names: Vec<String>,
+    pub attributes: AttributeSelection,
     /// The percentiles to compute for each attribute.
     #[serde(default)]
     #[schema(value_type = Vec<f64>, examples(json!([0.25, 0.5, 0.75])))]
@@ -258,7 +259,7 @@ impl TryFrom<Statistics> for geoengine_operators::plot::Statistics {
     type Error = anyhow::Error;
     fn try_from(value: Statistics) -> Result<Self, Self::Error> {
         let params = geoengine_operators::plot::StatisticsParams {
-            column_names: value.params.column_names,
+            column_names: value.params.attributes.into(),
             percentiles: value.params.percentiles.clone(),
         };
         let sources = value.sources.try_into()?;
@@ -281,9 +282,10 @@ impl TryFrom<Statistics> for geoengine_operators::plot::Statistics {
 ///
 /// The operator returns an error in the following cases.
 ///
-/// - Vector data: The `attribute` for one of the given `columnNames` is not numeric.
-/// - Vector data: The `attribute` for one of the given `columnNames` does not exist.
-/// - Raster data: The band for one of the given `columnNames` does not exist.
+/// - Vector data: `attributes` is `all`.
+/// - Vector data: One of the selected `attributes` is not numeric.
+/// - Vector data: One of the selected `attributes` does not exist.
+/// - Raster data: One of the selected `attributes` (bands) does not exist.
 /// - Raster data: More than 8 bands are selected.
 ///
 /// ## Notes
@@ -301,7 +303,10 @@ impl TryFrom<Statistics> for geoengine_operators::plot::Statistics {
         json!({
             "type": "BoxPlot",
             "params": {
-                "columnNames": ["x", "y"]
+                "attributes": {
+                    "type": "names",
+                    "values": ["x", "y"]
+                }
             },
             "sources": {
                 "source": {
@@ -315,7 +320,10 @@ impl TryFrom<Statistics> for geoengine_operators::plot::Statistics {
         json!({
             "type": "BoxPlot",
             "params": {
-                "columnNames": ["red", "green"]
+                "attributes": {
+                    "type": "names",
+                    "values": ["red", "green"]
+                }
             },
             "sources": {
                 "source": {
@@ -347,22 +355,19 @@ pub struct BoxPlot {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct BoxPlotParameters {
-    /// ## Vector Data
-    /// The names of the attributes to generate boxes for.
-    ///
-    /// ## Raster Data
-    /// _Optional_: The names of the bands to generate boxes for.
-    /// The operator generates boxes for all bands if this parameter is empty.
+    /// The attributes to generate boxes for.
+    /// For vector data, these are numeric columns and must be given by name.
+    /// For raster data, these are bands and default to `all`.
     #[serde(default)]
-    #[schema(examples(json!(["temperature", "humidity"])))]
-    pub column_names: Vec<String>,
+    #[schema(examples(json!({ "type": "names", "values": ["temperature", "humidity"] })))]
+    pub attributes: AttributeSelection,
 }
 
 impl TryFrom<BoxPlot> for geoengine_operators::plot::BoxPlot {
     type Error = anyhow::Error;
     fn try_from(value: BoxPlot) -> Result<Self, Self::Error> {
         let params = geoengine_operators::plot::BoxPlotParams {
-            column_names: value.params.column_names,
+            column_names: value.params.attributes.into(),
         };
         let sources = value.sources.try_into()?;
         Ok(Self { params, sources })
@@ -513,7 +518,7 @@ impl TryFrom<FeatureAttributeValuesOverTime>
 ///
 /// ## Errors
 ///
-/// The operator returns an error if one of the selected bands (`bandNames`) does not exist.
+/// The operator returns an error if one of the selected bands (`attributes`) does not exist.
 ///
 /// ## Notes
 ///
@@ -550,11 +555,11 @@ pub struct MeanRasterPixelValuesOverTimeParameters {
     #[serde(default = "default_true")]
     #[schema(examples(false))]
     pub area: bool,
-    /// _Optional_: The names of the bands to compute the means for.
-    /// The operator uses all bands if this parameter is empty.
+    /// _Optional_: The bands to compute the means for.
+    /// Defaults to `all`.
     #[serde(default)]
-    #[schema(examples(json!(["ndvi"])))]
-    pub band_names: Vec<String>,
+    #[schema(examples(json!({ "type": "names", "values": ["ndvi"] })))]
+    pub attributes: AttributeSelection,
 }
 
 const fn default_true() -> bool {
@@ -587,7 +592,7 @@ impl TryFrom<MeanRasterPixelValuesOverTime>
                 }
             },
             area: value.params.area,
-            band_names: value.params.band_names,
+            band_names: value.params.attributes.into(),
         };
         let sources = value.sources.try_into()?;
         Ok(Self { params, sources })
@@ -983,7 +988,10 @@ mod tests {
         let example = serde_json::json!({
             "type": "Statistics",
             "params": {
-                "columnNames": ["ndvi"],
+                "attributes": {
+                    "type": "names",
+                    "values": ["ndvi"]
+                },
                 "percentiles": [0.25, 0.5, 0.75]
             },
             "sources": {
@@ -998,7 +1006,10 @@ mod tests {
 
         let parsed: Statistics = serde_json::from_value(example).expect("example must parse");
 
-        assert_eq!(parsed.params.column_names, vec!["ndvi".to_string()]);
+        assert_eq!(
+            Vec::<String>::from(parsed.params.attributes),
+            vec!["ndvi".to_string()]
+        );
         assert_eq!(parsed.params.percentiles.len(), 3);
     }
 
@@ -1007,7 +1018,7 @@ mod tests {
         let statistics = Statistics {
             r#type: Default::default(),
             params: StatisticsParameters {
-                column_names: vec!["A".to_string()],
+                attributes: vec!["A".to_string()].try_into().unwrap(),
                 percentiles: vec![
                     NotNan::new(0.25).unwrap(),
                     NotNan::new(0.5).unwrap(),
@@ -1038,7 +1049,7 @@ mod tests {
         let stats = Statistics {
             r#type: Default::default(),
             params: StatisticsParameters {
-                column_names: vec!["A".to_string()],
+                attributes: vec!["A".to_string()].try_into().unwrap(),
                 percentiles: vec![NotNan::new(0.5).unwrap()],
             },
             sources: SingleRasterOrVectorSource {
@@ -1070,7 +1081,9 @@ mod tests {
         let box_plot = BoxPlot {
             r#type: Default::default(),
             params: BoxPlotParameters {
-                column_names: vec!["temperature".to_string(), "humidity".to_string()],
+                attributes: vec!["temperature".to_string(), "humidity".to_string()]
+                    .try_into()
+                    .unwrap(),
             },
             sources: SingleRasterOrVectorSource {
                 source: SingleRasterOrVectorOperator::Vector(VectorOperator::MockPointSource(
@@ -1150,7 +1163,7 @@ mod tests {
             params: MeanRasterPixelValuesOverTimeParameters {
                 time_position: MeanRasterPixelValuesOverTimePosition::Center,
                 area: true,
-                band_names: vec!["temperature".to_string()],
+                attributes: vec!["temperature".to_string()].try_into().unwrap(),
             },
             sources: SingleRasterSource {
                 raster: RasterOperator::GdalSource(GdalSource {

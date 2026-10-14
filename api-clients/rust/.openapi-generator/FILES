@@ -21,6 +21,9 @@ docs/ArunaDataProviderDefinition.md
 docs/AttributeAggregateDef.md
 docs/AttributeAggregateType.md
 docs/AttributeFilter.md
+docs/AttributeSelection.md
+docs/AttributeSelectionAll.md
+docs/AttributeSelectionNames.md
 docs/AuthCodeRequestUrl.md
 docs/AuthCodeResponse.md
 docs/AutoCreateDataset.md
@@ -493,6 +496,9 @@ src/models/aruna_data_provider_definition.rs
 src/models/attribute_aggregate_def.rs
 src/models/attribute_aggregate_type.rs
 src/models/attribute_filter.rs
+src/models/attribute_selection.rs
+src/models/attribute_selection_all.rs
+src/models/attribute_selection_names.rs
 src/models/auth_code_request_url.rs
 src/models/auth_code_response.rs
 src/models/auto_create_dataset.rs

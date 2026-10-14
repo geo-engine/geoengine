@@ -1,4 +1,6 @@
-use crate::api::model::datatypes::{Coordinate2D, VectorDataType};
+use crate::api::model::datatypes::{
+    Coordinate2D, NonEmptyUniqueVec, NonEmptyUniqueVecError, VectorDataType,
+};
 use anyhow::Context;
 use geoengine_datatypes::primitives::AxisAlignedRectangle;
 use geoengine_macros::type_tag;
@@ -287,6 +289,71 @@ impl From<ColumnNames> for geoengine_operators::processing::ColumnNames {
     }
 }
 
+/// Selects all attributes, i.e., raster bands or vector columns, or the ones with the given names.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
+pub enum AttributeSelection {
+    All(AttributeSelectionAll),
+    Names(AttributeSelectionNames),
+}
+
+/// Selects all attributes.
+#[type_tag(value = "all")]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AttributeSelectionAll {}
+
+/// Selects the attributes with the given names.
+///
+/// The `values` are the names of the attributes in the order of their output.
+/// They must contain at least one name and no duplicates.
+#[type_tag(value = "names")]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(examples(json!({ "type": "names", "values": ["ndvi"] })))]
+pub struct AttributeSelectionNames {
+    // the docs and example are on the struct since utoipa wraps an inlined schema with docs in `oneOf`
+    #[schema(inline)]
+    pub values: NonEmptyUniqueVec<String>,
+}
+
+impl Default for AttributeSelection {
+    fn default() -> Self {
+        Self::All(AttributeSelectionAll::default())
+    }
+}
+
+impl AttributeSelection {
+    pub fn names(values: NonEmptyUniqueVec<String>) -> Self {
+        Self::Names(AttributeSelectionNames {
+            r#type: Default::default(),
+            values,
+        })
+    }
+}
+
+/// The operators select all attributes if the list is empty.
+impl From<AttributeSelection> for Vec<String> {
+    fn from(value: AttributeSelection) -> Self {
+        match value {
+            AttributeSelection::All(_) => vec![],
+            AttributeSelection::Names(names) => names.values.into(),
+        }
+    }
+}
+
+impl TryFrom<Vec<String>> for AttributeSelection {
+    type Error = NonEmptyUniqueVecError;
+
+    fn try_from(value: Vec<String>) -> Result<Self, Self::Error> {
+        if value.is_empty() {
+            return Ok(Self::default());
+        }
+        Ok(Self::names(value.try_into()?))
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum FeatureAggregationMethod {
@@ -552,5 +619,57 @@ mod tests {
             dt_bbox.lower_right(),
             geoengine_datatypes::primitives::Coordinate2D { x: 3.0, y: 2.0 }
         );
+    }
+
+    #[test]
+    fn it_deserializes_attribute_selection() {
+        let all: AttributeSelection = serde_json::from_str(r#"{"type":"all"}"#).unwrap();
+        assert_eq!(all, AttributeSelection::default());
+
+        let names: AttributeSelection =
+            serde_json::from_str(r#"{"type":"names","values":["b","a"]}"#).unwrap();
+        assert_eq!(
+            names,
+            AttributeSelection::names(vec!["b".to_string(), "a".to_string()].try_into().unwrap())
+        );
+
+        assert!(
+            serde_json::from_str::<AttributeSelection>(r#"{"type":"names","values":[]}"#).is_err()
+        );
+        assert!(serde_json::from_str::<AttributeSelection>(r#"{"type":"names"}"#).is_err());
+        assert!(serde_json::from_str::<AttributeSelection>(r#"{"type":"foo"}"#).is_err());
+    }
+
+    #[test]
+    fn it_serializes_attribute_selection() {
+        assert_eq!(
+            serde_json::to_string(&AttributeSelection::default()).unwrap(),
+            r#"{"type":"all"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&AttributeSelection::names(
+                vec!["a".to_string()].try_into().unwrap()
+            ))
+            .unwrap(),
+            r#"{"type":"names","values":["a"]}"#
+        );
+    }
+
+    #[test]
+    fn it_converts_attribute_selection_to_and_from_names() {
+        assert_eq!(
+            Vec::<String>::from(AttributeSelection::default()),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            AttributeSelection::try_from(Vec::<String>::new()).unwrap(),
+            AttributeSelection::default()
+        );
+
+        let names = vec!["b".to_string(), "a".to_string()];
+        let selection = AttributeSelection::try_from(names.clone()).unwrap();
+        assert_eq!(Vec::<String>::from(selection), names);
+
+        assert!(AttributeSelection::try_from(vec!["a".to_string(), "a".to_string()]).is_err());
     }
 }

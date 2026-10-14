@@ -17,8 +17,9 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from typing import Any, ClassVar, Dict, List, Optional
+from geoengine_api_client.models.attribute_selection import AttributeSelection
 from geoengine_api_client.models.mean_raster_pixel_values_over_time_position import MeanRasterPixelValuesOverTimePosition
 from typing import Optional, Set
 from typing_extensions import Self
@@ -29,8 +30,8 @@ class MeanRasterPixelValuesOverTimeParameters(BaseModel):
     """ # noqa: E501
     time_position: MeanRasterPixelValuesOverTimePosition = Field(description="Where should the x-axis (time) tick be positioned? At either time start, time end or in the center.", alias="timePosition")
     area: Optional[StrictBool] = Field(default=None, description="Whether to fill the area under the curve. Defaults to `true`. Only applies to a single band, multiple bands are drawn as lines.")
-    band_names: Optional[List[StrictStr]] = Field(default=None, description="_Optional_: The names of the bands to compute the means for. The operator uses all bands if this parameter is empty.", alias="bandNames")
-    __properties: ClassVar[List[str]] = ["timePosition", "area", "bandNames"]
+    attributes: Optional[AttributeSelection] = Field(default=None, description="_Optional_: The bands to compute the means for. Defaults to `all`.")
+    __properties: ClassVar[List[str]] = ["timePosition", "area", "attributes"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -71,6 +72,9 @@ class MeanRasterPixelValuesOverTimeParameters(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of attributes
+        if self.attributes:
+            _dict['attributes'] = self.attributes.to_dict()
         return _dict
 
     @classmethod
@@ -85,7 +89,7 @@ class MeanRasterPixelValuesOverTimeParameters(BaseModel):
         _obj = cls.model_validate({
             "timePosition": obj.get("timePosition"),
             "area": obj.get("area"),
-            "bandNames": obj.get("bandNames")
+            "attributes": AttributeSelection.from_dict(obj["attributes"]) if obj.get("attributes") is not None else None
         })
         return _obj
 

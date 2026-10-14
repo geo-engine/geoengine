@@ -10,6 +10,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { AttributeSelectionFromJSON, AttributeSelectionToJSON, } from './AttributeSelection';
 /**
  * Check if a given object implements the StatisticsParameters interface.
  */
@@ -24,7 +25,7 @@ export function StatisticsParametersFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'columnNames': json['columnNames'] == null ? undefined : json['columnNames'],
+        'attributes': json['attributes'] == null ? undefined : AttributeSelectionFromJSON(json['attributes']),
         'percentiles': json['percentiles'] == null ? undefined : json['percentiles'],
     };
 }
@@ -36,7 +37,7 @@ export function StatisticsParametersToJSONTyped(value, ignoreDiscriminator = fal
         return value;
     }
     return {
-        'columnNames': value['columnNames'],
+        'attributes': AttributeSelectionToJSON(value['attributes']),
         'percentiles': value['percentiles'],
     };
 }

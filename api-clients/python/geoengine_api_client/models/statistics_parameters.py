@@ -17,8 +17,9 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt
 from typing import Any, ClassVar, Dict, List, Optional, Union
+from geoengine_api_client.models.attribute_selection import AttributeSelection
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -26,9 +27,9 @@ class StatisticsParameters(BaseModel):
     """
     The parameter spec for `Statistics`
     """ # noqa: E501
-    column_names: Optional[List[StrictStr]] = Field(default=None, description="# Vector data The names of the attributes to generate statistics for.  # Raster data _Optional_: The names of the bands to generate statistics for. The operator generates statistics for all bands if this parameter is empty.", alias="columnNames")
+    attributes: Optional[AttributeSelection] = Field(default=None, description="_Optional_: The attributes to generate statistics for. For vector data, these are numeric columns, for raster data, these are bands. Defaults to `all`, i.e., all numeric columns or all bands.")
     percentiles: Optional[List[Union[StrictFloat, StrictInt]]] = Field(default=None, description="The percentiles to compute for each attribute.")
-    __properties: ClassVar[List[str]] = ["columnNames", "percentiles"]
+    __properties: ClassVar[List[str]] = ["attributes", "percentiles"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -69,6 +70,9 @@ class StatisticsParameters(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of attributes
+        if self.attributes:
+            _dict['attributes'] = self.attributes.to_dict()
         return _dict
 
     @classmethod
@@ -81,7 +85,7 @@ class StatisticsParameters(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "columnNames": obj.get("columnNames"),
+            "attributes": AttributeSelection.from_dict(obj["attributes"]) if obj.get("attributes") is not None else None,
             "percentiles": obj.get("percentiles")
         })
         return _obj

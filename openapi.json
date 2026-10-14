@@ -6298,6 +6298,71 @@
           }
         }
       },
+      "AttributeSelection": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AttributeSelectionAll"
+          },
+          {
+            "$ref": "#/components/schemas/AttributeSelectionNames"
+          }
+        ],
+        "description": "Selects all attributes, i.e., raster bands or vector columns, or the ones with the given names.",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "all": "#/components/schemas/AttributeSelectionAll",
+            "names": "#/components/schemas/AttributeSelectionNames"
+          }
+        }
+      },
+      "AttributeSelectionAll": {
+        "type": "object",
+        "description": "Selects all attributes.",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "all"
+            ]
+          }
+        }
+      },
+      "AttributeSelectionNames": {
+        "type": "object",
+        "description": "Selects the attributes with the given names.\n\nThe `values` are the names of the attributes in the order of their output.\nThey must contain at least one name and no duplicates.",
+        "required": [
+          "type",
+          "values"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "names"
+            ]
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          }
+        },
+        "examples": [
+          {
+            "type": "names",
+            "values": [
+              "ndvi"
+            ]
+          }
+        ]
+      },
       "AuthCodeRequestURL": {
         "type": "object",
         "required": [
@@ -6720,7 +6785,7 @@
       "BoxPlot": {
         "type": "object",
         "title": "BoxPlot",
-        "description": "The `BoxPlot` is a _plot operator_ that computes a box plot over\n\n- a selection of numerical columns of a single vector dataset, or\n- a selection of bands of a single raster dataset.\n\nThereby, the operator considers all data in the given query rectangle.\nFor raster data, these are the pixels that intersect the query rectangle.\n\nThe boxes of the plot span the 1st and 3rd quartile and highlight the median.\nThe whiskers indicate the minimum and maximum values of the corresponding attribute or band.\n\n## Errors\n\nThe operator returns an error in the following cases.\n\n- Vector data: The `attribute` for one of the given `columnNames` is not numeric.\n- Vector data: The `attribute` for one of the given `columnNames` does not exist.\n- Raster data: The band for one of the given `columnNames` does not exist.\n- Raster data: More than 8 bands are selected.\n\n## Notes\n\nIf your dataset contains `infinite` or `NAN` values, they are ignored for the computation.\nMoreover, if your dataset contains more than `10.000`values (which is likely for rasters),\nthe median and quartiles are estimated using the P^2 algorithm described in:\n\nR. Jain and I. Chlamtac, The P^2 algorithm for dynamic calculation of quantiles and\nhistograms without storing observations, Communications of the ACM,\nVolume 28 (October), Number 10, 1985, p. 1076-1085.\n<https://www.cse.wustl.edu/~jain/papers/ftp/psqr.pdf>",
+        "description": "The `BoxPlot` is a _plot operator_ that computes a box plot over\n\n- a selection of numerical columns of a single vector dataset, or\n- a selection of bands of a single raster dataset.\n\nThereby, the operator considers all data in the given query rectangle.\nFor raster data, these are the pixels that intersect the query rectangle.\n\nThe boxes of the plot span the 1st and 3rd quartile and highlight the median.\nThe whiskers indicate the minimum and maximum values of the corresponding attribute or band.\n\n## Errors\n\nThe operator returns an error in the following cases.\n\n- Vector data: `attributes` is `all`.\n- Vector data: One of the selected `attributes` is not numeric.\n- Vector data: One of the selected `attributes` does not exist.\n- Raster data: One of the selected `attributes` (bands) does not exist.\n- Raster data: More than 8 bands are selected.\n\n## Notes\n\nIf your dataset contains `infinite` or `NAN` values, they are ignored for the computation.\nMoreover, if your dataset contains more than `10.000`values (which is likely for rasters),\nthe median and quartiles are estimated using the P^2 algorithm described in:\n\nR. Jain and I. Chlamtac, The P^2 algorithm for dynamic calculation of quantiles and\nhistograms without storing observations, Communications of the ACM,\nVolume 28 (October), Number 10, 1985, p. 1076-1085.\n<https://www.cse.wustl.edu/~jain/papers/ftp/psqr.pdf>",
         "required": [
           "type",
           "params",
@@ -6744,10 +6809,13 @@
           {
             "type": "BoxPlot",
             "params": {
-              "columnNames": [
-                "x",
-                "y"
-              ]
+              "attributes": {
+                "type": "names",
+                "values": [
+                  "x",
+                  "y"
+                ]
+              }
             },
             "sources": {
               "source": {
@@ -6761,10 +6829,13 @@
           {
             "type": "BoxPlot",
             "params": {
-              "columnNames": [
-                "red",
-                "green"
-              ]
+              "attributes": {
+                "type": "names",
+                "values": [
+                  "red",
+                  "green"
+                ]
+              }
             },
             "sources": {
               "source": {
@@ -6781,18 +6852,9 @@
         "type": "object",
         "description": "The parameter spec for [`BoxPlot`].\n\n## Vector Data\n\nIn the case of vector data, the operator generates one box for each of the selected numerical attributes.\nThe operator returns an error if one of the selected attributes is not numeric.\n\n## Raster Data\n\nFor raster data, the operator generates one box for each of the selected bands.\n",
         "properties": {
-          "columnNames": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "examples": [
-                [
-                  "temperature",
-                  "humidity"
-                ]
-              ]
-            },
-            "description": "## Vector Data\nThe names of the attributes to generate boxes for.\n\n## Raster Data\n_Optional_: The names of the bands to generate boxes for.\nThe operator generates boxes for all bands if this parameter is empty."
+          "attributes": {
+            "$ref": "#/components/schemas/AttributeSelection",
+            "description": "The attributes to generate boxes for.\nFor vector data, these are numeric columns and must be given by name.\nFor raster data, these are bands and default to `all`."
           }
         }
       },
@@ -10128,7 +10190,7 @@
       "MeanRasterPixelValuesOverTime": {
         "type": "object",
         "title": "MeanRasterPixelValuesOverTime",
-        "description": "The `MeanRasterPixelValuesOverTime` is a _plot operator_ that computes a time series plot of mean raster values.\n\nFor each time step in the raster time series, it computes one mean value per band.\nThe output is a plot in Vega-Lite specification.\nFor a single band, it is an area or line plot.\nFor multiple bands, it is a line plot with one line per band.\n\nFor instance, you want to plot the mean temperature of a monthly raster time series.\nThen, you can use this operator to generate a time series plot.\n\n## Errors\n\nThe operator returns an error if one of the selected bands (`bandNames`) does not exist.\n\n## Notes\n\nIf the selected bands have different [`Measurement`](../datatypes/measurement)s, the y-axis has no unit.",
+        "description": "The `MeanRasterPixelValuesOverTime` is a _plot operator_ that computes a time series plot of mean raster values.\n\nFor each time step in the raster time series, it computes one mean value per band.\nThe output is a plot in Vega-Lite specification.\nFor a single band, it is an area or line plot.\nFor multiple bands, it is a line plot with one line per band.\n\nFor instance, you want to plot the mean temperature of a monthly raster time series.\nThen, you can use this operator to generate a time series plot.\n\n## Errors\n\nThe operator returns an error if one of the selected bands (`attributes`) does not exist.\n\n## Notes\n\nIf the selected bands have different [`Measurement`](../datatypes/measurement)s, the y-axis has no unit.",
         "required": [
           "type",
           "params",
@@ -10184,17 +10246,9 @@
               false
             ]
           },
-          "bandNames": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "examples": [
-                [
-                  "ndvi"
-                ]
-              ]
-            },
-            "description": "_Optional_: The names of the bands to compute the means for.\nThe operator uses all bands if this parameter is empty."
+          "attributes": {
+            "$ref": "#/components/schemas/AttributeSelection",
+            "description": "_Optional_: The bands to compute the means for.\nDefaults to `all`."
           }
         }
       },
@@ -14431,7 +14485,7 @@
       "Statistics": {
         "type": "object",
         "title": "Statistics",
-        "description": "The `Statistics` operator is a _plot operator_ that computes count statistics over\n\n- a selection of numerical columns of a single vector dataset, or\n- a selection of bands of a single raster dataset.\n\nThe output is a Vega-Lite table with one row per attribute or band.\nThe raw statistics of each row are in the `data.values` of the Vega-Lite spec in `vegaSpec`,\nwith the attribute or band in `name`.\n\nFor instance, you want to get an overview of a raster data source.\nThen, you can use this operator to get basic count statistics.\n\n## Vector Data\n\nIn the case of vector data, the operator generates one statistic for each of the selected numerical attributes.\nThe operator returns an error if one of the selected attributes is not numeric.\n\n## Raster Data\n\nFor raster data, the operator generates one statistic for each of the selected bands.\nIt only considers the pixels that intersect the query rectangle.\n\n## Errors\n\nThe operator returns an error in the following cases.\n\n- Vector data: The `attribute` for one of the given `columnNames` is not numeric.\n- Vector data: The `attribute` for one of the given `columnNames` does not exist.\n- Raster data: The band for one of the given `columnNames` does not exist.\n\n### Example Output\n\nThe `data.values` of the Vega-Lite spec:\n\n```json\n[\n  {\n    \"name\": \"ndvi\",\n    \"valueCount\": 6,\n    \"validCount\": 6,\n    \"min\": 1.0,\n    \"max\": 6.0,\n    \"mean\": 3.5,\n    \"stddev\": 1.707,\n    \"percentiles\": [\n      {\n        \"percentile\": 0.25,\n        \"value\": 2.0\n      },\n      {\n        \"percentile\": 0.5,\n        \"value\": 3.5\n      },\n      {\n        \"percentile\": 0.75,\n        \"value\": 5.0\n      }\n    ]\n  }\n]\n```\n",
+        "description": "The `Statistics` operator is a _plot operator_ that computes count statistics over\n\n- a selection of numerical columns of a single vector dataset, or\n- a selection of bands of a single raster dataset.\n\nThe output is a Vega-Lite table with one row per attribute or band.\nThe raw statistics of each row are in the `data.values` of the Vega-Lite spec in `vegaSpec`,\nwith the attribute or band in `name`.\n\nFor instance, you want to get an overview of a raster data source.\nThen, you can use this operator to get basic count statistics.\n\n## Vector Data\n\nIn the case of vector data, the operator generates one statistic for each of the selected numerical attributes.\nThe operator returns an error if one of the selected attributes is not numeric.\n\n## Raster Data\n\nFor raster data, the operator generates one statistic for each of the selected bands.\nIt only considers the pixels that intersect the query rectangle.\n\n## Errors\n\nThe operator returns an error in the following cases.\n\n- Vector data: One of the selected `attributes` is not numeric.\n- Vector data: One of the selected `attributes` does not exist.\n- Raster data: One of the selected `attributes` (bands) does not exist.\n\n### Example Output\n\nThe `data.values` of the Vega-Lite spec:\n\n```json\n[\n  {\n    \"name\": \"ndvi\",\n    \"valueCount\": 6,\n    \"validCount\": 6,\n    \"min\": 1.0,\n    \"max\": 6.0,\n    \"mean\": 3.5,\n    \"stddev\": 1.707,\n    \"percentiles\": [\n      {\n        \"percentile\": 0.25,\n        \"value\": 2.0\n      },\n      {\n        \"percentile\": 0.5,\n        \"value\": 3.5\n      },\n      {\n        \"percentile\": 0.75,\n        \"value\": 5.0\n      }\n    ]\n  }\n]\n```\n",
         "required": [
           "type",
           "params",
@@ -14455,9 +14509,12 @@
           {
             "type": "Statistics",
             "params": {
-              "columnNames": [
-                "ndvi"
-              ],
+              "attributes": {
+                "type": "names",
+                "values": [
+                  "ndvi"
+                ]
+              },
               "percentiles": [
                 0.25,
                 0.5,
@@ -14479,18 +14536,9 @@
         "type": "object",
         "description": "The parameter spec for `Statistics`",
         "properties": {
-          "columnNames": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "examples": [
-                [
-                  "x",
-                  "y"
-                ]
-              ]
-            },
-            "description": "# Vector data\nThe names of the attributes to generate statistics for.\n\n# Raster data\n_Optional_: The names of the bands to generate statistics for.\nThe operator generates statistics for all bands if this parameter is empty."
+          "attributes": {
+            "$ref": "#/components/schemas/AttributeSelection",
+            "description": "_Optional_: The attributes to generate statistics for.\nFor vector data, these are numeric columns, for raster data, these are bands.\nDefaults to `all`, i.e., all numeric columns or all bands."
           },
           "percentiles": {
             "type": "array",

@@ -84,7 +84,7 @@ impl TryFrom<&OperatorsBoxPlot> for BoxPlot {
         Ok(Self {
             r#type: Default::default(),
             params: BoxPlotParameters {
-                column_names: value.params.column_names.clone(),
+                attributes: value.params.column_names.clone().try_into()?,
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorSource {
                 source: match &value.sources.source {
@@ -224,7 +224,7 @@ impl TryFrom<&OperatorsMeanRasterPixelValuesOverTime> for MeanRasterPixelValuesO
                     }
                 },
                 area: value.params.area,
-                band_names: value.params.band_names.clone(),
+                attributes: value.params.band_names.clone().try_into()?,
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
                 raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
@@ -279,7 +279,7 @@ impl TryFrom<&OperatorsStatistics> for Statistics {
         Ok(Self {
             r#type: Default::default(),
             params: StatisticsParameters {
-                column_names: value.params.column_names.clone(),
+                attributes: value.params.column_names.clone().try_into()?,
                 percentiles: value.params.percentiles.clone(),
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorSource {

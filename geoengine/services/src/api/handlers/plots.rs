@@ -273,7 +273,7 @@ mod tests {
             operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
                 r#type: Default::default(),
                 params: StatisticsParameters {
-                    column_names: vec![],
+                    attributes: Default::default(),
                     percentiles: vec![],
                 },
                 sources: SingleRasterOrVectorSource {
@@ -517,7 +517,7 @@ mod tests {
                 operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
                     r#type: Default::default(),
                     params: StatisticsParameters {
-                        column_names: vec![],
+                        attributes: Default::default(),
                         percentiles: vec![],
                     },
                     sources: SingleRasterOrVectorSource {

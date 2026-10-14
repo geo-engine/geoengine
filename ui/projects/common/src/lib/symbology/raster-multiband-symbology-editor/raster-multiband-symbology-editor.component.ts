@@ -237,7 +237,7 @@ export class RasterMultibandSymbologyEditorComponent implements OnDestroy {
             type: 'Plot',
             operator: {
                 type: 'Statistics',
-                params: {columnNames: [...new Set(Object.values(bands).map((band) => band.name))]},
+                params: {attributes: {type: 'names', values: [...new Set(Object.values(bands).map((band) => band.name))]}},
                 sources: {
                     source: workflow.operator,
                 },

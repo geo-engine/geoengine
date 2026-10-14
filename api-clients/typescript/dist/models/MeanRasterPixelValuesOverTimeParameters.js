@@ -18,6 +18,7 @@ exports.MeanRasterPixelValuesOverTimeParametersFromJSONTyped = MeanRasterPixelVa
 exports.MeanRasterPixelValuesOverTimeParametersToJSON = MeanRasterPixelValuesOverTimeParametersToJSON;
 exports.MeanRasterPixelValuesOverTimeParametersToJSONTyped = MeanRasterPixelValuesOverTimeParametersToJSONTyped;
 const MeanRasterPixelValuesOverTimePosition_1 = require("./MeanRasterPixelValuesOverTimePosition");
+const AttributeSelection_1 = require("./AttributeSelection");
 /**
  * Check if a given object implements the MeanRasterPixelValuesOverTimeParameters interface.
  */
@@ -36,7 +37,7 @@ function MeanRasterPixelValuesOverTimeParametersFromJSONTyped(json, ignoreDiscri
     return {
         'timePosition': (0, MeanRasterPixelValuesOverTimePosition_1.MeanRasterPixelValuesOverTimePositionFromJSON)(json['timePosition']),
         'area': json['area'] == null ? undefined : json['area'],
-        'bandNames': json['bandNames'] == null ? undefined : json['bandNames'],
+        'attributes': json['attributes'] == null ? undefined : (0, AttributeSelection_1.AttributeSelectionFromJSON)(json['attributes']),
     };
 }
 function MeanRasterPixelValuesOverTimeParametersToJSON(json) {
@@ -49,6 +50,6 @@ function MeanRasterPixelValuesOverTimeParametersToJSONTyped(value, ignoreDiscrim
     return {
         'timePosition': (0, MeanRasterPixelValuesOverTimePosition_1.MeanRasterPixelValuesOverTimePositionToJSON)(value['timePosition']),
         'area': value['area'],
-        'bandNames': value['bandNames'],
+        'attributes': (0, AttributeSelection_1.AttributeSelectionToJSON)(value['attributes']),
     };
 }

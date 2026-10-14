@@ -35,9 +35,7 @@ class TestStatisticsParameters(unittest.TestCase):
         model = StatisticsParameters()
         if include_optional:
             return StatisticsParameters(
-                column_names = [
-                    ''
-                    ],
+                attributes = None,
                 percentiles = [
                     1.337
                     ]

@@ -14,7 +14,7 @@ Then, you can use this operator to generate a time series plot.
 
 ## Errors
 
-The operator returns an error if one of the selected bands (`bandNames`) does not exist.
+The operator returns an error if one of the selected bands (`attributes`) does not exist.
 
 ## Notes
 
@@ -22,11 +22,11 @@ If the selected bands have different [`Measurement`](/docs/datatypes/measurement
 
 ## Parameters
 
-| Name         | Type                                  | Description                                                                                                                        | Examples          |
-| ------------ | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| timePosition | MeanRasterPixelValuesOverTimePosition | Where should the x-axis (time) tick be positioned? At either time start, time end or in the center.                                | `"start"`         |
-| area         | boolean                               | Whether to fill the area under the curve. Defaults to `true`.<br>Only applies to a single band, multiple bands are drawn as lines. | `false`<br>`true` |
-| bandNames    | array                                 | _Optional_: The names of the bands to compute the means for.<br>The operator uses all bands if this parameter is empty.            | `["ndvi"]`        |
+| Name         | Type                                  | Description                                                                                                                        | Examples                             |
+| ------------ | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| timePosition | MeanRasterPixelValuesOverTimePosition | Where should the x-axis (time) tick be positioned? At either time start, time end or in the center.                                | `"start"`                            |
+| area         | boolean                               | Whether to fill the area under the curve. Defaults to `true`.<br>Only applies to a single band, multiple bands are drawn as lines. | `false`<br>`true`                    |
+| attributes   | AttributeSelection                    | _Optional_: The bands to compute the means for.<br>Defaults to `all`.                                                              | `{"type":"names","values":["ndvi"]}` |
 
 ## Sources
 

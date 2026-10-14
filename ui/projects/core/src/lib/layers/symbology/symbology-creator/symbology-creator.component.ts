@@ -215,7 +215,7 @@ export class SymbologyCreatorComponent implements OnInit, OnDestroy, ControlValu
                         operator: {
                             type: 'Statistics',
                             params: {
-                                columnNames: [bandName],
+                                attributes: {type: 'names', values: [bandName]},
                             },
                             sources: {
                                 source: workflow.operator,

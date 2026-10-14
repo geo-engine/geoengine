@@ -37,9 +37,7 @@ class TestBoxPlot(unittest.TestCase):
             return BoxPlot(
                 type = 'BoxPlot',
                 params = geoengine_api_client.models.box_plot_parameters.BoxPlotParameters(
-                    column_names = [
-                        ''
-                        ], ),
+                    attributes = null, ),
                 sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
                     source = null, )
             )
@@ -47,9 +45,7 @@ class TestBoxPlot(unittest.TestCase):
             return BoxPlot(
                 type = 'BoxPlot',
                 params = geoengine_api_client.models.box_plot_parameters.BoxPlotParameters(
-                    column_names = [
-                        ''
-                        ], ),
+                    attributes = null, ),
                 sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
                     source = null, ),
         )

@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 import { MeanRasterPixelValuesOverTimePositionFromJSON, MeanRasterPixelValuesOverTimePositionToJSON, } from './MeanRasterPixelValuesOverTimePosition';
+import { AttributeSelectionFromJSON, AttributeSelectionToJSON, } from './AttributeSelection';
 /**
  * Check if a given object implements the MeanRasterPixelValuesOverTimeParameters interface.
  */
@@ -29,7 +30,7 @@ export function MeanRasterPixelValuesOverTimeParametersFromJSONTyped(json, ignor
     return {
         'timePosition': MeanRasterPixelValuesOverTimePositionFromJSON(json['timePosition']),
         'area': json['area'] == null ? undefined : json['area'],
-        'bandNames': json['bandNames'] == null ? undefined : json['bandNames'],
+        'attributes': json['attributes'] == null ? undefined : AttributeSelectionFromJSON(json['attributes']),
     };
 }
 export function MeanRasterPixelValuesOverTimeParametersToJSON(json) {
@@ -42,6 +43,6 @@ export function MeanRasterPixelValuesOverTimeParametersToJSONTyped(value, ignore
     return {
         'timePosition': MeanRasterPixelValuesOverTimePositionToJSON(value['timePosition']),
         'area': value['area'],
-        'bandNames': value['bandNames'],
+        'attributes': AttributeSelectionToJSON(value['attributes']),
     };
 }

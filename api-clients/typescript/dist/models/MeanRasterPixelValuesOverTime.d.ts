@@ -23,7 +23,7 @@ import type { MeanRasterPixelValuesOverTimeParameters } from './MeanRasterPixelV
  *
  * ## Errors
  *
- * The operator returns an error if one of the selected bands (`bandNames`) does not exist.
+ * The operator returns an error if one of the selected bands (`attributes`) does not exist.
  *
  * ## Notes
  *

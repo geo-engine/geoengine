@@ -16,7 +16,7 @@ import {
     FxFlexDirective,
     FxLayoutAlignDirective,
 } from '@geoengine/common';
-import {BoxPlot, ProcessingGraph, RasterOperator, VectorOperator} from '@geoengine/api-client';
+import {AttributeSelection, BoxPlot, ProcessingGraph, RasterOperator, VectorOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -155,8 +155,10 @@ export class BoxPlotOperatorComponent implements AfterViewInit, OnDestroy {
     add(): void {
         const inputLayer = this.form.controls.layer.value!;
 
-        // for rasters, an empty list selects all bands
-        const columnNames = inputLayer.isVectorLayer ? this.columnNames.controls.map((fc) => fc.value?.toString() ?? '') : [];
+        // for rasters, select all bands
+        const attributes: AttributeSelection = inputLayer.isVectorLayer
+            ? {type: 'names', values: [...new Set(this.columnNames.controls.map((fc) => fc.value?.toString() ?? ''))]}
+            : {type: 'all'};
 
         const outputName: string = this.form.controls.name.value;
 
@@ -174,7 +176,7 @@ export class BoxPlotOperatorComponent implements AfterViewInit, OnDestroy {
                         operator: {
                             type: 'BoxPlot',
                             params: {
-                                columnNames,
+                                attributes,
                             },
                             sources: {
                                 source,

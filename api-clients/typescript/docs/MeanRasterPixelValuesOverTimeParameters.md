@@ -9,7 +9,7 @@ Name | Type
 ------------ | -------------
 `timePosition` | [MeanRasterPixelValuesOverTimePosition](MeanRasterPixelValuesOverTimePosition.md)
 `area` | boolean
-`bandNames` | Array&lt;string&gt;
+`attributes` | [AttributeSelection](AttributeSelection.md)
 
 ## Example
 
@@ -20,7 +20,7 @@ import type { MeanRasterPixelValuesOverTimeParameters } from '@geoengine/api-cli
 const example = {
   "timePosition": null,
   "area": null,
-  "bandNames": null,
+  "attributes": null,
 } satisfies MeanRasterPixelValuesOverTimeParameters
 
 console.log(example)
