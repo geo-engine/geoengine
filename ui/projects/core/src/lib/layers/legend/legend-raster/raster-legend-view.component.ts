@@ -93,23 +93,33 @@ export class LegendMeasurementTextPipe implements PipeTransform {
  */
 const DOUBLE_SIGNIFICANT_DIGITS = 15;
 
-export function unifyDecimals(values: number[], minDecimals = 0): number[] {
+/**
+ * Non-zero values with a smaller magnitude are shown in exponential notation (e.g. `1e-7`),
+ * since a fixed number of decimals would cut them off to `0`.
+ */
+const EXPONENTIAL_NOTATION_THRESHOLD = 1e-4;
+
+/**
+ * Format values for display, cutting off decimals that are not needed to tell neighboring values apart.
+ * Trailing zeros are omitted, e.g. `[1, 1.0001]` becomes `['1', '1.0001']`.
+ */
+export function unifyDecimals(values: number[], minDecimals = 0): string[] {
     const minRoundAt = Math.pow(10, minDecimals);
-    // values in exponential notation (e.g. `1e-7`) cannot be compared digit by digit, so they stay the same
-    const isExponential = (x: number): boolean => x.toString().includes('e');
+    // tiny values cannot be compared digit by digit, so they stay the same
+    const isTiny = (x: number): boolean => x !== 0 && Math.abs(x) < EXPONENTIAL_NOTATION_THRESHOLD;
     // remove floating point errors before flooring, e.g. `0.29 * 100 = 28.999999999999996`
-    const floorAt = (x: number, roundAt: number): number =>
-        Math.floor(Number((x * roundAt).toPrecision(DOUBLE_SIGNIFICANT_DIGITS))) / roundAt;
+    const floorAt = (x: number, roundAt: number): string =>
+        (Math.floor(Number((x * roundAt).toPrecision(DOUBLE_SIGNIFICANT_DIGITS))) / roundAt).toString();
 
     // Early return if all values differ by more than 1
     if (oneApart(values.map((x) => Math.floor(x)).sort((a, b) => a - b))) {
-        return values.map((x) => (isExponential(x) ? x : floorAt(x, minRoundAt)));
+        return values.map((x) => (isTiny(x) ? x.toExponential() : floorAt(x, minRoundAt)));
     }
 
     // Find highest overlap for cut-off point
     let maxOverlap = 0;
     for (let i = 0; i < values.length - 1; i++) {
-        if (isExponential(values[i]) || isExponential(values[i + 1])) {
+        if (isTiny(values[i]) || isTiny(values[i + 1])) {
             continue;
         }
         const overlap: number = overlappingDigits(values[i], values[i + 1]);
@@ -117,8 +127,8 @@ export function unifyDecimals(values: number[], minDecimals = 0): number[] {
     }
 
     return values.map((x) => {
-        if (isExponential(x)) {
-            return x;
+        if (isTiny(x)) {
+            return x.toExponential();
         }
         const preDecimals = Math.floor(x).toString().length;
         const roundAt = Math.max(minRoundAt, Math.pow(10, Math.max(0, maxOverlap + 2 - preDecimals)));
@@ -128,8 +138,12 @@ export function unifyDecimals(values: number[], minDecimals = 0): number[] {
 
 export function overlappingDigits(val1: number, val2: number): number {
     let overlap = 0;
-    const str1 = val1.toString();
-    const str2 = val2.toString();
+    // pad the decimals to the same length, so that e.g. `1` and `1.0001` share the digits `1.000`
+    const [int1, frac1 = ''] = val1.toString().split('.');
+    const [int2, frac2 = ''] = val2.toString().split('.');
+    const fracLength = Math.max(frac1.length, frac2.length);
+    const str1 = fracLength > 0 ? `${int1}.${frac1.padEnd(fracLength, '0')}` : int1;
+    const str2 = fracLength > 0 ? `${int2}.${frac2.padEnd(fracLength, '0')}` : int2;
     const maxLength = Math.min(str1.length, str2.length);
     let passedDecimal = false;
     for (let i = 0; i < maxLength; i++) {
@@ -172,8 +186,8 @@ export interface RgbLegendChannel {
     label: 'Red' | 'Green' | 'Blue';
     cssColor: string;
     band: RasterBandDescriptor;
-    min: number;
-    max: number;
+    min: string;
+    max: string;
     scale: number;
 }
 
@@ -248,7 +262,7 @@ export class RasterLegendViewComponent {
         }
         return selectRgbChannels(metadata.bands, this.layer().symbology.rasterColorizer);
     });
-    readonly displayedBreakpoints = computed<Array<number>>(() =>
+    readonly displayedBreakpoints = computed<Array<string>>(() =>
         calculateDisplayedBreakpoints(this.layer(), this.orderValuesDescending()),
     );
     readonly colorizerBreakpoints = computed<Array<ColorBreakpoint>>(() => {
@@ -276,9 +290,8 @@ export class RasterLegendViewComponent {
 /**
  * Calculate the displayed breakpoints for the legend
  */
-function calculateDisplayedBreakpoints(layer: RasterLayer, orderValuesDescending: boolean): Array<number> {
-    let displayedBreakpoints = layer.symbology.rasterColorizer.getBreakpoints().map((x) => x.value);
-    displayedBreakpoints = unifyDecimals(displayedBreakpoints);
+function calculateDisplayedBreakpoints(layer: RasterLayer, orderValuesDescending: boolean): Array<string> {
+    let displayedBreakpoints = unifyDecimals(layer.symbology.rasterColorizer.getBreakpoints().map((x) => x.value));
 
     if (orderValuesDescending) {
         displayedBreakpoints = displayedBreakpoints.reverse();
