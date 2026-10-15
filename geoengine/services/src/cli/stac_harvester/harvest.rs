@@ -929,23 +929,9 @@ async fn query_item_collection_internal(
             query_url,
             query_params,
         } => {
-            let item_collection: stac::ItemCollection = retry_http(
-                || async {
-                    client
-                        .get(query_url)
-                        .await?
-                        .query(&query_params)
-                        .send()
-                        .await?
-                        .error_for_status()?
-                        .json()
-                        .await
-                },
-                "Query STAC first page",
-                &RetryPolicy::new(),
-                |e| e.status().map(|s| s.as_u16()),
-            )
-            .await?;
+            let request = client.get(query_url).query(&query_params);
+            let item_collection: stac::ItemCollection =
+                client.send_json(request, &RetryPolicy::new()).await?;
 
             let new_state = item_collection
                 .links
@@ -958,22 +944,9 @@ async fn query_item_collection_internal(
             Ok((item_collection, new_state))
         }
         QueryState::NextPage { next_url } => {
-            let item_collection: stac::ItemCollection = retry_http(
-                || async {
-                    client
-                        .get(next_url)
-                        .await?
-                        .send()
-                        .await?
-                        .error_for_status()?
-                        .json()
-                        .await
-                },
-                "Query STAC next page",
-                &RetryPolicy::new(),
-                |e| e.status().map(|s| s.as_u16()),
-            )
-            .await?;
+            let request = client.get(next_url);
+            let item_collection: stac::ItemCollection =
+                client.send_json(request, &RetryPolicy::new()).await?;
 
             let new_state = item_collection
                 .links

@@ -15,6 +15,7 @@ use std::{fmt, sync::Arc};
 mod auth;
 mod cache;
 pub(crate) mod common;
+mod coordinator;
 mod grid;
 mod listing;
 mod loading_info;
@@ -374,6 +375,8 @@ pub(crate) struct StacClient {
     client: reqwest::Client,
     authentication: Option<auth::StacAuthentication>,
     authentication_origin: Option<url::Url>,
+    coordinator_origin: Option<url::Url>,
+    coordinator: Option<Arc<coordinator::StacRequestCoordinator>>,
 }
 
 impl StacClient {
@@ -382,6 +385,8 @@ impl StacClient {
             client,
             authentication: None,
             authentication_origin: None,
+            coordinator_origin: None,
+            coordinator: None,
         }
     }
 
@@ -390,10 +395,13 @@ impl StacClient {
         config: Option<StacProviderAuthentication>,
         stac_api_url: &str,
     ) -> crate::error::Result<Self> {
-        self.authentication_origin = config
-            .as_ref()
-            .map(|_| url::Url::parse(stac_api_url))
-            .transpose()?;
+        let stac_origin = url::Url::parse(stac_api_url)?;
+        self.authentication_origin = config.as_ref().map(|_| stac_origin.clone());
+        self.coordinator_origin = Some(stac_origin.clone());
+        self.coordinator = Some(coordinator::StacRequestCoordinator::shared(
+            &stac_origin,
+            config.as_ref(),
+        ));
         self.authentication = match config {
             Some(config) => {
                 Some(auth::StacAuthentication::initialize(self.client.clone(), config).await?)
@@ -403,19 +411,39 @@ impl StacClient {
         Ok(self)
     }
 
-    pub(crate) async fn get(
+    pub(crate) fn get(&self, url: impl reqwest::IntoUrl) -> reqwest::RequestBuilder {
+        self.client.get(url)
+    }
+
+    /// Returns decoded JSON or an error; the coordinator owns all request retries.
+    pub(crate) async fn send_json<T: serde::de::DeserializeOwned>(
         &self,
-        url: impl reqwest::IntoUrl,
-    ) -> reqwest::Result<reqwest::RequestBuilder> {
-        let url = url.into_url()?;
-        let request = self.client.get(url.clone());
-        match (&self.authentication, &self.authentication_origin) {
-            (Some(authentication), Some(authentication_origin))
-                if same_origin(authentication_origin, &url) =>
-            {
-                Ok(authentication.authorize(request).await)
+        request: reqwest::RequestBuilder,
+        policy: &crate::util::retry::RetryPolicy,
+    ) -> reqwest::Result<T> {
+        let request = request.build()?;
+        let coordinator = self.coordinator_for(request.url());
+        let authentication = self.authentication_for(request.url());
+        coordinator
+            .execute(&self.client, request, authentication, policy)
+            .await
+    }
+
+    fn coordinator_for(&self, request_url: &url::Url) -> Arc<coordinator::StacRequestCoordinator> {
+        match (&self.coordinator, &self.coordinator_origin) {
+            (Some(coordinator), Some(origin)) if same_origin(origin, request_url) => {
+                coordinator.clone()
             }
-            _ => Ok(request),
+            _ => coordinator::StacRequestCoordinator::shared(request_url, None),
+        }
+    }
+
+    fn authentication_for(&self, request_url: &url::Url) -> Option<&auth::StacAuthentication> {
+        match (&self.authentication, &self.authentication_origin) {
+            (Some(authentication), Some(origin)) if same_origin(origin, request_url) => {
+                Some(authentication)
+            }
+            _ => None,
         }
     }
 }
@@ -429,6 +457,234 @@ fn same_origin(expected: &url::Url, actual: &url::Url) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    type AuthenticationBucketArrivals =
+        Arc<std::sync::Mutex<Vec<(&'static str, std::time::Instant)>>>;
+
+    fn authentication_bucket_server(
+        authenticated: bool,
+    ) -> (httptest::Server, AuthenticationBucketArrivals) {
+        use httptest::{
+            Expectation, Server, all_of,
+            matchers::{any, contains, not, request},
+            responders,
+        };
+        use serde_json::json;
+        use std::{sync::Mutex, time::Instant};
+
+        let server = Server::run();
+        // Separate token grants for matching credentials deliberately issue
+        // different tokens. Renewed/independently issued tokens keep one bucket.
+        let tokens = if authenticated {
+            vec!["shared-first", "shared-second", "independent"]
+        } else {
+            vec!["independent"]
+        };
+        let token_count = tokens.len();
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token"))
+                .times(token_count)
+                .respond_with(responders::cycle(
+                    tokens
+                        .into_iter()
+                        .map(|token| {
+                            Box::new(responders::json_encoded(json!({
+                                "access_token": token, "expires_in": 3600
+                            }))) as Box<dyn responders::Responder>
+                        })
+                        .collect(),
+                )),
+        );
+        let arrivals = Arc::new(Mutex::new(Vec::new()));
+        for (path, token) in [
+            ("/probe", authenticated.then_some("shared-first")),
+            ("/shared", authenticated.then_some("shared-second")),
+            ("/independent", Some("independent")),
+            ("/anonymous", None),
+        ] {
+            if path == "/anonymous" && !authenticated {
+                continue;
+            }
+            let expectation = if let Some(token) = token {
+                Expectation::matching(all_of![
+                    request::method_path("GET", path),
+                    request::headers(contains(("authorization", format!("Bearer {token}"))))
+                ])
+            } else {
+                Expectation::matching(all_of![
+                    request::method_path("GET", path),
+                    request::headers(not(contains(("authorization", any()))))
+                ])
+            };
+            let arrivals = arrivals.clone();
+            server.expect(expectation.times(1).respond_with(move || {
+                arrivals.lock().unwrap().push((path, Instant::now()));
+                let response = responders::status_code(200).body("null");
+                if path == "/probe" {
+                    response
+                        .append_header("x-ratelimit-limit", "10, 10;w=1, 60;w=60")
+                        .append_header("x-ratelimit-remaining", "0")
+                        .append_header("x-ratelimit-reset", "1")
+                } else {
+                    response
+                }
+            }));
+        }
+        (server, arrivals)
+    }
+
+    async fn authentication_bucket_contract(authenticated: bool) {
+        use serde_json::Value;
+        use std::time::{Duration, Instant};
+
+        let (server, arrivals) = authentication_bucket_server(authenticated);
+        let create_client = |username: Option<&str>| {
+            let config = username.map(|username| StacProviderAuthentication {
+                endpoint: server.url_str("/token"),
+                client_id: "client".into(),
+                username: username.into(),
+                password: "password".into(),
+            });
+            let api_url = server.url_str("/");
+            async move {
+                StacClient::new(reqwest::Client::new())
+                    .with_authentication(config, &api_url)
+                    .await
+                    .unwrap()
+            }
+        };
+        let first = create_client(authenticated.then_some("shared-user")).await;
+        let same = create_client(authenticated.then_some("shared-user")).await;
+        let other = create_client(Some("different-user")).await;
+        let anonymous = create_client(None).await;
+        let policy = crate::util::retry::RetryPolicy::new().stop_on_status(&[400, 404]);
+        let exhausted = Instant::now();
+        first
+            .send_json::<Value>(first.get(server.url_str("/probe")), &policy)
+            .await
+            .unwrap();
+        let waiting = same.send_json::<Value>(same.get(server.url_str("/shared")), &policy);
+        tokio::pin!(waiting);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), &mut waiting)
+                .await
+                .is_err(),
+            "matching authentication must share the exhausted bucket"
+        );
+        tokio::time::timeout(
+            Duration::from_millis(300),
+            other.send_json::<Value>(other.get(server.url_str("/independent")), &policy),
+        )
+        .await
+        .expect("different authentication has an independent quota")
+        .unwrap();
+        if authenticated {
+            tokio::time::timeout(
+                Duration::from_millis(300),
+                anonymous.send_json::<Value>(anonymous.get(server.url_str("/anonymous")), &policy),
+            )
+            .await
+            .expect("anonymous quota is independent of authenticated quota")
+            .unwrap();
+        }
+        tokio::time::timeout(Duration::from_secs(3), &mut waiting)
+            .await
+            .unwrap()
+            .unwrap();
+        let arrivals = arrivals.lock().unwrap();
+        let shared_start = arrivals
+            .iter()
+            .find(|(path, _)| *path == "/shared")
+            .unwrap()
+            .1;
+        assert!(shared_start.duration_since(exhausted) >= Duration::from_secs(1));
+    }
+
+    #[tokio::test]
+    async fn it_shares_anonymous_rate_limits_across_clients() {
+        authentication_bucket_contract(false).await;
+    }
+
+    #[tokio::test]
+    async fn it_shares_matching_authentication_and_isolates_other_credentials() {
+        authentication_bucket_contract(true).await;
+    }
+
+    #[tokio::test]
+    async fn it_authorizes_after_queue_wait_and_preserves_request_timeout() {
+        use httptest::{
+            Expectation, Server, all_of,
+            matchers::{contains, request},
+            responders,
+        };
+        use serde_json::json;
+        use std::time::Duration;
+
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token"))
+                .times(2)
+                .respond_with(responders::cycle![
+                    responders::json_encoded(json!({
+                        "access_token": "initial", "refresh_token": "refresh",
+                        "expires_in": 1
+                    })),
+                    responders::json_encoded(json!({
+                        "access_token": "renewed", "refresh_token": "next-refresh",
+                        "expires_in": 3600
+                    })),
+                ]),
+        );
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/probe"),
+                request::headers(contains(("authorization", "Bearer initial"))),
+            ])
+            .times(1)
+            .respond_with(
+                responders::status_code(200)
+                    .append_header("x-ratelimit-limit", "10, 10;w=1, 60;w=60")
+                    .append_header("x-ratelimit-remaining", "0")
+                    .append_header("x-ratelimit-reset", "1")
+                    .body("null"),
+            ),
+        );
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/queued"),
+                request::headers(contains(("authorization", "Bearer renewed"))),
+            ])
+            .times(1)
+            .respond_with(responders::status_code(200).body("null")),
+        );
+        let client = StacClient::new(reqwest::Client::new())
+            .with_authentication(
+                Some(StacProviderAuthentication {
+                    endpoint: server.url_str("/token"),
+                    client_id: "client".into(),
+                    username: "user".into(),
+                    password: "password".into(),
+                }),
+                &server.url_str("/"),
+            )
+            .await
+            .unwrap();
+        let queued = client
+            .get(server.url_str("/queued"))
+            .timeout(Duration::from_millis(100));
+        let policy = crate::util::retry::RetryPolicy::new().stop_on_status(&[400, 404]);
+        client
+            .send_json::<serde_json::Value>(client.get(server.url_str("/probe")), &policy)
+            .await
+            .unwrap();
+        tokio::time::timeout(
+            Duration::from_secs(3),
+            client.send_json::<serde_json::Value>(queued, &policy),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    }
 
     #[test]
     fn same_origin_ignores_path_but_checks_scheme_host_and_port() {
