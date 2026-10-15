@@ -4,9 +4,12 @@ import {
     calculateNumberPipeParameters,
     CastMeasurementToClassificationPipe,
     CastMeasurementToContinuousPipe,
+    measurementText,
     selectBands,
+    selectRgbChannels,
     unifyDecimals,
 } from './raster-legend-view.component';
+import {describe, expect, it} from 'vitest';
 
 describe('RasterLegend', () => {
     it('calculateNumberPipeParameters', () => {
@@ -55,48 +58,93 @@ describe('RasterLegend', () => {
 
     it('unifyDecimals', () => {
         const values1: number[] = [12.34567, 12.345678];
-        const expect1: number[] = [12.34567, 12.345678];
+        const expect1: string[] = ['12.34567', '12.345678'];
         expect(unifyDecimals(values1)).toEqual(expect1);
 
         const values2: number[] = [12.345, 12.34567];
-        const expect2: number[] = [12.345, 12.34567];
+        const expect2: string[] = ['12.345', '12.34567'];
         expect(unifyDecimals(values2)).toEqual(expect2);
 
         const values3: number[] = [12345, 12345, 12345.3236434];
-        const expect3: number[] = [12345, 12345, 12345.32];
+        const expect3: string[] = ['12345', '12345', '12345.32'];
         expect(unifyDecimals(values3)).toEqual(expect3);
 
         const values4: number[] = [
             12.423562343, 3.0034456333, 2, 2.9, 2.09643543, 1235.0009634526, 3.00000065, 4.11111123234234, 4.111111654234234,
         ];
-        const expect4: number[] = [12.4235623, 3.00344563, 2, 2.9, 2.09643543, 1235.00096, 3.00000065, 4.11111123, 4.11111165];
+        const expect4: string[] = [
+            '12.4235623',
+            '3.00344563',
+            '2',
+            '2.9',
+            '2.09643543',
+            '1235.00096',
+            '3.00000065',
+            '4.11111123',
+            '4.11111165',
+        ];
         expect(unifyDecimals(values4)).toEqual(expect4);
 
         // eslint-disable-next-line no-loss-of-precision
         const values5: number[] = [122.4222235625234343, 122.42222034432356, 122.422225654352, 122.422226441233];
-        const expect5: number[] = [122.4222235, 122.4222203, 122.4222256, 122.4222264];
+        const expect5: string[] = ['122.4222235', '122.4222203', '122.4222256', '122.4222264'];
         expect(unifyDecimals(values5)).toEqual(expect5);
 
         // eslint-disable-next-line no-loss-of-precision
         const values6: number[] = [4.0000123464234235234, 4.000005243423424, 4.000000009];
-        const expect6: number[] = [4.0000123, 4.0000052, 4];
+        const expect6: string[] = ['4.0000123', '4.0000052', '4'];
         expect(unifyDecimals(values6)).toEqual(expect6);
 
         const values7: number[] = [5243.42352135234, 1643.262342314436, 23676.23464564, 23675];
-        const expect7: number[] = [5243, 1643, 23676, 23675];
+        const expect7: string[] = ['5243', '1643', '23676', '23675'];
         expect(unifyDecimals(values7)).toEqual(expect7);
 
         const values8: number[] = [1.2345, 1.2345679912358765];
-        const expect8: number[] = [1.2345, 1.234567];
+        const expect8: string[] = ['1.2345', '1.234567'];
         expect(unifyDecimals(values8)).toEqual(expect8);
 
         const values9: number[] = [12345, 12345, 12345.3236434];
-        const expect9: number[] = [12345, 12345, 12345.32];
+        const expect9: string[] = ['12345', '12345', '12345.32'];
         expect(unifyDecimals(values9)).toEqual(expect9);
 
         const values10: number[] = [81.123123, 81.123456, 81.123987];
-        const expect10: number[] = [81.12312, 81.12345, 81.12398];
+        const expect10: string[] = ['81.12312', '81.12345', '81.12398'];
         expect(unifyDecimals(values10)).toEqual(expect10);
+
+        // keep a minimum number of decimals if the integer parts are one apart
+        const values11: number[] = [0.5, 255];
+        expect(unifyDecimals(values11)).toEqual(['0', '255']);
+        const expect11: string[] = ['0.5', '255'];
+        expect(unifyDecimals(values11, 1)).toEqual(expect11);
+
+        const values12: number[] = [0.1 + 0.2, 1];
+        const expect12: string[] = ['0.3', '1'];
+        expect(unifyDecimals(values12, 1)).toEqual(expect12);
+
+        // negative values
+        const values13: number[] = [-0.5, 0.5];
+        const expect13: string[] = ['-0.5', '0.5'];
+        expect(unifyDecimals(values13, 1)).toEqual(expect13);
+
+        const values14: number[] = [-1.25, -1.5];
+        const expect14: string[] = ['-1.25', '-1.5'];
+        expect(unifyDecimals(values14)).toEqual(expect14);
+
+        // no lost digits due to floating point errors
+        const values15: number[] = [0.29, 0.5];
+        const expect15: string[] = ['0.29', '0.5'];
+        expect(unifyDecimals(values15)).toEqual(expect15);
+
+        // values in exponential notation
+        const values16: number[] = [1e-7, 2e-7];
+        const expect16: string[] = ['1e-7', '2e-7'];
+        expect(unifyDecimals(values16)).toEqual(expect16);
+
+        expect(unifyDecimals([1e-7, 1e-6], 2)).toEqual(['1e-7', '1e-6']);
+
+        expect(unifyDecimals([-1e-6, -9e-7], 2)).toEqual(['-1e-6', '-9e-7']);
+
+        expect(unifyDecimals([1, 1.0001], 2)).toEqual(['1', '1.0001']);
     });
 
     it('convertsToContinuousMeasurement', () => {
@@ -158,5 +206,30 @@ describe('RasterLegend', () => {
 
         const multiBand = new MultiBandRasterColorizer(3, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, BLACK);
         expect(selectBands(bands, multiBand).map((band) => band.name)).toEqual(['d', 'a', 'b']);
+    });
+
+    it('selectRgbChannels', () => {
+        const bands: Array<RasterBandDescriptor> = ['a', 'b', 'c', 'd'].map((name) => ({name, measurement: {type: 'unitless'}}));
+
+        const singleBand = new SingleBandRasterColorizer(
+            2,
+            new LinearGradient([new ColorBreakpoint(0, BLACK), new ColorBreakpoint(1, WHITE)], BLACK, BLACK, BLACK),
+        );
+        expect(selectRgbChannels(bands, singleBand)).toBeUndefined();
+
+        const multiBand = new MultiBandRasterColorizer(3, 0, 1, 0, 3000, 1, 0.5, 1.25, 1, 0.1 + 0.2, 10, 2, BLACK);
+        const channels = selectRgbChannels(bands, multiBand);
+        expect(channels?.map((c) => [c.label, c.band.name, c.min, c.max, c.scale])).toEqual([
+            ['Red', 'd', '0', '3000', 1],
+            ['Green', 'a', '0.5', '1.25', 1],
+            ['Blue', 'b', '0.3', '10', 2],
+        ]);
+    });
+
+    it('measurementText', () => {
+        expect(measurementText({type: 'continuous', measurement: 'Reflectance', unit: '%'})).toBe('Reflectance (in %)');
+        expect(measurementText({type: 'continuous', measurement: 'Reflectance'})).toBe('Reflectance');
+        expect(measurementText({type: 'classification', measurement: 'Land cover', classes: {}})).toBe('Land cover');
+        expect(measurementText({type: 'unitless'})).toBe('unitless');
     });
 });
