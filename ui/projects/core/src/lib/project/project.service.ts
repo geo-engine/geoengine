@@ -65,6 +65,7 @@ import {
     VectorLayer,
     VectorLayerMetadata,
     ProcessingGraphsService,
+    PlotsService,
 } from '@geoengine/common';
 import {
     CollectionItem,
@@ -82,6 +83,8 @@ import {
     ProcessingGraphsApi,
     LineSimplification,
     TypedOperator,
+    ResponseError,
+    WrappedPlotOutput,
 } from '@geoengine/api-client';
 import {toSignal} from '@angular/core/rxjs-interop';
 
@@ -105,6 +108,7 @@ export class ProjectService implements OnDestroy {
     protected spatialReferenceService = inject(SpatialReferenceService);
     protected layersService = inject(LayersService);
     protected readonly processingGraphsService = inject(ProcessingGraphsService);
+    protected readonly plotsService = inject(PlotsService);
 
     private project$ = new ReplaySubject<Project | undefined>(1);
 
@@ -1502,10 +1506,9 @@ export class ProjectService implements OnDestroy {
         error$: Observer<GeoEngineError | undefined>,
         loadingState$: Observer<LoadingState>,
     ): Subscription {
-        const observables: [Observable<Time>, Observable<ViewportSize>, Observable<string>, Observable<SpatialReference>] = [
+        const observables: [Observable<Time>, Observable<ViewportSize>, Observable<SpatialReference>] = [
             this.getTimeStream(),
             this.mapService.getViewportSizeStream(),
-            this.userService.getSessionTokenForRequest(),
             this.getSpatialReferenceStream(),
         ];
 
@@ -1513,51 +1516,38 @@ export class ProjectService implements OnDestroy {
             .pipe(
                 debounceTime(this.config.DELAYS.DEBOUNCE),
                 tap(() => loadingState$.next(LoadingState.LOADING)),
-                switchMap(([time, viewport, sessionToken, sref]) =>
-                    // TODO: add image size for png
+                switchMap(
+                    ([time, viewport, sref]) =>
+                        // TODO: add image size for png
+                        new Observable<WrappedPlotOutput>((subscriber) => {
+                            const abortController = new AbortController();
 
-                    this.backend.getPlot(
-                        plot.workflowId,
-                        {
-                            time: time.toDict(),
-                            bbox: extentToBboxDict(viewport.extent),
-                            crs: sref.srsString,
-                            spatialResolution: [viewport.resolution, viewport.resolution], // TODO: check if resolution needs two numbers
-                        },
-                        sessionToken,
-                    ),
+                            // no resolution, so that the plot is computed on the native resolution of the data
+                            this.plotsService
+                                .getPlot(plot.workflowId, extentToBboxDict(viewport.extent), time, undefined, sref, abortController.signal)
+                                .then((data) => {
+                                    loadingState$.next(LoadingState.OK);
+                                    subscriber.next(data);
+                                    subscriber.complete();
+                                })
+                                .catch(async (error: unknown) => {
+                                    if (abortController.signal.aborted) {
+                                        return;
+                                    }
+
+                                    const plotError = await plotErrorFromResponse(error);
+                                    this.notificationService.error(`${plot.name}: ${plotError.name} ${plotError.message}`);
+
+                                    error$.next(plotError);
+                                    loadingState$.next(LoadingState.ERROR);
+                                    subscriber.complete();
+                                });
+
+                            return (): void => abortController.abort();
+                        }),
                 ),
-                tap({
-                    next: () => loadingState$.next(LoadingState.OK),
-                    error: (errorResponse: HttpErrorResponse) => {
-                        const errorDict = errorResponse.error;
-                        let error: GeoEngineError | undefined;
-                        let errorMessage: string;
-
-                        if (
-                            'error' in errorDict &&
-                            'message' in errorDict &&
-                            typeof errorDict['error'] === 'string' &&
-                            typeof errorDict['message'] === 'string'
-                        ) {
-                            error = GeoEngineError.fromDict(errorDict as {error: string; message: string});
-                            errorMessage = `${error.name} ${error.message}`;
-                        } else {
-                            // fallback error notice
-                            errorMessage = `${errorResponse.status} ${errorResponse.statusText}`;
-                        }
-
-                        this.notificationService.error(`${plot.name}: ${errorMessage}`);
-
-                        error$.next(error);
-                        loadingState$.next(LoadingState.ERROR);
-                    },
-                }),
             )
-            .subscribe({
-                next: (data) => data$.next(data),
-                error: (error) => error, // ignore error
-            });
+            .subscribe((data) => data$.next(data));
     }
 
     /**
@@ -1703,4 +1693,28 @@ function createProjectedOperator<Operator extends RasterOperator | VectorOperato
             source: inputOperator,
         },
     } as Operator;
+}
+
+/**
+ * Extracts the backend error of a failed plot request.
+ */
+async function plotErrorFromResponse(error: unknown): Promise<GeoEngineError> {
+    if (!(error instanceof ResponseError)) {
+        return new GeoEngineError('Error', error instanceof Error ? error.message : String(error));
+    }
+
+    const errorDict: unknown = await error.response.json().catch(() => undefined);
+
+    if (
+        typeof errorDict === 'object' &&
+        errorDict !== null &&
+        'error' in errorDict &&
+        'message' in errorDict &&
+        typeof errorDict.error === 'string' &&
+        typeof errorDict.message === 'string'
+    ) {
+        return GeoEngineError.fromDict({error: errorDict.error, message: errorDict.message});
+    }
+
+    return new GeoEngineError(`${error.response.status}`, error.response.statusText);
 }

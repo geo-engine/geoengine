@@ -23,13 +23,13 @@ pub enum GetPlotHandlerError {
 
 
 /// # Example  1. Upload the file `plain_data.csv` with the following content:  ```csv a 1 2 ``` 2. Create a dataset from it using the \"Plain Data\" example at `/dataset`. 3. Create a statistics processing graph using the \"Statistics Plot\" example at `/processingGraphs`. 4. Generate the plot with this handler.
-pub async fn get_plot_handler(configuration: &configuration::Configuration, bbox: &str, time: &str, spatial_resolution: &str, id: &str, crs: Option<&str>) -> Result<models::WrappedPlotOutput, Error<GetPlotHandlerError>> {
+pub async fn get_plot_handler(configuration: &configuration::Configuration, bbox: &str, time: &str, id: &str, crs: Option<&str>, spatial_resolution: Option<&str>) -> Result<models::WrappedPlotOutput, Error<GetPlotHandlerError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_query_bbox = bbox;
     let p_query_time = time;
-    let p_query_spatial_resolution = spatial_resolution;
     let p_path_id = id;
     let p_query_crs = crs;
+    let p_query_spatial_resolution = spatial_resolution;
 
     let uri_str = format!("{}/plot/{id}", configuration.base_path, id=crate::apis::urlencode(p_path_id));
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
@@ -39,7 +39,9 @@ pub async fn get_plot_handler(configuration: &configuration::Configuration, bbox
         req_builder = req_builder.query(&[("crs", &param_value.to_string())]);
     }
     req_builder = req_builder.query(&[("time", &p_query_time.to_string())]);
-    req_builder = req_builder.query(&[("spatialResolution", &p_query_spatial_resolution.to_string())]);
+    if let Some(ref param_value) = p_query_spatial_resolution {
+        req_builder = req_builder.query(&[("spatialResolution", &param_value.to_string())]);
+    }
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }

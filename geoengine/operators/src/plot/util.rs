@@ -1,6 +1,8 @@
-use crate::engine::RasterBandDescriptors;
+use crate::engine::{InitializedRasterOperator, RasterBandDescriptors, RasterOperator};
 use crate::error::Error;
+use crate::optimization::OptimizationError;
 use crate::util::Result;
+use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::raster::{
     GridBoundingBox2D, GridIndexAccess, GridIntersection, GridOrEmpty, GridSize, Pixel,
     RasterTile2D, grid_idx_iter_2d,
@@ -45,6 +47,26 @@ pub(super) fn select_bands(
     selected.retain(|band| band_names.contains(&band.name));
 
     Ok(selected)
+}
+
+/// Optimizes a raster source of a plot for `target_resolution`.
+///
+/// Plots do not need an exact output grid, so instead of resampling to `target_resolution`,
+/// the source is read at the coarsest overview level (power of two of its native resolution)
+/// that is not coarser than `target_resolution`. If `target_resolution` is finer than the
+/// native resolution, the source is read at its native resolution.
+pub(super) fn optimize_raster_plot_source(
+    source: &dyn InitializedRasterOperator,
+    target_resolution: SpatialResolution,
+) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    let native_resolution = source.result_descriptor().spatial_grid.spatial_resolution();
+
+    let mut resolution = native_resolution;
+    while resolution.x * 2. <= target_resolution.x && resolution.y * 2. <= target_resolution.y {
+        resolution = resolution * 2.;
+    }
+
+    source.optimize(resolution)
 }
 
 /// Returns the part of `tile` that lies within `query_bounds`, both in global pixel indices.

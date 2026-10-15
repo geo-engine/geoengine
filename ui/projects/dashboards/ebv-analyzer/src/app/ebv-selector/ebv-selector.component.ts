@@ -2,11 +2,9 @@ import {ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, OnDes
 import {HttpClient} from '@angular/common/http';
 import {
     ProjectService,
-    BackendService,
     LayoutService,
     ProviderLayerIdDict,
     ProviderLayerCollectionIdDict,
-    PlotDataDict,
     RasterResultDescriptorDict,
     MapService,
     SymbologyEditorComponent,
@@ -24,19 +22,25 @@ import {
     NotificationService,
     PathChange,
     PathChangeSource,
+    PlotsService,
     RasterDataType,
     RasterDataTypes,
     RasterLayer,
     RasterSymbology,
     Time,
-    UserService,
     extentToBboxDict,
     CommonModule,
     FxFlexDirective,
     FxLayoutDirective,
     FxLayoutAlignDirective,
 } from '@geoengine/common';
-import {LayerListing, MeanRasterPixelValuesOverTime, RasterDataType as ApiRasterDataType, RasterOperator} from '@geoengine/api-client';
+import {
+    LayerListing,
+    MeanRasterPixelValuesOverTime,
+    WrappedPlotOutput,
+    RasterDataType as ApiRasterDataType,
+    RasterOperator,
+} from '@geoengine/api-client';
 import {MatButton} from '@angular/material/button';
 import {MatIcon} from '@angular/material/icon';
 import {MatSlideToggle} from '@angular/material/slide-toggle';
@@ -74,7 +78,6 @@ interface Path {
     ],
 })
 export class EbvSelectorComponent implements OnInit, OnDestroy {
-    private readonly userService = inject(UserService);
     private readonly config = inject<AppConfig>(AppConfig);
     private readonly changeDetectorRef = inject(ChangeDetectorRef);
     private readonly http = inject(HttpClient);
@@ -83,7 +86,7 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
     private readonly dataSelectionService = inject(DataSelectionService);
     private readonly route = inject(ActivatedRoute);
     private readonly mapService = inject(MapService);
-    private readonly backend = inject(BackendService);
+    private readonly plotsService = inject(PlotsService);
     private readonly layoutService = inject(LayoutService);
     private readonly layersService = inject(LayersService);
     private readonly notificationService = inject(NotificationService);
@@ -370,7 +373,7 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
         };
     }
 
-    protected async computePlot(): Promise<PlotDataDict> {
+    protected async computePlot(): Promise<WrappedPlotOutput> {
         const rasterLayer = await firstValueFrom(this.dataSelectionService.rasterLayer);
         const selectedCountry = await firstValueFrom(this.countryProviderService.getSelectedCountryStream());
         const selectedTime = this.time;
@@ -383,8 +386,6 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
         this.plotData.next(undefined);
 
         const rasterLayerMetadata = await firstValueFrom(this.projectService.getRasterLayerMetadata(rasterLayer));
-
-        const sessionToken = await firstValueFrom(this.userService.getSessionTokenForRequest());
 
         const rasterWorkflow = await this.projectService.getProcessingGraph(rasterLayer.workflowId);
 
@@ -455,31 +456,27 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
             combineLatest([projectedRasterWorkflowMetadata$, plotWorkflowId$]),
         );
 
-        let spatialResolution: [number, number] = [0.1, 0.1];
+        // read coarser overviews to limit the computation time
+        let spatialResolution = {x: 0.1, y: 0.1};
         if (
             projectedRasterWorkflowMetadata.resolution &&
             projectedRasterWorkflowMetadata.resolution.x > 0.1 &&
             projectedRasterWorkflowMetadata.resolution.y > 0.1
         ) {
             // TODO: communicate upper limit or think about long-running plot requests
-            spatialResolution = [projectedRasterWorkflowMetadata.resolution.x, projectedRasterWorkflowMetadata.resolution.y];
+            spatialResolution = {x: projectedRasterWorkflowMetadata.resolution.x, y: projectedRasterWorkflowMetadata.resolution.y};
         }
 
-        return firstValueFrom(
-            this.backend.getPlot(
-                plotWorkflowId,
-                {
-                    time: {
-                        start: selectedTime.start.unix() * 1_000,
-                        end: selectedTime.end.unix() * 1_000 + 1 /* add one millisecond to include the end time */,
-                    },
-                    bbox: extentToBboxDict([selectedCountry.minx, selectedCountry.miny, selectedCountry.maxx, selectedCountry.maxy]),
-                    // always use WGS 84 for computing the plot
-                    crs: WGS_84.spatialReference.srsString,
-                    spatialResolution,
-                },
-                sessionToken,
-            ),
+        return this.plotsService.getPlot(
+            plotWorkflowId,
+            extentToBboxDict([selectedCountry.minx, selectedCountry.miny, selectedCountry.maxx, selectedCountry.maxy]),
+            Time.fromDict({
+                start: selectedTime.start.unix() * 1_000,
+                end: selectedTime.end.unix() * 1_000 + 1 /* add one millisecond to include the end time */,
+            }),
+            spatialResolution,
+            // always use WGS 84 for computing the plot
+            WGS_84.spatialReference,
         );
     }
 

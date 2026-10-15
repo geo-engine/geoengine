@@ -7,25 +7,29 @@ use crate::{
     contexts::{ApplicationContext, SessionContext},
     error::{self, Result},
     quota::ComputationId,
-    util::{parsing::parse_spatial_resolution, server::connection_closed},
+    util::{parsing::parse_spatial_resolution_option, server::connection_closed},
     workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, Responder, web};
 use base64::Engine;
 use geoengine_datatypes::{
-    operations::reproject::reproject_spatial_query,
+    operations::reproject::{reproject_spatial_query, suggest_pixel_size_like_gdal_helper},
     plots::PlotOutputFormat,
     primitives::{BoundingBox2D, PlotQueryRectangle, PlotSeriesSelection, SpatialResolution},
     spatial_reference::{DefaultCoordinateProjector, SpatialReference},
     util::Identifier,
 };
 use geoengine_operators::{
-    engine::{QueryContext, ResultDescriptor, TypedPlotQueryProcessor, WorkflowOperatorPath},
+    engine::{
+        ExecutionContext, InitializedPlotOperator, PlotOperator, QueryContext, ResultDescriptor,
+        TypedPlotQueryProcessor, WorkflowOperatorPath,
+    },
     util::abortable_query_execution,
 };
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::time::Duration;
+use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -48,9 +52,14 @@ pub(crate) struct GetPlot {
     #[serde(deserialize_with = "parse_time")]
     #[param(example = "2020-01-01T00:00:00.0Z", value_type = String)]
     pub time: TimeInterval,
-    #[serde(deserialize_with = "parse_spatial_resolution")]
-    #[param(example = "0.1,0.1", value_type = String)]
-    pub spatial_resolution: SpatialResolution,
+    /// Optional resolution (in the units of `crs`) at which the plot may be computed.
+    ///
+    /// If set, raster inputs are read at the coarsest overview level that is not coarser than
+    /// this resolution, which speeds up plots of large areas at the cost of exactness.
+    /// If omitted, raster inputs are read at their native resolution.
+    #[serde(default, deserialize_with = "parse_spatial_resolution_option")]
+    #[param(example = "0.1,0.1", value_type = Option<String>)]
+    pub spatial_resolution: Option<SpatialResolution>,
 }
 
 /// Generates a plot.
@@ -142,6 +151,20 @@ async fn get_plot_handler<C: ApplicationContext>(
     let request_spatial_ref: SpatialReference =
         params.crs.ok_or(error::Error::MissingSpatialReference)?;
 
+    let initialized = if let Some(request_resolution) = params.spatial_resolution {
+        optimize_for_request_resolution(
+            initialized,
+            &execution_context,
+            params.bbox,
+            request_resolution,
+            request_spatial_ref,
+            workflow_spatial_ref,
+        )
+        .await?
+    } else {
+        initialized
+    };
+
     let query_rect =
         PlotQueryRectangle::new(params.bbox, params.time.into(), PlotSeriesSelection::all());
 
@@ -223,6 +246,48 @@ pub struct WrappedPlotOutput {
     plot_type: &'static str,
     #[schema(value_type = Object)]
     data: serde_json::Value,
+}
+
+/// Optimizes the plot for the `request_resolution` (in the `request_spatial_ref`), so that raster
+/// inputs are read at a coarser overview level.
+///
+/// Falls back to the unoptimized operator if the processing graph cannot be optimized,
+/// e.g., because a source explicitly loads an overview level.
+async fn optimize_for_request_resolution(
+    initialized: Box<dyn InitializedPlotOperator>,
+    execution_context: &dyn ExecutionContext,
+    request_bbox: BoundingBox2D,
+    request_resolution: SpatialResolution,
+    request_spatial_ref: SpatialReference,
+    workflow_spatial_ref: SpatialReference,
+) -> Result<Box<dyn InitializedPlotOperator>> {
+    let resolution = if request_spatial_ref == workflow_spatial_ref {
+        Ok(request_resolution)
+    } else {
+        suggest_pixel_size_like_gdal_helper::<_, DefaultCoordinateProjector>(
+            request_bbox,
+            request_resolution,
+            request_spatial_ref,
+            workflow_spatial_ref,
+        )
+    };
+
+    let optimized: Result<Box<dyn PlotOperator>, String> = match resolution {
+        Ok(resolution) => initialized
+            .optimize(resolution)
+            .map_err(|error| error.to_string()),
+        Err(error) => Err(error.to_string()),
+    };
+
+    match optimized {
+        Ok(optimized) => Ok(optimized
+            .initialize(WorkflowOperatorPath::initialize_root(), execution_context)
+            .await?),
+        Err(error) => {
+            debug!("Computing plot without optimization: {error}");
+            Ok(initialized)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -342,6 +407,122 @@ mod tests {
                 "percentiles": []
             }])
         );
+    }
+
+    /// Registers a statistics plot on the NDVI dataset (native resolution 0.1°),
+    /// queries it with `params` and returns the statistics row of the `ndvi` band.
+    async fn query_ndvi_statistics(
+        app_ctx: PostgresContext<NoTls>,
+        params: &[(&str, &str)],
+    ) -> Value {
+        let (_, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
+
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let workflow = Workflow {
+            operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
+                r#type: Default::default(),
+                params: StatisticsParameters {
+                    attributes: Default::default(),
+                    percentiles: vec![],
+                },
+                sources: SingleRasterOrVectorSource {
+                    source: SingleRasterOrVectorOperator::Raster(RasterOperator::GdalSource(
+                        GdalSource {
+                            r#type: Default::default(),
+                            params: GdalSourceParameters {
+                                data: dataset_name.into(),
+                                overview_level: None,
+                            },
+                        },
+                    )),
+                },
+            }))
+            .try_into()
+            .unwrap(),
+        };
+
+        let id = app_ctx
+            .session_context(session.clone())
+            .db()
+            .register_workflow(workflow)
+            .await
+            .unwrap();
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/plot/{}?{}",
+                id,
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_test_request(req, app_ctx).await;
+
+        assert_eq!(
+            res.status(),
+            200,
+            "Error {code}: {body:?}",
+            code = res.status(),
+            body = read_body_string(res).await
+        );
+
+        let response = read_body_json(res).await;
+
+        response["data"]["vegaSpec"]["data"]["values"][0].clone()
+    }
+
+    #[ge_context::test(tiling_spec = "json_tiling_spec")]
+    async fn it_uses_native_resolution_without_spatial_resolution(app_ctx: PostgresContext<NoTls>) {
+        let statistics = query_ndvi_statistics(
+            app_ctx,
+            &[
+                ("bbox", "51,10,52,11"),
+                ("crs", "EPSG:4326"),
+                ("time", "2014-05-01T00:00:00.0Z"),
+            ],
+        )
+        .await;
+
+        assert_eq!(statistics["valueCount"], 121);
+    }
+
+    #[ge_context::test(tiling_spec = "json_tiling_spec")]
+    async fn it_uses_overview_for_coarse_spatial_resolution(app_ctx: PostgresContext<NoTls>) {
+        let statistics = query_ndvi_statistics(
+            app_ctx,
+            &[
+                ("bbox", "51,10,52,11"),
+                ("crs", "EPSG:4326"),
+                ("time", "2014-05-01T00:00:00.0Z"),
+                // snaps to overview level 2, i.e., a resolution of 0.4°
+                ("spatialResolution", "0.5,0.5"),
+            ],
+        )
+        .await;
+
+        // 4*4 pixels instead of 11*11 pixels at native resolution
+        assert_eq!(statistics["valueCount"], 16);
+    }
+
+    #[ge_context::test(tiling_spec = "json_tiling_spec")]
+    async fn it_uses_overview_for_coarse_spatial_resolution_in_other_crs(
+        app_ctx: PostgresContext<NoTls>,
+    ) {
+        let statistics = query_ndvi_statistics(
+            app_ctx,
+            &[
+                // roughly 10°–11° E, 51°–52° N
+                ("bbox", "1113194.9,6621293.7,1224514.4,6800125.5"),
+                ("crs", "EPSG:3857"),
+                ("time", "2014-05-01T00:00:00.0Z"),
+                // roughly 0.3° at this latitude, so it snaps to overview level 1, i.e., 0.2°
+                ("spatialResolution", "55000,55000"),
+            ],
+        )
+        .await;
+
+        // 7*7 pixels instead of 11*11 pixels at native resolution
+        assert_eq!(statistics["valueCount"], 49);
     }
 
     fn json_vega_tiling_spec() -> TilingSpecification {
@@ -497,7 +678,7 @@ mod tests {
                 )
                 .unwrap()
                 .into(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
+                spatial_resolution: Some(SpatialResolution::zero_point_one()),
             }
         );
     }

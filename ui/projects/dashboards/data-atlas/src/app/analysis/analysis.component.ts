@@ -1,10 +1,10 @@
 import {Component, ChangeDetectionStrategy, inject} from '@angular/core';
-import {BackendService, BBoxDict, ProjectService, SourceOperatorDict, RasterResultDescriptorDict} from '@geoengine/core';
+import {BBoxDict, ProjectService, SourceOperatorDict, RasterResultDescriptorDict} from '@geoengine/core';
 import {first, map, mergeMap, tap} from 'rxjs/operators';
 import {DataSelectionService} from '../data-selection.service';
 import {BehaviorSubject, combineLatest, from, Observable, of} from 'rxjs';
 import {COUNTRY_METADATA, countryDatasetName} from './country-data.model';
-import {PolygonSymbology, RasterDataTypes, RasterLayer, UserService, VectorLayer, CommonModule} from '@geoengine/common';
+import {PlotsService, PolygonSymbology, RasterDataTypes, RasterLayer, VectorLayer, CommonModule} from '@geoengine/common';
 import {MatFormField, MatLabel} from '@angular/material/input';
 import {MatSelect} from '@angular/material/select';
 import {MatOption} from '@angular/material/autocomplete';
@@ -37,8 +37,7 @@ import {Histogram, HistogramParameters, ProcessingGraph, RasterOperator} from '@
 export class AnalysisComponent {
     private readonly projectService = inject(ProjectService);
     private readonly dataSelectionService = inject(DataSelectionService);
-    private readonly backend = inject(BackendService);
-    private readonly userService = inject(UserService);
+    private readonly plotsService = inject(PlotsService);
 
     countries = new Array<string>();
 
@@ -227,26 +226,9 @@ export class AnalysisComponent {
                     }),
                 ),
                 mergeMap((workflowId) =>
-                    combineLatest([
-                        of(workflowId),
-                        this.userService.getSessionTokenForRequest(),
-                        this.projectService.getTimeOnce(),
-                        this.projectService.getSpatialReferenceStream(),
-                    ]),
+                    combineLatest([of(workflowId), this.projectService.getTimeOnce(), this.projectService.getSpatialReferenceStream()]),
                 ),
-                mergeMap(([workflowId, sessionToken, time, crs]) =>
-                    this.backend.getPlot(
-                        workflowId,
-                        {
-                            time: time.toDict(),
-                            bbox: countryBounds,
-                            crs: crs.srsString,
-                            // TODO: set reasonable size
-                            spatialResolution: [0.1, 0.1],
-                        },
-                        sessionToken,
-                    ),
-                ),
+                mergeMap(([workflowId, time, crs]) => this.plotsService.getPlot(workflowId, countryBounds, time, undefined, crs)),
             )
             .subscribe({
                 next: (plotData) => {

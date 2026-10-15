@@ -298,7 +298,7 @@ export class ComputeComponent {
                 plotWorkflowId,
                 bboxAndSpatialReference.bbox,
                 await this.projectService.getTimeOnce(),
-                {x: Math.abs(metadata.pixelSizeX), y: Math.abs(metadata.pixelSizeY)},
+                undefined,
                 bboxAndSpatialReference.spatialReference,
             );
 
