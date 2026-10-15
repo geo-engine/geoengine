@@ -336,59 +336,6 @@ impl From<crate::layers::storage::LayerProviderListing> for LayerProviderListing
     }
 }
 
-#[type_tag(value = "Aruna")]
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct ArunaDataProviderDefinition {
-    pub id: DataProviderId,
-    pub name: String,
-    pub description: String,
-    pub priority: Option<i16>,
-    pub api_url: String,
-    pub project_id: String,
-    pub api_token: String,
-    pub filter_label: String,
-    #[serde(default)]
-    pub cache_ttl: Option<CacheTtlSeconds>,
-}
-
-impl From<ArunaDataProviderDefinition>
-    for crate::datasets::external::aruna::ArunaDataProviderDefinition
-{
-    fn from(value: ArunaDataProviderDefinition) -> Self {
-        crate::datasets::external::aruna::ArunaDataProviderDefinition {
-            id: value.id.into(),
-            name: value.name,
-            description: value.description,
-            priority: value.priority,
-            api_url: value.api_url,
-            project_id: value.project_id,
-            api_token: value.api_token,
-            filter_label: value.filter_label,
-            cache_ttl: value.cache_ttl.map(Into::into),
-        }
-    }
-}
-
-impl From<crate::datasets::external::aruna::ArunaDataProviderDefinition>
-    for ArunaDataProviderDefinition
-{
-    fn from(value: crate::datasets::external::aruna::ArunaDataProviderDefinition) -> Self {
-        ArunaDataProviderDefinition {
-            r#type: Default::default(),
-            id: value.id.into(),
-            name: value.name,
-            description: value.description,
-            priority: value.priority,
-            api_url: value.api_url,
-            project_id: value.project_id,
-            api_token: SECRET_REPLACEMENT.to_string(),
-            filter_label: value.filter_label,
-            cache_ttl: value.cache_ttl.map(Into::into),
-        }
-    }
-}
-
 #[type_tag(value = "CopernicusDataspace")]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -1366,7 +1313,6 @@ impl From<crate::datasets::external::WildliveDataConnectorDefinition>
 #[schema(discriminator = "type")]
 #[serde(untagged)]
 pub enum TypedDataProviderDefinition {
-    ArunaDataProviderDefinition(ArunaDataProviderDefinition),
     CopernicusDataspaceDataProviderDefinition(CopernicusDataspaceDataProviderDefinition),
     DatasetLayerListingProviderDefinition(DatasetLayerListingProviderDefinition),
     EbvPortalDataProviderDefinition(EbvPortalDataProviderDefinition),
@@ -1384,7 +1330,6 @@ pub enum TypedDataProviderDefinition {
 impl From<TypedDataProviderDefinition> for crate::layers::external::TypedDataProviderDefinition {
     fn from(value: TypedDataProviderDefinition) -> Self {
         match value {
-            TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => crate::layers::external::TypedDataProviderDefinition::ArunaDataProviderDefinition(def.into()),
             TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(def) => crate::layers::external::TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(def.into()),
             TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(def) => crate::layers::external::TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(def.into()),
             TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => crate::layers::external::TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def.into()),
@@ -1404,7 +1349,6 @@ impl From<TypedDataProviderDefinition> for crate::layers::external::TypedDataPro
 impl From<crate::layers::external::TypedDataProviderDefinition> for TypedDataProviderDefinition {
     fn from(value: crate::layers::external::TypedDataProviderDefinition) -> Self {
         match value {
-            crate::layers::external::TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => TypedDataProviderDefinition::ArunaDataProviderDefinition(def.into()),
             crate::layers::external::TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(def) => TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(def.into()),
             crate::layers::external::TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(def) => TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(def.into()),
             crate::layers::external::TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def.into()),

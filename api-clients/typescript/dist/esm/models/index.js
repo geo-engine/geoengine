@@ -15,7 +15,6 @@ export * from './AggregationMean';
 export * from './AggregationMin';
 export * from './AggregationPercentileEstimate';
 export * from './AggregationSum';
-export * from './ArunaDataProviderDefinition';
 export * from './AttributeAggregateDef';
 export * from './AttributeAggregateType';
 export * from './AttributeFilter';

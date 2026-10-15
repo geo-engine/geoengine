@@ -6167,65 +6167,6 @@
           }
         }
       },
-      "ArunaDataProviderDefinition": {
-        "type": "object",
-        "required": [
-          "type",
-          "id",
-          "name",
-          "description",
-          "apiUrl",
-          "projectId",
-          "apiToken",
-          "filterLabel"
-        ],
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "Aruna"
-            ]
-          },
-          "id": {
-            "$ref": "#/components/schemas/DataProviderId"
-          },
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "priority": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int32"
-          },
-          "apiUrl": {
-            "type": "string"
-          },
-          "projectId": {
-            "type": "string"
-          },
-          "apiToken": {
-            "type": "string"
-          },
-          "filterLabel": {
-            "type": "string"
-          },
-          "cacheTtl": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/CacheTtlSeconds"
-              }
-            ]
-          }
-        }
-      },
       "AttributeAggregateDef": {
         "type": "object",
         "required": [
@@ -15911,9 +15852,6 @@
       "TypedDataProviderDefinition": {
         "oneOf": [
           {
-            "$ref": "#/components/schemas/ArunaDataProviderDefinition"
-          },
-          {
             "$ref": "#/components/schemas/CopernicusDataspaceDataProviderDefinition"
           },
           {
@@ -15953,7 +15891,6 @@
         "discriminator": {
           "propertyName": "type",
           "mapping": {
-            "Aruna": "#/components/schemas/ArunaDataProviderDefinition",
             "CopernicusDataspace": "#/components/schemas/CopernicusDataspaceDataProviderDefinition",
             "DatasetLayerListing": "#/components/schemas/DatasetLayerListingProviderDefinition",
             "EbvPortal": "#/components/schemas/EbvPortalDataProviderDefinition",

@@ -7,24 +7,20 @@
 Name | Type
 ------------ | -------------
 `type` | string
-`id` | string
 `name` | string
 `description` | string
-`priority` | number
-`apiUrl` | string
-`projectId` | string
-`apiToken` | string
-`filterLabel` | string
-`cacheTtl` | number
+`id` | string
 `stacUrl` | string
 `s3Url` | string
 `s3AccessKey` | string
 `s3SecretKey` | string
 `gdalConfig` | Array&lt;Array&lt;string&gt;&gt;
+`priority` | number
 `collections` | [Array&lt;DatasetLayerListingCollection&gt;](DatasetLayerListingCollection.md)
 `baseUrl` | string
 `data` | string
 `overviews` | string
+`cacheTtl` | number
 `vectorSpec` | [EdrVectorSpec](EdrVectorSpec.md)
 `discreteVrs` | Array&lt;string&gt;
 `provenance` | [Array&lt;Provenance&gt;](Provenance.md)
@@ -35,6 +31,7 @@ Name | Type
 `collectionApiAuthToken` | string
 `abcdDbConfig` | [DatabaseConnectionConfig](DatabaseConnectionConfig.md)
 `pangaeaUrl` | string
+`apiUrl` | string
 `stacApiRetries` | [StacApiRetries](StacApiRetries.md)
 `gdalRetries` | number
 `queryBuffer` | [StacQueryBuffer](StacQueryBuffer.md)
@@ -58,24 +55,20 @@ import type { TypedDataProviderDefinition } from '@geoengine/api-client'
 // TODO: Update the object below with actual values
 const example = {
   "type": null,
-  "id": null,
   "name": null,
   "description": null,
-  "priority": null,
-  "apiUrl": null,
-  "projectId": null,
-  "apiToken": null,
-  "filterLabel": null,
-  "cacheTtl": null,
+  "id": null,
   "stacUrl": null,
   "s3Url": null,
   "s3AccessKey": null,
   "s3SecretKey": null,
   "gdalConfig": null,
+  "priority": null,
   "collections": null,
   "baseUrl": null,
   "data": null,
   "overviews": null,
+  "cacheTtl": null,
   "vectorSpec": null,
   "discreteVrs": null,
   "provenance": null,
@@ -86,6 +79,7 @@ const example = {
   "collectionApiAuthToken": null,
   "abcdDbConfig": null,
   "pangaeaUrl": null,
+  "apiUrl": null,
   "stacApiRetries": null,
   "gdalRetries": null,
   "queryBuffer": null,

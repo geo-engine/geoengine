@@ -3,7 +3,6 @@ import {ProviderType} from '../provider-editor/provider-editor.component';
 import {TypedDataProviderDefinition} from '@geoengine/api-client';
 import {MatTab, MatTabChangeEvent, MatTabGroup} from '@angular/material/tabs';
 import {ProviderJsonInputComponent} from '../provider-json-input/provider-json-input.component';
-import {ArunaComponent} from '../provider-editor/forms/aruna/aruna.component';
 import {WildLiveComponent} from '../provider-editor/forms/wildlive/wildlive.component';
 import {FormsModule} from '@angular/forms';
 
@@ -12,7 +11,7 @@ import {FormsModule} from '@angular/forms';
     templateUrl: './provider-input.component.html',
     styleUrl: './provider-input.component.scss',
     changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [ProviderJsonInputComponent, ArunaComponent, WildLiveComponent, MatTabGroup, MatTab, FormsModule],
+    imports: [ProviderJsonInputComponent, WildLiveComponent, MatTabGroup, MatTab, FormsModule],
 })
 export class ProviderInputComponent {
     readonly providerType = input<ProviderType>(ProviderType.OTHER);
