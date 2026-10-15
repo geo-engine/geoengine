@@ -492,6 +492,7 @@ impl LayerCollectionProvider for StacDataProvider {
 
 #[cfg(test)]
 mod tests {
+    use super::super::StacDataProviderDefinition;
     use super::*;
     use geoengine_datatypes::dataset::DataProviderId;
     use geoengine_datatypes::primitives::{
@@ -503,18 +504,21 @@ mod tests {
     use geoengine_operators::engine::SpatialGridDescriptor;
 
     fn sample_provider() -> StacDataProvider {
-        StacDataProvider::new(
-            DataProviderId::new(),
-            "Sentinel 2 L2A from STAC".to_owned(),
-            String::new(),
-            "http://example.com".to_owned(),
-            "sentinel-2-l2a".to_owned(),
-            None,
-            TimeDimension::Regular(RegularTimeDimension::new_with_epoch_origin(TimeStep {
-                granularity: TimeGranularity::Days,
-                step: 1,
-            })),
-            vec![StacProviderDataset {
+        StacDataProvider::from_definition(StacDataProviderDefinition {
+            id: DataProviderId::new(),
+            name: "Sentinel 2 L2A from STAC".to_owned(),
+            description: String::new(),
+            api_url: "http://example.com".to_owned(),
+            collection_name: "sentinel-2-l2a".to_owned(),
+            s3_config: None,
+            authentication: None,
+            time_dimension: TimeDimension::Regular(RegularTimeDimension::new_with_epoch_origin(
+                TimeStep {
+                    granularity: TimeGranularity::Days,
+                    step: 1,
+                },
+            )),
+            datasets: vec![StacProviderDataset {
                 name: "Sentinel-2 L2A EPSG:32632 U16 10m".to_owned(),
                 description: String::new(),
                 data_type: geoengine_datatypes::raster::RasterDataType::U16,
@@ -527,24 +531,31 @@ mod tests {
                 ),
                 bands: vec![],
             }],
-            100_i64,
-            60,
-        )
+            priority: None,
+            page_limit: 100,
+            query_timeout_secs: 60,
+            cache_ttl_secs: None,
+            stac_grid: None,
+        })
+        .unwrap()
     }
 
     fn sample_provider_with_projection_variants() -> StacDataProvider {
-        StacDataProvider::new(
-            DataProviderId::new(),
-            "Sentinel 2 L2A from STAC".to_owned(),
-            String::new(),
-            "http://example.com".to_owned(),
-            "sentinel-2-l2a".to_owned(),
-            None,
-            TimeDimension::Regular(RegularTimeDimension::new_with_epoch_origin(TimeStep {
-                granularity: TimeGranularity::Days,
-                step: 1,
-            })),
-            vec![
+        StacDataProvider::from_definition(StacDataProviderDefinition {
+            id: DataProviderId::new(),
+            name: "Sentinel 2 L2A from STAC".to_owned(),
+            description: String::new(),
+            api_url: "http://example.com".to_owned(),
+            collection_name: "sentinel-2-l2a".to_owned(),
+            s3_config: None,
+            authentication: None,
+            time_dimension: TimeDimension::Regular(RegularTimeDimension::new_with_epoch_origin(
+                TimeStep {
+                    granularity: TimeGranularity::Days,
+                    step: 1,
+                },
+            )),
+            datasets: vec![
                 StacProviderDataset {
                     name: "Sentinel-2 L2A EPSG:32632 U16 10m".to_owned(),
                     description: String::new(),
@@ -594,9 +605,13 @@ mod tests {
                     bands: vec![],
                 },
             ],
-            100_i64,
-            60,
-        )
+            priority: None,
+            page_limit: 100,
+            query_timeout_secs: 60,
+            cache_ttl_secs: None,
+            stac_grid: None,
+        })
+        .unwrap()
     }
 
     #[test]

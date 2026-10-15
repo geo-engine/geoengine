@@ -42,6 +42,9 @@ pub struct StacDataProviderDefinition {
     /// Optional output cache lifetime; omitted values use the global cache default.
     #[serde(rename = "cacheTtlSecs", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub cache_ttl_secs: Option<Option<i32>>,
+    /// Target number of square search cells per dataset CRS projected area of use; omitted values use 512.
+    #[serde(rename = "stacGrid", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub stac_grid: Option<Option<Box<models::StacGrid>>>,
 }
 
 impl StacDataProviderDefinition {
@@ -61,6 +64,7 @@ impl StacDataProviderDefinition {
             query_timeout_secs: None,
             page_limit: None,
             cache_ttl_secs: None,
+            stac_grid: None,
         }
     }
 }

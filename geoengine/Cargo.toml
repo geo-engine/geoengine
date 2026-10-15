@@ -132,6 +132,7 @@ indoc = "2.0"
 itertools = "0.15"
 libloading = "0.9"
 lru = "0.18"
+moka = { version = "0.12.16", features = ["future"] }
 lz4_flex = "0.14"
 mime = "0.3"
 ndarray = { version = "0.17", features = ["approx"] }     # has to match with `ort`
