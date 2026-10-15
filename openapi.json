@@ -6333,7 +6333,7 @@
       },
       "AttributeSelectionNames": {
         "type": "object",
-        "description": "Selects the attributes with the given names.\n\nThe `values` are the names of the attributes in the order of their output.\nThey must contain at least one name and no duplicates.",
+        "description": "Selects the attributes with the given names.\n\nThe `values` are the names of the attributes.\nThey must contain at least one name and no duplicates.\nRaster bands are output in their order in the input raster, regardless of the order of `values`.\nVector columns are output in the order of `values`.",
         "required": [
           "type",
           "values"

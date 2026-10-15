@@ -1,7 +1,7 @@
 
 # AttributeSelectionNames
 
-Selects the attributes with the given names.  The `values` are the names of the attributes in the order of their output. They must contain at least one name and no duplicates.
+Selects the attributes with the given names.  The `values` are the names of the attributes. They must contain at least one name and no duplicates. Raster bands are output in their order in the input raster, regardless of the order of `values`. Vector columns are output in the order of `values`.
 
 ## Properties
 

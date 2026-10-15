@@ -95,8 +95,18 @@ mod tests {
     fn serialization() {
         let chart = MultiLineChart::new(
             vec![
-                ("S0".to_owned(), TimeInstance::from_millis_unchecked(0), Some(0.)).into(),
-                ("S1".to_owned(), TimeInstance::from_millis_unchecked(0), Some(2.)).into(),
+                (
+                    "S0".to_owned(),
+                    TimeInstance::from_millis_unchecked(0),
+                    Some(0.),
+                )
+                    .into(),
+                (
+                    "S1".to_owned(),
+                    TimeInstance::from_millis_unchecked(0),
+                    Some(2.),
+                )
+                    .into(),
                 (
                     "S0".to_owned(),
                     TimeInstance::from_millis_unchecked(1000),
