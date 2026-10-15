@@ -9,23 +9,23 @@ import {
     ReactiveFormsModule,
 } from '@angular/forms';
 import {combineLatest, first, from, map, mergeMap, Observable, of, Subject, takeUntil} from 'rxjs';
-import {BBoxDict, RasterResultDescriptorDict, SrsString, TimeIntervalDict, UUID} from '../../../backend/backend.model';
-import {BackendService} from '../../../backend/backend.service';
+import {BBoxDict, RasterResultDescriptorDict, UUID} from '../../../backend/backend.model';
 import {ProjectService} from '../../../project/project.service';
 import {SpatialReferenceService} from '../../../spatial-references/spatial-reference.service';
 import {
     Colorizer,
     ColorMapSelectorComponent,
     LinearGradient,
+    PlotsService,
     ALL_COLORMAPS,
     RasterLayer,
     RasterResultDescriptor,
     RasterSymbology,
     SingleBandRasterColorizer,
+    SpatialReference,
     statisticsFromPlotData,
     Time,
     TRANSPARENT,
-    UserService,
     VegaChartData,
     FxFlexDirective,
 } from '@geoengine/common';
@@ -58,8 +58,7 @@ export enum SymbologyCreationType {
 })
 export class SymbologyCreatorComponent implements OnInit, OnDestroy, ControlValueAccessor {
     protected readonly projectService = inject(ProjectService);
-    protected readonly userService = inject(UserService);
-    protected readonly backend = inject(BackendService);
+    protected readonly plotsService = inject(PlotsService);
     protected readonly spatialReferenceService = inject(SpatialReferenceService);
 
     AS_INPUT = SymbologyCreationType.AS_INPUT;
@@ -228,43 +227,45 @@ export class SymbologyCreatorComponent implements OnInit, OnDestroy, ControlValu
 
         const queryParams$: Observable<{
             bbox: BBoxDict;
-            crs: SrsString;
-            time: TimeIntervalDict;
-            spatialResolution: [number, number];
+            crs: SpatialReference;
+            time: Time;
+            spatialResolution: {x: number; y: number};
         }> = combineLatest([
             this.projectService
                 .getProcessingGraphMetaData(workflowId)
                 .pipe(map((resultDescriptor) => RasterResultDescriptor.fromDict(resultDescriptor as RasterResultDescriptorDict))),
             this.projectService.getTimeOnce(),
         ]).pipe(
-            mergeMap(([resultDescriptor, time]) =>
-                combineLatest([
-                    // if we don't know the bbox of the dataset, we use the projection's whole bbox for guessing the symbology
-                    // TODO: better use the screen extent?
-                    of(resultDescriptor.spatialGrid.bbox()),
-                    of(resultDescriptor.spatialReference),
-                    of(time),
-                ]),
-            ),
-            map(([bbox, crs, time]: [BBoxDict, SrsString, Time]) => {
-                // for sampling, we choose a reasonable resolution
-                // FIXME: changing the reslution does not imply that we do less work!
+            map(([resultDescriptor, time]) => {
+                // if we don't know the bbox of the dataset, we use the projection's whole bbox for guessing the symbology
+                // TODO: better use the screen extent?
+                const bbox = resultDescriptor.spatialGrid.bbox();
+
+                // for sampling, we choose a reasonable resolution, so that the backend reads coarser overviews
                 const NUM_PIXELS = 1024;
                 const xResolution = (bbox.upperRightCoordinate.x - bbox.lowerLeftCoordinate.x) / NUM_PIXELS;
                 const yResolution = (bbox.upperRightCoordinate.y - bbox.lowerLeftCoordinate.y) / NUM_PIXELS;
                 return {
                     bbox,
-                    crs,
-                    time: time.toDict(),
-                    spatialResolution: [xResolution, yResolution],
+                    crs: SpatialReference.fromSrsString(resultDescriptor.spatialReference),
+                    time,
+                    spatialResolution: {x: xResolution, y: yResolution},
                 };
             }),
         );
 
-        return combineLatest([statistics$, queryParams$, this.userService.getSessionOnce()]).pipe(
+        return combineLatest([statistics$, queryParams$]).pipe(
             first(),
-            mergeMap(([{statisticsWorkflow, bandName}, queryParams, session]) =>
-                this.backend.getPlot(statisticsWorkflow, queryParams, session.sessionToken).pipe(map((plot) => ({plot, bandName}))),
+            mergeMap(([{statisticsWorkflow, bandName}, queryParams]) =>
+                from(
+                    this.plotsService.getPlot(
+                        statisticsWorkflow,
+                        queryParams.bbox,
+                        queryParams.time,
+                        queryParams.spatialResolution,
+                        queryParams.crs,
+                    ),
+                ).pipe(map((plot) => ({plot, bandName}))),
             ),
             map(({plot, bandName}) => {
                 if (plot.plotType !== 'Statistics') {

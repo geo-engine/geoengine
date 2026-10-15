@@ -10,7 +10,7 @@ Method | HTTP request | Description
 
 ## get_plot_handler
 
-> models::WrappedPlotOutput get_plot_handler(bbox, time, spatial_resolution, id, crs)
+> models::WrappedPlotOutput get_plot_handler(bbox, time, id, crs, spatial_resolution)
 Generates a plot.
 
 # Example  1. Upload the file `plain_data.csv` with the following content:  ```csv a 1 2 ``` 2. Create a dataset from it using the \"Plain Data\" example at `/dataset`. 3. Create a statistics processing graph using the \"Statistics Plot\" example at `/processingGraphs`. 4. Generate the plot with this handler.
@@ -22,9 +22,9 @@ Name | Type | Description  | Required | Notes
 ------------- | ------------- | ------------- | ------------- | -------------
 **bbox** | **String** |  | [required] |
 **time** | **String** |  | [required] |
-**spatial_resolution** | **String** |  | [required] |
 **id** | **uuid::Uuid** | Processing graph id | [required] |
 **crs** | Option<**String**> |  |  |
+**spatial_resolution** | Option<**String**> | Optional resolution (in the units of `crs`) at which the plot may be computed.  If set, raster inputs are read at the coarsest overview level that is not coarser than this resolution, which speeds up plots of large areas at the cost of exactness. If omitted, raster inputs are read at their native resolution. |  |
 
 ### Return type
 

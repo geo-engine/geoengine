@@ -3,7 +3,6 @@ import {HttpClient, HttpEvent, HttpHeaders, HttpParams} from '@angular/common/ht
 import {Observable, Subject} from 'rxjs';
 import {CoreConfig} from '../config.service';
 import {
-    BBoxDict,
     CreateProjectResponseDict,
     ProjectFilterDict,
     ProjectListingDict,
@@ -11,10 +10,8 @@ import {
     ProjectPermissionDict,
     STRectangleDict,
     SrsString,
-    TimeIntervalDict,
     TimeStepDict,
     UUID,
-    PlotDataDict,
     UploadResponseDict,
     AutoCreateDatasetDict,
     DatasetNameResponseDict,
@@ -197,29 +194,6 @@ export class BackendService {
         params.set('propertyName', request.propertyName);
 
         return this.http.get<Record<string, unknown>>(`${this.config.API_URL}/wfs/${request.workflowId}`, {
-            headers: BackendService.authorizationHeader(sessionId),
-            params: params.httpParams,
-        });
-    }
-
-    getPlot(
-        workflowId: UUID,
-        request: {
-            bbox: BBoxDict;
-            crs: SrsString;
-            time: TimeIntervalDict;
-            spatialResolution: [number, number];
-        },
-        sessionId: UUID,
-    ): Observable<PlotDataDict> {
-        const params = new NullDiscardingHttpParams();
-
-        params.setMapped('bbox', request.bbox, (bbox) => bboxDictToExtent(bbox).join(','));
-        params.set('crs', request.crs);
-        params.setMapped('time', request.time, (time) => `${unixTimestampToIsoString(time.start)}/${unixTimestampToIsoString(time.end)}`);
-        params.setMapped('spatialResolution', request.spatialResolution, (resolution) => resolution.join(','));
-
-        return this.http.get<PlotDataDict>(this.config.API_URL + `/plot/${workflowId}`, {
             headers: BackendService.authorizationHeader(sessionId),
             params: params.httpParams,
         });

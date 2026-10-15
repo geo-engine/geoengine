@@ -8,7 +8,7 @@ use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::error;
 use crate::error::Error;
 use crate::optimization::OptimizationError;
-use crate::plot::util::masked_pixels_in_query;
+use crate::plot::util::{masked_pixels_in_query, optimize_raster_plot_source};
 use crate::util::Result;
 use crate::util::input::RasterOrVectorOperator;
 use async_trait::async_trait;
@@ -226,9 +226,10 @@ impl InitializedPlotOperator for InitializedClassHistogram<RasterBandSource> {
                 column_name: self.column_name.clone(),
             },
             sources: SingleRasterOrVectorSource {
-                source: RasterOrVectorOperator::Raster(
-                    self.source.raster.optimize(target_resolution)?,
-                ),
+                source: RasterOrVectorOperator::Raster(optimize_raster_plot_source(
+                    self.source.raster.as_ref(),
+                    target_resolution,
+                )?),
             },
         }
         .boxed())

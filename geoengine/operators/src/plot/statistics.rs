@@ -8,7 +8,10 @@ use crate::engine::{
 use crate::error;
 use crate::error::Error;
 use crate::optimization::OptimizationError;
-use crate::plot::util::{SelectedBand, masked_pixels_in_query, pixel_count_in_query, select_bands};
+use crate::plot::util::{
+    SelectedBand, masked_pixels_in_query, optimize_raster_plot_source, pixel_count_in_query,
+    select_bands,
+};
 use crate::util::Result;
 use crate::util::input::RasterOrVectorOperator;
 use crate::util::number_statistics::NumberStatistics;
@@ -279,7 +282,10 @@ impl InitializedPlotOperator
             params: self
                 .optimized_params(self.columns.iter().map(|band| band.name.clone()).collect()),
             sources: SingleRasterOrVectorSource {
-                source: RasterOrVectorOperator::Raster(self.source.optimize(target_resolution)?),
+                source: RasterOrVectorOperator::Raster(optimize_raster_plot_source(
+                    self.source.as_ref(),
+                    target_resolution,
+                )?),
             },
         }
         .boxed())

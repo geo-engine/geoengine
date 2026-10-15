@@ -13,9 +13,9 @@ import type { WrappedPlotOutput } from '../models/index';
 export interface GetPlotHandlerRequest {
     bbox: string;
     time: string;
-    spatialResolution: string;
     id: string;
     crs?: string | null;
+    spatialResolution?: string | null;
 }
 /**
  *

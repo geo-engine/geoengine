@@ -8,7 +8,9 @@ use crate::engine::{
 use crate::error;
 use crate::error::Error;
 use crate::optimization::OptimizationError;
-use crate::plot::util::{masked_pixels_in_query, pixel_count_in_query};
+use crate::plot::util::{
+    masked_pixels_in_query, optimize_raster_plot_source, pixel_count_in_query,
+};
 use crate::string_token;
 use crate::util::Result;
 use crate::util::input::RasterOrVectorOperator;
@@ -249,7 +251,10 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedRasterO
         Ok(Histogram {
             params: self.params.clone(),
             sources: SingleRasterOrVectorSource {
-                source: RasterOrVectorOperator::Raster(self.source.optimize(target_resolution)?),
+                source: RasterOrVectorOperator::Raster(optimize_raster_plot_source(
+                    self.source.as_ref(),
+                    target_resolution,
+                )?),
             },
         }
         .boxed())

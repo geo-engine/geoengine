@@ -44,9 +44,9 @@ class PlotsApi:
         self,
         bbox: StrictStr,
         time: StrictStr,
-        spatial_resolution: StrictStr,
         id: Annotated[UUID, Field(description="Processing graph id")],
         crs: Optional[StrictStr] = None,
+        spatial_resolution: Annotated[Optional[StrictStr], Field(description="Optional resolution (in the units of `crs`) at which the plot may be computed.  If set, raster inputs are read at the coarsest overview level that is not coarser than this resolution, which speeds up plots of large areas at the cost of exactness. If omitted, raster inputs are read at their native resolution.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -68,12 +68,12 @@ class PlotsApi:
         :type bbox: str
         :param time: (required)
         :type time: str
-        :param spatial_resolution: (required)
-        :type spatial_resolution: str
         :param id: Processing graph id (required)
         :type id: UUID
         :param crs:
         :type crs: str
+        :param spatial_resolution: Optional resolution (in the units of `crs`) at which the plot may be computed.  If set, raster inputs are read at the coarsest overview level that is not coarser than this resolution, which speeds up plots of large areas at the cost of exactness. If omitted, raster inputs are read at their native resolution.
+        :type spatial_resolution: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -99,9 +99,9 @@ class PlotsApi:
         _param = self._get_plot_handler_serialize(
             bbox=bbox,
             time=time,
-            spatial_resolution=spatial_resolution,
             id=id,
             crs=crs,
+            spatial_resolution=spatial_resolution,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -127,9 +127,9 @@ class PlotsApi:
         self,
         bbox: StrictStr,
         time: StrictStr,
-        spatial_resolution: StrictStr,
         id: Annotated[UUID, Field(description="Processing graph id")],
         crs: Optional[StrictStr] = None,
+        spatial_resolution: Annotated[Optional[StrictStr], Field(description="Optional resolution (in the units of `crs`) at which the plot may be computed.  If set, raster inputs are read at the coarsest overview level that is not coarser than this resolution, which speeds up plots of large areas at the cost of exactness. If omitted, raster inputs are read at their native resolution.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -151,12 +151,12 @@ class PlotsApi:
         :type bbox: str
         :param time: (required)
         :type time: str
-        :param spatial_resolution: (required)
-        :type spatial_resolution: str
         :param id: Processing graph id (required)
         :type id: UUID
         :param crs:
         :type crs: str
+        :param spatial_resolution: Optional resolution (in the units of `crs`) at which the plot may be computed.  If set, raster inputs are read at the coarsest overview level that is not coarser than this resolution, which speeds up plots of large areas at the cost of exactness. If omitted, raster inputs are read at their native resolution.
+        :type spatial_resolution: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -182,9 +182,9 @@ class PlotsApi:
         _param = self._get_plot_handler_serialize(
             bbox=bbox,
             time=time,
-            spatial_resolution=spatial_resolution,
             id=id,
             crs=crs,
+            spatial_resolution=spatial_resolution,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -210,9 +210,9 @@ class PlotsApi:
         self,
         bbox: StrictStr,
         time: StrictStr,
-        spatial_resolution: StrictStr,
         id: Annotated[UUID, Field(description="Processing graph id")],
         crs: Optional[StrictStr] = None,
+        spatial_resolution: Annotated[Optional[StrictStr], Field(description="Optional resolution (in the units of `crs`) at which the plot may be computed.  If set, raster inputs are read at the coarsest overview level that is not coarser than this resolution, which speeds up plots of large areas at the cost of exactness. If omitted, raster inputs are read at their native resolution.")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -234,12 +234,12 @@ class PlotsApi:
         :type bbox: str
         :param time: (required)
         :type time: str
-        :param spatial_resolution: (required)
-        :type spatial_resolution: str
         :param id: Processing graph id (required)
         :type id: UUID
         :param crs:
         :type crs: str
+        :param spatial_resolution: Optional resolution (in the units of `crs`) at which the plot may be computed.  If set, raster inputs are read at the coarsest overview level that is not coarser than this resolution, which speeds up plots of large areas at the cost of exactness. If omitted, raster inputs are read at their native resolution.
+        :type spatial_resolution: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -265,9 +265,9 @@ class PlotsApi:
         _param = self._get_plot_handler_serialize(
             bbox=bbox,
             time=time,
-            spatial_resolution=spatial_resolution,
             id=id,
             crs=crs,
+            spatial_resolution=spatial_resolution,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -288,9 +288,9 @@ class PlotsApi:
         self,
         bbox,
         time,
-        spatial_resolution,
         id,
         crs,
+        spatial_resolution,
         _request_auth,
         _content_type,
         _headers,

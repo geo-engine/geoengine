@@ -19,7 +19,6 @@ import {MatCardModule} from '@angular/material/card';
 import {firstValueFrom, lastValueFrom} from 'rxjs';
 import {
     AutoCreateDatasetDict,
-    BackendService,
     CoreModule,
     DatasetService,
     Extent,
@@ -37,10 +36,12 @@ import {
     LinearGradient,
     NotificationService,
     PaletteColorizer,
+    PlotsService,
     PolygonSymbology,
     RasterLayer,
     RasterSymbology,
     SingleBandRasterColorizer,
+    SpatialReference,
     Time,
     TRANSPARENT,
     UserService,
@@ -91,7 +92,7 @@ export class DashboardComponent implements AfterViewInit {
     private readonly notificationService = inject(NotificationService);
     private readonly datasetService = inject(DatasetService);
     private readonly changeDetectorRef = inject(ChangeDetectorRef);
-    private readonly backend = inject(BackendService);
+    private readonly plotsService = inject(PlotsService);
 
     indicators = INDICATORS;
 
@@ -305,8 +306,6 @@ export class DashboardComponent implements AfterViewInit {
         this.plotLoading.set(true);
 
         const workflowId = await this.projectService.registerProcessingGraph(workflow);
-        const sessionId = await firstValueFrom(this.userService.getSessionTokenForRequest());
-
         const time = await this.projectService.getTimeOnce();
 
         // reproject selectedBbox to EPSG:32632 using proj4
@@ -318,21 +317,16 @@ export class DashboardComponent implements AfterViewInit {
         const ur = proj4('EPSG:4326', projString, [selectedBBox[2], selectedBBox[3]]);
         const extent = [ll[0], ll[1], ur[0], ur[1]];
 
-        const plot = await firstValueFrom(
-            this.backend.getPlot(
-                workflowId,
-                {
-                    time: {
-                        start: time.start.unix() * 1_000,
-                        end: time.end.unix() * 1_000 + 1 /* add one millisecond to include the end time */,
-                    },
-                    bbox: extentToBboxDict([extent[0], extent[1], extent[2], extent[3]]),
-                    // always use WGS 84 for computing the plot
-                    crs: 'EPSG:32632',
-                    spatialResolution: [10, 10],
-                },
-                sessionId,
-            ),
+        const plot = await this.plotsService.getPlot(
+            workflowId,
+            extentToBboxDict([extent[0], extent[1], extent[2], extent[3]]),
+            Time.fromDict({
+                start: time.start.unix() * 1_000,
+                end: time.end.unix() * 1_000 + 1 /* add one millisecond to include the end time */,
+            }),
+            undefined,
+            // always use UTM zone 32N for computing the plot
+            SpatialReference.fromSrsString('EPSG:32632'),
         );
 
         this.plotData.set(plot.data);

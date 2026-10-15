@@ -1793,4 +1793,65 @@ mod tests {
             .await
             .unwrap();
     }
+
+    #[tokio::test]
+    async fn it_snaps_plot_resolution_to_overview_levels() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
+
+        let histogram_initialized = Histogram {
+            params: HistogramParams {
+                attribute_name: "ndvi".to_string(),
+                bounds: HistogramBounds::Values {
+                    min: 0.0,
+                    max: 255.0,
+                },
+                buckets: HistogramBuckets::Number { value: 8 },
+                interactive: false,
+            },
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Raster(
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            data: ndvi_id.clone(),
+                            overview_level: None,
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .await
+        .unwrap();
+
+        // the native resolution of the NDVI dataset is 0.1
+        for (x, y, expected_overview_level) in [
+            // finer than native resolution
+            (0.05, 0.05, 0),
+            // not a multiple of the native resolution
+            (0.3, 0.3, 2),
+            (0.7, 0.7, 4),
+            // differing resolutions per axis
+            (0.8, 0.2, 2),
+        ] {
+            let target_resolution = SpatialResolution::new(x, y).unwrap();
+            let histogram_optimized = histogram_initialized.optimize(target_resolution).unwrap();
+
+            let json = serde_json::to_value(&histogram_optimized).unwrap();
+
+            assert_eq!(
+                json["sources"]["source"]["params"]["overviewLevel"],
+                serde_json::json!(expected_overview_level),
+                "target resolution: {target_resolution:?}"
+            );
+
+            histogram_optimized
+                .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                .await
+                .unwrap();
+        }
+    }
 }

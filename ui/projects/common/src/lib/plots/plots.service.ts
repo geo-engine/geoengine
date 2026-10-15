@@ -21,21 +21,34 @@ export class PlotsService {
         });
     }
 
+    /**
+     * Computes a plot.
+     *
+     * If `spatialResolution` is set, raster inputs are read at a coarser overview level, which is faster but less exact.
+     * Use this only where an approximation suffices, e.g., for deriving a colorizer.
+     * Otherwise, raster inputs are read at their native resolution.
+     *
+     * Aborting `signal` cancels the request, which also stops the computation in the backend.
+     */
     async getPlot(
         id: UUID,
         bbox: BoundingBox2D,
         time: Time,
-        spatialResolution: {x: number; y: number},
+        spatialResolution?: {x: number; y: number},
         crs?: SpatialReference,
+        signal?: AbortSignal,
     ): Promise<WrappedPlotOutput> {
         const plotApi = await firstValueFrom(this.plotApi);
 
-        return plotApi.getPlotHandler({
-            bbox: bboxDictToExtent(bbox).join(','),
-            time: time.asRequestString(),
-            spatialResolution: `${spatialResolution.x},${spatialResolution.y}`,
-            id,
-            crs: crs?.srsString,
-        });
+        return plotApi.getPlotHandler(
+            {
+                bbox: bboxDictToExtent(bbox).join(','),
+                time: time.asRequestString(),
+                spatialResolution: spatialResolution ? `${spatialResolution.x},${spatialResolution.y}` : undefined,
+                id,
+                crs: crs?.srsString,
+            },
+            {signal},
+        );
     }
 }

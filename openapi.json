@@ -3342,9 +3342,13 @@
           {
             "name": "spatialResolution",
             "in": "query",
-            "required": true,
+            "description": "Optional resolution (in the units of `crs`) at which the plot may be computed.\n\nIf set, raster inputs are read at the coarsest overview level that is not coarser than\nthis resolution, which speeds up plots of large areas at the cost of exactness.\nIf omitted, raster inputs are read at their native resolution.",
+            "required": false,
             "schema": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "example": "0.1,0.1"
           },
