@@ -8,21 +8,26 @@ description: Add a new PostgreSQL schema or data migration to the Geo Engine bac
 Migrations live in `geoengine/services/src/contexts/migrations/` (paths below are relative to it unless they start with `geoengine/`).
 They run automatically on server start inside a single transaction; there is no manual migration step.
 
-Use the user's migration name, or derive one from the task or changes and state it. Ask for a short description only if neither works.
+Use the user's migration name, or derive one from the task or changes and state it.
+Ask for a short description only if neither works.
 
 ## 1. Name and number
 
 - Name: `snake_case`, short, describing the change (e.g. `stac_provider_cache_ttl`).
 - Number: highest existing `migration_NNNN_*` file plus one, zero-padded to 4 digits (enforced by the `versions_follow_schema` test).
-- Files: `migration_NNNN_<name>.rs` and, for SQL, `migration_NNNN_<name>.sql`. Struct: `MigrationNNNN<CamelCaseName>`. Version string: `"NNNN_<name>"`.
+- Files: `migration_NNNN_<name>.rs` and, for SQL, `migration_NNNN_<name>.sql`.
+  Struct: `MigrationNNNN<CamelCaseName>`.
+  Version string: `"NNNN_<name>"`.
 - `prev_version` is the last entry of `all_migrations()` in `mod.rs`.
 
 ## 2. Write the migration
 
 Pick the shape that fits:
 
-- **Pure DDL/SQL**: `.rs` + `.sql`, the `.rs` runs `tx.batch_execute(include_str!("migration_NNNN_<name>.sql"))`. Template: `migration_0033_gdal_multiband_cache_ttl.rs`.
-- **Needs Rust values** (role ids, permissions, computed data): logic in the `.rs` with `tx.execute`/`tx.prepare`. Example: `migration_0021_default_permissions_for_existing_providers.rs`.
+- **Pure DDL/SQL**: `.rs` + `.sql`, the `.rs` runs `tx.batch_execute(include_str!("migration_NNNN_<name>.sql"))`.
+  Template: `migration_0033_gdal_multiband_cache_ttl.rs`.
+- **Needs Rust values** (role ids, permissions, computed data): logic in the `.rs` with `tx.execute`/`tx.prepare`.
+  Example: `migration_0021_default_permissions_for_existing_providers.rs`.
 
 Put a `///` doc comment on the struct that says what the migration changes and why.
 
@@ -54,9 +59,11 @@ Grep for the type name, e.g. `geoengine/services/src/contexts/db_types.rs` or `g
 
 - **Derive** `ToSql`/`FromSql` (with `#[postgres(name = "…")]`) directly on the Rust type if it maps 1:1: a struct whose fields match the composite type, or a fieldless enum that maps to a PostgreSQL enum (e.g. `FeatureDataType`).
 - **Delegate** if it does not: enums with data (PostgreSQL has no sum types), or types whose shape differs or that need validation on read.
-  Add a `…DbType` struct that derives the traits, usually with a discriminator enum and `Option<…>` fields per variant, implement `From<&T> for TDbType` and `TryFrom<TDbType> for T`, and call `delegate_from_to_sql!(T, TDbType)`. Example: `ColorParamDbType` in `geoengine/services/src/contexts/db_types.rs`.
+  Add a `…DbType` struct that derives the traits, usually with a discriminator enum and `Option<…>` fields per variant, implement `From<&T> for TDbType` and `TryFrom<TDbType> for T`, and call `delegate_from_to_sql!(T, TDbType)`.
+  Example: `ColorParamDbType` in `geoengine/services/src/contexts/db_types.rs`.
 
-Field names must match the column or attribute names. New nullable fields are `Option<…>`.
+Field names must match the column or attribute names.
+New nullable fields are `Option<…>`.
 Then fix the code that builds or reads these types (`From`/`TryFrom` impls, inserts and queries).
 
 ## 6. Tests
@@ -87,5 +94,6 @@ If Postgres is not available, say so and do not claim the migration was verified
 
 ## Don'ts
 
-- Never edit, renumber or delete a migration that is already on `main`. Fix mistakes with a new migration.
+- Never edit, renumber or delete a migration that is already on `main`.
+  Fix mistakes with a new migration.
 - Never hand-edit `migration_0015_snapshot.sql`.
