@@ -56,7 +56,7 @@ Supporting crates: `expression` (used by `operators` and `services`), `macros` (
   `engine/` defines the operator lifecycle: serializable operator definitions (`RasterOperator`/`VectorOperator`/`PlotOperator`, combined in `TypedOperator`) are initialized against an `ExecutionContext` (which yields result descriptors) and then produce query processors that return async streams of tiles or feature chunks.
   Implementations live in `source/` (GDAL, OGR, CSV), `processing/`, `plot/` and `adapters/` (stream combinators).
   There is also `cache/` and `machine_learning/` (ONNX via `ort`).
-  GDAL reads can run out-of-process through the `gdalsource-process` binary (`src/bin/`), managed by a process pool (`[gdal_process_pool]` settings).
+  GDAL reads must run out-of-process through the `gdalsource-process` binary (`src/bin/`), managed by a process pool (`[gdal_process_pool]` settings).
 - **`expression`**: user expressions are compiled to Rust **at runtime** and dynamically linked.
   `expression/deps-workspace` pins the dependencies for that compilation and must stay in sync with the workspace (`geo`, `geo-types`, …).
   Update it with `.scripts/update-expression-deps.rs`.
