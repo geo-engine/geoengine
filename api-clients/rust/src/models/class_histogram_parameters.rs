@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 /// ClassHistogramParameters : The parameter spec for `ClassHistogram`.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ClassHistogramParameters {
-    /// The name of the attribute making up the x-axis of the histogram. Must be set for a vector sources, must not be set for rasters.
+    /// The name of the attribute or raster band making up the x-axis of the histogram. Must be set for vector sources. For raster sources, it defaults to the first band.
     #[serde(rename = "columnName", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub column_name: Option<Option<String>>,
 }

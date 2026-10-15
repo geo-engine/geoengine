@@ -64,6 +64,8 @@ export * from './lib/layer-collections/layer-collection.model';
 export * from './lib/operators/datatype.model';
 export * from './lib/operators/result-type.model';
 export * from './lib/plots/plot.model';
+export * from './lib/plots/statistics';
+export * from './lib/plots/plot-data';
 export * from './lib/spatial-references/spatial-reference.model';
 export * from './lib/symbology/symbology.model';
 export * from './lib/time/time.model';

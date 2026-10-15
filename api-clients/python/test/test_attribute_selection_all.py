@@ -14,10 +14,10 @@
 
 import unittest
 
-from geoengine_api_client.models.multiple_raster_or_single_vector_operator import MultipleRasterOrSingleVectorOperator
+from geoengine_api_client.models.attribute_selection_all import AttributeSelectionAll
 
-class TestMultipleRasterOrSingleVectorOperator(unittest.TestCase):
-    """MultipleRasterOrSingleVectorOperator unit test stubs"""
+class TestAttributeSelectionAll(unittest.TestCase):
+    """AttributeSelectionAll unit test stubs"""
 
     def setUp(self):
         pass
@@ -25,24 +25,26 @@ class TestMultipleRasterOrSingleVectorOperator(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def make_instance(self, include_optional) -> MultipleRasterOrSingleVectorOperator:
-        """Test MultipleRasterOrSingleVectorOperator
+    def make_instance(self, include_optional) -> AttributeSelectionAll:
+        """Test AttributeSelectionAll
             include_optional is a boolean, when False only required
             params are included, when True both required and
             optional params are included """
-        # uncomment below to create an instance of `MultipleRasterOrSingleVectorOperator`
+        # uncomment below to create an instance of `AttributeSelectionAll`
         """
-        model = MultipleRasterOrSingleVectorOperator()
+        model = AttributeSelectionAll()
         if include_optional:
-            return MultipleRasterOrSingleVectorOperator(
+            return AttributeSelectionAll(
+                type = 'all'
             )
         else:
-            return MultipleRasterOrSingleVectorOperator(
+            return AttributeSelectionAll(
+                type = 'all',
         )
         """
 
-    def testMultipleRasterOrSingleVectorOperator(self):
-        """Test MultipleRasterOrSingleVectorOperator"""
+    def testAttributeSelectionAll(self):
+        """Test AttributeSelectionAll"""
         # inst_req_only = self.make_instance(include_optional=False)
         # inst_req_and_optional = self.make_instance(include_optional=True)
 

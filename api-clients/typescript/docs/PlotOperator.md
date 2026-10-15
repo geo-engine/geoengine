@@ -9,7 +9,7 @@ Name | Type
 ------------ | -------------
 `type` | string
 `params` | [StatisticsParameters](StatisticsParameters.md)
-`sources` | [MultipleRasterOrSingleVectorSource](MultipleRasterOrSingleVectorSource.md)
+`sources` | [SingleRasterOrVectorSource](SingleRasterOrVectorSource.md)
 
 ## Example
 

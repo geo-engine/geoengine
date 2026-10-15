@@ -5,20 +5,23 @@ title: BoxPlot
 The `BoxPlot` is a _plot operator_ that computes a box plot over
 
 - a selection of numerical columns of a single vector dataset, or
-- multiple raster datasets.
+- a selection of bands of a single raster dataset.
 
 Thereby, the operator considers all data in the given query rectangle.
+For raster data, these are the pixels that intersect the query rectangle.
 
 The boxes of the plot span the 1st and 3rd quartile and highlight the median.
-The whiskers indicate the minimum and maximum values of the corresponding attribute or raster.
+The whiskers indicate the minimum and maximum values of the corresponding attribute or band.
 
 ## Errors
 
 The operator returns an error in the following cases.
 
-- Vector data: The `attribute` for one of the given `columnNames` is not numeric.
-- Vector data: The `attribute` for one of the given `columnNames` does not exist.
-- Raster data: The length of the `columnNames` parameter does not match the number of input rasters.
+- Vector data: `attributes` is `all`.
+- Vector data: One of the selected `attributes` is not numeric.
+- Vector data: One of the selected `attributes` does not exist.
+- Raster data: One of the selected `attributes` (bands) does not exist.
+- Raster data: More than 8 bands are selected.
 
 ## Notes
 
@@ -33,15 +36,15 @@ Volume 28 (October), Number 10, 1985, p. 1076-1085.
 
 ## Parameters
 
-| Name        | Type  | Description                                                                                                                                                                                                                                                                                                                                                                   | Examples                                    |
-| ----------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| columnNames | array | ## Vector Data<br>The names of the attributes to generate boxes for.<br><br>## Raster Data<br>_Optional_: An alias for each input source.<br>The operator will automatically name the boxes `Raster-1`, `Raster-2`, ... if this parameter is empty.<br>If aliases are given, the number of aliases must match the number of input rasters.<br>Otherwise an error is returned. | `["temperature","humidity"]`<br>`["A","B"]` |
+| Name       | Type               | Description                                                                                                                                                              | Examples                                                                            |
+| ---------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| attributes | AttributeSelection | The attributes to generate boxes for.<br>For vector data, these are numeric columns and must be given by name.<br>For raster data, these are bands and default to `all`. | `{"type":"names","values":["ndvi"]}`<br>`{"type":"names","values":["red","green"]}` |
 
 ## Sources
 
-| Name   | Type                                 | Description                                                         |
-| ------ | ------------------------------------ | ------------------------------------------------------------------- |
-| source | MultipleRasterOrSingleVectorOperator | It is either a set of `RasterOperator` or a single `VectorOperator` |
+| Name   | Type                         | Description                                                         |
+| ------ | ---------------------------- | ------------------------------------------------------------------- |
+| source | SingleRasterOrVectorOperator | It is either a single `RasterOperator` or a single `VectorOperator` |
 
 ## Examples
 
@@ -49,7 +52,10 @@ Volume 28 (October), Number 10, 1985, p. 1076-1085.
 {
     "type": "BoxPlot",
     "params": {
-        "columnNames": ["x", "y"]
+        "attributes": {
+            "type": "names",
+            "values": ["x", "y"]
+        }
     },
     "sources": {
         "source": {
@@ -66,23 +72,18 @@ Volume 28 (October), Number 10, 1985, p. 1076-1085.
 {
     "type": "BoxPlot",
     "params": {
-        "columnNames": ["A", "B"]
+        "attributes": {
+            "type": "names",
+            "values": ["red", "green"]
+        }
     },
     "sources": {
-        "source": [
-            {
-                "type": "GdalSource",
-                "params": {
-                    "data": "ndvi"
-                }
-            },
-            {
-                "type": "GdalSource",
-                "params": {
-                    "data": "temperature"
-                }
+        "source": {
+            "type": "GdalSource",
+            "params": {
+                "data": "sentinel2"
             }
-        ]
+        }
     }
 }
 ```

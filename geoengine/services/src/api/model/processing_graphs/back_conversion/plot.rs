@@ -84,20 +84,17 @@ impl TryFrom<&OperatorsBoxPlot> for BoxPlot {
         Ok(Self {
             r#type: Default::default(),
             params: BoxPlotParameters {
-                column_names: value.params.column_names.clone(),
+                attributes: value.params.column_names.clone().try_into()?,
             },
-            sources: crate::api::model::processing_graphs::source_parameters::MultipleRasterOrSingleVectorSource {
+            sources: crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorSource {
                 source: match &value.sources.source {
-                    geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster(rasters) => {
-                        crate::api::model::processing_graphs::source_parameters::MultipleRasterOrSingleVectorOperator::Raster(
-                            rasters
-                                .iter()
-                                .map(|raster| raster_operator_from_runtime(raster.as_ref()))
-                                .collect::<anyhow::Result<Vec<_>>>()?,
+                    geoengine_operators::util::input::RasterOrVectorOperator::Raster(raster) => {
+                        crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorOperator::Raster(
+                            raster_operator_from_runtime(raster.as_ref())?,
                         )
                     }
-                    geoengine_operators::util::input::MultiRasterOrVectorOperator::Vector(vector) => {
-                        crate::api::model::processing_graphs::source_parameters::MultipleRasterOrSingleVectorOperator::Vector(
+                    geoengine_operators::util::input::RasterOrVectorOperator::Vector(vector) => {
+                        crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorOperator::Vector(
                             vector_operator_from_runtime(vector.as_ref())?,
                         )
                     }
@@ -227,6 +224,7 @@ impl TryFrom<&OperatorsMeanRasterPixelValuesOverTime> for MeanRasterPixelValuesO
                     }
                 },
                 area: value.params.area,
+                attributes: value.params.band_names.clone().try_into()?,
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
                 raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
@@ -281,21 +279,18 @@ impl TryFrom<&OperatorsStatistics> for Statistics {
         Ok(Self {
             r#type: Default::default(),
             params: StatisticsParameters {
-                column_names: value.params.column_names.clone(),
+                attributes: value.params.column_names.clone().try_into()?,
                 percentiles: value.params.percentiles.clone(),
             },
-            sources: crate::api::model::processing_graphs::source_parameters::MultipleRasterOrSingleVectorSource {
+            sources: crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorSource {
                 source: match &value.sources.source {
-                    geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster(rasters) => {
-                        crate::api::model::processing_graphs::source_parameters::MultipleRasterOrSingleVectorOperator::Raster(
-                            rasters
-                                .iter()
-                                .map(|raster| raster_operator_from_runtime(raster.as_ref()))
-                                .collect::<anyhow::Result<Vec<_>>>()?,
+                    geoengine_operators::util::input::RasterOrVectorOperator::Raster(raster) => {
+                        crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorOperator::Raster(
+                            raster_operator_from_runtime(raster.as_ref())?,
                         )
                     }
-                    geoengine_operators::util::input::MultiRasterOrVectorOperator::Vector(vector) => {
-                        crate::api::model::processing_graphs::source_parameters::MultipleRasterOrSingleVectorOperator::Vector(
+                    geoengine_operators::util::input::RasterOrVectorOperator::Vector(vector) => {
+                        crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorOperator::Vector(
                             vector_operator_from_runtime(vector.as_ref())?,
                         )
                     }
@@ -311,8 +306,8 @@ mod tests {
     use geoengine_datatypes::dataset::NamedData;
     use geoengine_operators::{
         engine::{
-            MultipleRasterOrSingleVectorSource, PlotOperator as OperatorsPlotOperator,
-            SingleRasterOrVectorSource, SingleRasterSource, SingleVectorSource,
+            PlotOperator as OperatorsPlotOperator, SingleRasterOrVectorSource, SingleRasterSource,
+            SingleVectorSource,
         },
         mock::{MockPointSource, MockPointSourceParams, SpatialBoundsDerive},
         plot::{
@@ -330,7 +325,7 @@ mod tests {
             GdalSource as OperatorsGdalSource,
             GdalSourceParameters as OperatorsGdalSourceParameters,
         },
-        util::input::{MultiRasterOrVectorOperator, RasterOrVectorOperator},
+        util::input::RasterOrVectorOperator,
     };
 
     fn raster_source() -> Box<dyn geoengine_operators::engine::RasterOperator> {
@@ -362,8 +357,8 @@ mod tests {
                     params: BoxPlotParams {
                         column_names: vec![],
                     },
-                    sources: MultipleRasterOrSingleVectorSource {
-                        source: MultiRasterOrVectorOperator::Raster(vec![raster_source()]),
+                    sources: SingleRasterOrVectorSource {
+                        source: RasterOrVectorOperator::Raster(raster_source()),
                     },
                 }),
                 |graph| matches!(graph, PlotOperator::BoxPlot(_)),
@@ -408,6 +403,7 @@ mod tests {
                     params: MeanRasterPixelValuesOverTimeParams {
                         time_position: MeanRasterPixelValuesOverTimePosition::Start,
                         area: true,
+                        band_names: vec![],
                     },
                     sources: SingleRasterSource {
                         raster: raster_source(),
@@ -445,8 +441,8 @@ mod tests {
                         column_names: vec![],
                         percentiles: vec![],
                     },
-                    sources: MultipleRasterOrSingleVectorSource {
-                        source: MultiRasterOrVectorOperator::Raster(vec![raster_source()]),
+                    sources: SingleRasterOrVectorSource {
+                        source: RasterOrVectorOperator::Raster(raster_source()),
                     },
                 }),
                 |graph| matches!(graph, PlotOperator::Statistics(_)),

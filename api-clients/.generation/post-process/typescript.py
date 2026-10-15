@@ -22,6 +22,7 @@ def file_modifications() -> Generator[tuple[Path, FileModifier], None, None]:
     yield Path("models/PlotUpdate.ts"), plot_update_ts
     yield Path("models/TypedOperator.ts"), typed_operator_ts
     yield Path("models/HistogramBounds.ts"), histogram_bounds_ts
+    yield Path("models/AttributeSelectionNames.ts"), attribute_selection_names_ts
     yield Path("runtime.ts"), runtime_ts
 
 
@@ -161,6 +162,18 @@ def histogram_bounds_ts(file_contents: list[str]) -> Generator[str, None, None]:
     for line in file_contents:
         yield line.replace(
             "DataToJSON(value as Data)", "DataToJSON(value as unknown as Data)"
+        )
+
+
+def attribute_selection_names_ts(
+    file_contents: list[str],
+) -> Generator[str, None, None]:
+    """Use an array instead of a `Set` for `uniqueItems`, since the order of the values matters."""
+    for line in file_contents:
+        yield (
+            line.replace("values: Set<string>;", "values: Array<string>;")
+            .replace("new Set(json['values'])", "json['values']")
+            .replace("Array.from(value['values'] as Set<any>)", "value['values']")
         )
 
 

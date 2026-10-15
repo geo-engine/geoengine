@@ -13,9 +13,9 @@ use serde::{Deserialize, Serialize};
 /// StatisticsParameters : The parameter spec for `Statistics`
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StatisticsParameters {
-    /// # Vector data The names of the attributes to generate statistics for.  # Raster data _Optional_: An alias for each input source. The operator will automatically name the rasters `Raster-1`, `Raster-2`, … if this parameter is empty. If aliases are given, the number of aliases must match the number of input rasters. Otherwise an error is returned.
-    #[serde(rename = "columnNames", skip_serializing_if = "Option::is_none")]
-    pub column_names: Option<Vec<String>>,
+    /// _Optional_: The attributes to generate statistics for. For vector data, these are numeric columns, for raster data, these are bands. Defaults to `all`, i.e., all numeric columns or all bands.
+    #[serde(rename = "attributes", skip_serializing_if = "Option::is_none")]
+    pub attributes: Option<Box<models::AttributeSelection>>,
     /// The percentiles to compute for each attribute.
     #[serde(rename = "percentiles", skip_serializing_if = "Option::is_none")]
     pub percentiles: Option<Vec<f64>>,
@@ -25,7 +25,7 @@ impl StatisticsParameters {
     /// The parameter spec for `Statistics`
     pub fn new() -> StatisticsParameters {
         StatisticsParameters {
-            column_names: None,
+            attributes: None,
             percentiles: None,
         }
     }

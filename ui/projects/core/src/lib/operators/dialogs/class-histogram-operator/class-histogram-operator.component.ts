@@ -91,10 +91,8 @@ export class ClassHistogramOperatorComponent implements AfterViewInit, OnDestroy
         this.form = this.formBuilder.group<ClassHistogramForm>({
             name: this.formBuilder.control<string>('Filtered Values', [Validators.required, geoengineValidators.notOnlyWhitespace]),
             layer: layerControl,
-            attribute: this.formBuilder.control<string | undefined>(
-                undefined,
-                geoengineValidators.conditionalValidator(Validators.required, () => isVectorLayer(layerControl.value)),
-            ),
+            // the vector attribute or raster band
+            attribute: this.formBuilder.control<string | undefined>(undefined, Validators.required),
         });
 
         layerControl.addAsyncValidators(categoricalInputValidator(projectService, this.form.controls['attribute']));
@@ -118,12 +116,29 @@ export class ClassHistogramOperatorComponent implements AfterViewInit, OnDestroy
                                         .toArray(),
                                 ),
                             );
+                        } else if (layer instanceof RasterLayer) {
+                            return this.projectService
+                                .getRasterLayerMetadata(layer)
+                                .pipe(
+                                    map((metadata) =>
+                                        metadata.bands
+                                            .filter((band) => band.measurement.type === 'classification')
+                                            .map((band) => band.name),
+                                    ),
+                                );
                         } else {
                             return of([]);
                         }
                     }),
                 )
-                .subscribe((attributes) => this.attributes$.next(attributes)),
+                .subscribe((attributes) => {
+                    this.attributes$.next(attributes);
+
+                    // preselect the first band, so that single-band rasters need no selection
+                    if (layerControl.value instanceof RasterLayer && attributes.length > 0) {
+                        this.form.controls.attribute.setValue(attributes[0]);
+                    }
+                }),
         );
 
         this.subscriptions.push(
@@ -206,8 +221,8 @@ export class ClassHistogramOperatorComponent implements AfterViewInit, OnDestroy
                 next: () => {
                     // success
                 },
-                error: (error) => {
-                    this.notificationService.error(error);
+                error: (error: unknown) => {
+                    this.notificationService.error(error instanceof Error ? error.message : String(error));
                 },
             });
     }
@@ -237,11 +252,16 @@ const categoricalInputValidator =
         }
 
         if (layer instanceof RasterLayer) {
+            const bandName: string | undefined = attributeControl.value;
+
             return projectService.getRasterLayerMetadata(layer).pipe(
                 first(),
                 map((metadata) => {
-                    const allBandsAreClassification = metadata.bands.every((band) => band.measurement.type === 'classification');
-                    if (allBandsAreClassification) {
+                    // without a selected band, check whether any band is categorical
+                    const isCategorical = bandName
+                        ? metadata.bands.some((band) => band.name === bandName && band.measurement.type === 'classification')
+                        : metadata.bands.some((band) => band.measurement.type === 'classification');
+                    if (isCategorical) {
                         return null;
                     } else {
                         return {nonCategorical: true};

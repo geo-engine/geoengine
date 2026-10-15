@@ -43,7 +43,7 @@ The data, originally valid for January, is shifted forward to February again, to
 
 | Name   | Type                         | Description                                                         |
 | ------ | ---------------------------- | ------------------------------------------------------------------- |
-| source | SingleRasterOrVectorOperator | It is either a set of `RasterOperator` or a single `VectorOperator` |
+| source | SingleRasterOrVectorOperator | It is either a single `RasterOperator` or a single `VectorOperator` |
 
 ## Examples
 

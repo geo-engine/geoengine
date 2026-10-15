@@ -17,18 +17,26 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List
-from geoengine_api_client.models.multiple_raster_or_single_vector_operator import MultipleRasterOrSingleVectorOperator
+from typing_extensions import Annotated
 from typing import Optional, Set
 from typing_extensions import Self
 
-class MultipleRasterOrSingleVectorSource(BaseModel):
+class AttributeSelectionNames(BaseModel):
     """
-    Either one or more raster operators or a single vector operator as source for this operator.
+    Selects the attributes with the given names.  The `values` are the names of the attributes. They must contain at least one name and no duplicates. Raster bands are output in their order in the input raster, regardless of the order of `values`. Vector columns are output in the order of `values`.
     """ # noqa: E501
-    source: MultipleRasterOrSingleVectorOperator
-    __properties: ClassVar[List[str]] = ["source"]
+    type: StrictStr
+    values: Annotated[List[StrictStr], Field(min_length=1)]
+    __properties: ClassVar[List[str]] = ["type", "values"]
+
+    @field_validator('type')
+    def type_validate_enum(cls, value):
+        """Validates the enum"""
+        if value not in set(['names']):
+            raise ValueError("must be one of enum values ('names')")
+        return value
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -48,7 +56,7 @@ class MultipleRasterOrSingleVectorSource(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of MultipleRasterOrSingleVectorSource from a JSON string"""
+        """Create an instance of AttributeSelectionNames from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -69,14 +77,11 @@ class MultipleRasterOrSingleVectorSource(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of source
-        if self.source:
-            _dict['source'] = self.source.to_dict()
         return _dict
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of MultipleRasterOrSingleVectorSource from a dict"""
+        """Create an instance of AttributeSelectionNames from a dict"""
         if obj is None:
             return None
 
@@ -84,7 +89,8 @@ class MultipleRasterOrSingleVectorSource(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "source": MultipleRasterOrSingleVectorOperator.from_dict(obj["source"]) if obj.get("source") is not None else None
+            "type": obj.get("type"),
+            "values": obj.get("values")
         })
         return _obj
 

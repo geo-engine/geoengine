@@ -85,7 +85,6 @@ pub use crate::api::model::processing_graphs::{
         MockPointSourceParameters, MultiBandGdalSource, OgrSource, OgrSourceParameters,
     },
     source_parameters::{
-        MultipleRasterOrSingleVectorOperator, MultipleRasterOrSingleVectorSource,
         MultipleRasterSources, SingleRasterOrVectorOperator, SingleRasterOrVectorSource,
         SingleRasterSource, SingleVectorMultipleRasterSources,
     },
@@ -497,8 +496,6 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     Statistics,
     StatisticsParameters,
     // Source Parameters
-    MultipleRasterOrSingleVectorOperator,
-    MultipleRasterOrSingleVectorSource,
     MultipleRasterSources,
     SingleRasterOrVectorOperator,
     SingleRasterOrVectorSource,

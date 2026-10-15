@@ -36,7 +36,8 @@ class TestMeanRasterPixelValuesOverTimeParameters(unittest.TestCase):
         if include_optional:
             return MeanRasterPixelValuesOverTimeParameters(
                 time_position = 'start',
-                area = True
+                area = True,
+                attributes = None
             )
         else:
             return MeanRasterPixelValuesOverTimeParameters(

@@ -83,7 +83,7 @@ impl BoxPlotAttribute {
 impl Plot for BoxPlot {
     fn to_vega_embeddable(&self, _allow_interactions: bool) -> Result<PlotData> {
         let vega_spec = serde_json::json!({
-            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+            "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
             "width": "container",
             "data": self,
             "encoding": {"x": {"field": "name", "type": "nominal" }},
@@ -118,7 +118,7 @@ impl Plot for BoxPlot {
         });
 
         Ok(PlotData {
-            vega_string: vega_spec.to_string(),
+            vega_spec,
             metadata: PlotMetaData::None,
         })
     }
@@ -148,7 +148,7 @@ mod tests {
         assert_eq!(
             bp.to_vega_embeddable(false).unwrap(),
             PlotData {
-                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v5.json","config":{"axisXDiscrete":{"title":null},"axisYQuantitative":{"title":null},"legend":{"disable":true}},"data":{"values":[{"isExact":true,"max":83.0,"median":35.0,"min":12.0,"name":"A1","q1":20.0,"q3":55.0}]},"encoding":{"x":{"field":"name","type":"nominal"}},"layer":[{"encoding":{"y":{"field":"min","scale":{"zero":false},"type":"quantitative"},"y2":{"field":"max"}},"mark":{"type":"rule"}},{"encoding":{"color":{"field":"name","type":"nominal"},"y":{"field":"q1","type":"quantitative"},"y2":{"field":"q3"}},"mark":{"cornerRadius":5,"type":"bar","width":{"band":0.75}}},{"encoding":{"y":{"field":"median","type":"quantitative"}},"mark":{"color":"white","height":1,"type":"rect","width":{"band":0.75}}}],"width":"container"}"#.to_owned(),
+                vega_spec: serde_json::from_str(r#"{"$schema":"https://vega.github.io/schema/vega-lite/v6.json","config":{"axisXDiscrete":{"title":null},"axisYQuantitative":{"title":null},"legend":{"disable":true}},"data":{"values":[{"isExact":true,"max":83.0,"median":35.0,"min":12.0,"name":"A1","q1":20.0,"q3":55.0}]},"encoding":{"x":{"field":"name","type":"nominal"}},"layer":[{"encoding":{"y":{"field":"min","scale":{"zero":false},"type":"quantitative"},"y2":{"field":"max"}},"mark":{"type":"rule"}},{"encoding":{"color":{"field":"name","type":"nominal"},"y":{"field":"q1","type":"quantitative"},"y2":{"field":"q3"}},"mark":{"cornerRadius":5,"type":"bar","width":{"band":0.75}}},{"encoding":{"y":{"field":"median","type":"quantitative"}},"mark":{"color":"white","height":1,"type":"rect","width":{"band":0.75}}}],"width":"container"}"#).unwrap(),
                 metadata: PlotMetaData::None
             }
         );

@@ -1,21 +1,23 @@
 
-# MultipleRasterOrSingleVectorOperator
+# AttributeSelectionAll
 
-It is either a set of `RasterOperator` or a single `VectorOperator`
+Selects all attributes.
 
 ## Properties
 
 Name | Type
 ------------ | -------------
+`type` | string
 
 ## Example
 
 ```typescript
-import type { MultipleRasterOrSingleVectorOperator } from '@geoengine/api-client'
+import type { AttributeSelectionAll } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-} satisfies MultipleRasterOrSingleVectorOperator
+  "type": null,
+} satisfies AttributeSelectionAll
 
 console.log(example)
 
@@ -24,7 +26,7 @@ const exampleJSON: string = JSON.stringify(example)
 console.log(exampleJSON)
 
 // Parse the JSON string back to an object
-const exampleParsed = JSON.parse(exampleJSON) as MultipleRasterOrSingleVectorOperator
+const exampleParsed = JSON.parse(exampleJSON) as AttributeSelectionAll
 console.log(exampleParsed)
 ```
 

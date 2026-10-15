@@ -15,15 +15,13 @@
         </a>
 
         <ng-container operatorParameters>
-            @if (isVectorLayer$ | async) {
-                <mat-form-field>
-                    <mat-select placeholder="Attribute" formControlName="attribute">
-                        @for (attribute of attributes$ | async; track attribute) {
-                            <mat-option [value]="attribute">{{ attribute }}</mat-option>
-                        }
-                    </mat-select>
-                </mat-form-field>
-            }
+            <mat-form-field>
+                <mat-select [placeholder]="(isVectorLayer$ | async) ? 'Attribute' : 'Band'" formControlName="attribute">
+                    @for (attribute of attributes$ | async; track attribute) {
+                        <mat-option [value]="attribute">{{ attribute }}</mat-option>
+                    }
+                </mat-select>
+            </mat-form-field>
             @if (form.controls.layer.errors?.nonCategorical) {
                 <mat-hint align="end" class="error"> The input must be categorical. </mat-hint>
             }

@@ -17,17 +17,18 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, ClassVar, Dict, List, Optional
+from geoengine_api_client.models.attribute_selection import AttributeSelection
 from typing import Optional, Set
 from typing_extensions import Self
 
 class BoxPlotParameters(BaseModel):
     """
-    The parameter spec for [`BoxPlot`].  ## Vector Data  In the case of vector data, the operator generates one box for each of the selected numerical attributes. The operator returns an error if one of the selected attributes is not numeric.  ## Raster Data  For raster data, the operator generates one box for each input raster. 
+    The parameter spec for [`BoxPlot`].  ## Vector Data  In the case of vector data, the operator generates one box for each of the selected numerical attributes. The operator returns an error if one of the selected attributes is not numeric.  ## Raster Data  For raster data, the operator generates one box for each of the selected bands. 
     """ # noqa: E501
-    column_names: Optional[List[StrictStr]] = Field(default=None, description="## Vector Data The names of the attributes to generate boxes for.  ## Raster Data _Optional_: An alias for each input source. The operator will automatically name the boxes `Raster-1`, `Raster-2`, ... if this parameter is empty. If aliases are given, the number of aliases must match the number of input rasters. Otherwise an error is returned.", alias="columnNames")
-    __properties: ClassVar[List[str]] = ["columnNames"]
+    attributes: Optional[AttributeSelection] = Field(default=None, description="The attributes to generate boxes for. For vector data, these are numeric columns and must be given by name. For raster data, these are bands and default to `all`.")
+    __properties: ClassVar[List[str]] = ["attributes"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -68,6 +69,9 @@ class BoxPlotParameters(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of attributes
+        if self.attributes:
+            _dict['attributes'] = self.attributes.to_dict()
         return _dict
 
     @classmethod
@@ -80,7 +84,7 @@ class BoxPlotParameters(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "columnNames": obj.get("columnNames")
+            "attributes": AttributeSelection.from_dict(obj["attributes"]) if obj.get("attributes") is not None else None
         })
         return _obj
 

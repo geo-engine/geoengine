@@ -37,26 +37,22 @@ class TestPlotOperator(unittest.TestCase):
             return PlotOperator(
                 type = 'BoxPlot',
                 params = geoengine_api_client.models.statistics_parameters.StatisticsParameters(
-                    column_names = [
-                        ''
-                        ], 
+                    attributes = null, 
                     percentiles = [
                         1.337
                         ], ),
-                sources = geoengine_api_client.models.multiple_raster_or_single_vector_source.MultipleRasterOrSingleVectorSource(
+                sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
                     source = null, )
             )
         else:
             return PlotOperator(
                 type = 'BoxPlot',
                 params = geoengine_api_client.models.statistics_parameters.StatisticsParameters(
-                    column_names = [
-                        ''
-                        ], 
+                    attributes = null, 
                     percentiles = [
                         1.337
                         ], ),
-                sources = geoengine_api_client.models.multiple_raster_or_single_vector_source.MultipleRasterOrSingleVectorSource(
+                sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
                     source = null, ),
         )
         """

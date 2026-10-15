@@ -4,8 +4,7 @@ import {AbstractControl, AsyncValidatorFn, FormArray, FormGroup, ValidationError
 import {Moment} from 'moment';
 import {PathKind, SchemaPath, SchemaPathRules, validate} from '@angular/forms/signals';
 
-const isFiniteNumber = (value: null | undefined | number): boolean =>
-    value !== null && value !== undefined && !isNaN(value) && isFinite(value);
+const isFiniteNumber = (value: unknown): value is number => value !== null && value !== undefined && isFinite(Number(value));
 
 /**
  * A validator that validates a form group that contains min/max number fields.
@@ -29,8 +28,8 @@ const minAndMax = (
     }
 
     return (control: AbstractControl): ValidationErrors | null => {
-        const min = control.get(controlMinName)?.value;
-        const max = control.get(controlMaxName)?.value;
+        const min: unknown = control.get(controlMinName)?.value;
+        const max: unknown = control.get(controlMaxName)?.value;
 
         const errors: {
             minOverMax?: boolean;
@@ -87,8 +86,8 @@ const minAndMaxNumOrStr = (
     }
 
     return (control: AbstractControl): ValidationErrors | null => {
-        let min = control.get(controlMinName)?.value;
-        let max = control.get(controlMaxName)?.value;
+        let min = control.get(controlMinName)?.value as number | string;
+        let max = control.get(controlMaxName)?.value as number | string;
 
         const errors: {
             minOverMax?: boolean;
@@ -156,7 +155,7 @@ const conditionalAsyncValidator =
 const keywordValidator =
     (keywords: Array<string>) =>
     (control: AbstractControl): {keyword: true} | null =>
-        keywords.includes(control.value) ? {keyword: true} : null;
+        keywords.includes(control.value as string) ? {keyword: true} : null;
 
 function keywordSignalValidator<TPathKind extends PathKind = PathKind.Root>(
     path: SchemaPath<string, SchemaPathRules.Supported, TPathKind>,
@@ -214,8 +213,23 @@ const notOnlyWhitespace = (control: AbstractControl): {onlyWhitespace: true} | n
     return text.trim().length <= 0 ? {onlyWhitespace: true} : null;
 };
 
+function notOnlyWhitespaceSignalValidator<TPathKind extends PathKind = PathKind.Root>(
+    path: SchemaPath<string, SchemaPathRules.Supported, TPathKind>,
+): void {
+    validate(path, ({value}) => {
+        const text = value();
+        if (text && text.trim().length <= 0) {
+            return {
+                kind: 'onlyWhitespace',
+                message: 'The value must not consist of whitespace only.',
+            };
+        }
+        return null;
+    });
+}
+
 const isNumber = (control: AbstractControl): {isNoNumber: true} | null => {
-    const value = control.value;
+    const value: unknown = control.value;
     return isFiniteNumber(value) ? null : {isNoNumber: true};
 };
 
@@ -307,7 +321,7 @@ const oneOrBoth =
 const largerThan =
     (lowerBound: number): ((_: AbstractControl) => ValidationErrors | null) =>
     (control: AbstractControl): ValidationErrors | null => {
-        const value = control.value;
+        const value: unknown = control.value;
 
         const errors: {
             valueNotLarger?: boolean;
@@ -331,7 +345,7 @@ const inRange =
         upperInclusive: boolean,
     ): ((_: AbstractControl) => ValidationErrors | null) =>
     (control: AbstractControl): ValidationErrors | null => {
-        const value = control.value;
+        const value: unknown = control.value;
 
         const errors: {
             valueNotInRange?: boolean;
@@ -354,7 +368,7 @@ const inRange =
  * A validator that checks that a value is not zero.
  */
 const notZero = (control: AbstractControl): ValidationErrors | null => {
-    const value = control.value;
+    const value: unknown = control.value;
 
     const errors: {
         valueIsZero?: boolean;
@@ -401,7 +415,7 @@ export const duplicateInFormArrayValidator =
         const formArray = control;
 
         const controls = formArray.controls;
-        const values = controls.map((c) => c.value);
+        const values = controls.map((c): unknown => c.value);
 
         const duplicates = values.some((value, index) => values.indexOf(value) !== index);
 
@@ -431,7 +445,7 @@ export const validJson: ValidatorFn = (control: AbstractControl): ValidationErro
     }
 
     try {
-        JSON.parse(control.value);
+        JSON.parse(control.value as string);
         return null; // Valid JSON
     } catch (_e) {
         return {invalidJson: true}; // Invalid JSON
@@ -446,6 +460,7 @@ export const geoengineValidators = {
     keyword2: keywordSignalValidator,
     minAndMax,
     notOnlyWhitespace,
+    notOnlyWhitespace2: notOnlyWhitespaceSignalValidator,
     uniqueProjectName: uniqueProjectNameValidator,
     largerThan,
     inRange,
