@@ -20,9 +20,16 @@ impl SpatialResolution {
         SpatialResolution { x, y }
     }
 
+    /// Create a new `SpatialResolution` object, if `x` and `y` are positive and finite
     pub fn new(x: f64, y: f64) -> Result<Self> {
-        ensure!(x > 0.0, error::InvalidSpatialResolution { value: x });
-        ensure!(y > 0.0, error::InvalidSpatialResolution { value: y });
+        ensure!(
+            x > 0.0 && x.is_finite(),
+            error::InvalidSpatialResolution { value: x }
+        );
+        ensure!(
+            y > 0.0 && y.is_finite(),
+            error::InvalidSpatialResolution { value: y }
+        );
         Ok(Self::new_unchecked(x, y))
     }
 
@@ -213,6 +220,16 @@ mod test {
     fn div_scalar() {
         let res = SpatialResolution { x: 4., y: 8. } / 2.;
         assert_eq!(res, SpatialResolution { x: 2., y: 4. });
+    }
+
+    #[test]
+    fn it_rejects_invalid_resolutions() {
+        assert!(SpatialResolution::new(0.1, 0.1).is_ok());
+
+        for invalid in [0., -0.1, f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+            assert!(SpatialResolution::new(invalid, 0.1).is_err());
+            assert!(SpatialResolution::new(0.1, invalid).is_err());
+        }
     }
 
     #[test]
