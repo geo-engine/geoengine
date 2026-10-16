@@ -1,22 +1,12 @@
 import {AfterViewInit, ChangeDetectionStrategy, Component, OnDestroy, inject} from '@angular/core';
-import {
-    UntypedFormBuilder,
-    UntypedFormGroup,
-    UntypedFormArray,
-    Validators,
-    UntypedFormControl,
-    FormsModule,
-    ReactiveFormsModule,
-} from '@angular/forms';
-import {Observable, of, ReplaySubject, Subscription} from 'rxjs';
+import {FormArray, FormBuilder, FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {from, Observable, of, ReplaySubject, Subscription} from 'rxjs';
 import {ProjectService} from '../../../project/project.service';
-
 import {map, mergeMap, tap} from 'rxjs/operators';
 import {
     Layer,
     NotificationService,
     Plot,
-    RasterLayer,
     ResultTypes,
     VectorColumnDataTypes,
     VectorLayer,
@@ -26,13 +16,12 @@ import {
     FxFlexDirective,
     FxLayoutAlignDirective,
 } from '@geoengine/common';
-import {BoxPlot, ProcessingGraph, RasterOperator, VectorOperator} from '@geoengine/api-client';
+import {AttributeSelection, BoxPlot, ProcessingGraph, RasterOperator, VectorOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
 import {MatIcon} from '@angular/material/icon';
 import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
-import {MultiLayerSelectionComponent} from '../helpers/multi-layer-selection/multi-layer-selection.component';
 import {DialogSectionHeadingComponent} from '../../../dialogs/dialog-section-heading/dialog-section-heading.component';
 import {MatFormField, MatHint} from '@angular/material/input';
 import {MatSelect} from '@angular/material/select';
@@ -40,25 +29,11 @@ import {MatOption} from '@angular/material/autocomplete';
 import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
 import {AsyncPipe} from '@angular/common';
 
-/**
- * Checks whether the layer is a vector layer (points, lines, polygons).
- */
-const isVectorLayer = (layer: Layer): boolean => {
-    if (!layer) {
-        return false;
-    }
-    return layer.layerType === 'vector';
-};
-
-/**
- * Checks whether the layer is a raster layer.
- */
-const isRasterLayer = (layer: Layer): boolean => {
-    if (!layer) {
-        return false;
-    }
-    return layer.layerType === 'raster';
-};
+interface BoxPlotForm {
+    name: FormControl<string>;
+    layer: FormControl<Layer | null>;
+    columnNames: FormArray<FormControl<string | null>>;
+}
 
 /**
  * This dialog allows creating a box plot of a layer's values.
@@ -76,7 +51,6 @@ const isRasterLayer = (layer: Layer): boolean => {
         MatIconButton,
         MatIcon,
         LayerSelectionComponent,
-        MultiLayerSelectionComponent,
         FxLayoutDirective,
         DialogSectionHeadingComponent,
         FxFlexDirective,
@@ -93,19 +67,15 @@ const isRasterLayer = (layer: Layer): boolean => {
 export class BoxPlotOperatorComponent implements AfterViewInit, OnDestroy {
     private readonly projectService = inject(ProjectService);
     private readonly notificationService = inject(NotificationService);
-    private readonly formBuilder = inject(UntypedFormBuilder);
+    private readonly formBuilder = inject(FormBuilder);
 
     readonly inputTypes = ResultTypes.INPUT_TYPES;
 
-    readonly RASTER_TYPE = [ResultTypes.RASTER];
-
-    form: UntypedFormGroup;
+    form: FormGroup<BoxPlotForm>;
 
     attributes$ = new ReplaySubject<Array<string>>(1);
 
     isVectorLayer$: Observable<boolean>;
-
-    isRasterLayer$: Observable<boolean>;
 
     private subscriptions: Array<Subscription> = [];
 
@@ -113,28 +83,26 @@ export class BoxPlotOperatorComponent implements AfterViewInit, OnDestroy {
      * DI for services
      */
     constructor() {
-        const layerControl = this.formBuilder.control(undefined, Validators.required);
+        const layerControl = this.formBuilder.control<Layer | null>(null, Validators.required);
         this.form = this.formBuilder.group({
-            name: ['Filtered Values', [Validators.required, geoengineValidators.notOnlyWhitespace]],
+            name: this.formBuilder.nonNullable.control('Filtered Values', [Validators.required, geoengineValidators.notOnlyWhitespace]),
             layer: layerControl,
-            columnNames: this.formBuilder.array(
+            columnNames: this.formBuilder.array<FormControl<string | null>>(
                 [],
-                geoengineValidators.conditionalValidator(Validators.required, () => isVectorLayer(layerControl.value)),
+                geoengineValidators.conditionalValidator(Validators.required, () => layerControl.value?.isVectorLayer ?? false),
             ),
-            additionalRasterLayers: new UntypedFormControl([]),
         });
 
         this.subscriptions.push(
-            this.form.controls['layer'].valueChanges
+            this.form.controls.layer.valueChanges
                 .pipe(
                     tap(() => {
                         this.columnNames.clear();
-                        this.additionalRasterLayers.setValue([]);
-                        if (isVectorLayer(layerControl.value)) {
+                        if (layerControl.value?.isVectorLayer) {
                             this.addColumn();
                         }
                     }),
-                    mergeMap((layer: Layer) => {
+                    mergeMap((layer: Layer | null) => {
                         if (layer instanceof VectorLayer) {
                             return this.projectService.getVectorLayerMetadata(layer).pipe(
                                 map((metadata: VectorLayerMetadata) =>
@@ -154,14 +122,13 @@ export class BoxPlotOperatorComponent implements AfterViewInit, OnDestroy {
                 )
                 .subscribe((attributes) => this.attributes$.next(attributes)),
         );
-        this.isVectorLayer$ = this.form.controls['layer'].valueChanges.pipe(map((layer) => isVectorLayer(layer)));
-        this.isRasterLayer$ = this.form.controls['layer'].valueChanges.pipe(map((layer) => isRasterLayer(layer)));
+        this.isVectorLayer$ = this.form.controls.layer.valueChanges.pipe(map((layer) => layer?.isVectorLayer ?? false));
     }
 
     ngAfterViewInit(): void {
         setTimeout(() => {
             this.form.updateValueAndValidity();
-            this.form.controls['layer'].updateValueAndValidity();
+            this.form.controls.layer.updateValueAndValidity();
         });
     }
 
@@ -169,20 +136,12 @@ export class BoxPlotOperatorComponent implements AfterViewInit, OnDestroy {
         this.subscriptions.forEach((subscription) => subscription.unsubscribe());
     }
 
-    get additionalRasterLayers(): UntypedFormControl {
-        return this.form.get('additionalRasterLayers') as UntypedFormControl;
-    }
-
-    rasterInputNaming(_idx: number): string {
-        return 'Input';
-    }
-
-    get columnNames(): UntypedFormArray {
-        return this.form.get('columnNames') as UntypedFormArray;
+    get columnNames(): FormArray<FormControl<string | null>> {
+        return this.form.controls.columnNames;
     }
 
     addColumn(): void {
-        this.columnNames.push(this.formBuilder.control(undefined, Validators.required));
+        this.columnNames.push(this.formBuilder.control<string | null>(null, Validators.required));
     }
 
     removeColumn(i: number): void {
@@ -194,37 +153,30 @@ export class BoxPlotOperatorComponent implements AfterViewInit, OnDestroy {
      * The plot is added to the plot view.
      */
     add(): void {
-        const inputLayer = this.form.controls['layer'].value as Layer;
+        const inputLayer = this.form.controls.layer.value!;
 
-        const columnNames = this.columnNames.controls.map((fc) => fc.value.toString());
+        // for rasters, select all bands
+        const attributes: AttributeSelection = inputLayer.isVectorLayer
+            ? {type: 'names', values: [...new Set(this.columnNames.controls.map((fc) => fc.value?.toString() ?? ''))]}
+            : {type: 'all'};
 
-        const outputName: string = this.form.controls['name'].value;
+        const outputName: string = this.form.controls.name.value;
 
-        const sources = [inputLayer] as Array<Layer>;
-
-        if (inputLayer.layerType === 'raster') {
-            const rasterLayers: Array<RasterLayer> = this.form.controls['additionalRasterLayers'].value;
-            columnNames.push(inputLayer.name);
-            rasterLayers.forEach((value) => {
-                sources.push(value);
-                columnNames.push(value.name);
-            });
-        }
-
-        this.projectService
-            .getAutomaticallyProjectedOperatorsFromLayers(sources)
+        from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(
-                mergeMap((inputOperators: Array<ProcessingGraph>) => {
-                    const source = isVectorLayer(inputLayer)
-                        ? (inputOperators[0].operator as VectorOperator)
-                        : inputOperators.map((inputOperator) => inputOperator.operator as RasterOperator);
+                mergeMap((inputWorkflow: ProcessingGraph) => {
+                    if (inputWorkflow.type !== 'Raster' && inputWorkflow.type !== 'Vector') {
+                        throw new Error(`Invalid workflow type ${inputWorkflow.type}.`);
+                    }
 
-                    return this.projectService.registerWorkflow({
+                    const source: RasterOperator | VectorOperator = inputWorkflow.operator;
+
+                    return this.projectService.registerProcessingGraph({
                         type: 'Plot',
                         operator: {
                             type: 'BoxPlot',
                             params: {
-                                columnNames,
+                                attributes,
                             },
                             sources: {
                                 source,
@@ -245,7 +197,7 @@ export class BoxPlotOperatorComponent implements AfterViewInit, OnDestroy {
                 () => {
                     // success
                 },
-                (error) => this.notificationService.error(error),
+                (error: unknown) => this.notificationService.error(error instanceof Error ? error.message : String(error)),
             );
     }
 }

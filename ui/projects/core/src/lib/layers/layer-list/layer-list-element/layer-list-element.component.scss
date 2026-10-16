@@ -65,9 +65,18 @@ mat-progress-bar {
         auto;
 }
 
-geoengine-raster-legend {
-    padding-top: 0.25rem;
-    padding-left: 0.5rem;
-    padding-right: 0;
-    padding-bottom: 0.5rem;
+.raster-legend {
+    position: relative;
+
+    // only the legend header makes room for the toggle, the rest uses the full width
+    .legend-toggle {
+        position: absolute;
+        top: 0;
+        right: 0;
+    }
+
+    geoengine-raster-legend {
+        --geoengine-legend-header-end-inset: 2.5rem;
+        padding: 0.25rem 0.5rem 0.5rem;
+    }
 }

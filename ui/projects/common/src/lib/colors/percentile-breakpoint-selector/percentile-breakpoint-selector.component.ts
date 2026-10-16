@@ -5,10 +5,12 @@ import {Color, RgbaTuple} from '../color';
 import {ColorBreakpoint} from '../color-breakpoint.model';
 import {geoengineValidators} from '../../util/form.validators';
 import {UUID} from '../../datasets/dataset.model';
-import {WorkflowsService} from '../../workflows/workflows.service';
+import {ProcessingGraphsService} from '../../processing-graphs/processing-graphs.service';
 import {RasterOperator, Statistics} from '@geoengine/api-client';
 import {SymbologyQueryParams} from '../../symbology/symbology.model';
 import {PlotsService} from '../../plots/plots.service';
+import {StatisticsRow, statisticsFromPlotData} from '../../plots/statistics';
+import {VegaChartData} from '../../plots/plot.model';
 import {ALL_COLORMAPS} from '../colormaps/colormaps';
 import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
 import {MatSelect} from '@angular/material/select';
@@ -44,7 +46,7 @@ import {RgbaArrayCssGradientPipe} from '../../util/pipes/color-gradients.pipe';
 export class PercentileBreakpointSelectorComponent {
     protected readonly changeDetectorRef = inject(ChangeDetectorRef);
     protected readonly formBuilder = inject(UntypedFormBuilder);
-    protected readonly workflowsService = inject(WorkflowsService);
+    protected readonly processingGraphsService = inject(ProcessingGraphsService);
     protected readonly plotsService = inject(PlotsService);
 
     readonly band = input.required<string>();
@@ -227,55 +229,51 @@ export class PercentileBreakpointSelectorComponent {
         const statistics = await this.createStatistics(statisticsWorkflowsId, this.queryParams());
 
         // add min and max to percentiles
-        const percentileValues = statistics.percentiles.map((p) => p.value);
-        percentileValues.unshift(statistics.min);
-        percentileValues.push(statistics.max);
+        const values = [statistics.min, ...statistics.percentiles.map((p) => p.value), statistics.max];
+        const percentileValues = values.filter((value): value is number => value !== null);
+        if (percentileValues.length !== values.length) {
+            throw new Error('The statistics contain no valid values.');
+        }
 
         percentileValues.sort((a, b) => a - b);
 
         return PercentileBreakpointSelectorComponent.createBreakpoints(colorMap, colorMapReverseColors, percentileValues);
     }
 
-    private createStatistics(
-        histogramWorkflowId: UUID,
-        queryParams: SymbologyQueryParams,
-    ): Promise<{min: number; max: number; percentiles: {percentile: number; value: number}[]}> {
+    private createStatistics(histogramWorkflowId: UUID, queryParams: SymbologyQueryParams): Promise<StatisticsRow> {
         this.statisticsLoading$.next(true);
         return this.plotsService
             .getPlot(histogramWorkflowId, queryParams.bbox, queryParams.time, queryParams.resolution, queryParams.spatialReference)
             .then((plotData) => {
                 this.statisticsLoading$.next(false);
 
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const statistics = plotData.data as any;
-
-                const band = this.band();
-                if (!(band in plotData.data)) {
+                const statistics = statisticsFromPlotData(plotData.data as VegaChartData).get(this.band());
+                if (!statistics) {
                     throw new Error('Band not found in statistics');
                 }
 
-                return statistics[band] as {min: number; max: number; percentiles: {percentile: number; value: number}[]};
+                return statistics;
             });
     }
 
     protected createStatisticsWorkflow(percentiles: number[]): Promise<UUID> {
-        return this.workflowsService.getWorkflow(this.workflowId()).then((workflow) => {
+        return this.processingGraphsService.getProcessingGraph(this.workflowId()).then((workflow) => {
             if (workflow.type !== 'Raster') {
-                throw new Error('Expected a raster workflow for percentile statistics.');
+                throw new Error('Expected a raster processing graph for percentile statistics.');
             }
 
             const sourceOperator: RasterOperator = workflow.operator;
 
-            return this.workflowsService.registerWorkflow({
+            return this.processingGraphsService.registerProcessingGraph({
                 type: 'Plot',
                 operator: {
                     type: 'Statistics',
                     params: {
-                        columnNames: [this.band()],
+                        attributes: {type: 'names', values: [this.band()]},
                         percentiles,
                     },
                     sources: {
-                        source: [sourceOperator],
+                        source: sourceOperator,
                     },
                 } as Statistics,
             });

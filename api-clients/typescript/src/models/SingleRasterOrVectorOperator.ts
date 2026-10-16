@@ -28,7 +28,7 @@ import {
 
 /**
  * @type SingleRasterOrVectorOperator
- * It is either a set of `RasterOperator` or a single `VectorOperator`
+ * It is either a single `RasterOperator` or a single `VectorOperator`
  * @export
  */
 export type SingleRasterOrVectorOperator = RasterOperator | VectorOperator;

@@ -35,9 +35,7 @@ class TestBoxPlotParameters(unittest.TestCase):
         model = BoxPlotParameters()
         if include_optional:
             return BoxPlotParameters(
-                column_names = [
-                    ''
-                    ]
+                attributes = None
             )
         else:
             return BoxPlotParameters(

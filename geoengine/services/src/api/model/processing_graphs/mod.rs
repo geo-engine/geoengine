@@ -86,12 +86,27 @@ pub use crate::api::model::processing_graphs::{
         OgrSourceParameters,
     },
     source_parameters::{
-        MultipleRasterOrSingleVectorOperator, MultipleRasterOrSingleVectorSource,
         MultipleRasterSources, SingleRasterOrVectorOperator, SingleRasterOrVectorSource,
         SingleRasterSource, SingleVectorMultipleRasterSources,
     },
 };
-use crate::workflows::workflow::Workflow;
+use crate::identifier;
+use crate::workflows::workflow::{Workflow, WorkflowId};
+
+// Identifier for registered processing graphs
+identifier!(ProcessingGraphId);
+
+impl From<WorkflowId> for ProcessingGraphId {
+    fn from(value: WorkflowId) -> Self {
+        Self(value.0)
+    }
+}
+
+impl From<ProcessingGraphId> for WorkflowId {
+    fn from(value: ProcessingGraphId) -> Self {
+        Self(value.0)
+    }
+}
 
 /// Operator outputs are distinguished by their data type.
 /// There are `raster`, `vector` and `plot` operators.
@@ -488,8 +503,6 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     Statistics,
     StatisticsParameters,
     // Source Parameters
-    MultipleRasterOrSingleVectorOperator,
-    MultipleRasterOrSingleVectorSource,
     MultipleRasterSources,
     SingleRasterOrVectorOperator,
     SingleRasterOrVectorSource,

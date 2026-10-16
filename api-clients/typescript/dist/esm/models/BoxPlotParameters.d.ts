@@ -8,6 +8,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import type { AttributeSelection } from './AttributeSelection';
 /**
  * The parameter spec for [`BoxPlot`].
  *
@@ -18,25 +19,20 @@
  *
  * ## Raster Data
  *
- * For raster data, the operator generates one box for each input raster.
+ * For raster data, the operator generates one box for each of the selected bands.
  *
  * @export
  * @interface BoxPlotParameters
  */
 export interface BoxPlotParameters {
     /**
-     * ## Vector Data
-     * The names of the attributes to generate boxes for.
-     *
-     * ## Raster Data
-     * _Optional_: An alias for each input source.
-     * The operator will automatically name the boxes `Raster-1`, `Raster-2`, ... if this parameter is empty.
-     * If aliases are given, the number of aliases must match the number of input rasters.
-     * Otherwise an error is returned.
-     * @type {Array<string>}
+     * The attributes to generate boxes for.
+     * For vector data, these are numeric columns and must be given by name.
+     * For raster data, these are bands and default to `all`.
+     * @type {AttributeSelection}
      * @memberof BoxPlotParameters
      */
-    columnNames?: Array<string>;
+    attributes?: AttributeSelection;
 }
 /**
  * Check if a given object implements the BoxPlotParameters interface.

@@ -33,6 +33,9 @@ from geoengine_api_client.models.aruna_data_provider_definition import ArunaData
 from geoengine_api_client.models.attribute_aggregate_def import AttributeAggregateDef
 from geoengine_api_client.models.attribute_aggregate_type import AttributeAggregateType
 from geoengine_api_client.models.attribute_filter import AttributeFilter
+from geoengine_api_client.models.attribute_selection import AttributeSelection
+from geoengine_api_client.models.attribute_selection_all import AttributeSelectionAll
+from geoengine_api_client.models.attribute_selection_names import AttributeSelectionNames
 from geoengine_api_client.models.auth_code_request_url import AuthCodeRequestURL
 from geoengine_api_client.models.auth_code_response import AuthCodeResponse
 from geoengine_api_client.models.auto_create_dataset import AutoCreateDataset
@@ -166,6 +169,7 @@ from geoengine_api_client.models.layer_collection_resource import LayerCollectio
 from geoengine_api_client.models.layer_listing import LayerListing
 from geoengine_api_client.models.layer_provider_listing import LayerProviderListing
 from geoengine_api_client.models.layer_resource import LayerResource
+from geoengine_api_client.models.layer_update import LayerUpdate
 from geoengine_api_client.models.layer_visibility import LayerVisibility
 from geoengine_api_client.models.line_simplification import LineSimplification
 from geoengine_api_client.models.line_simplification_algorithm import LineSimplificationAlgorithm
@@ -207,8 +211,6 @@ from geoengine_api_client.models.multi_band_raster_colorizer import MultiBandRas
 from geoengine_api_client.models.multi_line_string import MultiLineString
 from geoengine_api_client.models.multi_point import MultiPoint
 from geoengine_api_client.models.multi_polygon import MultiPolygon
-from geoengine_api_client.models.multiple_raster_or_single_vector_operator import MultipleRasterOrSingleVectorOperator
-from geoengine_api_client.models.multiple_raster_or_single_vector_source import MultipleRasterOrSingleVectorSource
 from geoengine_api_client.models.multiple_raster_sources import MultipleRasterSources
 from geoengine_api_client.models.names import Names
 from geoengine_api_client.models.neighborhood_aggregate import NeighborhoodAggregate
@@ -258,6 +260,7 @@ from geoengine_api_client.models.plot import Plot
 from geoengine_api_client.models.plot_operator import PlotOperator
 from geoengine_api_client.models.plot_output_format import PlotOutputFormat
 from geoengine_api_client.models.plot_result_descriptor import PlotResultDescriptor
+from geoengine_api_client.models.plot_update import PlotUpdate
 from geoengine_api_client.models.point_in_polygon_filter import PointInPolygonFilter
 from geoengine_api_client.models.point_in_polygon_filter_source import PointInPolygonFilterSource
 from geoengine_api_client.models.point_symbology import PointSymbology
@@ -280,7 +283,7 @@ from geoengine_api_client.models.radiance import Radiance
 from geoengine_api_client.models.raster_band_descriptor import RasterBandDescriptor
 from geoengine_api_client.models.raster_colorizer import RasterColorizer
 from geoengine_api_client.models.raster_data_type import RasterDataType
-from geoengine_api_client.models.raster_dataset_from_workflow import RasterDatasetFromWorkflow
+from geoengine_api_client.models.raster_dataset_from_processing_graph import RasterDatasetFromProcessingGraph
 from geoengine_api_client.models.raster_operator import RasterOperator
 from geoengine_api_client.models.raster_properties_entry_type import RasterPropertiesEntryType
 from geoengine_api_client.models.raster_properties_key import RasterPropertiesKey
@@ -302,8 +305,10 @@ from geoengine_api_client.models.reflectance import Reflectance
 from geoengine_api_client.models.reflectance_parameters import ReflectanceParameters
 from geoengine_api_client.models.regular import Regular
 from geoengine_api_client.models.regular_time_dimension import RegularTimeDimension
-from geoengine_api_client.models.rename import Rename
 from geoengine_api_client.models.rename_bands import RenameBands
+from geoengine_api_client.models.rename_bands_default import RenameBandsDefault
+from geoengine_api_client.models.rename_bands_rename import RenameBandsRename
+from geoengine_api_client.models.rename_bands_suffix import RenameBandsSuffix
 from geoengine_api_client.models.reprojection import Reprojection
 from geoengine_api_client.models.reprojection_parameters import ReprojectionParameters
 from geoengine_api_client.models.resource import Resource
@@ -430,7 +435,6 @@ from geoengine_api_client.models.user_info import UserInfo
 from geoengine_api_client.models.user_registration import UserRegistration
 from geoengine_api_client.models.user_session import UserSession
 from geoengine_api_client.models.variable_matrix_width import VariableMatrixWidth
-from geoengine_api_client.models.vec_update import VecUpdate
 from geoengine_api_client.models.vector_column_info import VectorColumnInfo
 from geoengine_api_client.models.vector_data_type import VectorDataType
 from geoengine_api_client.models.vector_expression import VectorExpression

@@ -123,7 +123,7 @@ export class LineageGraphComponent implements AfterViewInit {
     }
 
     private drawGraph(): void {
-        void from(this.projectService.getWorkflow(this.layer.workflowId)).subscribe((workflow) => {
+        void from(this.projectService.getProcessingGraph(this.layer.workflowId)).subscribe((workflow) => {
             const graph = new dagreD3.graphlib.Graph().setGraph({}).setDefaultEdgeLabel(() => ({label: ''}));
 
             LineageGraphComponent.addOperatorsToGraph(graph, workflow);

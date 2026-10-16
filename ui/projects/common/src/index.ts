@@ -15,7 +15,7 @@ export * from './lib/permissions/permissions.service';
 export * from './lib/plots/plots.service';
 export * from './lib/util/services/random-color.service';
 export * from './lib/user/user.service';
-export * from './lib/workflows/workflows.service';
+export * from './lib/processing-graphs/processing-graphs.service';
 
 // Components
 export * from './lib/colors/color-attribute-input/color-attribute-input.component';
@@ -64,6 +64,8 @@ export * from './lib/layer-collections/layer-collection.model';
 export * from './lib/operators/datatype.model';
 export * from './lib/operators/result-type.model';
 export * from './lib/plots/plot.model';
+export * from './lib/plots/statistics';
+export * from './lib/plots/plot-data';
 export * from './lib/spatial-references/spatial-reference.model';
 export * from './lib/symbology/symbology.model';
 export * from './lib/time/time.model';

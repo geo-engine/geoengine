@@ -6,7 +6,7 @@
 
 Name | Type
 ------------ | -------------
-`workflow` | string
+`processingGraph` | string
 `name` | string
 
 ## Example
@@ -16,7 +16,7 @@ import type { Plot } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "workflow": null,
+  "processingGraph": null,
   "name": null,
 } satisfies Plot
 

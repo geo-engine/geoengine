@@ -12,6 +12,7 @@ pub mod machine_learning;
 pub mod ogc;
 pub mod permissions;
 pub mod plots;
+pub mod processing_graphs;
 pub mod projects;
 pub mod spatial_references;
 pub mod tasks;
@@ -20,7 +21,6 @@ pub mod users;
 pub mod wcs;
 pub mod wfs;
 pub mod wms;
-pub mod workflows;
 
 pub fn get_token(req: &HttpRequest) -> Result<SessionId> {
     // Otherwise, extract the session ID from the Authorization header

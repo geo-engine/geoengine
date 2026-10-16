@@ -4,9 +4,11 @@ import {FormBuilder, FormControl, FormGroup, Validators, FormsModule, ReactiveFo
 import {geoengineValidators} from '../../util/form.validators';
 import {SymbologyQueryParams, MultiBandRasterColorizer} from '../symbology.model';
 import {Color, TRANSPARENT} from '../../colors/color';
-import {WorkflowsService} from '../../workflows/workflows.service';
-import {Expression, Statistics} from '@geoengine/api-client';
+import {ProcessingGraphsService} from '../../processing-graphs/processing-graphs.service';
+import {Statistics} from '@geoengine/api-client';
 import {PlotsService} from '../../plots/plots.service';
+import {statisticsFromPlotData} from '../../plots/statistics';
+import {VegaChartData} from '../../plots/plot.model';
 import {UUID} from '../../datasets/dataset.model';
 import {MatCard, MatCardHeader, MatCardTitleGroup, MatCardTitle, MatCardSubtitle, MatCardContent} from '@angular/material/card';
 import {MatIcon} from '@angular/material/icon';
@@ -65,7 +67,7 @@ type RgbColorName = 'red' | 'green' | 'blue';
 })
 export class RasterMultibandSymbologyEditorComponent implements OnDestroy {
     private readonly formBuilder = inject(FormBuilder);
-    private readonly workflowsService = inject(WorkflowsService);
+    private readonly processingGraphsService = inject(ProcessingGraphsService);
     private readonly plotsService = inject(PlotsService);
 
     readonly workflowId = input.required<UUID>();
@@ -223,38 +225,21 @@ export class RasterMultibandSymbologyEditorComponent implements OnDestroy {
 
         this.isLoadingRasterStats.set(true);
 
-        const workflow = await this.workflowsService.getWorkflow(this.workflowId());
+        const workflow = await this.processingGraphsService.getProcessingGraph(this.workflowId());
 
         if (workflow.type !== 'Raster') {
-            throw new Error('Expected a raster workflow for multiband statistics.');
+            throw new Error('Expected a raster processing graph for multiband statistics.');
         }
 
-        // TODO: remove expressions when Statistics Operator supports multiple bands
-        const subExpression = ({name, index}: {name: string; index: number}): Expression => {
-            return {
-                type: 'Expression',
-                params: {
-                    expression: String.fromCharCode('A'.charCodeAt(0) + index),
-                    outputType: 'F64',
-                    outputBand: {
-                        name,
-                        measurement: {type: 'unitless'},
-                    },
-                    mapNoData: false,
-                },
-                sources: {
-                    raster: workflow.operator,
-                },
-            };
-        };
+        const bands = {red: this.band1(), green: this.band2(), blue: this.band3()};
 
-        const statsWorkflowId = await this.workflowsService.registerWorkflow({
+        const statsWorkflowId = await this.processingGraphsService.registerProcessingGraph({
             type: 'Plot',
             operator: {
                 type: 'Statistics',
-                params: {columnNames: ['red', 'green', 'blue']},
+                params: {attributes: {type: 'names', values: [...new Set(Object.values(bands).map((band) => band.name))]}},
                 sources: {
-                    source: [subExpression(this.band1()), subExpression(this.band2()), subExpression(this.band3())],
+                    source: workflow.operator,
                 },
             } as Statistics,
         });
@@ -267,25 +252,16 @@ export class RasterMultibandSymbologyEditorComponent implements OnDestroy {
             queryParams.spatialReference,
         );
 
-        const plotData = plot.data as {
-            red: {
-                min: number;
-                max: number;
-            };
-            green: {
-                min: number;
-                max: number;
-            };
-            blue: {
-                min: number;
-                max: number;
-            };
-        };
+        const statistics = statisticsFromPlotData(plot.data as VegaChartData);
 
         const colors: Array<RgbColorName> = ['red', 'green', 'blue'];
         for (const color of colors) {
-            this.form.controls[color].controls.min.setValue(plotData[color].min);
-            this.form.controls[color].controls.max.setValue(plotData[color].max);
+            const bandStatistics = statistics.get(bands[color].name);
+            if (bandStatistics?.min == null || bandStatistics.max == null) {
+                throw new Error(`Band ${bands[color].name} has no valid min/max values in the statistics`);
+            }
+            this.form.controls[color].controls.min.setValue(bandStatistics.min);
+            this.form.controls[color].controls.max.setValue(bandStatistics.max);
         }
 
         this.form.updateValueAndValidity();

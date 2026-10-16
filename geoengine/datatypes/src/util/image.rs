@@ -67,13 +67,12 @@ pub fn assert_image_equals_tiff(expected: &Path, found: &[u8]) {
         .write_all(found)
         .expect("Failed to write `found` bytes to temporary file");
 
-    // TODO: use GDALRasterCompareAlgorithm in `gdal 3.11`
-    let output = std::process::Command::new("gdalcompare.py")
-        .arg("-skip_binary") // skip comparison of exact binary content
+    let output = std::process::Command::new("gdal")
+        .args(["raster", "compare", "--skip-binary", "--skip-metadata"])
         .arg(expected)
         .arg(tmp_file.path())
         .output()
-        .expect("Failed to execute gdalcompare.py");
+        .expect("Failed to execute gdal raster compare");
 
     assert!(
         output.status.success(),

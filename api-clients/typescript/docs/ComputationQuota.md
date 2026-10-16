@@ -8,7 +8,7 @@ Name | Type
 ------------ | -------------
 `timestamp` | Date
 `computationId` | string
-`workflowId` | string
+`processingGraphId` | string
 `count` | number
 
 ## Example
@@ -20,7 +20,7 @@ import type { ComputationQuota } from '@geoengine/api-client'
 const example = {
   "timestamp": null,
   "computationId": null,
-  "workflowId": null,
+  "processingGraphId": null,
   "count": null,
 } satisfies ComputationQuota
 

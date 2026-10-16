@@ -6,6 +6,7 @@ mod scatter_plot;
 mod statistics;
 mod temporal_raster_mean_plot;
 mod temporal_vector_line_plot;
+mod util;
 
 pub use self::box_plot::{BoxPlot, BoxPlotParams};
 pub use self::class_histogram::{

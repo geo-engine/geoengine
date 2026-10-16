@@ -1,0 +1,353 @@
+import {
+    afterNextRender,
+    ChangeDetectionStrategy,
+    Component,
+    computed,
+    DestroyRef,
+    ElementRef,
+    inject,
+    linkedSignal,
+    resource,
+    signal,
+} from '@angular/core';
+import {CoreModule, MapService, ProjectService, UUID} from '@geoengine/core';
+import {A11yModule} from '@angular/cdk/a11y';
+import {MatButtonModule} from '@angular/material/button';
+import {MatDialog} from '@angular/material/dialog';
+import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatIconModule} from '@angular/material/icon';
+import {MatSelectModule} from '@angular/material/select';
+import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
+import {
+    BoundingBox2D,
+    LayersService,
+    NotificationService,
+    PlotsService,
+    RasterLayerMetadata,
+    SpatialReference,
+    UserService,
+    VegaChartData,
+    VegaViewerComponent,
+} from '@geoengine/common';
+import OlPolygon from 'ol/geom/Polygon';
+import {LayerIdPair} from '../main/main.component';
+import {EOdysseyLayerService} from '../layers/layers.service';
+import {PlotOutputFormat, RasterBandDescriptor, TypedPlotOperator, TypedRasterOperator, WrappedPlotOutput} from '@geoengine/api-client';
+import {PlotDialogComponent} from './plot-dialog.component';
+
+@Component({
+    selector: 'geoengine-compute',
+    template: `
+        <div class="compute-actions">
+            <mat-form-field appearance="outline">
+                <mat-label>Raster band</mat-label>
+                <mat-select [value]="selectedBand()" (selectionChange)="selectedBand.set($event.value)" [disabled]="isLoadingMetadata()">
+                    @for (band of bands(); track band) {
+                        <mat-option [value]="band">{{ band }}</mat-option>
+                    } @empty {
+                        <mat-option disabled>No bands available</mat-option>
+                    }
+                </mat-select>
+            </mat-form-field>
+
+            <button type="button" mat-raised-button color="primary" [disabled]="cannotComputeHistogram()" (click)="computeHistogram()">
+                Compute histogram
+            </button>
+
+            @if (cannotComputeHistogram()) {
+                <p class="hint">Draw a box on the map before computing a histogram.</p>
+                <p class="hint">Also select a raster band.</p>
+            }
+
+            @if (isLoading()) {
+                <mat-progress-spinner mode="indeterminate" [diameter]="spinnerWidthPx()"></mat-progress-spinner>
+            }
+
+            @if (plotData(); as plotData) {
+                <geoengine-vega-viewer
+                    [chartData]="vegaPlotData(plotData)"
+                    [width]="plotWidthPx()"
+                    [height]="plotWidthPx()"
+                ></geoengine-vega-viewer>
+                <div class="histogram-buttons">
+                    <button
+                        type="button"
+                        class="histogram-button"
+                        mat-icon-button
+                        matTooltip="Maximize histogram"
+                        aria-label="Maximize histogram"
+                        (click)="openHistogramDialog(plotData)"
+                    >
+                        <mat-icon>fullscreen</mat-icon>
+                    </button>
+                </div>
+            }
+        </div>
+    `,
+    styles: [
+        `
+            :host {
+                display: block;
+                padding: 1rem;
+            }
+
+            .compute-actions {
+                display: flex;
+                flex-direction: column;
+                gap: 0.75rem;
+            }
+
+            .hint {
+                margin: 0;
+                color: var(--geoengine-foreground-text-color, #444);
+                font-size: 0.85rem;
+            }
+
+            mat-form-field {
+                width: 100%;
+            }
+
+            .histogram-buttons {
+                background: var(--geoengine-background-color);
+                display: flex;
+                justify-content: flex-end;
+                margin-top: -1rem;
+            }
+
+            mat-progress-spinner {
+                display: block;
+                margin: 0 auto;
+            }
+        `,
+    ],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    imports: [
+        A11yModule,
+        CoreModule,
+        MatButtonModule,
+        MatFormFieldModule,
+        MatIconModule,
+        MatSelectModule,
+        MatProgressSpinnerModule,
+        VegaViewerComponent,
+    ],
+})
+export class ComputeComponent {
+    private readonly destroyRef = inject(DestroyRef);
+    private readonly dialog = inject(MatDialog);
+    private readonly layerService = inject(LayersService);
+    private readonly mapService = inject(MapService);
+    private readonly notificationService = inject(NotificationService);
+    private readonly plotsService = inject(PlotsService);
+    private readonly projectService = inject(ProjectService);
+    private readonly userService = inject(UserService);
+    private readonly eodysseyLayerService = inject(EOdysseyLayerService);
+
+    readonly plotWidthPx = signal(0);
+    readonly spinnerWidthPx = computed(() => Math.round(this.plotWidthPx() / 2));
+    readonly hostElement = inject(ElementRef).nativeElement as HTMLElement;
+
+    readonly selectedRasterLayer = this.eodysseyLayerService.mapTileLayer;
+    readonly selectedProcessingGraphId = resource<string | undefined, LayerIdPair | undefined>({
+        params: () => this.selectedRasterLayer(),
+        loader: async ({params: rasterLayer}): Promise<string | undefined> => {
+            if (!rasterLayer) return undefined;
+
+            return await this.layerService.registerAndGetLayerProcessingGraphId(rasterLayer.dataConnectorId, rasterLayer.layerId);
+        },
+    });
+    readonly selectedLayerMetadata = resource<RasterLayerMetadata | undefined, UUID | undefined>({
+        params: () => this.selectedProcessingGraphId.value(),
+        loader: async ({params: processingGraphId}): Promise<RasterLayerMetadata | undefined> => {
+            if (!processingGraphId) return undefined;
+
+            const processingGraphIdMetadata = await this.layerService.getProcessingGraphIdMetadata(processingGraphId);
+
+            if (processingGraphIdMetadata.layerType !== 'raster') return undefined;
+
+            return processingGraphIdMetadata;
+        },
+    });
+    readonly bands = computed(() => this.selectedLayerMetadata.value()?.bands.map((band) => band.name));
+    readonly selectedBand = linkedSignal<string | undefined>(() => {
+        const bands = this.bands();
+        if (!bands || bands.length === 0) return undefined;
+        return bands[0];
+    });
+    readonly layerOverlay = this.mapService.getLayerOverlay();
+    readonly computationBbox = computed<BboxAndSpatialReference | undefined>(() => {
+        const layerOverlay = this.layerOverlay();
+        if (!layerOverlay) return undefined;
+
+        const feature = layerOverlay.getSource()?.getFeatures()[0];
+        if (!feature) return undefined;
+
+        const geometry = feature.getGeometry();
+        if (!(geometry instanceof OlPolygon)) return undefined;
+
+        const [minx, miny, maxx, maxy] = geometry.getExtent();
+
+        return {
+            bbox: new BoundingBox2D([minx, miny, maxx, maxy]),
+            spatialReference: SpatialReference.fromSrsString(this.mapService.getView().getProjection().getCode()),
+        };
+    });
+    readonly cannotComputeHistogram = computed(() => {
+        return !this.computationBbox() || !this.selectedRasterLayer() || !this.selectedBand();
+    });
+
+    readonly isLoadingMetadata = computed(() => this.selectedProcessingGraphId.isLoading() || this.selectedLayerMetadata.isLoading());
+    readonly isComputingHistogram = signal(false);
+    readonly isLoading = computed(() => this.isComputingHistogram() || this.isLoadingMetadata());
+
+    readonly plotData = linkedSignal<WrappedPlotOutput | undefined>(() => {
+        this.computationBbox();
+        this.selectedRasterLayer();
+        this.selectedBand(); // reset the computation when its inputs change
+        return undefined;
+    });
+
+    constructor() {
+        let resizeObserver: ResizeObserver | undefined;
+
+        afterNextRender(() => {
+            resizeObserver?.disconnect();
+            resizeObserver = new ResizeObserver(() => {
+                const cardElement = this.hostElement.querySelector('div') as HTMLElement | undefined;
+                if (!cardElement) return;
+
+                this.plotWidthPx.set(getContentWidth(cardElement));
+            });
+            resizeObserver.observe(this.hostElement);
+        });
+
+        this.destroyRef.onDestroy(() => {
+            resizeObserver?.disconnect();
+        });
+    }
+
+    vegaPlotData(plotData: WrappedPlotOutput): VegaChartData {
+        if (plotData.outputFormat !== PlotOutputFormat.JsonVega) throw new Error('Invalid plot data format');
+        return plotData.data as VegaChartData;
+    }
+
+    openHistogramDialog(plotData: WrappedPlotOutput): void {
+        if (plotData.outputFormat !== PlotOutputFormat.JsonVega) {
+            return;
+        }
+
+        this.dialog.open(PlotDialogComponent, {
+            data: this.vegaPlotData(plotData),
+            maxWidth: '100vw',
+            maxHeight: '100vh',
+            panelClass: 'plot-dialog',
+        });
+    }
+
+    async computeHistogram(): Promise<void> {
+        const bboxAndSpatialReference = this.computationBbox();
+        const layer = this.selectedRasterLayer();
+        const metadata = this.selectedLayerMetadata.value();
+        const processingGraphId = this.selectedProcessingGraphId.value();
+        const band = this.selectedBand();
+
+        if (!bboxAndSpatialReference || !layer || !band || !processingGraphId || !metadata) return;
+
+        this.isComputingHistogram.set(true);
+        this.plotData.set(undefined);
+
+        try {
+            const sourceProcessingGraph = (await this.userService
+                .processingGraphAPI()
+                .loadProcessingGraphHandler({id: processingGraphId})) as TypedRasterOperator;
+            const measurementType = bandMeasurementType(metadata.bands, band);
+            let processingGraph: TypedPlotOperator;
+            if (measurementType === 'classification') {
+                processingGraph = {
+                    type: 'Plot',
+                    operator: {
+                        type: 'ClassHistogram',
+                        params: {},
+                        sources: {
+                            source: sourceProcessingGraph.operator,
+                        },
+                    },
+                };
+            } else {
+                processingGraph = {
+                    type: 'Plot',
+                    operator: {
+                        type: 'Histogram',
+                        params: {
+                            columnName: band,
+                            bounds: 'data',
+                            buckets: {
+                                type: 'squareRootChoiceRule',
+                                maxNumberOfBuckets: 20,
+                            },
+                        },
+                        sources: {
+                            source: sourceProcessingGraph.operator,
+                        },
+                    },
+                };
+            }
+            const plotWorkflowId = (await this.userService.processingGraphAPI().registerProcessingGraphHandler({processingGraph})).id;
+
+            const plotData = await this.plotsService.getPlot(
+                plotWorkflowId,
+                bboxAndSpatialReference.bbox,
+                await this.projectService.getTimeOnce(),
+                {x: Math.abs(metadata.pixelSizeX), y: Math.abs(metadata.pixelSizeY)},
+                bboxAndSpatialReference.spatialReference,
+            );
+
+            this.plotData.set(plotData);
+        } catch (error) {
+            this.notificationService.error(error instanceof Error ? error.message : String(error));
+        } finally {
+            this.isComputingHistogram.set(false);
+        }
+    }
+}
+
+/**
+ * Calculates the exact content width of an HTML element,
+ * excluding padding, border, and margin.
+ *
+ * @param element - The target HTMLElement.
+ * @returns The inner content width in pixels.
+ */
+function getContentWidth(element: HTMLElement): number {
+    const style = window.getComputedStyle(element);
+    const totalWidth = element.getBoundingClientRect().width;
+
+    const paddingLeft = parseFloat(style.paddingLeft) || 0;
+    const paddingRight = parseFloat(style.paddingRight) || 0;
+    const borderLeft = parseFloat(style.borderLeftWidth) || 0;
+    const borderRight = parseFloat(style.borderRightWidth) || 0;
+
+    return totalWidth - paddingLeft - paddingRight - borderLeft - borderRight;
+}
+
+/**
+ * Determines the measurement type of a specific band from the provided bands metadata.
+ *
+ * @param bandsMetadata - Array of raster band descriptors.
+ * @param band - The name of the band to check.
+ * @returns The measurement type of the band ('classification', 'continuous', or 'unitless').
+ */
+function bandMeasurementType(bandsMetadata: RasterBandDescriptor[], band: string): 'classification' | 'continuous' | 'unitless' {
+    for (const bandMetadata of bandsMetadata) {
+        if (bandMetadata.name !== band) continue;
+
+        return bandMetadata.measurement.type;
+    }
+
+    return 'unitless'; // fallback if the band is not found
+}
+
+interface BboxAndSpatialReference {
+    bbox: BoundingBox2D;
+    spatialReference: SpatialReference;
+}

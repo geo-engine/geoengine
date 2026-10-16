@@ -10,8 +10,8 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import { MultipleRasterOrSingleVectorSourceFromJSON, MultipleRasterOrSingleVectorSourceToJSON, } from './MultipleRasterOrSingleVectorSource';
 import { StatisticsParametersFromJSON, StatisticsParametersToJSON, } from './StatisticsParameters';
+import { SingleRasterOrVectorSourceFromJSON, SingleRasterOrVectorSourceToJSON, } from './SingleRasterOrVectorSource';
 /**
  * @export
  */
@@ -40,7 +40,7 @@ export function StatisticsFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'type': json['type'],
         'params': StatisticsParametersFromJSON(json['params']),
-        'sources': MultipleRasterOrSingleVectorSourceFromJSON(json['sources']),
+        'sources': SingleRasterOrVectorSourceFromJSON(json['sources']),
     };
 }
 export function StatisticsToJSON(json) {
@@ -53,6 +53,6 @@ export function StatisticsToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'type': value['type'],
         'params': StatisticsParametersToJSON(value['params']),
-        'sources': MultipleRasterOrSingleVectorSourceToJSON(value['sources']),
+        'sources': SingleRasterOrVectorSourceToJSON(value['sources']),
     };
 }

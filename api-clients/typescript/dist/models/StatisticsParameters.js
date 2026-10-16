@@ -17,6 +17,7 @@ exports.StatisticsParametersFromJSON = StatisticsParametersFromJSON;
 exports.StatisticsParametersFromJSONTyped = StatisticsParametersFromJSONTyped;
 exports.StatisticsParametersToJSON = StatisticsParametersToJSON;
 exports.StatisticsParametersToJSONTyped = StatisticsParametersToJSONTyped;
+const AttributeSelection_1 = require("./AttributeSelection");
 /**
  * Check if a given object implements the StatisticsParameters interface.
  */
@@ -31,7 +32,7 @@ function StatisticsParametersFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'columnNames': json['columnNames'] == null ? undefined : json['columnNames'],
+        'attributes': json['attributes'] == null ? undefined : (0, AttributeSelection_1.AttributeSelectionFromJSON)(json['attributes']),
         'percentiles': json['percentiles'] == null ? undefined : json['percentiles'],
     };
 }
@@ -43,7 +44,7 @@ function StatisticsParametersToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'columnNames': value['columnNames'],
+        'attributes': (0, AttributeSelection_1.AttributeSelectionToJSON)(value['attributes']),
         'percentiles': value['percentiles'],
     };
 }

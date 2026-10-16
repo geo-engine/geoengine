@@ -2273,6 +2273,80 @@ impl From<StringPair> for geoengine_datatypes::util::StringPair {
     }
 }
 
+/// A list that contains at least one element and no duplicates.
+/// The order of the elements is preserved.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    try_from = "Vec<T>",
+    into = "Vec<T>",
+    bound(
+        serialize = "T: Clone + Serialize",
+        deserialize = "T: Eq + std::hash::Hash + Deserialize<'de>"
+    )
+)]
+pub struct NonEmptyUniqueVec<T>(Vec<T>);
+
+#[derive(Debug, snafu::Snafu)]
+pub enum NonEmptyUniqueVecError {
+    #[snafu(display("The list must contain at least one element"))]
+    Empty,
+    #[snafu(display("The list must not contain duplicates"))]
+    Duplicates,
+}
+
+impl<T> NonEmptyUniqueVec<T> {
+    pub fn into_inner(self) -> Vec<T> {
+        self.0
+    }
+}
+
+impl<T: Eq + std::hash::Hash> TryFrom<Vec<T>> for NonEmptyUniqueVec<T> {
+    type Error = NonEmptyUniqueVecError;
+
+    fn try_from(values: Vec<T>) -> Result<Self, Self::Error> {
+        if values.is_empty() {
+            return Err(NonEmptyUniqueVecError::Empty);
+        }
+
+        let mut seen = std::collections::HashSet::with_capacity(values.len());
+        if !values.iter().all(|value| seen.insert(value)) {
+            return Err(NonEmptyUniqueVecError::Duplicates);
+        }
+
+        Ok(Self(values))
+    }
+}
+
+impl<T> From<NonEmptyUniqueVec<T>> for Vec<T> {
+    fn from(value: NonEmptyUniqueVec<T>) -> Self {
+        value.0
+    }
+}
+
+impl<T> std::ops::Deref for NonEmptyUniqueVec<T> {
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+// `ComposeSchema` instead of `PartialSchema` since utoipa composes generic field types with it.
+impl<T: ToSchema> utoipa::__dev::ComposeSchema for NonEmptyUniqueVec<T> {
+    fn compose(
+        generics: Vec<utoipa::openapi::RefOr<utoipa::openapi::Schema>>,
+    ) -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::ArrayBuilder;
+        ArrayBuilder::new()
+            .items(generics.into_iter().next().unwrap_or_else(T::schema))
+            .min_items(Some(1))
+            .unique_items(true)
+            .into()
+    }
+}
+
+impl<T: ToSchema> ToSchema for NonEmptyUniqueVec<T> {}
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize, ToSchema)]
 pub enum PlotOutputFormat {
     JsonPlain,
@@ -2498,6 +2572,35 @@ mod tests {
         assert_eq!(
             deserialized.unwrap_err().to_string(),
             "Failed to parse key as u8: invalid digit found in string at line 1 column 75"
+        );
+    }
+
+    #[test]
+    fn it_deserializes_non_empty_unique_vec() {
+        let values: super::NonEmptyUniqueVec<String> =
+            serde_json::from_str(r#"["b", "a"]"#).unwrap();
+
+        assert_eq!(&*values, ["b".to_string(), "a".to_string()]);
+        assert_eq!(serde_json::to_string(&values).unwrap(), r#"["b","a"]"#);
+    }
+
+    #[test]
+    fn it_rejects_empty_non_empty_unique_vec() {
+        let result = serde_json::from_str::<super::NonEmptyUniqueVec<String>>("[]");
+
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "The list must contain at least one element"
+        );
+    }
+
+    #[test]
+    fn it_rejects_duplicates_in_non_empty_unique_vec() {
+        let result = serde_json::from_str::<super::NonEmptyUniqueVec<String>>(r#"["a", "a"]"#);
+
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "The list must not contain duplicates"
         );
     }
 }

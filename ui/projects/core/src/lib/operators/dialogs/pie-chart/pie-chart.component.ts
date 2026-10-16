@@ -152,11 +152,11 @@ export class PieChartComponent implements AfterViewInit, OnDestroy {
         const donut = this.form.controls['donut'].value;
         const outputName: string = this.form.controls['name'].value;
 
-        from(this.projectService.getWorkflow(inputLayer.workflowId))
+        from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) =>
                     from(
-                        this.projectService.registerWorkflow({
+                        this.projectService.registerProcessingGraph({
                             type: 'Plot',
                             operator: {
                                 type: 'PieChart',

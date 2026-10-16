@@ -1,6 +1,7 @@
 import {UUID} from '../datasets/dataset.model';
 import {ToDict} from '../time/time.model';
 import {Plot as PlotDict} from '@geoengine/api-client';
+import {VisualizationSpec} from 'vega-embed';
 
 export type PlotType = 'JSON' | 'PNG';
 
@@ -21,7 +22,7 @@ export class Plot implements HasPlotId, ToDict<PlotDict> {
     static fromDict(dict: PlotDict): Plot {
         return new Plot({
             name: dict.name,
-            workflowId: dict.workflow,
+            workflowId: dict.processingGraph,
         });
     }
 
@@ -44,7 +45,7 @@ export class Plot implements HasPlotId, ToDict<PlotDict> {
     toDict(): PlotDict {
         return {
             name: this.name,
-            workflow: this.workflowId,
+            processingGraph: this.workflowId,
         };
     }
 }
@@ -54,7 +55,10 @@ export interface HasPlotId {
 }
 
 export interface VegaChartData {
-    readonly vegaString: string;
+    /**
+     * The Vega-Lite spec of the plot
+     */
+    readonly vegaSpec: VisualizationSpec;
     readonly metadata?: {
         readonly selectionName?: string;
     };

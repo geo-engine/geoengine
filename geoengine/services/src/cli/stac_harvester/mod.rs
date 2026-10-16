@@ -8,7 +8,7 @@
 //!   creating datasets, tiles, and layer collections.
 //!
 //! The mapping JSON matches the format of `StacDataProviderDefinition` as used by the
-//! STAC provider and the EDV bootstrap scripts.
+//! STAC provider and the `EOdyssey` bootstrap scripts.
 
 #![allow(clippy::print_stdout)]
 

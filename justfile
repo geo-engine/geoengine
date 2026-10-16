@@ -14,9 +14,10 @@ _default:
 [group("install")]
 install: api-clients::install backend::install python::install ui::install www::install
 
-# Call lint for all submodules.
+# Call lint for all submodules. Automatically fix issues where possible with `--fix`.
+[arg("fix", long="fix", value="true", help="Automatically apply fixes where possible.")]
 [group("lint")]
-lint: repo::lint api-clients::lint backend::lint python::lint ui::lint www::lint
+lint fix="false": (repo::lint fix) api-clients::lint (backend::lint fix) (python::lint fix) (ui::lint fix) (www::lint fix)
 
 # Check the format for all submodules. Format them with `--write`.
 [arg("write", long="write", value="true", help="Whether to write the formatted files back to disk.")]

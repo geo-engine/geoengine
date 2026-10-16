@@ -25,7 +25,7 @@ SINGLERASTERORVECTOROPERATOR_ONE_OF_SCHEMAS = ["RasterOperator", "VectorOperator
 
 class SingleRasterOrVectorOperator(BaseModel):
     """
-    It is either a set of `RasterOperator` or a single `VectorOperator`
+    It is either a single `RasterOperator` or a single `VectorOperator`
     """
     # data type: RasterOperator
     oneof_schema_1_validator: Optional[RasterOperator] = None

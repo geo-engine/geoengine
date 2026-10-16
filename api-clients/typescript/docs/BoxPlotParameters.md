@@ -1,13 +1,13 @@
 
 # BoxPlotParameters
 
-The parameter spec for [`BoxPlot`].  ## Vector Data  In the case of vector data, the operator generates one box for each of the selected numerical attributes. The operator returns an error if one of the selected attributes is not numeric.  ## Raster Data  For raster data, the operator generates one box for each input raster. 
+The parameter spec for [`BoxPlot`].  ## Vector Data  In the case of vector data, the operator generates one box for each of the selected numerical attributes. The operator returns an error if one of the selected attributes is not numeric.  ## Raster Data  For raster data, the operator generates one box for each of the selected bands. 
 
 ## Properties
 
 Name | Type
 ------------ | -------------
-`columnNames` | Array&lt;string&gt;
+`attributes` | [AttributeSelection](AttributeSelection.md)
 
 ## Example
 
@@ -16,7 +16,7 @@ import type { BoxPlotParameters } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "columnNames": null,
+  "attributes": null,
 } satisfies BoxPlotParameters
 
 console.log(example)

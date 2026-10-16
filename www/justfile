@@ -22,8 +22,11 @@ build: common::_clear
 run preview="false": common::_clear
     {{ if preview == "true" { "npm run build && npm run preview" } else { "npm run dev" } }}
 
-lint: common::_clear format
-    npm run eslint
+# Check formatting and lints. Automatically fix issues where possible with `--fix`.
+[arg("fix", long="fix", value="true", help="Automatically apply fixes where possible.")]
+[group("lint")]
+lint fix="false": common::_clear (format fix)
+    npm run eslint {{ if fix == "true" { "-- --fix" } else { "" } }}
 
 [arg("write", long="write", value="true", help="Whether to write the formatted files back to disk.")]
 [group("lint")]

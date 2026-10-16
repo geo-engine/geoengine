@@ -334,7 +334,7 @@ jobs:
         app: 
           - {project: gis, name: gis}
           - {project: gfbio, name: vat}
-          - {project: enhanced-data-viewer, name: edv}
+          - {project: eodyssey, name: eodyssey}
 
     runs-on: ubuntu-24.04
 
@@ -362,7 +362,7 @@ jobs:
           echo "BUILD_TAG=${{matrix.app.project}}" >> $GITHUB_ENV
 
       - name: Modify `BUILD_TAG` if dashboard
-        if: contains(fromJSON('["gis", "manager", "enhanced-data-viewer"]'), env.BUILD_TAG) == false
+        if: contains(fromJSON('["gis", "manager", "eodyssey"]'), env.BUILD_TAG) == false
         run: echo "BUILD_TAG=dashboards/${{env.BUILD_TAG}}" >> $GITHUB_ENV
     
       - uses: extractions/setup-just@v4

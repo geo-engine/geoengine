@@ -1,0 +1,105 @@
+@use '@angular/material' as mat;
+
+mat-toolbar {
+    .logo {
+        height: 2.5rem;
+        width: auto;
+        margin-right: 1rem;
+    }
+
+    .space {
+        flex: 1;
+    }
+
+    border-bottom: 1px solid var(--geoengine-divider-color);
+
+    button[matIconButton],
+    a[matIconButton] {
+        display: inline-flex; /* Icons are vertically centered differently otherwise. */
+    }
+}
+
+.loading-indicator {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+}
+
+mat-drawer {
+    width: 360px;
+
+    .drawer-container {
+        display: flex;
+        flex-direction: row;
+        height: 100%;
+
+        mat-nav-list {
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--geoengine-divider-color);
+
+            mat-list-item span {
+                text-align: center;
+            }
+
+            .geoengine-logo {
+                height: 1.5rem;
+                width: auto;
+            }
+
+            .spacer {
+                flex: 1;
+            }
+        }
+
+        .drawer-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 0 0.5rem;
+            overflow: auto;
+        }
+    }
+}
+
+.side-buttons {
+    position: absolute;
+    right: 1rem;
+    top: 1rem;
+
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: center;
+
+    .zoom-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+
+        box-shadow: var(--mat-fab-small-pressed-container-elevation-shadow);
+        border-radius: 50%;
+        background: solid 1px var(--mat-button-toggle-divider-color);
+
+        .zoom-in {
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+
+            box-shadow: none;
+        }
+
+        .zoom-out {
+            border-top-left-radius: 0;
+            border-top-right-radius: 0;
+
+            box-shadow: none;
+        }
+    }
+
+    button {
+        width: 48px; // adjust to toggle button size
+        height: 48px; // adjust to toggle button size
+    }
+}

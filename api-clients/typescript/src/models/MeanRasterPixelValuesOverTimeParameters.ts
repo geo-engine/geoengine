@@ -19,6 +19,13 @@ import {
     MeanRasterPixelValuesOverTimePositionToJSON,
     MeanRasterPixelValuesOverTimePositionToJSONTyped,
 } from './MeanRasterPixelValuesOverTimePosition';
+import type { AttributeSelection } from './AttributeSelection';
+import {
+    AttributeSelectionFromJSON,
+    AttributeSelectionFromJSONTyped,
+    AttributeSelectionToJSON,
+    AttributeSelectionToJSONTyped,
+} from './AttributeSelection';
 
 /**
  * The parameter spec for `MeanRasterPixelValuesOverTime`.
@@ -34,10 +41,18 @@ export interface MeanRasterPixelValuesOverTimeParameters {
     timePosition: MeanRasterPixelValuesOverTimePosition;
     /**
      * Whether to fill the area under the curve. Defaults to `true`.
+     * Only applies to a single band, multiple bands are drawn as lines.
      * @type {boolean}
      * @memberof MeanRasterPixelValuesOverTimeParameters
      */
     area?: boolean;
+    /**
+     * _Optional_: The bands to compute the means for.
+     * Defaults to `all`.
+     * @type {AttributeSelection}
+     * @memberof MeanRasterPixelValuesOverTimeParameters
+     */
+    attributes?: AttributeSelection;
 }
 
 
@@ -62,6 +77,7 @@ export function MeanRasterPixelValuesOverTimeParametersFromJSONTyped(json: any, 
         
         'timePosition': MeanRasterPixelValuesOverTimePositionFromJSON(json['timePosition']),
         'area': json['area'] == null ? undefined : json['area'],
+        'attributes': json['attributes'] == null ? undefined : AttributeSelectionFromJSON(json['attributes']),
     };
 }
 
@@ -78,6 +94,7 @@ export function MeanRasterPixelValuesOverTimeParametersToJSONTyped(value?: MeanR
         
         'timePosition': MeanRasterPixelValuesOverTimePositionToJSON(value['timePosition']),
         'area': value['area'],
+        'attributes': AttributeSelectionToJSON(value['attributes']),
     };
 }
 

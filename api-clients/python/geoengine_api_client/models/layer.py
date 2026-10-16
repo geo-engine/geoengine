@@ -33,11 +33,11 @@ class Layer(BaseModel):
     id: ProviderLayerId
     name: StrictStr
     description: StrictStr
-    workflow: ProcessingGraph
+    processing_graph: ProcessingGraph = Field(alias="processingGraph")
     symbology: Optional[Symbology] = None
     properties: Optional[List[Annotated[List[StrictStr], Field(min_length=2, max_length=2)]]] = Field(default=None, description="properties, for instance, to be rendered in the UI")
     metadata: Optional[Dict[str, StrictStr]] = Field(default=None, description="metadata used for loading the data")
-    __properties: ClassVar[List[str]] = ["id", "name", "description", "workflow", "symbology", "properties", "metadata"]
+    __properties: ClassVar[List[str]] = ["id", "name", "description", "processingGraph", "symbology", "properties", "metadata"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -81,9 +81,9 @@ class Layer(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of id
         if self.id:
             _dict['id'] = self.id.to_dict()
-        # override the default output from pydantic by calling `to_dict()` of workflow
-        if self.workflow:
-            _dict['workflow'] = self.workflow.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of processing_graph
+        if self.processing_graph:
+            _dict['processingGraph'] = self.processing_graph.to_dict()
         # override the default output from pydantic by calling `to_dict()` of symbology
         if self.symbology:
             _dict['symbology'] = self.symbology.to_dict()
@@ -107,7 +107,7 @@ class Layer(BaseModel):
             "id": ProviderLayerId.from_dict(obj["id"]) if obj.get("id") is not None else None,
             "name": obj.get("name"),
             "description": obj.get("description"),
-            "workflow": ProcessingGraph.from_dict(obj["workflow"]) if obj.get("workflow") is not None else None,
+            "processingGraph": ProcessingGraph.from_dict(obj["processingGraph"]) if obj.get("processingGraph") is not None else None,
             "symbology": Symbology.from_dict(obj["symbology"]) if obj.get("symbology") is not None else None,
             "properties": obj.get("properties"),
             "metadata": obj.get("metadata")

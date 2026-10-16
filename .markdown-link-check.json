@@ -1,0 +1,22 @@
+{
+  "replacementPatterns": [
+    {
+      "pattern": "^https://coveralls\\.io/github/([^?#]+)(.*)$",
+      "replacement": "https://coveralls.io/github/$1.json$2"
+    },
+    {
+      "pattern": "^https://www\\.npmjs\\.com/package/",
+      "replacement": "https://registry.npmjs.org/"
+    }
+  ],
+  "httpHeaders": [
+    {
+      "urls": ["https://crates.io"],
+      "headers": { "Accept": "text/html" }
+    }
+  ],
+  "retryOn429": true,
+  "retryCount": 3,
+  "fallbackRetryDelay": "30s",
+  "timeout": "20s"
+}

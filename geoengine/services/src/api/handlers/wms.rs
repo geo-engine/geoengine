@@ -1,3 +1,4 @@
+use crate::api::model::processing_graphs::ProcessingGraphId;
 use crate::{
     api::{
         model::{
@@ -48,7 +49,7 @@ where
     C: ApplicationContext,
     C::Session: FromRequest,
 {
-    cfg.service(web::resource("/wms/{workflow}").route(web::get().to(wms_handler::<C>)));
+    cfg.service(web::resource("/wms/{processingGraph}").route(web::get().to(wms_handler::<C>)));
 }
 
 #[derive(Debug, Deserialize)]
@@ -115,7 +116,7 @@ impl IntoParams for WmsQueryParams {
 #[utoipa::path(
     tag = "OGC WMS",
     get,
-    path = "/wms/{workflow}",
+    path = "/wms/{processingGraph}",
     responses(
         (status = 200, description = "OK", content_type = "text/xml", body = String,
             // TODO: add example when utoipa supports more than just json examples
@@ -158,7 +159,7 @@ impl IntoParams for WmsQueryParams {
             //     </Exception>
             //     <Layer queryable="1">
             //       <Name>b709b27b-dea5-5a27-a074-ae3366c49498</Name>
-            //       <Title>Workflow b709b27b-dea5-5a27-a074-ae3366c49498</Title>
+            //       <Title>Processing Graph b709b27b-dea5-5a27-a074-ae3366c49498</Title>
             //       <CRS>EPSG:3857</CRS>
             //       <EX_GeographicBoundingBox>
             //         <westBoundLongitude>-180</westBoundLongitude>
@@ -174,7 +175,7 @@ impl IntoParams for WmsQueryParams {
         (status = 200, response = crate::api::model::responses::PngResponse),
     ),
     params(
-        ("workflow" = WorkflowId, description = "Workflow id"),
+        ("processingGraph" = ProcessingGraphId, description = "Processing graph id"),
         WmsQueryParams
     ),
     security(
@@ -183,7 +184,7 @@ impl IntoParams for WmsQueryParams {
 )]
 async fn wms_handler<C>(
     req: HttpRequest,
-    workflow: web::Path<WorkflowId>,
+    processing_graph: web::Path<ProcessingGraphId>,
     request: OgcQueryExtractor<WmsQueryParams>,
     app_ctx: web::Data<C>,
     session: C::Session,
@@ -193,10 +194,17 @@ where
 {
     match request.into_inner() {
         WmsQueryParams::GetCapabilities(_) => {
-            wms_get_capabilities(workflow.into_inner(), app_ctx, session).await
+            wms_get_capabilities(processing_graph.into_inner().into(), app_ctx, session).await
         }
         WmsQueryParams::GetMap(get_map) => {
-            wms_get_map(req, workflow.into_inner(), get_map, app_ctx, session).await
+            wms_get_map(
+                req,
+                processing_graph.into_inner().into(),
+                get_map,
+                app_ctx,
+                session,
+            )
+            .await
         }
         WmsQueryParams::GetFeatureInfo(_)
         | WmsQueryParams::GetStyles(_)
@@ -269,7 +277,7 @@ where
         </Exception>
         <Layer queryable="1">
             <Name>{workflow}</Name>
-            <Title>Workflow {workflow}</Title>
+            <Title>Processing Graph {workflow}</Title>
             <CRS>{srs_authority}:{srs_code}</CRS>
             <EX_GeographicBoundingBox>
                 <westBoundLongitude>-180</westBoundLongitude>
@@ -1279,7 +1287,7 @@ mod tests {
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
-        let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=3600&height=1800&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=500&height=500&crs=EPSG:4326&bbox=-10.0,0.0,40.0,50.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, app_ctx).await;
 
         assert_eq!(

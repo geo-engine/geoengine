@@ -229,7 +229,7 @@ export class DownloadLayerComponent implements OnInit {
         combineLatest([
             this.projectService.getSpatialReferenceOnce(),
             this.userService.getSessionTokenForRequest(),
-            this.projectService.getWorkflowMetaData(this.layer().workflowId),
+            this.projectService.getProcessingGraphMetaData(this.layer().workflowId),
         ])
             .pipe(
                 mergeMap(([sref, sessionToken, resultDescriptor]) => {
@@ -263,7 +263,7 @@ export class DownloadLayerComponent implements OnInit {
         combineLatest([
             this.projectService.getSpatialReferenceOnce(),
             this.userService.getSessionTokenForRequest(),
-            this.projectService.getWorkflowMetaData(this.layer().workflowId),
+            this.projectService.getProcessingGraphMetaData(this.layer().workflowId),
         ])
             .pipe(
                 mergeMap(([sref, sessionToken, resultDescriptor]) => {

@@ -10,6 +10,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { AttributeSelectionFromJSON, AttributeSelectionToJSON, } from './AttributeSelection';
 /**
  * Check if a given object implements the BoxPlotParameters interface.
  */
@@ -24,7 +25,7 @@ export function BoxPlotParametersFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'columnNames': json['columnNames'] == null ? undefined : json['columnNames'],
+        'attributes': json['attributes'] == null ? undefined : AttributeSelectionFromJSON(json['attributes']),
     };
 }
 export function BoxPlotParametersToJSON(json) {
@@ -35,6 +36,6 @@ export function BoxPlotParametersToJSONTyped(value, ignoreDiscriminator = false)
         return value;
     }
     return {
-        'columnNames': value['columnNames'],
+        'attributes': AttributeSelectionToJSON(value['attributes']),
     };
 }

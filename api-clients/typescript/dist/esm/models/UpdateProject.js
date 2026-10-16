@@ -11,8 +11,9 @@
  * Do not edit the class manually.
  */
 import { TimeStepFromJSON, TimeStepToJSON, } from './TimeStep';
+import { PlotUpdateFromJSON, PlotUpdateToJSON, } from './PlotUpdate';
 import { STRectangleFromJSON, STRectangleToJSON, } from './STRectangle';
-import { VecUpdateFromJSON, VecUpdateToJSON, } from './VecUpdate';
+import { LayerUpdateFromJSON, LayerUpdateToJSON, } from './LayerUpdate';
 /**
  * Check if a given object implements the UpdateProject interface.
  */
@@ -32,8 +33,8 @@ export function UpdateProjectFromJSONTyped(json, ignoreDiscriminator) {
         'id': json['id'],
         'name': json['name'] == null ? undefined : json['name'],
         'description': json['description'] == null ? undefined : json['description'],
-        'layers': json['layers'] == null ? undefined : (json['layers'].map(VecUpdateFromJSON)),
-        'plots': json['plots'] == null ? undefined : (json['plots'].map(VecUpdateFromJSON)),
+        'layers': json['layers'] == null ? undefined : (json['layers'].map(LayerUpdateFromJSON)),
+        'plots': json['plots'] == null ? undefined : (json['plots'].map(PlotUpdateFromJSON)),
         'bounds': json['bounds'] == null ? undefined : STRectangleFromJSON(json['bounds']),
         'timeStep': json['timeStep'] == null ? undefined : TimeStepFromJSON(json['timeStep']),
     };
@@ -49,8 +50,8 @@ export function UpdateProjectToJSONTyped(value, ignoreDiscriminator = false) {
         'id': value['id'],
         'name': value['name'],
         'description': value['description'],
-        'layers': value['layers'] == null ? undefined : (value['layers'].map(VecUpdateToJSON)),
-        'plots': value['plots'] == null ? undefined : (value['plots'].map(VecUpdateToJSON)),
+        'layers': value['layers'] == null ? undefined : (value['layers'].map(LayerUpdateToJSON)),
+        'plots': value['plots'] == null ? undefined : (value['plots'].map(PlotUpdateToJSON)),
         'bounds': STRectangleToJSON(value['bounds']),
         'timeStep': TimeStepToJSON(value['timeStep']),
     };

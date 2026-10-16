@@ -102,7 +102,7 @@ export class LineSimplificationComponent implements OnInit {
 
         this.loading$.next(true);
 
-        from(this.projectService.getWorkflow(vectorLayer.workflowId))
+        from(this.projectService.getProcessingGraph(vectorLayer.workflowId))
             .pipe(
                 mergeMap((sourceWorkflow: ProcessingGraph) => {
                     const workflow: ProcessingGraph = {
@@ -118,12 +118,12 @@ export class LineSimplificationComponent implements OnInit {
                             },
                         },
                     };
-                    return from(this.projectService.registerWorkflow(workflow));
+                    return from(this.projectService.registerProcessingGraph(workflow));
                 }),
                 mergeMap((workflowId) =>
                     this.projectService.addLayer(
                         new VectorLayer({
-                            workflowId,
+                            processingGraphId: workflowId,
                             name: layerName,
                             symbology: vectorLayer.symbology,
                             isLegendVisible: false,

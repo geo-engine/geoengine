@@ -37,7 +37,7 @@ The operator returns an error if the target projection is unknown or if input da
 
 | Name   | Type                         | Description                                                         |
 | ------ | ---------------------------- | ------------------------------------------------------------------- |
-| source | SingleRasterOrVectorOperator | It is either a set of `RasterOperator` or a single `VectorOperator` |
+| source | SingleRasterOrVectorOperator | It is either a single `RasterOperator` or a single `VectorOperator` |
 
 ## Examples
 

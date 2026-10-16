@@ -125,14 +125,14 @@ export class FeatureAttributeOvertimeComponent implements AfterViewInit, OnDestr
 
         const outputName: string = this.form.controls['name'].value;
 
-        from(this.projectService.getWorkflow(inputLayer.workflowId))
+        from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(
                 mergeMap((inputWorkflow: ProcessingGraph) => {
                     if (inputWorkflow.type !== 'Vector') {
-                        throw new Error('Expected a vector workflow for feature attribute over time.');
+                        throw new Error('Expected a vector processing graph for feature attribute over time.');
                     }
 
-                    return this.projectService.registerWorkflow({
+                    return this.projectService.registerProcessingGraph({
                         type: 'Plot',
                         operator: {
                             type: 'FeatureAttributeValuesOverTime',

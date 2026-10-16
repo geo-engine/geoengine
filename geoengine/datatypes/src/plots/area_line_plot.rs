@@ -4,9 +4,11 @@ use crate::primitives::{Measurement, TimeInstance};
 use crate::util::Result;
 use snafu::ensure;
 
+/// A chart over time with one line or area.
+/// `None` values are rendered as `null` and interrupt the line.
 pub struct AreaLineChart {
     timestamps: Vec<TimeInstance>,
-    values: Vec<f64>,
+    values: Vec<Option<f64>>,
     measurement: Measurement,
     draw_area: bool,
 }
@@ -14,7 +16,7 @@ pub struct AreaLineChart {
 impl AreaLineChart {
     pub fn new(
         timestamps: Vec<TimeInstance>,
-        values: Vec<f64>,
+        values: Vec<Option<f64>>,
         measurement: Measurement,
         draw_area: bool,
     ) -> Result<Self> {
@@ -53,8 +55,8 @@ impl Plot for AreaLineChart {
 
         let mark_type = if self.draw_area { "area" } else { "line" };
 
-        let vega_string = serde_json::json!({
-            "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json",
+        let vega_spec = serde_json::json!({
+            "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
             "data": {
                 "values": data
             },
@@ -76,11 +78,10 @@ impl Plot for AreaLineChart {
                 "line": true,
                 "point": true
             }
-        })
-        .to_string();
+        });
 
         Ok(PlotData {
-            vega_string,
+            vega_spec,
             metadata: PlotMetaData::None,
         })
     }
@@ -102,7 +103,7 @@ mod tests {
                 TimeInstance::from(DateTime::new_utc(2013, 1, 1, 0, 0, 0)),
                 TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)),
             ],
-            vec![0., 1., 4., 9., 7.],
+            vec![Some(0.), Some(1.), Some(4.), Some(9.), Some(7.)],
             Measurement::Unitless,
             true,
         )
@@ -111,7 +112,7 @@ mod tests {
         assert_eq!(
             chart.to_vega_embeddable(false).unwrap(),
             PlotData {
-                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"2010-01-01T00:00:00+00:00","y":0.0},{"x":"2011-01-01T00:00:00+00:00","y":1.0},{"x":"2012-01-01T00:00:00+00:00","y":4.0},{"x":"2013-01-01T00:00:00+00:00","y":9.0},{"x":"2014-01-01T00:00:00+00:00","y":7.0}]},"description":"Area Plot","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"}},"mark":{"line":true,"point":true,"type":"area"}}"#.to_owned(),
+                vega_spec: serde_json::from_str(r#"{"$schema":"https://vega.github.io/schema/vega-lite/v6.json","data":{"values":[{"x":"2010-01-01T00:00:00+00:00","y":0.0},{"x":"2011-01-01T00:00:00+00:00","y":1.0},{"x":"2012-01-01T00:00:00+00:00","y":4.0},{"x":"2013-01-01T00:00:00+00:00","y":9.0},{"x":"2014-01-01T00:00:00+00:00","y":7.0}]},"description":"Area Plot","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"}},"mark":{"line":true,"point":true,"type":"area"}}"#).unwrap(),
                 metadata: PlotMetaData::None,
             }
         );
@@ -127,7 +128,7 @@ mod tests {
                 TimeInstance::from(DateTime::new_utc(2013, 1, 1, 0, 0, 0)),
                 TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)),
             ],
-            vec![0., 1., 4., 9., 7.],
+            vec![Some(0.), Some(1.), Some(4.), Some(9.), Some(7.)],
             Measurement::Continuous(ContinuousMeasurement {
                 measurement: "Joy".to_owned(),
                 unit: Some("Pct".to_owned()),
@@ -139,9 +140,33 @@ mod tests {
         assert_eq!(
             chart.to_vega_embeddable(false).unwrap(),
             PlotData {
-                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"2010-01-01T00:00:00+00:00","y":0.0},{"x":"2011-01-01T00:00:00+00:00","y":1.0},{"x":"2012-01-01T00:00:00+00:00","y":4.0},{"x":"2013-01-01T00:00:00+00:00","y":9.0},{"x":"2014-01-01T00:00:00+00:00","y":7.0}]},"description":"Area Plot","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"Joy in Pct","type":"quantitative"}},"mark":{"line":true,"point":true,"type":"line"}}"#.to_owned(),
+                vega_spec: serde_json::from_str(r#"{"$schema":"https://vega.github.io/schema/vega-lite/v6.json","data":{"values":[{"x":"2010-01-01T00:00:00+00:00","y":0.0},{"x":"2011-01-01T00:00:00+00:00","y":1.0},{"x":"2012-01-01T00:00:00+00:00","y":4.0},{"x":"2013-01-01T00:00:00+00:00","y":9.0},{"x":"2014-01-01T00:00:00+00:00","y":7.0}]},"description":"Area Plot","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"Joy in Pct","type":"quantitative"}},"mark":{"line":true,"point":true,"type":"line"}}"#).unwrap(),
                 metadata: PlotMetaData::None,
             }
+        );
+    }
+
+    #[test]
+    fn it_serializes_missing_values_as_null() {
+        let chart = AreaLineChart::new(
+            vec![
+                TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
+                TimeInstance::from(DateTime::new_utc(2011, 1, 1, 0, 0, 0)),
+            ],
+            vec![None, Some(1.)],
+            Measurement::Unitless,
+            false,
+        )
+        .unwrap();
+
+        let plot_data = chart.to_vega_embeddable(false).unwrap();
+
+        assert_eq!(
+            plot_data.vega_spec["data"]["values"],
+            serde_json::json!([
+                {"x": "2010-01-01T00:00:00+00:00", "y": null},
+                {"x": "2011-01-01T00:00:00+00:00", "y": 1.0},
+            ])
         );
     }
 }

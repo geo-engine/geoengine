@@ -1,103 +1,67 @@
-@if (selectedBands(); as bands) {
-    <table>
-        <thead>
-            <!-- measurement -->
-            <tr>
-                <td colspan="3" class="measurement">
-                    @if (showBandNames()) {
-                        <span>
-                            @if (bands.length > 1) {
-                                Bandnames
-                            } @else {
-                                Bandname
-                            }
-                            :
-                            <i>
-                                @for (band of bands; track band.name) {
-                                    {{ band.name }}
-                                    @if (!$last) {
-                                        <span>,</span>
-                                    }
-                                }
-                            </i>
-                        </span>
-                    }
+@if (rgbChannels(); as channels) {
+    <div class="rgb-legend">
+        <div class="rgb-title">RGB composite</div>
+        @for (channel of channels; track channel.label) {
+            <div class="channel-swatch" [style.--channel-color]="channel.cssColor" [attr.aria-label]="channel.label + ' channel'"></div>
+            <div class="channel-name">
+                <span>{{ showBandNames() ? channel.label + ':' : channel.label }}</span>
+                @if (showBandNames()) {
+                    <b>{{ channel.band.name }}</b>
+                }
+            </div>
+            <div class="channel-details">
+                @if (channel.band.measurement.type !== 'unitless') {
+                    <span>{{ channel.band.measurement | legendMeasurementText }}</span>
+                    <span>·</span>
+                }
+                <span class="range">{{ channel.min }} – {{ channel.max }}{{ channel.scale !== 1 ? ' ×' + channel.scale : '' }}</span>
+            </div>
+        }
+    </div>
+} @else if (selectedBands(); as bands) {
+    <div class="measurement">
+        @if (showBandNames()) {
+            <div>
+                {{ bands.length > 1 ? 'Bands' : 'Band' }}: <i>{{ bandNamesText() }}</i>
+            </div>
+        }
+        @if (bandsHaveUnits()) {
+            <div>
+                {{ bands.length > 1 ? 'Measurements' : 'Measurement' }}: <i>{{ measurementsText() }}</i>
+            </div>
+        }
+    </div>
 
-                    @if (bandsHaveUnits()) {
-                        Measurement
-                        @if (bands.length > 1) {
-                            <span>s</span>
-                        }
-                        :
-                        @for (band of bands; track band.name) {
-                            @if (band.measurement | continuousMeasurement; as measurement) {
-                                <i>
-                                    {{ measurement.measurement }}
-                                    @if (measurement.unit) {
-                                        <span> (in {{ measurement.unit }})</span>
-                                    }
-                                </i>
-                                @if (!$last) {
-                                    <span>, </span>
-                                }
-                            }
-                            @if (band.measurement | classificationMeasurement; as measurement) {
-                                <i>{{ measurement.measurement }}</i>
-                                @if (!$last) {
-                                    <span>, </span>
-                                }
-                            }
-                            @if (band.measurement | unitlessMeasurement; as measurement) {
-                                <i>unitless</i>
-                                @if (!$last) {
-                                    <span>, </span>
-                                }
-                            }
-                        }
-                    }
-                </td>
-            </tr>
-        </thead>
-        <tbody>
-            @if (layer().symbology.rasterColorizer.isContinuous()) {
-                @for (breakpoint of displayedBreakpoints(); track breakpoint) {
-                    <tr>
-                        @if ($first) {
-                            <td
-                                class="gradient"
-                                [rowSpan]="layer().symbology.rasterColorizer.getBreakpoints().length"
-                                [style.background]="
-                                    layer().symbology.rasterColorizer | geoengineRasterColorizerCssGradient: gradientAngle()
-                                "
-                            ></td>
-                        }
-                        <td>{{ breakpoint }}</td>
-                    </tr>
+    @if (layer().symbology.rasterColorizer.isContinuous()) {
+        <div class="gradient-legend">
+            <div
+                class="gradient-bar"
+                [style.background]="layer().symbology.rasterColorizer | geoengineRasterColorizerCssGradient: gradientAngle()"
+            ></div>
+            <div class="gradient-values">
+                @for (breakpoint of displayedBreakpoints(); track $index) {
+                    <span>{{ breakpoint }}</span>
                 }
-            } @else if (layer().symbology.rasterColorizer.isDiscrete() && bands[0]) {
-                @if (bands[0].measurement | classificationMeasurement; as measurement) {
-                    @for (breakpoint of colorizerBreakpoints(); track breakpoint) {
-                        <tr>
-                            <td class="classes">
-                                <div class="icon" [style.background-color]="breakpoint | breakpointToCssStringPipe"></div>
-                            </td>
-                            <td class="classes">{{ breakpoint.value }}</td>
-                            <td>{{ measurement.classes[breakpoint.value] }}</td>
-                        </tr>
-                    }
-                } @else {
-                    @for (breakpoint of colorizerBreakpoints(); track breakpoint) {
-                        <tr>
-                            <td class="classes">
-                                <div class="icon" [style.background-color]="breakpoint | breakpointToCssStringPipe"></div>
-                            </td>
-                            <td>{{ breakpoint.value }}</td>
-                        </tr>
-                    }
+            </div>
+        </div>
+    } @else if (layer().symbology.rasterColorizer.isDiscrete() && bands[0]) {
+        @if (bands[0].measurement | classificationMeasurement; as measurement) {
+            <div class="classes with-labels">
+                @for (breakpoint of colorizerBreakpoints(); track breakpoint) {
+                    <div class="swatch" [style.background-color]="breakpoint | breakpointToCssStringPipe"></div>
+                    <div class="value">{{ breakpoint.value }}</div>
+                    <div class="label">{{ measurement.classes[breakpoint.value] }}</div>
                 }
-            }
-        </tbody>
-    </table>
+            </div>
+        } @else {
+            <div class="classes">
+                @for (breakpoint of colorizerBreakpoints(); track breakpoint) {
+                    <div class="swatch" [style.background-color]="breakpoint | breakpointToCssStringPipe"></div>
+                    <div class="label">{{ breakpoint.value }}</div>
+                }
+            </div>
+        }
+    }
 } @else {
     <!-- loading spinner -->
     <mat-spinner></mat-spinner>

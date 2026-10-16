@@ -59,11 +59,14 @@ export class MapService {
 
     private mapComponent?: MapContainerComponent;
     private isGridStream = new BehaviorSubject(false);
-    private view$ = new BehaviorSubject<OlView>(
+    private readonly viewSignal = signal<OlView>(
         new OlView({
             zoom: 0,
         }),
     );
+
+    /** The current map view, including replacements after a projection change. */
+    readonly view = this.viewSignal.asReadonly();
 
     /**
      * Returns events that indicate if the map is in grid or default mode
@@ -189,13 +192,13 @@ export class MapService {
      * Set the current view
      */
     setView(view: OlView): void {
-        this.view$.next(view);
+        this.viewSignal.set(view);
     }
 
     /**
      * Return the current view
      */
     getView(): OlView {
-        return this.view$.value;
+        return this.view();
     }
 }

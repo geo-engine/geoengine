@@ -582,6 +582,7 @@ where
 mod tests {
     use super::*;
     use crate::{
+        api::model::projects::UpdateProject as ApiUpdateProject,
         config::QuotaTrackingMode,
         datasets::{
             AddDataset, DatasetIdAndName,
@@ -642,10 +643,9 @@ mod tests {
     };
     use geoengine_operators::{
         engine::{
-            MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
-            RasterBandDescriptors, RasterResultDescriptor, StaticMetaData, TimeDescriptor,
-            TypedOperator, TypedResultDescriptor, VectorColumnInfo, VectorOperator,
-            VectorResultDescriptor,
+            MetaData, MetaDataProvider, PlotOperator, RasterBandDescriptors,
+            RasterResultDescriptor, StaticMetaData, TimeDescriptor, TypedOperator,
+            TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
         },
         machine_learning::MlModelMetadata,
         mock::{MockPointSource, MockPointSourceParams, SpatialBoundsDerive},
@@ -657,7 +657,6 @@ mod tests {
             OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
             OgrSourceTimeFormat,
         },
-        util::input::MultiRasterOrVectorOperator::Raster,
     };
     use httptest::Server;
     use oauth2::{AccessToken, RefreshToken};
@@ -868,9 +867,11 @@ mod tests {
                         column_names: vec![],
                         percentiles: vec![],
                     },
-                    sources: MultipleRasterOrSingleVectorSource {
-                        source: Raster(vec![]),
-                    },
+                    sources: MockPointSource {
+                        params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
+                    }
+                    .boxed()
+                    .into(),
                 }
                 .boxed()
                 .into(),
@@ -4567,11 +4568,11 @@ mod tests {
 
         let project_id = db.create_project(create_project).await.unwrap();
 
-        let update: UpdateProject = serde_json::from_value(json!({
+        let update: UpdateProject = serde_json::from_value::<ApiUpdateProject>(json!({
             "id": project_id.to_string(),
             "layers": [{
                 "name": "NDVI",
-                "workflow": workflow_id.to_string(),
+                "processingGraph": workflow_id.to_string(),
                 "visibility": {
                     "data": true,
                     "legend": false
@@ -4599,15 +4600,16 @@ mod tests {
                 }
             }]
         }))
-        .unwrap();
+        .unwrap()
+        .into();
 
         db.update_project(update).await.unwrap();
 
-        let update: UpdateProject = serde_json::from_value(json!({
+        let update: UpdateProject = serde_json::from_value::<ApiUpdateProject>(json!({
             "id": project_id.to_string(),
             "layers": [{
                 "name": "NDVI",
-                "workflow": workflow_id.to_string(),
+                "processingGraph": workflow_id.to_string(),
                 "visibility": {
                     "data": true,
                     "legend": false
@@ -4677,15 +4679,16 @@ mod tests {
                 }
             }]
         }))
-        .unwrap();
+        .unwrap()
+        .into();
 
         db.update_project(update).await.unwrap();
 
-        let update: UpdateProject = serde_json::from_value(json!({
+        let update: UpdateProject = serde_json::from_value::<ApiUpdateProject>(json!({
             "id": project_id.to_string(),
             "layers": [{
                 "name": "NDVI",
-                "workflow": workflow_id.to_string(),
+                "processingGraph": workflow_id.to_string(),
                 "visibility": {
                     "data": true,
                     "legend": false
@@ -4755,15 +4758,16 @@ mod tests {
                 }
             }]
         }))
-        .unwrap();
+        .unwrap()
+        .into();
 
         db.update_project(update).await.unwrap();
 
-        let update: UpdateProject = serde_json::from_value(json!({
+        let update: UpdateProject = serde_json::from_value::<ApiUpdateProject>(json!({
             "id": project_id.to_string(),
             "layers": [{
                 "name": "NDVI",
-                "workflow": workflow_id.to_string(),
+                "processingGraph": workflow_id.to_string(),
                 "visibility": {
                     "data": true,
                     "legend": false
@@ -4833,7 +4837,8 @@ mod tests {
                 }
             }]
         }))
-        .unwrap();
+        .unwrap()
+        .into();
 
         // run two updates concurrently
         let (r0, r1) = join!(db.update_project(update.clone()), db.update_project(update));

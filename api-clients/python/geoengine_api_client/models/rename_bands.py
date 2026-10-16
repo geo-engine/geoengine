@@ -17,33 +17,36 @@ import json
 import pprint
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, field_validator
 from typing import Any, List, Optional
-from geoengine_api_client.models.default import Default
-from geoengine_api_client.models.rename import Rename
-from geoengine_api_client.models.suffix import Suffix
+from geoengine_api_client.models.rename_bands_default import RenameBandsDefault
+from geoengine_api_client.models.rename_bands_rename import RenameBandsRename
+from geoengine_api_client.models.rename_bands_suffix import RenameBandsSuffix
 from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-RENAMEBANDS_ONE_OF_SCHEMAS = ["Default", "Rename", "Suffix"]
+RENAMEBANDS_ONE_OF_SCHEMAS = ["RenameBandsDefault", "RenameBandsRename", "RenameBandsSuffix"]
 
 class RenameBands(BaseModel):
     """
     RenameBands
     """
-    # data type: Default
-    oneof_schema_1_validator: Optional[Default] = None
-    # data type: Suffix
-    oneof_schema_2_validator: Optional[Suffix] = None
-    # data type: Rename
-    oneof_schema_3_validator: Optional[Rename] = None
-    actual_instance: Optional[Union[Default, Rename, Suffix]] = None
-    one_of_schemas: Set[str] = { "Default", "Rename", "Suffix" }
+    # data type: RenameBandsDefault
+    oneof_schema_1_validator: Optional[RenameBandsDefault] = None
+    # data type: RenameBandsSuffix
+    oneof_schema_2_validator: Optional[RenameBandsSuffix] = None
+    # data type: RenameBandsRename
+    oneof_schema_3_validator: Optional[RenameBandsRename] = None
+    actual_instance: Optional[Union[RenameBandsDefault, RenameBandsRename, RenameBandsSuffix]] = None
+    one_of_schemas: Set[str] = { "RenameBandsDefault", "RenameBandsRename", "RenameBandsSuffix" }
 
     model_config = ConfigDict(
         validate_assignment=True,
         protected_namespaces=(),
     )
 
+
+    discriminator_value_class_map: Dict[str, str] = {
+    }
 
     def __init__(self, *args, **kwargs) -> None:
         if args:
@@ -60,27 +63,27 @@ class RenameBands(BaseModel):
         instance = RenameBands.model_construct()
         error_messages = []
         match = 0
-        # validate data type: Default
-        if not isinstance(v, Default):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `Default`")
+        # validate data type: RenameBandsDefault
+        if not isinstance(v, RenameBandsDefault):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `RenameBandsDefault`")
         else:
             match += 1
-        # validate data type: Suffix
-        if not isinstance(v, Suffix):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `Suffix`")
+        # validate data type: RenameBandsSuffix
+        if not isinstance(v, RenameBandsSuffix):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `RenameBandsSuffix`")
         else:
             match += 1
-        # validate data type: Rename
-        if not isinstance(v, Rename):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `Rename`")
+        # validate data type: RenameBandsRename
+        if not isinstance(v, RenameBandsRename):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `RenameBandsRename`")
         else:
             match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in RenameBands with oneOf schemas: Default, Rename, Suffix. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in RenameBands with oneOf schemas: RenameBandsDefault, RenameBandsRename, RenameBandsSuffix. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in RenameBands with oneOf schemas: Default, Rename, Suffix. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in RenameBands with oneOf schemas: RenameBandsDefault, RenameBandsRename, RenameBandsSuffix. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -95,31 +98,51 @@ class RenameBands(BaseModel):
         error_messages = []
         match = 0
 
-        # deserialize data into Default
+        # use oneOf discriminator to lookup the data type
+        _data_type = json.loads(json_str).get("type")
+        if not _data_type:
+            raise ValueError("Failed to lookup data type from the field `type` in the input.")
+
+        # check if data type is `RenameBandsDefault`
+        if _data_type == "default":
+            instance.actual_instance = RenameBandsDefault.from_json(json_str)
+            return instance
+
+        # check if data type is `RenameBandsRename`
+        if _data_type == "rename":
+            instance.actual_instance = RenameBandsRename.from_json(json_str)
+            return instance
+
+        # check if data type is `RenameBandsSuffix`
+        if _data_type == "suffix":
+            instance.actual_instance = RenameBandsSuffix.from_json(json_str)
+            return instance
+
+        # deserialize data into RenameBandsDefault
         try:
-            instance.actual_instance = Default.from_json(json_str)
+            instance.actual_instance = RenameBandsDefault.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # deserialize data into Suffix
+        # deserialize data into RenameBandsSuffix
         try:
-            instance.actual_instance = Suffix.from_json(json_str)
+            instance.actual_instance = RenameBandsSuffix.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # deserialize data into Rename
+        # deserialize data into RenameBandsRename
         try:
-            instance.actual_instance = Rename.from_json(json_str)
+            instance.actual_instance = RenameBandsRename.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into RenameBands with oneOf schemas: Default, Rename, Suffix. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into RenameBands with oneOf schemas: RenameBandsDefault, RenameBandsRename, RenameBandsSuffix. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into RenameBands with oneOf schemas: Default, Rename, Suffix. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into RenameBands with oneOf schemas: RenameBandsDefault, RenameBandsRename, RenameBandsSuffix. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -133,7 +156,7 @@ class RenameBands(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], Default, Rename, Suffix]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], RenameBandsDefault, RenameBandsRename, RenameBandsSuffix]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None
