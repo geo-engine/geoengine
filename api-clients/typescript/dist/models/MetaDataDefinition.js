@@ -16,6 +16,7 @@ exports.MetaDataDefinitionFromJSON = MetaDataDefinitionFromJSON;
 exports.MetaDataDefinitionFromJSONTyped = MetaDataDefinitionFromJSONTyped;
 exports.MetaDataDefinitionToJSON = MetaDataDefinitionToJSON;
 exports.MetaDataDefinitionToJSONTyped = MetaDataDefinitionToJSONTyped;
+const GdalMdMetaData_1 = require("./GdalMdMetaData");
 const GdalMetaDataList_1 = require("./GdalMetaDataList");
 const GdalMetaDataRegular_1 = require("./GdalMetaDataRegular");
 const GdalMetaDataStatic_1 = require("./GdalMetaDataStatic");
@@ -31,6 +32,8 @@ function MetaDataDefinitionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     switch (json['type']) {
+        case 'GdalMdMetaData':
+            return Object.assign({}, (0, GdalMdMetaData_1.GdalMdMetaDataFromJSONTyped)(json, true), { type: 'GdalMdMetaData' });
         case 'GdalMetaDataList':
             return Object.assign({}, (0, GdalMetaDataList_1.GdalMetaDataListFromJSONTyped)(json, true), { type: 'GdalMetaDataList' });
         case 'GdalMetaDataNetCdfCf':
@@ -57,6 +60,8 @@ function MetaDataDefinitionToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     switch (value['type']) {
+        case 'GdalMdMetaData':
+            return Object.assign({}, (0, GdalMdMetaData_1.GdalMdMetaDataToJSON)(value), { type: 'GdalMdMetaData' });
         case 'GdalMetaDataList':
             return Object.assign({}, (0, GdalMetaDataList_1.GdalMetaDataListToJSON)(value), { type: 'GdalMetaDataList' });
         case 'GdalMetaDataNetCdfCf':
