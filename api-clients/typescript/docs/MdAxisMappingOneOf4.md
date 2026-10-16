@@ -1,21 +1,25 @@
 
-# ZRole
+# MdAxisMappingOneOf4
 
-How the z dimension of an MD array maps to the 2D raster output. Mirrors `geoengine_operators::source::ZRole`, which cannot derive a schema of its own.
+A fixed index into a dimension that is not sliced (e.g. a sub-dataset selector).
 
 ## Properties
 
 Name | Type
 ------------ | -------------
+`index` | number
+`role` | string
 
 ## Example
 
 ```typescript
-import type { ZRole } from '@geoengine/api-client'
+import type { MdAxisMappingOneOf4 } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-} satisfies ZRole
+  "index": null,
+  "role": null,
+} satisfies MdAxisMappingOneOf4
 
 console.log(example)
 
@@ -24,7 +28,7 @@ const exampleJSON: string = JSON.stringify(example)
 console.log(exampleJSON)
 
 // Parse the JSON string back to an object
-const exampleParsed = JSON.parse(exampleJSON) as ZRole
+const exampleParsed = JSON.parse(exampleJSON) as MdAxisMappingOneOf4
 console.log(exampleParsed)
 ```
 

@@ -15,7 +15,6 @@ Name | Type
 `timeDescriptor` | [TimeDescriptor](TimeDescriptor.md)
 `timeSteps` | [Array&lt;TimeInterval&gt;](TimeInterval.md)
 `params` | [GdalDatasetParameters](GdalDatasetParameters.md)
-`leadingPrefix` | Array&lt;number&gt;
 
 ## Example
 
@@ -32,7 +31,6 @@ const example = {
   "timeDescriptor": null,
   "timeSteps": null,
   "params": null,
-  "leadingPrefix": null,
 } satisfies AddDatasetMdTile
 
 console.log(example)

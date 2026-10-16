@@ -101,9 +101,14 @@ class TestMetaDataDefinition(unittest.TestCase):
                 start = 56,
                 end = 56,
                 band_offset = 0,
-                z_role = 'band',
-                wrap = True,
-                max_z_batch_size = 56
+                variables = [
+                    geoengine_api_client.models.md_variable.MdVariable(
+                        name = '', 
+                        axis_mapping = [
+                            null
+                            ], )
+                    ],
+                wrap = True
             )
         else:
             return MetaDataDefinition(
@@ -169,7 +174,13 @@ class TestMetaDataDefinition(unittest.TestCase):
                 start = 56,
                 end = 56,
                 band_offset = 0,
-                z_role = 'band',
+                variables = [
+                    geoengine_api_client.models.md_variable.MdVariable(
+                        name = '', 
+                        axis_mapping = [
+                            null
+                            ], )
+                    ],
                 wrap = True,
         )
         """

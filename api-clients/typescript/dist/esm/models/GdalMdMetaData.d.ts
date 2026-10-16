@@ -8,8 +8,8 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import type { MdVariable } from './MdVariable';
 import type { RasterResultDescriptor } from './RasterResultDescriptor';
-import type { ZRole } from './ZRole';
 /**
  *
  * @export
@@ -29,25 +29,17 @@ export interface GdalMdMetaData {
      */
     resultDescriptor: RasterResultDescriptor;
     /**
-     *
-     * @type {ZRole}
+     * The variables of the dataset; the index of a variable is its output band.
+     * @type {Array<MdVariable>}
      * @memberof GdalMdMetaData
      */
-    zRole: ZRole;
+    variables: Array<MdVariable>;
     /**
      * whether the stored 0..360 degree coverage is re-presented as -180..180
      * @type {boolean}
      * @memberof GdalMdMetaData
      */
     wrap: boolean;
-    /**
-     * upper bound on the z slices a single worker read may request; `None` means the
-     * operator's default. A dataset property, since a batch is sized against the slice
-     * size of the data itself.
-     * @type {number}
-     * @memberof GdalMdMetaData
-     */
-    maxZBatchSize?: number | null;
     /**
      * Dataset-level TTL fallback used when no tile-level TTL is provided.
      * @type {number}

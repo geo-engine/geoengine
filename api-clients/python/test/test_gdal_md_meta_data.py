@@ -63,9 +63,14 @@ class TestGdalMdMetaData(unittest.TestCase):
                             name = '', 
                             measurement = null, )
                         ], ),
-                z_role = 'band',
+                variables = [
+                    geoengine_api_client.models.md_variable.MdVariable(
+                        name = '', 
+                        axis_mapping = [
+                            null
+                            ], )
+                    ],
                 wrap = True,
-                max_z_batch_size = 56,
                 cache_ttl = 0
             )
         else:
@@ -98,7 +103,13 @@ class TestGdalMdMetaData(unittest.TestCase):
                             name = '', 
                             measurement = null, )
                         ], ),
-                z_role = 'band',
+                variables = [
+                    geoengine_api_client.models.md_variable.MdVariable(
+                        name = '', 
+                        axis_mapping = [
+                            null
+                            ], )
+                    ],
                 wrap = True,
         )
         """

@@ -18,9 +18,8 @@ Name | Type
 `start` | number
 `end` | number
 `bandOffset` | number
-`zRole` | [ZRole](ZRole.md)
+`variables` | [Array&lt;MdVariable&gt;](MdVariable.md)
 `wrap` | boolean
-`maxZBatchSize` | number
 
 ## Example
 
@@ -41,9 +40,8 @@ const example = {
   "start": null,
   "end": null,
   "bandOffset": null,
-  "zRole": null,
+  "variables": null,
   "wrap": null,
-  "maxZBatchSize": null,
 } satisfies MetaDataDefinition
 
 console.log(example)
