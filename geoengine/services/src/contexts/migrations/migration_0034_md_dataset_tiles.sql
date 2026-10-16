@@ -10,21 +10,13 @@
 -- `time` holds the file's overall bounds so that row filtering can keep using
 -- `time_interval_intersects`.
 
--- `ZRole` is derived as `ToSql`/`FromSql` in the operators crate, so it needs a
--- matching enum type now that it is no longer hidden inside a jsonb blob.
-CREATE TYPE "ZRole" AS ENUM (
-    'Band',
-    'Variable'
-);
-
--- Dataset level description of an MD dataset: the result descriptor plus
--- the two properties that are constant across all of its files.
+-- Dataset level description of an MD dataset: the result descriptor, the variables
+-- (one per output band, with the axis roles of each variable) and the properties that are
+-- constant across all of its files.
 CREATE TYPE "GdalMdMetaData" AS (
     result_descriptor "RasterResultDescriptor",
-    z_role "ZRole",
+    variables jsonb,
     wrap boolean,
-    -- upper bound on how many z slices one GDAL read may request at once
-    max_z_batch_size bigint,
     -- dataset-level TTL fallback, mirroring `GdalMultiBand.cache_ttl`
     cache_ttl int
 );
@@ -47,14 +39,7 @@ CREATE TABLE dataset_md_tiles (
     time_descriptor "TimeDescriptor" NOT NULL,
     -- one interval per z slice, always populated
     time_steps "TimeInterval" [] NOT NULL,
-    gdal_params "GdalDatasetParameters" NOT NULL,
-    -- fixed index into each dimension between z and (y, x), so one row is one slice of a
-    -- 4D array - `[depth]` for `(time, depth, y, x)`. Empty for 3D.
-    --
-    -- Per row rather than per dataset, so the bands of one dataset can each select a
-    -- different slice: a `(time, depth, y, x)` file with one row per depth becomes a
-    -- single dataset whose band `b` is depth `b`, sharing one time axis.
-    leading_prefix bigint[] NOT NULL DEFAULT '{}'
+    gdal_params "GdalDatasetParameters" NOT NULL
 );
 
 CREATE UNIQUE INDEX dataset_md_tiles_unique_idx ON dataset_md_tiles (
@@ -87,6 +72,5 @@ CREATE TYPE "MdTileEntry" AS (
     array_group text,
     time_descriptor "TimeDescriptor",
     time_steps "TimeInterval" [],
-    gdal_params "GdalDatasetParameters",
-    leading_prefix bigint[]
+    gdal_params "GdalDatasetParameters"
 );

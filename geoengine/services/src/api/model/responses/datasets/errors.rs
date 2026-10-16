@@ -217,13 +217,8 @@ pub enum AddDatasetMdTilesError {
         found: usize,
         file_path: String,
     },
-    /// the array has a different number of dimensions between z and (y, x) than the row
-    /// declares a leading prefix for
-    MdTileLeadingPrefixMismatch {
-        expected: usize,
-        found: usize,
-        file_path: String,
-    },
+    /// the declared per-dimension mapping is invalid for the array
+    MdTileAxisMappingInvalid { details: String, file_path: String },
     /// the array's (x, y) size disagrees with the row's declared grid
     MdTileArraySizeMismatch {
         declared: (usize, usize),

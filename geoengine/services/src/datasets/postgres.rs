@@ -37,8 +37,8 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     GdalDatasetParameters, GdalLoadingInfo, GdalMdMetaData, MdDatasetFile, MdFileTimes,
-    MdLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-    OgrSourceDataset, TileFile, ZRole,
+    MdLoadingInfo, MdVariable, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
+    OgrSourceDataset, TileFile,
 };
 use postgres_types::{FromSql, ToSql};
 use tokio_postgres::{GenericClient, Transaction};
@@ -741,23 +741,18 @@ where
         };
         let GdalMdMetaData {
             result_descriptor,
-            z_role,
+            variables,
             wrap,
-            max_z_batch_size,
             cache_ttl,
         } = m;
-        // `bigint` -> `usize`; a negative or absurd value can only come from a hand-edited
-        // row, and a batch size that does not fit in memory is no better than none
-        let max_z_batch_size = max_z_batch_size.and_then(|size| usize::try_from(size).ok());
 
         let data_path: DataPath = try_get_dataset_by_index_operators(&row, 1, &id)?;
 
         Ok(Box::new(MdGdalLoadingInfoProvider {
             dataset_id: id,
             result_descriptor,
-            z_role,
+            variables,
             wrap,
-            max_z_batch_size,
             dataset_cache_ttl: cache_ttl,
             data_path,
             db: self.clone(),
@@ -775,12 +770,23 @@ where
 {
     dataset_id: DatasetId,
     result_descriptor: RasterResultDescriptor,
-    z_role: ZRole,
+    variables: Vec<MdVariable>,
     wrap: bool,
-    max_z_batch_size: Option<usize>,
     dataset_cache_ttl: Option<geoengine_datatypes::primitives::CacheTtlSeconds>,
     data_path: DataPath,
     db: PostgresDb<Tls>,
+}
+
+impl<Tls> MdGdalLoadingInfoProvider<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    fn z_is_band(&self) -> bool {
+        self.variables.iter().any(MdVariable::z_is_band)
+    }
 }
 
 #[async_trait]
@@ -1247,19 +1253,18 @@ where
         // The rows are needed for the time axis even when the files themselves are not, so
         // they are always queried.
         //
-        // `ZRole::Band` maps a band index to a z index: every stored row carries `band = 0`
+        // A band z axis maps a band index to a z index: every stored row carries `band = 0`
         // and a synthetic `[k, k+1)` time, so neither the band nor the time predicate would
         // ever match a real selection and a query for band 2 of a 4-band dataset would come
         // back as empty tiles instead of data. Only the spatial filter applies there.
         //
         // Ordered by `(time).start` within each band so the concatenated axis follows real
         // time without trusting a client-supplied `z_index`; `z_index` is only the tiebreak.
-        let rows = if self.z_role == ZRole::Band {
+        let rows = if self.z_is_band() {
             conn.query(
                 "
             SELECT
-                z_index, band, array_name, array_group, time_descriptor, time_steps, gdal_params,
-                leading_prefix
+                z_index, band, array_name, array_group, time_descriptor, time_steps, gdal_params
             FROM
                 dataset_md_tiles
             WHERE
@@ -1274,8 +1279,7 @@ where
             conn.query(
                 "
             SELECT
-                z_index, band, array_name, array_group, time_descriptor, time_steps, gdal_params,
-                leading_prefix
+                z_index, band, array_name, array_group, time_descriptor, time_steps, gdal_params
             FROM
                 dataset_md_tiles
             WHERE
@@ -1305,21 +1309,23 @@ where
                 },
             )?;
 
-        Ok(MdLoadingInfo::new(
+        MdLoadingInfo::new(
             time_steps,
             files,
+            self.variables.clone(),
             self.dataset_cache_ttl, // fall back to the dataset TTL, then the context default
-            self.z_role,
             self.wrap,
-            self.max_z_batch_size,
-        ))
+        )
+        .map_err(|e| geoengine_operators::error::Error::MetaData {
+            source: Box::new(e),
+        })
     }
 
     async fn time_axis(
         &self,
         query: TimeInterval,
     ) -> Result<Option<Vec<TimeInterval>>, geoengine_operators::error::Error> {
-        if self.z_role == ZRole::Band {
+        if self.z_is_band() {
             return Ok(None);
         }
 
@@ -1438,7 +1444,7 @@ fn md_loading_info_from_rows(
         if band != Some(row_band) {
             band = Some(row_band);
             slices_per_band = 0;
-            // every band shares one time axis (that is what `ZRole::Variable` means), so the
+            // every band shares one time axis (that is what a time z axis means), so the
             // axis is built from one band's rows only; collecting all bands would concatenate
             // N copies of the same intervals and produce a non-monotonic axis. The clear on
             // band change leaves the *last* band's rows - equal to the first's because the
@@ -1457,7 +1463,6 @@ fn md_loading_info_from_rows(
             local_offset: 0,
             times,
             output_band: row_band,
-            leading_prefix: row.get(7),
         });
         slices_per_band += slices;
     }
@@ -1493,7 +1498,7 @@ fn md_loading_info_from_rows(
 /// The dataset's time axis: every file's per-slice intervals concatenated, gap-filled to
 /// cover `query_time`.
 ///
-/// `ZRole::Band` datasets have no time axis at all (their z dimension *is* the band index),
+/// Band z-axis datasets have no time axis at all (their z dimension *is* the band index),
 /// so they answer `None` instead of an empty axis.
 fn md_time_axis(times: &[MdFileTimes], query_time: TimeInterval) -> Result<Vec<TimeInterval>> {
     times
@@ -1552,7 +1557,6 @@ struct MdTileEntry {
     time_descriptor: TimeDescriptor,
     time_steps: Vec<TimeInterval>,
     gdal_params: GdalDatasetParameters,
-    leading_prefix: Vec<i64>,
 }
 
 #[async_trait]
@@ -1911,7 +1915,6 @@ async fn batch_insert_md_tiles(
                 .map(|t| geoengine_datatypes::primitives::TimeInterval::from(*t))
                 .collect(),
             gdal_params: tile.params.clone().into(),
-            leading_prefix: tile.leading_prefix.clone(),
         })
         .collect::<Vec<_>>();
 
@@ -1919,8 +1922,7 @@ async fn batch_insert_md_tiles(
         r#"
             INSERT INTO dataset_md_tiles (
                 id, dataset_id, time, bbox, band, z_index,
-                array_name, array_group, time_descriptor, time_steps, gdal_params,
-                leading_prefix
+                array_name, array_group, time_descriptor, time_steps, gdal_params
             )
                 SELECT * FROM unnest($1::"MdTileEntry"[]);
             "#,

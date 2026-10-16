@@ -63,13 +63,17 @@ FIXTURES = [
     "cf_time_units_minutes.nc",
     "cf_time_units_date_only.nc",
     "cf_time_units_years.nc",
-    "too_few_dims.nc",
+    "grid_2d.nc",
     "projected_crs.nc",
     "projected_no_crs.nc",
     "time_depth_4d.nc",
     "variables.nc",
     "variables_multitile.nc",
     "grouped_variables.nc",
+    "era5_pl_synthetic.nc",
+    "era5_sfc_synthetic.nc",
+    "mtg_fci_west.nc",
+    "mtg_fci_east.nc",
 ]
 
 
@@ -305,8 +309,8 @@ def projected_crs(path: Path):
 def time_depth_4d(path: Path):
     """(time, depth, y, x): z is the outermost dimension, `depth` is a leading prefix.
 
-    Depth is the leading dimension a `leadingPrefix` selects: the probe reads `time` as the
-    z axis and holds `depth` at a fixed index, so one dataset is one depth. Value at
+    Depth is the dimension an `axis_mapping` `Fixed` role selects: the probe reads `time` as
+    the z axis and holds `depth` at a fixed index, so one dataset is one depth. Value at
     `(t, d, row, col)` is `t * 10_000 + d * 1000 + row * 10 + col`, which makes a wrong
     prefix or a wrong z mapping obvious.
     """
@@ -353,13 +357,8 @@ def projected_no_crs(path: Path):
     ds = None
 
 
-def too_few_dims(path: Path):
-    """(y, x) array -- one dimension short of a raster, so the probe must reject it.
-
-    Rejection coverage for the *non-numeric datatype* path is intentionally absent: writing a
-    GDAL string MD array through the python bindings is not worth the fight for a plain
-    `try_into()` on the numeric datatype.
-    """
+def grid_2d(path: Path):
+    """(y, x) array with no z axis: one slice, valid under `[Y, X]`."""
     width, height = 8, 8
     ds = new_netcdf(path)
     rg = ds.GetRootGroup()
@@ -430,6 +429,97 @@ def grouped_variables(path: Path):
     _fill_variables(ds.GetRootGroup().CreateGroup("analysis"), 8, 8, 8)
 
 
+def _era5_grid(rg, nlat: int, nlon: int):
+    """ERA5-shaped coordinates: `latitude` descending (north first), `longitude` 0..360.
+
+    Edges sit on the 22.5 x 12 degree pixel lattice from (0, 0), as the tile lattice needs.
+    """
+    lon = np.arange(nlon, dtype=np.float64) * (360.0 / nlon)
+    lat = 42.0 - np.arange(nlat, dtype=np.float64) * 12.0
+    xdim, xa = add_coord_var(rg, "longitude", "HORIZONTAL_X", "", lon)
+    xa.CreateAttribute("units", [1], gdal.ExtendedDataType.CreateString(), []).WriteString(
+        "degrees_east"
+    )
+    ydim, ya = add_coord_var(rg, "latitude", "HORIZONTAL_Y", "", lat)
+    ya.CreateAttribute("units", [1], gdal.ExtendedDataType.CreateString(), []).WriteString(
+        "degrees_north"
+    )
+    return xdim, ydim
+
+
+def era5_pl_synthetic(path: Path):
+    """ERA5-like `t` on (valid_time, pressure_level, latitude, longitude), K.
+
+    Value at `(t, p, row, col)` is `t * 10_000 + p * 1000 + row * 10 + col`, so a slice
+    picked by the wrong dimension is obvious. Latitude descends, longitude is 0..360.
+    """
+    nt, npl, nlat, nlon = 4, 3, 8, 16
+    ds = new_netcdf(path)
+    rg = ds.GetRootGroup()
+    xdim, ydim = _era5_grid(rg, nlat, nlon)
+    tdim = add_time_dim(rg, nt, "hours since 2024-01-01 00:00:00")
+    pdim, _pa = add_coord_var(rg, "pressure_level", "VERTICAL", "", np.array([1000.0, 850.0, 500.0]))
+    t = np.arange(nt, dtype=np.int64)[:, None, None, None]
+    p = np.arange(npl, dtype=np.int64)[None, :, None, None]
+    r = np.arange(nlat, dtype=np.int64)[None, None, :, None]
+    c = np.arange(nlon, dtype=np.int64)[None, None, None, :]
+    vals = (t * 10_000 + p * 1000 + r * 10 + c).astype("float32")
+    write_array(rg, "t", [tdim, pdim, ydim, xdim], vals, -32767, "Temperature", "K")
+    ds = None
+
+
+def era5_sfc_synthetic(path: Path):
+    """ERA5-like surface `t2m` on (valid_time, latitude, longitude), K; no level dimension.
+
+    Value at `(t, row, col)` is `t * 1000 + row * 10 + col`.
+    """
+    nt, nlat, nlon = 4, 8, 16
+    ds = new_netcdf(path)
+    rg = ds.GetRootGroup()
+    xdim, ydim = _era5_grid(rg, nlat, nlon)
+    tdim = add_time_dim(rg, nt, "hours since 2024-01-01 00:00:00")
+    t = np.arange(nt, dtype=np.int64)[:, None, None]
+    r = np.arange(nlat, dtype=np.int64)[None, :, None]
+    c = np.arange(nlon, dtype=np.int64)[None, None, :]
+    vals = (t * 1000 + r * 10 + c).astype("float32")
+    write_array(rg, "t2m", [tdim, ydim, xdim], vals, -32767, "2 metre temperature", "K")
+    ds = None
+
+
+def mtg_fci_like(out_dir: Path):
+    """Two MTG-FCI-like files covering the same 8x8 grid, each valid in one half.
+
+    `effective_radiance` (`y, x`) sits in the `data/ir_105_hr/measured` group; `time` is a
+    vector over the `index` dimension, not a data dimension. The west file is valid for
+    columns 0..4 and the east file for 4..8, nodata (-9999) elsewhere, so a mosaic of the two
+    is complete. Value at `(row, col)` is `row * 10 + col`.
+    """
+    nrow, ncol = 8, 8
+    names = []
+    for half, name in enumerate(["mtg_fci_west.nc", "mtg_fci_east.nc"]):
+        names.append(name)
+        ds = new_netcdf(out_dir / name)
+        rg = ds.GetRootGroup()
+        proj = rg.CreateGroup("data").CreateGroup("ir_105_hr").CreateGroup("measured")
+        x = np.arange(ncol, dtype=np.float64) + 0.5
+        y = -(np.arange(nrow, dtype=np.float64) + 0.5)
+        xdim, _ = add_coord_var(proj, "x", "HORIZONTAL_X", "", x)
+        ydim, _ = add_coord_var(proj, "y", "HORIZONTAL_Y", "", y)
+        idx = proj.CreateDimension("index", "", "", 1)
+        t = proj.CreateMDArray("time", [idx], F64, [])
+        t.Write(np.array([1_750_000_000.0], dtype=np.float64))
+        r = np.arange(nrow, dtype=np.float32)[:, None]
+        c = np.arange(ncol, dtype=np.float32)[None, :]
+        vals = np.broadcast_to(r * 10 + c, (nrow, ncol)).astype(np.float32).copy()
+        in_half = (np.arange(ncol)[None, :] < 4) == (half == 0)
+        vals[~np.broadcast_to(in_half, (nrow, ncol))] = -9999.0
+        arr = proj.CreateMDArray("effective_radiance", [ydim, xdim], gdal.ExtendedDataType.Create(gdal.GDT_Float32), [])
+        arr.SetNoDataValueDouble(-9999.0)
+        arr.Write(vals)
+        ds = None
+    return names
+
+
 # where the example notebook's copy of `time_series.nc` goes; the notebook reads it from
 # next to itself, so the example does not depend on a configured `test_data` volume
 EXAMPLE_COPY = OUT_DIR.parents[2] / "python" / "examples" / "data" / "md_example.nc"
@@ -462,13 +552,16 @@ def main() -> None:
     wrap_0_360_multitile(OUT_DIR / "wrap_0_360_multitile.nc")
     cf_time_units_date_only(OUT_DIR / "cf_time_units_date_only.nc")
     cf_time_units_years(OUT_DIR / "cf_time_units_years.nc")
-    too_few_dims(OUT_DIR / "too_few_dims.nc")
+    grid_2d(OUT_DIR / "grid_2d.nc")
     projected_crs(OUT_DIR / "projected_crs.nc")
     projected_no_crs(OUT_DIR / "projected_no_crs.nc")
     time_depth_4d(OUT_DIR / "time_depth_4d.nc")
     variables(OUT_DIR / "variables.nc")
     variables_multitile(OUT_DIR / "variables_multitile.nc")
     grouped_variables(OUT_DIR / "grouped_variables.nc")
+    era5_pl_synthetic(OUT_DIR / "era5_pl_synthetic.nc")
+    era5_sfc_synthetic(OUT_DIR / "era5_sfc_synthetic.nc")
+    mtg_fci_like(OUT_DIR)
 
     EXAMPLE_COPY.parent.mkdir(parents=True, exist_ok=True)
     time_series(8, 8, EXAMPLE_COPY)

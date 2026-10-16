@@ -26,4 +26,17 @@ pub enum MdGdalSourceError {
         "Stored MD time axis is not ordered: time steps do not run in non-decreasing start order"
     ))]
     UnorderedTimeAxis,
+
+    #[snafu(display("MD dataset variable name `{name}` is used more than once"))]
+    DuplicateVariableName { name: String },
+
+    #[snafu(display(
+        "MD file refers to variable index {index}, but the dataset has {count} variables"
+    ))]
+    UnknownVariable { index: u32, count: usize },
+
+    #[snafu(display(
+        "MD dataset mixes time and band variables; all variables must share one z axis kind"
+    ))]
+    MixedZAxisKinds,
 }

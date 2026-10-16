@@ -444,14 +444,6 @@ pub struct AddDatasetMdTile {
     /// and every later file come back at the wrong time.
     pub time_steps: Vec<crate::api::model::datatypes::TimeInterval>,
     pub params: GdalDatasetParameters,
-    /// Fixed index into each dimension between z and (y, x), so one row is one slice of a
-    /// 4D array - `[depth]` for `(time, depth, y, x)`. Empty for 3D.
-    ///
-    /// Per row rather than per dataset, so the bands of one dataset can each select a
-    /// different slice: a `(time, depth, y, x)` file with one row per depth becomes one
-    /// dataset whose band `b` is depth `b`.
-    #[serde(default)]
-    pub leading_prefix: Vec<i64>,
 }
 
 impl AddDatasetMdTile {
@@ -540,6 +532,7 @@ pub async fn add_md_dataset_tiles_handler<C: ApplicationContext>(
         return Err(AddDatasetMdTilesError::DatasetIsNotMdGdal);
     };
     let wrap = md_meta_data.wrap;
+    let variables = md_meta_data.variables.clone();
 
     let TypedResultDescriptor::Raster(dataset_descriptor) = dataset.result_descriptor else {
         return Err(AddDatasetMdTilesError::DatasetIsNotMdGdal);
@@ -568,6 +561,7 @@ pub async fn add_md_dataset_tiles_handler<C: ApplicationContext>(
             validate_md_tile(
                 tile,
                 wrap,
+                &variables,
                 &data_path,
                 &data_path_file_path,
                 &dataset_descriptor,
@@ -578,6 +572,7 @@ pub async fn add_md_dataset_tiles_handler<C: ApplicationContext>(
         validate_md_tile(
             tile,
             wrap,
+            &variables,
             &data_path,
             &data_path_file_path,
             &dataset_descriptor,
@@ -592,24 +587,15 @@ pub async fn add_md_dataset_tiles_handler<C: ApplicationContext>(
     Ok(HttpResponse::Ok().finish())
 }
 
-/// The z size of the tile's MD array, or `None` if the file, group or array cannot be opened.
-///
-/// MD arrays are not exposed as classic raster bands, so the array has to be reached through
-/// GDAL's multidim API instead of `raster_descriptor_from_dataset`.
-///
-/// ponytail: GDAL on the caller's thread, not in the worker pool - see the note on
-/// `ProbedGdalMdMetaData`. Fold this into the probe endpoint once probing is pooled.
 /// The shape and declared CRS of the tile's MD array.
 ///
-/// Returns `None` if the file, group or array cannot be opened, and otherwise the z size,
-/// the `(y, x)` sizes and the CF-declared CRS (if any). Reading these is a header-only
-/// operation.
+/// MD arrays are not exposed as classic raster bands, so the array is reached through GDAL's
+/// multidim API instead of `raster_descriptor_from_dataset`. Returns `None` if the file, group
+/// or array cannot be opened.
+///
+/// shortcut: GDAL runs on the caller's thread, not in the worker pool (see `ProbedGdalMdMetaData`), upgrade once probing is pooled
 struct MdArrayShape {
-    z: usize,
-    y: usize,
-    x: usize,
-    /// one index per dimension between z and `(y, x)`; `[depth]` for `(time, depth, y, x)`
-    prefix_len: usize,
+    axis_sizes: Vec<usize>,
     crs: Option<SpatialReference>,
 }
 
@@ -646,12 +632,7 @@ fn md_array_shape(path: &Path, tile: &AddDatasetMdTile) -> Option<MdArrayShape> 
         .open_md_array(&tile.array_name, Default::default())
         .ok()?;
     let dimensions = md_array.dimensions().ok()?;
-    if dimensions.len() < 3 {
-        return None;
-    }
 
-    // z is dimension 0; any dimensions between it and (y, x) are the leading prefix and do
-    // not contribute z slices
     let crs = ["crs", "spatial_ref", "grid_mapping"]
         .into_iter()
         .find_map(|name| md_array.attribute(name).ok().map(|a| a.read_as_string()))
@@ -659,10 +640,10 @@ fn md_array_shape(path: &Path, tile: &AddDatasetMdTile) -> Option<MdArrayShape> 
         .and_then(|srs| SpatialReference::try_from(srs).ok());
 
     Some(MdArrayShape {
-        z: dimensions[0].size(),
-        y: dimensions[dimensions.len() - 2].size(),
-        x: dimensions[dimensions.len() - 1].size(),
-        prefix_len: dimensions.len() - 3,
+        axis_sizes: dimensions
+            .iter()
+            .map(gdal::raster::Dimension::size)
+            .collect(),
         crs,
     })
 }
@@ -688,10 +669,11 @@ fn md_tile_open_path(
 
 /// Checks a tile's declared metadata against the array it names.
 ///
-/// This is the only place a wrong `arrayName`, `leadingPrefix`, grid, slice count or CRS can
+/// This is the only place a wrong `arrayName`, `axisMapping`, grid, slice count or CRS can
 /// be caught, so it runs even for external data - where the file is not opened elsewhere.
 fn check_md_tile_against_array(
     tile: &AddDatasetMdTile,
+    axis_mapping: &[geoengine_operators::source::MdAxisMapping],
     open_path: &Path,
     dataset_descriptor: &RasterResultDescriptor,
 ) -> Result<(), AddDatasetMdTilesError> {
@@ -712,28 +694,42 @@ fn check_md_tile_against_array(
             file_path: file_path.clone(),
         })?;
 
+    geoengine_operators::source::validate_md_axis_mapping(axis_mapping, &shape.axis_sizes)
+        .map_err(|details| AddDatasetMdTilesError::MdTileAxisMappingInvalid {
+            details,
+            file_path: file_path.clone(),
+        })?;
+
+    let axis_size = |role: geoengine_operators::source::MdAxisMapping| {
+        axis_mapping
+            .iter()
+            .position(|axis| *axis == role)
+            .map(|index| shape.axis_sizes[index])
+            .ok_or_else(|| AddDatasetMdTilesError::MdTileAxisMappingInvalid {
+                details: format!("axis mapping has no {role:?} axis"),
+                file_path: file_path.clone(),
+            })
+    };
     let slices = tile.time_steps.len();
-    if shape.z != slices {
+    // a variable without a z dimension is a single slice
+    let z_size = match axis_mapping.iter().position(|axis| axis.is_z()) {
+        Some(index) => shape.axis_sizes[index],
+        None => 1,
+    };
+    if z_size != slices {
         return Err(AddDatasetMdTilesError::MdTileSliceCountMismatch {
             expected: slices,
-            found: shape.z,
+            found: z_size,
             file_path,
         });
     }
 
-    // a 4D array needs one prefix index per dimension between z and (y, x)
-    if shape.prefix_len != tile.leading_prefix.len() {
-        return Err(AddDatasetMdTilesError::MdTileLeadingPrefixMismatch {
-            expected: shape.prefix_len,
-            found: tile.leading_prefix.len(),
-            file_path,
-        });
-    }
-
-    if (shape.x, shape.y) != (tile.params.width, tile.params.height) {
+    let x_size = axis_size(geoengine_operators::source::MdAxisMapping::X)?;
+    let y_size = axis_size(geoengine_operators::source::MdAxisMapping::Y)?;
+    if (x_size, y_size) != (tile.params.width, tile.params.height) {
         return Err(AddDatasetMdTilesError::MdTileArraySizeMismatch {
             declared: (tile.params.width, tile.params.height),
-            found: (shape.x, shape.y),
+            found: (x_size, y_size),
             file_path,
         });
     }
@@ -761,6 +757,7 @@ fn check_md_tile_against_array(
 fn validate_md_tile(
     tile: &AddDatasetMdTile,
     wrap: bool,
+    variables: &[geoengine_operators::source::MdVariable],
     data_path: &DataPath,
     data_path_file_path: &Path,
     dataset_descriptor: &RasterResultDescriptor,
@@ -829,8 +826,15 @@ fn validate_md_tile(
     );
 
     if check_against_array {
+        let variable = variables.get(tile.band as usize).ok_or_else(|| {
+            AddDatasetMdTilesError::MdTileAxisMappingInvalid {
+                details: format!("dataset has no variable for band {}", tile.band),
+                file_path: file_path.clone(),
+            }
+        })?;
         check_md_tile_against_array(
             tile,
+            &variable.axis_mapping,
             &md_tile_open_path(tile, data_path, &absolute_path),
             dataset_descriptor,
         )?;
@@ -2110,9 +2114,9 @@ mod tests {
                 TimeInstance,
             },
             operators::{
-                FileNotFoundHandling, GdalMultiBand, RasterBandDescriptor, RasterBandDescriptors,
-                RasterResultDescriptor, SpatialGridDescriptor, SpatialGridDescriptorState,
-                TimeDescriptor, TimeDimension,
+                FileNotFoundHandling, GdalMultiBand, MdAxisMapping, RasterBandDescriptor,
+                RasterBandDescriptors, RasterResultDescriptor, SpatialGridDescriptor,
+                SpatialGridDescriptorState, TimeDescriptor, TimeDimension,
             },
             processing_graphs::{
                 GdalSourceParameters, MultiBandGdalSource, RasterOperator, TypedOperator,
@@ -4566,7 +4570,6 @@ mod tests {
             .set_json(tiles);
 
         let res = send_test_request(req, app_ctx.clone()).await;
-
         assert_eq!(res.status(), 200, "response: {res:?}");
 
         Ok((ctx, dataset_name))
@@ -6251,7 +6254,7 @@ mod tests {
         /// first slice of this file in the dataset's global z axis
         z_start: usize,
         slices: usize,
-        leading_prefix: Vec<i64>,
+        axis_mapping: Vec<MdAxisMapping>,
     }
 
     impl MdRow {
@@ -6266,7 +6269,7 @@ mod tests {
                 z_index: 0,
                 z_start,
                 slices,
-                leading_prefix: Vec::new(),
+                axis_mapping: vec![MdAxisMapping::Time, MdAxisMapping::Y, MdAxisMapping::X],
             }
         }
     }
@@ -6362,8 +6365,25 @@ mod tests {
                         })
                         .collect(),
                     params,
-                    leading_prefix: r.leading_prefix.clone(),
                 }
+            })
+            .collect::<Vec<_>>();
+
+        let variables = bands
+            .iter()
+            .enumerate()
+            .map(|(band, b)| geoengine_operators::source::MdVariable {
+                name: b.name.clone(),
+                axis_mapping: rows
+                    .iter()
+                    .find(|r| r.band == band as u32)
+                    .map_or_else(
+                        || vec![MdAxisMapping::Time, MdAxisMapping::Y, MdAxisMapping::X],
+                        |r| r.axis_mapping.clone(),
+                    )
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
             })
             .collect::<Vec<_>>();
 
@@ -6403,9 +6423,8 @@ mod tests {
         (
             geoengine_operators::source::GdalMdMetaData::new(
                 result_descriptor,
-                geoengine_operators::source::ZRole::Variable,
+                variables,
                 false,
-                None,
                 None,
             )
             .into(),
@@ -6783,10 +6802,9 @@ mod tests {
         Ok(())
     }
 
-    /// `leading_prefix` is what turns a 4D array into depth bands, and it is per row. It has
-    /// to survive the write, not just the validation that reads it before the insert.
+    /// The explicit dimension mapping survives persistence and loading-info reconstruction.
     #[ge_context::test]
-    async fn it_persists_the_leading_prefix_of_md_tiles(
+    async fn it_persists_the_axis_mapping_of_md_variables(
         app_ctx: PostgresContext<NoTls>,
     ) -> Result<()> {
         let session = admin_login(&app_ctx).await;
@@ -6795,15 +6813,20 @@ mod tests {
         let volume = VolumeName("test_data".to_string());
 
         let mut row = MdRow::of("md/time_depth_4d.nc", "temperature", 0, 6);
-        row.leading_prefix = vec![0];
+        row.axis_mapping = vec![
+            MdAxisMapping::Time,
+            MdAxisMapping::Fixed { index: 0 },
+            MdAxisMapping::Y,
+            MdAxisMapping::X,
+        ];
         let (meta_data, tiles) = md_dataset_meta(&[row], vec![api_band("temperature")]);
 
         let id_and_name = db
             .add_dataset(
                 AddDataset {
                     name: None,
-                    display_name: "md leading prefix".to_string(),
-                    description: "md leading prefix".to_string(),
+                    display_name: "md axis mapping".to_string(),
+                    description: "md axis mapping".to_string(),
                     source_operator: "MdGdalSource".to_string(),
                     symbology: None,
                     provenance: None,
@@ -6849,18 +6872,22 @@ mod tests {
             ))
             .await?;
 
-        let files = loading_info.files();
-        assert_eq!(files.len(), 1);
+        assert_eq!(loading_info.files().len(), 1);
         assert_eq!(
-            files[0].leading_prefix,
-            vec![0],
-            "the leading prefix must come back from the row, not the column default"
+            loading_info.variables()[0].axis_mapping,
+            vec![
+                geoengine_operators::source::MdAxisMapping::Time,
+                geoengine_operators::source::MdAxisMapping::Fixed { index: 0 },
+                geoengine_operators::source::MdAxisMapping::Y,
+                geoengine_operators::source::MdAxisMapping::X,
+            ],
+            "the axis mapping must come back from the row"
         );
 
         Ok(())
     }
 
-    /// A `ZRole::Variable` dataset stores one row per `(file, variable)`, so the row reader
+    /// A time-axis dataset stores one row per `(file, variable)`, so the row reader
     /// sees every band's copy of the same intervals. The axis must be built from one band's
     /// rows only: concatenating all of them yields N copies of the timeline, which
     /// `try_time_irregular_range_fill` passes through and turns into a non-monotonic axis.
@@ -6964,7 +6991,7 @@ mod tests {
         Ok(())
     }
 
-    /// `ZRole::Band` stores every row with `band = 0` because the z index *is* the band, so
+    /// A band-axis dataset stores every row with `band = 0` because the z index *is* the band, so
     /// a `band = ANY(...)` predicate would match nothing and a request for band 2 would
     /// silently come back as an empty tile instead of data.
     #[ge_context::test]
@@ -6980,7 +7007,13 @@ mod tests {
         let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(mut md) = meta_data else {
             unreachable!("md_dataset_meta returns MD metadata")
         };
-        md.z_role = geoengine_operators::source::ZRole::Band;
+        for variable in &mut md.variables {
+            variable.axis_mapping = vec![
+                geoengine_operators::source::MdAxisMapping::Band,
+                geoengine_operators::source::MdAxisMapping::Y,
+                geoengine_operators::source::MdAxisMapping::X,
+            ];
+        }
         let meta_data = crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md);
 
         let session = admin_login(&app_ctx).await;
@@ -7102,6 +7135,7 @@ mod tests {
         assert!(
             check_md_tile_against_array(
                 &local(&tiles[0]),
+                &md.variables[0].axis_mapping,
                 test_data!("md/time_series.nc"),
                 &md.result_descriptor
             )
@@ -7114,6 +7148,7 @@ mod tests {
         assert!(matches!(
             check_md_tile_against_array(
                 &wrong_name,
+                &md.variables[0].axis_mapping,
                 test_data!("md/time_series.nc"),
                 &md.result_descriptor
             ),
@@ -7126,6 +7161,7 @@ mod tests {
         assert!(matches!(
             check_md_tile_against_array(
                 &wrong_slices,
+                &md.variables[0].axis_mapping,
                 test_data!("md/time_series.nc"),
                 &md.result_descriptor
             ),
@@ -7136,20 +7172,19 @@ mod tests {
             })
         ));
 
-        // a 3D array declares no prefix, so a non-empty one is wrong
-        let mut wrong_prefix = local(&tiles[0]);
-        wrong_prefix.leading_prefix = vec![0];
+        // every dimension needs exactly one valid role
+        let wrong_mapping = [
+            geoengine_operators::source::MdAxisMapping::Time,
+            geoengine_operators::source::MdAxisMapping::Y,
+        ];
         assert!(matches!(
             check_md_tile_against_array(
-                &wrong_prefix,
+                &local(&tiles[0]),
+                &wrong_mapping,
                 test_data!("md/time_series.nc"),
                 &md.result_descriptor
             ),
-            Err(AddDatasetMdTilesError::MdTileLeadingPrefixMismatch {
-                expected: 0,
-                found: 1,
-                ..
-            })
+            Err(AddDatasetMdTilesError::MdTileAxisMappingInvalid { .. })
         ));
 
         // the fixture has no `crs` attribute, so nothing contradicts EPSG:4326
@@ -7158,6 +7193,7 @@ mod tests {
         assert!(matches!(
             check_md_tile_against_array(
                 &wrong_grid,
+                &md.variables[0].axis_mapping,
                 test_data!("md/time_series.nc"),
                 &md.result_descriptor
             ),
@@ -7184,11 +7220,39 @@ mod tests {
         assert!(matches!(
             check_md_tile_against_array(
                 &tiles[0],
+                &md.variables[0].axis_mapping,
                 test_data!("md/projected_crs.nc"),
                 &md.result_descriptor
             ),
             Err(AddDatasetMdTilesError::MdTileCrsMismatch { .. })
         ));
+    }
+
+    /// A `[Y, X]` variable has no z axis and is one slice; the probe must accept it.
+    #[test]
+    fn it_accepts_a_2d_md_row_without_a_z_axis() {
+        let (meta_data, tiles) = md_dataset_meta(
+            &[MdRow {
+                axis_mapping: vec![MdAxisMapping::Y, MdAxisMapping::X],
+                ..MdRow::of("md/grid_2d.nc", "grid_2d", 0, 1)
+            }],
+            vec![api_band("grid_2d")],
+        );
+        let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md) = meta_data else {
+            panic!("md_dataset_meta returns MD metadata")
+        };
+        let mut tile = tiles[0].clone();
+        tile.params.file_path = test_data!("md/grid_2d.nc").to_path_buf();
+
+        assert!(
+            check_md_tile_against_array(
+                &tile,
+                &md.variables[0].axis_mapping,
+                test_data!("md/grid_2d.nc"),
+                &md.result_descriptor
+            )
+            .is_ok()
+        );
     }
 
     /// External data is never opened while a row is validated, so the declared axis is the
@@ -7223,6 +7287,7 @@ mod tests {
             validate_md_tile(
                 &tile,
                 md.wrap,
+                &md.variables,
                 &DataPath::External,
                 Path::new(""),
                 &md.result_descriptor,
@@ -7248,6 +7313,7 @@ mod tests {
             validate_md_tile(
                 &tile,
                 md.wrap,
+                &md.variables,
                 &DataPath::External,
                 Path::new(""),
                 &md.result_descriptor,

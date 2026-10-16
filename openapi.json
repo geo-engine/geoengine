@@ -5970,14 +5970,6 @@
           },
           "params": {
             "$ref": "#/components/schemas/GdalDatasetParameters"
-          },
-          "leading_prefix": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "description": "Fixed index into each dimension between z and (y, x), so one row is one slice of a\n4D array - `[depth]` for `(time, depth, y, x)`. Empty for 3D.\n\nPer row rather than per dataset, so the bands of one dataset can each select a\ndifferent slice: a `(time, depth, y, x)` file with one row per depth becomes one\ndataset whose band `b` is depth `b`."
           }
         }
       },
@@ -8776,7 +8768,7 @@
         "required": [
           "type",
           "resultDescriptor",
-          "zRole",
+          "variables",
           "wrap"
         ],
         "properties": {
@@ -8789,20 +8781,16 @@
           "resultDescriptor": {
             "$ref": "#/components/schemas/RasterResultDescriptor"
           },
-          "zRole": {
-            "$ref": "#/components/schemas/ZRole"
+          "variables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MdVariable"
+            },
+            "description": "The variables of the dataset; the index of a variable is its output band."
           },
           "wrap": {
             "type": "boolean",
             "description": "whether the stored 0..360 degree coverage is re-presented as -180..180"
-          },
-          "maxZBatchSize": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64",
-            "description": "upper bound on the z slices a single worker read may request; `None` means the\noperator's default. A dataset property, since a batch is sized against the slice\nsize of the data itself."
           },
           "cacheTtl": {
             "oneOf": [
@@ -10276,6 +10264,89 @@
           }
         }
       },
+      "MdAxisMapping": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "role"
+            ],
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": [
+                  "x"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "role"
+            ],
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": [
+                  "y"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The z axis as time steps: every slice is a time step of the selected band.",
+            "required": [
+              "role"
+            ],
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": [
+                  "time"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The z axis as bands: every slice is a band of a single time step.",
+            "required": [
+              "role"
+            ],
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": [
+                  "band"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "A fixed index into a dimension that is not sliced (e.g. a sub-dataset selector).",
+            "required": [
+              "index",
+              "role"
+            ],
+            "properties": {
+              "index": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "fixed"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "The role of one source-array dimension in an MD raster read."
+      },
       "MdGdalSource": {
         "type": "object",
         "title": "Multidimensional GDAL Source",
@@ -10317,6 +10388,27 @@
             "examples": [
               "era5-timeseries"
             ]
+          }
+        }
+      },
+      "MdVariable": {
+        "type": "object",
+        "description": "One variable of an MD dataset: its name and the role of each of its source dimensions.",
+        "required": [
+          "name",
+          "axisMapping"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "unique within the dataset"
+          },
+          "axisMapping": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MdAxisMapping"
+            },
+            "description": "Required role for each source-array dimension, in source order."
           }
         }
       },
@@ -17483,14 +17575,6 @@
             "type": "object"
           }
         }
-      },
-      "ZRole": {
-        "type": "string",
-        "description": "How the z dimension of an MD array maps to the 2D raster output. Mirrors\n`geoengine_operators::source::ZRole`, which cannot derive a schema of its own.",
-        "enum": [
-          "band",
-          "variable"
-        ]
       }
     },
     "responses": {

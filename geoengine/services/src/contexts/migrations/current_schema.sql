@@ -566,16 +566,10 @@ CREATE TYPE "GdalMultiBand" AS (
     cache_ttl int
 );
 
-CREATE TYPE "ZRole" AS ENUM (
-    'Band',
-    'Variable'
-);
-
 CREATE TYPE "GdalMdMetaData" AS (
     result_descriptor "RasterResultDescriptor",
-    z_role "ZRole",
+    variables jsonb,
     wrap boolean,
-    max_z_batch_size bigint,
     cache_ttl int
 );
 
@@ -1450,9 +1444,7 @@ CREATE TABLE dataset_md_tiles (
     array_group text,
     time_descriptor "TimeDescriptor" NOT NULL,
     time_steps "TimeInterval" [] NOT NULL, -- noqa: rules.shorthands
-    gdal_params "GdalDatasetParameters" NOT NULL,
-    -- fixed index into each dimension between z and (y, x); empty for 3D
-    leading_prefix bigint[] NOT NULL DEFAULT '{}'
+    gdal_params "GdalDatasetParameters" NOT NULL
 );
 
 CREATE UNIQUE INDEX dataset_md_tiles_unique_idx ON dataset_md_tiles (
@@ -1485,8 +1477,7 @@ CREATE TYPE "MdTileEntry" AS (
     array_group text,
     time_descriptor "TimeDescriptor",
     time_steps "TimeInterval" [], -- noqa: rules.shorthands
-    gdal_params "GdalDatasetParameters",
-    leading_prefix bigint[]
+    gdal_params "GdalDatasetParameters"
 );
 
 -- Returns true if the partitions have any space in common

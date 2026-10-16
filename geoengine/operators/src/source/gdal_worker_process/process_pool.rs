@@ -13,7 +13,7 @@ use rustc_hash::FxHasher;
 use super::{
     GdalProcessPoolAccess,
     process_common::{
-        GdalIpcPayload, IpcChannelMessage, IpcChannelResult, IpcProcessError,
+        GdalIpcMdPayload, GdalIpcPayload, IpcChannelMessage, IpcChannelResult, IpcProcessError,
         IpcProcessRasterResult,
     },
     process_impl::{ChildProcessGuard, WorkerConfig, spawn_ipc_server_process},
@@ -871,7 +871,7 @@ impl GdalPoolDispatcher {
         let IpcChannelResult::Raster(byte_payload) = result_ref else {
             return Err(GdalProcessPoolError::IpcProcessError {
                 source: IpcProcessError::IpcOther {
-                    msg: "expected a classic raster result but got an MD batch".to_string(),
+                    msg: "expected a 2D raster result but got an MD slice".to_string(),
                 },
             });
         };
@@ -880,7 +880,7 @@ impl GdalPoolDispatcher {
             byte_payload
                 .try_into()
                 .map_err(|e: bytemuck::PodCastError| {
-                    tracing::error!("DEBUG: Failed to cast payload: {:?}", e);
+                    tracing::error!("Failed to cast payload: {:?}", e);
                     GdalProcessPoolError::IpcProcessError {
                         source: IpcProcessError::PocCastError {
                             error: e.to_string(),
@@ -891,43 +891,38 @@ impl GdalPoolDispatcher {
         Ok(payload)
     }
 
-    /// Read a batch of z-slices from a GDAL multidimensional array (one request,
-    /// one response containing one payload per z-slice). Uses the same
+    /// Read one z-slice from a GDAL multidimensional array (one request, one response
+    /// containing the raw source-order buffer). Uses the same
     /// leader/follower deduplication as [`Self::read_data`].
     ///
     /// # Panics
     /// This function will panic if a required channel is dropped unexpectedly.
-    pub async fn read_md_batch_data<P: Pixel>(
+    pub async fn read_md_slice_data<P: Pixel>(
         &self,
         request: IpcChannelMessage,
-    ) -> Result<Vec<GdalIpcPayload<P>>, GdalProcessPoolError> {
+    ) -> Result<GdalIpcMdPayload<P>, GdalProcessPoolError> {
         let shared_res = self.dispatch_dedup(request).await?;
 
         let result_ref = shared_res.0.as_ref().map_err(pool_error_as_ipc_other)?;
 
-        let IpcChannelResult::MdBatch(byte_payloads) = result_ref else {
+        let IpcChannelResult::MdSlice(byte_payload) = result_ref else {
             return Err(GdalProcessPoolError::IpcProcessError {
                 source: IpcProcessError::IpcOther {
-                    msg: "expected an MD batch result but got a classic raster result".to_string(),
+                    msg: "expected an MD slice result but got a 2D raster result".to_string(),
                 },
             });
         };
 
-        byte_payloads
-            .iter()
-            .map(|byte_payload| {
-                byte_payload
-                    .try_into()
-                    .map_err(|e: bytemuck::PodCastError| {
-                        tracing::error!("DEBUG: Failed to cast MD payload: {:?}", e);
-                        GdalProcessPoolError::IpcProcessError {
-                            source: IpcProcessError::PocCastError {
-                                error: e.to_string(),
-                            },
-                        }
-                    })
+        byte_payload
+            .try_into()
+            .map_err(|e: bytemuck::PodCastError| {
+                tracing::error!("Failed to cast MD payload: {:?}", e);
+                GdalProcessPoolError::IpcProcessError {
+                    source: IpcProcessError::PocCastError {
+                        error: e.to_string(),
+                    },
+                }
             })
-            .collect()
     }
 
     /// Shared leader/follower dispatch: hashes the request, coalesces identical
@@ -1092,7 +1087,7 @@ mod tests {
 
     // --- routing is z-blind, sharing is z-aware ---
 
-    fn md_message(z_range: std::ops::Range<usize>) -> IpcChannelMessage {
+    fn md_message(z_index: usize) -> IpcChannelMessage {
         IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
             dataset_params: GdalDatasetParameters {
                 file_path: PathBuf::from("/vsicurl/https://example.invalid/tasmax.nc"),
@@ -1131,8 +1126,12 @@ mod tests {
             read_kind: GdalReadKind::MdArray {
                 group: None,
                 array_name: "tasmax".to_string(),
-                z_range,
-                leading_prefix: Vec::new(),
+                z_index,
+                axis_mapping: vec![
+                    super::super::process_common::MdAxisMapping::Time,
+                    super::super::process_common::MdAxisMapping::Y,
+                    super::super::process_common::MdAxisMapping::X,
+                ],
             },
         })
     }
@@ -1149,11 +1148,11 @@ mod tests {
 
     /// Requests for the same file but different z slices must land in the same worker queue,
     /// so the worker can reuse the GDAL dataset it already has open. The routing key is
-    /// `dataset_params.partial_hash`, which must not contain the z range.
+    /// `dataset_params.partial_hash`, which must not contain the z index.
     #[test]
-    fn routing_is_blind_to_the_z_range() {
-        let a = md_message(0..4);
-        let b = md_message(48..52);
+    fn routing_is_blind_to_the_z_index() {
+        let a = md_message(0);
+        let b = md_message(48);
         assert_eq!(
             hash_of(&a, false),
             hash_of(&b, false),
@@ -1162,16 +1161,16 @@ mod tests {
         );
     }
 
-    /// ...while the *dedup* key must not collapse them: two different z ranges are two
-    /// different batches and must not share a result.
+    /// ...while the *dedup* key must not collapse them: two different z slices must not
+    /// share a result.
     #[test]
-    fn sharing_is_not_blind_to_the_z_range() {
-        let a = md_message(0..4);
-        let b = md_message(48..52);
+    fn sharing_is_not_blind_to_the_z_index() {
+        let a = md_message(0);
+        let b = md_message(48);
         assert_ne!(
             hash_of(&a, true),
             hash_of(&b, true),
-            "collapsing different z ranges would return the wrong slices"
+            "collapsing different z slices would return the wrong slices"
         );
     }
 
@@ -1180,15 +1179,19 @@ mod tests {
     /// tell them apart, since they return different data.
     #[test]
     fn routing_is_blind_to_the_array_but_sharing_is_not() {
-        let a = md_message(0..4);
-        let mut b = md_message(0..4);
+        let a = md_message(0);
+        let mut b = md_message(0);
         let IpcChannelMessage(p) = &mut b;
         let IpcChannelMessagePayload { read_kind, .. } = p;
         *read_kind = GdalReadKind::MdArray {
             group: None,
             array_name: "tasmin".to_string(),
-            z_range: 0..4,
-            leading_prefix: Vec::new(),
+            z_index: 0,
+            axis_mapping: vec![
+                super::super::process_common::MdAxisMapping::Time,
+                super::super::process_common::MdAxisMapping::Y,
+                super::super::process_common::MdAxisMapping::X,
+            ],
         };
         assert_eq!(
             hash_of(&a, false),
@@ -1202,11 +1205,11 @@ mod tests {
         );
     }
 
-    /// The same array at the same z in a *different* file is a different read.
+    /// The same array at the same z slice in a *different* file is a different read.
     #[test]
     fn routing_separates_different_files() {
-        let a = md_message(0..4);
-        let mut b = md_message(0..4);
+        let a = md_message(0);
+        let mut b = md_message(0);
         let IpcChannelMessage(p) = &mut b;
         p.dataset_params.file_path = PathBuf::from("/vsicurl/https://example.invalid/tasmin.nc");
         assert_ne!(hash_of(&a, false), hash_of(&b, false));

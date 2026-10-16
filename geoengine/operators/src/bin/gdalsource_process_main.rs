@@ -5,8 +5,8 @@ use geoengine_datatypes::raster::Pixel;
 use geoengine_operators::source::gdal_worker_process::{
     OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig,
     process_common::{
-        GdalIpcBytePayload, GdalReadKind, IpcChannelMessage, IpcChannelMessagePayload,
-        IpcChannelResult, IpcProcessError, IpcProcessRasterResult,
+        GdalIpcBytePayload, GdalIpcMdBytePayload, GdalReadKind, IpcChannelMessage,
+        IpcChannelMessagePayload, IpcChannelResult, IpcProcessError, IpcProcessRasterResult,
     },
     process_impl::{GdalDatasetHolder, GdalHandling, setup_client},
 };
@@ -257,20 +257,6 @@ fn main() {
     drop(file_guard);
 }
 
-/// Hands a failed read back to the parent, after logging it here.
-///
-/// This is the only place the real cause survives. The parent wraps it into
-/// `GdalProcessPoolError`, whose `Display` is just the variant name, so the error that
-/// reaches the client says nothing about *why* the read failed - and the caller's span
-/// (`gdal_worker_read_tile`) carries the read id, dataset and band this happened on.
-fn send_read_error(
-    sender: &IpcSender<IpcProcessRasterResult>,
-    err: IpcProcessError,
-) -> Result<(), ipc_channel::IpcError> {
-    tracing::error!(error = ?err, "gdal worker read failed");
-    sender.send(Err(err))
-}
-
 fn raster_type_dispatch(
     payload: IpcChannelMessagePayload,
     dataset_cache: &mut GdalDatasetHolder,
@@ -350,31 +336,32 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
         GdalReadKind::MdArray {
             group,
             array_name,
-            z_range,
-            leading_prefix,
+            z_index,
+            axis_mapping,
         } => GdalHandling::load_md_tile_data_with_dataset_retry::<T>(
             dataset_cache,
             &dataset_params,
             read_advise,
             group.as_deref(),
             &array_name,
-            z_range,
-            &leading_prefix,
+            z_index,
+            &axis_mapping,
         )
-        .and_then(|payloads| {
-            payloads
-                .into_iter()
-                .map(GdalIpcBytePayload::try_from)
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(Into::into)
-        })
-        .map(IpcChannelResult::MdBatch),
+        .and_then(|payload| GdalIpcMdBytePayload::try_from(payload).map_err(Into::into))
+        .map(IpcChannelResult::MdSlice),
     };
 
     // Propagate channel send errors directly up out of the handler
     match byte_payload {
         Ok(result) => sender.send(Ok(result)),
-        Err(err) => send_read_error(sender, err),
+        Err(err) => {
+            // This is the only place the real cause survives. The parent wraps it into
+            // `GdalProcessPoolError`, whose `Display` is just the variant name, so the error that
+            // reaches the client says nothing about *why* the read failed - and the caller's span
+            // (`gdal_worker_read_tile`) carries the read id, dataset and band this happened on.
+            tracing::error!(error = ?err, "gdal worker read failed");
+            sender.send(Err(err))
+        }
     }?;
 
     Ok(())

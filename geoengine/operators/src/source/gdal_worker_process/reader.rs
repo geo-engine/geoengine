@@ -7,8 +7,9 @@ use crate::source::gdal_worker_process::{
     FileNotFoundHandling, GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError,
     GridAndProperties,
     process_common::{
-        GdalReadAdvise, GdalReadKind, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
-        IpcProcessGdalErrorKind,
+        GdalDataGridVariant, GdalIpcMdPayload, GdalIpcPayload, GdalReadAdvise, GdalReadKind,
+        IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError, IpcProcessGdalErrorKind,
+        MdAxisMapping,
     },
 };
 
@@ -20,10 +21,10 @@ pub enum GdalProcessReadResult<T: Pixel> {
     FileNotFoundAsNoData,
 }
 
-/// Result of reading a batch of z-slices through the GDAL worker process.
+/// Result of reading a z-slice of a multidimensional array through the GDAL worker process.
 pub enum GdalProcessMdReadResult<T: Pixel> {
-    /// One grid per z-slice of the requested batch, in ascending z order.
-    Grids(Vec<GridAndProperties<T, GridBoundingBox2D>>),
+    /// The grid of the requested z-slice.
+    Grid(Box<GridAndProperties<T, GridBoundingBox2D>>),
     /// The file was not found and the dataset is configured to treat that as no-data.
     FileNotFoundAsNoData,
 }
@@ -52,6 +53,132 @@ fn flip_grid_y_if_needed<T: Pixel>(
         ),
         GridOrEmpty::Empty(e) => GridOrEmpty::new_empty(e),
     }
+}
+
+/// Gathers the z-slice of a worker buffer into row-major `[y, x]` order. The worker reads one
+/// z index, so a z axis has size 1 and adds no offset.
+fn gather_md_slice<T: Copy>(
+    data: &[T],
+    axis_sizes: &[usize],
+    axis_mapping: &[MdAxisMapping],
+    size_y: usize,
+    size_x: usize,
+) -> Result<Vec<T>, IpcProcessError> {
+    if axis_sizes.len() != axis_mapping.len() {
+        return Err(IpcProcessError::IpcOther {
+            msg: "MD payload dimension count does not match its axis mapping".to_string(),
+        });
+    }
+
+    let axis_index = |role: fn(&MdAxisMapping) -> bool, name: &str| {
+        axis_mapping
+            .iter()
+            .position(role)
+            .ok_or_else(|| IpcProcessError::IpcOther {
+                msg: format!("MD axis mapping is missing {name}"),
+            })
+    };
+    // A variable without a z role is a single slice.
+    let z_size = axis_mapping
+        .iter()
+        .position(|axis| axis.is_z())
+        .map_or(1, |axis| axis_sizes[axis]);
+    let y_axis = axis_index(|axis| *axis == MdAxisMapping::Y, "Y")?;
+    let x_axis = axis_index(|axis| *axis == MdAxisMapping::X, "X")?;
+
+    if (z_size, axis_sizes[y_axis], axis_sizes[x_axis]) != (1, size_y, size_x) {
+        return Err(IpcProcessError::IpcOther {
+            msg: format!(
+                "MD payload shape {:?} does not match requested z/y/x shape (1, {size_y}, {size_x})",
+                (z_size, axis_sizes[y_axis], axis_sizes[x_axis])
+            ),
+        });
+    }
+
+    let expected_len = axis_sizes
+        .iter()
+        .try_fold(1usize, |size, axis_size| size.checked_mul(*axis_size));
+    if expected_len != Some(data.len()) {
+        return Err(IpcProcessError::IpcOther {
+            msg: format!(
+                "MD buffer has {} values but shape {:?} requires {}",
+                data.len(),
+                axis_sizes,
+                expected_len.unwrap_or(usize::MAX)
+            ),
+        });
+    }
+
+    let mut strides = vec![1usize; axis_sizes.len()];
+    for axis in (0..axis_sizes.len().saturating_sub(1)).rev() {
+        strides[axis] = strides[axis + 1] * axis_sizes[axis + 1];
+    }
+
+    let (y_stride, x_stride) = (strides[y_axis], strides[x_axis]);
+    let mut slice = Vec::with_capacity(size_y * size_x);
+    for y in 0..size_y {
+        let row = y * y_stride;
+        if x_stride == 1 {
+            slice.extend_from_slice(&data[row..row + size_x]);
+        } else {
+            slice.extend((0..size_x).map(|x| data[row + x * x_stride]));
+        }
+    }
+
+    Ok(slice)
+}
+
+fn split_md_slice<T: Pixel>(
+    batch: GdalIpcMdPayload<T>,
+    axis_mapping: &[MdAxisMapping],
+    read_advise: GdalReadAdvise,
+) -> Result<GdalIpcPayload<T>, IpcProcessError> {
+    let size_x = read_advise.gdal_read_widow.size_x;
+    let size_y = read_advise.gdal_read_widow.size_y;
+    size_y
+        .checked_mul(size_x)
+        .ok_or_else(|| IpcProcessError::IpcOther {
+            msg: "MD slice dimensions overflow addressable memory".to_string(),
+        })?;
+
+    let GdalIpcMdPayload {
+        axis_sizes,
+        properties,
+        data_variant,
+    } = batch;
+    let gather = |values: &[T]| gather_md_slice(values, &axis_sizes, axis_mapping, size_y, size_x);
+    let data_variant = match data_variant {
+        GdalDataGridVariant::Empty => GdalDataGridVariant::Empty,
+        GdalDataGridVariant::AllValid { data } => GdalDataGridVariant::AllValid {
+            data: gather(&data)?,
+        },
+        GdalDataGridVariant::WithNoData {
+            data,
+            no_data_value,
+        } => GdalDataGridVariant::WithNoData {
+            data: gather(&data)?,
+            no_data_value,
+        },
+        GdalDataGridVariant::WithExplicitMask {
+            data,
+            validity_mask,
+        } => GdalDataGridVariant::WithExplicitMask {
+            data: gather(&data)?,
+            validity_mask: gather_md_slice(
+                &validity_mask,
+                &axis_sizes,
+                axis_mapping,
+                size_y,
+                size_x,
+            )?,
+        },
+    };
+
+    Ok(GdalIpcPayload {
+        dimensions: read_advise.read_window_bounds,
+        properties,
+        data_variant,
+    })
 }
 
 /// Reader that dispatches GDAL tile requests to the [`GdalProcessPool`].
@@ -130,8 +257,7 @@ impl GdalPoolReader {
         })))
     }
 
-    /// Reads a batch of z-slices from a multidim array via the worker process in a
-    /// single request, applying the same post-processing (Y-axis flip per z-slice)
+    /// Reads one z-slice from a multidim array via the worker process in a single request, applying the same post-processing (Y-axis flip per z-slice)
     /// and file-not-found handling as [`Self::read_tile_data`].
     ///
     /// This method intentionally does **not** blit the results into the final tile
@@ -143,24 +269,22 @@ impl GdalPoolReader {
     ///
     /// # Panics
     /// Panics if a Y-axis flipped grid cannot be wrapped in a `MaskedGrid`.
-    pub async fn read_md_batch_data<T: Pixel + GdalType + FromPrimitive>(
+    pub async fn read_md_slice_data<T: Pixel + GdalType + FromPrimitive>(
         &self,
         dataset_params: GdalDatasetParameters,
         read_advise: GdalReadAdvise,
         group: Option<&str>,
         array_name: &str,
-        z_range: std::ops::Range<usize>,
-        leading_prefix: &[u64],
+        z_index: usize,
+        axis_mapping: &[MdAxisMapping],
     ) -> Result<GdalProcessMdReadResult<T>, GdalProcessPoolError> {
         let file_not_found_as_no_data =
             dataset_params.file_not_found_handling == FileNotFoundHandling::NoData;
 
         // extend the read_id with the MD-specific request parts
         let read_id = format!(
-            "{}-{array_name}-{}-{}",
+            "{}-{array_name}-{z_index}",
             dataset_params.create_read_id(&read_advise),
-            z_range.start,
-            z_range.end
         );
 
         let span = tracing::info_span!(
@@ -169,8 +293,7 @@ impl GdalPoolReader {
             dataset = %dataset_params.file_path.display(),
             group = ?group,
             array = array_name,
-            z_start = z_range.start,
-            z_end = z_range.end,
+            z_index,
         );
 
         let request = IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
@@ -181,30 +304,28 @@ impl GdalPoolReader {
             read_kind: GdalReadKind::MdArray {
                 group: group.map(str::to_string),
                 array_name: array_name.to_string(),
-                z_range,
-                leading_prefix: leading_prefix.to_vec(),
+                z_index,
+                axis_mapping: axis_mapping.to_vec(),
             },
         });
 
         let res = self
             .dispatcher()
-            .read_md_batch_data::<T>(request)
+            .read_md_slice_data::<T>(request)
             .instrument(span)
             .await;
 
-        let Some(payloads) = read_result_or_no_data(res, file_not_found_as_no_data)? else {
+        let Some(payload) = read_result_or_no_data(res, file_not_found_as_no_data)? else {
             return Ok(GdalProcessMdReadResult::FileNotFoundAsNoData);
         };
 
-        let grids = payloads
-            .into_iter()
-            .map(|p| {
-                let GridAndProperties { grid, properties } = p.into();
-                let grid = flip_grid_y_if_needed(grid, read_advise.flip_y);
-                GridAndProperties { grid, properties }
-            })
-            .collect();
-        Ok(GdalProcessMdReadResult::Grids(grids))
+        let slice = split_md_slice(payload, axis_mapping, read_advise)?;
+        let GridAndProperties { grid, properties } = slice.into();
+        let grid = flip_grid_y_if_needed(grid, read_advise.flip_y);
+        Ok(GdalProcessMdReadResult::Grid(Box::new(GridAndProperties {
+            grid,
+            properties,
+        })))
     }
 }
 
@@ -224,5 +345,60 @@ fn read_result_or_no_data<T>(
                 },
         }) if file_not_found_as_no_data => Ok(None),
         Err(other_err) => Err(other_err),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::source::gdal_worker_process::process_common::GdalReadWindow;
+    use geoengine_datatypes::raster::{GridShape2D, RasterProperties};
+
+    fn advise() -> GdalReadAdvise {
+        GdalReadAdvise {
+            gdal_read_widow: GdalReadWindow::new([0, 0].into(), GridShape2D::new([2, 2])),
+            read_window_bounds: GridBoundingBox2D::new_unchecked([0, 0], [1, 1]),
+            bounds_of_target: GridBoundingBox2D::new_unchecked([0, 0], [1, 1]),
+            flip_y: false,
+        }
+    }
+
+    fn all_valid_data(payload: GdalIpcPayload<i32>) -> Vec<i32> {
+        match payload.data_variant {
+            GdalDataGridVariant::AllValid { data } => data,
+            other => panic!("expected all-valid data, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn md_slice_without_z_role_is_the_whole_buffer() {
+        let batch = GdalIpcMdPayload {
+            axis_sizes: vec![2, 2],
+            properties: RasterProperties::default(),
+            data_variant: GdalDataGridVariant::AllValid {
+                data: (0..4).collect(),
+            },
+        };
+        let mapping = [MdAxisMapping::Y, MdAxisMapping::X];
+
+        let payload = split_md_slice(batch, &mapping, advise()).unwrap();
+
+        assert_eq!(all_valid_data(payload), vec![0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn md_slice_gathers_strided_x_axis() {
+        let batch = GdalIpcMdPayload {
+            axis_sizes: vec![2, 1, 2],
+            properties: RasterProperties::default(),
+            data_variant: GdalDataGridVariant::AllValid {
+                data: (0..4).collect(),
+            },
+        };
+        let mapping = [MdAxisMapping::X, MdAxisMapping::Time, MdAxisMapping::Y];
+
+        let payload = split_md_slice(batch, &mapping, advise()).unwrap();
+
+        assert_eq!(all_valid_data(payload), vec![0, 2, 1, 3]);
     }
 }

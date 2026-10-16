@@ -1,16 +1,16 @@
-use std::ops::Range;
-
 use geoengine_datatypes::primitives::{
     CacheHint, CacheTtlSeconds, RegularTimeDimension, TimeDimension, TimeGranularity, TimeInstance,
     TimeInterval, TimeStep,
 };
 use geoengine_datatypes::raster::GeoTransform;
-use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
 use super::error::MdGdalSourceError;
+use super::reader::MdTileRequest;
 use crate::engine::{RasterResultDescriptor, TimeDescriptor};
-use crate::source::gdal_worker_process::{GdalDatasetGeoTransform, GdalDatasetParameters};
+use crate::source::gdal_worker_process::{
+    GdalDatasetGeoTransform, GdalDatasetParameters, MdAxisMapping,
+};
 
 /// The transform a tile's stored grid is *presented* as.
 ///
@@ -41,47 +41,16 @@ pub fn presented_geo_transform(
     GeoTransform::new((origin_x, origin_y).into(), raw.x_pixel_size, -abs_y)
 }
 
-/// How the z (leading) dimension of an MD array maps onto the 2D raster output.
-///
-/// A GDAL multidim array has no raster bands at all: every array is `(z, y, x)` and `z` is
-/// just a dimension. What a *Geo Engine* raster does have is bands, so this enum decides what
-/// each z slice becomes. `Variable` turns z into the time axis, `Band` turns it into bands.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, FromSql, ToSql)]
-#[serde(rename_all = "camelCase")]
-pub enum ZRole {
-    /// Each z-slice is an output band of a single time step.
-    ///
-    /// The leading dimension has no CF time units, so there is no time axis to speak of and
-    /// every slice is a band. Example: `reflectance(band, lat, lon)`.
-    Band,
-    /// Each selected *variable* is an output band, and within a variable the z-slices are
-    /// time steps. All variables must share one time axis, which is what lets a single
-    /// `time_steps` vector serve every band.
-    ///
-    /// For a single-variable dataset this degenerates to one band and one axis
-    /// (previously `ZRole::Time`). Every selected variable reads **every** file: the probe
-    /// opens each file once and probes all of them in it, so a `(file, variable)` pair
-    /// becomes one row and the same file appears once per variable.
-    Variable,
-}
-
 /// The dataset-level metadata of an `MdGdalSource`, mirroring `GdalMultiBand`: everything
 /// per-file lives in `dataset_md_tiles`, so this only carries the result descriptor and the
-/// two properties that are constant across all files.
-#[derive(Serialize, Deserialize, Debug, Clone, FromSql, ToSql, PartialEq)]
+/// properties that are constant across all files.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMdMetaData {
     pub result_descriptor: RasterResultDescriptor,
-    pub z_role: ZRole,
+    /// The variables of the dataset; the index of a variable is its Geo Engine output band.
+    pub variables: Vec<MdVariable>,
     pub wrap: bool,
-    /// Upper bound on how many consecutive z slices one worker request may return.
-    ///
-    /// This lives on the dataset rather than on the workflow's operator parameters because a
-    /// batch is sized against the data's slice size, which the operator cannot know.
-    ///
-    /// `i64` rather than `usize` because this is a `bigint` column and postgres has no
-    /// `usize` codec; callers get the bounds check for free from `try_from`.
-    pub max_z_batch_size: Option<i64>,
     /// Dataset-level TTL fallback used when no tile-level TTL is provided, mirroring
     /// `GdalMultiBand::cache_ttl`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -92,18 +61,40 @@ impl GdalMdMetaData {
     #[must_use]
     pub fn new(
         result_descriptor: RasterResultDescriptor,
-        z_role: ZRole,
+        variables: Vec<MdVariable>,
         wrap: bool,
-        max_z_batch_size: Option<i64>,
         cache_ttl: Option<CacheTtlSeconds>,
     ) -> Self {
         Self {
             result_descriptor,
-            z_role,
+            variables,
             wrap,
-            max_z_batch_size,
             cache_ttl,
         }
+    }
+}
+
+/// One variable of an MD dataset: a named array and the role of each of its dimensions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MdVariable {
+    /// unique within the dataset; files refer to a variable by this name
+    pub name: String,
+    /// one entry per source dimension, in array order
+    pub axis_mapping: Vec<MdAxisMapping>,
+}
+
+impl MdVariable {
+    /// The z axis of this variable: its `Time` or `Band` dimension, `None` for a single slice.
+    #[must_use]
+    pub fn z_axis(&self) -> Option<MdAxisMapping> {
+        self.axis_mapping.iter().copied().find(|axis| axis.is_z())
+    }
+
+    /// Whether this variable's z axis is bands (`Band`) rather than time steps.
+    #[must_use]
+    pub fn z_is_band(&self) -> bool {
+        self.z_axis() == Some(MdAxisMapping::Band)
     }
 }
 
@@ -283,40 +274,26 @@ pub struct MdDatasetFile {
     pub local_offset: usize,
     /// the file's own time axis, one interval per z slice
     pub times: MdFileTimes,
+    /// index into `GdalMdMetaData::variables` of the variable this file holds
     #[serde(default)]
     pub output_band: u32,
-    /// Fixed index into each dimension between z and (y, x), so one row is one slice of a
-    /// 4D array - `[depth]` for `(time, depth, y, x)`.
-    ///
-    /// Empty for 3D, and per row rather than per dataset so that bands of one dataset can
-    /// each select a different slice: a `(time, depth, y, x)` file registered with
-    /// `variables_as_bands` becomes one dataset whose band `b` is depth `b`.
-    #[serde(default)]
-    pub leading_prefix: Vec<i64>,
 }
 
-/// The `(time, band)` stamp of the tile at `global_z`: band-role intervals are synthetic
-/// `[k, k+1)` unit steps indexed by band, so the time is `time_steps[global_z]` and the band
-/// is the z index; a variable-role tile is stamped with its file's output band instead. Data
+/// The `(time, band)` stamp of the tile at `global_z`: for a band axis the intervals are
+/// synthetic `[k, k+1)` unit steps indexed by band, so the time is `time_steps[global_z]` and
+/// the band is the z index; a time axis is stamped with its file's output band instead. Data
 /// tiles and gap tiles use the same rule, which is what keeps one query consistent.
 pub(crate) fn time_and_band(
-    z_role: ZRole,
+    z_is_band: bool,
     global_z: usize,
     output_band: u32,
     time_steps: &[TimeInterval],
 ) -> (TimeInterval, u32) {
-    match z_role {
-        ZRole::Band => (time_steps[global_z], global_z as u32),
-        ZRole::Variable => (time_steps[global_z], output_band),
+    if z_is_band {
+        (time_steps[global_z], global_z as u32)
+    } else {
+        (time_steps[global_z], output_band)
     }
-}
-
-/// A contiguous chunk of z-slices from a single file.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MdZBatch {
-    pub file_idx: usize,
-    pub local_z: Range<usize>,
-    pub global_z: Range<usize>,
 }
 
 /// The loading information of a `MdGdalSource`: a set of MD arrays that are
@@ -326,29 +303,53 @@ pub struct MdZBatch {
 pub struct MdLoadingInfo {
     /// one interval per z slice (in concatenated/global z order)
     time_steps: Vec<TimeInterval>,
-    /// the files in z order; their z ranges are disjoint and cover `[0, time_steps.len())`
+    /// the files in ascending `z_start` order; files of one band may share z slices when
+    /// they are spatial pieces of the same time step
     files: Vec<MdDatasetFile>,
+    /// the dataset's variables, indexed by the `output_band` of their files
+    variables: Vec<MdVariable>,
     /// Fallback TTL used when the dataset does not provide its own.
     #[serde(default)]
     cache_ttl: Option<CacheTtlSeconds>,
-    z_role: ZRole,
     /// re-apply the stored 0..360° coverage onto -180..180° (one-way wrap-around)
     wrap: bool,
-    /// upper bound on how many consecutive z slices one worker request may return; a
-    /// dataset-level knob, since a batch is sized against the data's slice size
-    max_z_batch_size: Option<usize>,
 }
 
 impl MdLoadingInfo {
-    #[must_use]
     pub fn new(
         time_steps: Vec<TimeInterval>,
         files: Vec<MdDatasetFile>,
+        variables: Vec<MdVariable>,
         cache_ttl: Option<CacheTtlSeconds>,
-        z_role: ZRole,
         wrap: bool,
-        max_z_batch_size: Option<usize>,
-    ) -> Self {
+    ) -> Result<Self, MdGdalSourceError> {
+        for (i, variable) in variables.iter().enumerate() {
+            if variables[..i]
+                .iter()
+                .any(|other| other.name == variable.name)
+            {
+                return Err(MdGdalSourceError::DuplicateVariableName {
+                    name: variable.name.clone(),
+                });
+            }
+        }
+        if let Some(file) = files
+            .iter()
+            .find(|f| f.output_band as usize >= variables.len())
+        {
+            return Err(MdGdalSourceError::UnknownVariable {
+                index: file.output_band,
+                count: variables.len(),
+            });
+        }
+        // shortcut: time and band variables share one `time_steps` axis, so they cannot be mixed
+        // in a dataset, upgrade when the axis can carry both kinds
+        let z_axes: std::collections::HashSet<Option<MdAxisMapping>> =
+            variables.iter().map(MdVariable::z_axis).collect();
+        if z_axes.len() > 1 {
+            return Err(MdGdalSourceError::MixedZAxisKinds);
+        }
+
         debug_assert!(!time_steps.is_empty(), "time_steps must not be empty");
         debug_assert!(
             time_steps.windows(2).all(|w| w[0] <= w[1]),
@@ -360,12 +361,12 @@ impl MdLoadingInfo {
         for band in bands {
             let band_files: Vec<&MdDatasetFile> =
                 files.iter().filter(|f| f.output_band == band).collect();
-            // ordered and non-overlapping, but *not* contiguous: a z index that no file
-            // covers is a gap-filling step that `z_batches` reports as missing, and the
-            // operator turns into an empty tile
+            // ordered by z_start, possibly overlapping (spatial mosaic), and *not* contiguous:
+            // a z index that no file covers is a gap-filling step that `z_slices` reports as
+            // missing, and the operator turns into an empty tile
             debug_assert!(
-                band_files.windows(2).all(|w| w[0].z_end <= w[1].z_start),
-                "files of a band must be ordered and must not overlap along the z axis"
+                band_files.windows(2).all(|w| w[0].z_start <= w[1].z_start),
+                "files of a band must be ordered by z_start"
             );
             debug_assert!(
                 band_files.iter().all(|f| {
@@ -377,29 +378,35 @@ impl MdLoadingInfo {
         }
 
         debug_assert!(
-            max_z_batch_size.is_none_or(|size| size > 0),
-            "a z batch must hold at least one slice"
-        );
-        debug_assert!(
             files
                 .iter()
                 .all(|f| f.params.width > 0 && f.params.height > 0),
             "a tile must have a non-empty footprint"
         );
 
-        Self {
+        Ok(Self {
             time_steps,
             files,
+            variables,
             cache_ttl,
-            z_role,
             wrap,
-            max_z_batch_size,
-        }
+        })
     }
 
     #[must_use]
     pub fn time_steps(&self) -> &[TimeInterval] {
         &self.time_steps
+    }
+
+    #[must_use]
+    pub fn variables(&self) -> &[MdVariable] {
+        &self.variables
+    }
+
+    /// The variable a file holds; `new` checked that every file's index is in range.
+    #[must_use]
+    pub fn variable_of(&self, file: &MdDatasetFile) -> &MdVariable {
+        &self.variables[file.output_band as usize]
     }
 
     /// The dataset's whole time axis as a `TimeDescriptor`: bounds span the concatenated
@@ -419,9 +426,11 @@ impl MdLoadingInfo {
         &self.files
     }
 
+    /// Whether the z axis of this dataset is bands rather than time steps. All variables share
+    /// one z axis kind (`new` rejects mixed kinds), so one variable answers for the dataset.
     #[must_use]
-    pub fn z_role(&self) -> ZRole {
-        self.z_role
+    pub fn z_is_band(&self) -> bool {
+        self.variables.iter().any(MdVariable::z_is_band)
     }
 
     #[must_use]
@@ -435,13 +444,6 @@ impl MdLoadingInfo {
         self.cache_ttl.unwrap_or(default_ttl).into()
     }
 
-    /// How many consecutive z slices one worker request may return.
-    #[must_use]
-    pub fn max_z_batch_size(&self) -> usize {
-        self.max_z_batch_size
-            .unwrap_or(super::DEFAULT_MAX_Z_BATCH_SIZE)
-    }
-
     #[must_use]
     /// Global z indices of the time steps that intersect `time`.
     pub fn z_indices_in_time(&self, time: TimeInterval) -> Vec<usize> {
@@ -453,22 +455,22 @@ impl MdLoadingInfo {
             .collect()
     }
 
-    /// Splits the given ascending global z indices into per-file contiguous batches
-    /// (each at most `batch_size` slices) and returns the z indices that no file covers.
+    /// Maps each ascending global z index to every file of the band that holds it, with the
+    /// file-local z index in each, and returns the z indices that no file covers.
+    /// Several files hold one z index when they are spatial pieces of the same time step;
+    /// the reader blits them into one tile.
     /// With `output_band`, only files of that Geo Engine output band are considered;
     /// `None` considers all files (single-variable datasets).
     #[must_use]
-    pub fn z_batches(
+    pub fn z_slices(
         &self,
         global_z: &[usize],
         output_band: Option<u32>,
-        batch_size: usize,
-    ) -> (Vec<MdZBatch>, Vec<usize>) {
-        let mut batches: Vec<MdZBatch> = Vec::new();
+    ) -> (Vec<(usize, Vec<MdTileRequest>)>, Vec<usize>) {
+        let mut slices = Vec::new();
         let mut missing = Vec::new();
 
-        // candidate files of the requested band, sorted by z_start (probe keeps them sorted);
-        // binary search per z-index gives O(z log files) instead of O(z * files).
+        // candidate files of the requested band, sorted by z_start.
         // `z_start == z_end` marks a file with no slice in the query window; such rows carry
         // a placeholder `z_start = 0` that would break the ascending order the search needs.
         let candidates: Vec<usize> = self
@@ -478,45 +480,36 @@ impl MdLoadingInfo {
             .filter(|(_, f)| output_band.is_none_or(|b| f.output_band == b) && f.z_start < f.z_end)
             .map(|(i, _)| i)
             .collect();
+        // a file can only hold `gz` if it starts less than its own length before `gz`
+        let longest = candidates
+            .iter()
+            .map(|&i| self.files[i].z_end - self.files[i].z_start)
+            .max()
+            .unwrap_or(0);
 
         for &gz in global_z {
-            let Some(&file_idx) = (candidates.partition_point(|&i| self.files[i].z_start <= gz))
-                .checked_sub(1)
-                .map(|i| &candidates[..][i])
-            else {
-                missing.push(gz);
-                continue;
-            };
-
-            if gz >= self.files[file_idx].z_end {
-                missing.push(gz);
-                continue;
-            }
-
-            let local = gz - self.files[file_idx].z_start + self.files[file_idx].local_offset;
-
-            match batches.last_mut() {
-                Some(b)
-                    if b.file_idx == file_idx
-                        && b.local_z.end == local
-                        && b.local_z.len() < batch_size =>
-                {
-                    b.local_z.end += 1;
-                    b.global_z.end += 1;
-                }
-                _ => {
+            let first = candidates.partition_point(|&i| self.files[i].z_start + longest <= gz);
+            let last = candidates.partition_point(|&i| self.files[i].z_start <= gz);
+            let covering: Vec<MdTileRequest> = candidates[first..last]
+                .iter()
+                .filter(|&&i| gz < self.files[i].z_end)
+                .map(|&file_idx| {
                     let file = &self.files[file_idx];
-                    let g0 = file.z_start + (local - file.local_offset);
-                    batches.push(MdZBatch {
+                    MdTileRequest {
                         file_idx,
-                        local_z: local..local + 1,
-                        global_z: g0..g0 + 1,
-                    });
-                }
+                        local_z: gz - file.z_start + file.local_offset,
+                    }
+                })
+                .collect();
+
+            if covering.is_empty() {
+                missing.push(gz);
+            } else {
+                slices.push((gz, covering));
             }
         }
 
-        (batches, missing)
+        (slices, missing)
     }
 }
 
@@ -625,83 +618,190 @@ mod tests {
             local_offset: 0,
             times: MdFileTimes::from_intervals(intervals),
             output_band: band,
-            leading_prefix: Vec::new(),
+        }
+    }
+
+    fn time_variable(name: &str) -> MdVariable {
+        MdVariable {
+            name: name.to_owned(),
+            axis_mapping: vec![MdAxisMapping::Time, MdAxisMapping::Y, MdAxisMapping::X],
+        }
+    }
+
+    fn loading_info(files: Vec<MdDatasetFile>, variables: Vec<MdVariable>) -> MdLoadingInfo {
+        MdLoadingInfo::new(
+            (0..8).map(|i| interval(i, i + 1)).collect(),
+            files,
+            variables,
+            None,
+            false,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn z_slices_filters_by_band() {
+        let files = vec![file(0, 0, 4, 4), file(0, 4, 8, 4), file(1, 0, 8, 8)];
+        let loading_info = loading_info(
+            files,
+            vec![time_variable("temperature"), time_variable("precipitation")],
+        );
+        let all_z = (0..8).collect::<Vec<_>>();
+
+        let (slices, missing) = loading_info.z_slices(&all_z, Some(0));
+        assert!(missing.is_empty());
+        assert_eq!(slices.len(), 8);
+        assert_eq!(
+            slices[0],
+            (
+                0,
+                vec![MdTileRequest {
+                    file_idx: 0,
+                    local_z: 0
+                }]
+            )
+        );
+        assert_eq!(
+            slices[4],
+            (
+                4,
+                vec![MdTileRequest {
+                    file_idx: 1,
+                    local_z: 0
+                }]
+            )
+        );
+
+        let (slices, missing) = loading_info.z_slices(&all_z, Some(1));
+        assert!(missing.is_empty());
+        assert_eq!(
+            slices[7],
+            (
+                7,
+                vec![MdTileRequest {
+                    file_idx: 2,
+                    local_z: 7
+                }]
+            )
+        );
+    }
+
+    #[test]
+    fn z_slices_returns_every_file_holding_a_slice() {
+        // two spatial pieces of the same time steps (a mosaic), then a file for the next ones
+        let files = vec![file(0, 0, 4, 4), file(0, 0, 4, 4), file(0, 4, 8, 4)];
+        let loading_info = loading_info(files, vec![time_variable("temperature")]);
+
+        let (slices, missing) = loading_info.z_slices(&(0..8).collect::<Vec<_>>(), Some(0));
+
+        assert!(missing.is_empty());
+        assert_eq!(
+            slices[1],
+            (
+                1,
+                vec![
+                    MdTileRequest {
+                        file_idx: 0,
+                        local_z: 1
+                    },
+                    MdTileRequest {
+                        file_idx: 1,
+                        local_z: 1
+                    },
+                ]
+            )
+        );
+        assert_eq!(slices[5].1.len(), 1);
+    }
+
+    #[test]
+    fn z_slices_reports_missing_per_band() {
+        // band 0 only covers z 0..4, so z 4..8 is a gap
+        let files = vec![file(0, 0, 4, 4), file(1, 0, 8, 8)];
+        let loading_info = loading_info(
+            files,
+            vec![time_variable("temperature"), time_variable("precipitation")],
+        );
+
+        let (slices, missing) = loading_info.z_slices(&(0..8).collect::<Vec<_>>(), Some(0));
+
+        assert_eq!(slices.len(), 4);
+        assert_eq!(missing, vec![4, 5, 6, 7]);
+    }
+
+    fn band_variable(name: &str) -> MdVariable {
+        MdVariable {
+            name: name.to_owned(),
+            axis_mapping: vec![MdAxisMapping::Band, MdAxisMapping::Y, MdAxisMapping::X],
         }
     }
 
     #[test]
-    fn z_batches_filters_by_band() {
-        let files = vec![file(0, 0, 4, 4), file(0, 4, 8, 4), file(1, 0, 8, 8)];
-        let loading_info = MdLoadingInfo::new(
-            (0..8).map(|i| interval(i, i + 1)).collect(),
-            files,
+    fn variable_names_must_be_unique() {
+        let result = MdLoadingInfo::new(
+            vec![interval(0, 1)],
+            vec![file(0, 0, 1, 1)],
+            vec![time_variable("temperature"), time_variable("temperature")],
             None,
-            ZRole::Variable,
             false,
-            None,
-        );
-        let all_z = (0..8).collect::<Vec<_>>();
-
-        let (batches, missing) = loading_info.z_batches(&all_z, Some(0), 16);
-        assert!(missing.is_empty());
-        assert_eq!(
-            batches,
-            vec![
-                MdZBatch {
-                    file_idx: 0,
-                    local_z: 0..4,
-                    global_z: 0..4,
-                },
-                MdZBatch {
-                    file_idx: 1,
-                    local_z: 0..4,
-                    global_z: 4..8,
-                },
-            ]
         );
 
-        let (batches, missing) = loading_info.z_batches(&all_z, Some(1), 16);
-        assert!(missing.is_empty());
-        assert_eq!(
-            batches,
-            vec![MdZBatch {
-                file_idx: 2,
-                local_z: 0..8,
-                global_z: 0..8,
-            }]
-        );
+        assert!(matches!(
+            result,
+            Err(MdGdalSourceError::DuplicateVariableName { name }) if name == "temperature"
+        ));
     }
 
     #[test]
-    fn z_batches_reports_missing_per_band() {
-        // band 0 only covers z 0..4, so z 4..8 is a gap
-        let files = vec![file(0, 0, 4, 4), file(1, 0, 8, 8)];
-        let loading_info = MdLoadingInfo::new(
-            (0..8).map(|i| interval(i, i + 1)).collect(),
-            files,
+    fn files_must_refer_to_an_existing_variable() {
+        let result = MdLoadingInfo::new(
+            vec![interval(0, 1)],
+            vec![file(1, 0, 1, 1)],
+            vec![time_variable("temperature")],
             None,
-            ZRole::Variable,
             false,
+        );
+
+        assert!(matches!(
+            result,
+            Err(MdGdalSourceError::UnknownVariable { index: 1, count: 1 })
+        ));
+    }
+
+    #[test]
+    fn time_and_band_variables_cannot_mix() {
+        let result = MdLoadingInfo::new(
+            vec![interval(0, 1)],
+            vec![file(0, 0, 1, 1), file(1, 0, 1, 1)],
+            vec![time_variable("temperature"), band_variable("reflectance")],
             None,
+            false,
         );
 
-        let (batches, missing) = loading_info.z_batches(&(0..8).collect::<Vec<_>>(), Some(0), 2);
+        assert!(matches!(result, Err(MdGdalSourceError::MixedZAxisKinds)));
+    }
 
+    #[test]
+    fn z_axis_kind_is_read_per_variable() {
+        let loading_info = loading_info(
+            vec![file(0, 0, 4, 4), file(1, 0, 4, 4)],
+            vec![time_variable("temperature"), time_variable("precipitation")],
+        );
+
+        assert!(!loading_info.z_is_band());
         assert_eq!(
-            batches,
-            vec![
-                MdZBatch {
-                    file_idx: 0,
-                    local_z: 0..2,
-                    global_z: 0..2,
-                },
-                MdZBatch {
-                    file_idx: 0,
-                    local_z: 2..4,
-                    global_z: 2..4,
-                },
-            ]
+            loading_info.variable_of(&loading_info.files()[1]).name,
+            "precipitation"
         );
-        assert_eq!(missing, vec![4, 5, 6, 7]);
+
+        let bands = MdLoadingInfo::new(
+            vec![interval(0, 1)],
+            vec![file(0, 0, 1, 1)],
+            vec![band_variable("reflectance")],
+            None,
+            false,
+        )
+        .unwrap();
+        assert!(bands.z_is_band());
     }
 }

@@ -1,7 +1,8 @@
 use super::{
     GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetadataMapping,
     process_common::{
-        GdalDataGridVariant, GdalIpcPayload, GdalReadAdvise, GdalReadWindow, IpcProcessError,
+        GdalDataGridVariant, GdalIpcMdPayload, GdalIpcPayload, GdalReadAdvise, GdalReadWindow,
+        IpcProcessError, MdAxisMapping, validate_md_axis_mapping,
     },
 };
 use crate::{
@@ -341,33 +342,51 @@ impl GdalDatasetHolder {
     }
 }
 
-/// Builds the per-dimension `[start, count]` window of one MD read.
-///
-/// Dimension 0 is `z`, the last two are `(y, x)`, and the dimensions in between are the
-/// dataset's fixed `leading_prefix`. A 3D array therefore has an empty prefix and the
-/// window is `(z, y, x)` exactly as before.
+/// Builds GDAL's per-dimension `[start, count]` vectors from the explicit axis mapping.
 fn md_read_window(
-    num_dimensions: usize,
-    z_range: &std::ops::Range<usize>,
-    leading_prefix: &[u64],
-    start_y: usize,
-    start_x: usize,
-    size_y: usize,
-    size_x: usize,
-) -> (Vec<u64>, Vec<usize>) {
-    let prefix_len = num_dimensions - 3;
-    let mut start = vec![0u64; num_dimensions];
-    start[0] = z_range.start as u64;
-    start[1..=prefix_len].copy_from_slice(leading_prefix);
-    start[num_dimensions - 2] = start_y as u64;
-    start[num_dimensions - 1] = start_x as u64;
+    axis_mapping: &[MdAxisMapping],
+    z_index: usize,
+    read_window: GdalReadWindow,
+) -> Result<(Vec<u64>, Vec<usize>), IpcProcessError> {
+    let (start_x, start_y) = (
+        usize::try_from(read_window.start_x).map_err(|_| IpcProcessError::IpcOther {
+            msg: format!(
+                "negative read window start x {} is invalid for MD reads",
+                read_window.start_x
+            ),
+        })?,
+        usize::try_from(read_window.start_y).map_err(|_| IpcProcessError::IpcOther {
+            msg: format!(
+                "negative read window start y {} is invalid for MD reads",
+                read_window.start_y
+            ),
+        })?,
+    );
 
-    let mut count = vec![1usize; num_dimensions];
-    count[0] = z_range.len();
-    count[num_dimensions - 2] = size_y;
-    count[num_dimensions - 1] = size_x;
+    let mut start = vec![0u64; axis_mapping.len()];
+    let mut count = vec![1usize; axis_mapping.len()];
+    for (axis, role) in axis_mapping.iter().enumerate() {
+        match role {
+            MdAxisMapping::X => {
+                start[axis] = start_x as u64;
+                count[axis] = read_window.size_x;
+            }
+            MdAxisMapping::Y => {
+                start[axis] = start_y as u64;
+                count[axis] = read_window.size_y;
+            }
+            MdAxisMapping::Time | MdAxisMapping::Band => {
+                start[axis] = z_index as u64;
+            }
+            MdAxisMapping::Fixed { index } => {
+                start[axis] = u64::try_from(*index).map_err(|_| IpcProcessError::IpcOther {
+                    msg: format!("negative fixed index {index} for MD dimension {axis}"),
+                })?;
+            }
+        }
+    }
 
-    (start, count)
+    Ok((start, count))
 }
 
 pub struct GdalHandling;
@@ -687,7 +706,7 @@ impl GdalHandling {
     }
 
     ///
-    /// A method to load a batch of z-slices from a GDAL multidimensional array.
+    /// A method to load a z-slice from a GDAL multidimensional array.
     ///
     /// Reuses the same retry/backoff + VSI-cache-clearing wrapper as
     /// [`Self::load_tile_data_with_dataset_retry`].
@@ -700,9 +719,9 @@ impl GdalHandling {
         read_advise: GdalReadAdvise,
         group: Option<&str>,
         array_name: &str,
-        z_range: std::ops::Range<usize>,
-        leading_prefix: &[u64],
-    ) -> Result<Vec<super::process_common::GdalIpcPayload<T>>, IpcProcessError> {
+        z_index: usize,
+        axis_mapping: &[MdAxisMapping],
+    ) -> Result<GdalIpcMdPayload<T>, IpcProcessError> {
         Self::open_with_retry(cache, dataset_params, |ds, params| {
             Self::load_md_tile_data(
                 ds,
@@ -710,20 +729,13 @@ impl GdalHandling {
                 read_advise,
                 group,
                 array_name,
-                z_range.clone(),
-                leading_prefix,
+                z_index,
+                axis_mapping,
             )
         })
     }
 
-    /// Reads a batch of z-slices from a multidim array in one `GDALMDArrayRead` call
-    /// and splits the 3D buffer into one `GdalIpcPayload` per z-slice.
-    ///
-    /// Layout contract (validated at dataset registration): dimension 0 is `z`, the last two
-    /// are `(y, x)`, and the dimensions in between are the fixed `leading_prefix`. So 3D is
-    /// `(z, y, x)` with an empty prefix and 4D is `(z, depth, y, x)` with `[depth]`.
-    /// The read window is interpreted in raw array index space (the MD operator
-    /// converts `gdal_read_widow` to array space before sending).
+    /// Reads a z-slice from a multidimensional array and returns the raw source-order buffer.
     #[allow(clippy::too_many_lines)]
     fn load_md_tile_data<T: Pixel + GdalType + FromPrimitive>(
         dataset: &mut GdalDataset,
@@ -731,16 +743,15 @@ impl GdalHandling {
         read_advise: GdalReadAdvise,
         group: Option<&str>,
         array_name: &str,
-        z_range: std::ops::Range<usize>,
-        leading_prefix: &[u64],
-    ) -> Result<Vec<super::process_common::GdalIpcPayload<T>>, IpcProcessError> {
+        z_index: usize,
+        axis_mapping: &[MdAxisMapping],
+    ) -> Result<GdalIpcMdPayload<T>, IpcProcessError> {
         let _span = tracing::debug_span!(
             "gdal_load_md_tile_data",
             data_type = ?T::TYPE,
             group = ?group,
             array = array_name,
-            z_start = z_range.start,
-            z_len = z_range.len(),
+            z_index,
             window = ?read_advise.bounds_of_target,
         )
         .entered();
@@ -763,63 +774,27 @@ impl GdalHandling {
         }
         let md_array = group_h.open_md_array(array_name, CslStringList::new())?;
 
-        let num_dimensions = md_array.num_dimensions();
-        if num_dimensions < 3 {
-            return Err(IpcProcessError::IpcOther {
-                msg: format!(
-                    "MD array '{array_name}' must have at least 3 dimensions (z, y, x), found {num_dimensions}"
-                ),
-            });
-        }
+        let axis_sizes: Vec<usize> = md_array
+            .dimensions()?
+            .iter()
+            .map(gdal::raster::Dimension::size)
+            .collect();
+        validate_md_axis_mapping(axis_mapping, &axis_sizes).map_err(|msg| {
+            IpcProcessError::IpcOther {
+                msg: format!("MD array '{array_name}': {msg}"),
+            }
+        })?;
 
-        // a 4D array carries one prefix index per dimension between z and (y, x); a mismatch
-        // means the dataset was registered against a different file shape
-        let expected_prefix = num_dimensions - 3;
-        if leading_prefix.len() != expected_prefix {
-            return Err(IpcProcessError::IpcOther {
-                msg: format!(
-                    "MD array '{array_name}' has {num_dimensions} dimensions, so it needs a \
-                     leading prefix of {expected_prefix}, but the dataset supplies {}",
-                    leading_prefix.len()
-                ),
-            });
-        }
-
-        let GdalReadWindow {
-            start_x,
-            start_y,
-            size_x,
-            size_y,
-        } = read_advise.gdal_read_widow;
-
-        let (start_y, start_x) = (
-            usize::try_from(start_y).map_err(|_| IpcProcessError::IpcOther {
-                msg: format!("negative read window start y {start_y} is invalid for MD reads"),
-            })?,
-            usize::try_from(start_x).map_err(|_| IpcProcessError::IpcOther {
-                msg: format!("negative read window start x {start_x} is invalid for MD reads"),
-            })?,
-        );
-
-        let (array_start_index, array_count) = md_read_window(
-            num_dimensions,
-            &z_range,
-            leading_prefix,
-            start_y,
-            start_x,
-            size_y,
-            size_x,
-        );
+        let (array_start_index, array_count) =
+            md_read_window(axis_mapping, z_index, read_advise.gdal_read_widow)?;
 
         let read_start = Instant::now();
-        // one batched 3D read: (z, y, x) row-major, x fastest – same 2D layout per slice
-        let data = md_array.read_as::<T>(array_start_index, array_count)?;
+        let data = md_array.read_as::<T>(array_start_index, array_count.clone())?;
         tracing::debug!(
-            "GDAL md array read took {:?} for {} z-slices of window size ({}, {})",
+            "GDAL md array read took {:?} for window size ({}, {})",
             read_start.elapsed(),
-            z_range.len(),
-            size_x,
-            size_y,
+            read_advise.gdal_read_widow.size_x,
+            read_advise.gdal_read_widow.size_y,
         );
 
         // no-data classification: MD arrays have no mask band, only a scalar no-data value
@@ -827,34 +802,22 @@ impl GdalHandling {
             .no_data_value
             .or_else(|| md_array.no_data_value_as_double());
 
-        let slice_len = size_y * size_x;
-        let mut payloads = Vec::with_capacity(z_range.len());
-
-        for chunk in data.chunks(slice_len) {
-            let data_variant = match no_data_value {
-                Some(no_data_value) => GdalDataGridVariant::WithNoData {
-                    data: chunk.to_vec(),
-                    no_data_value,
-                },
-                None => GdalDataGridVariant::AllValid {
-                    data: chunk.to_vec(),
-                },
-            };
-
-            payloads.push(super::process_common::GdalIpcPayload {
-                dimensions: read_advise.read_window_bounds,
-                properties: RasterProperties::default(),
-                data_variant,
-            });
-        }
+        let data_variant = match no_data_value {
+            Some(no_data_value) => GdalDataGridVariant::WithNoData {
+                data,
+                no_data_value,
+            },
+            None => GdalDataGridVariant::AllValid { data },
+        };
 
         let elapsed = start.elapsed();
-        debug!(
-            "md data loaded -> returning {} z-slices, took {elapsed:?}",
-            payloads.len()
-        );
+        debug!("md data loaded -> returning z-slice, took {elapsed:?}");
 
-        Ok(payloads)
+        Ok(GdalIpcMdPayload {
+            axis_sizes: array_count,
+            properties: RasterProperties::default(),
+            data_variant,
+        })
     }
 }
 
@@ -880,6 +843,33 @@ mod tests {
         util::{gdal::hide_gdal_errors, test::TestDefault},
     };
     use httptest::{Expectation, Server, matchers::request, responders};
+
+    #[test]
+    fn md_read_window_uses_axis_roles_not_position_assumptions() {
+        let mapping = [MdAxisMapping::Y, MdAxisMapping::Time, MdAxisMapping::X];
+        let window = GdalReadWindow {
+            start_x: 10,
+            start_y: 3,
+            size_x: 4,
+            size_y: 6,
+        };
+
+        let (start, count) = md_read_window(&mapping, 5, window).unwrap();
+
+        assert_eq!(start, vec![3, 5, 10]);
+        assert_eq!(count, vec![6, 1, 4]);
+
+        let mapping = [
+            MdAxisMapping::Fixed { index: 1 },
+            MdAxisMapping::Time,
+            MdAxisMapping::Y,
+            MdAxisMapping::X,
+        ];
+        let (start, count) = md_read_window(&mapping, 5, window).unwrap();
+
+        assert_eq!(start, vec![1, 5, 3, 10]);
+        assert_eq!(count, vec![1, 1, 6, 4]);
+    }
 
     fn get_params() -> GdalDatasetParameters {
         GdalDatasetParameters {
@@ -944,7 +934,7 @@ mod tests {
 
     /// The dataset cache is keyed on the *file*, not on the shape of the request.
     ///
-    /// This is what makes two things safe: splitting a read batch into single-slice requests
+    /// This is what makes two things safe: issuing one request per z slice
     /// must not cost extra GDAL opens, and two arrays of one file must share the open handle.
     /// Both fall out of `is_hit` looking only at the path and the open/config options, and
     /// neither survives someone adding a request field to that comparison.
