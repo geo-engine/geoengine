@@ -30,10 +30,10 @@ use geoengine_datatypes::{
     error::BoxedResultExt,
     operations::reproject::{Reproject, ReprojectClipped, reproject_spatial_query},
     primitives::{
-        BandSelection, BoundingBox2D, ColumnSelection, Geometry, RasterQueryRectangle,
-        SpatialPartition2D, SpatialResolution, VectorQueryRectangle,
+        AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, Geometry,
+        RasterQueryRectangle, SpatialPartition2D, SpatialResolution, VectorQueryRectangle,
     },
-    raster::{GridBoundingBox2D, Pixel, RasterTile2D, TilingSpecification},
+    raster::{GeoTransform, GridBoundingBox2D, Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::{CoordinateProjection, DefaultCoordinateProjector, SpatialReference},
     util::arrow::ArrowTyped,
 };
@@ -147,31 +147,12 @@ impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
         let in_srs = Into::<Option<SpatialReference>>::into(in_desc.spatial_reference)
             .ok_or(Error::AllSourcesMustHaveSameSpatialReference)?;
 
-        // calculate the intersection of input and output srs in both coordinate systems
-        let proj_from_to =
-            DefaultCoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
-
-        let out_spatial_grid = match params.derive_out_spec {
-            DeriveOutRasterSpecsSource::DataBounds => in_desc
-                .spatial_grid_descriptor()
-                .reproject_clipped(&proj_from_to)?, // TODO: we could skip the intersection (clipped) and try to project larger area
-            DeriveOutRasterSpecsSource::ProjectionBounds => {
-                let in_srs_area: SpatialPartition2D = in_srs.area_of_use_projected()?; // TODO: since we clip in projection anyway, we could use the AOU of the source projection?
-                let target_proj_total_grid = in_desc
-                    .spatial_grid_descriptor()
-                    .spatial_bounds_to_compatible_spatial_grid(in_srs_area)
-                    .reproject_clipped(&proj_from_to)?;
-                // TODO: we could skip the intersection and try to project larger area
-                let spatial_bounds_proj =
-                    in_desc.spatial_bounds().reproject_clipped(&proj_from_to)?;
-                target_proj_total_grid.and_then(|x| {
-                    spatial_bounds_proj.map(|spb| x.spatial_bounds_to_compatible_spatial_grid(spb))
-                })
-            }
-        };
-
-        // Operator will return an error when there is no intersection between data and output projection bounds!
-        let out_spatial_grid = out_spatial_grid.ok_or(error::Error::ReprojectionFailed)?; // TODO: better error!
+        let out_spatial_grid = compute_output_spatial_grid(
+            *in_desc.spatial_grid_descriptor(),
+            in_desc.spatial_bounds(),
+            in_srs,
+            params,
+        )?;
 
         let out_desc = RasterResultDescriptor {
             spatial_reference: params.target_spatial_reference.into(),
@@ -214,7 +195,24 @@ fn compute_output_spatial_grid(
         DefaultCoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
     let out_spatial_grid = match params.derive_out_spec {
         DeriveOutRasterSpecsSource::DataBounds => {
-            in_spatial_grid_descriptor.reproject_clipped(&proj_from_to)?
+            if let Some(utm_bounds) = in_srs.utm_coordinate_bounds() {
+                // UTM data grids may include MGRS tile margins and negative
+                // Landsat northings outside the source CRS's nominal area.
+                // Clip to native coordinate bounds, then to the target domain.
+                let native_bounds =
+                    SpatialPartition2D::new(utm_bounds.upper_left(), utm_bounds.lower_right())?;
+                if let Some(bounds) = in_spatial_bounds.intersection(&native_bounds) {
+                    reproject_utm_data_grid(
+                        in_spatial_grid_descriptor
+                            .spatial_bounds_to_compatible_spatial_grid(bounds),
+                        &proj_from_to,
+                    )?
+                } else {
+                    None
+                }
+            } else {
+                in_spatial_grid_descriptor.reproject_clipped(&proj_from_to)?
+            }
         }
         DeriveOutRasterSpecsSource::ProjectionBounds => {
             let in_srs_area: SpatialPartition2D = in_srs.area_of_use_projected()?; // TODO: since we clip in projection anyway, we could use the AOU of the source projection?
@@ -230,6 +228,62 @@ fn compute_output_spatial_grid(
     };
     let out_spatial_grid = out_spatial_grid.ok_or(error::Error::ReprojectionFailed)?;
     Ok(out_spatial_grid)
+}
+
+fn reproject_utm_data_grid(
+    grid: SpatialGridDescriptor,
+    projector: &DefaultCoordinateProjector,
+) -> Result<Option<SpatialGridDescriptor>> {
+    let target_bounds: SpatialPartition2D = projector.target_srs().area_of_use_projected()?;
+    let raw_bounds = grid.spatial_partition().reproject(projector).ok();
+    let wrapped_bounds = raw_bounds.filter(|bounds| {
+        [
+            SpatialReference::web_mercator(),
+            SpatialReference::epsg_4326(),
+        ]
+        .contains(&projector.target_srs())
+            && bounds.size_x() > target_bounds.size_x() / 2.
+    });
+    let projected = if let Some(bounds) = wrapped_bounds {
+        // A single grid must cover both sides of the antimeridian. Derive its
+        // pixel size locally: measuring a diagonal across the wrap would turn
+        // a small raster into enormous pixels and collapse its height to zero.
+        let native = grid.spatial_partition();
+        let center = (native.upper_left() + native.lower_right()) / 2.;
+        let projected_center = projector.project_coordinate(center)?;
+        let spacing = grid.spatial_resolution();
+        let distance = |other: geoengine_datatypes::primitives::Coordinate2D| {
+            let dx = (other.x - projected_center.x).abs();
+            dx.min((target_bounds.size_x() - dx).abs())
+                .hypot(other.y - projected_center.y)
+        };
+        let x_distance =
+            distance(projector.project_coordinate((center.x + spacing.x, center.y).into())?);
+        let y_distance =
+            distance(projector.project_coordinate((center.x, center.y + spacing.y).into())?);
+        let pixel_size =
+            SpatialResolution::new(x_distance.min(y_distance), x_distance.min(y_distance))?;
+        let bounds = SpatialPartition2D::new(
+            (target_bounds.upper_left().x, bounds.upper_left().y).into(),
+            (target_bounds.lower_right().x, bounds.lower_right().y).into(),
+        )?;
+        let Some(bounds) = bounds.intersection(&target_bounds) else {
+            return Ok(None);
+        };
+        let transform = GeoTransform::new(bounds.upper_left(), pixel_size.x, -pixel_size.y);
+        SpatialGridDescriptor::source_from_parts(
+            transform,
+            transform.spatial_to_grid_bounds(&bounds),
+        )
+        .as_derived()
+    } else {
+        grid.try_map(|grid| Ok(grid.reproject(projector)?))?
+            .as_derived()
+    };
+    Ok(projected
+        .spatial_partition()
+        .intersection(&target_bounds)
+        .map(|bounds| projected.spatial_bounds_to_compatible_spatial_grid(bounds)))
 }
 
 #[typetag::serde]
@@ -878,6 +932,121 @@ mod tests {
     };
     use std::collections::HashMap;
     use std::path::PathBuf;
+
+    #[test]
+    fn it_reprojects_utm_data_outside_nominal_crs_bounds() {
+        // Landsat uses northern UTM with negative northings in the south. Sentinel's
+        // Norwegian MGRS zone 32 also extends west of the nominal EPSG zone.
+        for (epsg, longitude, latitude) in [
+            (32655, 147., -35.),
+            (32632, 3.2, 56.5),
+            (32660, 179.9999, 35.),
+            (32601, -179.9999, 35.),
+        ] {
+            let source_srs = SpatialReference::new(SpatialReferenceAuthority::Epsg, epsg);
+            let geographic_center = Coordinate2D::new(longitude, latitude);
+            let native_center = geographic_center
+                .reproject(
+                    &DefaultCoordinateProjector::from_known_srs(
+                        SpatialReference::epsg_4326(),
+                        source_srs,
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+            let grid = SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(
+                    Coordinate2D::new(native_center.x - 150., native_center.y + 150.),
+                    30.,
+                    -30.,
+                ),
+                GridBoundingBox2D::new_min_max(0, 9, 0, 9).unwrap(),
+            );
+            for target_srs in [
+                SpatialReference::web_mercator(),
+                SpatialReference::epsg_4326(),
+            ] {
+                let output = compute_output_spatial_grid(
+                    grid,
+                    grid.spatial_partition(),
+                    source_srs,
+                    ReprojectionParams {
+                        target_spatial_reference: target_srs,
+                        derive_out_spec: DeriveOutRasterSpecsSource::DataBounds,
+                    },
+                )
+                .unwrap();
+                let expected_center = geographic_center
+                    .reproject(
+                        &DefaultCoordinateProjector::from_known_srs(
+                            SpatialReference::epsg_4326(),
+                            target_srs,
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap();
+                assert!(
+                    output
+                        .spatial_partition()
+                        .contains_coordinate(&expected_center)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn it_reprojects_full_utm_grids_for_every_zone() {
+        for epsg in (32601..=32660).chain(32701..=32760) {
+            let source_srs = SpatialReference::new(SpatialReferenceAuthority::Epsg, epsg);
+            let southern = epsg >= 32700;
+            let grid = SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new((0., 10_000_000.).into(), 30., -30.),
+                GridBoundingBox2D::new_min_max(
+                    0,
+                    if southern { 333_333 } else { 666_666 },
+                    0,
+                    33_333,
+                )
+                .unwrap(),
+            );
+            for target_srs in [
+                SpatialReference::web_mercator(),
+                SpatialReference::epsg_4326(),
+            ] {
+                let output = compute_output_spatial_grid(
+                    grid,
+                    grid.spatial_partition(),
+                    source_srs,
+                    ReprojectionParams {
+                        target_spatial_reference: target_srs,
+                        derive_out_spec: DeriveOutRasterSpecsSource::DataBounds,
+                    },
+                )
+                .unwrap();
+                for latitude in [-35., 35.] {
+                    if southern && latitude > 0. {
+                        continue;
+                    }
+                    let center = Coordinate2D::new(-183. + f64::from(epsg % 100) * 6., latitude)
+                        .reproject(
+                            &DefaultCoordinateProjector::from_known_srs(
+                                SpatialReference::epsg_4326(),
+                                target_srs,
+                            )
+                            .unwrap(),
+                        )
+                        .unwrap();
+                    assert!(
+                        output.spatial_partition().contains_coordinate(&center),
+                        "EPSG:{epsg} to {target_srs} excludes {center:?}",
+                    );
+                }
+                let resolution = output.spatial_resolution();
+                assert!(resolution.x.is_finite() && resolution.x > 0.);
+                assert!(resolution.y.is_finite() && resolution.y > 0.);
+            }
+        }
+    }
     use std::str::FromStr;
 
     #[tokio::test]

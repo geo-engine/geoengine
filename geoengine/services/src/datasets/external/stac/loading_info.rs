@@ -9,7 +9,7 @@ use crate::util::retry::{RetryPolicy, retry_http};
 use async_trait::async_trait;
 use chrono::DateTime as ChronoDateTime;
 use geoengine_datatypes::dataset::DataId;
-use geoengine_datatypes::operations::reproject::ReprojectClipped;
+use geoengine_datatypes::operations::reproject::{Reproject, ReprojectClipped};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, CacheTtlSeconds, RasterQueryRectangle, TimeDimension, TimeInstance,
     TimeInterval, TryRegularTimeFillIterExt, VectorQueryRectangle,
@@ -619,14 +619,35 @@ fn stac_query_bbox(
         },
     )?;
 
-    spatial_bounds
-        .as_bbox()
-        .reproject_clipped(&projector)
-        .map_err(
-            |e| geoengine_operators::error::Error::InvalidDataProviderConfig {
-                reason: format!("could not reproject query bounds to STAC coordinates: {e}"),
-            },
-        )
+    let bbox = spatial_bounds.as_bbox();
+    // UTM scenes can extend beyond the nominal EPSG area of use: Sentinel's
+    // MGRS tile margins and southern Landsat's negative northern-CRS northings.
+    let projected = if let Some(utm_bounds) = spatial_reference.utm_coordinate_bounds() {
+        bbox.intersection(&utm_bounds)
+            .map(|bounds| bounds.reproject(&projector))
+            .transpose()
+            .map(|bounds| {
+                bounds.map(|bounds| {
+                    if bounds.size_x() > 180. {
+                        // An antimeridian crossing needs both sides of +/-180.
+                        // A single conservative bbox keeps both sides in the query.
+                        geoengine_datatypes::primitives::BoundingBox2D::new_unchecked(
+                            (-180., bounds.lower_left().y).into(),
+                            (180., bounds.upper_right().y).into(),
+                        )
+                    } else {
+                        bounds
+                    }
+                })
+            })
+    } else {
+        bbox.reproject_clipped(&projector)
+    };
+    projected.map_err(
+        |e| geoengine_operators::error::Error::InvalidDataProviderConfig {
+            reason: format!("could not reproject query bounds to STAC coordinates: {e}"),
+        },
+    )
 }
 
 fn stac_query_time_interval(
@@ -828,6 +849,31 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn it_queries_utm_scenes_outside_nominal_crs_bounds() {
+        for (epsg, longitude, latitude) in [
+            (32655, 147., -35.),
+            (32632, 3.2, 56.5),
+            (32660, 179.9999, 35.),
+            (32601, -179.9999, 35.),
+        ] {
+            let srs = SpatialReference::new(SpatialReferenceAuthority::Epsg, epsg);
+            let center = (longitude, latitude).into();
+            let native_center =
+                DefaultCoordinateProjector::from_known_srs(SpatialReference::epsg_4326(), srs)
+                    .unwrap()
+                    .project_coordinate(center)
+                    .unwrap();
+            let native_bounds = SpatialPartition2D::new(
+                (native_center.x - 150., native_center.y + 150.).into(),
+                (native_center.x + 150., native_center.y - 150.).into(),
+            )
+            .unwrap();
+            let bbox = stac_query_bbox(native_bounds, srs).unwrap().unwrap();
+            assert!(bbox.contains_coordinate(&center));
+        }
     }
 
     #[tokio::test]

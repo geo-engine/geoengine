@@ -29,6 +29,7 @@ use geoengine_operators::engine::SpatialGridDescriptor as GeoOpSpatialGridDescri
 
 /// Probe a STAC collection and sample items to auto-discover the dataset mapping.
 #[derive(Debug, Parser)]
+#[allow(clippy::struct_excessive_bools)] // Independent CLI switches, not mutually exclusive states.
 pub struct StacDiscoverMapping {
     /// STAC API URL
     #[arg(long)]
@@ -61,6 +62,20 @@ pub struct StacDiscoverMapping {
     /// Output file for the mapping JSON (default: stdout)
     #[arg(long)]
     pub output: Option<PathBuf>,
+
+    /// Optional local STAC `ItemCollection` to use instead of sampling the items API.
+    /// The collection metadata is still fetched from the configured STAC API.
+    #[arg(long)]
+    pub items_file: Option<PathBuf>,
+
+    /// Extend a northern UTM CRS grid to include southern geographic coverage.
+    /// Landsat scenes use northern EPSG codes in both hemispheres, with negative northings south of the equator.
+    #[arg(long, default_value_t = false)]
+    pub include_southern_hemisphere_in_northern_utm: bool,
+
+    /// Cover all coordinate values in UTM zones rather than the narrower CRS area of use.
+    #[arg(long, default_value_t = false)]
+    pub full_utm_coordinate_grid: bool,
 
     /// Filter STAC item fields to reduce response size
     #[arg(long, default_value_t = false)]
@@ -143,7 +158,15 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         );
     }
 
-    let items_response = fetch_sample_items(&client, &params).await?;
+    let items_response = if let Some(path) = &params.items_file {
+        let bytes = tokio::fs::read(path)
+            .await
+            .with_context(|| format!("Failed to read local STAC items from {}", path.display()))?;
+        serde_json::from_slice::<stac::ItemCollection>(&bytes)
+            .with_context(|| format!("Failed to parse local STAC items from {}", path.display()))?
+    } else {
+        fetch_sample_items(&client, &params).await?
+    };
 
     if items_response.items.is_empty() {
         anyhow::bail!("No items found in the collection. Cannot discover mapping.");
@@ -187,6 +210,8 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         &dataset_bands,
         &sample_band_info,
         params.full_projection_grid,
+        params.full_utm_coordinate_grid,
+        params.include_southern_hemisphere_in_northern_utm,
         &params.stac_collection,
     );
 
@@ -477,6 +502,8 @@ fn build_datasets(
     dataset_bands: &HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>>,
     sample_band_info: &HashMap<PartialDatasetKey, Vec<(String, String)>>,
     full_projection_grid: bool,
+    full_utm_coordinate_grid: bool,
+    include_southern_hemisphere_in_northern_utm: bool,
     stac_collection: &str,
 ) -> Vec<StacProviderDataset> {
     let mut datasets: Vec<StacProviderDataset> = Vec::new();
@@ -540,7 +567,13 @@ fn build_datasets(
             a_name.cmp(b_name)
         });
 
-        let spatial_grid = build_dataset_spatial_grid(info, dataset_key, full_projection_grid);
+        let spatial_grid = build_dataset_spatial_grid(
+            info,
+            dataset_key,
+            full_projection_grid,
+            full_utm_coordinate_grid,
+            include_southern_hemisphere_in_northern_utm,
+        );
 
         let unit_suffix = get_unit_suffix(dataset_key.epsg);
         let dataset_name = format!(
@@ -575,6 +608,8 @@ fn build_dataset_spatial_grid(
     info: &DiscoveredDatasetInfo,
     dataset_key: &DatasetKey,
     full_projection_grid: bool,
+    full_utm_coordinate_grid: bool,
+    include_southern_hemisphere_in_northern_utm: bool,
 ) -> GeoOpSpatialGridDescriptor {
     let fallback_grid = || {
         warn!(
@@ -593,8 +628,13 @@ fn build_dataset_spatial_grid(
 
     if full_projection_grid {
         if let Some(gt) = info.geo_transform {
-            let grid_bounds = projection_grid_bounds(gt, dataset_key.epsg)
-                .unwrap_or_else(|| fallback_grid_bounds(info));
+            let grid_bounds = projection_grid_bounds(
+                gt,
+                dataset_key.epsg,
+                full_utm_coordinate_grid,
+                include_southern_hemisphere_in_northern_utm,
+            )
+            .unwrap_or_else(|| fallback_grid_bounds(info));
             GeoOpSpatialGridDescriptor::source_from_parts(gt, grid_bounds)
         } else {
             fallback_grid()
@@ -644,7 +684,12 @@ fn zero_size_grid() -> GridBoundingBox2D {
 ///
 /// The extent is taken from PROJ's area of use for the CRS, projected into the
 /// CRS's own coordinates, so no per-CRS coordinates are hard-coded here.
-fn projection_grid_bounds(gt: GeoTransform, epsg: u32) -> Option<GridBoundingBox2D> {
+fn projection_grid_bounds(
+    gt: GeoTransform,
+    epsg: u32,
+    full_utm_coordinate_grid: bool,
+    include_southern_hemisphere_in_northern_utm: bool,
+) -> Option<GridBoundingBox2D> {
     let extent: BoundingBox2D = SpatialReference::new(SpatialReferenceAuthority::Epsg, epsg)
         .area_of_use_projected()
         .ok()?;
@@ -685,6 +730,34 @@ fn projection_grid_bounds(gt: GeoTransform, epsg: u32) -> Option<GridBoundingBox
         y_max = y_max.max(y_idx);
         x_min = x_min.min(x_idx);
         x_max = x_max.max(x_idx);
+    }
+
+    if full_utm_coordinate_grid
+        && ((32601..=32660).contains(&epsg) || (32701..=32760).contains(&epsg))
+    {
+        for (x, y) in [
+            (0.0, 0.0),
+            (1_000_000.0, 0.0),
+            (0.0, 10_000_000.0),
+            (1_000_000.0, 10_000_000.0),
+        ] {
+            let (y_idx, x_idx) = corner_index(x, y);
+            y_min = y_min.min(y_idx);
+            y_max = y_max.max(y_idx);
+            x_min = x_min.min(x_idx);
+            x_max = x_max.max(x_idx);
+        }
+    }
+
+    // Landsat Level-1 uses northern UTM EPSG codes for southern scenes, whose
+    // northings are negative. Include those coordinates in the shared grid.
+    if include_southern_hemisphere_in_northern_utm && (32601..=32660).contains(&epsg) {
+        let southern_idx = ((-10_000_000.0 - oy) / ps_y).floor() as isize;
+        if ps_y < 0.0 {
+            y_max = y_max.max(southern_idx);
+        } else {
+            y_min = y_min.min(southern_idx);
+        }
     }
 
     GridBoundingBox2D::new(
@@ -987,7 +1060,7 @@ mod tests {
             .area_of_use_projected()
             .expect("EPSG:32632 should have a projected area of use");
 
-        let bounds = projection_grid_bounds(geo_transform, 32632)
+        let bounds = projection_grid_bounds(geo_transform, 32632, false, false)
             .expect("grid bounds should be computable for a valid projection");
 
         // The returned pixel grid must contain the full projected area of use.
@@ -1029,7 +1102,7 @@ mod tests {
         let ps = 100.0;
         let gt = GeoTransform::new_with_coordinate_x_y(ox, ps, oy, -ps);
 
-        let bounds = projection_grid_bounds(gt, 32632)
+        let bounds = projection_grid_bounds(gt, 32632, false, false)
             .expect("grid bounds should be computable for EPSG:32632");
 
         // The pixel grid must cover the whole projected area of use.
@@ -1047,6 +1120,61 @@ mod tests {
         assert_eq!(
             bounds.y_bounds(),
             [expect_index(NORTH, oy, -ps), expect_index(SOUTH, oy, -ps)]
+        );
+    }
+
+    #[test]
+    fn northern_utm_grid_can_cover_landsat_southern_northings() {
+        let gt = GeoTransform::new_with_coordinate_x_y(500_000., 30., 9_330_000., -30.);
+        let ordinary = projection_grid_bounds(gt, 32632, false, false).unwrap();
+        let extended = projection_grid_bounds(gt, 32632, false, true).unwrap();
+        let ordinary_extent = gt.grid_to_spatial_bounds(&ordinary);
+        let extended_extent = gt.grid_to_spatial_bounds(&extended);
+        assert!(extended_extent.lower_right().y <= -10_000_000.0);
+        float_cmp::assert_approx_eq!(
+            f64,
+            extended_extent.upper_left().x,
+            ordinary_extent.upper_left().x
+        );
+        float_cmp::assert_approx_eq!(
+            f64,
+            extended_extent.upper_left().y,
+            ordinary_extent.upper_left().y
+        );
+        float_cmp::assert_approx_eq!(
+            f64,
+            extended_extent.lower_right().x,
+            ordinary_extent.lower_right().x
+        );
+
+        // The same option must not widen a southern UTM CRS or a geographic CRS.
+        assert_eq!(
+            projection_grid_bounds(gt, 32732, false, true),
+            projection_grid_bounds(gt, 32732, false, false)
+        );
+    }
+
+    #[test]
+    fn full_utm_coordinate_grid_covers_zone_edges_and_both_false_northing_grids() {
+        let gt = GeoTransform::new_with_coordinate_x_y(500_000., 30., 9_330_000., -30.);
+        for epsg in [32632, 32732] {
+            let bounds = projection_grid_bounds(gt, epsg, true, false).unwrap();
+            let extent = gt.grid_to_spatial_bounds(&bounds);
+            assert!(extent.upper_left().x <= 0.0);
+            assert!(extent.lower_right().x >= 1_000_000.0);
+            assert!(extent.upper_left().y >= 10_000_000.0);
+            assert!(extent.lower_right().y <= 0.0);
+        }
+        let landsat_bounds = projection_grid_bounds(gt, 32632, true, true).unwrap();
+        let landsat_extent = gt.grid_to_spatial_bounds(&landsat_bounds);
+        assert!(landsat_extent.lower_right().y <= -10_000_000.0);
+        assert_eq!(
+            projection_grid_bounds(gt, 32661, true, false),
+            projection_grid_bounds(gt, 32661, false, false)
+        );
+        assert_eq!(
+            projection_grid_bounds(gt, 4326, true, false),
+            projection_grid_bounds(gt, 4326, false, false)
         );
     }
 
@@ -1078,7 +1206,7 @@ mod tests {
         let ps = 1.0;
         let gt = GeoTransform::new_with_coordinate_x_y(ox, ps, oy, -ps);
 
-        let bounds = projection_grid_bounds(gt, 4326)
+        let bounds = projection_grid_bounds(gt, 4326, false, false)
             .expect("grid bounds should be computable for EPSG:4326");
 
         // The pixel grid must cover the whole globe.
@@ -1153,6 +1281,9 @@ mod tests {
             s3_secret_key: None,
             sample_items: 2,
             output: Some(output_path.clone()),
+            items_file: None,
+            include_southern_hemisphere_in_northern_utm: false,
+            full_utm_coordinate_grid: false,
             filter_item_fields: true,
             file_types: vec![ImportFileType::Jp2],
             epsgs: vec![],
@@ -1265,6 +1396,9 @@ mod tests {
             s3_secret_key: None,
             sample_items: 1,
             output: Some(output_path.clone()),
+            items_file: None,
+            include_southern_hemisphere_in_northern_utm: false,
+            full_utm_coordinate_grid: false,
             filter_item_fields: true,
             file_types: vec![ImportFileType::Cog],
             epsgs: vec![],
@@ -1350,6 +1484,8 @@ mod tests {
             &HashMap::new(),
             &sample_band_info,
             false,
+            false,
+            false,
             "sentinel-2-l2a",
         );
         assert!(!datasets.is_empty());
@@ -1373,7 +1509,7 @@ mod tests {
             resolution: OrderedFloat(10.0),
         };
 
-        let spatial_grid = build_dataset_spatial_grid(&info, &dataset_key, false);
+        let spatial_grid = build_dataset_spatial_grid(&info, &dataset_key, false, false, false);
 
         assert_eq!(spatial_grid.geo_transform(), geo_transform);
     }
@@ -1426,6 +1562,8 @@ mod tests {
             &discovered_datasets,
             &dataset_bands,
             &sample_band_info,
+            false,
+            false,
             false,
             "sentinel-2-l2a",
         );
