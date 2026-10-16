@@ -205,8 +205,15 @@ __all__ = [
     "LinearGradient",
     "Link",
     "LogarithmicGradient",
+    "MdAxisMapping",
+    "MdAxisMappingOneOf",
+    "MdAxisMappingOneOf1",
+    "MdAxisMappingOneOf2",
+    "MdAxisMappingOneOf3",
+    "MdAxisMappingOneOf4",
     "MdGdalSource",
     "MdGdalSourceParameters",
+    "MdVariable",
     "MeanRasterPixelValuesOverTime",
     "MeanRasterPixelValuesOverTimeParameters",
     "MeanRasterPixelValuesOverTimePosition",
@@ -481,7 +488,6 @@ __all__ = [
     "WmsService",
     "WmsVersion",
     "WrappedPlotOutput",
-    "ZRole",
 ]
 
 # import apis into sdk package
@@ -676,8 +682,15 @@ from geoengine_api_client.models.line_symbology import LineSymbology as LineSymb
 from geoengine_api_client.models.linear_gradient import LinearGradient as LinearGradient
 from geoengine_api_client.models.link import Link as Link
 from geoengine_api_client.models.logarithmic_gradient import LogarithmicGradient as LogarithmicGradient
+from geoengine_api_client.models.md_axis_mapping import MdAxisMapping as MdAxisMapping
+from geoengine_api_client.models.md_axis_mapping_one_of import MdAxisMappingOneOf as MdAxisMappingOneOf
+from geoengine_api_client.models.md_axis_mapping_one_of1 import MdAxisMappingOneOf1 as MdAxisMappingOneOf1
+from geoengine_api_client.models.md_axis_mapping_one_of2 import MdAxisMappingOneOf2 as MdAxisMappingOneOf2
+from geoengine_api_client.models.md_axis_mapping_one_of3 import MdAxisMappingOneOf3 as MdAxisMappingOneOf3
+from geoengine_api_client.models.md_axis_mapping_one_of4 import MdAxisMappingOneOf4 as MdAxisMappingOneOf4
 from geoengine_api_client.models.md_gdal_source import MdGdalSource as MdGdalSource
 from geoengine_api_client.models.md_gdal_source_parameters import MdGdalSourceParameters as MdGdalSourceParameters
+from geoengine_api_client.models.md_variable import MdVariable as MdVariable
 from geoengine_api_client.models.mean_raster_pixel_values_over_time import MeanRasterPixelValuesOverTime as MeanRasterPixelValuesOverTime
 from geoengine_api_client.models.mean_raster_pixel_values_over_time_parameters import MeanRasterPixelValuesOverTimeParameters as MeanRasterPixelValuesOverTimeParameters
 from geoengine_api_client.models.mean_raster_pixel_values_over_time_position import MeanRasterPixelValuesOverTimePosition as MeanRasterPixelValuesOverTimePosition
@@ -952,5 +965,4 @@ from geoengine_api_client.models.wms_response_format import WmsResponseFormat as
 from geoengine_api_client.models.wms_service import WmsService as WmsService
 from geoengine_api_client.models.wms_version import WmsVersion as WmsVersion
 from geoengine_api_client.models.wrapped_plot_output import WrappedPlotOutput as WrappedPlotOutput
-from geoengine_api_client.models.z_role import ZRole as ZRole
 

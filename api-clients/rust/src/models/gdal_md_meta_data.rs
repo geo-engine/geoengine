@@ -16,27 +16,24 @@ pub struct GdalMdMetaData {
     pub r#type: Type,
     #[serde(rename = "resultDescriptor")]
     pub result_descriptor: Box<models::RasterResultDescriptor>,
-    #[serde(rename = "zRole")]
-    pub z_role: models::ZRole,
+    /// The variables of the dataset; the index of a variable is its output band.
+    #[serde(rename = "variables")]
+    pub variables: Vec<models::MdVariable>,
     /// whether the stored 0..360 degree coverage is re-presented as -180..180
     #[serde(rename = "wrap")]
     pub wrap: bool,
-    /// upper bound on the z slices a single worker read may request; `None` means the operator's default. A dataset property, since a batch is sized against the slice size of the data itself.
-    #[serde(rename = "maxZBatchSize", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub max_z_batch_size: Option<Option<i64>>,
     /// Dataset-level TTL fallback used when no tile-level TTL is provided.
     #[serde(rename = "cacheTtl", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub cache_ttl: Option<Option<i32>>,
 }
 
 impl GdalMdMetaData {
-    pub fn new(r#type: Type, result_descriptor: models::RasterResultDescriptor, z_role: models::ZRole, wrap: bool) -> GdalMdMetaData {
+    pub fn new(r#type: Type, result_descriptor: models::RasterResultDescriptor, variables: Vec<models::MdVariable>, wrap: bool) -> GdalMdMetaData {
         GdalMdMetaData {
             r#type,
             result_descriptor: Box::new(result_descriptor),
-            z_role,
+            variables,
             wrap,
-            max_z_batch_size: None,
             cache_ttl: None,
         }
     }

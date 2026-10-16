@@ -166,8 +166,15 @@ docs/LineSymbology.md
 docs/LinearGradient.md
 docs/Link.md
 docs/LogarithmicGradient.md
+docs/MdAxisMapping.md
+docs/MdAxisMappingOneOf.md
+docs/MdAxisMappingOneOf1.md
+docs/MdAxisMappingOneOf2.md
+docs/MdAxisMappingOneOf3.md
+docs/MdAxisMappingOneOf4.md
 docs/MdGdalSource.md
 docs/MdGdalSourceParameters.md
+docs/MdVariable.md
 docs/MeanRasterPixelValuesOverTime.md
 docs/MeanRasterPixelValuesOverTimeParameters.md
 docs/MeanRasterPixelValuesOverTimePosition.md
@@ -456,7 +463,6 @@ docs/WmsService.md
 docs/WmsVersion.md
 docs/WorkflowsApi.md
 docs/WrappedPlotOutput.md
-docs/ZRole.md
 git_push.sh
 src/apis/configuration.rs
 src/apis/datasets_api.rs
@@ -639,8 +645,15 @@ src/models/line_symbology.rs
 src/models/linear_gradient.rs
 src/models/link.rs
 src/models/logarithmic_gradient.rs
+src/models/md_axis_mapping.rs
+src/models/md_axis_mapping_one_of.rs
+src/models/md_axis_mapping_one_of_1.rs
+src/models/md_axis_mapping_one_of_2.rs
+src/models/md_axis_mapping_one_of_3.rs
+src/models/md_axis_mapping_one_of_4.rs
 src/models/md_gdal_source.rs
 src/models/md_gdal_source_parameters.rs
+src/models/md_variable.rs
 src/models/mean_raster_pixel_values_over_time.rs
 src/models/mean_raster_pixel_values_over_time_parameters.rs
 src/models/mean_raster_pixel_values_over_time_position.rs
@@ -916,4 +929,3 @@ src/models/wms_response_format.rs
 src/models/wms_service.rs
 src/models/wms_version.rs
 src/models/wrapped_plot_output.rs
-src/models/z_role.rs

@@ -360,8 +360,15 @@ Class | Method | HTTP request | Description
  - [LinearGradient](docs/LinearGradient.md)
  - [Link](docs/Link.md)
  - [LogarithmicGradient](docs/LogarithmicGradient.md)
+ - [MdAxisMapping](docs/MdAxisMapping.md)
+ - [MdAxisMappingOneOf](docs/MdAxisMappingOneOf.md)
+ - [MdAxisMappingOneOf1](docs/MdAxisMappingOneOf1.md)
+ - [MdAxisMappingOneOf2](docs/MdAxisMappingOneOf2.md)
+ - [MdAxisMappingOneOf3](docs/MdAxisMappingOneOf3.md)
+ - [MdAxisMappingOneOf4](docs/MdAxisMappingOneOf4.md)
  - [MdGdalSource](docs/MdGdalSource.md)
  - [MdGdalSourceParameters](docs/MdGdalSourceParameters.md)
+ - [MdVariable](docs/MdVariable.md)
  - [MeanRasterPixelValuesOverTime](docs/MeanRasterPixelValuesOverTime.md)
  - [MeanRasterPixelValuesOverTimeParameters](docs/MeanRasterPixelValuesOverTimeParameters.md)
  - [MeanRasterPixelValuesOverTimePosition](docs/MeanRasterPixelValuesOverTimePosition.md)
@@ -636,7 +643,6 @@ Class | Method | HTTP request | Description
  - [WmsService](docs/WmsService.md)
  - [WmsVersion](docs/WmsVersion.md)
  - [WrappedPlotOutput](docs/WrappedPlotOutput.md)
- - [ZRole](docs/ZRole.md)
 
 
 <a id="documentation-for-authorization"></a>

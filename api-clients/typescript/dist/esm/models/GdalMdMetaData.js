@@ -10,8 +10,8 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { MdVariableFromJSON, MdVariableToJSON, } from './MdVariable';
 import { RasterResultDescriptorFromJSON, RasterResultDescriptorToJSON, } from './RasterResultDescriptor';
-import { ZRoleFromJSON, ZRoleToJSON, } from './ZRole';
 /**
  * @export
  */
@@ -26,7 +26,7 @@ export function instanceOfGdalMdMetaData(value) {
         return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
         return false;
-    if (!('zRole' in value) || value['zRole'] === undefined)
+    if (!('variables' in value) || value['variables'] === undefined)
         return false;
     if (!('wrap' in value) || value['wrap'] === undefined)
         return false;
@@ -42,9 +42,8 @@ export function GdalMdMetaDataFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'type': json['type'],
         'resultDescriptor': RasterResultDescriptorFromJSON(json['resultDescriptor']),
-        'zRole': ZRoleFromJSON(json['zRole']),
+        'variables': (json['variables'].map(MdVariableFromJSON)),
         'wrap': json['wrap'],
-        'maxZBatchSize': json['maxZBatchSize'] == null ? undefined : json['maxZBatchSize'],
         'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
@@ -58,9 +57,8 @@ export function GdalMdMetaDataToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'type': value['type'],
         'resultDescriptor': RasterResultDescriptorToJSON(value['resultDescriptor']),
-        'zRole': ZRoleToJSON(value['zRole']),
+        'variables': (value['variables'].map(MdVariableToJSON)),
         'wrap': value['wrap'],
-        'maxZBatchSize': value['maxZBatchSize'],
         'cacheTtl': value['cacheTtl'],
     };
 }

@@ -8,9 +8,8 @@ Name | Type
 ------------ | -------------
 `type` | string
 `resultDescriptor` | [RasterResultDescriptor](RasterResultDescriptor.md)
-`zRole` | [ZRole](ZRole.md)
+`variables` | [Array&lt;MdVariable&gt;](MdVariable.md)
 `wrap` | boolean
-`maxZBatchSize` | number
 `cacheTtl` | number
 
 ## Example
@@ -22,9 +21,8 @@ import type { GdalMdMetaData } from '@geoengine/api-client'
 const example = {
   "type": null,
   "resultDescriptor": null,
-  "zRole": null,
+  "variables": null,
   "wrap": null,
-  "maxZBatchSize": null,
   "cacheTtl": null,
 } satisfies GdalMdMetaData
 

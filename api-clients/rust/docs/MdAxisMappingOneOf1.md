@@ -1,12 +1,10 @@
-# ZRole
+# MdAxisMappingOneOf1
 
-## Enum Variants
+## Properties
 
-| Name | Value |
-|---- | -----|
-| Band | band |
-| Variable | variable |
-
+Name | Type | Description | Notes
+------------ | ------------- | ------------- | -------------
+**role** | **Role** |  (enum: y) | 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

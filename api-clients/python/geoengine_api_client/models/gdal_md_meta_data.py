@@ -17,11 +17,11 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
+from geoengine_api_client.models.md_variable import MdVariable
 from geoengine_api_client.models.raster_result_descriptor import RasterResultDescriptor
-from geoengine_api_client.models.z_role import ZRole
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -31,11 +31,10 @@ class GdalMdMetaData(BaseModel):
     """ # noqa: E501
     type: StrictStr
     result_descriptor: RasterResultDescriptor = Field(alias="resultDescriptor")
-    z_role: ZRole = Field(alias="zRole")
+    variables: List[MdVariable] = Field(description="The variables of the dataset; the index of a variable is its output band.")
     wrap: StrictBool = Field(description="whether the stored 0..360 degree coverage is re-presented as -180..180")
-    max_z_batch_size: Optional[StrictInt] = Field(default=None, description="upper bound on the z slices a single worker read may request; `None` means the operator's default. A dataset property, since a batch is sized against the slice size of the data itself.", alias="maxZBatchSize")
     cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, description="Dataset-level TTL fallback used when no tile-level TTL is provided.", alias="cacheTtl")
-    __properties: ClassVar[List[str]] = ["type", "resultDescriptor", "zRole", "wrap", "maxZBatchSize", "cacheTtl"]
+    __properties: ClassVar[List[str]] = ["type", "resultDescriptor", "variables", "wrap", "cacheTtl"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -86,11 +85,13 @@ class GdalMdMetaData(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of result_descriptor
         if self.result_descriptor:
             _dict['resultDescriptor'] = self.result_descriptor.to_dict()
-        # set to None if max_z_batch_size (nullable) is None
-        # and model_fields_set contains the field
-        if self.max_z_batch_size is None and "max_z_batch_size" in self.model_fields_set:
-            _dict['maxZBatchSize'] = None
-
+        # override the default output from pydantic by calling `to_dict()` of each item in variables (list)
+        _items = []
+        if self.variables:
+            for _item_variables in self.variables:
+                if _item_variables:
+                    _items.append(_item_variables.to_dict())
+            _dict['variables'] = _items
         # set to None if cache_ttl (nullable) is None
         # and model_fields_set contains the field
         if self.cache_ttl is None and "cache_ttl" in self.model_fields_set:
@@ -110,9 +111,8 @@ class GdalMdMetaData(BaseModel):
         _obj = cls.model_validate({
             "type": obj.get("type"),
             "resultDescriptor": RasterResultDescriptor.from_dict(obj["resultDescriptor"]) if obj.get("resultDescriptor") is not None else None,
-            "zRole": obj.get("zRole"),
+            "variables": [MdVariable.from_dict(_item) for _item in obj["variables"]] if obj.get("variables") is not None else None,
             "wrap": obj.get("wrap"),
-            "maxZBatchSize": obj.get("maxZBatchSize"),
             "cacheTtl": obj.get("cacheTtl")
         })
         return _obj

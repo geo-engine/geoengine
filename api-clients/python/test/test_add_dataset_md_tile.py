@@ -85,10 +85,7 @@ class TestAddDatasetMdTile(unittest.TestCase):
                             ''
                             ]
                         ], 
-                    allow_alphaband_as_mask = True, ),
-                leading_prefix = [
-                    56
-                    ]
+                    allow_alphaband_as_mask = True, )
             )
         else:
             return AddDatasetMdTile(

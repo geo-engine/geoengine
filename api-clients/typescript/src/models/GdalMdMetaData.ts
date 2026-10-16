@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { MdVariable } from './MdVariable';
+import {
+    MdVariableFromJSON,
+    MdVariableFromJSONTyped,
+    MdVariableToJSON,
+    MdVariableToJSONTyped,
+} from './MdVariable';
 import type { RasterResultDescriptor } from './RasterResultDescriptor';
 import {
     RasterResultDescriptorFromJSON,
@@ -19,13 +26,6 @@ import {
     RasterResultDescriptorToJSON,
     RasterResultDescriptorToJSONTyped,
 } from './RasterResultDescriptor';
-import type { ZRole } from './ZRole';
-import {
-    ZRoleFromJSON,
-    ZRoleFromJSONTyped,
-    ZRoleToJSON,
-    ZRoleToJSONTyped,
-} from './ZRole';
 
 /**
  * 
@@ -46,25 +46,17 @@ export interface GdalMdMetaData {
      */
     resultDescriptor: RasterResultDescriptor;
     /**
-     * 
-     * @type {ZRole}
+     * The variables of the dataset; the index of a variable is its output band.
+     * @type {Array<MdVariable>}
      * @memberof GdalMdMetaData
      */
-    zRole: ZRole;
+    variables: Array<MdVariable>;
     /**
      * whether the stored 0..360 degree coverage is re-presented as -180..180
      * @type {boolean}
      * @memberof GdalMdMetaData
      */
     wrap: boolean;
-    /**
-     * upper bound on the z slices a single worker read may request; `None` means the
-     * operator's default. A dataset property, since a batch is sized against the slice
-     * size of the data itself.
-     * @type {number}
-     * @memberof GdalMdMetaData
-     */
-    maxZBatchSize?: number | null;
     /**
      * Dataset-level TTL fallback used when no tile-level TTL is provided.
      * @type {number}
@@ -89,7 +81,7 @@ export type GdalMdMetaDataTypeEnum = typeof GdalMdMetaDataTypeEnum[keyof typeof 
 export function instanceOfGdalMdMetaData(value: object): value is GdalMdMetaData {
     if (!('type' in value) || value['type'] === undefined) return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined) return false;
-    if (!('zRole' in value) || value['zRole'] === undefined) return false;
+    if (!('variables' in value) || value['variables'] === undefined) return false;
     if (!('wrap' in value) || value['wrap'] === undefined) return false;
     return true;
 }
@@ -106,9 +98,8 @@ export function GdalMdMetaDataFromJSONTyped(json: any, ignoreDiscriminator: bool
         
         'type': json['type'],
         'resultDescriptor': RasterResultDescriptorFromJSON(json['resultDescriptor']),
-        'zRole': ZRoleFromJSON(json['zRole']),
+        'variables': ((json['variables'] as Array<any>).map(MdVariableFromJSON)),
         'wrap': json['wrap'],
-        'maxZBatchSize': json['maxZBatchSize'] == null ? undefined : json['maxZBatchSize'],
         'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
@@ -126,9 +117,8 @@ export function GdalMdMetaDataToJSONTyped(value?: GdalMdMetaData | null, ignoreD
         
         'type': value['type'],
         'resultDescriptor': RasterResultDescriptorToJSON(value['resultDescriptor']),
-        'zRole': ZRoleToJSON(value['zRole']),
+        'variables': ((value['variables'] as Array<any>).map(MdVariableToJSON)),
         'wrap': value['wrap'],
-        'maxZBatchSize': value['maxZBatchSize'],
         'cacheTtl': value['cacheTtl'],
     };
 }

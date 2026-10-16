@@ -18,8 +18,8 @@ exports.GdalMdMetaDataFromJSON = GdalMdMetaDataFromJSON;
 exports.GdalMdMetaDataFromJSONTyped = GdalMdMetaDataFromJSONTyped;
 exports.GdalMdMetaDataToJSON = GdalMdMetaDataToJSON;
 exports.GdalMdMetaDataToJSONTyped = GdalMdMetaDataToJSONTyped;
+const MdVariable_1 = require("./MdVariable");
 const RasterResultDescriptor_1 = require("./RasterResultDescriptor");
-const ZRole_1 = require("./ZRole");
 /**
  * @export
  */
@@ -34,7 +34,7 @@ function instanceOfGdalMdMetaData(value) {
         return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
         return false;
-    if (!('zRole' in value) || value['zRole'] === undefined)
+    if (!('variables' in value) || value['variables'] === undefined)
         return false;
     if (!('wrap' in value) || value['wrap'] === undefined)
         return false;
@@ -50,9 +50,8 @@ function GdalMdMetaDataFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'type': json['type'],
         'resultDescriptor': (0, RasterResultDescriptor_1.RasterResultDescriptorFromJSON)(json['resultDescriptor']),
-        'zRole': (0, ZRole_1.ZRoleFromJSON)(json['zRole']),
+        'variables': (json['variables'].map(MdVariable_1.MdVariableFromJSON)),
         'wrap': json['wrap'],
-        'maxZBatchSize': json['maxZBatchSize'] == null ? undefined : json['maxZBatchSize'],
         'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
@@ -66,9 +65,8 @@ function GdalMdMetaDataToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'type': value['type'],
         'resultDescriptor': (0, RasterResultDescriptor_1.RasterResultDescriptorToJSON)(value['resultDescriptor']),
-        'zRole': (0, ZRole_1.ZRoleToJSON)(value['zRole']),
+        'variables': (value['variables'].map(MdVariable_1.MdVariableToJSON)),
         'wrap': value['wrap'],
-        'maxZBatchSize': value['maxZBatchSize'],
         'cacheTtl': value['cacheTtl'],
     };
 }
