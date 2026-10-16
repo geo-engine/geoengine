@@ -27,14 +27,16 @@ use geoengine_datatypes::{
 use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
+use std::sync::Arc;
 
+mod db_types;
 mod error;
 mod loading_info;
 mod reader;
 
 pub use error::MdGdalSourceError;
 pub use loading_info::{
-    GdalMdMetaData, MdDatasetFile, MdFileTimes, MdLoadingInfo, ZRole, presented_geo_transform,
+    GdalMdMetaData, MdDatasetFile, MdFileTimes, MdLoadingInfo, MdVariable, presented_geo_transform,
 };
 
 /// Parameters for the MD GDAL Source Operator.
@@ -43,19 +45,6 @@ pub use loading_info::{
 pub struct MdGdalSourceParameters {
     pub data: NamedData,
 }
-
-/// The default bound on how many consecutive z slices one worker request may return.
-///
-/// This is a property of the *data*, not of a workflow, so it lives on the dataset meta data
-/// (`max_z_batch_size`) rather than on these parameters; this is the fallback for datasets
-/// that do not set it.
-///
-/// ponytail: 4 rather than more because a batch is one IPC message and one slice of a
-/// 1440x600 float32 array is already 3.4 MB - a batch of 16 is a 55 MB message that takes
-/// ~22 s cold over the network, while 4 is 14 MB / ~6 s. It is an upper bound: a query for a
-/// single time step still reads exactly one slice. Raise it when reading more per round trip
-/// measurably beats the per-request overhead.
-pub const DEFAULT_MAX_Z_BATCH_SIZE: usize = 4;
 
 impl MdGdalSourceParameters {
     #[must_use]
@@ -141,27 +130,30 @@ where
                 ),
         );
         let loading_info = self.meta_data.loading_info(query_in_source_grid).await?;
-        let z_role = loading_info.z_role();
+        let z_is_band = loading_info.z_is_band();
         let gdal_worker = ctx.get_gdal_worker();
         let default_cache_ttl = self.default_cache_ttl;
 
-        // resolve the requested z-slices: time steps for `ZRole::Variable`,
-        // bands as z-indices for `ZRole::Band`
-        let global_z = match z_role {
-            ZRole::Band => query
+        // resolve the requested z-slices: time steps for a time axis, bands as z-indices for
+        // a band axis
+        let global_z = if z_is_band {
+            query
                 .attributes()
                 .as_vec()
                 .into_iter()
                 .map(|band| band as usize)
-                .collect(),
-            ZRole::Variable => loading_info.z_indices_in_time(query.time_interval()),
+                .collect()
+        } else {
+            loading_info.z_indices_in_time(query.time_interval())
         };
 
-        // `ZRole::Variable`: each selected variable becomes its own output band and reads
-        // only the files of that variable; the other roles have one implicit group covering
-        // all files
-        let band_groups =
-            output_band_groups(z_role, result_descriptor.bands.count(), query.attributes())?;
+        // a time axis: each selected variable becomes its own output band and reads only the
+        // files of that variable; a band axis has one implicit group covering all files
+        let band_groups = output_band_groups(
+            z_is_band,
+            result_descriptor.bands.count(),
+            query.attributes(),
+        )?;
 
         let spatial_tiles = tiling_strategy
             .tile_information_iterator_from_pixel_bounds(query.spatial_bounds())
@@ -173,28 +165,12 @@ where
             spatial_tiles.len(),
         );
 
-        // A read batch may only span a *contiguous* run in the output order, which Geo Engine
-        // fixes as `band` fastest, `space` (row by row) next and `time` slowest.
-        //
-        // `ZRole::Band` puts z on the band axis, so a batch is one contiguous run of bands at
-        // one tile and pays off directly. `ZRole::Variable` puts z on the time axis - the
-        // slowest one - so a batch would straddle whole time steps and the tiles could only be
-        // put back in order by buffering every spatial tile of those steps. A spatial row can
-        // be arbitrarily long, so that is not an option: a time axis gets one slice per read.
-        let batch_size = effective_z_batch_size(z_role, loading_info.max_z_batch_size());
-
         let mut per_band: Vec<Vec<(usize, MdRequest)>> = Vec::with_capacity(band_groups.len());
         for sel_band in band_groups {
-            let (batches, missing) = loading_info.z_batches(&global_z, sel_band, batch_size);
-            let mut reqs = Vec::with_capacity(batches.len() + missing.len());
-            for batch in batches {
-                reqs.push((
-                    batch.global_z.start,
-                    MdRequest::Batch(MdTileRequest {
-                        file_idx: batch.file_idx,
-                        local_z: batch.local_z,
-                    }),
-                ));
+            let (slices, missing) = loading_info.z_slices(&global_z, sel_band);
+            let mut reqs = Vec::with_capacity(slices.len() + missing.len());
+            for (gz, requests) in slices {
+                reqs.push((gz, MdRequest::Read(requests)));
             }
             for gz in missing {
                 reqs.push((
@@ -205,9 +181,9 @@ where
                     }),
                 ));
             }
-            // batches and gaps are collected separately; the merge below needs one list
+            // reads and gaps are collected separately; the merge below needs one list
             // ascending in its key, and a hole in the middle of the axis would otherwise
-            // put every gap after every batch
+            // put every gap after every read
             reqs.sort_by_key(|(z, _)| *z);
             per_band.push(reqs);
         }
@@ -218,48 +194,34 @@ where
         requests.sort_by_key(|(z, _)| *z);
 
         // Canonical output order: `band` fastest, `space` (row by row) next, `time` slowest.
-        // `iproduct!(requests, spatial_tiles)` emitted (time, band, space) instead - band
-        // before space - which is wrong for every multi-band query, and with a batch larger
-        // than one it emitted (z-block, space) which is wrong even single-band.
-        let mut work: Vec<(MdRequest, TileInformation)> = Vec::new();
-        match z_role {
-            // one time step: the order is (space, band), and a request is already a run of
-            // consecutive bands of a single tile
-            ZRole::Band => {
-                for tile_info in &spatial_tiles {
-                    for (_, request) in &requests {
-                        work.push((request.clone(), *tile_info));
-                    }
-                }
-            }
-            // one z step per request, requests already ordered by (z, band)
-            ZRole::Variable => {
-                let mut start = 0;
-                while start < requests.len() {
-                    let z = requests[start].0;
-                    let mut end = start;
-                    while end < requests.len() && requests[end].0 == z {
-                        end += 1;
-                    }
-                    for tile_info in &spatial_tiles {
-                        for (_, request) in &requests[start..end] {
-                            work.push((request.clone(), *tile_info));
-                        }
-                    }
-                    start = end;
-                }
-            }
-        }
+        // Groups are one z slice each (one group for a band axis), and within a group the
+        // tiles come before the requests, so the order is (space, band) per time step.
+        let groups: Vec<Vec<MdRequest>> = if z_is_band {
+            vec![requests.iter().map(|(_, request)| request.clone()).collect()]
+        } else {
+            requests
+                .chunk_by(|a, b| a.0 == b.0)
+                .map(|group| group.iter().map(|(_, request)| request.clone()).collect())
+                .collect()
+        };
+        let loading_info = Arc::new(loading_info);
 
-        let stream = stream::iter(work)
+        // lazy: the (slice, tile) pairs are produced as the stream is polled, so a long time
+        // range costs one group at a time, not one request per tile up front
+        let stream = stream::iter(groups)
+            .flat_map(move |group| {
+                stream::iter(spatial_tiles.clone()).flat_map(move |tile_info| {
+                    stream::iter(group.clone()).map(move |request| (request, tile_info))
+                })
+            })
             .map(move |(request, tile_info)| {
                 let gdal_worker = gdal_worker.clone();
-                let loading_info = loading_info.clone();
+                let loading_info = Arc::clone(&loading_info);
                 async move {
                     match request {
-                        MdRequest::Batch(batch) => load_md_tile_from_files_async::<P>(
+                        MdRequest::Read(reads) => load_md_tile_from_files_async::<P>(
                             &loading_info,
-                            &batch,
+                            &reads,
                             reader_mode,
                             tile_info,
                             &gdal_worker,
@@ -267,26 +229,21 @@ where
                         )
                         .await
                         .map_err(Error::from),
-                        MdRequest::Gap(gap) => Ok(vec![empty_tile(
+                        MdRequest::Gap(gap) => Ok(Some(empty_tile(
                             &loading_info,
                             gap,
                             tile_info,
                             default_cache_ttl,
-                        )]),
+                        ))),
                     }
                 }
             })
-            // Concurrency, not buffering: at most this many `(request, tile)` results are in
-            // flight. A request is one z slice for a time axis, but a whole band run (up to
-            // `batch_size` slices) for a band axis - so peak tile memory is
-            // `TILE_READ_CONCURRENCY` slices for `ZRole::Variable` and
-            // `TILE_READ_CONCURRENCY * batch_size` for `ZRole::Band`. Deliberately *not*
-            // `batch x tiles`, which is what a reorder buffer would have needed and what
-            // makes long spatial rows untenable.
+            // Concurrency, not buffering: at most this many tiles are in flight, and each one
+            // is a single z slice. Deliberately *not* `slices x tiles`, which is what a reorder
+            // buffer would have needed and what makes long spatial rows untenable.
             .buffered(TILE_READ_CONCURRENCY)
-            .flat_map(|res: Result<Vec<RasterTile2D<P>>>| match res {
-                Ok(tiles) => stream::iter(tiles.into_iter().map(Ok)).boxed(),
-                Err(err) => stream::once(futures::future::ready(Err(err))).boxed(),
+            .filter_map(|res: Result<Option<RasterTile2D<P>>>| {
+                futures::future::ready(res.transpose())
             })
             .boxed();
 
@@ -302,7 +259,8 @@ where
 /// covers and therefore becomes an empty tile.
 #[derive(Debug, Clone)]
 enum MdRequest {
-    Batch(MdTileRequest),
+    /// every file holding the z slice; they are mosaicked into one tile
+    Read(Vec<MdTileRequest>),
     Gap(MdGapRequest),
 }
 
@@ -327,7 +285,7 @@ fn empty_tile<P: Pixel>(
     // is recoverable, a panic in a query task is not
     let (time, band) = match time_steps.get(gap.global_z) {
         Some(_) => loading_info::time_and_band(
-            loading_info.z_role(),
+            loading_info.z_is_band(),
             gap.global_z,
             gap.output_band,
             time_steps,
@@ -346,26 +304,14 @@ fn empty_tile<P: Pixel>(
     )
 }
 
-/// How many consecutive z slices one read may ask for.
-///
-/// Only a contiguous run in the output order (`band` fastest, `space` next, `time` slowest)
-/// may be read as one batch. `ZRole::Band` has z on the band axis, so it is; `ZRole::Variable`
-/// has z on the time axis, so it is not - see the batching comment in `query_processor`.
-const fn effective_z_batch_size(z_role: ZRole, max_z_batch_size: usize) -> usize {
-    match z_role {
-        ZRole::Band => max_z_batch_size,
-        ZRole::Variable => 1,
-    }
-}
-
-/// The output-band groups to query: one per selected band for `ZRole::Variable` (each
-/// variable reads only its own files), or a single `None` group (all files) otherwise.
+/// The output-band groups to query: one per selected band for a time axis (each variable
+/// reads only its own files), or a single `None` group (all files) for a band axis.
 fn output_band_groups(
-    z_role: ZRole,
+    z_is_band: bool,
     band_count: u32,
     attributes: &BandSelection,
 ) -> Result<Vec<Option<u32>>> {
-    // an out-of-range band would otherwise reach `empty_tile`/`z_batches` as a missing index
+    // an out-of-range band would otherwise reach `empty_tile`/`z_slices` as a missing index
     // and panic on `time_steps[global_z]`
     for &b in attributes.as_slice() {
         if b >= band_count {
@@ -374,10 +320,11 @@ fn output_band_groups(
             }));
         }
     }
-    match z_role {
-        ZRole::Variable => Ok(attributes.as_vec().into_iter().map(Some).collect()),
-        // `ZRole::Band` maps a band index straight to a z index, so one group covers all files
-        ZRole::Band => Ok(vec![None]),
+    if z_is_band {
+        // a band index maps straight to a z index, so one group covers all files
+        Ok(vec![None])
+    } else {
+        Ok(attributes.as_vec().into_iter().map(Some).collect())
     }
 }
 
@@ -547,6 +494,7 @@ mod tests {
         MockExecutionContext, MockQueryContext, RasterBandDescriptor, RasterBandDescriptors,
         SourceOperator, SpatialGridDescriptor, StaticMetaData, WorkflowOperatorPath,
     };
+    use crate::source::MdAxisMapping;
     use crate::test_data;
     use geoengine_datatypes::{
         dataset::{DataId, DatasetId, NamedData},
@@ -573,8 +521,7 @@ mod tests {
         /// first z slice of this file in the dataset's concatenated z axis
         z_start: usize,
         slices: usize,
-        /// fixed index into each dimension between z and (y, x)
-        leading_prefix: Vec<i64>,
+        axis_mapping: Vec<MdAxisMapping>,
     }
 
     impl MdFile {
@@ -586,7 +533,7 @@ mod tests {
                 band: 0,
                 z_start,
                 slices,
-                leading_prefix: Vec::new(),
+                axis_mapping: vec![MdAxisMapping::Time, MdAxisMapping::Y, MdAxisMapping::X],
             }
         }
     }
@@ -599,12 +546,10 @@ mod tests {
         width: usize,
         height: usize,
         wrap: bool,
-        z_role: ZRole,
         /// the global time axis as `origin + i * step`, or `None` for a band axis, which has
         /// synthetic `[k, k+1)` unit steps indexed by band instead
         time: Option<(i64, i64)>,
         bands: Vec<&'static str>,
-        max_z_batch_size: Option<usize>,
     }
 
     impl MdDataset {
@@ -618,17 +563,20 @@ mod tests {
                 width: 8,
                 height: 8,
                 wrap: false,
-                z_role: ZRole::Variable,
                 time: Some((EPOCH_2000, DAY)),
                 bands: vec!["temperature"],
-                max_z_batch_size: None,
             }
         }
 
-        /// `(time, depth, y, x)`: 6 daily slices with `depth` held at index 0 by the prefix.
+        /// `(time, depth, y, x)`: 6 daily slices with depth fixed at index 0.
         fn four_dimensional() -> Self {
             let mut dataset = Self::daily_series("md/time_depth_4d.nc", 6);
-            dataset.files[0].leading_prefix = vec![0];
+            dataset.files[0].axis_mapping = vec![
+                MdAxisMapping::Time,
+                MdAxisMapping::Fixed { index: 0 },
+                MdAxisMapping::Y,
+                MdAxisMapping::X,
+            ];
             dataset
         }
 
@@ -656,10 +604,8 @@ mod tests {
                 width,
                 height,
                 wrap: true,
-                z_role: ZRole::Variable,
                 time: Some((EPOCH_2000, DAY)),
                 bands: vec!["temperature"],
-                max_z_batch_size: None,
             }
         }
 
@@ -695,17 +641,15 @@ mod tests {
                         band: *band,
                         z_start: 0,
                         slices,
-                        leading_prefix: Vec::new(),
+                        axis_mapping: vec![MdAxisMapping::Time, MdAxisMapping::Y, MdAxisMapping::X],
                     })
                     .collect(),
                 grid,
                 width,
                 height,
                 wrap: false,
-                z_role: ZRole::Variable,
                 time: Some((EPOCH_2000, DAY)),
                 bands: arrays.iter().map(|(n, _)| *n).collect(),
-                max_z_batch_size: None,
             }
         }
 
@@ -723,27 +667,26 @@ mod tests {
                 width: 8,
                 height: 8,
                 wrap: false,
-                z_role: ZRole::Variable,
                 time: Some((-2_208_988_800_000, 60_000)),
                 bands: vec!["temperature"],
-                max_z_batch_size: None,
             }
         }
 
         /// `(band, y, x)` with no CF time units on z: each z slice is an output band and the
         /// "time" axis is the synthetic `[k, k+1)` unit step.
         fn band_axis() -> Self {
-            Self {
+            let mut dataset = Self {
                 files: vec![MdFile::of("md/bands.nc", "reflectance", 0, 4)],
                 grid: (0.0, 0.0, 30.0, -1.0),
                 width: 8,
                 height: 8,
                 wrap: false,
-                z_role: ZRole::Band,
                 time: None,
                 bands: vec!["band 0", "band 1", "band 2", "band 3"],
-                max_z_batch_size: None,
-            }
+            };
+            dataset.files[0].axis_mapping =
+                vec![MdAxisMapping::Band, MdAxisMapping::Y, MdAxisMapping::X];
+            dataset
         }
 
         /// One file holding several `(time, y, x)` arrays: one band per array, in the given
@@ -763,17 +706,38 @@ mod tests {
                         band: *band,
                         z_start: 0,
                         slices: 8,
-                        leading_prefix: Vec::new(),
+                        axis_mapping: vec![MdAxisMapping::Time, MdAxisMapping::Y, MdAxisMapping::X],
                     })
                     .collect(),
                 grid: (0.0, 0.0, 30.0, -1.0),
                 width: 8,
                 height: 8,
                 wrap: false,
-                z_role: ZRole::Variable,
                 time: Some((EPOCH_2000, DAY)),
                 bands: vec!["temperature", "precipitation", "cloud_area_fraction"],
-                max_z_batch_size: None,
+            }
+        }
+
+        /// Two spatial pieces of one time step on the same 8x8 grid: the west file is valid
+        /// for columns 0..4 and the east file for 4..8, each nodata elsewhere.
+        fn mosaic_halves() -> Self {
+            let mtg = |path| MdFile {
+                path,
+                array_name: "effective_radiance",
+                group: Some("data/ir_105_hr/measured"),
+                band: 0,
+                z_start: 0,
+                slices: 1,
+                axis_mapping: vec![MdAxisMapping::Y, MdAxisMapping::X],
+            };
+            Self {
+                files: vec![mtg("md/mtg_fci_west.nc"), mtg("md/mtg_fci_east.nc")],
+                grid: (0.0, 0.0, 1.0, -1.0),
+                width: 8,
+                height: 8,
+                wrap: false,
+                time: Some((EPOCH_2000, DAY)),
+                bands: vec!["radiance"],
             }
         }
     }
@@ -786,10 +750,8 @@ mod tests {
             width,
             height,
             wrap,
-            z_role,
             time,
             bands,
-            max_z_batch_size,
         } = spec;
 
         // the global axis, from which each file's own slices are carved
@@ -807,6 +769,17 @@ mod tests {
                 .map(|i| TimeInterval::new(i as i64, i as i64 + 1).unwrap())
                 .collect(),
         };
+
+        // one variable per output band, taken from the first file of that band
+        let mut variables: Vec<MdVariable> = Vec::new();
+        for f in &files {
+            if f.band as usize == variables.len() {
+                variables.push(MdVariable {
+                    name: bands[f.band as usize].to_owned(),
+                    axis_mapping: f.axis_mapping.clone(),
+                });
+            }
+        }
 
         let md_files = files
             .iter()
@@ -839,7 +812,6 @@ mod tests {
                     time_steps[f.z_start..f.z_start + f.slices].to_vec(),
                 ),
                 output_band: f.band,
-                leading_prefix: f.leading_prefix.clone(),
             })
             .collect::<Vec<_>>();
 
@@ -858,11 +830,11 @@ mod tests {
             MdLoadingInfo::new(
                 time_steps.clone(),
                 md_files.clone(),
+                variables.clone(),
                 None,
-                z_role,
                 wrap,
-                max_z_batch_size,
             )
+            .unwrap()
             .time_descriptor(),
             SpatialGridDescriptor::source_from_parts(
                 presented,
@@ -883,14 +855,8 @@ mod tests {
             id,
             named.clone(),
             Box::new(StaticMetaData {
-                loading_info: MdLoadingInfo::new(
-                    time_steps,
-                    md_files,
-                    None,
-                    z_role,
-                    wrap,
-                    max_z_batch_size,
-                ),
+                loading_info: MdLoadingInfo::new(time_steps, md_files, variables, None, wrap)
+                    .unwrap(),
                 result_descriptor,
                 phantom: PhantomData::<RasterQueryRectangle>,
             }),
@@ -955,7 +921,7 @@ mod tests {
             MdDataset::daily_series("md/time_series.nc", 8),
         );
 
-        // window over z-slices 2..6 (4 slices), batched one slice at a time
+        // window over z-slices 2..6 (4 slices), one read per slice
         let time = TimeInterval::new_unchecked(EPOCH_2000 + 2 * DAY, EPOCH_2000 + 6 * DAY);
         let tiles = query_md_source(
             &exe_ctx,
@@ -992,7 +958,7 @@ mod tests {
     /// slice must come back with the `depth` offset in its values. A read that dropped or
     /// mis-set the prefix would return another depth's data, not an error.
     #[tokio::test]
-    async fn test_query_four_dimensional_array_holds_the_leading_prefix() {
+    async fn test_query_four_dimensional_array_holds_the_mapped_fixed_axis() {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = exe_ctx.mock_query_context_test_default();
         let name = add_md_dataset(&mut exe_ctx, "md_time_depth", MdDataset::four_dimensional());
@@ -1027,59 +993,6 @@ mod tests {
                     expected,
                     "value at y={y}, x={x} of t={t} must be depth 0's slice"
                 );
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_query_batched_z_equals_single_batched() {
-        let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = exe_ctx.mock_query_context_test_default();
-        let time = TimeInterval::new_unchecked(EPOCH_2000 + 2 * DAY, EPOCH_2000 + 6 * DAY);
-
-        // the batch bound is a dataset property, so comparing two bounds means two datasets
-        let mut batched_of_8 = MdDataset::daily_series("md/time_series.nc", 8);
-        batched_of_8.max_z_batch_size = Some(8);
-        let mut batched_of_1 = MdDataset::daily_series("md/time_series.nc", 8);
-        batched_of_1.max_z_batch_size = Some(1);
-        let batched_name = add_md_dataset(&mut exe_ctx, "md_batched_8", batched_of_8);
-        let single_name = add_md_dataset(&mut exe_ctx, "md_batched_1", batched_of_1);
-
-        let batched = query_md_source(
-            &exe_ctx,
-            &query_ctx,
-            batched_name,
-            ts_grid_bounds(),
-            time,
-            BandSelection::first(),
-        )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-        let single = query_md_source(
-            &exe_ctx,
-            &query_ctx,
-            single_name,
-            ts_grid_bounds(),
-            time,
-            BandSelection::first(),
-        )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-
-        assert_eq!(batched.len(), 4);
-        assert_eq!(batched.len(), single.len());
-        for (a, b) in batched.iter().zip(&single) {
-            assert_eq!(a.time, b.time);
-            assert_eq!(
-                a.tile_information().global_tile_position(),
-                b.tile_information().global_tile_position()
-            );
-            for (y, x) in [(0, 0), (7, 7)] {
-                assert_eq!(grid_value(a, y, x), grid_value(b, y, x));
             }
         }
     }
@@ -1476,7 +1389,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
         let name = add_md_dataset(&mut exe_ctx, "md_bands", MdDataset::band_axis());
 
-        // band 2 of a ZRole::Band dataset
+        // band 2 of a band-axis dataset
         let time = TimeInterval::new_instant(0).unwrap();
         let tiles = query_md_source(
             &exe_ctx,
@@ -1498,15 +1411,155 @@ mod tests {
         assert_eq!(grid_value(tile, 7, 7), 200.0 + (7 * 10 + 7) as f32);
     }
 
+    #[tokio::test]
+    async fn test_query_mosaic_blends_spatial_pieces() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+        let name = add_md_dataset(&mut exe_ctx, "md_mosaic", MdDataset::mosaic_halves());
+
+        let tiles = query_md_source(
+            &exe_ctx,
+            &query_ctx,
+            name,
+            ts_grid_bounds(),
+            TimeInterval::new_instant(EPOCH_2000).unwrap(),
+            BandSelection::first(),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+        // value = row * 10 + col; both halves are present, so no nodata (-9999) is left
+        assert_eq!(value_at(&tiles, 0, 0), 0.0);
+        assert_eq!(value_at(&tiles, 3, 3), 33.0);
+        assert_eq!(value_at(&tiles, 3, 4), 34.0);
+        assert_eq!(value_at(&tiles, 7, 7), 77.0);
+    }
+
+    /// The 8x16 ERA5-shaped grid (lat 48..-48, lon -180..180 presented) in global pixel
+    /// indices, where the lattice origin is (0, 0): rows -4..3, columns -8..7. The window
+    /// straddles the tile lattice, so it is split over four tiles.
+    fn era5_grid_bounds() -> GridBoundingBox2D {
+        GridBoundingBox2D::new_unchecked([-4, -8], [3, 7])
+    }
+
+    /// The value at global pixel `(row, col)`, looked up in whichever tile covers it.
+    fn value_at(tiles: &[RasterTile2D<f32>], row: isize, col: isize) -> f32 {
+        tiles
+            .iter()
+            .find_map(|tile| {
+                let GridOrEmpty::Grid(grid) = &tile.grid_array else {
+                    return None;
+                };
+                let origin = tile.tile_information().global_pixel_bounds().min_index();
+                let (r, c) = (row - origin.y(), col - origin.x());
+                let shape = grid.inner_grid.shape;
+                let covered =
+                    (0..shape.y() as isize).contains(&r) && (0..shape.x() as isize).contains(&c);
+                covered.then(|| grid_value(tile, r as usize, c as usize))
+            })
+            .expect("pixel is not covered by any tile")
+    }
+
+    #[tokio::test]
+    async fn test_query_era5_pressure_level_slices_fixed_level() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+
+        // one variable per pressure level (1000, 850, 500 hPa); each is a `Fixed` slice of
+        // `(valid_time, pressure_level, latitude, longitude)`
+        let levels = [0_usize, 1, 2];
+        let mut dataset = MdDataset {
+            files: levels
+                .iter()
+                .map(|_| MdFile::of("md/era5_pl_synthetic.nc", "t", 0, 4))
+                .collect(),
+            grid: (0.0, 48.0, 22.5, -12.0),
+            width: 16,
+            height: 8,
+            wrap: true,
+            time: Some((EPOCH_2000, DAY)),
+            bands: vec!["t 1000 hPa", "t 850 hPa", "t 500 hPa"],
+        };
+        for (file, level) in dataset.files.iter_mut().zip(levels) {
+            file.band = level as u32;
+            file.axis_mapping = vec![
+                MdAxisMapping::Time,
+                MdAxisMapping::Fixed {
+                    index: level as i64,
+                },
+                MdAxisMapping::Y,
+                MdAxisMapping::X,
+            ];
+        }
+        let name = add_md_dataset(&mut exe_ctx, "md_era5_pl", dataset);
+
+        // band 1 is the 850 hPa slice, time step 2
+        let tiles = query_md_source(
+            &exe_ctx,
+            &query_ctx,
+            name,
+            era5_grid_bounds(),
+            TimeInterval::new_instant(EPOCH_2000 + 2 * DAY).unwrap(),
+            BandSelection::new_single(1),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+        assert_eq!(tiles.len(), 4);
+        // value = t * 10_000 + p * 1000 + stored row * 10 + stored col; global (-4, -8) is
+        // lat 48, lon -180, i.e. stored (0, 8)
+        assert_eq!(value_at(&tiles, -4, -8), 21_008.0);
+        assert_eq!(value_at(&tiles, 3, 7), 21_077.0);
+    }
+
+    #[tokio::test]
+    async fn test_query_era5_surface_without_level_axis() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+
+        let dataset = MdDataset {
+            files: vec![MdFile::of("md/era5_sfc_synthetic.nc", "t2m", 0, 4)],
+            grid: (0.0, 48.0, 22.5, -12.0),
+            width: 16,
+            height: 8,
+            wrap: true,
+            time: Some((EPOCH_2000, DAY)),
+            bands: vec!["t2m"],
+        };
+        let name = add_md_dataset(&mut exe_ctx, "md_era5_sfc", dataset);
+
+        let tiles = query_md_source(
+            &exe_ctx,
+            &query_ctx,
+            name,
+            era5_grid_bounds(),
+            TimeInterval::new_instant(EPOCH_2000 + DAY).unwrap(),
+            BandSelection::first(),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+        assert_eq!(tiles.len(), 4);
+        // value = t * 1000 + stored row * 10 + stored col
+        assert_eq!(value_at(&tiles, -4, -8), 1_008.0);
+        assert_eq!(value_at(&tiles, 3, 7), 1_077.0);
+    }
+
     #[test]
     fn out_of_range_band_is_rejected_for_band_role() {
-        // `ZRole::Band` maps a band index straight to a z index, so an index past the end
+        // A band axis maps a band index straight to a z index, so an index past the end
         // would reach `empty_tile` and panic on `time_steps[global_z]`
         assert!(
-            output_band_groups(ZRole::Band, 4, &BandSelection::new_single(5)).is_err(),
+            output_band_groups(true, 4, &BandSelection::new_single(5)).is_err(),
             "band 5 of a 4-band dataset must be rejected"
         );
-        assert!(output_band_groups(ZRole::Band, 4, &BandSelection::new_single(3)).is_ok());
+        assert!(output_band_groups(true, 4, &BandSelection::new_single(3)).is_ok());
     }
 
     #[tokio::test]
@@ -1616,21 +1669,18 @@ mod tests {
     // --- the output order: band fastest, space next, time slowest ---
 
     /// `(time, space)` ordering. Three tile columns and two time steps: every tile of the
-    /// first step must precede every tile of the second, whatever the batch size.
+    /// first step must precede every tile of the second.
     #[tokio::test]
     async fn test_emits_time_before_space() {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = exe_ctx.mock_query_context_test_default();
-        let mut spec = MdDataset::wrapped(
+        let spec = MdDataset::wrapped(
             "md/wrap_0_360_multitile.nc",
             1440,
             4,
             (0.0, 1.0, 0.25, -0.25),
             2,
         );
-        // a batch larger than the query is exactly what used to emit all of a tile's steps
-        // before the next tile
-        spec.max_z_batch_size = Some(4);
         let name = add_md_dataset(&mut exe_ctx, "md_order_time_space", spec);
 
         let spatial = GridBoundingBox2D::new_unchecked([-4, -720], [-1, 719]);
@@ -1721,7 +1771,7 @@ mod tests {
     async fn test_emits_band_inside_space() {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = exe_ctx.mock_query_context_test_default();
-        let mut spec = MdDataset::wrapped_arrays(
+        let spec = MdDataset::wrapped_arrays(
             "md/variables_multitile.nc",
             1440,
             4,
@@ -1729,7 +1779,6 @@ mod tests {
             2,
             &[("temperature", 0), ("precipitation", 1)],
         );
-        spec.max_z_batch_size = Some(4);
         let name = add_md_dataset(&mut exe_ctx, "md_order_band_space", spec);
 
         // three tile columns, two time steps, two bands
@@ -1774,18 +1823,8 @@ mod tests {
         assert_eq!(keys, sorted, "(time, space) must be non-decreasing");
     }
 
-    /// A time axis gets one slice per read; a band axis keeps the batch.
-    #[test]
-    fn test_z_batch_spans_only_the_fastest_axis() {
-        assert_eq!(effective_z_batch_size(ZRole::Variable, 4), 1);
-        assert_eq!(effective_z_batch_size(ZRole::Band, 4), 4);
-        assert_eq!(effective_z_batch_size(ZRole::Band, 1), 1);
-    }
-
-    /// The merge used to key batches by their *file-local* z start, which restarts at every
-    /// file boundary. Two bands whose files split at different z then interleave wrongly.
-    /// Band 0 is split across two files at gz 4, band 1 is a single file: the key `0` of band
-    /// 0's second file must not jump ahead of band 1's gz 3.
+    /// Band order must follow the global z, not each file's local z (which restarts at every
+    /// file boundary). Band 0 is split across two files at gz 4, band 1 is a single file.
     #[tokio::test]
     async fn test_emits_band_fastest_across_mismatched_file_splits() {
         let mut exe_ctx = MockExecutionContext::test_default();
@@ -1800,7 +1839,7 @@ mod tests {
             band: 1,
             z_start: 0,
             slices: 8,
-            leading_prefix: Vec::new(),
+            axis_mapping: vec![MdAxisMapping::Time, MdAxisMapping::Y, MdAxisMapping::X],
         });
         spec.bands = vec!["temperature", "precipitation"];
         let name = add_md_dataset(&mut exe_ctx, "md_order_mismatched_splits", spec);
@@ -1874,9 +1913,7 @@ mod tests {
     }
 
     #[test]
-    fn params_serde_has_no_batch_size() {
-        // the z batch bound is a dataset property, so it must not appear in the operator
-        // parameters at all
+    fn params_serde_round_trips() {
         let params: MdGdalSourceParameters = serde_json::from_str(r#"{"data": "ns:ds"}"#).unwrap();
         assert_eq!(
             params,

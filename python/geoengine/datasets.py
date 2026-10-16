@@ -739,8 +739,9 @@ def add_md_dataset_tiles(
     `params.gdal_config_options` on each row for remote data, e.g.
     `[["CPL_VSIL_CURL_ALLOWED_EXTENSIONS", "...,.nc"]]`.
 
-    `leading_prefix` selects a slice of a 4D array: `[2]` reads depth 2 of a
-    `(time, depth, y, x)` file, and leaving it empty reads a 3D array.
+    `axis_mapping` gives the role of each array dimension, in source order. It defaults to
+    `[Time, Y, X]`, which reads a 3D `(time, y, x)` array. For a 4D `(time, depth, y, x)` array,
+    use `[Time, Fixed(index=2), Y, X]` to read depth 2.
     """
     if not isinstance(dataset, DatasetName):
         dataset = DatasetName(dataset)

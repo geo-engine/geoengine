@@ -1,5 +1,3 @@
-use std::ops::Range;
-
 use gdal::raster::GdalType;
 use geoengine_datatypes::{
     primitives::{CacheHint, CacheTtlSeconds, TimeInterval},
@@ -16,61 +14,101 @@ use crate::source::gdal_worker_process::{
     process_common::{GdalReadAdvise, GdalReadWindow},
 };
 use crate::source::md_gdal_source::loading_info::time_and_band;
-use crate::source::md_gdal_source::{MdDatasetFile, MdGdalSourceError, MdLoadingInfo, ZRole};
+use crate::source::md_gdal_source::{MdDatasetFile, MdGdalSourceError, MdLoadingInfo};
 
-/// One z-slice batch request: which file, and which local z range within it.
+/// One z-slice request: which file, and which file-local z index within it.
 /// The Geo Engine band follows from the file (`MdDatasetFile::output_band`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MdTileRequest {
     /// index into [`MdLoadingInfo::files`]
     pub file_idx: usize,
-    /// slice range within that file, file-local and end-exclusive
-    pub local_z: Range<usize>,
+    /// z index within that file, file-local
+    pub local_z: usize,
 }
 
-/// Reads one z-slice batch of one MD array file for one query tile and returns one
-/// `RasterTile2D` per requested slice.
+/// Reads one z slice for one query tile: every file in `requests` that holds that slice is
+/// blitted into the same tile, the way the spatial pieces of one time step are mosaicked.
+/// Returns `None` if no file intersects the tile.
+///
+/// # Errors
+/// Returns a `MdGdalSourceError` if a read window cannot be computed or a pool read fails.
+pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
+    loading_info: &MdLoadingInfo,
+    requests: &[MdTileRequest],
+    reader_mode: GdalReaderMode,
+    tile_information: TileInformation,
+    gdal_worker: &GdalPoolDispatcher,
+    default_cache_ttl: CacheTtlSeconds,
+) -> Result<Option<RasterTile2D<T>>, MdGdalSourceError> {
+    let Some(first) = requests.first() else {
+        return Ok(None);
+    };
+    let mut frame: GridOrEmpty<GridBoundingBox2D, T> =
+        GridOrEmpty::from(EmptyGrid::new(tile_information.global_pixel_bounds()));
+    let mut properties = RasterProperties::default();
+
+    let mut intersects = false;
+    for request in requests {
+        intersects |= blit_md_file(
+            loading_info,
+            request,
+            reader_mode,
+            tile_information,
+            gdal_worker,
+            &mut frame,
+            &mut properties,
+        )
+        .await?;
+    }
+    if !intersects {
+        return Ok(None);
+    }
+
+    let file = &loading_info.files()[first.file_idx];
+    let global_z = file.z_start
+        + first
+            .local_z
+            .checked_sub(file.local_offset)
+            .expect("z_slices sets local_z to at least local_offset");
+    Ok(Some(raster_tile_from_frame(
+        file,
+        tile_information,
+        global_z,
+        frame,
+        properties,
+        loading_info.cache_hint(default_cache_ttl),
+        loading_info.z_is_band(),
+        loading_info.time_steps(),
+    )))
+}
+
+/// Blits one file's read windows for one z slice into `frame`. Returns `false` if the file
+/// does not intersect the tile.
 ///
 /// For wrapped (0..360° stored, −180..180° presented) datasets the read window is computed
 /// directly in the tile lattice, because the presented frame relabels the stored longitudes
 /// (see [`wrapped_splitted_advises`]).
-///
-/// # Errors
-/// Returns a `MdGdalSourceError` if the read window cannot be computed or the pool read fails.
 #[allow(clippy::too_many_arguments)]
-pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
+async fn blit_md_file<T: Pixel + GdalType + FromPrimitive>(
     loading_info: &MdLoadingInfo,
     request: &MdTileRequest,
     reader_mode: GdalReaderMode,
     tile_information: TileInformation,
     gdal_worker: &GdalPoolDispatcher,
-    default_cache_ttl: CacheTtlSeconds,
-) -> Result<Vec<RasterTile2D<T>>, MdGdalSourceError> {
+    frame: &mut GridOrEmpty<GridBoundingBox2D, T>,
+    properties: &mut RasterProperties,
+) -> Result<bool, MdGdalSourceError> {
     let file: &MdDatasetFile = &loading_info.files()[request.file_idx];
-    let z_range = request.local_z.clone();
+    let z_index = request.local_z;
     let dataset_params = file.params.clone();
     let array_name = file.array_name.clone();
-    // `i64` in the dataset, `u64` in the read window: a hand-edited row could carry a
-    // negative index, so refuse rather than wrap it to a huge offset.
-    let leading_prefix: Vec<u64> = file
-        .leading_prefix
-        .iter()
-        .map(|index| u64::try_from(*index))
-        .collect::<Result<_, _>>()
-        .map_err(|_| MdGdalSourceError::ProbeError {
-            message: format!(
-                "MD array '{array_name}' has a negative leading prefix index: {:?}",
-                file.leading_prefix
-            ),
-        })?;
-    let leading_prefix = leading_prefix.as_slice();
+    let axis_mapping = loading_info.variable_of(file).axis_mapping.as_slice();
     let ds_spatial_grid = dataset_params.spatial_grid_definition();
     let tile_spatial_grid = tile_information.spatial_grid_definition();
 
     debug!(
-        "loading md tile {:?} for z-range {:?} of array {array_name}",
+        "loading md tile {:?} for z-index {z_index} of array {array_name}",
         tile_information.global_tile_position.inner(),
-        z_range,
     );
 
     let advises = if loading_info.wrap() {
@@ -82,7 +120,7 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
         // rectangle of empty tiles where `GdalSource` would return none.
         if advises.is_empty() {
             trace!("no read advise for tile, skipping.");
-            return Ok(vec![]);
+            return Ok(false);
         }
         advises
     } else {
@@ -92,65 +130,37 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
             Some(advise) => vec![advise],
             None => {
                 trace!("no read advise for tile, skipping.",);
-                return Ok(vec![]);
+                return Ok(false);
             }
         }
     };
-
-    let number_of_z_slices = z_range.len();
-    let mut frames: Vec<GridOrEmpty<GridBoundingBox2D, T>> =
-        vec![
-            GridOrEmpty::from(EmptyGrid::new(tile_information.global_pixel_bounds()));
-            number_of_z_slices
-        ];
-    let mut properties = RasterProperties::default();
 
     let reader =
         crate::source::gdal_worker_process::reader::GdalPoolReader::from(gdal_worker.clone());
 
     for advise in advises {
         match reader
-            .read_md_batch_data::<T>(
+            .read_md_slice_data::<T>(
                 dataset_params.clone(),
                 advise,
                 file.group.as_deref(),
                 &array_name,
-                z_range.clone(),
-                leading_prefix,
+                z_index,
+                axis_mapping,
             )
             .await?
         {
-            crate::source::gdal_worker_process::reader::GdalProcessMdReadResult::Grids(grids) => {
-                for (k, grid_and_properties) in grids.into_iter().enumerate() {
-                    frames[k].grid_blit_valid_only(&grid_and_properties.grid);
-                    properties = grid_and_properties.properties;
-                }
+            crate::source::gdal_worker_process::reader::GdalProcessMdReadResult::Grid(grid_and_properties) => {
+                frame.grid_blit_valid_only(&grid_and_properties.grid);
+                *properties = grid_and_properties.properties;
             }
             crate::source::gdal_worker_process::reader::GdalProcessMdReadResult::FileNotFoundAsNoData => {
-                // leave the frames empty to signal no data
+                // leave the frame empty to signal no data
             }
         }
     }
 
-    let cache_hint = loading_info.cache_hint(default_cache_ttl);
-
-    Ok(frames
-        .into_iter()
-        .enumerate()
-        .map(|(k, frame)| {
-            let global_z = file.z_start + (z_range.start - file.local_offset) + k;
-            raster_tile_from_frame(
-                file,
-                tile_information,
-                global_z,
-                frame,
-                properties.clone(),
-                cache_hint,
-                loading_info.z_role(),
-                loading_info.time_steps(),
-            )
-        })
-        .collect())
+    Ok(true)
 }
 
 /// Computes the read windows for a wrapped (0..360° stored, −180..180° presented) dataset.
@@ -162,15 +172,7 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
 /// column `c` holds stored column `(c − col0) mod width`. A tile crossing the seam column
 /// `col0` (world longitude 0°) is split into two contiguous stored runs.
 ///
-/// ponytail: `col0` is always 0 in practice, because a dataset only sets `wrap` when its
-/// stored grid's first cell *edge* sits on longitude 0, so the raw origin is 0 and the
-/// tiling origin (the nearest pixel edge to `(0,0)`) is 0 too. With a 512 px tile the seam
-/// is then always exactly a tile boundary and the two-run split at the bottom is unreachable
-/// end-to-end - `wrap_tile_straddling_seam_splits` covers it with a narrow synthetic tile
-/// instead. The split is kept because it is the correct answer if either the tile size or
-/// `TilingSpecification::tiling_origin_reference` ever stops being a multiple of the seam;
-/// the upgrade path if a wrapped file ever does store a non-zero raw origin is to detect the
-/// coverage from the array's own coordinates rather than from the geo transform.
+/// shortcut: `col0` is 0 in practice, so the seam split is only reached with a narrow synthetic tile (`wrap_tile_straddling_seam_splits`), upgrade when a wrapped file stores a non-zero raw origin: detect the coverage from the array's coordinates
 fn wrapped_splitted_advises(
     dataset_params: &crate::source::gdal_worker_process::GdalDatasetParameters,
     tile_spatial_grid: &SpatialGridDefinition,
@@ -244,10 +246,10 @@ fn raster_tile_from_frame<T: Pixel>(
     frame: GridOrEmpty<GridBoundingBox2D, T>,
     properties: RasterProperties,
     cache_hint: CacheHint,
-    z_role: ZRole,
+    z_is_band: bool,
     time_steps: &[TimeInterval],
 ) -> RasterTile2D<T> {
-    let (time, band) = time_and_band(z_role, global_z, file.output_band, time_steps);
+    let (time, band) = time_and_band(z_is_band, global_z, file.output_band, time_steps);
 
     RasterTile2D::new_with_properties(
         time,
