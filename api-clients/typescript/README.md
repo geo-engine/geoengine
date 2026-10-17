@@ -332,7 +332,6 @@ All URIs are relative to *https://geoengine.io/api*
 - [MdAxisMappingOneOf1](docs/MdAxisMappingOneOf1.md)
 - [MdAxisMappingOneOf2](docs/MdAxisMappingOneOf2.md)
 - [MdAxisMappingOneOf3](docs/MdAxisMappingOneOf3.md)
-- [MdAxisMappingOneOf4](docs/MdAxisMappingOneOf4.md)
 - [MdGdalSource](docs/MdGdalSource.md)
 - [MdGdalSourceParameters](docs/MdGdalSourceParameters.md)
 - [MdVariable](docs/MdVariable.md)

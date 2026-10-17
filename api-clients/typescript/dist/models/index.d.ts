@@ -168,7 +168,6 @@ export * from './MdAxisMappingOneOf';
 export * from './MdAxisMappingOneOf1';
 export * from './MdAxisMappingOneOf2';
 export * from './MdAxisMappingOneOf3';
-export * from './MdAxisMappingOneOf4';
 export * from './MdGdalSource';
 export * from './MdGdalSourceParameters';
 export * from './MdVariable';

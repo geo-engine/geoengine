@@ -13,11 +13,17 @@
 
 import { mapValues } from '../runtime';
 /**
- * The z axis as bands: every slice is a band of a single time step.
+ * A fixed index into a dimension that is not sliced (a band or level dimension).
  * @export
  * @interface MdAxisMappingOneOf3
  */
 export interface MdAxisMappingOneOf3 {
+    /**
+     * 
+     * @type {number}
+     * @memberof MdAxisMappingOneOf3
+     */
+    index: number;
     /**
      * 
      * @type {MdAxisMappingOneOf3RoleEnum}
@@ -31,7 +37,7 @@ export interface MdAxisMappingOneOf3 {
  * @export
  */
 export const MdAxisMappingOneOf3RoleEnum = {
-    Band: 'band'
+    Fixed: 'fixed'
 } as const;
 export type MdAxisMappingOneOf3RoleEnum = typeof MdAxisMappingOneOf3RoleEnum[keyof typeof MdAxisMappingOneOf3RoleEnum];
 
@@ -40,6 +46,7 @@ export type MdAxisMappingOneOf3RoleEnum = typeof MdAxisMappingOneOf3RoleEnum[key
  * Check if a given object implements the MdAxisMappingOneOf3 interface.
  */
 export function instanceOfMdAxisMappingOneOf3(value: object): value is MdAxisMappingOneOf3 {
+    if (!('index' in value) || value['index'] === undefined) return false;
     if (!('role' in value) || value['role'] === undefined) return false;
     return true;
 }
@@ -54,6 +61,7 @@ export function MdAxisMappingOneOf3FromJSONTyped(json: any, ignoreDiscriminator:
     }
     return {
         
+        'index': json['index'],
         'role': json['role'],
     };
 }
@@ -69,6 +77,7 @@ export function MdAxisMappingOneOf3ToJSONTyped(value?: MdAxisMappingOneOf3 | nul
 
     return {
         
+        'index': value['index'],
         'role': value['role'],
     };
 }

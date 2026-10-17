@@ -85,16 +85,11 @@ pub struct MdVariable {
 }
 
 impl MdVariable {
-    /// The z axis of this variable: its `Time` or `Band` dimension, `None` for a single slice.
+    /// The time axis of this variable: its `Time` dimension, `None` when it has none - a fixed
+    /// index on the band or level dimension and no time of its own.
     #[must_use]
     pub fn z_axis(&self) -> Option<MdAxisMapping> {
         self.axis_mapping.iter().copied().find(|axis| axis.is_z())
-    }
-
-    /// Whether this variable's z axis is bands (`Band`) rather than time steps.
-    #[must_use]
-    pub fn z_is_band(&self) -> bool {
-        self.z_axis() == Some(MdAxisMapping::Band)
     }
 }
 
@@ -279,23 +274,6 @@ pub struct MdDatasetFile {
     pub output_band: u32,
 }
 
-/// The `(time, band)` stamp of the tile at `global_z`: for a band axis the intervals are
-/// synthetic `[k, k+1)` unit steps indexed by band, so the time is `time_steps[global_z]` and
-/// the band is the z index; a time axis is stamped with its file's output band instead. Data
-/// tiles and gap tiles use the same rule, which is what keeps one query consistent.
-pub(crate) fn time_and_band(
-    z_is_band: bool,
-    global_z: usize,
-    output_band: u32,
-    time_steps: &[TimeInterval],
-) -> (TimeInterval, u32) {
-    if z_is_band {
-        (time_steps[global_z], global_z as u32)
-    } else {
-        (time_steps[global_z], output_band)
-    }
-}
-
 /// The loading information of a `MdGdalSource`: a set of MD arrays that are
 /// concatenated along the z axis (in time order).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -303,7 +281,7 @@ pub(crate) fn time_and_band(
 pub struct MdLoadingInfo {
     /// one interval per z slice (in concatenated/global z order)
     time_steps: Vec<TimeInterval>,
-    /// the files in ascending `z_start` order; files of one band may share z slices when
+    /// the files in ascending `z_start` order; files of one variable may share z slices when
     /// they are spatial pieces of the same time step
     files: Vec<MdDatasetFile>,
     /// the dataset's variables, indexed by the `output_band` of their files
@@ -342,11 +320,12 @@ impl MdLoadingInfo {
                 count: variables.len(),
             });
         }
-        // shortcut: time and band variables share one `time_steps` axis, so they cannot be mixed
-        // in a dataset, upgrade when the axis can carry both kinds
-        let z_axes: std::collections::HashSet<Option<MdAxisMapping>> =
+        // shortcut: every variable's time axis is the one shared `time_steps`, so a variable
+        // with a `Time` dimension cannot be mixed with one that has none, upgrade when each
+        // variable can carry its own axis
+        let time_axes: std::collections::HashSet<Option<MdAxisMapping>> =
             variables.iter().map(MdVariable::z_axis).collect();
-        if z_axes.len() > 1 {
+        if time_axes.len() > 1 {
             return Err(MdGdalSourceError::MixedZAxisKinds);
         }
 
@@ -426,13 +405,6 @@ impl MdLoadingInfo {
         &self.files
     }
 
-    /// Whether the z axis of this dataset is bands rather than time steps. All variables share
-    /// one z axis kind (`new` rejects mixed kinds), so one variable answers for the dataset.
-    #[must_use]
-    pub fn z_is_band(&self) -> bool {
-        self.variables.iter().any(MdVariable::z_is_band)
-    }
-
     #[must_use]
     pub fn wrap(&self) -> bool {
         self.wrap
@@ -455,17 +427,15 @@ impl MdLoadingInfo {
             .collect()
     }
 
-    /// Maps each ascending global z index to every file of the band that holds it, with the
-    /// file-local z index in each, and returns the z indices that no file covers.
+    /// Maps each ascending global z index to every file of `output_band` that holds it, with
+    /// the file-local z index in each, and returns the z indices that no file covers.
     /// Several files hold one z index when they are spatial pieces of the same time step;
     /// the reader blits them into one tile.
-    /// With `output_band`, only files of that Geo Engine output band are considered;
-    /// `None` considers all files (single-variable datasets).
     #[must_use]
     pub fn z_slices(
         &self,
         global_z: &[usize],
-        output_band: Option<u32>,
+        output_band: u32,
     ) -> (Vec<(usize, Vec<MdTileRequest>)>, Vec<usize>) {
         let mut slices = Vec::new();
         let mut missing = Vec::new();
@@ -477,7 +447,7 @@ impl MdLoadingInfo {
             .files
             .iter()
             .enumerate()
-            .filter(|(_, f)| output_band.is_none_or(|b| f.output_band == b) && f.z_start < f.z_end)
+            .filter(|(_, f)| f.output_band == output_band && f.z_start < f.z_end)
             .map(|(i, _)| i)
             .collect();
         // a file can only hold `gz` if it starts less than its own length before `gz`
@@ -648,7 +618,7 @@ mod tests {
         );
         let all_z = (0..8).collect::<Vec<_>>();
 
-        let (slices, missing) = loading_info.z_slices(&all_z, Some(0));
+        let (slices, missing) = loading_info.z_slices(&all_z, 0);
         assert!(missing.is_empty());
         assert_eq!(slices.len(), 8);
         assert_eq!(
@@ -672,7 +642,7 @@ mod tests {
             )
         );
 
-        let (slices, missing) = loading_info.z_slices(&all_z, Some(1));
+        let (slices, missing) = loading_info.z_slices(&all_z, 1);
         assert!(missing.is_empty());
         assert_eq!(
             slices[7],
@@ -692,7 +662,7 @@ mod tests {
         let files = vec![file(0, 0, 4, 4), file(0, 0, 4, 4), file(0, 4, 8, 4)];
         let loading_info = loading_info(files, vec![time_variable("temperature")]);
 
-        let (slices, missing) = loading_info.z_slices(&(0..8).collect::<Vec<_>>(), Some(0));
+        let (slices, missing) = loading_info.z_slices(&(0..8).collect::<Vec<_>>(), 0);
 
         assert!(missing.is_empty());
         assert_eq!(
@@ -723,16 +693,21 @@ mod tests {
             vec![time_variable("temperature"), time_variable("precipitation")],
         );
 
-        let (slices, missing) = loading_info.z_slices(&(0..8).collect::<Vec<_>>(), Some(0));
+        let (slices, missing) = loading_info.z_slices(&(0..8).collect::<Vec<_>>(), 0);
 
         assert_eq!(slices.len(), 4);
         assert_eq!(missing, vec![4, 5, 6, 7]);
     }
 
-    fn band_variable(name: &str) -> MdVariable {
+    /// A variable on a fixed (non-time) z dimension, e.g. one index of a band axis.
+    fn fixed_variable(name: &str) -> MdVariable {
         MdVariable {
             name: name.to_owned(),
-            axis_mapping: vec![MdAxisMapping::Band, MdAxisMapping::Y, MdAxisMapping::X],
+            axis_mapping: vec![
+                MdAxisMapping::Fixed { index: 0 },
+                MdAxisMapping::Y,
+                MdAxisMapping::X,
+            ],
         }
     }
 
@@ -769,11 +744,11 @@ mod tests {
     }
 
     #[test]
-    fn time_and_band_variables_cannot_mix() {
+    fn time_and_fixed_variables_cannot_mix() {
         let result = MdLoadingInfo::new(
             vec![interval(0, 1)],
             vec![file(0, 0, 1, 1), file(1, 0, 1, 1)],
-            vec![time_variable("temperature"), band_variable("reflectance")],
+            vec![time_variable("temperature"), fixed_variable("reflectance")],
             None,
             false,
         );
@@ -782,26 +757,15 @@ mod tests {
     }
 
     #[test]
-    fn z_axis_kind_is_read_per_variable() {
+    fn variables_may_all_have_no_time_axis() {
         let loading_info = loading_info(
-            vec![file(0, 0, 4, 4), file(1, 0, 4, 4)],
-            vec![time_variable("temperature"), time_variable("precipitation")],
+            vec![file(0, 0, 1, 1), file(1, 0, 1, 1)],
+            vec![fixed_variable("reflectance"), fixed_variable("brightness")],
         );
 
-        assert!(!loading_info.z_is_band());
         assert_eq!(
             loading_info.variable_of(&loading_info.files()[1]).name,
-            "precipitation"
+            "brightness"
         );
-
-        let bands = MdLoadingInfo::new(
-            vec![interval(0, 1)],
-            vec![file(0, 0, 1, 1)],
-            vec![band_variable("reflectance")],
-            None,
-            false,
-        )
-        .unwrap();
-        assert!(bands.z_is_band());
     }
 }

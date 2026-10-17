@@ -47,24 +47,25 @@ pub struct GdalReadWindow {
 }
 
 /// The role of one source-array dimension in a multidimensional raster read.
+///
+/// A dimension that is neither spatial nor time is pinned with [`Self::Fixed`], so a source
+/// whose band or level dimension is not the time axis is read as one variable per fixed index.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum MdAxisMapping {
     X,
     Y,
-    /// The z axis as time steps: every slice is a time step of the selected band.
+    /// The z axis as time steps: every slice is one time step of the array.
     Time,
-    /// The z axis as bands: every slice is a band of a single time step.
-    Band,
     Fixed {
         index: i64,
     },
 }
 
 impl MdAxisMapping {
-    /// Whether this dimension is the z axis that a read slices, i.e. `Time` or `Band`.
+    /// Whether this dimension is the z axis a read slices, i.e. `Time`.
     #[must_use]
     pub fn is_z(self) -> bool {
-        matches!(self, Self::Time | Self::Band)
+        matches!(self, Self::Time)
     }
 }
 
@@ -86,7 +87,7 @@ pub fn validate_md_axis_mapping(
         match role {
             MdAxisMapping::X => x_count += 1,
             MdAxisMapping::Y => y_count += 1,
-            MdAxisMapping::Time | MdAxisMapping::Band => z_count += 1,
+            MdAxisMapping::Time => z_count += 1,
             MdAxisMapping::Fixed { index } => {
                 let index = usize::try_from(index).map_err(|_| {
                     format!("fixed index {index} for dimension {axis} must be non-negative")
@@ -102,7 +103,7 @@ pub fn validate_md_axis_mapping(
 
     if (x_count, y_count) != (1, 1) || z_count > 1 {
         return Err(format!(
-            "axis mapping must contain exactly one X and one Y, and at most one z role (Time or Band); found {x_count} X, {y_count} Y and {z_count} z"
+            "axis mapping must contain exactly one X and one Y, and at most one Time axis; found {x_count} X, {y_count} Y and {z_count} Time"
         ));
     }
 
@@ -712,7 +713,7 @@ mod tests {
 
     #[test]
     fn validate_md_axis_mapping_cases() {
-        use MdAxisMapping::{Band, Fixed, Time, X, Y};
+        use MdAxisMapping::{Fixed, Time, X, Y};
 
         assert!(validate_md_axis_mapping(&[Y, X], &[10, 20]).is_ok());
         assert!(validate_md_axis_mapping(&[Time, Y, X], &[3, 10, 20]).is_ok());
@@ -720,7 +721,7 @@ mod tests {
             validate_md_axis_mapping(&[Fixed { index: 1 }, Time, Y, X], &[2, 3, 10, 20]).is_ok()
         );
 
-        assert!(validate_md_axis_mapping(&[Time, Band, Y, X], &[3, 2, 10, 20]).is_err());
+        assert!(validate_md_axis_mapping(&[Time, Time, Y, X], &[3, 2, 10, 20]).is_err());
         assert!(validate_md_axis_mapping(&[Time, Y], &[3, 10]).is_err());
         assert!(validate_md_axis_mapping(&[Y, X, X], &[10, 20, 20]).is_err());
         assert!(validate_md_axis_mapping(&[Fixed { index: 2 }, Y, X], &[2, 10, 20]).is_err());

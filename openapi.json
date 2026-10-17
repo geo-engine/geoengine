@@ -10374,7 +10374,7 @@
           },
           {
             "type": "object",
-            "description": "The z axis as time steps: every slice is a time step of the selected band.",
+            "description": "The z axis as time steps: every slice is one time step of the array.",
             "required": [
               "role"
             ],
@@ -10389,22 +10389,7 @@
           },
           {
             "type": "object",
-            "description": "The z axis as bands: every slice is a band of a single time step.",
-            "required": [
-              "role"
-            ],
-            "properties": {
-              "role": {
-                "type": "string",
-                "enum": [
-                  "band"
-                ]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "description": "A fixed index into a dimension that is not sliced (e.g. a sub-dataset selector).",
+            "description": "A fixed index into a dimension that is not sliced (a band or level dimension).",
             "required": [
               "index",
               "role"

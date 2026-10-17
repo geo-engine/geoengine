@@ -12,13 +12,12 @@ import type { MdAxisMappingOneOf } from './MdAxisMappingOneOf';
 import type { MdAxisMappingOneOf1 } from './MdAxisMappingOneOf1';
 import type { MdAxisMappingOneOf2 } from './MdAxisMappingOneOf2';
 import type { MdAxisMappingOneOf3 } from './MdAxisMappingOneOf3';
-import type { MdAxisMappingOneOf4 } from './MdAxisMappingOneOf4';
 /**
  * @type MdAxisMapping
  * The role of one source-array dimension in an MD raster read.
  * @export
  */
-export type MdAxisMapping = MdAxisMappingOneOf | MdAxisMappingOneOf1 | MdAxisMappingOneOf2 | MdAxisMappingOneOf3 | MdAxisMappingOneOf4;
+export type MdAxisMapping = MdAxisMappingOneOf | MdAxisMappingOneOf1 | MdAxisMappingOneOf2 | MdAxisMappingOneOf3;
 export declare function MdAxisMappingFromJSON(json: any): MdAxisMapping;
 export declare function MdAxisMappingFromJSONTyped(json: any, ignoreDiscriminator: boolean): MdAxisMapping;
 export declare function MdAxisMappingToJSON(json: any): any;

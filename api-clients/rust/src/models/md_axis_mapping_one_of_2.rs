@@ -10,7 +10,7 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// MdAxisMappingOneOf2 : The z axis as time steps: every slice is a time step of the selected band.
+/// MdAxisMappingOneOf2 : The z axis as time steps: every slice is one time step of the array.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MdAxisMappingOneOf2 {
     #[serde(rename = "role")]
@@ -18,7 +18,7 @@ pub struct MdAxisMappingOneOf2 {
 }
 
 impl MdAxisMappingOneOf2 {
-    /// The z axis as time steps: every slice is a time step of the selected band.
+    /// The z axis as time steps: every slice is one time step of the array.
     pub fn new(role: Role) -> MdAxisMappingOneOf2 {
         MdAxisMappingOneOf2 {
             role,

@@ -14,12 +14,14 @@
  * @export
  */
 export const MdAxisMappingOneOf3RoleEnum = {
-    Band: 'band'
+    Fixed: 'fixed'
 };
 /**
  * Check if a given object implements the MdAxisMappingOneOf3 interface.
  */
 export function instanceOfMdAxisMappingOneOf3(value) {
+    if (!('index' in value) || value['index'] === undefined)
+        return false;
     if (!('role' in value) || value['role'] === undefined)
         return false;
     return true;
@@ -32,6 +34,7 @@ export function MdAxisMappingOneOf3FromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'index': json['index'],
         'role': json['role'],
     };
 }
@@ -43,6 +46,7 @@ export function MdAxisMappingOneOf3ToJSONTyped(value, ignoreDiscriminator = fals
         return value;
     }
     return {
+        'index': value['index'],
         'role': value['role'],
     };
 }

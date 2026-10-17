@@ -186,7 +186,6 @@ __exportStar(require("./MdAxisMappingOneOf"), exports);
 __exportStar(require("./MdAxisMappingOneOf1"), exports);
 __exportStar(require("./MdAxisMappingOneOf2"), exports);
 __exportStar(require("./MdAxisMappingOneOf3"), exports);
-__exportStar(require("./MdAxisMappingOneOf4"), exports);
 __exportStar(require("./MdGdalSource"), exports);
 __exportStar(require("./MdGdalSourceParameters"), exports);
 __exportStar(require("./MdVariable"), exports);

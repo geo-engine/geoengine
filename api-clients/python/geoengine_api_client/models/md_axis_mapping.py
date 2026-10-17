@@ -21,12 +21,11 @@ from geoengine_api_client.models.md_axis_mapping_one_of import MdAxisMappingOneO
 from geoengine_api_client.models.md_axis_mapping_one_of1 import MdAxisMappingOneOf1
 from geoengine_api_client.models.md_axis_mapping_one_of2 import MdAxisMappingOneOf2
 from geoengine_api_client.models.md_axis_mapping_one_of3 import MdAxisMappingOneOf3
-from geoengine_api_client.models.md_axis_mapping_one_of4 import MdAxisMappingOneOf4
 from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-MDAXISMAPPING_ONE_OF_SCHEMAS = ["MdAxisMappingOneOf", "MdAxisMappingOneOf1", "MdAxisMappingOneOf2", "MdAxisMappingOneOf3", "MdAxisMappingOneOf4"]
+MDAXISMAPPING_ONE_OF_SCHEMAS = ["MdAxisMappingOneOf", "MdAxisMappingOneOf1", "MdAxisMappingOneOf2", "MdAxisMappingOneOf3"]
 
 class MdAxisMapping(BaseModel):
     """
@@ -40,10 +39,8 @@ class MdAxisMapping(BaseModel):
     oneof_schema_3_validator: Optional[MdAxisMappingOneOf2] = None
     # data type: MdAxisMappingOneOf3
     oneof_schema_4_validator: Optional[MdAxisMappingOneOf3] = None
-    # data type: MdAxisMappingOneOf4
-    oneof_schema_5_validator: Optional[MdAxisMappingOneOf4] = None
-    actual_instance: Optional[Union[MdAxisMappingOneOf, MdAxisMappingOneOf1, MdAxisMappingOneOf2, MdAxisMappingOneOf3, MdAxisMappingOneOf4]] = None
-    one_of_schemas: Set[str] = { "MdAxisMappingOneOf", "MdAxisMappingOneOf1", "MdAxisMappingOneOf2", "MdAxisMappingOneOf3", "MdAxisMappingOneOf4" }
+    actual_instance: Optional[Union[MdAxisMappingOneOf, MdAxisMappingOneOf1, MdAxisMappingOneOf2, MdAxisMappingOneOf3]] = None
+    one_of_schemas: Set[str] = { "MdAxisMappingOneOf", "MdAxisMappingOneOf1", "MdAxisMappingOneOf2", "MdAxisMappingOneOf3" }
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -86,17 +83,12 @@ class MdAxisMapping(BaseModel):
             error_messages.append(f"Error! Input type `{type(v)}` is not `MdAxisMappingOneOf3`")
         else:
             match += 1
-        # validate data type: MdAxisMappingOneOf4
-        if not isinstance(v, MdAxisMappingOneOf4):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `MdAxisMappingOneOf4`")
-        else:
-            match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in MdAxisMapping with oneOf schemas: MdAxisMappingOneOf, MdAxisMappingOneOf1, MdAxisMappingOneOf2, MdAxisMappingOneOf3, MdAxisMappingOneOf4. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in MdAxisMapping with oneOf schemas: MdAxisMappingOneOf, MdAxisMappingOneOf1, MdAxisMappingOneOf2, MdAxisMappingOneOf3. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in MdAxisMapping with oneOf schemas: MdAxisMappingOneOf, MdAxisMappingOneOf1, MdAxisMappingOneOf2, MdAxisMappingOneOf3, MdAxisMappingOneOf4. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in MdAxisMapping with oneOf schemas: MdAxisMappingOneOf, MdAxisMappingOneOf1, MdAxisMappingOneOf2, MdAxisMappingOneOf3. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -135,19 +127,13 @@ class MdAxisMapping(BaseModel):
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # deserialize data into MdAxisMappingOneOf4
-        try:
-            instance.actual_instance = MdAxisMappingOneOf4.from_json(json_str)
-            match += 1
-        except (ValidationError, ValueError) as e:
-            error_messages.append(str(e))
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into MdAxisMapping with oneOf schemas: MdAxisMappingOneOf, MdAxisMappingOneOf1, MdAxisMappingOneOf2, MdAxisMappingOneOf3, MdAxisMappingOneOf4. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into MdAxisMapping with oneOf schemas: MdAxisMappingOneOf, MdAxisMappingOneOf1, MdAxisMappingOneOf2, MdAxisMappingOneOf3. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into MdAxisMapping with oneOf schemas: MdAxisMappingOneOf, MdAxisMappingOneOf1, MdAxisMappingOneOf2, MdAxisMappingOneOf3, MdAxisMappingOneOf4. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into MdAxisMapping with oneOf schemas: MdAxisMappingOneOf, MdAxisMappingOneOf1, MdAxisMappingOneOf2, MdAxisMappingOneOf3. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -161,7 +147,7 @@ class MdAxisMapping(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], MdAxisMappingOneOf, MdAxisMappingOneOf1, MdAxisMappingOneOf2, MdAxisMappingOneOf3, MdAxisMappingOneOf4]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], MdAxisMappingOneOf, MdAxisMappingOneOf1, MdAxisMappingOneOf2, MdAxisMappingOneOf3]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None

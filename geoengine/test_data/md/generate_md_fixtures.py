@@ -6,17 +6,17 @@ Idempotent: overwrites existing fixtures.
 
 Fixtures
 --------
-- time_series.nc          ZRole::Time, single file, edges lon 0..240 (step 30), lat 0..-8, 8 time steps
+- time_series.nc          time axis, single file, edges lon 0..240 (step 30), lat 0..-8, 8 time steps
 - time_series.zarr        same array via the ZARR driver
 - time_series_split_a.nc  first half of a two-file time series (global t 0..4)
 - time_series_split_b.nc  second half (global t 4..8), grid identical to part a
 - time_series_gap_a.nc    first 4 slices (t 0..4) of a series with a hole
 - time_series_gap_b.nc    last 4 slices (t 8..12) of a series with a hole; t 4..8 is absent
-- wrap_0_360.nc           ZRole::Time, edges lon 0..360 (step 1), lat 45..35 (wrap-around)
+- wrap_0_360.nc           time axis, edges lon 0..360 (step 1), lat 45..35 (wrap-around)
 - wrap_0_360_multitile.nc same but 0.25 deg lon (1440 cols, spans 3 tile columns)
-- bands.nc                ZRole::Band, dims (band, y, x), no CF time units
-- cf_time_units_minutes.nc ZRole::Time, CF units `minutes since 1900-01-01`, ASCENDING lat
-- variables.nc            ZRole::Variable: 3 CF data variables (temperature/precipitation/
+- bands.nc                dims (band, y, x), no CF time units; read as one variable per fixed band index
+- cf_time_units_minutes.nc time axis, CF units `minutes since 1900-01-01`, ASCENDING lat
+- variables.nc            one variable per CF data variable: 3 CF data variables (temperature/precipitation/
                           cloud_area_fraction) sharing (time, lat, lon), with long_name/units
 - grouped_variables.nc    same arrays as variables.nc but inside the `analysis` subgroup
 - projected_crs.nc        (time, y, x) in a projected CRS, declaring it via the CF `crs`
@@ -200,8 +200,8 @@ def cf_time_units_date_only(path: Path):
     NEX-GDDP-CMIP6 writes `days since 1850-01-01`. The probe used to keep `"%Y-%m-%d"` in its
     origin format list, but `NaiveDateTime::parse_from_str` needs a time component, so that
     entry could never match: the origin failed to parse, the time axis was discarded, and the
-    array was registered as `ZRole::Band` - one output band per time slice with synthetic
-    `[k, k+1)` ms steps instead of real dates.
+    array was registered with one output band per time slice and synthetic `[k, k+1)` ms steps
+    instead of real dates.
     """
     width, height, ntime = 8, 8, 8
     ds = new_netcdf(path)
@@ -245,7 +245,7 @@ def wrap_0_360(path: Path):
 
 
 def bands(path: Path):
-    """(band, y, x) array without CF time units on the leading dimension (ZRole::Band)."""
+    """(band, y, x) array without CF time units on the leading dimension."""
     width, height, nbands = 8, 8, 4
     ds = new_netcdf(path)
     rg = ds.GetRootGroup()
@@ -261,8 +261,8 @@ def cf_time_units_years(path: Path):
     """(time, y, x) array whose CF units are a variable-length `years since`.
 
     The probe cannot convert a calendar year to a fixed millisecond step, so it must reject
-    this rather than silently fall back to bands. It used to: the array was registered as
-    `ZRole::Band`, one band per slice with synthetic `[k, k+1)` ms steps.
+    this rather than silently fall back to synthetic steps. It used to: the array was registered
+    with one band per slice and synthetic `[k, k+1)` ms steps.
     """
     width, height, ntime = 8, 8, 4
     ds = new_netcdf(path)

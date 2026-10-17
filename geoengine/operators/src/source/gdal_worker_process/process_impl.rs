@@ -375,7 +375,7 @@ fn md_read_window(
                 start[axis] = start_y as u64;
                 count[axis] = read_window.size_y;
             }
-            MdAxisMapping::Time | MdAxisMapping::Band => {
+            MdAxisMapping::Time => {
                 start[axis] = z_index as u64;
             }
             MdAxisMapping::Fixed { index } => {

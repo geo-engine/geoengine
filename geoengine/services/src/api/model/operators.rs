@@ -1541,11 +1541,9 @@ pub struct MdVariable {
 pub enum MdAxisMapping {
     X,
     Y,
-    /// The z axis as time steps: every slice is a time step of the selected band.
+    /// The z axis as time steps: every slice is one time step of the array.
     Time,
-    /// The z axis as bands: every slice is a band of a single time step.
-    Band,
-    /// A fixed index into a dimension that is not sliced (e.g. a sub-dataset selector).
+    /// A fixed index into a dimension that is not sliced (a band or level dimension).
     Fixed {
         index: i64,
     },
@@ -1557,7 +1555,6 @@ impl From<MdAxisMapping> for geoengine_operators::source::MdAxisMapping {
             MdAxisMapping::X => Self::X,
             MdAxisMapping::Y => Self::Y,
             MdAxisMapping::Time => Self::Time,
-            MdAxisMapping::Band => Self::Band,
             MdAxisMapping::Fixed { index } => Self::Fixed { index },
         }
     }
@@ -1569,7 +1566,6 @@ impl From<geoengine_operators::source::MdAxisMapping> for MdAxisMapping {
             geoengine_operators::source::MdAxisMapping::X => Self::X,
             geoengine_operators::source::MdAxisMapping::Y => Self::Y,
             geoengine_operators::source::MdAxisMapping::Time => Self::Time,
-            geoengine_operators::source::MdAxisMapping::Band => Self::Band,
             geoengine_operators::source::MdAxisMapping::Fixed { index } => Self::Fixed { index },
         }
     }

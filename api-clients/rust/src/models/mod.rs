@@ -338,8 +338,6 @@ pub mod md_axis_mapping_one_of_2;
 pub use self::md_axis_mapping_one_of_2::MdAxisMappingOneOf2;
 pub mod md_axis_mapping_one_of_3;
 pub use self::md_axis_mapping_one_of_3::MdAxisMappingOneOf3;
-pub mod md_axis_mapping_one_of_4;
-pub use self::md_axis_mapping_one_of_4::MdAxisMappingOneOf4;
 pub mod md_gdal_source;
 pub use self::md_gdal_source::MdGdalSource;
 pub mod md_gdal_source_parameters;

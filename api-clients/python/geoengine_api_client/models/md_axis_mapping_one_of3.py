@@ -17,23 +17,24 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
 
 class MdAxisMappingOneOf3(BaseModel):
     """
-    The z axis as bands: every slice is a band of a single time step.
+    A fixed index into a dimension that is not sliced (a band or level dimension).
     """ # noqa: E501
+    index: StrictInt
     role: StrictStr
-    __properties: ClassVar[List[str]] = ["role"]
+    __properties: ClassVar[List[str]] = ["index", "role"]
 
     @field_validator('role')
     def role_validate_enum(cls, value):
         """Validates the enum"""
-        if value not in set(['band']):
-            raise ValueError("must be one of enum values ('band')")
+        if value not in set(['fixed']):
+            raise ValueError("must be one of enum values ('fixed')")
         return value
 
     model_config = ConfigDict(
@@ -87,6 +88,7 @@ class MdAxisMappingOneOf3(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "index": obj.get("index"),
             "role": obj.get("role")
         })
         return _obj

@@ -241,6 +241,11 @@ pub enum AddDatasetMdTilesError {
     MdTileTimeAxisInconsistent { file_path: String },
     #[snafu(display("MD tile '{file_path}' declares time steps that do not run in time order"))]
     MdTileTimeAxisUnordered { file_path: String },
+    #[snafu(display(
+        "MD tile '{file_path}' declares time steps with a gap; a file's slices must be \
+         consecutive, since the reader maps a requested time step to a slice by offset"
+    ))]
+    MdTileTimeAxisHoles { file_path: String },
 }
 
 impl ResponseError for AddDatasetMdTilesError {

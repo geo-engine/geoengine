@@ -10,17 +10,20 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// MdAxisMappingOneOf3 : The z axis as bands: every slice is a band of a single time step.
+/// MdAxisMappingOneOf3 : A fixed index into a dimension that is not sliced (a band or level dimension).
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MdAxisMappingOneOf3 {
+    #[serde(rename = "index")]
+    pub index: i64,
     #[serde(rename = "role")]
     pub role: Role,
 }
 
 impl MdAxisMappingOneOf3 {
-    /// The z axis as bands: every slice is a band of a single time step.
-    pub fn new(role: Role) -> MdAxisMappingOneOf3 {
+    /// A fixed index into a dimension that is not sliced (a band or level dimension).
+    pub fn new(index: i64, role: Role) -> MdAxisMappingOneOf3 {
         MdAxisMappingOneOf3 {
+            index,
             role,
         }
     }
@@ -28,13 +31,13 @@ impl MdAxisMappingOneOf3 {
 /// 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum Role {
-    #[serde(rename = "band")]
-    Band,
+    #[serde(rename = "fixed")]
+    Fixed,
 }
 
 impl Default for Role {
     fn default() -> Role {
-        Self::Band
+        Self::Fixed
     }
 }
 

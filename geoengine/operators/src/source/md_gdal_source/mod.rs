@@ -130,30 +130,13 @@ where
                 ),
         );
         let loading_info = self.meta_data.loading_info(query_in_source_grid).await?;
-        let z_is_band = loading_info.z_is_band();
         let gdal_worker = ctx.get_gdal_worker();
         let default_cache_ttl = self.default_cache_ttl;
 
-        // resolve the requested z-slices: time steps for a time axis, bands as z-indices for
-        // a band axis
-        let global_z = if z_is_band {
-            query
-                .attributes()
-                .as_vec()
-                .into_iter()
-                .map(|band| band as usize)
-                .collect()
-        } else {
-            loading_info.z_indices_in_time(query.time_interval())
-        };
+        let global_z = loading_info.z_indices_in_time(query.time_interval());
 
-        // a time axis: each selected variable becomes its own output band and reads only the
-        // files of that variable; a band axis has one implicit group covering all files
-        let band_groups = output_band_groups(
-            z_is_band,
-            result_descriptor.bands.count(),
-            query.attributes(),
-        )?;
+        // each selected variable becomes its own output band and reads only its own files
+        let band_groups = output_band_groups(result_descriptor.bands.count(), query.attributes())?;
 
         let spatial_tiles = tiling_strategy
             .tile_information_iterator_from_pixel_bounds(query.spatial_bounds())
@@ -177,7 +160,7 @@ where
                     gz,
                     MdRequest::Gap(MdGapRequest {
                         global_z: gz,
-                        output_band: sel_band.unwrap_or(0),
+                        output_band: sel_band,
                     }),
                 ));
             }
@@ -194,16 +177,12 @@ where
         requests.sort_by_key(|(z, _)| *z);
 
         // Canonical output order: `band` fastest, `space` (row by row) next, `time` slowest.
-        // Groups are one z slice each (one group for a band axis), and within a group the
-        // tiles come before the requests, so the order is (space, band) per time step.
-        let groups: Vec<Vec<MdRequest>> = if z_is_band {
-            vec![requests.iter().map(|(_, request)| request.clone()).collect()]
-        } else {
-            requests
-                .chunk_by(|a, b| a.0 == b.0)
-                .map(|group| group.iter().map(|(_, request)| request.clone()).collect())
-                .collect()
-        };
+        // Groups are one z slice each, and within a group the tiles come before the requests,
+        // so the order is (space, band) per time step.
+        let groups: Vec<Vec<MdRequest>> = requests
+            .chunk_by(|a, b| a.0 == b.0)
+            .map(|group| group.iter().map(|(_, request)| request.clone()).collect())
+            .collect();
         let loading_info = Arc::new(loading_info);
 
         // lazy: the (slice, tile) pairs are produced as the stream is polled, so a long time
@@ -283,20 +262,15 @@ fn empty_tile<P: Pixel>(
 
     // a gap index outside `time_steps` would panic; an empty tile with a degenerate interval
     // is recoverable, a panic in a query task is not
-    let (time, band) = match time_steps.get(gap.global_z) {
-        Some(_) => loading_info::time_and_band(
-            loading_info.z_is_band(),
-            gap.global_z,
-            gap.output_band,
-            time_steps,
-        ),
-        None => (TimeInterval::default(), gap.output_band),
-    };
+    let time = time_steps
+        .get(gap.global_z)
+        .copied()
+        .unwrap_or_else(TimeInterval::default);
 
     RasterTile2D::new_with_properties(
         time,
         tile_info.global_tile_position,
-        band,
+        gap.output_band,
         tile_info.global_geo_transform,
         GridOrEmpty::from(EmptyGrid::new(tile_info.global_pixel_bounds())).unbounded(),
         RasterProperties::default(),
@@ -304,13 +278,8 @@ fn empty_tile<P: Pixel>(
     )
 }
 
-/// The output-band groups to query: one per selected band for a time axis (each variable
-/// reads only its own files), or a single `None` group (all files) for a band axis.
-fn output_band_groups(
-    z_is_band: bool,
-    band_count: u32,
-    attributes: &BandSelection,
-) -> Result<Vec<Option<u32>>> {
+/// The output-band groups to query: one per selected band, each reading only its own files.
+fn output_band_groups(band_count: u32, attributes: &BandSelection) -> Result<Vec<u32>> {
     // an out-of-range band would otherwise reach `empty_tile`/`z_slices` as a missing index
     // and panic on `time_steps[global_z]`
     for &b in attributes.as_slice() {
@@ -320,12 +289,7 @@ fn output_band_groups(
             }));
         }
     }
-    if z_is_band {
-        // a band index maps straight to a z index, so one group covers all files
-        Ok(vec![None])
-    } else {
-        Ok(attributes.as_vec().into_iter().map(Some).collect())
-    }
+    Ok(attributes.as_vec())
 }
 
 #[async_trait]
@@ -546,8 +510,8 @@ mod tests {
         width: usize,
         height: usize,
         wrap: bool,
-        /// the global time axis as `origin + i * step`, or `None` for a band axis, which has
-        /// synthetic `[k, k+1)` unit steps indexed by band instead
+        /// the global time axis as `origin + i * step`, or `None` for an array without a time
+        /// axis, whose slices get synthetic `[k, k+1)` unit steps
         time: Option<(i64, i64)>,
         bands: Vec<&'static str>,
     }
@@ -672,21 +636,35 @@ mod tests {
             }
         }
 
-        /// `(band, y, x)` with no CF time units on z: each z slice is an output band and the
-        /// "time" axis is the synthetic `[k, k+1)` unit step.
-        fn band_axis() -> Self {
-            let mut dataset = Self {
-                files: vec![MdFile::of("md/bands.nc", "reflectance", 0, 4)],
+        /// The `reflectance` array read as four variables, one per fixed index on its band
+        /// dimension: each is a single-slice `(Fixed{k}, y, x)` array on its own output band,
+        /// all sharing one synthetic unit time step.
+        fn fixed_axis_variables() -> Self {
+            Self {
+                files: (0..4)
+                    .map(|band| MdFile {
+                        path: "md/bands.nc",
+                        array_name: "reflectance",
+                        group: None,
+                        band,
+                        z_start: 0,
+                        slices: 1,
+                        axis_mapping: vec![
+                            MdAxisMapping::Fixed {
+                                index: i64::from(band),
+                            },
+                            MdAxisMapping::Y,
+                            MdAxisMapping::X,
+                        ],
+                    })
+                    .collect(),
                 grid: (0.0, 0.0, 30.0, -1.0),
                 width: 8,
                 height: 8,
                 wrap: false,
                 time: None,
                 bands: vec!["band 0", "band 1", "band 2", "band 3"],
-            };
-            dataset.files[0].axis_mapping =
-                vec![MdAxisMapping::Band, MdAxisMapping::Y, MdAxisMapping::X];
-            dataset
+            }
         }
 
         /// One file holding several `(time, y, x)` arrays: one band per array, in the given
@@ -764,7 +742,7 @@ mod tests {
                     )
                 })
                 .collect(),
-            // a band axis has no time: each slice is the unit interval `[k, k+1)`
+            // no time axis: each slice gets the unit interval `[k, k+1)`
             None => (0..files.iter().map(|f| f.z_start + f.slices).max().unwrap())
                 .map(|i| TimeInterval::new(i as i64, i as i64 + 1).unwrap())
                 .collect(),
@@ -1384,13 +1362,38 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_query_bands() {
+    async fn test_query_fixed_axis_variables() {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = exe_ctx.mock_query_context_test_default();
-        let name = add_md_dataset(&mut exe_ctx, "md_bands", MdDataset::band_axis());
+        let name = add_md_dataset(&mut exe_ctx, "md_bands", MdDataset::fixed_axis_variables());
 
-        // band 2 of a band-axis dataset
         let time = TimeInterval::new_instant(0).unwrap();
+
+        // one variable per fixed index on the band dimension, each on its own output band;
+        // `grid_value` panics on an empty tile, so no gap tiles may appear here
+        let tiles = query_md_source(
+            &exe_ctx,
+            &query_ctx,
+            name.clone(),
+            ts_grid_bounds(),
+            time,
+            BandSelection::new(vec![0, 1, 2, 3]).unwrap(),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+        assert_eq!(tiles.len(), 4);
+        for tile in &tiles {
+            assert_eq!(grid_value(tile, 0, 0), tile.band as f32 * 100.0);
+            assert_eq!(
+                grid_value(tile, 7, 7),
+                tile.band as f32 * 100.0 + (7 * 10 + 7) as f32
+            );
+        }
+
+        // selecting only variable 2 reads exactly its fixed index
         let tiles = query_md_source(
             &exe_ctx,
             &query_ctx,
@@ -1552,14 +1555,14 @@ mod tests {
     }
 
     #[test]
-    fn out_of_range_band_is_rejected_for_band_role() {
-        // A band axis maps a band index straight to a z index, so an index past the end
-        // would reach `empty_tile` and panic on `time_steps[global_z]`
+    fn out_of_range_requested_band_is_rejected() {
+        // an index past the band count would otherwise reach `empty_tile`/`z_slices` as a
+        // missing index and panic on `time_steps[global_z]`
         assert!(
-            output_band_groups(true, 4, &BandSelection::new_single(5)).is_err(),
+            output_band_groups(4, &BandSelection::new_single(5)).is_err(),
             "band 5 of a 4-band dataset must be rejected"
         );
-        assert!(output_band_groups(true, 4, &BandSelection::new_single(3)).is_ok());
+        assert!(output_band_groups(4, &BandSelection::new_single(3)).is_ok());
     }
 
     #[tokio::test]

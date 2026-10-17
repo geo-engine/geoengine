@@ -13,7 +13,6 @@ use crate::source::gdal_worker_process::{
     GdalPoolDispatcher, GdalReaderMode,
     process_common::{GdalReadAdvise, GdalReadWindow},
 };
-use crate::source::md_gdal_source::loading_info::time_and_band;
 use crate::source::md_gdal_source::{MdDatasetFile, MdGdalSourceError, MdLoadingInfo};
 
 /// One z-slice request: which file, and which file-local z index within it.
@@ -77,7 +76,6 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
         frame,
         properties,
         loading_info.cache_hint(default_cache_ttl),
-        loading_info.z_is_band(),
         loading_info.time_steps(),
     )))
 }
@@ -246,15 +244,12 @@ fn raster_tile_from_frame<T: Pixel>(
     frame: GridOrEmpty<GridBoundingBox2D, T>,
     properties: RasterProperties,
     cache_hint: CacheHint,
-    z_is_band: bool,
     time_steps: &[TimeInterval],
 ) -> RasterTile2D<T> {
-    let (time, band) = time_and_band(z_is_band, global_z, file.output_band, time_steps);
-
     RasterTile2D::new_with_properties(
-        time,
+        time_steps[global_z],
         tile_information.global_tile_position,
-        band,
+        file.output_band,
         tile_information.global_geo_transform,
         frame.unbounded(),
         properties,

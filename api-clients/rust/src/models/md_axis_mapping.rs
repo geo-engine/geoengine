@@ -19,7 +19,6 @@ pub enum MdAxisMapping {
     MdAxisMappingOneOf1(Box<models::MdAxisMappingOneOf1>),
     MdAxisMappingOneOf2(Box<models::MdAxisMappingOneOf2>),
     MdAxisMappingOneOf3(Box<models::MdAxisMappingOneOf3>),
-    MdAxisMappingOneOf4(Box<models::MdAxisMappingOneOf4>),
 }
 
 impl Default for MdAxisMapping {

@@ -39,20 +39,13 @@ import {
     MdAxisMappingOneOf3FromJSONTyped,
     MdAxisMappingOneOf3ToJSON,
 } from './MdAxisMappingOneOf3';
-import type { MdAxisMappingOneOf4 } from './MdAxisMappingOneOf4';
-import {
-    instanceOfMdAxisMappingOneOf4,
-    MdAxisMappingOneOf4FromJSON,
-    MdAxisMappingOneOf4FromJSONTyped,
-    MdAxisMappingOneOf4ToJSON,
-} from './MdAxisMappingOneOf4';
 
 /**
  * @type MdAxisMapping
  * The role of one source-array dimension in an MD raster read.
  * @export
  */
-export type MdAxisMapping = MdAxisMappingOneOf | MdAxisMappingOneOf1 | MdAxisMappingOneOf2 | MdAxisMappingOneOf3 | MdAxisMappingOneOf4;
+export type MdAxisMapping = MdAxisMappingOneOf | MdAxisMappingOneOf1 | MdAxisMappingOneOf2 | MdAxisMappingOneOf3;
 
 export function MdAxisMappingFromJSON(json: any): MdAxisMapping {
     return MdAxisMappingFromJSONTyped(json, false);
@@ -76,9 +69,6 @@ export function MdAxisMappingFromJSONTyped(json: any, ignoreDiscriminator: boole
     }
     if (instanceOfMdAxisMappingOneOf3(json)) {
         return MdAxisMappingOneOf3FromJSONTyped(json, true);
-    }
-    if (instanceOfMdAxisMappingOneOf4(json)) {
-        return MdAxisMappingOneOf4FromJSONTyped(json, true);
     }
     return {} as any;
 }
@@ -105,9 +95,6 @@ export function MdAxisMappingToJSONTyped(value?: MdAxisMapping | null, ignoreDis
     }
     if (instanceOfMdAxisMappingOneOf3(value)) {
         return MdAxisMappingOneOf3ToJSON(value as MdAxisMappingOneOf3);
-    }
-    if (instanceOfMdAxisMappingOneOf4(value)) {
-        return MdAxisMappingOneOf4ToJSON(value as MdAxisMappingOneOf4);
     }
     return {};
 }

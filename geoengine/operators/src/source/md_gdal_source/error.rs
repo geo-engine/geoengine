@@ -5,9 +5,7 @@ use snafu::Snafu;
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum MdGdalSourceError {
-    #[snafu(display(
-        "MD data only supports requesting either the first band (z=time) or a band index (z=band): {message}"
-    ))]
+    #[snafu(display("Unsupported MD data request: {message}"))]
     UnsupportedBandRequest { message: String },
 
     #[snafu(display("Error in the MD GdalSource reading process: {source}"))]
@@ -36,7 +34,7 @@ pub enum MdGdalSourceError {
     UnknownVariable { index: u32, count: usize },
 
     #[snafu(display(
-        "MD dataset mixes time and band variables; all variables must share one z axis kind"
+        "MD dataset mixes variables with and without a time axis; all variables must share one time axis"
     ))]
     MixedZAxisKinds,
 }

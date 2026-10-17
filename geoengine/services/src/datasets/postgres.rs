@@ -777,18 +777,6 @@ where
     db: PostgresDb<Tls>,
 }
 
-impl<Tls> MdGdalLoadingInfoProvider<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    fn z_is_band(&self) -> bool {
-        self.variables.iter().any(MdVariable::z_is_band)
-    }
-}
-
 #[async_trait]
 impl<Tls>
     MetaDataProvider<
@@ -1253,30 +1241,10 @@ where
         // The rows are needed for the time axis even when the files themselves are not, so
         // they are always queried.
         //
-        // A band z axis maps a band index to a z index: every stored row carries `band = 0`
-        // and a synthetic `[k, k+1)` time, so neither the band nor the time predicate would
-        // ever match a real selection and a query for band 2 of a 4-band dataset would come
-        // back as empty tiles instead of data. Only the spatial filter applies there.
-        //
         // Ordered by `(time).start` within each band so the concatenated axis follows real
         // time without trusting a client-supplied `z_index`; `z_index` is only the tiebreak.
-        let rows = if self.z_is_band() {
-            conn.query(
-                "
-            SELECT
-                z_index, band, array_name, array_group, time_descriptor, time_steps, gdal_params
-            FROM
-                dataset_md_tiles
-            WHERE
-                dataset_id = $1 AND
-                spatial_partition2d_intersects(bbox, $2)
-            ORDER BY
-                band, (time).start, z_index",
-                &[&self.dataset_id, &query_partition],
-            )
-            .await
-        } else {
-            conn.query(
+        let rows = conn
+            .query(
                 "
             SELECT
                 z_index, band, array_name, array_group, time_descriptor, time_steps, gdal_params
@@ -1297,10 +1265,9 @@ where
                 ],
             )
             .await
-        }
-        .map_err(|e| geoengine_operators::error::Error::MetaData {
-            source: Box::new(e),
-        })?;
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
 
         let (time_steps, files) =
             md_loading_info_from_rows(rows, base_path.as_deref(), query.time_interval()).map_err(
@@ -1325,10 +1292,6 @@ where
         &self,
         query: TimeInterval,
     ) -> Result<Option<Vec<TimeInterval>>, geoengine_operators::error::Error> {
-        if self.z_is_band() {
-            return Ok(None);
-        }
-
         let conn = self.db.conn_pool.get().await.map_err(|e| {
             geoengine_operators::error::Error::MetaData {
                 source: Box::new(e),
@@ -1498,18 +1461,23 @@ fn md_loading_info_from_rows(
 /// The dataset's time axis: every file's per-slice intervals concatenated, gap-filled to
 /// cover `query_time`.
 ///
-/// Band z-axis datasets have no time axis at all (their z dimension *is* the band index),
-/// so they answer `None` instead of an empty axis.
+/// Rows are read in `(band, time, z_index)` order, so the concatenation is non-decreasing and
+/// equal neighbours are the same step stored once per spatial piece (or per overlapping file).
+/// Collapsing them keeps one step instead of N, which would otherwise leave every file but the
+/// first realigned onto one index and the rest of the axis as gap tiles.
 fn md_time_axis(times: &[MdFileTimes], query_time: TimeInterval) -> Result<Vec<TimeInterval>> {
-    times
+    let mut intervals: Vec<TimeInterval> = times
         .iter()
         .flat_map(MdFileTimes::intervals)
         .copied()
-        .map(Result::Ok)
-        .collect::<Vec<Result<TimeInterval>>>()
+        .collect();
+    intervals.dedup();
+
+    intervals
         .into_iter()
+        .map(Result::Ok)
         .try_time_irregular_range_fill(query_time)
-        .collect::<Result<Vec<TimeInterval>>>()
+        .collect()
 }
 
 #[derive(Debug, Clone, PartialEq, ToSql, FromSql)]
@@ -1844,9 +1812,10 @@ where
 /// disjoint time intervals: one MD row spans all of a file's slices, so two files of the
 /// same variable legitimately have overlapping bounds.
 ///
-/// A hole in the z axis is *not* an error: `md_loading_info_from_rows` gap-fills missing
-/// files and the operator turns the gap into an empty tile. Only an exact-key collision is
-/// rejected, because that row already exists and would be silently overwritten.
+/// A hole *between* files is not an error: `md_loading_info_from_rows` gap-fills missing files
+/// and the operator turns the gap into an empty tile. Only an exact-key collision is rejected,
+/// because that row already exists and would be silently overwritten. A hole *inside* one
+/// file's own steps is rejected earlier, by `validate_md_tile`.
 async fn validate_md_tiles(
     tx: &Transaction<'_>,
     dataset: DatasetId,
@@ -2261,6 +2230,38 @@ mod tests {
         },
     };
     use tokio_postgres::NoTls;
+
+    fn interval(start: i64, end: i64) -> TimeInterval {
+        TimeInterval::new_unchecked(
+            TimeInstance::from_millis_unchecked(start),
+            TimeInstance::from_millis_unchecked(end),
+        )
+    }
+
+    /// Two rows that share a time step (spatial pieces of one image, or two files with
+    /// overlapping ranges) must contribute one step, not N. Left as N, every file but the first
+    /// realigns onto one index and the rest of the axis becomes empty tiles.
+    #[test]
+    fn it_collapses_shared_time_steps_in_the_md_time_axis() {
+        let mosaic = vec![
+            MdFileTimes::from_intervals(vec![interval(0, 1)]),
+            MdFileTimes::from_intervals(vec![interval(0, 1)]),
+        ];
+        assert_eq!(
+            md_time_axis(&mosaic, interval(0, 1)).unwrap().len(),
+            1,
+            "two pieces of one time step give one step"
+        );
+
+        // overlapping ranges: A covers 0..3, B covers 2..5, so 2..3 is stored twice
+        let overlap = vec![
+            MdFileTimes::from_intervals(vec![interval(0, 1), interval(1, 2), interval(2, 3)]),
+            MdFileTimes::from_intervals(vec![interval(2, 3), interval(3, 4), interval(4, 5)]),
+        ];
+        let axis = md_time_axis(&overlap, interval(0, 5)).unwrap();
+        assert_eq!(axis.len(), 5);
+        assert_eq!(axis[2], interval(2, 3));
+    }
 
     #[test]
     fn it_initializes_missing_dataset_time_bounds_from_the_first_tile() {

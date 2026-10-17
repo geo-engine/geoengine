@@ -177,7 +177,6 @@ docs/MdAxisMappingOneOf.md
 docs/MdAxisMappingOneOf1.md
 docs/MdAxisMappingOneOf2.md
 docs/MdAxisMappingOneOf3.md
-docs/MdAxisMappingOneOf4.md
 docs/MdGdalSource.md
 docs/MdGdalSourceParameters.md
 docs/MdVariable.md
@@ -662,7 +661,6 @@ geoengine_api_client/models/md_axis_mapping_one_of.py
 geoengine_api_client/models/md_axis_mapping_one_of1.py
 geoengine_api_client/models/md_axis_mapping_one_of2.py
 geoengine_api_client/models/md_axis_mapping_one_of3.py
-geoengine_api_client/models/md_axis_mapping_one_of4.py
 geoengine_api_client/models/md_gdal_source.py
 geoengine_api_client/models/md_gdal_source_parameters.py
 geoengine_api_client/models/md_variable.py
@@ -1122,7 +1120,6 @@ test/test_md_axis_mapping_one_of.py
 test/test_md_axis_mapping_one_of1.py
 test/test_md_axis_mapping_one_of2.py
 test/test_md_axis_mapping_one_of3.py
-test/test_md_axis_mapping_one_of4.py
 test/test_md_gdal_source.py
 test/test_md_gdal_source_parameters.py
 test/test_md_variable.py

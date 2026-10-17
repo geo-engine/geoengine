@@ -1,12 +1,13 @@
 
 # MdAxisMappingOneOf3
 
-The z axis as bands: every slice is a band of a single time step.
+A fixed index into a dimension that is not sliced (a band or level dimension).
 
 ## Properties
 
 Name | Type
 ------------ | -------------
+`index` | number
 `role` | string
 
 ## Example
@@ -16,6 +17,7 @@ import type { MdAxisMappingOneOf3 } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "index": null,
   "role": null,
 } satisfies MdAxisMappingOneOf3
 

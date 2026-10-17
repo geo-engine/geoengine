@@ -35,11 +35,13 @@ class TestMdAxisMappingOneOf3(unittest.TestCase):
         model = MdAxisMappingOneOf3()
         if include_optional:
             return MdAxisMappingOneOf3(
-                role = 'band'
+                index = 56,
+                role = 'fixed'
             )
         else:
             return MdAxisMappingOneOf3(
-                role = 'band',
+                index = 56,
+                role = 'fixed',
         )
         """
 

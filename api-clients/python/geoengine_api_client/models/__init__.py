@@ -183,7 +183,6 @@ from geoengine_api_client.models.md_axis_mapping_one_of import MdAxisMappingOneO
 from geoengine_api_client.models.md_axis_mapping_one_of1 import MdAxisMappingOneOf1
 from geoengine_api_client.models.md_axis_mapping_one_of2 import MdAxisMappingOneOf2
 from geoengine_api_client.models.md_axis_mapping_one_of3 import MdAxisMappingOneOf3
-from geoengine_api_client.models.md_axis_mapping_one_of4 import MdAxisMappingOneOf4
 from geoengine_api_client.models.md_gdal_source import MdGdalSource
 from geoengine_api_client.models.md_gdal_source_parameters import MdGdalSourceParameters
 from geoengine_api_client.models.md_variable import MdVariable

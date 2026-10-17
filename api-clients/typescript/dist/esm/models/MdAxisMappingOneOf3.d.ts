@@ -9,11 +9,17 @@
  * Do not edit the class manually.
  */
 /**
- * The z axis as bands: every slice is a band of a single time step.
+ * A fixed index into a dimension that is not sliced (a band or level dimension).
  * @export
  * @interface MdAxisMappingOneOf3
  */
 export interface MdAxisMappingOneOf3 {
+    /**
+     *
+     * @type {number}
+     * @memberof MdAxisMappingOneOf3
+     */
+    index: number;
     /**
      *
      * @type {MdAxisMappingOneOf3RoleEnum}
@@ -25,7 +31,7 @@ export interface MdAxisMappingOneOf3 {
  * @export
  */
 export declare const MdAxisMappingOneOf3RoleEnum: {
-    readonly Band: "band";
+    readonly Fixed: "fixed";
 };
 export type MdAxisMappingOneOf3RoleEnum = typeof MdAxisMappingOneOf3RoleEnum[keyof typeof MdAxisMappingOneOf3RoleEnum];
 /**

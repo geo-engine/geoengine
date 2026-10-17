@@ -661,7 +661,8 @@ fn md_tile_open_path(
     absolute_path: &Path,
 ) -> PathBuf {
     if matches!(data_path, DataPath::External) {
-        tile.params.file_path.clone()
+        let params: geoengine_operators::source::GdalDatasetParameters = tile.params.clone().into();
+        params.file_path_for_open()
     } else {
         absolute_path.to_path_buf()
     }
@@ -821,6 +822,20 @@ fn validate_md_tile(
     ensure!(
         times.is_ordered(),
         MdTileTimeAxisUnordered {
+            file_path: file_path.clone(),
+        }
+    );
+
+    // a file's slices must be consecutive: the reader maps a global z index onto a slice by
+    // offset (`gz - z_start + local_offset`), so a hole in the file's own steps would shift every
+    // slice after it and silently read the wrong data. The dataset axis fills the hole with an
+    // empty step, which no file's offset accounts for.
+    ensure!(
+        times
+            .intervals()
+            .windows(2)
+            .all(|pair| pair[0].end() == pair[1].start()),
+        MdTileTimeAxisHoles {
             file_path: file_path.clone(),
         }
     );
@@ -6308,6 +6323,7 @@ mod tests {
     const MD_EPOCH_2000: i64 = 946_684_800_000;
 
     /// The rows plus the `GdalMdMetaData` that describes them, as a caller would post them.
+    #[allow(clippy::too_many_lines)]
     fn md_dataset_meta(
         rows: &[MdRow],
         bands: Vec<RasterBandDescriptor>,
@@ -6991,30 +7007,35 @@ mod tests {
         Ok(())
     }
 
-    /// A band-axis dataset stores every row with `band = 0` because the z index *is* the band, so
-    /// a `band = ANY(...)` predicate would match nothing and a request for band 2 would
-    /// silently come back as an empty tile instead of data.
+    /// A band dimension is declared as one variable per fixed index, each its own output band.
+    /// A `band = ANY(...)` filter must pick the requested variable's row: if it matched
+    /// nothing, a request for band 2 would silently come back as an empty tile instead of data.
     #[ge_context::test]
-    async fn it_reads_md_band_role_rows_for_any_requested_band(
+    async fn it_reads_md_fixed_axis_rows_for_the_requested_band(
         app_ctx: PostgresContext<NoTls>,
     ) -> Result<()> {
         let volume = VolumeName("test_data".to_string());
 
+        // `bands.nc` holds one `(band, y, x)` array; each variable pins one index of the band
+        // dimension, so every variable is a single-slice file on its own output band
+        let rows: Vec<MdRow> = (0..4)
+            .map(|band| MdRow {
+                band,
+                axis_mapping: vec![
+                    MdAxisMapping::Fixed {
+                        index: i64::from(band),
+                    },
+                    MdAxisMapping::Y,
+                    MdAxisMapping::X,
+                ],
+                ..MdRow::of("md/bands.nc", "reflectance", 0, 1)
+            })
+            .collect();
         let (meta_data, tiles) = md_dataset_meta(
-            &[MdRow::of("md/bands.nc", "reflectance", 0, 4)],
+            &rows,
             (0..4).map(|b| api_band(&format!("band {b}"))).collect(),
         );
-        let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(mut md) = meta_data else {
-            unreachable!("md_dataset_meta returns MD metadata")
-        };
-        for variable in &mut md.variables {
-            variable.axis_mapping = vec![
-                geoengine_operators::source::MdAxisMapping::Band,
-                geoengine_operators::source::MdAxisMapping::Y,
-                geoengine_operators::source::MdAxisMapping::X,
-            ];
-        }
-        let meta_data = crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md);
+        assert_eq!(tiles.len(), 4);
 
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session);
@@ -7062,7 +7083,6 @@ mod tests {
             )
             .await?;
 
-        // band 2 of a band-role dataset: the row filter must not look at the `band` column
         let loading_info = meta_data
             .loading_info(RasterQueryRectangle::new(
                 geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]),
@@ -7074,10 +7094,20 @@ mod tests {
             ))
             .await?;
 
-        assert!(
-            !loading_info.files().is_empty(),
-            "band 2 must match the stored rows, not come back empty"
+        assert_eq!(loading_info.time_steps().len(), 1);
+        assert_eq!(
+            loading_info.variables()[2].axis_mapping,
+            vec![
+                geoengine_operators::source::MdAxisMapping::Fixed { index: 2 },
+                geoengine_operators::source::MdAxisMapping::Y,
+                geoengine_operators::source::MdAxisMapping::X,
+            ],
         );
+
+        // band 2 must be read from its own row, not come back as a gap
+        let (slices, missing) = loading_info.z_slices(&[0], 2);
+        assert!(missing.is_empty(), "band 2 must be read, not a gap");
+        assert_eq!(slices.len(), 1);
 
         Ok(())
     }
@@ -7103,6 +7133,13 @@ mod tests {
             md_tile_open_path(&tile, &DataPath::External, &resolved),
             Path::new("/vsicurl/https://example.invalid/temperature.nc"),
             "an external row is opened at its own URL, not at the empty resolved path"
+        );
+
+        // a bare `https://` row is wrapped the way the read path wraps it
+        tile.params.file_path = "https://example.invalid/temperature.nc".into();
+        assert_eq!(
+            md_tile_open_path(&tile, &DataPath::External, &resolved),
+            Path::new("/vsicurl/https://example.invalid/temperature.nc"),
         );
 
         // a volume row is opened at the path resolved against the volume root
@@ -7322,6 +7359,30 @@ mod tests {
                 false,
             ),
             Err(AddDatasetMdTilesError::MdTileTimeAxisUnordered { .. }),
+        ));
+
+        // ordered and consistent, but with a hole: the reader maps a global z index onto a
+        // slice by offset, so the slice after the hole would be read as the hole's step
+        let mut tile = external(&tiles[0]);
+        tile.time_steps.remove(3);
+        let times = geoengine_operators::source::MdFileTimes::from_intervals(
+            tile.time_steps
+                .iter()
+                .map(|t| geoengine_datatypes::primitives::TimeInterval::from(*t))
+                .collect(),
+        );
+        tile.time_descriptor = times.descriptor.into();
+        assert!(matches!(
+            validate_md_tile(
+                &tile,
+                md.wrap,
+                &md.variables,
+                &DataPath::External,
+                Path::new(""),
+                &md.result_descriptor,
+                false,
+            ),
+            Err(AddDatasetMdTilesError::MdTileTimeAxisHoles { .. }),
         ));
     }
 }

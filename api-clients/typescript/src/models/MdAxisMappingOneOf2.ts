@@ -13,7 +13,7 @@
 
 import { mapValues } from '../runtime';
 /**
- * The z axis as time steps: every slice is a time step of the selected band.
+ * The z axis as time steps: every slice is one time step of the array.
  * @export
  * @interface MdAxisMappingOneOf2
  */

@@ -24,7 +24,7 @@ from typing_extensions import Self
 
 class MdAxisMappingOneOf2(BaseModel):
     """
-    The z axis as time steps: every slice is a time step of the selected band.
+    The z axis as time steps: every slice is one time step of the array.
     """ # noqa: E501
     role: StrictStr
     __properties: ClassVar[List[str]] = ["role"]

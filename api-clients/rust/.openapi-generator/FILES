@@ -175,7 +175,6 @@ docs/MdAxisMappingOneOf.md
 docs/MdAxisMappingOneOf1.md
 docs/MdAxisMappingOneOf2.md
 docs/MdAxisMappingOneOf3.md
-docs/MdAxisMappingOneOf4.md
 docs/MdGdalSource.md
 docs/MdGdalSourceParameters.md
 docs/MdVariable.md
@@ -658,7 +657,6 @@ src/models/md_axis_mapping_one_of.rs
 src/models/md_axis_mapping_one_of_1.rs
 src/models/md_axis_mapping_one_of_2.rs
 src/models/md_axis_mapping_one_of_3.rs
-src/models/md_axis_mapping_one_of_4.rs
 src/models/md_gdal_source.rs
 src/models/md_gdal_source_parameters.rs
 src/models/md_variable.rs

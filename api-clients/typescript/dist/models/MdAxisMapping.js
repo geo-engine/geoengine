@@ -20,7 +20,6 @@ const MdAxisMappingOneOf_1 = require("./MdAxisMappingOneOf");
 const MdAxisMappingOneOf1_1 = require("./MdAxisMappingOneOf1");
 const MdAxisMappingOneOf2_1 = require("./MdAxisMappingOneOf2");
 const MdAxisMappingOneOf3_1 = require("./MdAxisMappingOneOf3");
-const MdAxisMappingOneOf4_1 = require("./MdAxisMappingOneOf4");
 function MdAxisMappingFromJSON(json) {
     return MdAxisMappingFromJSONTyped(json, false);
 }
@@ -42,9 +41,6 @@ function MdAxisMappingFromJSONTyped(json, ignoreDiscriminator) {
     }
     if ((0, MdAxisMappingOneOf3_1.instanceOfMdAxisMappingOneOf3)(json)) {
         return (0, MdAxisMappingOneOf3_1.MdAxisMappingOneOf3FromJSONTyped)(json, true);
-    }
-    if ((0, MdAxisMappingOneOf4_1.instanceOfMdAxisMappingOneOf4)(json)) {
-        return (0, MdAxisMappingOneOf4_1.MdAxisMappingOneOf4FromJSONTyped)(json, true);
     }
     return {};
 }
@@ -69,9 +65,6 @@ function MdAxisMappingToJSONTyped(value, ignoreDiscriminator = false) {
     }
     if ((0, MdAxisMappingOneOf3_1.instanceOfMdAxisMappingOneOf3)(value)) {
         return (0, MdAxisMappingOneOf3_1.MdAxisMappingOneOf3ToJSON)(value);
-    }
-    if ((0, MdAxisMappingOneOf4_1.instanceOfMdAxisMappingOneOf4)(value)) {
-        return (0, MdAxisMappingOneOf4_1.MdAxisMappingOneOf4ToJSON)(value);
     }
     return {};
 }

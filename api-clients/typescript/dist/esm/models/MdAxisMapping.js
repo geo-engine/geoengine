@@ -14,7 +14,6 @@ import { instanceOfMdAxisMappingOneOf, MdAxisMappingOneOfFromJSONTyped, MdAxisMa
 import { instanceOfMdAxisMappingOneOf1, MdAxisMappingOneOf1FromJSONTyped, MdAxisMappingOneOf1ToJSON, } from './MdAxisMappingOneOf1';
 import { instanceOfMdAxisMappingOneOf2, MdAxisMappingOneOf2FromJSONTyped, MdAxisMappingOneOf2ToJSON, } from './MdAxisMappingOneOf2';
 import { instanceOfMdAxisMappingOneOf3, MdAxisMappingOneOf3FromJSONTyped, MdAxisMappingOneOf3ToJSON, } from './MdAxisMappingOneOf3';
-import { instanceOfMdAxisMappingOneOf4, MdAxisMappingOneOf4FromJSONTyped, MdAxisMappingOneOf4ToJSON, } from './MdAxisMappingOneOf4';
 export function MdAxisMappingFromJSON(json) {
     return MdAxisMappingFromJSONTyped(json, false);
 }
@@ -36,9 +35,6 @@ export function MdAxisMappingFromJSONTyped(json, ignoreDiscriminator) {
     }
     if (instanceOfMdAxisMappingOneOf3(json)) {
         return MdAxisMappingOneOf3FromJSONTyped(json, true);
-    }
-    if (instanceOfMdAxisMappingOneOf4(json)) {
-        return MdAxisMappingOneOf4FromJSONTyped(json, true);
     }
     return {};
 }
@@ -63,9 +59,6 @@ export function MdAxisMappingToJSONTyped(value, ignoreDiscriminator = false) {
     }
     if (instanceOfMdAxisMappingOneOf3(value)) {
         return MdAxisMappingOneOf3ToJSON(value);
-    }
-    if (instanceOfMdAxisMappingOneOf4(value)) {
-        return MdAxisMappingOneOf4ToJSON(value);
     }
     return {};
 }
