@@ -1,3 +1,4 @@
+import {describe, expect, it} from 'vitest';
 import {olExtentToTuple} from '@geoengine/common';
 
 describe('Conversion Utils', () => {

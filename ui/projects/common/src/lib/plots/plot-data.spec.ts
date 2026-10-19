@@ -1,3 +1,4 @@
+import {describe, expect, it} from 'vitest';
 import {plotDataToText, tableToText, vegaDataTable, vegaDataValues} from './plot-data';
 
 describe('plot data', () => {

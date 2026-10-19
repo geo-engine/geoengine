@@ -7,7 +7,7 @@ import {Directive, ElementRef, OnChanges, inject, input} from '@angular/core';
     selector: '[fxFlex]',
 })
 export class FxFlexDirective implements OnChanges {
-    private el = inject(ElementRef);
+    private el = inject<ElementRef<HTMLElement>>(ElementRef);
 
     readonly fxFlex = input<'0.5rem' | '1rem' | '4rem' | 'grow' | ''>('');
 
@@ -33,7 +33,7 @@ export class FxFlexDirective implements OnChanges {
     selector: '[fxLayout]',
 })
 export class FxLayoutDirective implements OnChanges {
-    private el = inject(ElementRef);
+    private el = inject<ElementRef<HTMLElement>>(ElementRef);
 
     readonly fxLayout = input<'row' | 'row wrap' | 'column' | 'row-reverse'>('row');
 
@@ -62,7 +62,7 @@ export class FxLayoutDirective implements OnChanges {
     selector: '[fxLayoutGap]',
 })
 export class FxLayoutGapDirective implements OnChanges {
-    private el = inject(ElementRef);
+    private el = inject<ElementRef<HTMLElement>>(ElementRef);
 
     readonly fxLayoutGap = input<'0.5rem' | '1rem'>('1rem');
 
@@ -82,7 +82,7 @@ export class FxLayoutGapDirective implements OnChanges {
     selector: '[fxLayoutAlign]',
 })
 export class FxLayoutAlignDirective implements OnChanges {
-    private el = inject(ElementRef);
+    private el = inject<ElementRef<HTMLElement>>(ElementRef);
 
     readonly fxLayoutAlign = input<
         | 'start center'

@@ -1,3 +1,4 @@
+import {describe, expect, it} from 'vitest';
 import {clamp} from './math';
 
 describe('Math Utils', () => {
