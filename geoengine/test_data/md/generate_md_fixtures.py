@@ -62,8 +62,8 @@ FIXTURES = [
     "variables.nc",
     "variables_multitile.nc",
     "era5_synthetic.nc",
-    "mtg_fci_west.nc",
-    "mtg_fci_east.nc",
+    "mosaic_west.nc",
+    "mosaic_east.nc",
 ]
 
 
@@ -398,21 +398,21 @@ def era5_synthetic(path: Path):
     ds = None
 
 
-def mtg_fci_like(out_dir: Path):
-    """Two MTG-FCI-like files covering the same 8x8 grid, each valid in one half.
+def mosaic_halves(out_dir: Path):
+    """Two files covering the same 8x8 grid, each valid in one half.
 
-    `effective_radiance` (`y, x`) sits in the `data/ir_105_hr/measured` group; `time` is a
+    `radiance` (`y, x`) sits in the `data/band_hr/measured` group; `time` is a
     vector over the `index` dimension, not a data dimension. The west file is valid for
     columns 0..4 and the east file for 4..8, nodata (-9999) elsewhere, so a mosaic of the two
     is complete. Value at `(row, col)` is `row * 10 + col`.
     """
     nrow, ncol = 8, 8
     names = []
-    for half, name in enumerate(["mtg_fci_west.nc", "mtg_fci_east.nc"]):
+    for half, name in enumerate(["mosaic_west.nc", "mosaic_east.nc"]):
         names.append(name)
         ds = new_netcdf(out_dir / name)
         rg = ds.GetRootGroup()
-        proj = rg.CreateGroup("data").CreateGroup("ir_105_hr").CreateGroup("measured")
+        proj = rg.CreateGroup("data").CreateGroup("band_hr").CreateGroup("measured")
         x = np.arange(ncol, dtype=np.float64) + 0.5
         y = -(np.arange(nrow, dtype=np.float64) + 0.5)
         xdim, _ = add_coord_var(proj, "x", "HORIZONTAL_X", "", x)
@@ -425,7 +425,7 @@ def mtg_fci_like(out_dir: Path):
         vals = np.broadcast_to(r * 10 + c, (nrow, ncol)).astype(np.float32).copy()
         in_half = (np.arange(ncol)[None, :] < 4) == (half == 0)
         vals[~np.broadcast_to(in_half, (nrow, ncol))] = -9999.0
-        arr = proj.CreateMDArray("effective_radiance", [ydim, xdim], gdal.ExtendedDataType.Create(gdal.GDT_Float32), [])
+        arr = proj.CreateMDArray("radiance", [ydim, xdim], gdal.ExtendedDataType.Create(gdal.GDT_Float32), [])
         arr.SetNoDataValueDouble(-9999.0)
         arr.Write(vals)
         ds = None
@@ -462,7 +462,7 @@ def main() -> None:
     variables(OUT_DIR / "variables.nc")
     variables_multitile(OUT_DIR / "variables_multitile.nc")
     era5_synthetic(OUT_DIR / "era5_synthetic.nc")
-    mtg_fci_like(OUT_DIR)
+    mosaic_halves(OUT_DIR)
     print(f"generated fixtures in {OUT_DIR}")
 
 

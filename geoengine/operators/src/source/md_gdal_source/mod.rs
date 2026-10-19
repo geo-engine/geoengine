@@ -687,17 +687,17 @@ mod tests {
         /// Two spatial pieces of one time step on the same 8x8 grid: the west file is valid
         /// for columns 0..4 and the east file for 4..8, each nodata elsewhere.
         fn mosaic_halves() -> Self {
-            let mtg = |path| MdFile {
+            let half = |path| MdFile {
                 path,
-                array_name: "effective_radiance",
-                group: Some("data/ir_105_hr/measured"),
+                array_name: "radiance",
+                group: Some("data/band_hr/measured"),
                 band: 0,
                 z_start: 0,
                 slices: 1,
                 axis_mapping: vec![MdAxisMapping::Y, MdAxisMapping::X],
             };
             Self {
-                files: vec![mtg("md/mtg_fci_west.nc"), mtg("md/mtg_fci_east.nc")],
+                files: vec![half("md/mosaic_west.nc"), half("md/mosaic_east.nc")],
                 grid: (0.0, 0.0, 1.0, -1.0),
                 width: 8,
                 height: 8,
