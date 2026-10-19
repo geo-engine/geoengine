@@ -1399,7 +1399,7 @@ mod tests {
         let mut dataset = MdDataset {
             files: levels
                 .iter()
-                .map(|_| MdFile::of("md/era5_pl_synthetic.nc", "t", 0, 4))
+                .map(|_| MdFile::of("md/era5_synthetic.nc", "t", 0, 4))
                 .collect(),
             grid: (0.0, 48.0, 22.5, -12.0),
             width: 16,
@@ -1445,7 +1445,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let dataset = MdDataset {
-            files: vec![MdFile::of("md/era5_sfc_synthetic.nc", "t2m", 0, 4)],
+            files: vec![MdFile::of("md/era5_synthetic.nc", "t2m", 0, 4)],
             grid: (0.0, 48.0, 22.5, -12.0),
             width: 16,
             height: 8,
@@ -1544,7 +1544,7 @@ mod tests {
             &mut exe_ctx,
             "md_grouped",
             MdDataset::one_array_per_band(
-                "md/grouped_variables.nc",
+                "md/variables.nc",
                 Some("analysis"),
                 &[("cloud_area_fraction", 0), ("precipitation", 1)],
             ),

@@ -18,7 +18,6 @@ Fixtures
 - cf_time_units_minutes.nc time axis, CF units `minutes since 1900-01-01`, ASCENDING lat
 - variables.nc            one variable per CF data variable: 3 CF data variables (temperature/precipitation/
                           cloud_area_fraction) sharing (time, lat, lon), with long_name/units
-- grouped_variables.nc    same arrays as variables.nc but inside the `analysis` subgroup
 - projected_crs.nc        (time, y, x) in a projected CRS, declaring it via the CF `crs`
                           attribute (metre x units, so EPSG:4326 would be a mislabel)
 
@@ -62,9 +61,7 @@ FIXTURES = [
     "time_depth_4d.nc",
     "variables.nc",
     "variables_multitile.nc",
-    "grouped_variables.nc",
-    "era5_pl_synthetic.nc",
-    "era5_sfc_synthetic.nc",
+    "era5_synthetic.nc",
     "mtg_fci_west.nc",
     "mtg_fci_east.nc",
 ]
@@ -197,7 +194,10 @@ def zarr_time_series(path: Path):
     ts = np.arange(ntime, dtype=np.int64)
     vals = (np.arange(height)[:, None] * 10 + np.arange(width)[None, :])[None, :, :]
     vals = ts[:, None, None] * 1000 + vals.astype("float32")
-    write_array(rg, "temperature", [tdim, ydim, xdim], vals, -9999)
+    # one chunk for the whole array: the default writes one chunk per slice (~30 small files)
+    arr = rg.CreateMDArray("temperature", [tdim, ydim, xdim], F32, ["BLOCKSIZE=8,8,8"])
+    arr.SetNoDataValueDouble(-9999)
+    arr.Write(vals)
     ds = None
 
 
@@ -325,8 +325,13 @@ def _fill_variables(group, width: int, height: int, ntime: int):
 
 
 def variables(path: Path):
-    """Root group with three CF data variables sharing (time, lat, lon) -> Geo Engine bands."""
-    _fill_variables(new_netcdf(path).GetRootGroup(), 8, 8, 8)
+    """Root group with three CF data variables sharing (time, lat, lon) -> Geo Engine bands.
+
+    The same arrays are repeated in the `analysis` subgroup, so one file covers both layouts.
+    """
+    ds = new_netcdf(path)
+    _fill_variables(ds.GetRootGroup(), 8, 8, 8)
+    _fill_variables(ds.GetRootGroup().CreateGroup("analysis"), 8, 8, 8)
 
 
 def variables_multitile(path: Path):
@@ -350,12 +355,6 @@ def variables_multitile(path: Path):
     ds = None
 
 
-def grouped_variables(path: Path):
-    """Same as `variables` but the data arrays live in the `analysis` subgroup."""
-    ds = new_netcdf(path)
-    _fill_variables(ds.GetRootGroup().CreateGroup("analysis"), 8, 8, 8)
-
-
 def _era5_grid(rg, nlat: int, nlon: int):
     """ERA5-shaped coordinates: `latitude` descending (north first), `longitude` 0..360.
 
@@ -374,8 +373,9 @@ def _era5_grid(rg, nlat: int, nlon: int):
     return xdim, ydim
 
 
-def era5_pl_synthetic(path: Path):
-    """ERA5-like `t` on (valid_time, pressure_level, latitude, longitude), K.
+def era5_synthetic(path: Path):
+    """ERA5-like `t` on (valid_time, pressure_level, latitude, longitude), K, and the surface
+    `t2m` on (valid_time, latitude, longitude), K, sharing one time and grid axis.
 
     Value at `(t, p, row, col)` is `t * 10_000 + p * 1000 + row * 10 + col`, so a slice
     picked by the wrong dimension is obvious. Latitude descends, longitude is 0..360.
@@ -392,24 +392,9 @@ def era5_pl_synthetic(path: Path):
     c = np.arange(nlon, dtype=np.int64)[None, None, None, :]
     vals = (t * 10_000 + p * 1000 + r * 10 + c).astype("float32")
     write_array(rg, "t", [tdim, pdim, ydim, xdim], vals, -32767, "Temperature", "K")
-    ds = None
-
-
-def era5_sfc_synthetic(path: Path):
-    """ERA5-like surface `t2m` on (valid_time, latitude, longitude), K; no level dimension.
-
-    Value at `(t, row, col)` is `t * 1000 + row * 10 + col`.
-    """
-    nt, nlat, nlon = 4, 8, 16
-    ds = new_netcdf(path)
-    rg = ds.GetRootGroup()
-    xdim, ydim = _era5_grid(rg, nlat, nlon)
-    tdim = add_time_dim(rg, nt, "hours since 2024-01-01 00:00:00")
-    t = np.arange(nt, dtype=np.int64)[:, None, None]
-    r = np.arange(nlat, dtype=np.int64)[None, :, None]
-    c = np.arange(nlon, dtype=np.int64)[None, None, :]
-    vals = (t * 1000 + r * 10 + c).astype("float32")
-    write_array(rg, "t2m", [tdim, ydim, xdim], vals, -32767, "2 metre temperature", "K")
+    # surface t2m: value at (t, row, col) is t * 1000 + row * 10 + col
+    t2m = (np.arange(nt)[:, None, None] * 1000 + np.arange(nlat)[None, :, None] * 10 + np.arange(nlon)[None, None, :]).astype("float32")
+    write_array(rg, "t2m", [tdim, ydim, xdim], t2m, -32767, "2 metre temperature", "K")
     ds = None
 
 
@@ -476,9 +461,7 @@ def main() -> None:
     time_depth_4d(OUT_DIR / "time_depth_4d.nc")
     variables(OUT_DIR / "variables.nc")
     variables_multitile(OUT_DIR / "variables_multitile.nc")
-    grouped_variables(OUT_DIR / "grouped_variables.nc")
-    era5_pl_synthetic(OUT_DIR / "era5_pl_synthetic.nc")
-    era5_sfc_synthetic(OUT_DIR / "era5_sfc_synthetic.nc")
+    era5_synthetic(OUT_DIR / "era5_synthetic.nc")
     mtg_fci_like(OUT_DIR)
     print(f"generated fixtures in {OUT_DIR}")
 
