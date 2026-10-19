@@ -1,5 +1,5 @@
 import {Directive, OnChanges, OnDestroy, SimpleChanges, input} from '@angular/core';
-import {UntypedFormControl} from '@angular/forms';
+import {FormControl} from '@angular/forms';
 import {Observable, ReplaySubject, Subscription} from 'rxjs';
 
 @Directive({
@@ -12,7 +12,7 @@ export class AutocompleteSelectDirective<T> implements OnChanges, OnDestroy {
         alias: 'geoengineAutocompleteSelectSearchPredicate',
     });
 
-    readonly filterFormControl = new UntypedFormControl();
+    readonly filterFormControl = new FormControl<string>('', {nonNullable: true});
     readonly _filteredValues = new ReplaySubject<Array<T>>();
 
     private filterFormSubscription: Subscription;
@@ -38,7 +38,7 @@ export class AutocompleteSelectDirective<T> implements OnChanges, OnDestroy {
     }
 
     protected applyFilter(): void {
-        let searchTerm: string = this.filterFormControl.value;
+        let searchTerm = this.filterFormControl.value;
 
         let filteredValues = this.allValues();
 

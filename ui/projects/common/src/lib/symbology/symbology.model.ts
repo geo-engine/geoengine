@@ -1048,7 +1048,7 @@ export class DerivedColor implements ColorParam {
     }
 
     getColor(feature: OlFeature<OlGeometry>): Color {
-        return this.colorizer.getColor(feature.get(this.attribute));
+        return this.colorizer.getColor(feature.get(this.attribute) as number | undefined);
     }
 
     equals(other: ColorParam): boolean {
@@ -1190,7 +1190,7 @@ export class TextSymbology {
     }
 
     createStyler(feature: OlFeature<OlGeometry>): OlStyleText {
-        const featureAttributeValue = feature.get(this.attribute);
+        const featureAttributeValue = feature.get(this.attribute) as string | number | boolean | null | undefined;
         let featureAttributeString: string;
         if (featureAttributeValue === null || featureAttributeValue === undefined) {
             featureAttributeString = '';

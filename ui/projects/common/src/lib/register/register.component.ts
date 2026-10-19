@@ -1,7 +1,7 @@
 import {BehaviorSubject, Observable} from 'rxjs';
 
 import {AfterViewInit, ChangeDetectionStrategy, Component, input, inject} from '@angular/core';
-import {UntypedFormControl, UntypedFormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 
 import {map} from 'rxjs/operators';
 import {Router, RouterLink} from '@angular/router';
@@ -58,16 +58,19 @@ export class RegisterComponent implements AfterViewInit {
 
     registrationError$ = new BehaviorSubject<string>('');
 
-    registrationForm: UntypedFormGroup;
+    registrationForm: FormGroup<{name: FormControl<string>; email: FormControl<string>; password: FormControl<string>}>;
 
     constructor() {
-        this.registrationForm = new UntypedFormGroup({
-            name: new UntypedFormControl('', Validators.required),
-            email: new UntypedFormControl(
-                '',
-                Validators.compose([Validators.required, Validators.email, geoengineValidators.keyword([this.config.USER.GUEST.NAME])]),
-            ),
-            password: new UntypedFormControl('', [Validators.required, Validators.minLength(this.PASSWORD_MIN_LENGTH)]),
+        this.registrationForm = new FormGroup({
+            name: new FormControl('', {nonNullable: true, validators: Validators.required}),
+            email: new FormControl('', {
+                nonNullable: true,
+                validators: [Validators.required, Validators.email, geoengineValidators.keyword([this.config.USER.GUEST.NAME])],
+            }),
+            password: new FormControl('', {
+                nonNullable: true,
+                validators: [Validators.required, Validators.minLength(this.PASSWORD_MIN_LENGTH)],
+            }),
         });
 
         this.formIsInvalid$ = this.registrationForm.statusChanges.pipe(map((status) => status !== 'VALID'));
@@ -82,9 +85,7 @@ export class RegisterComponent implements AfterViewInit {
         this.loading$.next(true);
         this.registrationError$.next('');
 
-        const realName: string = this.registrationForm.controls['name'].value;
-        const email: string = this.registrationForm.controls['email'].value;
-        const password: string = this.registrationForm.controls['password'].value;
+        const {name: realName, email, password} = this.registrationForm.getRawValue();
 
         try {
             await this.userService.registerUser({

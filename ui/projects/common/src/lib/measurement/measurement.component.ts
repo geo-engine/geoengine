@@ -1,4 +1,4 @@
-import {Component, Input, output, ChangeDetectionStrategy} from '@angular/core';
+import {Component, model, ChangeDetectionStrategy} from '@angular/core';
 import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {ClassificationMeasurement, ContinuousMeasurement, Measurement, UnitlessMeasurement} from '@geoengine/api-client';
 import {MatButtonToggleGroup, MatButtonToggle} from '@angular/material/button-toggle';
@@ -37,9 +37,7 @@ interface AddClassForm {
     ],
 })
 export class MeasurementComponent {
-    @Input() measurement!: Measurement;
-
-    readonly measurementChange = output<Measurement>();
+    readonly measurement = model<Measurement>({type: 'unitless'});
 
     MeasurementType = MeasurementType;
 
@@ -58,16 +56,8 @@ export class MeasurementComponent {
         }),
     });
 
-    constructor() {
-        if (!this.measurement) {
-            this.measurement = {
-                type: 'unitless',
-            };
-        }
-    }
-
     getMeasurementType(): MeasurementType {
-        switch (this.measurement.type) {
+        switch (this.measurement().type) {
             case 'classification':
                 return MeasurementType.Classification;
             case 'continuous':
@@ -86,7 +76,7 @@ export class MeasurementComponent {
                     classes: {},
                 };
 
-                this.measurement = this.classificationMeasurement;
+                this.measurement.set(this.classificationMeasurement);
                 break;
             case MeasurementType.Continuous:
                 this.continousMeasurement ??= {
@@ -94,16 +84,16 @@ export class MeasurementComponent {
                     measurement: 'continuous',
                 };
 
-                this.measurement = this.continousMeasurement;
+                this.measurement.set(this.continousMeasurement);
                 break;
             case MeasurementType.Unitless:
                 this.unitlessMeasurement ??= {
                     type: 'unitless',
                 };
 
-                this.measurement = {
+                this.measurement.set({
                     type: 'unitless',
-                };
+                });
                 break;
         }
     }

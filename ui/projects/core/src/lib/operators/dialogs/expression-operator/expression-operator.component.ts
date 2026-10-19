@@ -246,8 +246,8 @@ export class ExpressionOperatorComponent implements AfterViewInit {
         let outputMeasurement: Measurement | undefined = undefined;
 
         const measurementComponent = this.measurementComponent();
-        if (measurementComponent?.measurement) {
-            outputMeasurement = measurementComponent.measurement;
+        if (measurementComponent) {
+            outputMeasurement = measurementComponent.measurement();
         }
 
         const outputBand = {
