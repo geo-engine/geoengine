@@ -129,7 +129,7 @@ export class CommonConfig {
         if (!configFileResponse.ok) return {};
 
         try {
-            return await configFileResponse.json();
+            return (await configFileResponse.json()) as Partial<CommonConfigStructure>;
         } catch (_error) {
             return {};
         }
@@ -147,6 +147,5 @@ export function mergeDeepOverrideLists<C>(a: C, b: Iterable<unknown> | Iterable<
         return mergeWith(mergeDeepOverrideLists as (a: unknown, b: unknown) => unknown, a, b);
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return b as any;
+    return b as unknown as C;
 }

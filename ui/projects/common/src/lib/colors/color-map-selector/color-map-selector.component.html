@@ -14,7 +14,7 @@
                 @if (form.controls.bounds.errors?.noFilter) {
                     <mat-hint [ngClass]="{'mat-error': true, 'mat-hint': false}"> Specify a minimum and a maximum. </mat-hint>
                 }
-                @if ($any(form.controls.bounds).controls.min.errors?.valueNotLarger) {
+                @if (form.controls.bounds.controls.min.errors?.valueNotLarger) {
                     <mat-hint [ngClass]="{'mat-error': true, 'mat-hint': false}"> Must be positive for logarithmic gradient. </mat-hint>
                 }
             </mat-form-field>

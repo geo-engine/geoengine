@@ -191,19 +191,19 @@ const warningsAsErrors = (filesGlob) => {
     );
 };
 
-// The apps must not contain warnings, while the `common` and `core` libraries still have legacy warnings to fix.
-const libraries = ['projects/common/**', 'projects/core/**'];
+// Warnings are errors everywhere except in the `core` library, which still has legacy warnings to fix.
+const withLegacyWarnings = ['projects/core/**'];
 
 export default defineConfig([
     ...config,
     {
         files: ['**/*.ts'],
-        ignores: libraries,
+        ignores: withLegacyWarnings,
         rules: warningsAsErrors('**/*.ts'),
     },
     {
         files: ['**/*.html'],
-        ignores: libraries,
+        ignores: withLegacyWarnings,
         rules: warningsAsErrors('**/*.html'),
     },
 ]);

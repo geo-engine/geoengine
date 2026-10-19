@@ -1,5 +1,5 @@
 import {ChangeDetectorRef, Component, OnChanges, SimpleChanges, inject, input, ChangeDetectionStrategy} from '@angular/core';
-import {FormsModule, ReactiveFormsModule, UntypedFormControl, UntypedFormGroup, Validators} from '@angular/forms';
+import {FormControl, FormGroup, FormsModule, ReactiveFormsModule, Validators} from '@angular/forms';
 import {DatasetsService} from '../datasets.service';
 import {UploadsService} from '../../uploads/uploads.service';
 import {UserService} from '../../user/user.service';
@@ -10,9 +10,12 @@ import {
     OgrMetaData,
     OgrSourceDatasetTimeType,
     OgrSourceDurationSpec,
+    OgrSourceErrorSpec,
     OgrSourceTimeFormat,
     TimeGranularity,
+    UnixTimeStampType,
     VectorColumnInfo,
+    VectorDataType,
 } from '@geoengine/api-client';
 import {UUID} from '../dataset.model';
 import {CommonModule as AngularCommonModule} from '@angular/common';
@@ -23,6 +26,35 @@ import {timeStepGranularityOptions} from '../../time/time.model';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {FxLayoutDirective} from '../../util/directives/flexbox-legacy.directive';
+
+/** Empty string means that nothing is selected yet. */
+type Unselected = '';
+
+interface OgrDatasetForm {
+    mainFile: FormControl<string>;
+    layerName: FormControl<string>;
+    dataType: FormControl<VectorDataType | Unselected>;
+    timeType: FormControl<string>;
+    timeStartColumn: FormControl<string>;
+    timeStartFormat: FormControl<OgrSourceTimeFormat['format'] | Unselected>;
+    timeStartFormatCustom: FormControl<string>;
+    timeStartFormatUnix: FormControl<UnixTimeStampType | Unselected>;
+    timeDurationColumn: FormControl<string>;
+    timeDurationValue: FormControl<number>;
+    timeDurationValueType: FormControl<OgrSourceDurationSpec['type']>;
+    timeDurationGranularity: FormControl<TimeGranularity>;
+    timeEndColumn: FormControl<string>;
+    timeEndFormat: FormControl<OgrSourceTimeFormat['format'] | Unselected>;
+    timeEndFormatCustom: FormControl<string>;
+    timeEndFormatUnix: FormControl<UnixTimeStampType | Unselected>;
+    columnsX: FormControl<string>;
+    columnsY: FormControl<string | null | undefined>;
+    columnsText: FormControl<Array<string> | undefined>;
+    columnsFloat: FormControl<Array<string> | undefined>;
+    columnsInt: FormControl<Array<string> | undefined>;
+    errorHandling: FormControl<OgrSourceErrorSpec>;
+    spatialReference: FormControl<string>;
+}
 
 @Component({
     selector: 'geoengine-ogr-dataset',
@@ -60,7 +92,7 @@ export class OgrDatasetComponent implements OnChanges {
     readonly volumeName = input<string>();
     readonly metaData = input<OgrMetaData>();
 
-    formMetaData: UntypedFormGroup;
+    formMetaData: FormGroup<OgrDatasetForm>;
 
     uploadFiles?: Array<string>;
     uploadFileLayers: Array<string> = [];
@@ -68,40 +100,44 @@ export class OgrDatasetComponent implements OnChanges {
     readonly defaultTimeGranularity: TimeGranularity = 'seconds';
 
     constructor() {
-        this.formMetaData = new UntypedFormGroup({
-            mainFile: new UntypedFormControl('', Validators.required),
-            layerName: new UntypedFormControl('', Validators.required),
-            dataType: new UntypedFormControl('', Validators.required),
-            timeType: new UntypedFormControl('', Validators.required),
-            timeStartColumn: new UntypedFormControl(''),
-            timeStartFormat: new UntypedFormControl(''),
-            timeStartFormatCustom: new UntypedFormControl(''), // TODO: validate format
-            timeStartFormatUnix: new UntypedFormControl(''),
-            timeDurationColumn: new UntypedFormControl(''),
-            timeDurationValue: new UntypedFormControl(1), // TODO: validate is positive integer
-            timeDurationValueType: new UntypedFormControl('infinite'),
-            timeDurationGranularity: new UntypedFormControl(this.defaultTimeGranularity),
-            timeEndColumn: new UntypedFormControl(''),
-            timeEndFormat: new UntypedFormControl(''),
-            timeEndFormatCustom: new UntypedFormControl(''), // TODO: validate format
-            timeEndFormatUnix: new UntypedFormControl(''),
-            columnsX: new UntypedFormControl(''),
-            columnsY: new UntypedFormControl(''),
-            columnsText: new UntypedFormControl(''),
-            columnsFloat: new UntypedFormControl(''),
-            columnsInt: new UntypedFormControl(''),
-            errorHandling: new UntypedFormControl('skip', Validators.required),
-            spatialReference: new UntypedFormControl('EPSG:4326', Validators.required), // TODO: validate sref string
+        const control = <T>(value: T, required = false): FormControl<T> =>
+            new FormControl<T>(value, {nonNullable: true, validators: required ? Validators.required : []});
+
+        this.formMetaData = new FormGroup<OgrDatasetForm>({
+            mainFile: control('', true),
+            layerName: control('', true),
+            dataType: control<VectorDataType | Unselected>('', true),
+            timeType: control('', true),
+            timeStartColumn: control(''),
+            timeStartFormat: control<OgrSourceTimeFormat['format'] | Unselected>(''),
+            timeStartFormatCustom: control(''), // TODO: validate format
+            timeStartFormatUnix: control<UnixTimeStampType | Unselected>(''),
+            timeDurationColumn: control(''),
+            timeDurationValue: control(1), // TODO: validate is positive integer
+            timeDurationValueType: control<OgrSourceDurationSpec['type']>('infinite'),
+            timeDurationGranularity: control(this.defaultTimeGranularity),
+            timeEndColumn: control(''),
+            timeEndFormat: control<OgrSourceTimeFormat['format'] | Unselected>(''),
+            timeEndFormatCustom: control(''), // TODO: validate format
+            timeEndFormatUnix: control<UnixTimeStampType | Unselected>(''),
+            columnsX: control(''),
+            columnsY: control<string | null | undefined>(''),
+            columnsText: control<Array<string> | undefined>([]),
+            columnsFloat: control<Array<string> | undefined>([]),
+            columnsInt: control<Array<string> | undefined>([]),
+            errorHandling: control<OgrSourceErrorSpec>('ignore', true),
+            spatialReference: control('EPSG:4326', true), // TODO: validate sref string
         });
     }
     ngOnChanges(changes: SimpleChanges): void {
-        if (changes.uploadId?.currentValue) {
-            void this.setUpMetadataSpecification(changes.uploadId.currentValue);
+        const uploadId = this.uploadId();
+        if (changes.uploadId && uploadId) {
+            void this.setUpMetadataSpecification(uploadId);
             return;
         }
 
-        if (changes.metaData?.currentValue) {
-            const metaData = changes.metaData.currentValue as OgrMetaData;
+        const metaData = this.metaData();
+        if (changes.metaData && metaData) {
             this.fillMetaDataForm({
                 mainFile: metaData.loadingInfo.fileName,
                 layerName: metaData.loadingInfo.layerName,
@@ -227,7 +263,7 @@ export class OgrDatasetComponent implements OnChanges {
     }
 
     removeText(column: string): void {
-        const columns: Array<string> = this.formMetaData.controls.columnsText.value;
+        const columns = this.formMetaData.controls.columnsText.value ?? [];
 
         const index = columns.indexOf(column);
         if (index > -1) {
@@ -236,7 +272,7 @@ export class OgrDatasetComponent implements OnChanges {
     }
 
     addText(event: MatChipInputEvent): void {
-        const columns: Array<string> = this.formMetaData.controls.columnsText.value;
+        const columns = this.formMetaData.controls.columnsText.value ?? [];
         const column = event.value;
         const eventInput = event.input;
 
@@ -250,7 +286,7 @@ export class OgrDatasetComponent implements OnChanges {
     }
 
     removeInt(column: string): void {
-        const columns: Array<string> = this.formMetaData.controls.columnsInt.value;
+        const columns = this.formMetaData.controls.columnsInt.value ?? [];
 
         const index = columns.indexOf(column);
         if (index > -1) {
@@ -259,7 +295,7 @@ export class OgrDatasetComponent implements OnChanges {
     }
 
     addInt(event: MatChipInputEvent): void {
-        const columns: Array<string> = this.formMetaData.controls.columnsInt.value;
+        const columns = this.formMetaData.controls.columnsInt.value ?? [];
         const column = event.value;
         const eventInput = event.input;
 
@@ -273,7 +309,7 @@ export class OgrDatasetComponent implements OnChanges {
     }
 
     removeFloat(column: string): void {
-        const columns: Array<string> = this.formMetaData.controls.columnsFloat.value;
+        const columns = this.formMetaData.controls.columnsFloat.value ?? [];
 
         const index = columns.indexOf(column);
         if (index > -1) {
@@ -282,7 +318,7 @@ export class OgrDatasetComponent implements OnChanges {
     }
 
     addFloat(event: MatChipInputEvent): void {
-        const columns: Array<string> = this.formMetaData.controls.columnsFloat.value;
+        const columns = this.formMetaData.controls.columnsFloat.value ?? [];
         const column = event.value;
         const eventInput = event.input;
 
@@ -311,15 +347,19 @@ export class OgrDatasetComponent implements OnChanges {
         this.formMetaData.patchValue({
             mainFile: suggest.mainFile,
             layerName: info?.layerName,
-            dataType: info?.dataType,
+            dataType: info?.dataType ?? '',
             timeType: info.time ? this.getTimeType(info.time) : 'None',
             timeStartColumn: start ? start.startField : '',
             timeStartFormat: start ? start.startFormat.format : '',
             timeStartFormatCustom: start ? (start.startFormat.format == 'custom' ? start.startFormat.customFormat : '') : '',
             timeStartFormatUnix: start ? (start.startFormat.format == 'unixTimeStamp' ? start.startFormat.timestampType : '') : '',
             timeDurationColumn: info?.time?.type === 'start+duration' ? info?.time.durationField : '',
-            timeDurationValue: info?.time?.type === 'start' ? info?.time.duration : 1,
+            timeDurationValue: info?.time?.type === 'start' && info.time.duration.type === 'value' ? info.time.duration.step : 1,
             timeDurationValueType: info?.time?.type === 'start' ? info?.time.duration.type : 'infinite',
+            timeDurationGranularity:
+                info?.time?.type === 'start' && info.time.duration.type === 'value'
+                    ? info.time.duration.granularity
+                    : this.defaultTimeGranularity,
             timeEndColumn: end ? end.endField : '',
             timeEndFormat: end ? end.endFormat.format : '',
             timeEndFormatCustom: end ? (end.endFormat.format == 'custom' ? end.endFormat.customFormat : '') : '',
@@ -429,7 +469,7 @@ export class OgrDatasetComponent implements OnChanges {
         const formMeta = this.formMetaData.controls;
         const columns: Record<string, VectorColumnInfo> = {};
 
-        for (const column of formMeta.columnsText.value as Array<string>) {
+        for (const column of formMeta.columnsText.value ?? []) {
             columns[column] = {
                 dataType: 'text',
                 measurement: {
@@ -439,7 +479,7 @@ export class OgrDatasetComponent implements OnChanges {
             };
         }
 
-        for (const column of formMeta.columnsInt.value as Array<string>) {
+        for (const column of formMeta.columnsInt.value ?? []) {
             columns[column] = {
                 dataType: 'int',
                 measurement: {
@@ -449,7 +489,7 @@ export class OgrDatasetComponent implements OnChanges {
             };
         }
 
-        for (const column of formMeta.columnsFloat.value as Array<string>) {
+        for (const column of formMeta.columnsFloat.value ?? []) {
             columns[column] = {
                 dataType: 'float',
                 measurement: {
@@ -526,11 +566,11 @@ export class OgrDatasetComponent implements OnChanges {
         } else if (formMeta.timeStartFormat.value === 'unixTimeStamp') {
             return {
                 format: 'unixTimeStamp',
-                timestampType: formMeta.timeStartFormatUnix.value,
+                timestampType: formMeta.timeStartFormatUnix.value as UnixTimeStampType, // required if selected
             };
         }
         return {
-            format: formMeta.timeStartFormat.value,
+            format: 'auto',
         };
     }
 
@@ -545,11 +585,11 @@ export class OgrDatasetComponent implements OnChanges {
         } else if (formMeta.timeEndFormat.value === 'unixTimeStamp') {
             return {
                 format: 'unixTimeStamp',
-                timestampType: formMeta.timeEndFormatUnix.value,
+                timestampType: formMeta.timeEndFormatUnix.value as UnixTimeStampType, // required if selected
             };
         }
         return {
-            format: formMeta.timeEndFormat.value,
+            format: 'auto',
         };
     }
 
@@ -569,13 +609,14 @@ export class OgrDatasetComponent implements OnChanges {
 
     getMetaData(): MetaDataDefinition {
         const formMeta = this.formMetaData.controls;
+        const dataType = formMeta.dataType.value as VectorDataType; // required
 
         return {
             type: 'OgrMetaData',
             loadingInfo: {
                 fileName: formMeta.mainFile.value,
                 layerName: formMeta.layerName.value,
-                dataType: formMeta.dataType.value,
+                dataType,
                 time: this.getTime(),
                 columns: {
                     x: formMeta.columnsX.value,
@@ -588,7 +629,7 @@ export class OgrDatasetComponent implements OnChanges {
                 onError: formMeta.errorHandling.value,
             },
             resultDescriptor: {
-                dataType: formMeta.dataType.value,
+                dataType,
                 spatialReference: formMeta.spatialReference.value,
                 columns: this.getColumnsAsMap(),
             },

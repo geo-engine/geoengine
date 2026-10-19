@@ -1,6 +1,5 @@
 import {
     Component,
-    ViewChild,
     ElementRef,
     ChangeDetectionStrategy,
     OnInit,
@@ -9,6 +8,7 @@ import {
     SimpleChanges,
     OnDestroy,
     HostListener,
+    effect,
     inject,
     input,
     output,
@@ -75,9 +75,11 @@ export class LayerCollectionNavigationComponent implements OnInit, OnChanges, On
 
     readonly collectionId = input.required<ProviderLayerCollectionId>();
 
-    public readonly scrollElement = viewChild.required('scrollElement', {read: ElementRef});
+    public readonly scrollElement = viewChild.required<string, ElementRef<HTMLElement>>('scrollElement', {read: ElementRef});
 
     readonly layerCollectionListComponent = viewChild.required(LayerCollectionListComponent);
+
+    private readonly searchInput = viewChild('searchInput', {read: MatInput});
 
     breadcrumbs: BreadcrumbNavigation = this.createBreadcrumbNavigation();
     search: Search = this.createSearch();
@@ -87,6 +89,11 @@ export class LayerCollectionNavigationComponent implements OnInit, OnChanges, On
     readonly selectLayer = output<LayerListing>();
     readonly selectCollection = output<LayerCollectionListing>();
     readonly navigateCollection = output<LayerCollectionListing>();
+
+    constructor() {
+        // Focus the search field when it is shown
+        effect(() => this.searchInput()?.focus());
+    }
 
     ngOnInit(): void {
         this.updateListView(undefined);
@@ -129,12 +136,6 @@ export class LayerCollectionNavigationComponent implements OnInit, OnChanges, On
         }
 
         throw Error('not a search item');
-    }
-
-    // Focus the search field when it is shown
-    @ViewChild('searchInput', {read: MatInput})
-    set searchInput(searchInput: MatInput | undefined) {
-        searchInput?.focus();
     }
 
     @HostListener('window:keydown', ['$event'])

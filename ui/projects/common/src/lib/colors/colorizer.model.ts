@@ -370,9 +370,9 @@ export class PaletteColorizer extends Colorizer {
     }
 
     clone(): Colorizer {
-        const colors = new Map();
-        for (const i of this.colors.keys()) {
-            colors.set(i, this.colors.get(i));
+        const colors = new Map<number, Color>();
+        for (const [i, color] of this.colors.entries()) {
+            colors.set(i, color);
         }
 
         return new PaletteColorizer(colors, this.noDataColor.clone(), this.defaultColor.clone());
@@ -387,7 +387,7 @@ export class PaletteColorizer extends Colorizer {
         if (updates.colors) {
             colors = updates.colors;
         } else {
-            colors = new Map();
+            colors = new Map<number, Color>();
             for (const [i, color] of this.colors.entries()) {
                 colors.set(i, color);
             }

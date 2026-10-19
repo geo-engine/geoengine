@@ -8,7 +8,7 @@ import {
     FormGroup,
     NG_VALIDATORS,
     NG_VALUE_ACCESSOR,
-    UntypedFormBuilder,
+    NonNullableFormBuilder,
     UntypedFormGroup,
     ValidationErrors,
     Validator,
@@ -66,7 +66,7 @@ export interface TimeInterval {
 })
 export class TimeIntervalInputComponent implements ControlValueAccessor, Validator, AfterViewInit {
     private changeDetectorRef = inject(ChangeDetectorRef);
-    private formBuilder = inject(UntypedFormBuilder);
+    private formBuilder = inject(NonNullableFormBuilder);
 
     readonly allowRanges = input(true);
 

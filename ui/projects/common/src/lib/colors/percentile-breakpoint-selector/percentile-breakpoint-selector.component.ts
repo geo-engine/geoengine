@@ -1,5 +1,5 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, input, output} from '@angular/core';
-import {FormArray, UntypedFormBuilder, UntypedFormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {FormArray, FormControl, FormGroup, NonNullableFormBuilder, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {BehaviorSubject} from 'rxjs';
 import {Color, RgbaTuple} from '../color';
 import {ColorBreakpoint} from '../color-breakpoint.model';
@@ -19,6 +19,13 @@ import {MatCheckbox} from '@angular/material/checkbox';
 import {MatProgressBar} from '@angular/material/progress-bar';
 import {AsyncPipe, KeyValuePipe} from '@angular/common';
 import {RgbaArrayCssGradientPipe} from '../../util/pipes/color-gradients.pipe';
+
+interface PercentileBreakpointSelectorForm {
+    numPercentiles: FormControl<number>;
+    percentiles: FormArray<FormControl<number>>;
+    colorMap: FormControl<Array<RgbaTuple>>;
+    colorMapReverseColors: FormControl<boolean>;
+}
 
 /**
  * The ColormapColorizerComponent is a dialog to generate ColorizerData from colormaps.
@@ -45,7 +52,7 @@ import {RgbaArrayCssGradientPipe} from '../../util/pipes/color-gradients.pipe';
 })
 export class PercentileBreakpointSelectorComponent {
     protected readonly changeDetectorRef = inject(ChangeDetectorRef);
-    protected readonly formBuilder = inject(UntypedFormBuilder);
+    protected readonly formBuilder = inject(NonNullableFormBuilder);
     protected readonly processingGraphsService = inject(ProcessingGraphsService);
     protected readonly plotsService = inject(PlotsService);
 
@@ -72,7 +79,7 @@ export class PercentileBreakpointSelectorComponent {
     /**
      * The form control used in the template.
      */
-    form: UntypedFormGroup;
+    form: FormGroup<PercentileBreakpointSelectorForm>;
 
     /**
      * The local (work-in-progress) Colorizer.
@@ -89,33 +96,14 @@ export class PercentileBreakpointSelectorComponent {
         const initialColorMapName = Object.keys(this.colorMaps)[0];
 
         this.form = formBuilder.group({
-            numPercentiles: [3, [Validators.required, Validators.min(2), Validators.max(this.MAX_PERCENTILES + 2)]],
+            numPercentiles: formBuilder.control(3, [Validators.required, Validators.min(2), Validators.max(this.MAX_PERCENTILES + 2)]),
             percentiles: this.formBuilder.array(
-                [0.5].map((p) => [p, [Validators.required]]),
+                [0.5].map((p) => this.formBuilder.control(p, [Validators.required])),
                 [Validators.maxLength(this.MAX_PERCENTILES)],
             ),
-            colorMap: [this.colorMaps[initialColorMapName], [Validators.required]],
-            colorMapReverseColors: [false],
+            colorMap: formBuilder.control(this.colorMaps[initialColorMapName], [Validators.required]),
+            colorMapReverseColors: formBuilder.control(false),
         });
-    }
-
-    /**
-     * Replace the min and max values.
-     */
-    patchMinMaxValues(min?: number, max?: number): void {
-        if (typeof min !== 'number' || typeof max !== 'number') {
-            return;
-        }
-
-        const bounds: {min: number; max: number} = this.form.controls['bounds'].value;
-
-        if (bounds.min === min && bounds.max === max) {
-            return;
-        }
-
-        this.form.controls.bounds.setValue({min, max});
-
-        void this.updateColorizerData();
     }
 
     /**
@@ -145,8 +133,8 @@ export class PercentileBreakpointSelectorComponent {
         this.applyChanges();
     }
 
-    get percentiles(): FormArray {
-        return this.form.get('percentiles') as FormArray;
+    get percentiles(): FormArray<FormControl<number>> {
+        return this.form.controls.percentiles;
     }
 
     setNumPercentiles(num: number): void {
@@ -221,9 +209,7 @@ export class PercentileBreakpointSelectorComponent {
     }
 
     protected async createBreakpoints(): Promise<Array<ColorBreakpoint>> {
-        const colorMap: Array<RgbaTuple> = this.form.controls['colorMap'].value;
-        const colorMapReverseColors: boolean = this.form.controls['colorMapReverseColors'].value;
-        const percentiles: number[] = this.form.controls['percentiles'].value;
+        const {colorMap, colorMapReverseColors, percentiles} = this.form.getRawValue();
 
         const statisticsWorkflowsId = await this.createStatisticsWorkflow(percentiles);
         const statistics = await this.createStatistics(statisticsWorkflowsId, this.queryParams());

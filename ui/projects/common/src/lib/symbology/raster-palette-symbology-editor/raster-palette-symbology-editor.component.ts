@@ -1,4 +1,4 @@
-import {Component, Input, ChangeDetectionStrategy, OnChanges, SimpleChanges, input, output, viewChild} from '@angular/core';
+import {Component, ChangeDetectionStrategy, OnChanges, SimpleChanges, input, model, viewChild} from '@angular/core';
 import {PaletteColorizer} from '../../colors/colorizer.model';
 import {ColorAttributeInput, ColorAttributeInputComponent} from '../../colors/color-attribute-input/color-attribute-input.component';
 import {Color} from '../../colors/color';
@@ -36,10 +36,8 @@ export class RasterPaletteSymbologyEditorComponent implements OnChanges {
 
     readonly colorPaletteEditor = viewChild.required(ColorTableEditorComponent);
 
-    @Input() colorizer!: PaletteColorizer;
+    readonly colorizer = model.required<PaletteColorizer>();
     readonly measurement = input<Measurement>();
-
-    readonly colorizerChange = output<PaletteColorizer>();
 
     // The min value used for color table generation
     layerMinValue: number | undefined = undefined;
@@ -53,7 +51,7 @@ export class RasterPaletteSymbologyEditorComponent implements OnChanges {
 
     ngOnChanges(changes: SimpleChanges): void {
         if (changes.colorizer) {
-            this.colorTable = this.colorizer.getBreakpoints();
+            this.colorTable = this.colorizer().getBreakpoints();
             this.updateNodataAndDefaultColor();
             this.updateLayerMinMaxFromColorizer();
         }
@@ -65,12 +63,11 @@ export class RasterPaletteSymbologyEditorComponent implements OnChanges {
             colors.set(breakpoint.value, breakpoint.color);
         }
 
-        if (this.colorMapEquals(this.colorizer.colors, colors)) {
+        if (this.colorMapEquals(this.colorizer().colors, colors)) {
             return;
         }
 
-        this.colorizer = this.colorizer.cloneWith({colors});
-        this.colorizerChange.emit(this.colorizer);
+        this.colorizer.set(this.colorizer().cloneWith({colors}));
     }
 
     /**
@@ -113,9 +110,7 @@ export class RasterPaletteSymbologyEditorComponent implements OnChanges {
     updateDefaultColor(defaultColorInput: ColorAttributeInput): void {
         const defaultColor = defaultColorInput.value;
 
-        this.colorizer = this.colorizer.cloneWith({defaultColor: defaultColor});
-
-        this.colorizerChange.emit(this.colorizer);
+        this.colorizer.set(this.colorizer().cloneWith({defaultColor: defaultColor}));
     }
 
     getNoDataColor(): ColorAttributeInput {
@@ -132,14 +127,12 @@ export class RasterPaletteSymbologyEditorComponent implements OnChanges {
     updateNoDataColor(noDataColorInput: ColorAttributeInput): void {
         const noDataColor = noDataColorInput.value;
 
-        this.colorizer = this.colorizer.cloneWith({noDataColor});
-
-        this.colorizerChange.emit(this.colorizer);
+        this.colorizer.set(this.colorizer().cloneWith({noDataColor}));
     }
 
     createColorMap(): Map<number, Color> {
         const colorMap = new Map<number, Color>();
-        const colorizer: PaletteColorizer = this.colorizer;
+        const colorizer: PaletteColorizer = this.colorizer();
         colorizer.getBreakpoints().forEach((bp, index) => {
             colorMap.set(bp.value, colorizer.getColorAtIndex(index));
         });
@@ -150,7 +143,7 @@ export class RasterPaletteSymbologyEditorComponent implements OnChanges {
      * Sets the layer min/max values from the colorizer.
      */
     updateLayerMinMaxFromColorizer(): void {
-        const breakpoints = this.colorizer.getBreakpoints();
+        const breakpoints = this.colorizer().getBreakpoints();
         this.updateLayerMinValue(breakpoints[0].value);
         this.updateLayerMaxValue(breakpoints[breakpoints.length - 1].value);
     }
@@ -158,11 +151,11 @@ export class RasterPaletteSymbologyEditorComponent implements OnChanges {
     private updateNodataAndDefaultColor(): void {
         this.defaultColor = {
             key: 'Default Color',
-            value: this.colorizer.defaultColor,
+            value: this.colorizer().defaultColor,
         };
         this.noDataColor = {
             key: 'No Data Color',
-            value: this.colorizer.noDataColor,
+            value: this.colorizer().noDataColor,
         };
     }
 

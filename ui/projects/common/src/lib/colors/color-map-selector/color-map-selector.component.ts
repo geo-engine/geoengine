@@ -10,7 +10,7 @@ import {
     input,
     output,
 } from '@angular/core';
-import {UntypedFormBuilder, UntypedFormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {FormControl, FormGroup, NonNullableFormBuilder, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {Subscription} from 'rxjs';
 import {Color, RgbaTuple} from '../color';
 import {ColorBreakpoint} from '../color-breakpoint.model';
@@ -24,6 +24,13 @@ import {MatOption} from '@angular/material/autocomplete';
 import {MatCheckbox} from '@angular/material/checkbox';
 import {MatSlider, MatSliderThumb} from '@angular/material/slider';
 import {ColorBreakpointsCssGradientPipe, RgbaArrayCssGradientPipe} from '../../util/pipes/color-gradients.pipe';
+
+interface ColorMapSelectorForm {
+    bounds: FormGroup<{min: FormControl<number>; max: FormControl<number>}>;
+    colorMap: FormControl<Array<RgbaTuple>>;
+    colorMapSteps: FormControl<number>;
+    colorMapReverseColors: FormControl<boolean>;
+}
 
 /**
  * The ColormapColorizerComponent is a dialog to generate ColorizerData from colormaps.
@@ -56,7 +63,7 @@ import {ColorBreakpointsCssGradientPipe, RgbaArrayCssGradientPipe} from '../../u
 })
 export class ColorMapSelectorComponent implements OnInit, OnDestroy, OnChanges {
     protected readonly changeDetectorRef = inject(ChangeDetectorRef);
-    protected readonly formBuilder = inject(UntypedFormBuilder);
+    protected readonly formBuilder = inject(NonNullableFormBuilder);
 
     /**
      * Emmits colorizer breakpoint arrays
@@ -105,7 +112,7 @@ export class ColorMapSelectorComponent implements OnInit, OnDestroy, OnChanges {
     /**
      * The form control used in the template.
      */
-    form: UntypedFormGroup;
+    form: FormGroup<ColorMapSelectorForm>;
 
     /**
      * The local (work-in-progress) Colorizer.
@@ -124,16 +131,16 @@ export class ColorMapSelectorComponent implements OnInit, OnDestroy, OnChanges {
         this.form = formBuilder.group({
             bounds: formBuilder.group(
                 {
-                    min: [0],
-                    max: [1],
+                    min: formBuilder.control(0),
+                    max: formBuilder.control(1),
                 },
                 {
                     validators: [geoengineValidators.minAndMax('min', 'max', {checkBothExist: true, mustNotEqual: true})],
                 },
             ),
-            colorMap: [this.colorMaps[initialColorMapName], [Validators.required]],
-            colorMapSteps: [this.defaultNumberOfSteps(), [Validators.required, Validators.min(2)]],
-            colorMapReverseColors: [false],
+            colorMap: formBuilder.control(this.colorMaps[initialColorMapName], [Validators.required]),
+            colorMapSteps: formBuilder.control(this.defaultNumberOfSteps(), [Validators.required, Validators.min(2)]),
+            colorMapReverseColors: formBuilder.control(false),
         });
 
         this.breakpoints = this.createBreakpoints();
@@ -156,12 +163,12 @@ export class ColorMapSelectorComponent implements OnInit, OnDestroy, OnChanges {
             this.patchMinMaxValues(minValue, maxValue);
         }
 
-        const subMinMax = this.form.controls['bounds'].valueChanges.subscribe((x) => {
-            if (Number.isFinite(x.min)) {
-                this.minValueChange.emit(x.min.value);
+        const subMinMax = this.form.controls.bounds.valueChanges.subscribe((x) => {
+            if (x.min !== undefined && Number.isFinite(x.min)) {
+                this.minValueChange.emit(x.min);
             }
-            if (Number.isFinite(x.max)) {
-                this.maxValueChange.emit(x.max.value);
+            if (x.max !== undefined && Number.isFinite(x.max)) {
+                this.maxValueChange.emit(x.max);
             }
         });
         this.subscriptions.push(subMinMax);
@@ -193,7 +200,7 @@ export class ColorMapSelectorComponent implements OnInit, OnDestroy, OnChanges {
             return;
         }
 
-        const bounds: {min: number; max: number} = this.form.controls['bounds'].value;
+        const bounds = this.form.controls.bounds.getRawValue();
 
         if (bounds.min === min && bounds.max === max) {
             return;
@@ -205,11 +212,7 @@ export class ColorMapSelectorComponent implements OnInit, OnDestroy, OnChanges {
     }
 
     updateOnScaleChange(): void {
-        const minControl = this.form.controls['bounds'].get('min');
-
-        if (!minControl) {
-            return;
-        }
+        const minControl = this.form.controls.bounds.controls.min;
 
         const scale = this.scale();
         if (scale === 'linear') {
@@ -300,10 +303,9 @@ export class ColorMapSelectorComponent implements OnInit, OnDestroy, OnChanges {
     }
 
     protected checkValidConfig(): boolean {
-        const colorMap: Array<RgbaTuple> = this.form.controls['colorMap'].value;
-        const colorMapSteps: number = this.form.controls['colorMapSteps'].value;
-        const boundsMin: number = this.form.controls['bounds'].value.min;
-        const boundsMax: number = this.form.controls['bounds'].value.max;
+        const {colorMap, colorMapSteps, bounds} = this.form.getRawValue();
+        const boundsMin = bounds.min;
+        const boundsMax = bounds.max;
 
         if (!colorMap) {
             return false;
@@ -323,10 +325,7 @@ export class ColorMapSelectorComponent implements OnInit, OnDestroy, OnChanges {
     }
 
     protected createBreakpoints(): Array<ColorBreakpoint> {
-        const colorMap: Array<RgbaTuple> = this.form.controls['colorMap'].value;
-        const colorMapSteps: number = this.form.controls['colorMapSteps'].value;
-        const colorMapReverseColors: boolean = this.form.controls['colorMapReverseColors'].value;
-        const bounds: {min: number; max: number} = this.form.controls['bounds'].value;
+        const {colorMap, colorMapSteps, colorMapReverseColors, bounds} = this.form.getRawValue();
 
         if (this.scale() === 'logarithmic') {
             return this.createLogarithmicBreakpoints(colorMap, colorMapSteps, colorMapReverseColors, bounds);

@@ -11,7 +11,7 @@
         <mat-button-toggle [value]="MeasurementType.Unitless">Unitless</mat-button-toggle>
     </mat-button-toggle-group>
 
-    @if (measurement.type === MeasurementType.Classification && classificationMeasurement) {
+    @if (measurement().type === MeasurementType.Classification && classificationMeasurement) {
         <div>
             <mat-form-field appearance="fill">
                 <mat-label>Measurement</mat-label>
@@ -53,7 +53,7 @@
         </form>
     }
 
-    @if (measurement.type === MeasurementType.Continuous && continousMeasurement) {
+    @if (measurement().type === MeasurementType.Continuous && continousMeasurement) {
         <div class="flex-container">
             <mat-form-field appearance="fill">
                 <mat-label>Measurement</mat-label>

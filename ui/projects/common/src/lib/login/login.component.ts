@@ -93,9 +93,9 @@ export class LoginComponent implements OnInit {
             return queryRedirect;
         }
 
-        const dataRedirect = this.route.snapshot.data['loginRedirect'];
+        const dataRedirect = this.route.snapshot.data['loginRedirect'] as string | undefined;
         if (dataRedirect) {
-            return dataRedirect as string;
+            return dataRedirect;
         }
 
         const inputDefaultRedirect = this.defaultRedirect();

@@ -54,25 +54,10 @@ export function hashCode(str: string): number {
 
 // TODO: use a faster hash function
 export function featureToHash(feature: OlFeature<OlGeometry>): number {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sortObjKeys = (obj: Record<string, any>): any => {
-        Object.keys(obj)
-            .sort()
-            .reduce(
-                (x, key) => {
-                    x[key] = obj[key];
-                    return x;
-                },
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                {} as Record<string, any>,
-            );
-    };
-
     const jsonObj = new OlFormatGeoJson().writeFeatureObject(feature);
-    if (jsonObj['properties']) {
-        jsonObj['properties'] = sortObjKeys(jsonObj['properties']);
-    }
-    const json = JSON.stringify(jsonObj);
+    // Only the geometry is hashed, the properties are left out on purpose.
+    const {properties, ...jsonObjWithoutProperties} = jsonObj;
+    const json = JSON.stringify(properties ? jsonObjWithoutProperties : jsonObj);
 
     return hashCode(json);
 }
