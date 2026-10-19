@@ -12,7 +12,7 @@ import {MatPaginator, MatPaginatorIntl, PageEvent} from '@angular/material/pagin
 import {combineLatest, forkJoin, map, mergeMap, of, startWith, Subject, Subscription, switchMap} from 'rxjs';
 import {TaskStatusDict, TaskStatusType, UUID} from '../../backend/backend.model';
 import {BackendService} from '../../backend/backend.service';
-import {NotificationService, UserService} from '@geoengine/common';
+import {NotificationService, UserService, errorMessage} from '@geoengine/common';
 import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
 import {MatFormField, MatLabel} from '@angular/material/input';
 import {MatSelect} from '@angular/material/select';
@@ -197,8 +197,9 @@ export class TaskListComponent implements AfterViewInit, OnDestroy {
                     this.refreshPage();
                 },
                 error: (error) => {
-                    if (error.message) {
-                        this.notificationService.error(error.message);
+                    const message = errorMessage(error, '');
+                    if (message) {
+                        this.notificationService.error(message);
                     }
                     this.refreshPage();
                 },

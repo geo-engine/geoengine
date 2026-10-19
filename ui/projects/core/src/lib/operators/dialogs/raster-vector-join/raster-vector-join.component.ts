@@ -28,6 +28,7 @@ import {
     VectorLayerMetadata,
     geoengineValidators,
     FxLayoutDirective,
+    errorMessage,
 } from '@geoengine/common';
 import {ColumnNames as ApiColumnNames, RasterVectorJoinParameters} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
@@ -303,7 +304,7 @@ export class RasterVectorJoinComponent implements OnDestroy {
                 () => {
                     // success
                 },
-                (error) => this.notificationService.error(error),
+                (error) => this.notificationService.error(errorMessage(error)),
             );
     }
 

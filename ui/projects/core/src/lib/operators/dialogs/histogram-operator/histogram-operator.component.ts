@@ -17,6 +17,7 @@ import {
     geoengineValidators,
     FxLayoutDirective,
     FxFlexDirective,
+    errorMessage,
 } from '@geoengine/common';
 import {Histogram, HistogramParameters, ProcessingGraph, RasterOperator, VectorOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
@@ -148,7 +149,7 @@ export class HistogramOperatorComponent implements AfterViewInit, OnDestroy {
             this.form.controls['rangeType'].valueChanges.subscribe(() => this.form.controls['range'].updateValueAndValidity()),
         );
 
-        this.isVectorLayer$ = this.form.controls['layer'].valueChanges.pipe(map((layer) => isVectorLayer(layer)));
+        this.isVectorLayer$ = this.form.controls['layer'].valueChanges.pipe(map((layer) => isVectorLayer(layer as Layer)));
     }
 
     ngAfterViewInit(): void {
@@ -200,7 +201,7 @@ export class HistogramOperatorComponent implements AfterViewInit, OnDestroy {
             };
         }
 
-        const outputName: string = this.form.controls['name'].value;
+        const outputName = this.form.controls['name'].value as string;
 
         from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(
@@ -239,7 +240,7 @@ export class HistogramOperatorComponent implements AfterViewInit, OnDestroy {
                 () => {
                     // success
                 },
-                (error) => this.notificationService.error(error),
+                (error) => this.notificationService.error(errorMessage(error)),
             );
     }
 }

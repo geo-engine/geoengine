@@ -89,6 +89,32 @@ export async function errorToText(error: any, defaultMessage: string): Promise<s
     return errorJson.message ?? defaultMessage;
 }
 
+/**
+ * Extracts a human-readable message from an error of unknown type.
+ *
+ * It uses, in this order, the error itself if it is a string, the message of an error response body (`error.error.message`),
+ * the `message` of the error, and finally the `defaultMessage`.
+ */
+export function errorMessage(error: unknown, defaultMessage = 'Unknown error'): string {
+    if (typeof error === 'string') {
+        return error;
+    }
+
+    if (typeof error === 'object' && error !== null) {
+        const {error: body, message} = error as {error?: {message?: unknown}; message?: unknown};
+        const bodyMessage = typeof body === 'object' && body !== null ? body.message : undefined;
+
+        if (typeof bodyMessage === 'string') {
+            return bodyMessage;
+        }
+        if (typeof message === 'string') {
+            return message;
+        }
+    }
+
+    return defaultMessage;
+}
+
 // we use this non-breaking hyphen to avoid line breaks in the time format
 export const NON_BREAKING_HYPHEN = '‑';
 

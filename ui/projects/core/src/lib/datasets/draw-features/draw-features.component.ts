@@ -9,7 +9,7 @@ import {HttpEventType, HttpResponse} from '@angular/common/http';
 import {AutoCreateDatasetDict, UploadResponseDict, UUID} from '../../backend/backend.model';
 import {mergeMap} from 'rxjs/operators';
 import {WGS_84} from '../../spatial-references/spatial-reference.service';
-import {NotificationService, ResultType, ResultTypes, SpatialReference} from '@geoengine/common';
+import {NotificationService, ResultType, ResultTypes, SpatialReference, errorMessage} from '@geoengine/common';
 import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
 import {DialogHelpComponent} from '../../dialogs/dialog-help/dialog-help.component';
 import {MatCard, MatCardHeader, MatCardTitle, MatCardContent} from '@angular/material/card';
@@ -196,7 +196,7 @@ export class DrawFeaturesComponent implements OnDestroy, OnInit {
                     this.state$.next(State.Finished);
                 },
                 error: (err) => {
-                    this.notificationService.error('Create dataset failed: ' + err.message);
+                    this.notificationService.error('Create dataset failed: ' + errorMessage(err));
                     this.indicateLoading$.next(false);
                 },
             });

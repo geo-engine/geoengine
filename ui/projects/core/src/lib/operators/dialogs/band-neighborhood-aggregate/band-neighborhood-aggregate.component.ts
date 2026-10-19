@@ -21,6 +21,7 @@ import {
     RasterSymbology,
     SingleBandRasterColorizer,
     GeoEngineError,
+    errorMessage,
 } from '@geoengine/common';
 import {SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
 import {BandNeighborhoodAggregateMethod, ProcessingGraph, TypedRasterOperator} from '@geoengine/api-client';
@@ -201,7 +202,7 @@ export class BandNeighborhoodAggregateComponent {
                     this.loading$.next(false);
                 },
                 error: (error) => {
-                    const errorMsg = error;
+                    const errorMsg = errorMessage(error);
                     this.lastError$.next(errorMsg);
                     this.loading$.next(false);
                 },

@@ -1,7 +1,7 @@
 import {BehaviorSubject, Observable, Subscription} from 'rxjs';
 
 import {ChangeDetectionStrategy, Component, OnDestroy, inject} from '@angular/core';
-import {UntypedFormControl, UntypedFormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 
 import {CoreConfig} from '../../config.service';
 import {User} from '../user.model';
@@ -38,7 +38,7 @@ export class ModalLoginComponent implements OnDestroy {
 
     formStatus$ = new BehaviorSubject<FormStatus>(FormStatus.LoggedOut);
 
-    loginForm: UntypedFormGroup;
+    loginForm: FormGroup<{email: FormControl<string>; password: FormControl<string>}>;
 
     user?: User;
     invalidCredentials$ = new BehaviorSubject<boolean>(false);
@@ -48,12 +48,12 @@ export class ModalLoginComponent implements OnDestroy {
     private formStatusSubscription?: Subscription;
 
     constructor() {
-        this.loginForm = new UntypedFormGroup({
-            email: new UntypedFormControl(
-                '',
-                Validators.compose([Validators.required, geoengineValidators.keyword([this.config.USER.GUEST.NAME])]),
-            ),
-            password: new UntypedFormControl('', Validators.required),
+        this.loginForm = new FormGroup({
+            email: new FormControl('', {
+                nonNullable: true,
+                validators: [Validators.required, geoengineValidators.keyword([this.config.USER.GUEST.NAME])],
+            }),
+            password: new FormControl('', {nonNullable: true, validators: Validators.required}),
         });
     }
 
@@ -67,8 +67,8 @@ export class ModalLoginComponent implements OnDestroy {
         this.formStatus$.next(FormStatus.Loading);
 
         this.loginCallback({
-            email: this.loginForm.controls['email'].value,
-            password: this.loginForm.controls['password'].value,
+            email: this.loginForm.controls.email.value,
+            password: this.loginForm.controls.password.value,
         }).subscribe(
             (session) => {
                 this.user = session.user;
@@ -78,7 +78,7 @@ export class ModalLoginComponent implements OnDestroy {
             () => {
                 // on error
                 this.invalidCredentials$.next(true);
-                (this.loginForm.controls['password'] as UntypedFormControl).setValue('');
+                this.loginForm.controls.password.setValue('');
                 this.formStatus$.next(FormStatus.LoggedOut);
             },
         );

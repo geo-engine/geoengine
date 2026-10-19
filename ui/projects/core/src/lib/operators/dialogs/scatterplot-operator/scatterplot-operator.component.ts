@@ -13,6 +13,7 @@ import {
     VectorLayer,
     VectorLayerMetadata,
     geoengineValidators,
+    errorMessage,
 } from '@geoengine/common';
 import {ProcessingGraph} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
@@ -123,7 +124,7 @@ export class ScatterplotOperatorComponent implements AfterViewInit, OnDestroy {
 
         const columnY = this.form.controls['columnY'].value as string;
 
-        const outputName: string = this.form.controls['name'].value;
+        const outputName = this.form.controls['name'].value as string;
 
         from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(
@@ -159,7 +160,7 @@ export class ScatterplotOperatorComponent implements AfterViewInit, OnDestroy {
                 () => {
                     // success
                 },
-                (error) => this.notificationService.error(error),
+                (error) => this.notificationService.error(errorMessage(error)),
             );
     }
 }

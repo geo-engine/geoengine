@@ -56,6 +56,7 @@ import {MatFormField, MatLabel} from '@angular/material/input';
 import {MatSelect} from '@angular/material/select';
 import {FormsModule} from '@angular/forms';
 import {MatOption} from '@angular/material/autocomplete';
+import {MomentInput} from 'moment';
 
 @Component({
     selector: 'geoengine-datatable',
@@ -291,7 +292,7 @@ export class DataTableComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     readTimePropertyStart(geometry: OlFeature): string | undefined {
-        const result = geometry['values_']['_____table__start'];
+        const result = geometry.get('_____table__start') as MomentInput | undefined;
         if (!result) {
             return undefined;
         }
@@ -301,7 +302,7 @@ export class DataTableComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     readTimePropertyEnd(geometry: OlFeature): string | undefined {
-        const result: string = geometry['values_']['_____table__end'];
+        const result = geometry.get('_____table__end') as MomentInput | undefined;
         if (!result) {
             return undefined;
         }
@@ -367,7 +368,7 @@ export class DataTableComponent implements OnInit, AfterViewInit, OnDestroy {
         for (let column = 0; column < this.featureColumns.length; column++) {
             let columnType = this.featureColumnDataTypes[column];
             for (const rowData of this.dataSource.data) {
-                const tmp = rowData.get(this.featureColumns[column]);
+                const tmp: unknown = rowData.get(this.featureColumns[column]);
                 if (typeof tmp === 'string' && tmp !== '') {
                     const tmpUrls = tmp.split(/(,)/g);
                     for (const tmpUrl of tmpUrls) {

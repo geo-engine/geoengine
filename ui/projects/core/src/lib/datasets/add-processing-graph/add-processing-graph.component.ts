@@ -1,5 +1,5 @@
 import {Component, ChangeDetectionStrategy, inject} from '@angular/core';
-import {UntypedFormGroup, UntypedFormControl, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {GeoEngineErrorDict, RasterResultDescriptorDict, UUID, VectorResultDescriptorDict} from '../../backend/backend.model';
 import {ProjectService} from '../../project/project.service';
 import {
@@ -40,18 +40,18 @@ export class AddProcessingGraphComponent {
     protected readonly notificationService = inject(NotificationService);
     protected readonly randomColorService = inject(RandomColorService);
 
-    readonly form: UntypedFormGroup;
+    readonly form: FormGroup<{layerName: FormControl<string>; processingGraphId: FormControl<UUID>}>;
 
     constructor() {
-        this.form = new UntypedFormGroup({
-            layerName: new UntypedFormControl('New Layer', Validators.required),
-            processingGraphId: new UntypedFormControl('', [Validators.required, isValidUuid]),
+        this.form = new FormGroup({
+            layerName: new FormControl('New Layer', {nonNullable: true, validators: Validators.required}),
+            processingGraphId: new FormControl('', {nonNullable: true, validators: [Validators.required, isValidUuid]}),
         });
     }
 
     add(): void {
-        const layerName: string = this.form.controls.layerName.value;
-        const processingGraphId: UUID = this.form.controls.processingGraphId.value;
+        const layerName = this.form.controls.layerName.value;
+        const processingGraphId = this.form.controls.processingGraphId.value;
 
         this.projectService.getProcessingGraphMetaData(processingGraphId).subscribe(
             (resultDescriptorDict) => {

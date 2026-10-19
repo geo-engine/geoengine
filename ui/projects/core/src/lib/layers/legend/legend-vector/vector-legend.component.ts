@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, Component, Input, OnInit, input} from '@angular/core';
+import {ChangeDetectionStrategy, Component, OnInit, input} from '@angular/core';
 
 import {
     BLACK,
@@ -49,7 +49,7 @@ export class VectorLegendComponent implements OnInit {
     readonly ST = SymbologyType;
     readonly showDefaultStyle = input(true);
 
-    @Input() layer!: VectorLayer;
+    readonly layer = input.required<VectorLayer>();
 
     symbology?: VectorSymbology;
 
@@ -70,7 +70,7 @@ export class VectorLegendComponent implements OnInit {
     radiusAttributeName = '';
 
     ngOnInit(): void {
-        this.symbology = this.layer.symbology;
+        this.symbology = this.layer().symbology;
 
         if (this.symbology instanceof PointSymbology) {
             this.fillColors = this.symbology.fillColor;

@@ -5,7 +5,15 @@ import {ProjectService} from '../../../project/project.service';
 import {map, mergeMap} from 'rxjs/operators';
 import {from, Observable} from 'rxjs';
 import {Layer} from 'ol/layer';
-import {NotificationService, RasterDataType, RasterDataTypes, RasterLayer, ResultTypes, geoengineValidators} from '@geoengine/common';
+import {
+    NotificationService,
+    RasterDataType,
+    RasterDataTypes,
+    RasterLayer,
+    ResultTypes,
+    geoengineValidators,
+    errorMessage,
+} from '@geoengine/common';
 import {ProcessingGraph, RasterOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
@@ -73,10 +81,10 @@ export class RasterTypeConversionComponent implements AfterViewInit {
     }
 
     add(): void {
-        const inputLayer: RasterLayer = this.form.controls['layer'].value;
-        const outputName: string = this.form.controls['name'].value;
+        const inputLayer = this.form.controls['layer'].value as RasterLayer;
+        const outputName = this.form.controls['name'].value as string;
 
-        const outputDataType: RasterDataType = this.form.controls['dataType'].value;
+        const outputDataType = this.form.controls['dataType'].value as RasterDataType;
 
         from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(
@@ -111,7 +119,7 @@ export class RasterTypeConversionComponent implements AfterViewInit {
                 () => {
                     // success
                 },
-                (error) => this.notificationService.error(error),
+                (error) => this.notificationService.error(errorMessage(error)),
             );
     }
 }

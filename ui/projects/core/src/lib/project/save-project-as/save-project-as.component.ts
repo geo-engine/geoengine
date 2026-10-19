@@ -1,6 +1,6 @@
 import {BehaviorSubject} from 'rxjs';
 import {Component, ChangeDetectionStrategy, AfterViewInit, inject} from '@angular/core';
-import {UntypedFormGroup, UntypedFormBuilder, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {FormControl, FormGroup, NonNullableFormBuilder, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {ProjectService} from '../project.service';
 import {geoengineValidators, NotificationService, FxLayoutDirective, FxFlexDirective} from '@geoengine/common';
 import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
@@ -27,24 +27,24 @@ import {AsyncPipe} from '@angular/common';
     ],
 })
 export class SaveProjectAsComponent implements AfterViewInit {
-    private formBuilder = inject(UntypedFormBuilder);
+    private formBuilder = inject(NonNullableFormBuilder);
     private projectService = inject(ProjectService);
     private notificationService = inject(NotificationService);
 
-    form: UntypedFormGroup;
+    form: FormGroup<{name: FormControl<string>}>;
 
     created$ = new BehaviorSubject(false);
 
     constructor() {
         this.form = this.formBuilder.group({
-            name: [
+            name: this.formBuilder.control(
                 '',
                 Validators.compose([Validators.required, geoengineValidators.notOnlyWhitespace]),
                 // geoengineValidators.uniqueProjectName(this.storageService), // TODO: check for uniqueness
-            ],
+            ),
         });
         this.projectService.getProjectOnce().subscribe((project) => {
-            this.form.controls['name'].setValue(project.name);
+            this.form.controls.name.setValue(project.name);
         });
     }
 
@@ -57,7 +57,7 @@ export class SaveProjectAsComponent implements AfterViewInit {
      *
      */
     save(): void {
-        const projectName: string = this.form.controls['name'].value;
+        const projectName = this.form.controls.name.value;
 
         this.projectService.cloneProject(projectName).subscribe((project) => {
             this.projectService.setProject(project);

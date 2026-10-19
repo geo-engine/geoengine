@@ -1,5 +1,5 @@
 import {Observable, Subscription} from 'rxjs';
-import {Component, OnDestroy, Input, ChangeDetectionStrategy, ChangeDetectorRef, OnChanges, inject, input} from '@angular/core';
+import {Component, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, OnChanges, inject, input} from '@angular/core';
 import {CdkDragDrop, moveItemInArray, CdkDropList, CdkDrag, CdkDragPlaceholder} from '@angular/cdk/drag-drop';
 import {Clipboard} from '@angular/cdk/clipboard';
 import {MatDialog} from '@angular/material/dialog';
@@ -58,7 +58,7 @@ export class LayerListComponent implements OnDestroy, OnChanges {
      * The empty list shows a button to trigger the generation of a first layer.
      * This sidenav config is called to present a date listing or a similar dialog in the sidenav.
      */
-    @Input() addAFirstLayerSidenavConfig?: SidenavConfig = {component: AddDataComponent};
+    readonly addAFirstLayerSidenavConfig = input<SidenavConfig | undefined>({component: AddDataComponent});
 
     /**
      * sends if the layerlist should be visible

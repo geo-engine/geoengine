@@ -14,6 +14,7 @@ import {
     VectorColumnDataTypes,
     VectorLayer,
     VectorLayerMetadata,
+    errorMessage,
 } from '@geoengine/common';
 import {ProcessingGraph} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
@@ -123,7 +124,7 @@ export class FeatureAttributeOvertimeComponent implements AfterViewInit, OnDestr
         const idAttribute = this.form.controls['idAttribute'].value as string;
         const valueAttribute = this.form.controls['valueAttribute'].value as string;
 
-        const outputName: string = this.form.controls['name'].value;
+        const outputName = this.form.controls['name'].value as string;
 
         from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(
@@ -159,7 +160,7 @@ export class FeatureAttributeOvertimeComponent implements AfterViewInit, OnDestr
                 () => {
                     // success
                 },
-                (error) => this.notificationService.error(error),
+                (error) => this.notificationService.error(errorMessage(error)),
             );
     }
 

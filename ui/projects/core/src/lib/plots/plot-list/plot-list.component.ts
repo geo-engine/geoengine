@@ -26,7 +26,7 @@ import {AsyncPipe} from '@angular/common';
 export class PlotListComponent implements AfterViewInit, OnDestroy {
     readonly projectService = inject(ProjectService);
     private readonly layoutService = inject(LayoutService);
-    private readonly elementRef = inject(ElementRef);
+    private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
 
     /**
      * If the list is empty, show the following button.
@@ -50,6 +50,7 @@ export class PlotListComponent implements AfterViewInit, OnDestroy {
                 .subscribe(() => {
                     setTimeout(() => {
                         const cardContent = this.elementRef.nativeElement.querySelector('mat-card-content');
+                        if (!cardContent) return;
                         const width = parseInt(getComputedStyle(cardContent).width, 10);
                         this.cardWidth$.next(width);
                     });

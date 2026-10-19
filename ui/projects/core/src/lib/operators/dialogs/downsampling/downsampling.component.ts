@@ -17,6 +17,7 @@ import {
     FxLayoutDirective,
     AsyncValueDefault,
     errorToText,
+    errorMessage,
 } from '@geoengine/common';
 import {ProcessingGraph, RasterOperator, DownsamplingResolution} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
@@ -122,8 +123,8 @@ export class DownsamplingComponent implements AfterViewInit, OnDestroy {
             return; // don't add while loading
         }
 
-        const inputLayer: RasterLayer = this.form.controls['layer'].value;
-        const outputName: string = this.form.controls['name'].value;
+        const inputLayer = this.form.controls['layer'].value as RasterLayer;
+        const outputName = this.form.controls['name'].value as string;
 
         const downsamplingMethod = this.form.controls['downsamplingMethod'].value as 'nearestNeighbor';
         const outputResolution: DownsamplingResolution = this.getoutputResolution();
@@ -169,7 +170,7 @@ export class DownsamplingComponent implements AfterViewInit, OnDestroy {
             .subscribe({
                 next: () => this.loading$.next(false),
                 error: (error) => {
-                    void errorToText(error, error.error?.message ?? error.message).then((errorMsg) => {
+                    void errorToText(error, errorMessage(error)).then((errorMsg) => {
                         this.notificationService.error(errorMsg);
                         this.loading$.next(false);
                     });
@@ -178,19 +179,19 @@ export class DownsamplingComponent implements AfterViewInit, OnDestroy {
     }
 
     private getoutputResolution(): DownsamplingResolution {
-        const outputResolution = this.form.controls['outputResolution'].value;
+        const outputResolution = this.form.controls['outputResolution'].value as string;
 
         if (outputResolution === 'fraction') {
             return {
                 type: 'fraction',
-                x: this.form.controls['outputResolutionX'].value,
-                y: this.form.controls['outputResolutionY'].value,
+                x: this.form.controls['outputResolutionX'].value as number,
+                y: this.form.controls['outputResolutionY'].value as number,
             };
         } else if (outputResolution === 'resolution') {
             return {
                 type: 'resolution',
-                x: this.form.controls['outputResolutionX'].value,
-                y: this.form.controls['outputResolutionY'].value,
+                x: this.form.controls['outputResolutionX'].value as number,
+                y: this.form.controls['outputResolutionY'].value as number,
             };
         }
 

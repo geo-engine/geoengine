@@ -33,8 +33,6 @@ const config = defineConfig([
         },
 
         rules: {
-            'arrow-parens': ['off', 'always'],
-            'brace-style': ['off', '1tbs'], // prettier is currently inconsistent, re-enable if possible
             'guard-for-in': 'error',
             'id-blacklist': 'off',
             'id-match': 'off',
@@ -64,6 +62,7 @@ const config = defineConfig([
                 },
             ],
             '@angular-eslint/prefer-signals': 'warn',
+            '@angular-eslint/use-lifecycle-interface': 'error',
 
             '@typescript-eslint/array-type': ['off', {default: 'generic'}],
             '@typescript-eslint/consistent-type-definitions': 'error',
@@ -142,11 +141,11 @@ const config = defineConfig([
             ],
             '@typescript-eslint/no-shadow': 'error',
             '@typescript-eslint/explicit-function-return-type': 'error',
-            '@typescript-eslint/no-unsafe-argument': 'warn', // TODO: use typed forms
-            '@typescript-eslint/no-unsafe-assignment': 'warn', // TODO: use typed forms
-            '@typescript-eslint/no-unsafe-call': 'warn', // TODO: use typed forms
-            '@typescript-eslint/no-unsafe-member-access': 'warn', // TODO: use typed forms
-            '@typescript-eslint/no-unsafe-return': 'warn', // TODO: use typed forms
+            '@typescript-eslint/no-unsafe-argument': 'warn', // TODO: type lineage-graph, map-container and time-slider in core
+            '@typescript-eslint/no-unsafe-assignment': 'warn', // TODO: type lineage-graph, map-container and time-slider in core
+            '@typescript-eslint/no-unsafe-call': 'warn', // TODO: type lineage-graph, map-container and time-slider in core
+            '@typescript-eslint/no-unsafe-member-access': 'warn', // TODO: type lineage-graph, map-container and time-slider in core
+            '@typescript-eslint/no-unsafe-return': 'error',
             '@typescript-eslint/unbound-method': ['error', {ignoreStatic: true}],
             '@typescript-eslint/no-floating-promises': 'error',
             '@typescript-eslint/no-inferrable-types': ['error', {ignoreParameters: true, ignoreProperties: true}],
@@ -192,6 +191,7 @@ const warningsAsErrors = (filesGlob) => {
 };
 
 // Warnings are errors everywhere except in the `core` library, which still has legacy warnings to fix.
+// Once a rule has no warnings left in `core`, set it to 'error' above.
 const withLegacyWarnings = ['projects/core/**'];
 
 export default defineConfig([

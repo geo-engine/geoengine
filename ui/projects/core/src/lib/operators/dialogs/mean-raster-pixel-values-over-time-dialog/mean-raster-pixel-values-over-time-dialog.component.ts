@@ -4,7 +4,7 @@ import {ProjectService} from '../../../project/project.service';
 
 import {map, mergeMap} from 'rxjs/operators';
 import {from, Observable} from 'rxjs';
-import {NotificationService, Plot, RasterLayer, ResultTypes, geoengineValidators} from '@geoengine/common';
+import {NotificationService, Plot, RasterLayer, ResultTypes, geoengineValidators, errorMessage} from '@geoengine/common';
 import {ProcessingGraph, MeanRasterPixelValuesOverTimeParameters} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
@@ -101,11 +101,11 @@ export class MeanRasterPixelValuesOverTimeDialogComponent implements AfterViewIn
      * The plot is added to the plot view.
      */
     add(): void {
-        const inputLayer: RasterLayer = this.form.controls['layer'].value;
-        const outputName: string = this.form.controls['name'].value;
+        const inputLayer = this.form.controls['layer'].value as RasterLayer;
+        const outputName = this.form.controls['name'].value as string;
 
-        const timePosition: TimePosition = this.form.controls['timePosition'].value;
-        const area: boolean = this.form.controls['area'].value;
+        const timePosition = this.form.controls['timePosition'].value as TimePosition;
+        const area = this.form.controls['area'].value as boolean;
 
         const params: MeanRasterPixelValuesOverTimeParameters = {
             timePosition,
@@ -143,7 +143,7 @@ export class MeanRasterPixelValuesOverTimeDialogComponent implements AfterViewIn
                 () => {
                     // success
                 },
-                (error) => this.notificationService.error(error),
+                (error) => this.notificationService.error(errorMessage(error)),
             );
     }
 }
