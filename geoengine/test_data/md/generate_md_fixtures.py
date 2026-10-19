@@ -10,8 +10,8 @@ Fixtures
 - time_series.zarr        same array via the ZARR driver
 - time_series_split_a.nc  first half of a two-file time series (global t 0..4)
 - time_series_split_b.nc  second half (global t 4..8), grid identical to part a
-- time_series_gap_a.nc    first 4 slices (t 0..4) of a series with a hole
-- time_series_gap_b.nc    last 4 slices (t 8..12) of a series with a hole; t 4..8 is absent
+- time_series_gap_b.nc    last 4 slices (t 8..12) of a series with a hole; t 4..8 is absent,
+                          so pair it with time_series_split_a.nc (t 0..4, same bytes)
 - wrap_0_360.nc           time axis, edges lon 0..360 (step 1), lat 45..35 (wrap-around)
 - wrap_0_360_multitile.nc same but 0.25 deg lon (1440 cols, spans 3 tile columns)
 - bands.nc                dims (band, y, x), no CF time units; read as one variable per fixed band index
@@ -55,7 +55,6 @@ FIXTURES = [
     "time_series.zarr",
     "time_series_split_a.nc",
     "time_series_split_b.nc",
-    "time_series_gap_a.nc",
     "time_series_gap_b.nc",
     "wrap_0_360.nc",
     "wrap_0_360_multitile.nc",
@@ -540,11 +539,10 @@ def main() -> None:
     zarr_time_series(OUT_DIR / "time_series.zarr")
     time_series(2, 4, OUT_DIR / "time_series_split_a.nc", t_start=0)
     time_series(2, 4, OUT_DIR / "time_series_split_b.nc", t_start=4)
-    # Same as the split pair but with a deliberate 4-step hole (t 4..8 is missing), so the
-    # loading info's time axis has a gap-filling step in the middle. A file whose z_start
-    # came from a running slice count instead of its position on the axis would be off by
-    # one for every date after the gap.
-    time_series(2, 4, OUT_DIR / "time_series_gap_a.nc", t_start=0)
+    # Paired with `time_series_split_a.nc` (t 0..4) this has a deliberate 4-step hole
+    # (t 4..8 is missing), so the loading info's time axis has a gap-filling step in the
+    # middle. A file whose z_start came from a running slice count instead of its position
+    # on the axis would be off by one for every date after the gap.
     time_series(2, 4, OUT_DIR / "time_series_gap_b.nc", t_start=8)
     wrap_0_360(OUT_DIR / "wrap_0_360.nc")
     bands(OUT_DIR / "bands.nc")
