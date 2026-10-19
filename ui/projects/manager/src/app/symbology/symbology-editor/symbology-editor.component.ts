@@ -1,4 +1,4 @@
-import {Component, Input, OnChanges, SimpleChanges, inject, input, viewChild, ChangeDetectionStrategy} from '@angular/core';
+import {Component, OnChanges, SimpleChanges, inject, input, model, viewChild, ChangeDetectionStrategy} from '@angular/core';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {
     DatasetsService,
@@ -9,8 +9,8 @@ import {
     VectorSymbology,
     VectorSymbologyEditorComponent,
     CommonModule,
+    errorToText,
 } from '@geoengine/common';
-import {ResponseError} from '@geoengine/api-client';
 import {AppConfig} from '../../app-config.service';
 import {MatButton} from '@angular/material/button';
 
@@ -28,8 +28,8 @@ export class SymbologyEditorComponent implements OnChanges {
 
     readonly workflowId = input.required<UUID>();
     readonly datasetName = input<string>();
-    @Input() rasterSymbology: RasterSymbology | undefined;
-    @Input() vectorSymbology: VectorSymbology | undefined;
+    readonly rasterSymbology = model<RasterSymbology>();
+    readonly vectorSymbology = model<VectorSymbology>();
 
     readonly rasterSymbologyEditorComponent = viewChild(RasterSymbologyEditorComponent);
     readonly vectorSymbologyEditorComponent = viewChild(VectorSymbologyEditorComponent);
@@ -46,14 +46,16 @@ export class SymbologyEditorComponent implements OnChanges {
     }
 
     setUp(): void {
-        if (this.rasterSymbology) {
-            this.rasterSymbologyWorkflow = {symbology: this.rasterSymbology, workflowId: this.workflowId()};
+        const rasterSymbology = this.rasterSymbology();
+        if (rasterSymbology) {
+            this.rasterSymbologyWorkflow = {symbology: rasterSymbology, workflowId: this.workflowId()};
         } else {
             this.rasterSymbologyWorkflow = undefined;
         }
 
-        if (this.vectorSymbology) {
-            this.vectorSymbologyWorkflow = {symbology: this.vectorSymbology, workflowId: this.workflowId()};
+        const vectorSymbology = this.vectorSymbology();
+        if (vectorSymbology) {
+            this.vectorSymbologyWorkflow = {symbology: vectorSymbology, workflowId: this.workflowId()};
         } else {
             this.vectorSymbologyWorkflow = undefined;
         }
@@ -61,11 +63,11 @@ export class SymbologyEditorComponent implements OnChanges {
     }
 
     applyChanges(): void {
-        if (this.rasterSymbology) {
+        if (this.rasterSymbology()) {
             void this.updateRasterSymbology();
         }
 
-        if (this.vectorSymbology) {
+        if (this.vectorSymbology()) {
             void this.updateVectorSymbology();
         }
     }
@@ -79,29 +81,28 @@ export class SymbologyEditorComponent implements OnChanges {
     }
 
     changeRasterSymbology(symbology: RasterSymbology): void {
-        this.rasterSymbology = symbology;
+        this.rasterSymbology.set(symbology);
         this.unappliedChanges = true;
     }
 
     changeVectorSymbology(symbology: VectorSymbology): void {
-        this.vectorSymbology = symbology;
+        this.vectorSymbology.set(symbology);
         this.unappliedChanges = true;
     }
 
     async updateRasterSymbology(): Promise<void> {
         const datasetName = this.datasetName();
-        if (datasetName && this.rasterSymbology) {
+        const rasterSymbology = this.rasterSymbology();
+        if (datasetName && rasterSymbology) {
             try {
-                await this.datasetsService.updateSymbology(datasetName, this.rasterSymbology.toDict());
+                await this.datasetsService.updateSymbology(datasetName, rasterSymbology.toDict());
 
-                this.rasterSymbologyWorkflow = {symbology: this.rasterSymbology, workflowId: this.workflowId()};
+                this.rasterSymbologyWorkflow = {symbology: rasterSymbology, workflowId: this.workflowId()};
 
                 this.unappliedChanges = false;
                 this.snackBar.open('Symbology successfully updated.', 'Close', {duration: this.config.DEFAULTS.SNACKBAR_DURATION});
             } catch (error) {
-                const e = error as ResponseError;
-                const errorJson = await e.response.json().catch(() => ({}));
-                const errorMessage = errorJson.message ?? 'Updating symbology failed.';
+                const errorMessage = await errorToText(error, 'Updating symbology failed.');
                 this.snackBar.open(errorMessage, 'Close', {panelClass: ['error-snackbar']});
             }
         }
@@ -109,18 +110,17 @@ export class SymbologyEditorComponent implements OnChanges {
 
     async updateVectorSymbology(): Promise<void> {
         const datasetName = this.datasetName();
-        if (datasetName && this.vectorSymbology) {
+        const vectorSymbology = this.vectorSymbology();
+        if (datasetName && vectorSymbology) {
             try {
-                await this.datasetsService.updateSymbology(datasetName, this.vectorSymbology.toDict());
+                await this.datasetsService.updateSymbology(datasetName, vectorSymbology.toDict());
 
-                this.vectorSymbologyWorkflow = {symbology: this.vectorSymbology, workflowId: this.workflowId()};
+                this.vectorSymbologyWorkflow = {symbology: vectorSymbology, workflowId: this.workflowId()};
 
                 this.unappliedChanges = false;
                 this.snackBar.open('Symbology successfully updated.', 'Close', {duration: this.config.DEFAULTS.SNACKBAR_DURATION});
             } catch (error) {
-                const e = error as ResponseError;
-                const errorJson = await e.response.json().catch(() => ({}));
-                const errorMessage = errorJson.message ?? 'Updating symbology failed.';
+                const errorMessage = await errorToText(error, 'Updating symbology failed.');
                 this.snackBar.open(errorMessage, 'Close', {panelClass: ['error-snackbar']});
             }
         }

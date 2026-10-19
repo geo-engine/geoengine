@@ -1,7 +1,7 @@
 <form [formGroup]="form">
-    @if (dataPath) {
+    @if (dataPath()) {
         <div>
-            @if (dataPath) {
+            @if (dataPath()) {
                 <div class="flex-container">
                     <mat-form-field appearance="fill">
                         <mat-label>Path to probe file, relative to upload or volume (optional)</mat-label>
@@ -69,7 +69,7 @@
 
                 <geoengine-manager-gdal-dataset-parameters
                     [form]="selectedTimeSliceGroup.controls.gdalParameters"
-                    [dataPath]="dataPath"
+                    [dataPath]="dataPath()"
                 ></geoengine-manager-gdal-dataset-parameters>
 
                 <mat-divider id="gdal-params-divider"></mat-divider>

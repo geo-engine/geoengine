@@ -89,7 +89,7 @@ export class LayersComponent {
         if (!layerCollectionNavigationComponent.selectedCollection) {
             return;
         }
-        const dialogRef = this.dialog.open(AddLayerItemComponent, {
+        const dialogRef = this.dialog.open<AddLayerItemComponent, unknown, ItemId>(AddLayerItemComponent, {
             width: '50%',
             height: 'calc(66%)',
             autoFocus: false,
@@ -99,7 +99,7 @@ export class LayersComponent {
             },
         });
 
-        const itemId: ItemId = await firstValueFrom(dialogRef.afterClosed());
+        const itemId = await firstValueFrom(dialogRef.afterClosed());
 
         if (!itemId) {
             return;

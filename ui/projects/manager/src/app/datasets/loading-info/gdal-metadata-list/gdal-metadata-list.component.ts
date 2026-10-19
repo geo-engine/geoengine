@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, SimpleChanges, inject, input} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, OnChanges, SimpleChanges, inject, input} from '@angular/core';
 import {
     AbstractControl,
     FormArray,
@@ -91,7 +91,7 @@ export class GdalMetadataListComponent implements OnChanges {
 
     mainFile = '';
 
-    @Input() dataPath?: DataPath;
+    readonly dataPath = input<DataPath>();
 
     readonly metaData = input<GdalMetaDataList>();
 
@@ -250,7 +250,8 @@ export class GdalMetadataListComponent implements OnChanges {
     }
 
     async suggest(): Promise<void> {
-        if (!this.dataPath) {
+        const dataPath = this.dataPath();
+        if (!dataPath) {
             this.snackBar.open('No data path selected.', 'Close', {panelClass: ['error-snackbar']});
             return;
         }
@@ -258,7 +259,7 @@ export class GdalMetadataListComponent implements OnChanges {
         try {
             const suggestion = await this.datasetsService.suggestMetaData({
                 suggestMetaData: {
-                    dataPath: this.dataPath,
+                    dataPath,
                     mainFile: this.mainFile,
                 },
             });
@@ -414,10 +415,10 @@ export const overlappingTimeIntervalsValidator =
             return null;
         }
 
-        const formArray = control;
+        const formArray = control as FormArray<FormGroup<TimeSliceForm>>;
 
         const controls = formArray.controls;
-        const values: TimeInterval[] = controls.map((c) => c.value.time);
+        const values: TimeInterval[] = controls.map((c) => c.controls.time.value);
 
         for (let i = 0; i < values.length; i++) {
             for (let j = i + 1; j < values.length; j++) {

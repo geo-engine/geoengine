@@ -113,7 +113,9 @@ export class AppComponent implements OnInit, AfterViewInit {
     readonly bottomTabs = viewChild.required(MatTabGroup);
 
     readonly rightSidenav = viewChild.required(MatSidenav);
-    readonly sidenavContainerElement = viewChild.required(MatSidenavContainer, {read: ElementRef});
+    readonly sidenavContainerElement = viewChild.required<MatSidenavContainer, ElementRef<HTMLElement>>(MatSidenavContainer, {
+        read: ElementRef,
+    });
     readonly rightSidenavContainer = viewChild.required(SidenavContainerComponent);
 
     readonly layersReverse$: Observable<Array<Layer>>;

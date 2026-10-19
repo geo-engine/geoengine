@@ -27,7 +27,7 @@ export class AddProviderComponent {
     protected readonly Object = Object;
 
     private readonly layersService = inject(LayersService);
-    private readonly dialogRef = inject(MatDialogRef<AddProviderComponent>);
+    private readonly dialogRef = inject<MatDialogRef<AddProviderComponent, string>>(MatDialogRef);
     private readonly matSnackBar = inject(MatSnackBar);
 
     async createProvider(): Promise<void> {

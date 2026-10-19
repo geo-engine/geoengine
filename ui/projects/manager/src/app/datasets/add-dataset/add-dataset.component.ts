@@ -63,7 +63,7 @@ export interface AddDatasetForm {
 export class AddDatasetComponent {
     private readonly datasetsService = inject(DatasetsService);
     private readonly snackBar = inject(MatSnackBar);
-    private readonly dialogRef = inject<MatDialogRef<AddDatasetComponent>>(MatDialogRef);
+    private readonly dialogRef = inject<MatDialogRef<AddDatasetComponent, string>>(MatDialogRef);
     private readonly dialog = inject(MatDialog);
 
     DataPaths = DataPaths;
@@ -115,7 +115,7 @@ export class AddDatasetComponent {
                     return;
                 }
 
-                const confirmDialogRef = this.dialog.open(ConfirmationComponent, {
+                const confirmDialogRef = this.dialog.open<ConfirmationComponent, {message: string}, boolean>(ConfirmationComponent, {
                     data: {message: 'Do you really want to stop creating the dataset? All changes will be lost.'},
                 });
 

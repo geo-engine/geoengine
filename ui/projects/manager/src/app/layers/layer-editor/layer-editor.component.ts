@@ -16,7 +16,14 @@ import {
     UUID,
     CommonModule,
 } from '@geoengine/common';
-import {Layer, LayerListing, TypedResultDescriptor, Symbology as SymbologyDict, ProviderLayerCollectionId} from '@geoengine/api-client';
+import {
+    Layer,
+    LayerListing,
+    TypedResultDescriptor,
+    Symbology as SymbologyDict,
+    ProviderLayerCollectionId,
+    ProcessingGraph,
+} from '@geoengine/api-client';
 import {AppConfig} from '../../app-config.service';
 import {firstValueFrom} from 'rxjs';
 import {MatCard, MatCardHeader, MatCardTitle, MatCardContent} from '@angular/material/card';
@@ -356,7 +363,7 @@ export class LayerEditorComponent {
                 name,
                 properties,
                 metadata,
-                processingGraph: JSON.parse(this.form.controls.workflow.value),
+                processingGraph: JSON.parse(this.form.controls.workflow.value) as ProcessingGraph,
                 symbology: this.form.controls.symbology.value,
             });
 
@@ -375,7 +382,7 @@ export class LayerEditorComponent {
     }
 
     async deleteLayer(): Promise<void> {
-        const dialogRef = this.dialog.open(ConfirmationComponent, {
+        const dialogRef = this.dialog.open<ConfirmationComponent, {message: string}, boolean>(ConfirmationComponent, {
             data: {message: 'Confirm the deletion of the layer. It will be removed from ALL collections. This cannot be undone.'},
         });
 
@@ -396,7 +403,7 @@ export class LayerEditorComponent {
     }
 
     async deleteLayerFromParent(): Promise<void> {
-        const dialogRef = this.dialog.open(ConfirmationComponent, {
+        const dialogRef = this.dialog.open<ConfirmationComponent, {message: string}, boolean>(ConfirmationComponent, {
             data: {message: 'Confirm the removal of the layer from the parent collection.'},
         });
 

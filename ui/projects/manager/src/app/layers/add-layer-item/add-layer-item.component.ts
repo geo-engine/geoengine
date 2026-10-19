@@ -65,7 +65,7 @@ enum ChildType {
 export class AddLayerItemComponent {
     private readonly layersService = inject(LayersService);
     private readonly snackBar = inject(MatSnackBar);
-    private readonly dialogRef = inject<MatDialogRef<AddLayerItemComponent>>(MatDialogRef);
+    private readonly dialogRef = inject<MatDialogRef<AddLayerItemComponent, ItemId>>(MatDialogRef);
     private readonly dialog = inject(MatDialog);
 
     ItemType = ItemType;
@@ -112,7 +112,7 @@ export class AddLayerItemComponent {
                     return;
                 }
 
-                const confirmDialogRef = this.dialog.open(ConfirmationComponent, {
+                const confirmDialogRef = this.dialog.open<ConfirmationComponent, {message: string}, boolean>(ConfirmationComponent, {
                     data: {message: 'Do you really want to stop creating the item? All changes will be lost.'},
                 });
 

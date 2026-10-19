@@ -5,7 +5,7 @@ import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import eslintConfigPrettier from 'eslint-config-prettier/flat';
 
-export default defineConfig([
+const config = defineConfig([
     {
         files: ['**/*.ts'],
 
@@ -165,5 +165,45 @@ export default defineConfig([
         extends: [angular.configs.templateRecommended, eslintConfigPrettier],
 
         rules: {},
+    },
+]);
+
+const isWarning = (entry) => {
+    const severity = Array.isArray(entry) ? entry[0] : entry;
+    return severity === 'warn' || severity === 1;
+};
+
+/**
+ * Collect the effective rules of all config objects for the given file glob (later objects win)
+ * and set every rule that ends up as a warning to an error, keeping its options.
+ */
+const warningsAsErrors = (filesGlob) => {
+    const rules = {};
+    for (const {files, rules: configRules} of config) {
+        if (JSON.stringify(files ?? []).includes(JSON.stringify(filesGlob))) {
+            Object.assign(rules, configRules);
+        }
+    }
+    return Object.fromEntries(
+        Object.entries(rules)
+            .filter(([, entry]) => isWarning(entry))
+            .map(([rule, entry]) => [rule, Array.isArray(entry) ? ['error', ...entry.slice(1)] : 'error']),
+    );
+};
+
+// The apps must not contain warnings, while the `common` and `core` libraries still have legacy warnings to fix.
+const libraries = ['projects/common/**', 'projects/core/**'];
+
+export default defineConfig([
+    ...config,
+    {
+        files: ['**/*.ts'],
+        ignores: libraries,
+        rules: warningsAsErrors('**/*.ts'),
+    },
+    {
+        files: ['**/*.html'],
+        ignores: libraries,
+        rules: warningsAsErrors('**/*.html'),
     },
 ]);

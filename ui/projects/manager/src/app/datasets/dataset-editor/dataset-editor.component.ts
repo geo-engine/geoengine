@@ -241,7 +241,7 @@ export class DatasetEditorComponent {
     }
 
     async deleteDataset(): Promise<void> {
-        const dialogRef = this.dialog.open(ConfirmationComponent, {
+        const dialogRef = this.dialog.open<ConfirmationComponent, {message: string}, boolean>(ConfirmationComponent, {
             data: {message: 'Confirm the deletion of the dataset. This cannot be undone.'},
         });
 
