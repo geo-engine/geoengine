@@ -4,13 +4,25 @@ import {FormsModule} from '@angular/forms';
 import {MatOption} from '@angular/material/autocomplete';
 import {MatButton} from '@angular/material/button';
 import {MatSelect} from '@angular/material/select';
-import moment, {DurationInputArg2, Moment} from 'moment';
+import moment, {DurationInputArg2, Moment, MomentInput} from 'moment';
 import {Subscription} from 'rxjs';
 import {DataSet} from 'vis-data/peer';
-import {DateType, Timeline} from 'vis-timeline/peer';
+import {DataSetDataGroup, DataSetDataItem, DataGroup, DataItem, DateType, IdType, Timeline, TimelineOptions} from 'vis-timeline/peer';
 import {Layer, Time, FxLayoutDirective, FxLayoutGapDirective, FxLayoutAlignDirective} from '@geoengine/common';
 import {LayoutService} from '../../layout.service';
 import {ProjectService} from '../../project/project.service';
+
+/** The event properties of `timechanged`, which vis-timeline types as `any`. */
+interface TimeChangedProperties {
+    id: IdType;
+    time: Date;
+}
+
+/** The event properties of `rangechanged`, which vis-timeline types as `any`. */
+interface RangeChangedProperties {
+    start: Date;
+    end: Date;
+}
 
 @Component({
     selector: 'geoengine-time-slider',
@@ -26,12 +38,9 @@ export class TimeSliderComponent implements OnInit, OnDestroy {
 
     //Timeline Data for vis-timeline
     timeline: Timeline | undefined;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    options: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    data: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    groups: any;
+    options: TimelineOptions = {};
+    data: DataSetDataItem = new DataSet<DataItem>();
+    groups: DataSetDataGroup = new DataSet<DataGroup>();
 
     //Time Data
     startTime: DateType = new Date();
@@ -52,7 +61,7 @@ export class TimeSliderComponent implements OnInit, OnDestroy {
     //Layer Data
     layerList: Array<Layer> = [];
 
-    readonly timelineContainer = viewChild.required<ElementRef>('timeline');
+    readonly timelineContainer = viewChild.required<ElementRef<HTMLElement>>('timeline');
 
     // inventory of used subscriptions
     private subscriptions: Array<Subscription> = [];
@@ -83,7 +92,7 @@ export class TimeSliderComponent implements OnInit, OnDestroy {
         this.timeline.addCustomTime(this.endTime, 'end');
 
         //listens to events of the custom timebars
-        this.timeline.on('timechanged', (properties) => {
+        this.timeline.on('timechanged', (properties: TimeChangedProperties) => {
             if (properties.id === 'start') {
                 this.startTime = this.timeline!.getCustomTime(properties.id);
             }
@@ -96,10 +105,8 @@ export class TimeSliderComponent implements OnInit, OnDestroy {
             void this.changeTime();
         });
 
-        this.timeline.on('rangechanged', (properties) => {
-            const startWindow = properties.start;
-            const endWindow = properties.end;
-            const windowSize = endWindow - startWindow;
+        this.timeline.on('rangechanged', (properties: RangeChangedProperties) => {
+            const windowSize = properties.end.getTime() - properties.start.getTime();
             this.changeSelectedScale(windowSize);
         });
 
@@ -255,7 +262,7 @@ export class TimeSliderComponent implements OnInit, OnDestroy {
 
     //every group represents one layer
     getTimelineGroups(): void {
-        this.groups = new DataSet([]);
+        this.groups = new DataSet<DataGroup>();
         if (this.layerList.length > 0) {
             for (const layer of this.layerList) {
                 this.groups.add({
@@ -269,7 +276,7 @@ export class TimeSliderComponent implements OnInit, OnDestroy {
     //every group (layer) can hav multiple data points
     //ToDo: implement the availability of the layers
     getTimelineData(): void {
-        this.data = new DataSet();
+        this.data = new DataSet<DataItem>();
         for (const layer of this.layerList) {
             this.data.add({
                 id: layer.id,
@@ -285,8 +292,8 @@ export class TimeSliderComponent implements OnInit, OnDestroy {
     //options for the timeline
     getOptions(): void {
         this.options = {
-            moment: (date: Date): moment.Moment => moment(date).utc(), //use utc
-            snap: (date: Date, scale: string, step: number): Moment => this.snapFunction(date, scale, step),
+            moment: (date?: MomentInput): Moment => moment(date).utc(), //use utc
+            snap: (date: Date, scale: string, step: number): Date => this.snapFunction(date, scale, step).toDate(),
             start: '2012-01',
             end: '2020-01',
             orientation: 'top',

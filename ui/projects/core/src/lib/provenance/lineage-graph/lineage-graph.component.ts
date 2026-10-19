@@ -33,6 +33,26 @@ const GRAPH_STYLE = {
     },
 };
 
+/**
+ * An operator of the processing graph. Only the root of a processing graph is wrapped in a `TypedOperator`
+ * (`{type: 'Raster', operator: …}`), its sources are plain operators like this one.
+ */
+type GraphOperator = TypedOperator['operator'];
+
+/** The label of a graph node, as set in `addOperatorsToGraph` and `addLayerToGraph`. graphlib types it as `any`. */
+interface LineageNodeLabel {
+    type: 'operator' | 'layer';
+    operator?: GraphOperator;
+}
+
+/** The graph label after layouting, which graphlib types as `void | string`. */
+interface GraphLabel {
+    width?: number;
+    height?: number;
+}
+
+type SvgSelection = d3.Selection<SVGElement, unknown, null, undefined>;
+
 @Component({
     selector: 'geoengine-lineage-graph',
     templateUrl: './lineage-graph.component.html',
@@ -54,7 +74,7 @@ const GRAPH_STYLE = {
     ],
 })
 export class LineageGraphComponent implements AfterViewInit {
-    private elementRef = inject(ElementRef);
+    private elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
     private projectService = inject(ProjectService);
     private layoutService = inject(LayoutService);
     private dialogRef = inject<MatDialogRef<LineageGraphComponent>>(MatDialogRef);
@@ -62,8 +82,8 @@ export class LineageGraphComponent implements AfterViewInit {
         layer: Layer;
     }>(MAT_DIALOG_DATA);
 
-    readonly svg = viewChild.required<ElementRef>('svg');
-    readonly g = viewChild.required<ElementRef>('g');
+    readonly svg = viewChild.required<ElementRef<SVGSVGElement>>('svg');
+    readonly g = viewChild.required<ElementRef<SVGGElement>>('g');
 
     svgWidth$: Observable<number>;
     svgHeight$: Observable<number>;
@@ -76,7 +96,7 @@ export class LineageGraphComponent implements AfterViewInit {
     title = 'Layer Lineage';
     layer: Layer;
 
-    selectedOperator$ = new ReplaySubject<TypedOperator>(1);
+    selectedOperator$ = new ReplaySubject<GraphOperator>(1);
     selectedOperatorIcon$ = new ReplaySubject<string>(1);
     parameters$ = new ReplaySubject<Array<{key: string; value: string}>>(1);
 
@@ -107,11 +127,14 @@ export class LineageGraphComponent implements AfterViewInit {
     }
 
     private calculateDialogBounds(): void {
-        let dialogContainer;
+        let dialogContainer: Element | null = null;
         let parent = this.elementRef.nativeElement.parentElement;
-        while (!dialogContainer) {
+        while (!dialogContainer && parent) {
             dialogContainer = parent.querySelector('.cdk-overlay-pane');
             parent = parent.parentElement;
+        }
+        if (!dialogContainer) {
+            return;
         }
 
         const width = parseInt(getComputedStyle(dialogContainer).maxWidth, 10) - 2 * LayoutService.remInPx;
@@ -125,7 +148,7 @@ export class LineageGraphComponent implements AfterViewInit {
         void from(this.projectService.getProcessingGraph(this.layer.workflowId)).subscribe((workflow) => {
             const graph = new dagreD3.graphlib.Graph().setGraph({}).setDefaultEdgeLabel(() => ({label: ''}));
 
-            LineageGraphComponent.addOperatorsToGraph(graph, workflow);
+            LineageGraphComponent.addOperatorsToGraph(graph, workflow.operator);
 
             LineageGraphComponent.addLayerToGraph(graph, this.layer, 0);
 
@@ -134,13 +157,13 @@ export class LineageGraphComponent implements AfterViewInit {
 
             // Set up an SVG group so that we can translate the final graph.
             // console.log(this.graphContainer.nativeElement);
-            const svg = d3.select(this.svg().nativeElement);
-            const svgGroup = d3.select(this.g().nativeElement);
+            const svg = d3.select<SVGElement, unknown>(this.svg().nativeElement);
+            const svgGroup = d3.select<SVGElement, unknown>(this.g().nativeElement);
 
             // Run the renderer. This is what draws the final graph.
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            render(svgGroup as any, graph as any);
+            // The dagre-d3 typings are based on d3 v5 and the `dagre` graph type, so the d3 v7 selection
+            // and the `graphlib` graph (the same at runtime) have to be cast to its parameter types.
+            render(svgGroup as unknown as Parameters<typeof render>[0], graph as unknown as Parameters<typeof render>[1]);
 
             LineageGraphComponent.fixLabelPosition(svg);
 
@@ -155,10 +178,10 @@ export class LineageGraphComponent implements AfterViewInit {
         });
     }
 
-    private static addOperatorsToGraph(graph: dagreD3.graphlib.Graph, initialOperator: TypedOperator): void {
+    private static addOperatorsToGraph(graph: dagreD3.graphlib.Graph, initialOperator: GraphOperator): void {
         let nextOperatorId = 0;
 
-        const operatorQueue: Array<[number, TypedOperator]> = [[nextOperatorId++, initialOperator]];
+        const operatorQueue: Array<[number, GraphOperator]> = [[nextOperatorId++, initialOperator]];
         const edges: Array<[number, number, string]> = [];
 
         while (operatorQueue.length > 0) {
@@ -200,13 +223,13 @@ export class LineageGraphComponent implements AfterViewInit {
             // add children
             const operatorSources = sources(operator);
             for (const sourceKey of Object.keys(operatorSources)) {
-                const operatorSource = operatorSources[sourceKey] as TypedOperator | Array<TypedOperator> | undefined;
+                const operatorSource = operatorSources[sourceKey];
 
                 if (!operatorSource) {
                     continue;
                 }
 
-                let sourcesForKey: Array<TypedOperator>;
+                let sourcesForKey: Array<GraphOperator>;
                 if (operatorSource instanceof Array) {
                     sourcesForKey = operatorSource;
                 } else {
@@ -248,10 +271,8 @@ export class LineageGraphComponent implements AfterViewInit {
     }
 
     private addZoomSupport(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        svg: d3.Selection<SVGElement, any, any, any>,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        svgGroup: d3.Selection<SVGElement, any, any, any>,
+        svg: SvgSelection,
+        svgGroup: SvgSelection,
         graph: dagreD3.graphlib.Graph,
         svgWidth: number,
         svgHeight: number,
@@ -260,10 +281,9 @@ export class LineageGraphComponent implements AfterViewInit {
         const paddedWidth = svgWidth - GRAPH_STYLE.surrounding.margin;
         const paddedHeight = svgHeight - GRAPH_STYLE.surrounding.margin;
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const grapWidth = (graph.graph() as any).width ?? 1; // TODO: remove any
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const grapHeight = (graph.graph() as any).height ?? 1; // TODO: remove any
+        const graphLabel = graph.graph() as unknown as GraphLabel;
+        const grapWidth = graphLabel.width ?? 1;
+        const grapHeight = graphLabel.height ?? 1;
 
         // calculate the initial zoom level that captures the whole graph
         const scale = Math.min(
@@ -276,35 +296,32 @@ export class LineageGraphComponent implements AfterViewInit {
         const initialY = (svgHeight - scale * grapHeight) / 2;
 
         // create zoom behavior
-        const zoom = d3.zoom();
+        const zoom = d3.zoom<SVGElement, unknown>();
 
         // apply zoom to svg
         svgGroup
             .transition()
             .duration(500)
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/unbound-method
-            .call(zoom.transform as any, d3.zoomIdentity.translate(initialX, initialY).scale(scale));
+            // eslint-disable-next-line @typescript-eslint/unbound-method
+            .call(zoom.transform, d3.zoomIdentity.translate(initialX, initialY).scale(scale));
 
         // add zoom handler
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        zoom.on('zoom', (zoomEvent: d3.D3ZoomEvent<any, any>) => {
+        zoom.on('zoom', (zoomEvent: d3.D3ZoomEvent<SVGElement, unknown>) => {
             const zoomTranslate = isNaN(zoomEvent.transform.x) ? [0, 0] : [zoomEvent.transform.x, zoomEvent.transform.y];
             const zoomScale = isNaN(zoomEvent.transform.k) ? 0 : zoomEvent.transform.k;
             // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
             svgGroup.attr('transform', `translate(${zoomTranslate})scale(${zoomScale})`);
         });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        svg.call(zoom as any);
+        svg.call(zoom);
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    private addClickHandler(svg: d3.Selection<SVGElement, any, any, any>, graph: dagreD3.graphlib.Graph): void {
+    private addClickHandler(svg: SvgSelection, graph: dagreD3.graphlib.Graph): void {
         svg.selectAll('.node').on('click', (_event, theNodeId) => {
             const nodeId = theNodeId as string; // conversion since the signature is of the wrong type
 
-            const node = graph.node(nodeId);
-            if (node.type === 'operator') {
-                const operator: TypedOperator = node.operator;
+            const node = graph.node(nodeId) as LineageNodeLabel;
+            if (node.type === 'operator' && node.operator) {
+                const operator = node.operator;
 
                 // update operator type
                 this.selectedOperator$.next(operator);
@@ -321,10 +338,10 @@ export class LineageGraphComponent implements AfterViewInit {
         });
     }
 
-    private static parametersDisplayList(operator: TypedOperator): Array<{key: string; value: string}> {
+    private static parametersDisplayList(operator: GraphOperator): Array<{key: string; value: string}> {
         const list: Array<{key: string; value: string}> = [];
 
-        const params = (operator.operator as {params?: OperatorParams | null} | undefined)?.params ?? null;
+        const params = (operator as {params?: OperatorParams | null}).params ?? null;
 
         if (!params) {
             return list;
@@ -343,8 +360,7 @@ export class LineageGraphComponent implements AfterViewInit {
         return list;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    private static fixLabelPosition(svg: d3.Selection<SVGElement, any, any, any>): void {
+    private static fixLabelPosition(svg: SvgSelection): void {
         // HACK: move html label from center to top left
         svg.selectAll('.operator > .label > g > foreignObject')
             .attr('x', -GRAPH_STYLE.general.width / 2)
@@ -368,10 +384,9 @@ export class LineageGraphComponent implements AfterViewInit {
             maxWidth;
         // return the current width bounds
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const grapWidth = (graph.graph() as any).width ?? 1;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const grapHeight = (graph.graph() as any).height ?? 1;
+        const graphLabel = graph.graph() as unknown as GraphLabel;
+        const grapWidth = graphLabel.width ?? 1;
+        const grapHeight = graphLabel.height ?? 1;
 
         return {
             width: widthBound(this.maxWidth$.getValue(), grapWidth),
@@ -380,10 +395,8 @@ export class LineageGraphComponent implements AfterViewInit {
     }
 }
 
-function sources(operator: TypedOperator): Record<string, TypedOperator | Array<TypedOperator>> {
-    const nestedOperator = operator.operator as {
-        sources?: Record<string, TypedOperator | Array<TypedOperator> | undefined>;
-    };
+function sources(operator: GraphOperator): Record<string, GraphOperator | Array<GraphOperator> | undefined> {
+    const {sources: operatorSources} = operator as {sources?: Record<string, GraphOperator | Array<GraphOperator> | undefined>};
 
-    return (nestedOperator.sources ?? {}) as Record<string, TypedOperator | Array<TypedOperator>>;
+    return operatorSources ?? {};
 }
