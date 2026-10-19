@@ -1,13 +1,13 @@
 import {Component, ChangeDetectionStrategy, Signal, computed, inject} from '@angular/core';
-import {ProjectService} from '../../project/project.service';
-import {LayoutService} from '../../layout.service';
-import {TimeConfigComponent} from '../time-config/time-config.component';
-import {Time, TimeStepDuration} from '@geoengine/common';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {MatIconButton, MatButton} from '@angular/material/button';
-import {MatTooltip} from '@angular/material/tooltip';
 import {MatIcon} from '@angular/material/icon';
+import {MatTooltip} from '@angular/material/tooltip';
+import {Time, TimeStepDuration} from '@geoengine/common';
+import {LayoutService} from '../../layout.service';
+import {ProjectService} from '../../project/project.service';
 import {SafeHtmlPipe} from '../../util/pipes/safe-html.pipe';
+import {TimeConfigComponent} from '../time-config/time-config.component';
 
 @Component({
     selector: 'geoengine-small-time-interaction',

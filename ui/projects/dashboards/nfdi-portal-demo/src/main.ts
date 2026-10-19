@@ -1,16 +1,16 @@
-import {AppConfig} from './app/app-config.service';
-import {CoreConfig, LayoutService, MapService, ProjectService, SidenavRef, SpatialReferenceService, CoreModule} from '@geoengine/core';
-import {CommonConfig, NotificationService, RandomColorService, UserService} from '@geoengine/common';
-import {provideAppInitializer, inject, importProvidersFrom, provideZonelessChangeDetection} from '@angular/core';
-import {DataSelectionService} from './app/data-selection.service';
-import {provideHttpClient, withInterceptorsFromDi} from '@angular/common/http';
-import {AppRoutingModule} from './app/app-routing.module';
-import {provideAnimations} from '@angular/platform-browser/animations';
-import {BrowserModule, bootstrapApplication} from '@angular/platform-browser';
-import {FormsModule} from '@angular/forms';
-import {NgxMatSelectSearchModule} from 'ngx-mat-select-search';
 import {PortalModule} from '@angular/cdk/portal';
+import {provideHttpClient, withInterceptorsFromDi} from '@angular/common/http';
+import {provideAppInitializer, inject, importProvidersFrom, provideZonelessChangeDetection} from '@angular/core';
+import {FormsModule} from '@angular/forms';
+import {BrowserModule, bootstrapApplication} from '@angular/platform-browser';
+import {provideAnimations} from '@angular/platform-browser/animations';
+import {NgxMatSelectSearchModule} from 'ngx-mat-select-search';
+import {CommonConfig, NotificationService, RandomColorService, UserService} from '@geoengine/common';
+import {CoreConfig, LayoutService, MapService, ProjectService, SidenavRef, SpatialReferenceService, CoreModule} from '@geoengine/core';
+import {AppConfig} from './app/app-config.service';
+import {AppRoutingModule} from './app/app-routing.module';
 import {AppComponent} from './app/app.component';
+import {DataSelectionService} from './app/data-selection.service';
 
 bootstrapApplication(AppComponent, {
     providers: [

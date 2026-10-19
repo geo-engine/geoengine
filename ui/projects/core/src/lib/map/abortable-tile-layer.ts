@@ -1,15 +1,14 @@
+import {intersects} from 'ol/extent';
 import ImageTile from 'ol/ImageTile';
 import TileLayer from 'ol/layer/Tile';
-import TileSource from 'ol/source/Tile';
-import ReprojTile from 'ol/reproj/Tile';
-import CanvasTileLayerRenderer from 'ol/renderer/canvas/TileLayer';
-import {intersects} from 'ol/extent';
 import {equivalent} from 'ol/proj';
+import CanvasTileLayerRenderer from 'ol/renderer/canvas/TileLayer';
+import ReprojTile from 'ol/reproj/Tile';
+import TileSource from 'ol/source/Tile';
 import LRUCache from 'ol/structs/LRUCache';
 import Tile from 'ol/Tile';
-
-import {transformExtentBetweenProjections} from './tile-loader';
 import {Extent} from './map.service';
+import {transformExtentBetweenProjections} from './tile-loader';
 
 /** Keeps cancelled source tiles from leaving failed or incomplete reprojections in the display cache. */
 class AbortableTileLayerRenderer<L extends TileLayer> extends CanvasTileLayerRenderer<L> {

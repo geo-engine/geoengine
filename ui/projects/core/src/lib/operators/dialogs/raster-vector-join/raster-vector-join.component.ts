@@ -11,11 +11,15 @@ import {
     FormsModule,
     ReactiveFormsModule,
 } from '@angular/forms';
+import {MatIconButton, MatButton} from '@angular/material/button';
+import {MatButtonToggleGroup, MatButtonToggle} from '@angular/material/button-toggle';
+import {MatCheckbox} from '@angular/material/checkbox';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput, MatError, MatHint} from '@angular/material/input';
+import {MatRadioGroup, MatRadioButton} from '@angular/material/radio';
 import {EMPTY, Subscription, combineLatest, from} from 'rxjs';
-import {ProjectService} from '../../../project/project.service';
-
 import {filter, map, mergeMap} from 'rxjs/operators';
-import {LetterNumberConverter, MultiLayerSelectionComponent} from '../helpers/multi-layer-selection/multi-layer-selection.component';
+import {ColumnNames as ApiColumnNames, RasterVectorJoinParameters} from '@geoengine/api-client';
 import {
     NotificationService,
     PointSymbology,
@@ -30,16 +34,11 @@ import {
     FxLayoutDirective,
     errorMessage,
 } from '@geoengine/common';
-import {ColumnNames as ApiColumnNames, RasterVectorJoinParameters} from '@geoengine/api-client';
+import {ProjectService} from '../../../project/project.service';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
-import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
-import {MatIconButton, MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
 import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
-import {MatButtonToggleGroup, MatButtonToggle} from '@angular/material/button-toggle';
-import {MatFormField, MatLabel, MatInput, MatError, MatHint} from '@angular/material/input';
-import {MatRadioGroup, MatRadioButton} from '@angular/material/radio';
-import {MatCheckbox} from '@angular/material/checkbox';
+import {LetterNumberConverter, MultiLayerSelectionComponent} from '../helpers/multi-layer-selection/multi-layer-selection.component';
+import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
 
 type TemporalAggregation = 'none' | 'first' | 'mean';

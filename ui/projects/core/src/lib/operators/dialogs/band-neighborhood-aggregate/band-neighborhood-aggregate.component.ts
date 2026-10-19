@@ -1,3 +1,4 @@
+import {AsyncPipe} from '@angular/common';
 import {ChangeDetectionStrategy, Component, inject, viewChild} from '@angular/core';
 import {
     FormControl,
@@ -9,9 +10,13 @@ import {
     FormsModule,
     ReactiveFormsModule,
 } from '@angular/forms';
-import {ProjectService} from '../../../project/project.service';
-import {mergeMap} from 'rxjs/operators';
+import {MatIconButton, MatButton} from '@angular/material/button';
+import {MatButtonToggleGroup, MatButtonToggle} from '@angular/material/button-toggle';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput, MatError, MatHint} from '@angular/material/input';
 import {BehaviorSubject, Observable, combineLatest, from, of} from 'rxjs';
+import {mergeMap} from 'rxjs/operators';
+import {BandNeighborhoodAggregateMethod, ProcessingGraph, TypedRasterOperator} from '@geoengine/api-client';
 import {
     RasterDataTypes,
     RasterLayer,
@@ -24,16 +29,11 @@ import {
     errorMessage,
 } from '@geoengine/common';
 import {SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
-import {BandNeighborhoodAggregateMethod, ProcessingGraph, TypedRasterOperator} from '@geoengine/api-client';
+import {ProjectService} from '../../../project/project.service';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
-import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
-import {MatIconButton, MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
 import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
-import {MatButtonToggleGroup, MatButtonToggle} from '@angular/material/button-toggle';
-import {MatFormField, MatLabel, MatInput, MatError, MatHint} from '@angular/material/input';
+import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
-import {AsyncPipe} from '@angular/common';
 
 interface BandNeighborhoodForm {
     rasterLayer: FormControl<RasterLayer | undefined>;

@@ -1,7 +1,7 @@
 import * as Immutable from 'immutable';
+import {Measurement as MeasurementDict} from '@geoengine/api-client';
 import {ColorAttributeInputHinter} from '../colors/color-attribute-input/color-attribute-input.component';
 import {ToDict} from '../time/time.model';
-import {Measurement as MeasurementDict} from '@geoengine/api-client';
 
 export abstract class Measurement implements ToDict<MeasurementDict> {
     abstract readonly measurement: string;

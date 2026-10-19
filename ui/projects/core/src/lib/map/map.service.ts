@@ -1,18 +1,16 @@
-import {distinctUntilChanged} from 'rxjs/operators';
-import {BehaviorSubject, Observable} from 'rxjs';
-
 import {Injectable, signal, Signal} from '@angular/core';
 import {containsExtent as olExtentContainsExtent, getIntersection as olExtentGetIntersection} from 'ol/extent';
+import OlFeature from 'ol/Feature';
 import OlGeometry from 'ol/geom/Geometry';
 import {Type as OlGeometryType} from 'ol/geom/Geometry';
+import {createBox, GeometryFunction} from 'ol/interaction/Draw';
+import OlLayerVector from 'ol/layer/Vector';
 import {Vector as OlSourceVector} from 'ol/source';
 import OlView from 'ol/View';
-import OlFeature from 'ol/Feature';
-import OlLayerVector from 'ol/layer/Vector';
-
-import {MapContainerComponent} from './map-container/map-container.component';
-import {createBox, GeometryFunction} from 'ol/interaction/Draw';
+import {BehaviorSubject, Observable} from 'rxjs';
+import {distinctUntilChanged} from 'rxjs/operators';
 import {olExtentToTuple} from '@geoengine/common';
+import {MapContainerComponent} from './map-container/map-container.component';
 
 /**
  * The viewport combines…

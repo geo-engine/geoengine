@@ -1,13 +1,13 @@
+import {CdkScrollable} from '@angular/cdk/scrolling';
+import {JsonPipe} from '@angular/common';
 import {ChangeDetectionStrategy, Component, ElementRef, afterNextRender, inject, signal, viewChild} from '@angular/core';
+import {rxResource} from '@angular/core/rxjs-interop';
 import {MAT_DIALOG_DATA, MatDialogContent} from '@angular/material/dialog';
-import {ProjectService} from '../../project/project.service';
-import {LayoutService} from '../../layout.service';
+import {MatProgressBar} from '@angular/material/progress-bar';
 import {Plot, CommonModule} from '@geoengine/common';
 import {DialogHeaderComponent} from '../../dialogs/dialog-header/dialog-header.component';
-import {CdkScrollable} from '@angular/cdk/scrolling';
-import {MatProgressBar} from '@angular/material/progress-bar';
-import {JsonPipe} from '@angular/common';
-import {rxResource} from '@angular/core/rxjs-interop';
+import {LayoutService} from '../../layout.service';
+import {ProjectService} from '../../project/project.service';
 
 @Component({
     selector: 'geoengine-plot-detail-view',

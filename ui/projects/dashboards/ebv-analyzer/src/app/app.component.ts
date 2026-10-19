@@ -1,6 +1,15 @@
-import {Observable, BehaviorSubject, mergeMap} from 'rxjs';
+import {ComponentPortal, CdkPortalOutlet} from '@angular/cdk/portal';
+import {AsyncPipe} from '@angular/common';
 import {AfterViewInit, ChangeDetectionStrategy, Component, HostListener, OnInit, ViewContainerRef, inject, viewChild} from '@angular/core';
+import {MatButton} from '@angular/material/button';
 import {MatIconRegistry, MatIcon} from '@angular/material/icon';
+import {MatProgressBar} from '@angular/material/progress-bar';
+import {MatDrawerToggleResult, MatSidenav, MatSidenavContainer} from '@angular/material/sidenav';
+import {MatToolbar} from '@angular/material/toolbar';
+import {DomSanitizer} from '@angular/platform-browser';
+import moment from 'moment';
+import {Observable, BehaviorSubject, mergeMap} from 'rxjs';
+import {Layer, RandomColorService, Time, UserService, AsyncStringSanitizer, AsyncValueDefault} from '@geoengine/common';
 import {
     LayoutService,
     ProjectService,
@@ -13,19 +22,10 @@ import {
     OlVectorLayerComponent,
     OlRasterLayerComponent,
 } from '@geoengine/core';
-import {DomSanitizer} from '@angular/platform-browser';
 import {AppConfig} from './app-config.service';
-import {ComponentPortal, CdkPortalOutlet} from '@angular/cdk/portal';
-import moment from 'moment';
 import {DataSelectionService} from './data-selection.service';
 import {EbvSelectorComponent} from './ebv-selector/ebv-selector.component';
-import {MatDrawerToggleResult, MatSidenav, MatSidenavContainer} from '@angular/material/sidenav';
-import {Layer, RandomColorService, Time, UserService, AsyncStringSanitizer, AsyncValueDefault} from '@geoengine/common';
-import {MatToolbar} from '@angular/material/toolbar';
-import {MatButton} from '@angular/material/button';
 import {LegendComponent} from './legend/legend.component';
-import {MatProgressBar} from '@angular/material/progress-bar';
-import {AsyncPipe} from '@angular/common';
 
 @Component({
     selector: 'geoengine-root',

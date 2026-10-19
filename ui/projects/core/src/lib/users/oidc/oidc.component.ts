@@ -1,17 +1,17 @@
-import {ChangeDetectionStrategy, Component, inject, input, resource} from '@angular/core';
 import {NgTemplateOutlet} from '@angular/common';
-import {User} from '../user.model';
+import {ChangeDetectionStrategy, Component, inject, input, resource} from '@angular/core';
+import {MatButton} from '@angular/material/button';
+import {MatCard, MatCardHeader, MatCardTitle, MatCardContent} from '@angular/material/card';
 import {Router} from '@angular/router';
+import {firstValueFrom} from 'rxjs';
 import {UserService} from '@geoengine/common';
 import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
-import {MatCard, MatCardHeader, MatCardTitle, MatCardContent} from '@angular/material/card';
-import {IfLoggedInDirective} from '../../util/directives/if-logged-in.directive';
-import {MatButton} from '@angular/material/button';
 import {IfGuestDirective} from '../../util/directives/if-guest.directive';
-import {UserSessionComponent} from '../user-session/user-session.component';
+import {IfLoggedInDirective} from '../../util/directives/if-logged-in.directive';
 import {QuotaInfoComponent} from '../quota/quota-info/quota-info.component';
 import {RolesComponent} from '../roles/roles.component';
-import {firstValueFrom} from 'rxjs';
+import {UserSessionComponent} from '../user-session/user-session.component';
+import {User} from '../user.model';
 
 @Component({
     selector: 'geoengine-oidc',

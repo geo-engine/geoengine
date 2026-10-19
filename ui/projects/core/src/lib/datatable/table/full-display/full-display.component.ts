@@ -1,12 +1,12 @@
-import {Component, OnInit, ChangeDetectionStrategy, inject} from '@angular/core';
-import {MAT_DIALOG_DATA, MatDialogContent, MatDialogActions, MatDialogClose} from '@angular/material/dialog';
 import {Clipboard} from '@angular/cdk/clipboard';
-import {Geometry} from 'ol/geom';
+import {CdkScrollable, CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf} from '@angular/cdk/scrolling';
+import {Component, OnInit, ChangeDetectionStrategy, inject} from '@angular/core';
+import {MatButton} from '@angular/material/button';
+import {MAT_DIALOG_DATA, MatDialogContent, MatDialogActions, MatDialogClose} from '@angular/material/dialog';
 import OlFormatGeoJson from 'ol/format/GeoJSON';
 import OlFormatWKT from 'ol/format/WKT';
+import {Geometry} from 'ol/geom';
 import {DialogHeaderComponent} from '../../../dialogs/dialog-header/dialog-header.component';
-import {CdkScrollable, CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf} from '@angular/cdk/scrolling';
-import {MatButton} from '@angular/material/button';
 
 /**
  * Opened as modal dialog to display a full set of coordinates and allow copying to clipboard

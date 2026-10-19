@@ -1,10 +1,16 @@
+import {AsyncPipe} from '@angular/common';
 import {AfterViewInit, ChangeDetectionStrategy, Component, inject} from '@angular/core';
 import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {ProjectService} from '../../../project/project.service';
-import {map, mergeMap} from 'rxjs/operators';
-import {TimeStepGranularityDict} from '../../../backend/backend.model';
-import {BehaviorSubject, Observable, from} from 'rxjs';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatIconButton, MatButton} from '@angular/material/button';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
+import {MatSlideToggle} from '@angular/material/slide-toggle';
 import moment from 'moment';
+import {BehaviorSubject, Observable, from} from 'rxjs';
+import {map, mergeMap} from 'rxjs/operators';
+import {ProcessingGraph, RasterOperator, VectorOperator, TimeShiftParameters} from '@geoengine/api-client';
 import {
     Layer,
     NotificationService,
@@ -20,18 +26,12 @@ import {
     AsyncValueDefault,
     errorMessage,
 } from '@geoengine/common';
-import {ProcessingGraph, RasterOperator, VectorOperator, TimeShiftParameters} from '@geoengine/api-client';
+import {TimeStepGranularityDict} from '../../../backend/backend.model';
+import {ProjectService} from '../../../project/project.service';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
-import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
-import {MatIconButton, MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
 import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
-import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
-import {MatSlideToggle} from '@angular/material/slide-toggle';
+import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
-import {AsyncPipe} from '@angular/common';
 
 type TimeShiftFormType = 'relative' | 'absolute';
 

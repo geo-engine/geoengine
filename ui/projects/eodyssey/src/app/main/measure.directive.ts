@@ -1,17 +1,17 @@
 import {computed, Directive, inject, input, signal} from '@angular/core';
-import OlOverlay from 'ol/Overlay';
+import {getCenter} from 'ol/extent';
+import OlFeature from 'ol/Feature';
+import {Type as OlGeometryType} from 'ol/geom/Geometry';
+import OlGeometry from 'ol/geom/Geometry';
 import OlGeomLineString from 'ol/geom/LineString';
 import OlGeomPolygon from 'ol/geom/Polygon';
 import {GeometryFunction as OlGeometryFunction, createBox} from 'ol/interaction/Draw';
-import {Type as OlGeometryType} from 'ol/geom/Geometry';
-import {drawContrastStrokeStyle, drawStyle, MapContainerComponent, MapService} from '@geoengine/core';
+import OlLayerVector from 'ol/layer/Vector';
+import OlOverlay from 'ol/Overlay';
+import OlSourceVector from 'ol/source/Vector';
 import {getArea, getLength} from 'ol/sphere.js';
 import {assertNever} from '@geoengine/common';
-import {getCenter} from 'ol/extent';
-import OlFeature from 'ol/Feature';
-import OlGeometry from 'ol/geom/Geometry';
-import OlLayerVector from 'ol/layer/Vector';
-import OlSourceVector from 'ol/source/Vector';
+import {drawContrastStrokeStyle, drawStyle, MapContainerComponent, MapService} from '@geoengine/core';
 import {AppConfig} from '../app-config.service';
 
 export enum MeasurementType {

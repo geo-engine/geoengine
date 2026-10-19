@@ -1,8 +1,8 @@
 import {Component, effect, input, output, signal, ChangeDetectionStrategy} from '@angular/core';
-import {TypedDataProviderDefinition, TypedDataProviderDefinitionFromJSON} from '@geoengine/api-client';
-import {MatError} from '@angular/material/form-field';
-import {CodeEditorComponent} from '@geoengine/common';
 import {FormControl, ReactiveFormsModule} from '@angular/forms';
+import {MatError} from '@angular/material/form-field';
+import {TypedDataProviderDefinition, TypedDataProviderDefinitionFromJSON} from '@geoengine/api-client';
+import {CodeEditorComponent} from '@geoengine/common';
 
 @Component({
     selector: 'geoengine-manager-provider-json-input',

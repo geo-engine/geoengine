@@ -1,4 +1,11 @@
-import {AppConfig} from './app/app-config.service';
+import {provideHttpClient, withInterceptorsFromDi} from '@angular/common/http';
+import {provideAppInitializer, inject, importProvidersFrom, provideZonelessChangeDetection} from '@angular/core';
+import {MatButtonModule} from '@angular/material/button';
+import {MatTableModule} from '@angular/material/table';
+import {BrowserModule, bootstrapApplication} from '@angular/platform-browser';
+import {provideAnimations} from '@angular/platform-browser/animations';
+import {provideRouter} from '@angular/router';
+import {CommonConfig, NotificationService, RandomColorService, UserService} from '@geoengine/common';
 import {
     CoreConfig,
     DatasetService,
@@ -10,14 +17,7 @@ import {
     TabsService,
     CoreModule,
 } from '@geoengine/core';
-import {CommonConfig, NotificationService, RandomColorService, UserService} from '@geoengine/common';
-import {provideAppInitializer, inject, importProvidersFrom, provideZonelessChangeDetection} from '@angular/core';
-import {provideHttpClient, withInterceptorsFromDi} from '@angular/common/http';
-import {provideAnimations} from '@angular/platform-browser/animations';
-import {BrowserModule, bootstrapApplication} from '@angular/platform-browser';
-import {MatTableModule} from '@angular/material/table';
-import {MatButtonModule} from '@angular/material/button';
-import {provideRouter} from '@angular/router';
+import {AppConfig} from './app/app-config.service';
 import {AppComponent} from './app/app.component';
 
 bootstrapApplication(AppComponent, {

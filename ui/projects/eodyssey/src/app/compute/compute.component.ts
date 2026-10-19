@@ -1,3 +1,4 @@
+import {A11yModule} from '@angular/cdk/a11y';
 import {
     afterNextRender,
     ChangeDetectionStrategy,
@@ -10,14 +11,14 @@ import {
     resource,
     signal,
 } from '@angular/core';
-import {CoreModule, MapService, ProjectService, UUID} from '@geoengine/core';
-import {A11yModule} from '@angular/cdk/a11y';
 import {MatButtonModule} from '@angular/material/button';
 import {MatDialog} from '@angular/material/dialog';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatIconModule} from '@angular/material/icon';
-import {MatSelectModule} from '@angular/material/select';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
+import {MatSelectModule} from '@angular/material/select';
+import OlPolygon from 'ol/geom/Polygon';
+import {PlotOutputFormat, RasterBandDescriptor, TypedPlotOperator, TypedRasterOperator, WrappedPlotOutput} from '@geoengine/api-client';
 import {
     BoundingBox2D,
     LayersService,
@@ -29,11 +30,10 @@ import {
     VegaChartData,
     VegaViewerComponent,
 } from '@geoengine/common';
-import OlPolygon from 'ol/geom/Polygon';
-import {LayerIdPair} from '../main/main.component';
-import {EOdysseyLayerService} from '../layers/layers.service';
-import {PlotOutputFormat, RasterBandDescriptor, TypedPlotOperator, TypedRasterOperator, WrappedPlotOutput} from '@geoengine/api-client';
+import {CoreModule, MapService, ProjectService, UUID} from '@geoengine/core';
 import {PlotDialogComponent} from './plot-dialog.component';
+import {EOdysseyLayerService} from '../layers/layers.service';
+import {LayerIdPair} from '../main/main.component';
 
 @Component({
     selector: 'geoengine-compute',

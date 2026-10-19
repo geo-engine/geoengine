@@ -1,3 +1,4 @@
+import {AsyncPipe, CommonModule} from '@angular/common';
 import {AfterViewInit, ChangeDetectionStrategy, Component, OnDestroy, inject} from '@angular/core';
 import {
     AbstractControl,
@@ -9,9 +10,14 @@ import {
     Validators,
     NonNullableFormBuilder,
 } from '@angular/forms';
+import {MatButtonModule} from '@angular/material/button';
+import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatIconModule} from '@angular/material/icon';
+import {MatInputModule} from '@angular/material/input';
+import {MatSelectModule} from '@angular/material/select';
 import {from, Observable, of, ReplaySubject, Subscription, first} from 'rxjs';
-import {ProjectService} from '../../../project/project.service';
 import {map, mergeMap, tap} from 'rxjs/operators';
+import {ProcessingGraph} from '@geoengine/api-client';
 import {
     ClassificationMeasurement,
     Layer,
@@ -24,17 +30,11 @@ import {
     VectorLayerMetadata,
     geoengineValidators,
 } from '@geoengine/common';
-import {ProcessingGraph} from '@geoengine/api-client';
-import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
-import {MatIconModule} from '@angular/material/icon';
-import {MatButtonModule} from '@angular/material/button';
+import {ProjectService} from '../../../project/project.service';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
-import {AsyncPipe, CommonModule} from '@angular/common';
-import {MatFormFieldModule} from '@angular/material/form-field';
-import {MatSelectModule} from '@angular/material/select';
-import {MatInputModule} from '@angular/material/input';
-import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
 import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
+import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
+import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
 
 interface ClassHistogramForm {
     name: FormControl<string>;

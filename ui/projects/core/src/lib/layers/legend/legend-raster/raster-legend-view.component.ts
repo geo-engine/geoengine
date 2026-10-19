@@ -1,4 +1,7 @@
+import {CommonModule as AngularCommonModule} from '@angular/common';
 import {ChangeDetectionStrategy, Component, computed, input, Pipe, PipeTransform} from '@angular/core';
+import {MatProgressSpinner} from '@angular/material/progress-spinner';
+import {RasterBandDescriptor, Measurement, ContinuousMeasurement, ClassificationMeasurement} from '@geoengine/api-client';
 import {
     BreakpointToCssStringPipe,
     ColorBreakpoint,
@@ -9,9 +12,6 @@ import {
     RasterLayerMetadata,
     SingleBandRasterColorizer,
 } from '@geoengine/common';
-import {RasterBandDescriptor, Measurement, ContinuousMeasurement, ClassificationMeasurement} from '@geoengine/api-client';
-import {MatProgressSpinner} from '@angular/material/progress-spinner';
-import {CommonModule as AngularCommonModule} from '@angular/common';
 
 /**
  * calculate the decimal places for the legend of raster data
@@ -40,7 +40,7 @@ export function calculateNumberPipeParameters(breakpoints: Array<ColorBreakpoint
 })
 export class CastMeasurementToClassificationPipe implements PipeTransform {
     transform(value: Measurement, _args?: unknown): ClassificationMeasurement | null {
-        if (value.type == 'classification') {
+        if (value.type === 'classification') {
             return value;
         } else {
             return null;
@@ -54,7 +54,7 @@ export class CastMeasurementToClassificationPipe implements PipeTransform {
 })
 export class CastMeasurementToContinuousPipe implements PipeTransform {
     transform(value: Measurement, _args?: unknown): ContinuousMeasurement | null {
-        if (value.type == 'continuous') {
+        if (value.type === 'continuous') {
             return value;
         } else {
             return null;

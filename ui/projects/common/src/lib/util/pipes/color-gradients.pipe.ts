@@ -2,8 +2,8 @@ import {Pipe, PipeTransform, inject} from '@angular/core';
 import {DomSanitizer, SafeStyle} from '@angular/platform-browser';
 import {Color, RgbaTuple} from '../../colors/color';
 import {ColorBreakpoint} from '../../colors/color-breakpoint.model';
-import {RasterColorizer} from '../../symbology/symbology.model';
 import {Colorizer} from '../../colors/colorizer.model';
+import {RasterColorizer} from '../../symbology/symbology.model';
 
 /**
  * Pipe to transform a colorizer into a CSS gradient.

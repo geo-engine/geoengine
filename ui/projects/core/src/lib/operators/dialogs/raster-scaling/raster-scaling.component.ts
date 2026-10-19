@@ -1,3 +1,4 @@
+import {AsyncPipe} from '@angular/common';
 import {AfterViewInit, ChangeDetectionStrategy, Component, inject, viewChild} from '@angular/core';
 import {
     FormControl,
@@ -9,12 +10,15 @@ import {
     FormsModule,
     ReactiveFormsModule,
 } from '@angular/forms';
-import {ProjectService} from '../../../project/project.service';
-
-import {map, mergeMap} from 'rxjs/operators';
-import {UUID} from '../../../backend/backend.model';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatIconButton, MatButton} from '@angular/material/button';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
+import {MatDivider} from '@angular/material/list';
+import {MatSelect} from '@angular/material/select';
 import {BehaviorSubject, combineLatest, Observable, from, of} from 'rxjs';
-import {SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
+import {map, mergeMap} from 'rxjs/operators';
+import {ProcessingGraph, RasterOperator, SlopeOffsetSelection} from '@geoengine/api-client';
 import {
     NotificationService,
     RasterDataTypes,
@@ -29,18 +33,13 @@ import {
     AsyncValueDefault,
     errorMessage,
 } from '@geoengine/common';
-import {ProcessingGraph, RasterOperator, SlopeOffsetSelection} from '@geoengine/api-client';
+import {UUID} from '../../../backend/backend.model';
+import {SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
+import {ProjectService} from '../../../project/project.service';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
-import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
-import {MatIconButton, MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
 import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
-import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
-import {MatDivider} from '@angular/material/list';
+import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
-import {AsyncPipe} from '@angular/common';
 
 interface RasterScalingForm {
     name: FormControl<string>;

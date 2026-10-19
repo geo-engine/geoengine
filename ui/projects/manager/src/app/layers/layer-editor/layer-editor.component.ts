@@ -1,7 +1,20 @@
 import {Component, signal, WritableSignal, inject, input, linkedSignal, effect, output, ChangeDetectionStrategy} from '@angular/core';
 import {FormArray, FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {MatIconButton, MatButton} from '@angular/material/button';
+import {MatCard, MatCardHeader, MatCardTitle, MatCardContent} from '@angular/material/card';
 import {MatDialog} from '@angular/material/dialog';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
 import {MatSnackBar} from '@angular/material/snack-bar';
+import {firstValueFrom} from 'rxjs';
+import {
+    Layer,
+    LayerListing,
+    TypedResultDescriptor,
+    Symbology as SymbologyDict,
+    ProviderLayerCollectionId,
+    ProcessingGraph,
+} from '@geoengine/api-client';
 import {
     ConfirmationComponent,
     errorToText,
@@ -16,23 +29,10 @@ import {
     UUID,
     CommonModule,
 } from '@geoengine/common';
-import {
-    Layer,
-    LayerListing,
-    TypedResultDescriptor,
-    Symbology as SymbologyDict,
-    ProviderLayerCollectionId,
-    ProcessingGraph,
-} from '@geoengine/api-client';
 import {AppConfig} from '../../app-config.service';
-import {firstValueFrom} from 'rxjs';
-import {MatCard, MatCardHeader, MatCardTitle, MatCardContent} from '@angular/material/card';
-import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
-import {MatIconButton, MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
+import {PermissionsComponent} from '../../permissions/permissions.component';
 import {RasterResultDescriptorComponent} from '../../result-descriptors/raster-result-descriptor/raster-result-descriptor.component';
 import {VectorResultDescriptorComponent} from '../../result-descriptors/vector-result-descriptor/vector-result-descriptor.component';
-import {PermissionsComponent} from '../../permissions/permissions.component';
 
 export interface LayerForm {
     name: FormControl<string>;
@@ -143,11 +143,11 @@ export class LayerEditorComponent {
             return;
         }
 
-        if (layer.processingGraph.type == 'Raster') {
+        if (layer.processingGraph.type === 'Raster') {
             if (this.rasterSymbology) {
                 this.rasterSymbologyWorkflow.set({workflowId, symbology: this.rasterSymbology});
             }
-        } else if (layer.processingGraph.type == 'Vector') {
+        } else if (layer.processingGraph.type === 'Vector') {
             if (this.vectorSymbology) {
                 this.vectorSymbologyWorkflow.set({workflowId, symbology: this.vectorSymbology});
             }

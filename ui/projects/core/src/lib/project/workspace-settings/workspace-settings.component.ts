@@ -1,16 +1,16 @@
 import {Component, ChangeDetectionStrategy, inject} from '@angular/core';
-import {LayoutService} from '../../layout.service';
-import {ChangeSpatialReferenceComponent} from '../change-spatial-reference/change-spatial-reference.component';
-import {NewProjectComponent} from '../new-project/new-project.component';
-import {LoadProjectComponent} from '../load-project/load-project.component';
-import {SaveProjectAsComponent} from '../save-project-as/save-project-as.component';
-import {NotificationsComponent} from '../notifications/notifications.component';
-import {BasemapSelectorComponent} from '../basemap-selector/basemap-selector.component';
-import {MatListModule} from '@angular/material/list';
 import {MatIconModule} from '@angular/material/icon';
+import {MatListModule} from '@angular/material/list';
+import {LayoutService} from '../../layout.service';
 import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
 import {IfGuestDirective} from '../../util/directives/if-guest.directive';
 import {IfLoggedInDirective} from '../../util/directives/if-logged-in.directive';
+import {BasemapSelectorComponent} from '../basemap-selector/basemap-selector.component';
+import {ChangeSpatialReferenceComponent} from '../change-spatial-reference/change-spatial-reference.component';
+import {LoadProjectComponent} from '../load-project/load-project.component';
+import {NewProjectComponent} from '../new-project/new-project.component';
+import {NotificationsComponent} from '../notifications/notifications.component';
+import {SaveProjectAsComponent} from '../save-project-as/save-project-as.component';
 
 @Component({
     selector: 'geoengine-workspace-settings',

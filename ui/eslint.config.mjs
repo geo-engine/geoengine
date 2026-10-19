@@ -1,9 +1,10 @@
 import {defineConfig} from 'eslint/config';
-import preferArrow from 'eslint-plugin-prefer-arrow-functions';
 import angular from 'angular-eslint';
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import eslintConfigPrettier from 'eslint-config-prettier/flat';
+import {importX} from 'eslint-plugin-import-x';
+import {createTypeScriptImportResolver} from 'eslint-import-resolver-typescript';
 
 const config = defineConfig([
     {
@@ -20,37 +21,30 @@ const config = defineConfig([
         processor: angular.processInlineTemplates,
 
         plugins: {
-            'prefer-arrow': preferArrow,
+            'import-x': importX,
+        },
+
+        settings: {
+            'import-x/resolver-next': [createTypeScriptImportResolver({project: 'tsconfig.json'})],
         },
 
         languageOptions: {
-            parser: tseslint.parser,
-
             parserOptions: {
-                project: ['tsconfig.json'],
-                createDefaultProgram: false,
+                projectService: true,
+                tsconfigRootDir: import.meta.dirname,
             },
         },
 
         rules: {
+            eqeqeq: ['error', 'smart'],
             'guard-for-in': 'error',
-            'id-blacklist': 'off',
-            'id-match': 'off',
-            'import/order': 'off',
-            'no-redeclare': ['error', {builtinGlobals: false}],
-            'no-underscore-dangle': 'off',
-            'valid-typeof': 'error',
             'no-bitwise': 'error',
-            'no-empty-function': 'error',
-            'no-unused-vars': 'off',
-            'no-shadow': 'off',
             'no-console': [
                 'error',
                 {
                     allow: ['warn', 'error'],
                 },
             ],
-            camelcase: 'off',
 
             '@angular-eslint/component-selector': ['error', {type: 'element', prefix: 'geoengine', style: 'kebab-case'}],
             '@angular-eslint/directive-selector': [
@@ -64,15 +58,19 @@ const config = defineConfig([
             '@angular-eslint/prefer-signals': 'warn',
             '@angular-eslint/use-lifecycle-interface': 'error',
 
-            '@typescript-eslint/array-type': ['off', {default: 'generic'}],
-            '@typescript-eslint/consistent-type-definitions': 'error',
-            '@typescript-eslint/dot-notation': 'off',
-            '@typescript-eslint/explicit-member-accessibility': [
-                'off',
+            'import-x/order': [
+                'error',
                 {
-                    accessibility: 'explicit',
+                    groups: ['builtin', 'external', 'internal', ['parent', 'sibling', 'index']],
+                    pathGroups: [{pattern: '@geoengine/**', group: 'internal'}],
+                    pathGroupsExcludedImportTypes: ['builtin'],
+                    'newlines-between': 'never',
+                    alphabetize: {order: 'asc', caseInsensitive: true},
                 },
             ],
+
+            '@typescript-eslint/array-type': 'off',
+            '@typescript-eslint/dot-notation': 'off',
             '@typescript-eslint/member-ordering': [
                 'error',
                 {
@@ -146,16 +144,9 @@ const config = defineConfig([
             '@typescript-eslint/no-unsafe-call': 'warn', // TODO: type lineage-graph, map-container and time-slider in core
             '@typescript-eslint/no-unsafe-member-access': 'warn', // TODO: type lineage-graph, map-container and time-slider in core
             '@typescript-eslint/no-unsafe-return': 'error',
+            '@typescript-eslint/switch-exhaustiveness-check': ['error', {considerDefaultExhaustiveForUnions: true}],
             '@typescript-eslint/unbound-method': ['error', {ignoreStatic: true}],
-            '@typescript-eslint/no-floating-promises': 'error',
             '@typescript-eslint/no-inferrable-types': ['error', {ignoreParameters: true, ignoreProperties: true}],
-
-            'prefer-arrow/prefer-arrow-functions': [
-                'error',
-                {
-                    singleReturnOnly: true,
-                },
-            ],
         },
     },
     {

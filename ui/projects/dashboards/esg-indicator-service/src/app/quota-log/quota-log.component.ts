@@ -10,14 +10,14 @@ import {
     OnInit,
     OnDestroy,
 } from '@angular/core';
-import {Observable, Subject, Subscription, tap} from 'rxjs';
-import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
-import {UserService} from '@geoengine/common';
-import {MatTableModule} from '@angular/material/table';
-import {ComputationQuota, OperatorQuota} from '@geoengine/api-client';
 import {MatButtonModule} from '@angular/material/button';
-import {MatProgressBarModule} from '@angular/material/progress-bar';
 import {MatIconModule} from '@angular/material/icon';
+import {MatPaginator, MatPaginatorModule} from '@angular/material/paginator';
+import {MatProgressBarModule} from '@angular/material/progress-bar';
+import {MatTableModule} from '@angular/material/table';
+import {Observable, Subject, Subscription, tap} from 'rxjs';
+import {ComputationQuota, OperatorQuota} from '@geoengine/api-client';
+import {UserService} from '@geoengine/common';
 
 @Component({
     selector: 'geoengine-quota-log',

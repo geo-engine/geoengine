@@ -9,17 +9,16 @@ import {
     inject,
     input,
 } from '@angular/core';
-
 import {ControlValueAccessor, NG_VALUE_ACCESSOR, FormsModule} from '@angular/forms';
-import {Color, stringToRgbaStruct} from '../color';
+import {MatFormField, MatInput, MatHint} from '@angular/material/input';
+import {ColorPickerDirective} from 'ngx-color-picker';
 import {
     FxLayoutDirective,
     FxLayoutAlignDirective,
     FxLayoutGapDirective,
     FxFlexDirective,
 } from '../../util/directives/flexbox-legacy.directive';
-import {MatFormField, MatInput, MatHint} from '@angular/material/input';
-import {ColorPickerDirective} from 'ngx-color-picker';
+import {Color, stringToRgbaStruct} from '../color';
 
 export interface ColorAttributeInput {
     readonly key: string;

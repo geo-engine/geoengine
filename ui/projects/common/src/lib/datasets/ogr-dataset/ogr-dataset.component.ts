@@ -1,9 +1,12 @@
+import {CommonModule as AngularCommonModule} from '@angular/common';
 import {ChangeDetectorRef, Component, OnChanges, SimpleChanges, inject, input, ChangeDetectionStrategy} from '@angular/core';
 import {FormControl, FormGroup, FormsModule, ReactiveFormsModule, Validators} from '@angular/forms';
-import {DatasetsService} from '../datasets.service';
-import {UploadsService} from '../../uploads/uploads.service';
-import {UserService} from '../../user/user.service';
+import {MatButtonModule} from '@angular/material/button';
 import {MatChipInputEvent, MatChipsModule} from '@angular/material/chips';
+import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatIconModule} from '@angular/material/icon';
+import {MatInputModule} from '@angular/material/input';
+import {MatSelectModule} from '@angular/material/select';
 import {
     MetaDataDefinition,
     MetaDataSuggestion,
@@ -17,15 +20,12 @@ import {
     VectorColumnInfo,
     VectorDataType,
 } from '@geoengine/api-client';
-import {UUID} from '../dataset.model';
-import {CommonModule as AngularCommonModule} from '@angular/common';
-import {MatInputModule} from '@angular/material/input';
-import {MatFormFieldModule} from '@angular/material/form-field';
-import {MatSelectModule} from '@angular/material/select';
 import {timeStepGranularityOptions} from '../../time/time.model';
-import {MatButtonModule} from '@angular/material/button';
-import {MatIconModule} from '@angular/material/icon';
+import {UploadsService} from '../../uploads/uploads.service';
+import {UserService} from '../../user/user.service';
 import {FxLayoutDirective} from '../../util/directives/flexbox-legacy.directive';
+import {UUID} from '../dataset.model';
+import {DatasetsService} from '../datasets.service';
 
 /** Empty string means that nothing is selected yet. */
 type Unselected = '';
@@ -351,8 +351,8 @@ export class OgrDatasetComponent implements OnChanges {
             timeType: info.time ? this.getTimeType(info.time) : 'None',
             timeStartColumn: start ? start.startField : '',
             timeStartFormat: start ? start.startFormat.format : '',
-            timeStartFormatCustom: start ? (start.startFormat.format == 'custom' ? start.startFormat.customFormat : '') : '',
-            timeStartFormatUnix: start ? (start.startFormat.format == 'unixTimeStamp' ? start.startFormat.timestampType : '') : '',
+            timeStartFormatCustom: start ? (start.startFormat.format === 'custom' ? start.startFormat.customFormat : '') : '',
+            timeStartFormatUnix: start ? (start.startFormat.format === 'unixTimeStamp' ? start.startFormat.timestampType : '') : '',
             timeDurationColumn: info?.time?.type === 'start+duration' ? info?.time.durationField : '',
             timeDurationValue: info?.time?.type === 'start' && info.time.duration.type === 'value' ? info.time.duration.step : 1,
             timeDurationValueType: info?.time?.type === 'start' ? info?.time.duration.type : 'infinite',
@@ -362,8 +362,8 @@ export class OgrDatasetComponent implements OnChanges {
                     : this.defaultTimeGranularity,
             timeEndColumn: end ? end.endField : '',
             timeEndFormat: end ? end.endFormat.format : '',
-            timeEndFormatCustom: end ? (end.endFormat.format == 'custom' ? end.endFormat.customFormat : '') : '',
-            timeEndFormatUnix: end ? (end.endFormat.format == 'unixTimeStamp' ? end.endFormat.timestampType : '') : '',
+            timeEndFormatCustom: end ? (end.endFormat.format === 'custom' ? end.endFormat.customFormat : '') : '',
+            timeEndFormatUnix: end ? (end.endFormat.format === 'unixTimeStamp' ? end.endFormat.timestampType : '') : '',
             columnsX: info?.columns?.x,
             columnsY: info?.columns?.y,
             columnsText: info?.columns?.text,

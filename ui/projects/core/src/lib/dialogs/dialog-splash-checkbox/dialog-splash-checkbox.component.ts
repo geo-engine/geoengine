@@ -1,7 +1,7 @@
 import {Component, inject, input, ChangeDetectionStrategy} from '@angular/core';
 import {MatCheckboxChange, MatCheckbox} from '@angular/material/checkbox';
-import {UserService} from '@geoengine/common';
 import {MatDialogActions} from '@angular/material/dialog';
+import {UserService} from '@geoengine/common';
 
 @Component({
     selector: 'geoengine-dialog-splash-checkbox',

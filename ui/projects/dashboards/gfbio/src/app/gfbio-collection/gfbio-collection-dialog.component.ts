@@ -1,12 +1,11 @@
-import {Component, inject, ChangeDetectionStrategy} from '@angular/core';
-import {MAT_DIALOG_DATA, MatDialogRef, MatDialogContent} from '@angular/material/dialog';
-import {LayerCollectionItemDict, LayerCollectionLayerDict, ProjectService, CoreModule} from '@geoengine/core';
-import {map, mergeMap} from 'rxjs/operators';
-import {BehaviorSubject, Observable} from 'rxjs';
 import {SelectionModel} from '@angular/cdk/collections';
-import {LayerCollectionItem, LayersService, NotificationService} from '@geoengine/common';
-import {CollectionItem, LayerCollection} from '@geoengine/api-client';
 import {CdkScrollable} from '@angular/cdk/scrolling';
+import {AsyncPipe} from '@angular/common';
+import {Component, inject, ChangeDetectionStrategy} from '@angular/core';
+import {MatButton} from '@angular/material/button';
+import {MatCheckbox} from '@angular/material/checkbox';
+import {MAT_DIALOG_DATA, MatDialogRef, MatDialogContent} from '@angular/material/dialog';
+import {MatProgressBar} from '@angular/material/progress-bar';
 import {
     MatTable,
     MatColumnDef,
@@ -19,10 +18,11 @@ import {
     MatRowDef,
     MatRow,
 } from '@angular/material/table';
-import {MatCheckbox} from '@angular/material/checkbox';
-import {MatButton} from '@angular/material/button';
-import {MatProgressBar} from '@angular/material/progress-bar';
-import {AsyncPipe} from '@angular/common';
+import {BehaviorSubject, Observable} from 'rxjs';
+import {map, mergeMap} from 'rxjs/operators';
+import {CollectionItem, LayerCollection} from '@geoengine/api-client';
+import {LayerCollectionItem, LayersService, NotificationService} from '@geoengine/common';
+import {LayerCollectionItemDict, LayerCollectionLayerDict, ProjectService, CoreModule} from '@geoengine/core';
 
 enum LayerStatus {
     Ok = 'ok',

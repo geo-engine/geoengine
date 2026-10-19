@@ -1,4 +1,12 @@
+import * as Immutable from 'immutable';
+import {
+    TypedRasterResultDescriptor as RasterResultDescriptorDict,
+    TypedVectorResultDescriptor as VectorResultDescriptorDict,
+    RasterBandDescriptor,
+    TypedResultDescriptor,
+} from '@geoengine/api-client';
 import {HasLayerType, LayerType} from './layer.model';
+import {Measurement} from './measurement';
 import {
     RasterDataType,
     RasterDataTypes,
@@ -7,19 +15,11 @@ import {
     VectorDataType,
     VectorDataTypes,
 } from '../operators/datatype.model';
-import * as Immutable from 'immutable';
-import {Measurement} from './measurement';
 import {ResultType, ResultTypes} from '../operators/result-type.model';
+import {BoundingBox2D} from '../spatial-bounds/bounding-box';
+import {SpatialGridDescriptor} from '../spatial-grid/spatial-grid-descriptor.model';
 import {SpatialReference} from '../spatial-references/spatial-reference.model';
 import {Time} from '../time/time.model';
-import {BoundingBox2D} from '../spatial-bounds/bounding-box';
-import {
-    TypedRasterResultDescriptor as RasterResultDescriptorDict,
-    TypedVectorResultDescriptor as VectorResultDescriptorDict,
-    RasterBandDescriptor,
-    TypedResultDescriptor,
-} from '@geoengine/api-client';
-import {SpatialGridDescriptor} from '../spatial-grid/spatial-grid-descriptor.model';
 
 export abstract class LayerMetadata implements HasLayerType {
     abstract readonly layerType: LayerType;

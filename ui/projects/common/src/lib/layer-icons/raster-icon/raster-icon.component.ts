@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, Component, computed, input} from '@angular/core';
 import {Color, TRANSPARENT} from '../../colors/color';
-import {Colorizer, LinearGradient} from '../../colors/colorizer.model';
 import {ColorBreakpoint} from '../../colors/color-breakpoint.model';
+import {Colorizer, LinearGradient} from '../../colors/colorizer.model';
 import {RasterColorizer, SingleBandRasterColorizer} from '../../symbology/symbology.model';
 
 /**

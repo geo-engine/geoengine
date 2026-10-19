@@ -1,3 +1,4 @@
+import {DataSource} from '@angular/cdk/collections';
 import {
     Component,
     OnInit,
@@ -11,30 +12,15 @@ import {
     viewChild,
     effect,
 } from '@angular/core';
-import {MatPaginator} from '@angular/material/paginator';
-import {combineLatest, Observable, Subject, Subscription} from 'rxjs';
-import {Feature as OlFeature} from 'ol';
-import {FeatureSelection, ProjectService} from '../../project/project.service';
-import {DataSource} from '@angular/cdk/collections';
-import OlGeometry from 'ol/geom/Geometry';
-import OlPolygon from 'ol/geom/Polygon';
+import {FormsModule} from '@angular/forms';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatIconButton} from '@angular/material/button';
+import {MatCheckbox} from '@angular/material/checkbox';
 import {MatDialog} from '@angular/material/dialog';
-import {FullDisplayComponent} from './full-display/full-display.component';
-import {MediaviewComponent} from '../mediaview/mediaview.component';
-import {
-    Layer,
-    RasterLayer,
-    RasterLayerMetadata,
-    ResultTypes,
-    Time,
-    VectorColumnDataType,
-    VectorColumnDataTypes,
-    VectorData,
-    VectorLayer,
-    VectorLayerMetadata,
-} from '@geoengine/common';
-import {Measurement, ClassificationMeasurement} from '@geoengine/common';
-import {Map} from 'immutable';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel} from '@angular/material/input';
+import {MatPaginator} from '@angular/material/paginator';
+import {MatSelect} from '@angular/material/select';
 import {
     MatTable,
     MatColumnDef,
@@ -48,15 +34,29 @@ import {
     MatRow,
     MatNoDataRow,
 } from '@angular/material/table';
-import {MatCheckbox} from '@angular/material/checkbox';
-import {MatIconButton} from '@angular/material/button';
 import {MatTooltip} from '@angular/material/tooltip';
-import {MatIcon} from '@angular/material/icon';
-import {MatFormField, MatLabel} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {FormsModule} from '@angular/forms';
-import {MatOption} from '@angular/material/autocomplete';
+import {Map} from 'immutable';
 import {MomentInput} from 'moment';
+import {Feature as OlFeature} from 'ol';
+import OlGeometry from 'ol/geom/Geometry';
+import OlPolygon from 'ol/geom/Polygon';
+import {combineLatest, Observable, Subject, Subscription} from 'rxjs';
+import {
+    Layer,
+    RasterLayer,
+    RasterLayerMetadata,
+    ResultTypes,
+    Time,
+    VectorColumnDataType,
+    VectorColumnDataTypes,
+    VectorData,
+    VectorLayer,
+    VectorLayerMetadata,
+} from '@geoengine/common';
+import {Measurement, ClassificationMeasurement} from '@geoengine/common';
+import {FullDisplayComponent} from './full-display/full-display.component';
+import {FeatureSelection, ProjectService} from '../../project/project.service';
+import {MediaviewComponent} from '../mediaview/mediaview.component';
 
 @Component({
     selector: 'geoengine-datatable',

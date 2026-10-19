@@ -1,6 +1,5 @@
 import {Injectable, inject} from '@angular/core';
 import {ActivatedRouteSnapshot, RouterStateSnapshot, UrlTree, Router} from '@angular/router';
-
 import {Observable, map, skipWhile} from 'rxjs';
 import {UserService} from '../../user/user.service';
 

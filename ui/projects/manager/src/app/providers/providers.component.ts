@@ -1,7 +1,7 @@
 import {Component, viewChild, ChangeDetectionStrategy} from '@angular/core';
-import {ProviderListComponent} from './provider-list/provider-list.component';
 import {LayerProviderListing} from '@geoengine/api-client';
 import {ProviderEditorComponent} from './provider-editor/provider-editor.component';
+import {ProviderListComponent} from './provider-list/provider-list.component';
 
 @Component({
     selector: 'geoengine-manager-providers',

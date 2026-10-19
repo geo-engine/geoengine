@@ -1,22 +1,22 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, OnDestroy, OnInit, inject, viewChild} from '@angular/core';
+import {AsyncPipe} from '@angular/common';
 import {HttpClient} from '@angular/common/http';
-import {
-    ProjectService,
-    LayoutService,
-    ProviderLayerIdDict,
-    ProviderLayerCollectionIdDict,
-    RasterResultDescriptorDict,
-    MapService,
-    SymbologyEditorComponent,
-    WGS_84,
-} from '@geoengine/core';
-import {BehaviorSubject, combineLatest, firstValueFrom, from, Observable, of, Subscription} from 'rxjs';
-import {AppConfig} from '../app-config.service';
-import {filter, map, mergeMap} from 'rxjs/operators';
-import {Country, CountryProviderService} from '../country-provider.service';
-import {DataSelectionService, DataRange} from '../data-selection.service';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, OnDestroy, OnInit, inject, viewChild} from '@angular/core';
+import {FormsModule} from '@angular/forms';
+import {MatButton} from '@angular/material/button';
+import {MatIcon} from '@angular/material/icon';
+import {MatDivider} from '@angular/material/list';
+import {MatProgressSpinner} from '@angular/material/progress-spinner';
+import {MatSlideToggle} from '@angular/material/slide-toggle';
 import {ActivatedRoute} from '@angular/router';
-import {countryDatasetName} from '../country-selector/country-data.model';
+import {BehaviorSubject, combineLatest, firstValueFrom, from, Observable, of, Subscription} from 'rxjs';
+import {filter, map, mergeMap} from 'rxjs/operators';
+import {
+    LayerListing,
+    MeanRasterPixelValuesOverTime,
+    WrappedPlotOutput,
+    RasterDataType as ApiRasterDataType,
+    RasterOperator,
+} from '@geoengine/api-client';
 import {
     LayersService,
     NotificationService,
@@ -35,21 +35,21 @@ import {
     FxLayoutAlignDirective,
 } from '@geoengine/common';
 import {
-    LayerListing,
-    MeanRasterPixelValuesOverTime,
-    WrappedPlotOutput,
-    RasterDataType as ApiRasterDataType,
-    RasterOperator,
-} from '@geoengine/api-client';
-import {MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
-import {MatSlideToggle} from '@angular/material/slide-toggle';
-import {FormsModule} from '@angular/forms';
-import {MatDivider} from '@angular/material/list';
-import {CountrySelectorComponent} from '../country-selector/country-selector.component';
-import {MatProgressSpinner} from '@angular/material/progress-spinner';
+    ProjectService,
+    LayoutService,
+    ProviderLayerIdDict,
+    ProviderLayerCollectionIdDict,
+    RasterResultDescriptorDict,
+    MapService,
+    SymbologyEditorComponent,
+    WGS_84,
+} from '@geoengine/core';
+import {AppConfig} from '../app-config.service';
 import {AttributionsComponent} from '../attributions/attributions.component';
-import {AsyncPipe} from '@angular/common';
+import {Country, CountryProviderService} from '../country-provider.service';
+import {countryDatasetName} from '../country-selector/country-data.model';
+import {CountrySelectorComponent} from '../country-selector/country-selector.component';
+import {DataSelectionService, DataRange} from '../data-selection.service';
 
 interface Path {
     collectionId?: string;
@@ -173,7 +173,7 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
         }
 
         // Provider IDs are different (this should not happen)
-        if (this.lastSelectedLayerId.providerId != this.layerId.providerId) {
+        if (this.lastSelectedLayerId.providerId !== this.layerId.providerId) {
             return false;
         }
 
@@ -181,7 +181,7 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
         const newLayerIdParts = this.layerId.layerId.split('/');
 
         // EBV paths dont have the same length. This can only happen if one has scenarios and the other one does not.
-        if (lastLayerIdParts.length != newLayerIdParts.length) {
+        if (lastLayerIdParts.length !== newLayerIdParts.length) {
             return false;
         }
 
@@ -196,12 +196,12 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
 
         // IF there is a scenario in both paths it is ok th be different
         // Only metrics must stay the same
-        if (lastLayerIdParts.length == 7) {
+        if (lastLayerIdParts.length === 7) {
             return lastLayerIdParts[5] === newLayerIdParts[5];
         }
 
         // IF there is no scenario in both paths thats also ok. Metric must not be different.
-        if (lastLayerIdParts.length == 6) {
+        if (lastLayerIdParts.length === 6) {
             return lastLayerIdParts[4] === newLayerIdParts[4];
         }
 
@@ -358,7 +358,7 @@ export class EbvSelectorComponent implements OnInit, OnDestroy {
             },
         };
 
-        if (dataType == RasterDataTypes.Byte) {
+        if (dataType === RasterDataTypes.Byte) {
             return operator;
         }
 

@@ -1,13 +1,8 @@
-import {beforeEach, describe, expect, it, vi, type Mock} from 'vitest';
-import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {MultiLayerSelectionComponent} from './multi-layer-selection.component';
-import {ProjectService} from '../../../../project/project.service';
 import {inputBinding, provideZonelessChangeDetection, signal, WritableSignal} from '@angular/core';
-import {of} from 'rxjs';
-import {DialogSectionHeadingComponent} from '../../../../dialogs/dialog-section-heading/dialog-section-heading.component';
-import {MATERIAL_MODULES} from '../../../../core.module';
+import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {By} from '@angular/platform-browser';
-import {WGS_84} from '../../../../spatial-references/spatial-reference.service';
+import {of} from 'rxjs';
+import {beforeEach, describe, expect, it, vi, type Mock} from 'vitest';
 import {
     GeoTransform,
     Layer,
@@ -24,6 +19,11 @@ import {
     ResultTypes,
     UnitlessMeasurement,
 } from '@geoengine/common';
+import {MultiLayerSelectionComponent} from './multi-layer-selection.component';
+import {MATERIAL_MODULES} from '../../../../core.module';
+import {DialogSectionHeadingComponent} from '../../../../dialogs/dialog-section-heading/dialog-section-heading.component';
+import {ProjectService} from '../../../../project/project.service';
+import {WGS_84} from '../../../../spatial-references/spatial-reference.service';
 describe('MultiLayerSelectionComponent', () => {
     let component: MultiLayerSelectionComponent;
     let fixture: ComponentFixture<MultiLayerSelectionComponent>;

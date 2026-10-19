@@ -1,3 +1,4 @@
+import {CdkTextareaAutosize} from '@angular/cdk/text-field';
 import {Component, inject, output, input, effect, signal, ChangeDetectionStrategy} from '@angular/core';
 import {
     AbstractControl,
@@ -9,16 +10,14 @@ import {
     ValidatorFn,
     Validators,
 } from '@angular/forms';
+import {MatCard, MatCardContent} from '@angular/material/card';
+import {ErrorStateMatcher} from '@angular/material/core';
+import {MatError, MatFormField} from '@angular/material/form-field';
+import {MatInput, MatLabel} from '@angular/material/input';
+import {MatTooltip} from '@angular/material/tooltip';
 import {ArunaDataProviderDefinition, TypedDataProviderDefinition} from '@geoengine/api-client';
 import {isValidUuid} from '@geoengine/common';
 import {IdInputComponent} from '../util/id-input/id-input.component';
-import {MatCard, MatCardContent} from '@angular/material/card';
-import {MatError, MatFormField} from '@angular/material/form-field';
-import {MatInput, MatLabel} from '@angular/material/input';
-
-import {CdkTextareaAutosize} from '@angular/cdk/text-field';
-import {MatTooltip} from '@angular/material/tooltip';
-import {ErrorStateMatcher} from '@angular/material/core';
 import {priorityValidator} from '../util/validators';
 
 @Component({

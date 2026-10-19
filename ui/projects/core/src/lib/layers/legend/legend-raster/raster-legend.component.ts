@@ -1,8 +1,8 @@
 import {ChangeDetectionStrategy, Component, effect, inject, input, signal, untracked} from '@angular/core';
 import {firstValueFrom} from 'rxjs';
 import {RasterLayer, RasterLayerMetadata} from '@geoengine/common';
-import {ProjectService} from '../../../project/project.service';
 import {RasterLegendViewComponent} from './raster-legend-view.component';
+import {ProjectService} from '../../../project/project.service';
 
 /**
  * The raster legend component.

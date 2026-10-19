@@ -11,10 +11,6 @@ import {
     viewChild,
 } from '@angular/core';
 import {MatPaginator} from '@angular/material/paginator';
-import {ProjectService} from '../../project/project.service';
-import {ProvenanceDict} from '../../backend/backend.model';
-import {Layer} from '@geoengine/common';
-import {LayoutService} from '../../layout.service';
 import {MatProgressSpinner} from '@angular/material/progress-spinner';
 import {
     MatTable,
@@ -28,6 +24,10 @@ import {
     MatRowDef,
     MatRow,
 } from '@angular/material/table';
+import {Layer} from '@geoengine/common';
+import {ProvenanceDict} from '../../backend/backend.model';
+import {LayoutService} from '../../layout.service';
+import {ProjectService} from '../../project/project.service';
 
 @Component({
     selector: 'geoengine-provenance-table',

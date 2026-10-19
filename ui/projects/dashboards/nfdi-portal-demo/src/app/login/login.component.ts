@@ -1,6 +1,6 @@
 import {ChangeDetectionStrategy, Component} from '@angular/core';
-import {CoreModule} from '@geoengine/core';
 import {MatCardHeader, MatCardTitle, MatCardSubtitle} from '@angular/material/card';
+import {CoreModule} from '@geoengine/core';
 
 @Component({
     selector: 'geoengine-login',

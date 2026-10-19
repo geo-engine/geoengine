@@ -9,10 +9,9 @@ import {
     inject,
     input,
 } from '@angular/core';
-
 import {ControlValueAccessor, NG_VALUE_ACCESSOR, FormsModule} from '@angular/forms';
-import {ColorBreakpoint} from '../color-breakpoint.model';
-import {Color, stringToRgbaStruct, TRANSPARENT} from '../color';
+import {MatFormField, MatInput} from '@angular/material/input';
+import {ColorPickerDirective} from 'ngx-color-picker';
 import {Subject, Subscription} from 'rxjs';
 import {debounceTime} from 'rxjs/operators';
 import {CommonConfig} from '../../config.service';
@@ -22,8 +21,8 @@ import {
     FxLayoutGapDirective,
     FxFlexDirective,
 } from '../../util/directives/flexbox-legacy.directive';
-import {MatFormField, MatInput} from '@angular/material/input';
-import {ColorPickerDirective} from 'ngx-color-picker';
+import {Color, stringToRgbaStruct, TRANSPARENT} from '../color';
+import {ColorBreakpoint} from '../color-breakpoint.model';
 
 @Component({
     selector: 'geoengine-color-breakpoint',

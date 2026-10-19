@@ -1,17 +1,16 @@
 // @vitest-environment jsdom
 
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import ImageTile from 'ol/ImageTile';
-import Tile from 'ol/Tile';
-import TileState from 'ol/TileState';
-import TileGrid from 'ol/tilegrid/TileGrid';
-import TileWMS from 'ol/source/TileWMS';
 import {FrameState} from 'ol/Map';
-import View from 'ol/View';
 import {get as getProjection, transformExtent} from 'ol/proj';
+import TileWMS from 'ol/source/TileWMS';
+import Tile from 'ol/Tile';
+import TileGrid from 'ol/tilegrid/TileGrid';
+import TileState from 'ol/TileState';
+import View from 'ol/View';
 import {Observable, Subject} from 'rxjs';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {olExtentToTuple} from '@geoengine/common';
-
 import {AbortableTileLayer} from './abortable-tile-layer';
 import {TileDiagnostic, TileFrame, TileInView, TileLoadState, TileLoader, currentViewport, tileExtentInViewProjection} from './tile-loader';
 

@@ -1,11 +1,11 @@
 import {Injectable, inject} from '@angular/core';
-import {BoundingBox2D, PlotsApi, WrappedPlotOutput} from '@geoengine/api-client';
 import {ReplaySubject, firstValueFrom} from 'rxjs';
-import {UserService, apiConfigurationWithAccessKey} from '../user/user.service';
-import {Time} from '../time/time.model';
+import {BoundingBox2D, PlotsApi, WrappedPlotOutput} from '@geoengine/api-client';
 import {UUID} from '../datasets/dataset.model';
-import {bboxDictToExtent} from '../util/conversions';
 import {SpatialReference} from '../spatial-references/spatial-reference.model';
+import {Time} from '../time/time.model';
+import {UserService, apiConfigurationWithAccessKey} from '../user/user.service';
+import {bboxDictToExtent} from '../util/conversions';
 
 @Injectable({
     providedIn: 'root',

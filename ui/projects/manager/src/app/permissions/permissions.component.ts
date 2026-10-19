@@ -1,13 +1,16 @@
 import {DataSource} from '@angular/cdk/collections';
+import {AsyncPipe} from '@angular/common';
 import {AfterViewInit, Component, OnChanges, SimpleChanges, inject, input, viewChild, ChangeDetectionStrategy} from '@angular/core';
-import {Permission, PermissionListing} from '@geoengine/api-client';
-import {BehaviorSubject, firstValueFrom, Observable, Subject, tap} from 'rxjs';
-import {MatPaginator} from '@angular/material/paginator';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {ConfirmationComponent, PermissionsService, ResourceType, UserService, errorToText} from '@geoengine/common';
 import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatIconButton, MatButton} from '@angular/material/button';
 import {MatDialog} from '@angular/material/dialog';
-import {AppConfig} from '../app-config.service';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
+import {MatPaginator} from '@angular/material/paginator';
+import {MatProgressSpinner} from '@angular/material/progress-spinner';
+import {MatSelect} from '@angular/material/select';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import {
     MatTable,
     MatColumnDef,
@@ -20,13 +23,10 @@ import {
     MatRowDef,
     MatRow,
 } from '@angular/material/table';
-import {MatIconButton, MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
-import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
-import {MatProgressSpinner} from '@angular/material/progress-spinner';
-import {AsyncPipe} from '@angular/common';
+import {BehaviorSubject, firstValueFrom, Observable, Subject, tap} from 'rxjs';
+import {Permission, PermissionListing} from '@geoengine/api-client';
+import {ConfirmationComponent, PermissionsService, ResourceType, UserService, errorToText} from '@geoengine/common';
+import {AppConfig} from '../app-config.service';
 
 export interface PermissionForm {
     role: FormControl<string>;
@@ -218,8 +218,8 @@ class PermissionDataSource extends DataSource<PermissionListing> {
         void this.permissionsService
             .getPermissions(this.resourceType, this.resourceId, pageIndex * pageSize, pageSize)
             .then((permissions) => {
-                if (pageIndex * pageSize == 0) {
-                    this.isOwner$.next(permissions.length > 0 && permissions[0].permission == Permission.Owner);
+                if (pageIndex * pageSize === 0) {
+                    this.isOwner$.next(permissions.length > 0 && permissions[0].permission === Permission.Owner);
                 }
                 this.loading$.next(false);
                 if (this.paginator && permissions.length === pageSize) {

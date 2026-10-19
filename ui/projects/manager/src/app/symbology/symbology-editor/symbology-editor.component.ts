@@ -1,4 +1,5 @@
 import {Component, OnChanges, SimpleChanges, inject, input, model, viewChild, ChangeDetectionStrategy} from '@angular/core';
+import {MatButton} from '@angular/material/button';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {
     DatasetsService,
@@ -12,7 +13,6 @@ import {
     errorToText,
 } from '@geoengine/common';
 import {AppConfig} from '../../app-config.service';
-import {MatButton} from '@angular/material/button';
 
 @Component({
     selector: 'geoengine-manager-symbology-editor',

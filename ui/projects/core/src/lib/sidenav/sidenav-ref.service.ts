@@ -1,6 +1,6 @@
+import {Injectable, ElementRef, OutputEmitterRef} from '@angular/core';
 import {BehaviorSubject, Observable, Subject, Subscription} from 'rxjs';
 import {map} from 'rxjs/operators';
-import {Injectable, ElementRef, OutputEmitterRef} from '@angular/core';
 import {SidenavConfig} from '../layout.service';
 
 /**

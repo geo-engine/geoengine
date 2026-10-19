@@ -1,3 +1,4 @@
+import {AsyncPipe} from '@angular/common';
 import {
     Component,
     ChangeDetectionStrategy,
@@ -10,30 +11,29 @@ import {
     linkedSignal,
     untracked,
 } from '@angular/core';
+import {FormsModule} from '@angular/forms';
+import {MatButton} from '@angular/material/button';
+import {MatCard, MatCardHeader, MatCardTitleGroup, MatCardTitle, MatCardSubtitle, MatCardContent} from '@angular/material/card';
+import {MatIcon} from '@angular/material/icon';
+import {MatDivider} from '@angular/material/list';
+import {MatProgressBar} from '@angular/material/progress-bar';
+import {MatTabGroup, MatTab} from '@angular/material/tabs';
 import {BehaviorSubject, ReplaySubject} from 'rxjs';
-import {LinearGradient, LogarithmicGradient} from '../../colors/colorizer.model';
+import {Histogram, RasterOperator} from '@geoengine/api-client';
+import {Color} from '../../colors/color';
 import {ColorAttributeInput, ColorAttributeInputComponent} from '../../colors/color-attribute-input/color-attribute-input.component';
 import {ColorBreakpoint} from '../../colors/color-breakpoint.model';
 import {ColorMapSelectorComponent} from '../../colors/color-map-selector/color-map-selector.component';
-import {Color} from '../../colors/color';
 import {ColorTableEditorComponent} from '../../colors/color-table-editor/color-table-editor.component';
+import {LinearGradient, LogarithmicGradient} from '../../colors/colorizer.model';
+import {PercentileBreakpointSelectorComponent} from '../../colors/percentile-breakpoint-selector/percentile-breakpoint-selector.component';
 import {UUID} from '../../datasets/dataset.model';
 import {VegaChartData} from '../../plots/plot.model';
-import {ProcessingGraphsService} from '../../processing-graphs/processing-graphs.service';
-import {Histogram, RasterOperator} from '@geoengine/api-client';
 import {PlotsService} from '../../plots/plots.service';
-import {SymbologyQueryParams} from '../symbology.model';
-import {PercentileBreakpointSelectorComponent} from '../../colors/percentile-breakpoint-selector/percentile-breakpoint-selector.component';
-import {MatCard, MatCardHeader, MatCardTitleGroup, MatCardTitle, MatCardSubtitle, MatCardContent} from '@angular/material/card';
-import {MatIcon} from '@angular/material/icon';
-import {FormsModule} from '@angular/forms';
-import {MatTabGroup, MatTab} from '@angular/material/tabs';
 import {VegaViewerComponent} from '../../plots/vega-viewer/vega-viewer.component';
-import {MatProgressBar} from '@angular/material/progress-bar';
-import {MatButton} from '@angular/material/button';
-import {MatDivider} from '@angular/material/list';
-import {AsyncPipe} from '@angular/common';
+import {ProcessingGraphsService} from '../../processing-graphs/processing-graphs.service';
 import {ColorizerCssGradientPipe} from '../../util/pipes/color-gradients.pipe';
+import {SymbologyQueryParams} from '../symbology.model';
 
 /**
  * An editor for generating raster symbologies.

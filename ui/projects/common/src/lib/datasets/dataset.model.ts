@@ -1,3 +1,14 @@
+import {
+    Dataset as DatasetDict,
+    ProcessingGraph,
+    RasterOperator,
+    TypedResultDescriptor as TypedResultDescriptorDict,
+    TypedVectorResultDescriptor as VectorResultDescriptorDict,
+    TypedRasterResultDescriptor as RasterResultDescriptorDict,
+    RasterBandDescriptor as RasterBandDescriptor,
+    TimeDescriptor,
+    VectorOperator,
+} from '@geoengine/api-client';
 import {Measurement} from '../layers/measurement';
 import {
     RasterDataType,
@@ -10,17 +21,6 @@ import {
 import {SpatialGridDescriptor} from '../spatial-grid/spatial-grid-descriptor.model';
 import {SrsString} from '../spatial-references/spatial-reference.model';
 import {Symbology} from '../symbology/symbology.model';
-import {
-    Dataset as DatasetDict,
-    ProcessingGraph,
-    RasterOperator,
-    TypedResultDescriptor as TypedResultDescriptorDict,
-    TypedVectorResultDescriptor as VectorResultDescriptorDict,
-    TypedRasterResultDescriptor as RasterResultDescriptorDict,
-    RasterBandDescriptor as RasterBandDescriptor,
-    TimeDescriptor,
-    VectorOperator,
-} from '@geoengine/api-client';
 
 export type UUID = string;
 

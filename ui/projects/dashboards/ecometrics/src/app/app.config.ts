@@ -1,11 +1,10 @@
+import {provideHttpClient} from '@angular/common/http';
 import {ApplicationConfig, inject, provideAppInitializer} from '@angular/core';
-import {provideRouter} from '@angular/router';
 import {provideAnimations} from '@angular/platform-browser/animations';
-
-import {routes} from './app.routes';
+import {provideRouter} from '@angular/router';
 import {CommonConfig, NotificationService, RandomColorService, UserService} from '@geoengine/common';
 import {BackendService, CoreConfig, LayoutService, MapService, ProjectService, SidenavRef, SpatialReferenceService} from '@geoengine/core';
-import {provideHttpClient} from '@angular/common/http';
+import {routes} from './app.routes';
 import {DataSelectionService} from './data-selection.service';
 
 export const appConfig: ApplicationConfig = {

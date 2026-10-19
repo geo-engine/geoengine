@@ -1,17 +1,8 @@
+import {HttpEvent} from '@angular/common/http';
 import {Injectable, inject} from '@angular/core';
-import {BackendService} from '../backend/backend.service';
 import {from, Observable} from 'rxjs';
 import {map, mergeMap} from 'rxjs/operators';
-import {HttpEvent} from '@angular/common/http';
-import {
-    AutoCreateDatasetDict,
-    DatasetNameResponseDict,
-    UploadFileLayersResponseDict,
-    UploadFilesResponseDict,
-    UploadResponseDict,
-    UUID,
-} from '../backend/backend.model';
-import {ProjectService} from '../project/project.service';
+import {ProcessingGraph} from '@geoengine/api-client';
 import {
     ClusteredPointSymbology,
     Dataset,
@@ -29,8 +20,16 @@ import {
     VectorSymbology,
     colorToDict,
 } from '@geoengine/common';
-
-import {ProcessingGraph} from '@geoengine/api-client';
+import {
+    AutoCreateDatasetDict,
+    DatasetNameResponseDict,
+    UploadFileLayersResponseDict,
+    UploadFilesResponseDict,
+    UploadResponseDict,
+    UUID,
+} from '../backend/backend.model';
+import {BackendService} from '../backend/backend.service';
+import {ProjectService} from '../project/project.service';
 
 @Injectable({
     providedIn: 'root',

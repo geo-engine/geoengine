@@ -1,15 +1,15 @@
+import {HttpErrorResponse} from '@angular/common/http';
 import {ChangeDetectionStrategy, Component, OnInit, inject, signal} from '@angular/core';
-import {User, CoreModule} from '@geoengine/core';
-import {Router} from '@angular/router';
+import {FormField, required, form} from '@angular/forms/signals';
 import {MatButtonModule} from '@angular/material/button';
 import {MatCardModule} from '@angular/material/card';
 import {MatGridListModule} from '@angular/material/grid-list';
 import {MatIconModule} from '@angular/material/icon';
 import {MatMenuModule} from '@angular/material/menu';
-import {NotificationService, UserService} from '@geoengine/common';
-import {FormField, required, form} from '@angular/forms/signals';
+import {Router} from '@angular/router';
 import {firstValueFrom} from 'rxjs';
-import {HttpErrorResponse} from '@angular/common/http';
+import {NotificationService, UserService} from '@geoengine/common';
+import {User, CoreModule} from '@geoengine/core';
 
 enum FormStatus {
     LoggedOut,

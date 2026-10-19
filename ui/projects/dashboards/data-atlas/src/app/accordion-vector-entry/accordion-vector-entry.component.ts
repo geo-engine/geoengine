@@ -1,8 +1,10 @@
+import {AsyncPipe} from '@angular/common';
 import {Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef, inject, input} from '@angular/core';
-import {mergeMap, BehaviorSubject, of, forkJoin, from} from 'rxjs';
-import {LayerCollectionLayerDict, ProjectService, ProviderLayerCollectionIdDict, UUID, VectorResultDescriptorDict} from '@geoengine/core';
-import {DataSelectionService} from '../data-selection.service';
+import {MatButton} from '@angular/material/button';
+import {MatCard, MatCardHeader, MatCardAvatar, MatCardTitle, MatCardSubtitle, MatCardContent} from '@angular/material/card';
+import {MatIcon} from '@angular/material/icon';
 import moment from 'moment';
+import {mergeMap, BehaviorSubject, of, forkJoin, from} from 'rxjs';
 import {Layer as LayerDict} from '@geoengine/api-client';
 import {
     LayersService,
@@ -14,10 +16,8 @@ import {
     createVectorSymbology,
     AsyncValueDefault,
 } from '@geoengine/common';
-import {MatCard, MatCardHeader, MatCardAvatar, MatCardTitle, MatCardSubtitle, MatCardContent} from '@angular/material/card';
-import {MatIcon} from '@angular/material/icon';
-import {MatButton} from '@angular/material/button';
-import {AsyncPipe} from '@angular/common';
+import {LayerCollectionLayerDict, ProjectService, ProviderLayerCollectionIdDict, UUID, VectorResultDescriptorDict} from '@geoengine/core';
+import {DataSelectionService} from '../data-selection.service';
 
 @Component({
     selector: 'geoengine-accordion-vector-entry',

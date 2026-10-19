@@ -1,7 +1,7 @@
 import {Moment} from 'moment';
 import {Configuration, STRectangle} from '@geoengine/api-client';
-import {UUID} from '../datasets/dataset.model';
 import {User} from './user.model';
+import {UUID} from '../datasets/dataset.model';
 
 /**
  * A user session after login

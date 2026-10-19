@@ -1,4 +1,10 @@
 import {Component, signal, WritableSignal, inject, viewChild, ChangeDetectionStrategy} from '@angular/core';
+import {MatButton} from '@angular/material/button';
+import {MatDialog} from '@angular/material/dialog';
+import {MatIcon} from '@angular/material/icon';
+import {MatNavList, MatListItem, MatListItemTitle, MatListItemLine} from '@angular/material/list';
+import {firstValueFrom} from 'rxjs';
+import {LayerCollectionListing, LayerListing, ProviderLayerCollectionId} from '@geoengine/api-client';
 import {
     CollectionNavigation,
     LAYER_DB_PROVIDER_ID,
@@ -8,13 +14,7 @@ import {
     UUID,
     CommonModule,
 } from '@geoengine/common';
-import {LayerCollectionListing, LayerListing, ProviderLayerCollectionId} from '@geoengine/api-client';
 import {AddLayerItemComponent} from './add-layer-item/add-layer-item.component';
-import {firstValueFrom} from 'rxjs';
-import {MatDialog} from '@angular/material/dialog';
-import {MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
-import {MatNavList, MatListItem, MatListItemTitle, MatListItemLine} from '@angular/material/list';
 import {LayerCollectionEditorComponent} from './layer-collection-editor/layer-collection-editor.component';
 import {LayerEditorComponent} from './layer-editor/layer-editor.component';
 

@@ -1,17 +1,15 @@
+import {AsyncPipe} from '@angular/common';
+import {AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, inject, input} from '@angular/core';
+import {MatButton} from '@angular/material/button';
 import {BehaviorSubject, Subscription} from 'rxjs';
 import {filter, first} from 'rxjs/operators';
-
-import {AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, inject, input} from '@angular/core';
-
-import {OperatorListComponent} from '../../operators/dialogs/operator-list/operator-list.component';
-import {ProjectService} from '../../project/project.service';
-import {LayoutService} from '../../layout.service';
-import {LoadingState} from '../../project/loading-state.model';
 import {Plot, AsyncNumberSanitizer, AsyncValueDefault} from '@geoengine/common';
+import {LayoutService} from '../../layout.service';
+import {OperatorListComponent} from '../../operators/dialogs/operator-list/operator-list.component';
+import {LoadingState} from '../../project/loading-state.model';
+import {ProjectService} from '../../project/project.service';
 import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
-import {MatButton} from '@angular/material/button';
 import {PlotListEntryComponent} from '../plot-list-entry/plot-list-entry.component';
-import {AsyncPipe} from '@angular/common';
 
 /**
  * This component lists all current plots.

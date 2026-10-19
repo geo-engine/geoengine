@@ -1,3 +1,4 @@
+import {AsyncPipe} from '@angular/common';
 import {
     Component,
     OnInit,
@@ -10,20 +11,19 @@ import {
     input,
     output,
 } from '@angular/core';
+import {FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatFormField, MatLabel} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
+import {BehaviorSubject, Observable, Subject, map} from 'rxjs';
 import {
     LayerCollection as LayerCollectionDict,
     CollectionItem as LayerCollectionItemDict,
     ProviderLayerCollectionId as ProviderLayerCollectionIdDict,
     LayerListing as LayerCollectionLayerDict,
 } from '@geoengine/api-client';
-import {BehaviorSubject, Observable, Subject, map} from 'rxjs';
-import {LayersService} from '../layers.service';
-import {MatFormField, MatLabel} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
 import {AutocompleteSelectDirective} from '../../util/directives/autocomplete-select.directive';
-import {FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {AsyncPipe} from '@angular/common';
+import {LayersService} from '../layers.service';
 
 interface CollectionAndSelected {
     collection: LayerCollectionDict;

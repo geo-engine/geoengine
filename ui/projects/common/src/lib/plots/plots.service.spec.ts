@@ -1,11 +1,11 @@
 import {TestBed} from '@angular/core/testing';
-import {PlotsApi} from '@geoengine/api-client';
 import {NEVER, Observable} from 'rxjs';
 import {describe, expect, it, vi} from 'vitest';
-import {UserService} from '../user/user.service';
-import {Time} from '../time/time.model';
-import {SpatialReference} from '../spatial-references/spatial-reference.model';
+import {PlotsApi} from '@geoengine/api-client';
 import {PlotsService} from './plots.service';
+import {SpatialReference} from '../spatial-references/spatial-reference.model';
+import {Time} from '../time/time.model';
+import {UserService} from '../user/user.service';
 
 const BBOX = {lowerLeftCoordinate: {x: 0, y: 0}, upperRightCoordinate: {x: 10, y: 10}};
 const TIME = new Time(Date.UTC(2014, 0, 1));

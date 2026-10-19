@@ -1,19 +1,19 @@
-import {Component, ChangeDetectionStrategy, inject} from '@angular/core';
-import {BBoxDict, ProjectService, SourceOperatorDict, RasterResultDescriptorDict} from '@geoengine/core';
-import {first, map, mergeMap, tap} from 'rxjs/operators';
-import {DataSelectionService} from '../data-selection.service';
-import {BehaviorSubject, combineLatest, from, Observable, of} from 'rxjs';
-import {COUNTRY_METADATA, countryDatasetName} from './country-data.model';
-import {PlotsService, PolygonSymbology, RasterDataTypes, RasterLayer, VectorLayer, CommonModule} from '@geoengine/common';
-import {MatFormField, MatLabel} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
-import {MatSelectSearchComponent} from 'ngx-mat-select-search';
-import {FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {MatButton} from '@angular/material/button';
-import {MatProgressSpinner} from '@angular/material/progress-spinner';
 import {AsyncPipe} from '@angular/common';
+import {Component, ChangeDetectionStrategy, inject} from '@angular/core';
+import {FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatButton} from '@angular/material/button';
+import {MatFormField, MatLabel} from '@angular/material/input';
+import {MatProgressSpinner} from '@angular/material/progress-spinner';
+import {MatSelect} from '@angular/material/select';
+import {MatSelectSearchComponent} from 'ngx-mat-select-search';
+import {BehaviorSubject, combineLatest, from, Observable, of} from 'rxjs';
+import {first, map, mergeMap, tap} from 'rxjs/operators';
 import {Histogram, HistogramParameters, ProcessingGraph, RasterOperator} from '@geoengine/api-client';
+import {PlotsService, PolygonSymbology, RasterDataTypes, RasterLayer, VectorLayer, CommonModule} from '@geoengine/common';
+import {BBoxDict, ProjectService, SourceOperatorDict, RasterResultDescriptorDict} from '@geoengine/core';
+import {COUNTRY_METADATA, countryDatasetName} from './country-data.model';
+import {DataSelectionService} from '../data-selection.service';
 
 @Component({
     selector: 'geoengine-analysis',

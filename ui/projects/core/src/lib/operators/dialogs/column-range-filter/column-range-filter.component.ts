@@ -1,11 +1,15 @@
+import {AsyncPipe} from '@angular/common';
 import {Component, ChangeDetectionStrategy, OnDestroy, inject} from '@angular/core';
 import {FormArray, FormBuilder, FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatIconButton, MatButton} from '@angular/material/button';
+import {MatAccordion, MatExpansionPanel, MatExpansionPanelHeader, MatExpansionPanelTitle} from '@angular/material/expansion';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatInput, MatHint} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
 import {combineLatest, from, Observable, of, ReplaySubject, Subscription} from 'rxjs';
-import {ProjectService} from '../../../project/project.service';
 import {map, mergeMap} from 'rxjs/operators';
-import {UUID} from '../../../backend/backend.model';
-import {MapService} from '../../../map/map.service';
-
+import {ProcessingGraph, StringOrNumberRange, VectorOperator} from '@geoengine/api-client';
 import {
     Layer,
     PlotsService,
@@ -26,19 +30,14 @@ import {
     FxLayoutAlignDirective,
     CommonModule,
 } from '@geoengine/common';
-import {ProcessingGraph, StringOrNumberRange, VectorOperator} from '@geoengine/api-client';
-import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
-import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
-import {MatIconButton, MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
-import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
+import {UUID} from '../../../backend/backend.model';
 import {DialogSectionHeadingComponent} from '../../../dialogs/dialog-section-heading/dialog-section-heading.component';
-import {MatAccordion, MatExpansionPanel, MatExpansionPanelHeader, MatExpansionPanelTitle} from '@angular/material/expansion';
-import {MatFormField, MatInput, MatHint} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
+import {MapService} from '../../../map/map.service';
+import {ProjectService} from '../../../project/project.service';
+import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
+import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
+import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
-import {AsyncPipe} from '@angular/common';
 interface ColumnRangeFilterForm {
     layer: FormControl<Layer | null>;
     name: FormControl<string>;

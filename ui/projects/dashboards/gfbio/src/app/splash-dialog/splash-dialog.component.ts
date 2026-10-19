@@ -1,7 +1,7 @@
-import {Component, ChangeDetectionStrategy} from '@angular/core';
-import {CoreModule} from '@geoengine/core';
 import {CdkScrollable} from '@angular/cdk/scrolling';
+import {Component, ChangeDetectionStrategy} from '@angular/core';
 import {MatDialogContent} from '@angular/material/dialog';
+import {CoreModule} from '@geoengine/core';
 
 @Component({
     selector: 'geoengine-gfbio-splash-dialog',

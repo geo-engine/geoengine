@@ -1,4 +1,6 @@
+import {CdkTextareaAutosize} from '@angular/cdk/text-field';
 import {Component, inject, input, effect, forwardRef, ChangeDetectionStrategy} from '@angular/core';
+import {toSignal} from '@angular/core/rxjs-interop';
 import {
     ControlValueAccessor,
     FormBuilder,
@@ -8,23 +10,21 @@ import {
     ReactiveFormsModule,
     Validators,
 } from '@angular/forms';
+import {MatButton} from '@angular/material/button';
+import {MatCard, MatCardContent} from '@angular/material/card';
+import {ErrorStateMatcher} from '@angular/material/core';
+import {MatError, MatFormField} from '@angular/material/form-field';
+import {MatInput, MatLabel} from '@angular/material/input';
+import {map, pairwise, startWith} from 'rxjs';
 import {
     TypedDataProviderDefinition,
     instanceOfWildliveDataConnectorDefinition,
     WildliveDataConnectorDefinitionTypeEnum,
 } from '@geoengine/api-client';
 import {isValidUuid, UUID, CommonModule} from '@geoengine/common';
-import {IdInputComponent} from '../util/id-input/id-input.component';
-import {MatCard, MatCardContent} from '@angular/material/card';
-import {MatError, MatFormField} from '@angular/material/form-field';
-import {MatInput, MatLabel} from '@angular/material/input';
-import {CdkTextareaAutosize} from '@angular/cdk/text-field';
-import {ErrorStateMatcher} from '@angular/material/core';
-import {toSignal} from '@angular/core/rxjs-interop';
-import {map, pairwise, startWith} from 'rxjs';
-import {MatButton} from '@angular/material/button';
 import {OidcPopupMessage} from '../../../../oidc-popup/oidc-popup.component';
 import {oidcRedirectPath} from '../../../../util/location';
+import {IdInputComponent} from '../util/id-input/id-input.component';
 
 const nop = (): null => null;
 

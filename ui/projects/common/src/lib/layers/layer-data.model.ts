@@ -1,13 +1,13 @@
-import {Time} from '../time/time.model';
-import {LayerType} from './layer.model';
-import {SpatialReference} from '../spatial-references/spatial-reference.model';
-import {GeoJSON as OlFormatGeoJSON} from 'ol/format';
 import OlFeature from 'ol/Feature';
-import {ProjectionLike as OlProjectionLike} from 'ol/proj';
-import {featureToHash} from '../util/conversions';
 import {FeatureLike} from 'ol/Feature';
+import {GeoJSON as OlFormatGeoJSON} from 'ol/format';
+import {ProjectionLike as OlProjectionLike} from 'ol/proj';
 import OlRenderFeature, {toFeature} from 'ol/render/Feature';
+import {LayerType} from './layer.model';
 import {UUID} from '../datasets/dataset.model';
+import {SpatialReference} from '../spatial-references/spatial-reference.model';
+import {Time} from '../time/time.model';
+import {featureToHash} from '../util/conversions';
 
 export abstract class LayerData {
     readonly type: LayerType;

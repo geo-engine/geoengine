@@ -1,11 +1,11 @@
 import {AfterViewInit, Component, effect, forwardRef, signal, ChangeDetectionStrategy} from '@angular/core';
-import {v4 as uuidv4} from 'uuid';
+import {toSignal} from '@angular/core/rxjs-interop';
 import {ControlValueAccessor, FormControl, NG_VALUE_ACCESSOR, ReactiveFormsModule} from '@angular/forms';
+import {MatButton} from '@angular/material/button';
 import {MatFormField} from '@angular/material/form-field';
 import {MatInput, MatLabel} from '@angular/material/input';
-import {MatButton} from '@angular/material/button';
+import {v4 as uuidv4} from 'uuid';
 import {UUID} from '@geoengine/common';
-import {toSignal} from '@angular/core/rxjs-interop';
 
 @Component({
     selector: 'geoengine-manager-id-input',

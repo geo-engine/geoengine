@@ -1,7 +1,7 @@
+import {KeyValuePipe} from '@angular/common';
 import {Component, ChangeDetectionStrategy, inject} from '@angular/core';
 import {MatSelectModule} from '@angular/material/select';
 import {BasemapService} from '../../layers/basemap.service';
-import {KeyValuePipe} from '@angular/common';
 import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
 
 @Component({

@@ -1,3 +1,8 @@
+import {HttpErrorResponse} from '@angular/common/http';
+import {Injectable, OnDestroy, computed, inject} from '@angular/core';
+import {toSignal} from '@angular/core/rxjs-interop';
+import OlFeature from 'ol/Feature';
+import OlGeometry from 'ol/geom/Geometry';
 import {
     BehaviorSubject,
     combineLatest,
@@ -13,21 +18,25 @@ import {
     zip,
 } from 'rxjs';
 import {debounceTime, distinctUntilChanged, filter, finalize, first, map, mergeMap, pairwise, switchMap, take, tap} from 'rxjs/operators';
-
-import {Injectable, OnDestroy, computed, inject} from '@angular/core';
-
-import {Project} from './project.model';
-import {CoreConfig} from '../config.service';
-import {LoadingState} from './loading-state.model';
-import {HttpErrorResponse} from '@angular/common/http';
-import {BackendService} from '../backend/backend.service';
-import {BBoxDict, ToDict, UUID} from '../backend/backend.model';
-import {MapService, ViewportSize} from '../map/map.service';
-import {Session} from '../users/session.model';
-import OlFeature from 'ol/Feature';
-import OlGeometry from 'ol/geom/Geometry';
-import {getProjectionTarget} from '../util/spatial_reference';
-import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
+import {
+    CollectionItem,
+    GeoJson,
+    OGCWFSApi,
+    Plot as PlotDict,
+    PlotOperator,
+    ProjectLayer as ProjectLayerDict,
+    ProviderLayerId,
+    ProcessingGraph,
+    ProvenanceEntry,
+    RasterOperator,
+    TypedResultDescriptor,
+    VectorOperator,
+    ProcessingGraphsApi,
+    LineSimplification,
+    TypedOperator,
+    ResponseError,
+    WrappedPlotOutput,
+} from '@geoengine/api-client';
 import {
     apiConfigurationWithAccessKey,
     bboxDictToExtent,
@@ -67,26 +76,15 @@ import {
     ProcessingGraphsService,
     PlotsService,
 } from '@geoengine/common';
-import {
-    CollectionItem,
-    GeoJson,
-    OGCWFSApi,
-    Plot as PlotDict,
-    PlotOperator,
-    ProjectLayer as ProjectLayerDict,
-    ProviderLayerId,
-    ProcessingGraph,
-    ProvenanceEntry,
-    RasterOperator,
-    TypedResultDescriptor,
-    VectorOperator,
-    ProcessingGraphsApi,
-    LineSimplification,
-    TypedOperator,
-    ResponseError,
-    WrappedPlotOutput,
-} from '@geoengine/api-client';
-import {toSignal} from '@angular/core/rxjs-interop';
+import {Project} from './project.model';
+import {CoreConfig} from '../config.service';
+import {LoadingState} from './loading-state.model';
+import {BBoxDict, ToDict, UUID} from '../backend/backend.model';
+import {BackendService} from '../backend/backend.service';
+import {MapService, ViewportSize} from '../map/map.service';
+import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
+import {Session} from '../users/session.model';
+import {getProjectionTarget} from '../util/spatial_reference';
 
 export type FeatureId = string | number;
 

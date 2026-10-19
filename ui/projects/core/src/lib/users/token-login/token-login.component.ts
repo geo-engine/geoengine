@@ -1,14 +1,14 @@
-import {ChangeDetectionStrategy, Component, OnInit, inject, input, signal} from '@angular/core';
-import {first} from 'rxjs/operators';
-import {Router} from '@angular/router';
-import {UUID} from '../../backend/backend.model';
-import {UserService, FxLayoutDirective, FxLayoutAlignDirective, FxLayoutGapDirective, FxFlexDirective} from '@geoengine/common';
 import {NgClass} from '@angular/common';
+import {ChangeDetectionStrategy, Component, OnInit, inject, input, signal} from '@angular/core';
+import {form, FormField, required} from '@angular/forms/signals';
+import {MatButton} from '@angular/material/button';
 import {MatCard, MatCardContent, MatCardActions} from '@angular/material/card';
 import {MatFormField, MatInput} from '@angular/material/input';
 import {MatProgressSpinner} from '@angular/material/progress-spinner';
-import {MatButton} from '@angular/material/button';
-import {form, FormField, required} from '@angular/forms/signals';
+import {Router} from '@angular/router';
+import {first} from 'rxjs/operators';
+import {UserService, FxLayoutDirective, FxLayoutAlignDirective, FxLayoutGapDirective, FxFlexDirective} from '@geoengine/common';
+import {UUID} from '../../backend/backend.model';
 
 enum FormStatus {
     LoggedOut,

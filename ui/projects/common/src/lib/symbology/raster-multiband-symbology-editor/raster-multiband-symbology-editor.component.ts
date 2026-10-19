@@ -1,21 +1,21 @@
-import {Subscription} from 'rxjs';
+import {TitleCasePipe} from '@angular/common';
 import {ChangeDetectionStrategy, Component, computed, effect, inject, input, OnDestroy, output, signal} from '@angular/core';
 import {FormBuilder, FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {geoengineValidators} from '../../util/form.validators';
-import {SymbologyQueryParams, MultiBandRasterColorizer} from '../symbology.model';
-import {Color, TRANSPARENT} from '../../colors/color';
-import {ProcessingGraphsService} from '../../processing-graphs/processing-graphs.service';
-import {Statistics} from '@geoengine/api-client';
-import {PlotsService} from '../../plots/plots.service';
-import {statisticsFromPlotData} from '../../plots/statistics';
-import {VegaChartData} from '../../plots/plot.model';
-import {UUID} from '../../datasets/dataset.model';
+import {MatButton} from '@angular/material/button';
 import {MatCard, MatCardHeader, MatCardTitleGroup, MatCardTitle, MatCardSubtitle, MatCardContent} from '@angular/material/card';
 import {MatIcon} from '@angular/material/icon';
 import {MatFormField, MatLabel, MatInput, MatError} from '@angular/material/input';
 import {MatProgressSpinner} from '@angular/material/progress-spinner';
-import {MatButton} from '@angular/material/button';
-import {TitleCasePipe} from '@angular/common';
+import {Subscription} from 'rxjs';
+import {Statistics} from '@geoengine/api-client';
+import {Color, TRANSPARENT} from '../../colors/color';
+import {UUID} from '../../datasets/dataset.model';
+import {VegaChartData} from '../../plots/plot.model';
+import {PlotsService} from '../../plots/plots.service';
+import {statisticsFromPlotData} from '../../plots/statistics';
+import {ProcessingGraphsService} from '../../processing-graphs/processing-graphs.service';
+import {geoengineValidators} from '../../util/form.validators';
+import {SymbologyQueryParams, MultiBandRasterColorizer} from '../symbology.model';
 
 interface RgbSettingsForm {
     red: FormGroup<{

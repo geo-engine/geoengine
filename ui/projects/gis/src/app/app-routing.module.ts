@@ -1,9 +1,9 @@
 import {inject, NgModule} from '@angular/core';
 import {ActivatedRouteSnapshot, CanActivateFn, RouterModule, RouterStateSnapshot, Routes} from '@angular/router';
-import {BackendStatusPageComponent, NotFoundPageComponent} from '@geoengine/core';
-import {MainComponent} from './main/main.component';
 import {BackendAvailableGuard, CanRegisterGuard, LoginComponent, LogInGuard, RegisterComponent} from '@geoengine/common';
+import {BackendStatusPageComponent, NotFoundPageComponent} from '@geoengine/core';
 import {AppConfig} from './app-config.service';
+import {MainComponent} from './main/main.component';
 
 export const routeToManager: CanActivateFn = (_route: ActivatedRouteSnapshot, _state: RouterStateSnapshot) => {
     const config = inject(AppConfig);

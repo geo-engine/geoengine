@@ -1,7 +1,8 @@
+import {AsyncPipe} from '@angular/common';
 import {Component, ChangeDetectionStrategy, inject} from '@angular/core';
 import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {GeoEngineErrorDict, RasterResultDescriptorDict, UUID, VectorResultDescriptorDict} from '../../backend/backend.model';
-import {ProjectService} from '../../project/project.service';
+import {MatButton} from '@angular/material/button';
+import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
 import {
     NotificationService,
     RandomColorService,
@@ -11,11 +12,10 @@ import {
     createVectorSymbology,
     isValidUuid,
 } from '@geoengine/common';
-import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
+import {GeoEngineErrorDict, RasterResultDescriptorDict, UUID, VectorResultDescriptorDict} from '../../backend/backend.model';
 import {DialogHelpComponent} from '../../dialogs/dialog-help/dialog-help.component';
-import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
-import {MatButton} from '@angular/material/button';
-import {AsyncPipe} from '@angular/common';
+import {ProjectService} from '../../project/project.service';
+import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
 
 @Component({
     selector: 'geoengine-add-processing-graph',

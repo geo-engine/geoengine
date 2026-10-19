@@ -1,18 +1,18 @@
+import {AsyncPipe} from '@angular/common';
 import {Component, inject, viewChild, ChangeDetectionStrategy} from '@angular/core';
 import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {ConfirmationComponent, DatasetsService, errorToText, OgrDatasetComponent} from '@geoengine/common';
-import {DataPath, MetaDataDefinition, Volume as VolumeDict} from '@geoengine/api-client';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {MatDialog, MatDialogRef, MatDialogTitle} from '@angular/material/dialog';
-import {BehaviorSubject, filter, firstValueFrom, merge} from 'rxjs';
-import {GdalMetadataListComponent} from '../loading-info/gdal-metadata-list/gdal-metadata-list.component';
-import {MatCard, MatCardHeader, MatCardTitle, MatCardContent} from '@angular/material/card';
-import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
-import {MatButtonToggleGroup, MatButtonToggle} from '@angular/material/button-toggle';
-import {MatSelect} from '@angular/material/select';
 import {MatOption} from '@angular/material/autocomplete';
 import {MatButton} from '@angular/material/button';
-import {AsyncPipe} from '@angular/common';
+import {MatButtonToggleGroup, MatButtonToggle} from '@angular/material/button-toggle';
+import {MatCard, MatCardHeader, MatCardTitle, MatCardContent} from '@angular/material/card';
+import {MatDialog, MatDialogRef, MatDialogTitle} from '@angular/material/dialog';
+import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
+import {MatSnackBar} from '@angular/material/snack-bar';
+import {BehaviorSubject, filter, firstValueFrom, merge} from 'rxjs';
+import {DataPath, MetaDataDefinition, Volume as VolumeDict} from '@geoengine/api-client';
+import {ConfirmationComponent, DatasetsService, errorToText, OgrDatasetComponent} from '@geoengine/common';
+import {GdalMetadataListComponent} from '../loading-info/gdal-metadata-list/gdal-metadata-list.component';
 
 enum DataPaths {
     Upload,

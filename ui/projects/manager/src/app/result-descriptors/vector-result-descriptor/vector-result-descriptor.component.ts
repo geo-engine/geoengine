@@ -1,5 +1,4 @@
 import {Component, input, ChangeDetectionStrategy} from '@angular/core';
-import {Measurement, TypedVectorResultDescriptor} from '@geoengine/api-client';
 import {FormsModule} from '@angular/forms';
 import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
 import {
@@ -14,6 +13,7 @@ import {
     MatRowDef,
     MatRow,
 } from '@angular/material/table';
+import {Measurement, TypedVectorResultDescriptor} from '@geoengine/api-client';
 
 interface Column {
     name: string;

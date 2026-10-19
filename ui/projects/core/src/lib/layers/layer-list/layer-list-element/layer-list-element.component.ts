@@ -1,18 +1,15 @@
-import {Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, input} from '@angular/core';
 import {Clipboard} from '@angular/cdk/clipboard';
+import {CdkDragHandle} from '@angular/cdk/drag-drop';
+import {AsyncPipe} from '@angular/common';
+import {Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, input} from '@angular/core';
+import {MatIconButton} from '@angular/material/button';
 import {MatDialog} from '@angular/material/dialog';
-import {TabsService} from '../../../tabs/tabs.service';
-import {CoreConfig} from '../../../config.service';
-import {MapService} from '../../../map/map.service';
-import {ProjectService} from '../../../project/project.service';
-import {LayoutService} from '../../../layout.service';
+import {MatIcon} from '@angular/material/icon';
+import {MatMenu, MatMenuItem, MatMenuTrigger} from '@angular/material/menu';
+import {MatProgressBar} from '@angular/material/progress-bar';
+import {MatTooltip} from '@angular/material/tooltip';
 import {last, map, Observable, startWith} from 'rxjs';
-import {ProvenanceTableComponent} from '../../../provenance/table/provenance-table.component';
-import {DataTableComponent} from '../../../datatable/table/table.component';
-import {RenameLayerComponent} from '../../rename-layer/rename-layer.component';
-import {LineageGraphComponent} from '../../../provenance/lineage-graph/lineage-graph.component';
-import {LoadingState} from '../../../project/loading-state.model';
-import {filenameFromHttpHeaders} from '../../../util/http';
+import {RasterBandDescriptor} from '@geoengine/api-client';
 import {
     IconStyle,
     Layer,
@@ -30,18 +27,21 @@ import {
     RasterIconComponent,
     FxFlexDirective,
 } from '@geoengine/common';
-import {RasterBandDescriptor} from '@geoengine/api-client';
-import {SymbologyEditorComponent} from '../../symbology/symbology-editor/symbology-editor.component';
+import {CoreConfig} from '../../../config.service';
+import {DataTableComponent} from '../../../datatable/table/table.component';
 import {DownloadLayerComponent} from '../../../download-layer/download-layer.component';
-import {MatMenu, MatMenuItem, MatMenuTrigger} from '@angular/material/menu';
-import {AsyncPipe} from '@angular/common';
-import {MatIcon} from '@angular/material/icon';
-import {MatIconButton} from '@angular/material/button';
-import {MatTooltip} from '@angular/material/tooltip';
-import {CdkDragHandle} from '@angular/cdk/drag-drop';
-import {VectorLegendComponent} from '../../legend/legend-vector/vector-legend.component';
+import {LayoutService} from '../../../layout.service';
+import {MapService} from '../../../map/map.service';
+import {LoadingState} from '../../../project/loading-state.model';
+import {ProjectService} from '../../../project/project.service';
+import {LineageGraphComponent} from '../../../provenance/lineage-graph/lineage-graph.component';
+import {ProvenanceTableComponent} from '../../../provenance/table/provenance-table.component';
+import {TabsService} from '../../../tabs/tabs.service';
+import {filenameFromHttpHeaders} from '../../../util/http';
 import {RasterLegendComponent} from '../../legend/legend-raster/raster-legend.component';
-import {MatProgressBar} from '@angular/material/progress-bar';
+import {VectorLegendComponent} from '../../legend/legend-vector/vector-legend.component';
+import {RenameLayerComponent} from '../../rename-layer/rename-layer.component';
+import {SymbologyEditorComponent} from '../../symbology/symbology-editor/symbology-editor.component';
 /**
  * The layer list component displays active layers, legends and other controlls.
  */

@@ -1,7 +1,14 @@
+import {Component, ChangeDetectionStrategy, inject, input, computed, model, signal, forwardRef, effect, linkedSignal} from '@angular/core';
+import {rxResource, toSignal} from '@angular/core/rxjs-interop';
+import {ControlValueAccessor, NG_VALUE_ACCESSOR} from '@angular/forms';
+import {FormValueControl} from '@angular/forms/signals';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatIconButton} from '@angular/material/button';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
 import {of, zip, forkJoin, firstValueFrom} from 'rxjs';
 import {map, mergeMap} from 'rxjs/operators';
-import {Component, ChangeDetectionStrategy, inject, input, computed, model, signal, forwardRef, effect, linkedSignal} from '@angular/core';
-import {ProjectService} from '../../../../project/project.service';
 import {
     Layer,
     LayerMetadata,
@@ -12,14 +19,7 @@ import {
     FxLayoutAlignDirective,
     LayerCollectionLayerDetailsComponent,
 } from '@geoengine/common';
-import {MatIconButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
-import {MatFormField, MatLabel} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
-import {rxResource, toSignal} from '@angular/core/rxjs-interop';
-import {FormValueControl} from '@angular/forms/signals';
-import {ControlValueAccessor, NG_VALUE_ACCESSOR} from '@angular/forms';
+import {ProjectService} from '../../../../project/project.service';
 
 /**
  * Singleton for a letter to number converter for ids.

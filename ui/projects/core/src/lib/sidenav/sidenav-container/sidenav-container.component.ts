@@ -1,4 +1,4 @@
-import {Subscription, combineLatest} from 'rxjs';
+import {AsyncPipe} from '@angular/common';
 import {
     Component,
     OnInit,
@@ -15,18 +15,18 @@ import {
     viewChildren,
 } from '@angular/core';
 import {toObservable} from '@angular/core/rxjs-interop';
-import {SidenavRef} from '../sidenav-ref.service';
-import {LayoutService, SidenavConfig} from '../../layout.service';
-import {map} from 'rxjs/operators';
-import {MatSidenav} from '@angular/material/sidenav';
-import {MatToolbar} from '@angular/material/toolbar';
-import {FxLayoutDirective, FxFlexDirective} from '@geoengine/common';
+import {FormsModule} from '@angular/forms';
 import {MatButton} from '@angular/material/button';
-import {MatTooltip} from '@angular/material/tooltip';
 import {MatIcon} from '@angular/material/icon';
 import {MatFormField, MatPrefix, MatLabel, MatInput} from '@angular/material/input';
-import {FormsModule} from '@angular/forms';
-import {AsyncPipe} from '@angular/common';
+import {MatSidenav} from '@angular/material/sidenav';
+import {MatToolbar} from '@angular/material/toolbar';
+import {MatTooltip} from '@angular/material/tooltip';
+import {Subscription, combineLatest} from 'rxjs';
+import {map} from 'rxjs/operators';
+import {FxLayoutDirective, FxFlexDirective} from '@geoengine/common';
+import {LayoutService, SidenavConfig} from '../../layout.service';
+import {SidenavRef} from '../sidenav-ref.service';
 
 /**
  * This is a container component that encapsulates sidenav components, dialogs, etc. and

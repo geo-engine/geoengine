@@ -1,15 +1,14 @@
 import {ChangeDetectionStrategy, Component, input} from '@angular/core';
-import {LayerMetadata, RasterLayerMetadata, VectorLayerMetadata} from '../../layers/layer-metadata.model';
-import {VectorDataTypes} from '../../operators/datatype.model';
-import {Colorizer} from '../../colors/colorizer.model';
-import {SingleBandRasterColorizer} from '../../symbology/symbology.model';
-
 import {MatIconModule} from '@angular/material/icon';
-import {FxLayoutDirective} from '../../util/directives/flexbox-legacy.directive';
-import {PolygonIconComponent} from '../../layer-icons/polygon-icon/polygon-icon.component';
+import {Colorizer} from '../../colors/colorizer.model';
 import {LineIconComponent} from '../../layer-icons/line-icon/line-icon.component';
 import {PointIconComponent} from '../../layer-icons/point-icon/point-icon.component';
+import {PolygonIconComponent} from '../../layer-icons/polygon-icon/polygon-icon.component';
 import {RasterIconComponent} from '../../layer-icons/raster-icon/raster-icon.component';
+import {LayerMetadata, RasterLayerMetadata, VectorLayerMetadata} from '../../layers/layer-metadata.model';
+import {VectorDataTypes} from '../../operators/datatype.model';
+import {SingleBandRasterColorizer} from '../../symbology/symbology.model';
+import {FxLayoutDirective} from '../../util/directives/flexbox-legacy.directive';
 
 @Component({
     selector: 'geoengine-layer-collection-layer-details',

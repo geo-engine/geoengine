@@ -1,16 +1,14 @@
-import {BehaviorSubject, Observable, Subscription} from 'rxjs';
-
+import {AsyncPipe} from '@angular/common';
 import {ChangeDetectionStrategy, Component, OnDestroy, inject} from '@angular/core';
 import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-
-import {CoreConfig} from '../../config.service';
-import {User} from '../user.model';
-import {Session} from '../session.model';
-import {MatDialogRef} from '@angular/material/dialog';
-import {geoengineValidators} from '@geoengine/common';
-import {MatFormField, MatInput} from '@angular/material/input';
 import {MatButton} from '@angular/material/button';
-import {AsyncPipe} from '@angular/common';
+import {MatDialogRef} from '@angular/material/dialog';
+import {MatFormField, MatInput} from '@angular/material/input';
+import {BehaviorSubject, Observable, Subscription} from 'rxjs';
+import {geoengineValidators} from '@geoengine/common';
+import {CoreConfig} from '../../config.service';
+import {Session} from '../session.model';
+import {User} from '../user.model';
 
 enum FormStatus {
     LoggedOut,

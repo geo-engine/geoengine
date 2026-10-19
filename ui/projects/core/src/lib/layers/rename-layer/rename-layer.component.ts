@@ -1,12 +1,12 @@
+import {CdkScrollable} from '@angular/cdk/scrolling';
 import {Component, OnInit, ChangeDetectionStrategy, inject} from '@angular/core';
 import {FormControl, FormGroup, NonNullableFormBuilder, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {ProjectService} from '../../project/project.service';
+import {MatButton} from '@angular/material/button';
 import {MAT_DIALOG_DATA, MatDialogRef, MatDialogContent, MatDialogActions} from '@angular/material/dialog';
+import {MatFormField, MatInput} from '@angular/material/input';
 import {Layer} from '@geoengine/common';
 import {DialogHeaderComponent} from '../../dialogs/dialog-header/dialog-header.component';
-import {CdkScrollable} from '@angular/cdk/scrolling';
-import {MatFormField, MatInput} from '@angular/material/input';
-import {MatButton} from '@angular/material/button';
+import {ProjectService} from '../../project/project.service';
 
 @Component({
     selector: 'geoengine-rename-layer',

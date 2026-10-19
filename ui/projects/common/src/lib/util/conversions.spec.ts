@@ -1,5 +1,5 @@
-import {describe, expect, it} from 'vitest';
 import moment from 'moment';
+import {describe, expect, it} from 'vitest';
 import {errorMessage, estimateTimeFormat, NON_BREAKING_HYPHEN} from './conversions';
 import {Time} from '../time/time.model';
 

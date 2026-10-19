@@ -1,3 +1,4 @@
+import {JsonPipe, TitleCasePipe} from '@angular/common';
 import {
     Component,
     ChangeDetectionStrategy,
@@ -8,18 +9,13 @@ import {
     inject,
     viewChild,
 } from '@angular/core';
-import {MatPaginator, MatPaginatorIntl, PageEvent} from '@angular/material/paginator';
-import {combineLatest, forkJoin, map, mergeMap, of, startWith, Subject, Subscription, switchMap} from 'rxjs';
-import {TaskStatusDict, TaskStatusType, UUID} from '../../backend/backend.model';
-import {BackendService} from '../../backend/backend.service';
-import {NotificationService, UserService, errorMessage} from '@geoengine/common';
-import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
-import {MatFormField, MatLabel} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
 import {MatOption} from '@angular/material/autocomplete';
 import {MatMiniFabButton, MatButton} from '@angular/material/button';
 import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel} from '@angular/material/input';
+import {MatPaginator, MatPaginatorIntl, PageEvent} from '@angular/material/paginator';
 import {MatProgressSpinner} from '@angular/material/progress-spinner';
+import {MatSelect} from '@angular/material/select';
 import {
     MatTable,
     MatColumnDef,
@@ -33,7 +29,11 @@ import {
     MatRow,
 } from '@angular/material/table';
 import {MatTooltip} from '@angular/material/tooltip';
-import {JsonPipe, TitleCasePipe} from '@angular/common';
+import {combineLatest, forkJoin, map, mergeMap, of, startWith, Subject, Subscription, switchMap} from 'rxjs';
+import {NotificationService, UserService, errorMessage} from '@geoengine/common';
+import {TaskStatusDict, TaskStatusType, UUID} from '../../backend/backend.model';
+import {BackendService} from '../../backend/backend.service';
+import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
 
 @Injectable()
 export class MyCustomPaginatorIntl implements MatPaginatorIntl {

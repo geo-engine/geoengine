@@ -10,6 +10,26 @@ import {
     inject,
     WritableSignal,
 } from '@angular/core';
+import {FormsModule} from '@angular/forms';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatButtonToggleGroup, MatButtonToggle} from '@angular/material/button-toggle';
+import {MatCard, MatCardHeader, MatCardTitleGroup, MatCardTitle, MatCardSubtitle, MatCardContent} from '@angular/material/card';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel} from '@angular/material/input';
+import {MatDivider} from '@angular/material/list';
+import {MatSelect} from '@angular/material/select';
+import {MatSlider, MatSliderThumb} from '@angular/material/slider';
+import {BehaviorSubject} from 'rxjs';
+import {RasterBandDescriptor} from '@geoengine/api-client';
+import {BLACK, Color, TRANSPARENT, WHITE} from '../../colors/color';
+import {ColorBreakpoint} from '../../colors/color-breakpoint.model';
+import {Colorizer, ColorizerType, LinearGradient, LogarithmicGradient, PaletteColorizer} from '../../colors/colorizer.model';
+import {ProcessingGraphsService} from '../../processing-graphs/processing-graphs.service';
+import {FxLayoutDirective, FxFlexDirective} from '../../util/directives/flexbox-legacy.directive';
+import {AsyncValueDefault} from '../../util/pipes/async-converters.pipe';
+import {RasterGradientSymbologyEditorComponent} from '../raster-gradient-symbology-editor/raster-gradient-symbology-editor.component';
+import {RasterMultibandSymbologyEditorComponent} from '../raster-multiband-symbology-editor/raster-multiband-symbology-editor.component';
+import {RasterPaletteSymbologyEditorComponent} from '../raster-palette-symbology-editor/raster-palette-symbology-editor.component';
 import {
     MultiBandRasterColorizer,
     RasterSymbology,
@@ -17,26 +37,6 @@ import {
     SymbologyQueryParams,
     SymbologyWorkflow,
 } from '../symbology.model';
-import {Colorizer, ColorizerType, LinearGradient, LogarithmicGradient, PaletteColorizer} from '../../colors/colorizer.model';
-import {BLACK, Color, TRANSPARENT, WHITE} from '../../colors/color';
-import {ColorBreakpoint} from '../../colors/color-breakpoint.model';
-import {BehaviorSubject} from 'rxjs';
-import {RasterBandDescriptor} from '@geoengine/api-client';
-import {ProcessingGraphsService} from '../../processing-graphs/processing-graphs.service';
-import {FxLayoutDirective, FxFlexDirective} from '../../util/directives/flexbox-legacy.directive';
-import {MatCard, MatCardHeader, MatCardTitleGroup, MatCardTitle, MatCardSubtitle, MatCardContent} from '@angular/material/card';
-import {MatIcon} from '@angular/material/icon';
-import {MatSlider, MatSliderThumb} from '@angular/material/slider';
-import {FormsModule} from '@angular/forms';
-import {MatButtonToggleGroup, MatButtonToggle} from '@angular/material/button-toggle';
-import {MatDivider} from '@angular/material/list';
-import {MatFormField, MatLabel} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
-import {RasterGradientSymbologyEditorComponent} from '../raster-gradient-symbology-editor/raster-gradient-symbology-editor.component';
-import {RasterPaletteSymbologyEditorComponent} from '../raster-palette-symbology-editor/raster-palette-symbology-editor.component';
-import {RasterMultibandSymbologyEditorComponent} from '../raster-multiband-symbology-editor/raster-multiband-symbology-editor.component';
-import {AsyncValueDefault} from '../../util/pipes/async-converters.pipe';
 
 type RasterSymbologyType = 'singleBand' | 'multiBand';
 

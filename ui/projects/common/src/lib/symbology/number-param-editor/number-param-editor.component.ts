@@ -1,9 +1,9 @@
 import {Component, ChangeDetectionStrategy, forwardRef, HostListener, input} from '@angular/core';
 import {ControlValueAccessor, NG_VALUE_ACCESSOR, FormsModule} from '@angular/forms';
-import {NumberParam, StaticNumber, DerivedNumber} from '../symbology.model';
+import {MatOption} from '@angular/material/autocomplete';
 import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
 import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
+import {NumberParam, StaticNumber, DerivedNumber} from '../symbology.model';
 
 /**
  * An edit component for `NumberParam`

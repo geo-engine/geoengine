@@ -1,9 +1,12 @@
-import {BehaviorSubject, zip} from 'rxjs';
-import {first, mergeMap} from 'rxjs/operators';
+import {AsyncPipe} from '@angular/common';
 import {Component, ChangeDetectionStrategy, AfterViewInit, inject} from '@angular/core';
 import {FormControl, FormGroup, NonNullableFormBuilder, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {ProjectService} from '../project.service';
-import {SpatialReferenceService, WEB_MERCATOR} from '../../spatial-references/spatial-reference.service';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatButton} from '@angular/material/button';
+import {MatFormField, MatInput, MatHint} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
+import {BehaviorSubject, zip} from 'rxjs';
+import {first, mergeMap} from 'rxjs/operators';
 import {
     NamedSpatialReference,
     NotificationService,
@@ -15,11 +18,8 @@ import {
     FxFlexDirective,
 } from '@geoengine/common';
 import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
-import {MatFormField, MatInput, MatHint} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
-import {MatButton} from '@angular/material/button';
-import {AsyncPipe} from '@angular/common';
+import {SpatialReferenceService, WEB_MERCATOR} from '../../spatial-references/spatial-reference.service';
+import {ProjectService} from '../project.service';
 
 @Component({
     selector: 'geoengine-new-project',

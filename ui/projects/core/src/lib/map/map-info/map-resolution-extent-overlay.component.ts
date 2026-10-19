@@ -1,10 +1,10 @@
+import {AsyncPipe} from '@angular/common';
 import {ChangeDetectionStrategy, Component, inject, input} from '@angular/core';
-import {ProjectService} from '../../project/project.service';
-import {MapService} from '../map.service';
 import {BehaviorSubject, combineLatestWith, Observable} from 'rxjs';
 import {map} from 'rxjs/operators';
+import {ProjectService} from '../../project/project.service';
 import {SpatialReferenceService} from '../../spatial-references/spatial-reference.service';
-import {AsyncPipe} from '@angular/common';
+import {MapService} from '../map.service';
 
 /**
  * The `geoengine-map-resolution-extent-overlay` displays information about the resolution and extent of the visible map(s).
@@ -67,7 +67,7 @@ export class MapResolutionExtentOverlayComponent {
 
     private trimFraction(number: string, trim?: number): string {
         trim ??= this.countTrailingFractionZeros(number);
-        if (trim == this.getFraction(number).length) {
+        if (trim === this.getFraction(number).length) {
             trim += 1;
         }
         return number.substring(0, number.length - trim);
@@ -86,8 +86,8 @@ export class MapResolutionExtentOverlayComponent {
         const trailingZeros = frac
             .split('')
             .reverse()
-            .findIndex((c) => c != '0');
-        if (trailingZeros == -1) {
+            .findIndex((c) => c !== '0');
+        if (trailingZeros === -1) {
             return frac.length;
         }
         return trailingZeros;

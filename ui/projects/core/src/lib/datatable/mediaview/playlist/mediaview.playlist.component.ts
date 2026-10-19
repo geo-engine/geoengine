@@ -1,7 +1,7 @@
 import {Component, input, output, ChangeDetectionStrategy} from '@angular/core';
-import {MatNavList, MatListItem} from '@angular/material/list';
-import {MatIcon} from '@angular/material/icon';
 import {MatLine} from '@angular/material/grid-list';
+import {MatIcon} from '@angular/material/icon';
+import {MatNavList, MatListItem} from '@angular/material/list';
 import {MatTooltip} from '@angular/material/tooltip';
 
 @Component({

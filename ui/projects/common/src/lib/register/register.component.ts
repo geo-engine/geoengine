@@ -1,21 +1,19 @@
-import {BehaviorSubject, Observable} from 'rxjs';
-
+import {AsyncPipe} from '@angular/common';
 import {AfterViewInit, ChangeDetectionStrategy, Component, input, inject} from '@angular/core';
 import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-
-import {map} from 'rxjs/operators';
-import {Router, RouterLink} from '@angular/router';
-import {CommonConfig} from '../config.service';
-import {UserService} from '../user/user.service';
-import {NotificationService} from '../notification.service';
-import {geoengineValidators} from '../util/form.validators';
-import {GeoEngineError} from '../util/errors';
-import {FxLayoutDirective, FxLayoutAlignDirective, FxLayoutGapDirective} from '../util/directives/flexbox-legacy.directive';
+import {MatButton} from '@angular/material/button';
 import {MatCard, MatCardHeader, MatCardSubtitle, MatCardContent, MatCardActions} from '@angular/material/card';
 import {MatFormField, MatInput, MatHint} from '@angular/material/input';
 import {MatProgressSpinner} from '@angular/material/progress-spinner';
-import {MatButton} from '@angular/material/button';
-import {AsyncPipe} from '@angular/common';
+import {Router, RouterLink} from '@angular/router';
+import {BehaviorSubject, Observable} from 'rxjs';
+import {map} from 'rxjs/operators';
+import {CommonConfig} from '../config.service';
+import {NotificationService} from '../notification.service';
+import {UserService} from '../user/user.service';
+import {FxLayoutDirective, FxLayoutAlignDirective, FxLayoutGapDirective} from '../util/directives/flexbox-legacy.directive';
+import {GeoEngineError} from '../util/errors';
+import {geoengineValidators} from '../util/form.validators';
 
 @Component({
     selector: 'geoengine-register',

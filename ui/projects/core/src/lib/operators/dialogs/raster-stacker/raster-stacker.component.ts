@@ -1,9 +1,15 @@
+import {AsyncPipe} from '@angular/common';
 import {AfterViewInit, ChangeDetectionStrategy, Component, inject, computed, effect, signal} from '@angular/core';
-import {FormControl, FormBuilder, FormGroup, Validators, FormArray, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {ProjectService} from '../../../project/project.service';
-import {BehaviorSubject, of, firstValueFrom, merge} from 'rxjs';
 import {toSignal} from '@angular/core/rxjs-interop';
-import {LetterNumberConverter, MultiLayerSelectionComponent} from '../helpers/multi-layer-selection/multi-layer-selection.component';
+import {FormControl, FormBuilder, FormGroup, Validators, FormArray, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatIconButton, MatButton} from '@angular/material/button';
+import {MatButtonToggleGroup, MatButtonToggle} from '@angular/material/button-toggle';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput, MatError, MatHint} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
+import {BehaviorSubject, of, firstValueFrom, merge} from 'rxjs';
+import {Coordinate2D, ProcessingGraph, RasterOperator, RenameBands, TypedRasterOperator} from '@geoengine/api-client';
 import {
     RasterDataType,
     RasterDataTypes,
@@ -14,17 +20,11 @@ import {
     NotificationService,
     SpatialGridDefinition,
 } from '@geoengine/common';
-import {Coordinate2D, ProcessingGraph, RasterOperator, RenameBands, TypedRasterOperator} from '@geoengine/api-client';
+import {ProjectService} from '../../../project/project.service';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
+import {LetterNumberConverter, MultiLayerSelectionComponent} from '../helpers/multi-layer-selection/multi-layer-selection.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
-import {MatIconButton, MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
-import {MatButtonToggleGroup, MatButtonToggle} from '@angular/material/button-toggle';
-import {MatFormField, MatLabel, MatInput, MatError, MatHint} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
 import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
-import {AsyncPipe} from '@angular/common';
 
 interface RasterStackerForm {
     rasterLayers: FormControl<Array<RasterLayer> | undefined>;

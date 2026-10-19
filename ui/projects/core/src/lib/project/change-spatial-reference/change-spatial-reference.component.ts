@@ -1,13 +1,13 @@
 import {Component, ChangeDetectionStrategy, ChangeDetectorRef, OnDestroy, inject} from '@angular/core';
-import {ProjectService} from '../project.service';
-import {SpatialReferenceService} from '../../spatial-references/spatial-reference.service';
+import {FormsModule} from '@angular/forms';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatFormField} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
 import {Subscription} from 'rxjs/internal/Subscription';
 import {NamedSpatialReference, SpatialReference} from '@geoengine/common';
 import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
-import {MatFormField} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {FormsModule} from '@angular/forms';
-import {MatOption} from '@angular/material/autocomplete';
+import {SpatialReferenceService} from '../../spatial-references/spatial-reference.service';
+import {ProjectService} from '../project.service';
 
 @Component({
     selector: 'geoengine-change-projection',

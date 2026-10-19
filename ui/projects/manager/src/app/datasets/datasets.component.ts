@@ -1,9 +1,9 @@
-import {Component, viewChild, ChangeDetectionStrategy} from '@angular/core';
-import {DatasetListing} from '@geoengine/api-client';
-import {BehaviorSubject} from 'rxjs';
-import {DatasetListComponent} from './dataset-list/dataset-list.component';
-import {DatasetEditorComponent} from './dataset-editor/dataset-editor.component';
 import {AsyncPipe} from '@angular/common';
+import {Component, viewChild, ChangeDetectionStrategy} from '@angular/core';
+import {BehaviorSubject} from 'rxjs';
+import {DatasetListing} from '@geoengine/api-client';
+import {DatasetEditorComponent} from './dataset-editor/dataset-editor.component';
+import {DatasetListComponent} from './dataset-list/dataset-list.component';
 
 @Component({
     selector: 'geoengine-manager-datasets',

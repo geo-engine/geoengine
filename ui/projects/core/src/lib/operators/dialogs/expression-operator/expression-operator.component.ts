@@ -1,12 +1,15 @@
-import {map, mergeMap} from 'rxjs/operators';
-import {BehaviorSubject, combineLatest, from, Observable, of} from 'rxjs';
+import {AsyncPipe} from '@angular/common';
 import {AfterViewInit, ChangeDetectionStrategy, Component, inject, input, viewChild} from '@angular/core';
 import {AbstractControl, FormControl, FormGroup, ValidationErrors, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-
-import {ProjectService} from '../../../project/project.service';
-import {UUID} from '../../../backend/backend.model';
-import {LetterNumberConverter} from '../helpers/multi-layer-selection/multi-layer-selection.component';
-import {LayoutService, SidenavConfig} from '../../../layout.service';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatIconButton, MatButton} from '@angular/material/button';
+import {MatCheckbox} from '@angular/material/checkbox';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput, MatError} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
+import {BehaviorSubject, combineLatest, from, Observable, of} from 'rxjs';
+import {map, mergeMap} from 'rxjs/operators';
+import {Measurement, ProcessingGraph, RasterDataType as ApiRasterDataType} from '@geoengine/api-client';
 import {
     GeoEngineError,
     Layer,
@@ -25,19 +28,15 @@ import {
     errorToText,
     errorMessage,
 } from '@geoengine/common';
+import {UUID} from '../../../backend/backend.model';
 import {SymbologyCreationType, SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
-import {Measurement, ProcessingGraph, RasterDataType as ApiRasterDataType} from '@geoengine/api-client';
+import {LayoutService, SidenavConfig} from '../../../layout.service';
+import {ProjectService} from '../../../project/project.service';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
-import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
-import {MatIconButton, MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
 import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
-import {MatCheckbox} from '@angular/material/checkbox';
-import {MatFormField, MatLabel, MatInput, MatError} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
+import {LetterNumberConverter} from '../helpers/multi-layer-selection/multi-layer-selection.component';
+import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
-import {AsyncPipe} from '@angular/common';
 
 interface ExpressionForm {
     rasterLayer: FormControl<RasterLayer | undefined>;

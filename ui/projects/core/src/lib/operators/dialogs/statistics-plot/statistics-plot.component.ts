@@ -1,9 +1,14 @@
 import {Component, ChangeDetectionStrategy, inject, computed, effect, signal, untracked} from '@angular/core';
 import {rxResource} from '@angular/core/rxjs-interop';
 import {applyEach, form, FormField, FormRoot, minLength, required} from '@angular/forms/signals';
-import {ProjectService} from '../../../project/project.service';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatIconButton, MatButton} from '@angular/material/button';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatHint} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
 import {Observable, of} from 'rxjs';
 import {map} from 'rxjs/operators';
+import {AttributeSelection, Statistics, StatisticsParameters} from '@geoengine/api-client';
 import {
     geoengineValidators,
     Layer,
@@ -17,16 +22,11 @@ import {
     FxFlexDirective,
     FxLayoutAlignDirective,
 } from '@geoengine/common';
-import {AttributeSelection, Statistics, StatisticsParameters} from '@geoengine/api-client';
-import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
-import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
-import {MatIconButton, MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
-import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
 import {DialogSectionHeadingComponent} from '../../../dialogs/dialog-section-heading/dialog-section-heading.component';
-import {MatFormField, MatHint} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
+import {ProjectService} from '../../../project/project.service';
+import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
+import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
+import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
 
 interface StatisticsPlotModel {

@@ -1,16 +1,16 @@
 import {Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef, OnDestroy, inject, input, viewChild} from '@angular/core';
-import {DataSet} from 'vis-data/peer';
-import {DateType, Timeline} from 'vis-timeline/peer';
 import {ElementRef} from '@angular/core';
-import {LayoutService} from '../../layout.service';
-import {ProjectService} from '../../project/project.service';
-import moment, {DurationInputArg2, Moment} from 'moment';
-import {Subscription} from 'rxjs';
-import {Layer, Time, FxLayoutDirective, FxLayoutGapDirective, FxLayoutAlignDirective} from '@geoengine/common';
-import {MatButton} from '@angular/material/button';
-import {MatSelect} from '@angular/material/select';
 import {FormsModule} from '@angular/forms';
 import {MatOption} from '@angular/material/autocomplete';
+import {MatButton} from '@angular/material/button';
+import {MatSelect} from '@angular/material/select';
+import moment, {DurationInputArg2, Moment} from 'moment';
+import {Subscription} from 'rxjs';
+import {DataSet} from 'vis-data/peer';
+import {DateType, Timeline} from 'vis-timeline/peer';
+import {Layer, Time, FxLayoutDirective, FxLayoutGapDirective, FxLayoutAlignDirective} from '@geoengine/common';
+import {LayoutService} from '../../layout.service';
+import {ProjectService} from '../../project/project.service';
 
 @Component({
     selector: 'geoengine-time-slider',

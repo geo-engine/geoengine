@@ -1,10 +1,10 @@
 import {Component, ChangeDetectionStrategy, ElementRef, inject, input, output, viewChild, signal, effect, untracked} from '@angular/core';
-import vegaEmbed from 'vega-embed';
 import {View} from 'vega';
-import {TopLevelSpec as VlSpec} from 'vega-lite';
 import {Spec as VgSpec} from 'vega';
-import {VegaChartData} from '../plot.model';
+import vegaEmbed from 'vega-embed';
+import {TopLevelSpec as VlSpec} from 'vega-lite';
 import {CommonConfig} from '../../config.service';
+import {VegaChartData} from '../plot.model';
 
 /**
  * The maximum length of axis labels in pixels for a chart of the given `height`.

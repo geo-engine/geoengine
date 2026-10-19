@@ -1,6 +1,6 @@
 import {Injectable, inject} from '@angular/core';
-import {Permission, PermissionListing, PermissionsApi} from '@geoengine/api-client';
 import {ReplaySubject, firstValueFrom} from 'rxjs';
+import {Permission, PermissionListing, PermissionsApi} from '@geoengine/api-client';
 import {UserService, apiConfigurationWithAccessKey} from '../user/user.service';
 
 export type ResourceType = 'dataset' | 'layer' | 'layerCollection' | 'project' | 'provider' | 'mlModel';

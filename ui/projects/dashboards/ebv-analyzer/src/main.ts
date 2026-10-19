@@ -1,16 +1,16 @@
-import {AppConfig} from './app/app-config.service';
-import {CoreConfig, LayoutService, MapService, ProjectService, SidenavRef, SpatialReferenceService, CoreModule} from '@geoengine/core';
-import {CommonConfig, NotificationService, RandomColorService, UserService} from '@geoengine/common';
-import {provideAppInitializer, inject, importProvidersFrom, provideZonelessChangeDetection} from '@angular/core';
-import {DataSelectionService} from './app/data-selection.service';
-import {provideHttpClient, withInterceptorsFromDi, withXhr} from '@angular/common/http';
-import {provideAnimations} from '@angular/platform-browser/animations';
-import {BrowserModule, bootstrapApplication} from '@angular/platform-browser';
-import {provideRouter} from '@angular/router';
-import {AppComponent} from './app/app.component';
-import {PortalModule} from '@angular/cdk/portal';
-import {NgxMatSelectSearchModule} from 'ngx-mat-select-search';
 import {LayoutModule} from '@angular/cdk/layout';
+import {PortalModule} from '@angular/cdk/portal';
+import {provideHttpClient, withInterceptorsFromDi, withXhr} from '@angular/common/http';
+import {provideAppInitializer, inject, importProvidersFrom, provideZonelessChangeDetection} from '@angular/core';
+import {BrowserModule, bootstrapApplication} from '@angular/platform-browser';
+import {provideAnimations} from '@angular/platform-browser/animations';
+import {provideRouter} from '@angular/router';
+import {NgxMatSelectSearchModule} from 'ngx-mat-select-search';
+import {CommonConfig, NotificationService, RandomColorService, UserService} from '@geoengine/common';
+import {CoreConfig, LayoutService, MapService, ProjectService, SidenavRef, SpatialReferenceService, CoreModule} from '@geoengine/core';
+import {AppConfig} from './app/app-config.service';
+import {AppComponent} from './app/app.component';
+import {DataSelectionService} from './app/data-selection.service';
 
 bootstrapApplication(AppComponent, {
     providers: [

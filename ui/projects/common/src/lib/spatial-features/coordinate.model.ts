@@ -1,5 +1,5 @@
-import {ToDict} from '../time/time.model';
 import {Coordinate2D as CoordinateDict} from '@geoengine/api-client';
+import {ToDict} from '../time/time.model';
 
 /**
  * A 2D coordinate.

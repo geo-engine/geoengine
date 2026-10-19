@@ -1,8 +1,8 @@
+import {Injectable, Type, inject} from '@angular/core';
 import {fromEvent, combineLatest, BehaviorSubject, Observable, ReplaySubject, Subject} from 'rxjs';
 import {debounceTime, distinctUntilChanged, map} from 'rxjs/operators';
-import {Injectable, Type, inject} from '@angular/core';
-import {CoreConfig} from './config.service';
 import {LayoutService as CommonLayoutService} from '@geoengine/common';
+import {CoreConfig} from './config.service';
 
 /**
  * Layout settings serialization format.

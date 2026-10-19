@@ -1,4 +1,11 @@
-import {AppConfig} from './app/app-config.service';
+import {PortalModule} from '@angular/cdk/portal';
+import {provideHttpClient, withInterceptorsFromDi} from '@angular/common/http';
+import {provideAppInitializer, inject, importProvidersFrom, provideZonelessChangeDetection} from '@angular/core';
+import {BrowserModule, bootstrapApplication} from '@angular/platform-browser';
+import {provideAnimations} from '@angular/platform-browser/animations';
+import {provideRouter} from '@angular/router';
+import {NgxMatSelectSearchModule} from 'ngx-mat-select-search';
+import {CommonConfig, NotificationService, RandomColorService, UserService} from '@geoengine/common';
 import {
     CoreConfig,
     DatasetService,
@@ -9,17 +16,10 @@ import {
     SpatialReferenceService,
     CoreModule,
 } from '@geoengine/core';
-import {CommonConfig, NotificationService, RandomColorService, UserService} from '@geoengine/common';
-import {provideAppInitializer, inject, importProvidersFrom, provideZonelessChangeDetection} from '@angular/core';
+import {AppConfig} from './app/app-config.service';
 import {AppDatasetService} from './app/app-dataset.service';
-import {provideHttpClient, withInterceptorsFromDi} from '@angular/common/http';
-import {provideAnimations} from '@angular/platform-browser/animations';
-import {BrowserModule, bootstrapApplication} from '@angular/platform-browser';
-import {provideRouter} from '@angular/router';
-import {AppComponent} from './app/app.component';
-import {PortalModule} from '@angular/cdk/portal';
 import {AppRoutingModule} from './app/app-routing.module';
-import {NgxMatSelectSearchModule} from 'ngx-mat-select-search';
+import {AppComponent} from './app/app.component';
 
 bootstrapApplication(AppComponent, {
     providers: [

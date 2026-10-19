@@ -1,16 +1,16 @@
-import {ChangeDetectionStrategy, Component, computed, inject, resource, signal} from '@angular/core';
-import {CoreModule, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
 import {A11yModule} from '@angular/cdk/a11y';
-import {EOdysseyLayerService} from './layers.service';
-import {MatCheckboxModule} from '@angular/material/checkbox';
-import {MatListModule} from '@angular/material/list';
-import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
-import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, RasterSymbology, Time} from '@geoengine/common';
+import {ChangeDetectionStrategy, Component, computed, inject, resource, signal} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
-import type {DataSourceDefinition} from './data-sources';
+import {MatCheckboxModule} from '@angular/material/checkbox';
 import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
 import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatListModule} from '@angular/material/list';
+import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatSelectModule} from '@angular/material/select';
+import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, RasterSymbology, Time} from '@geoengine/common';
+import {CoreModule, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
+import type {DataSourceDefinition} from './data-sources';
+import {EOdysseyLayerService} from './layers.service';
 
 @Component({
     selector: 'geoengine-layers',

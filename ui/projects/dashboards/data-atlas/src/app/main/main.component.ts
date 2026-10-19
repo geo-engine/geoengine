@@ -1,6 +1,24 @@
-import {Observable, BehaviorSubject, first, filter, map, forkJoin, firstValueFrom} from 'rxjs';
+import {AsyncPipe} from '@angular/common';
 import {AfterViewInit, ChangeDetectionStrategy, Component, HostListener, OnInit, ViewContainerRef, inject, viewChild} from '@angular/core';
+import {MatButton} from '@angular/material/button';
+import {MatCard} from '@angular/material/card';
+import {
+    MatAccordion,
+    MatExpansionPanel,
+    MatExpansionPanelHeader,
+    MatExpansionPanelTitle,
+    MatExpansionPanelDescription,
+    MatExpansionPanelContent,
+} from '@angular/material/expansion';
 import {MatIconRegistry, MatIcon} from '@angular/material/icon';
+import {MatProgressBar} from '@angular/material/progress-bar';
+import {MatDrawerToggleResult, MatSidenav, MatSidenavContainer} from '@angular/material/sidenav';
+import {MatTabGroup, MatTab} from '@angular/material/tabs';
+import {MatToolbar} from '@angular/material/toolbar';
+import {DomSanitizer} from '@angular/platform-browser';
+import moment from 'moment';
+import {Observable, BehaviorSubject, first, filter, map, forkJoin, firstValueFrom} from 'rxjs';
+import {Layer, LayersService, Time, UserService, AsyncStringSanitizer, AsyncValueDefault} from '@geoengine/common';
 import {
     LayoutService,
     ProjectService,
@@ -12,33 +30,15 @@ import {
     SymbologyEditorComponent,
     CoreModule,
 } from '@geoengine/core';
-import {DomSanitizer} from '@angular/platform-browser';
-import {AppConfig} from '../app-config.service';
-import moment from 'moment';
-import {DataSelectionService} from '../data-selection.service';
-import {AppDatasetService} from '../app-dataset.service';
-import {MatDrawerToggleResult, MatSidenav, MatSidenavContainer} from '@angular/material/sidenav';
-import {Layer, LayersService, Time, UserService, AsyncStringSanitizer, AsyncValueDefault} from '@geoengine/common';
-import {MatToolbar} from '@angular/material/toolbar';
-import {
-    MatAccordion,
-    MatExpansionPanel,
-    MatExpansionPanelHeader,
-    MatExpansionPanelTitle,
-    MatExpansionPanelDescription,
-    MatExpansionPanelContent,
-} from '@angular/material/expansion';
-import {MatTabGroup, MatTab} from '@angular/material/tabs';
+import {AboutComponent} from '../about/about.component';
 import {AccordionEntryComponent} from '../accordion-entry/accordion-entry.component';
 import {AccordionVectorEntryComponent} from '../accordion-vector-entry/accordion-vector-entry.component';
-import {AboutComponent} from '../about/about.component';
-import {MatButton} from '@angular/material/button';
-import {MatCard} from '@angular/material/card';
 import {AnalysisComponent} from '../analysis/analysis.component';
+import {AppConfig} from '../app-config.service';
+import {AppDatasetService} from '../app-dataset.service';
 import {DataPointComponent} from '../data-point/data-point.component';
+import {DataSelectionService} from '../data-selection.service';
 import {LegendComponent} from '../legend/legend.component';
-import {MatProgressBar} from '@angular/material/progress-bar';
-import {AsyncPipe} from '@angular/common';
 
 interface LayerCollectionBiListing {
     name: string;

@@ -1,10 +1,10 @@
-import {Component, ChangeDetectionStrategy, inject} from '@angular/core';
-import {ProjectService, FeatureSelection} from '@geoengine/core';
-import {map, mergeMap} from 'rxjs/operators';
-import {DataSelectionService} from '../data-selection.service';
-import {combineLatest, Observable, of} from 'rxjs';
-import {LayerMetadata, VectorData, VectorLayerMetadata} from '@geoengine/common';
 import {AsyncPipe} from '@angular/common';
+import {Component, ChangeDetectionStrategy, inject} from '@angular/core';
+import {combineLatest, Observable, of} from 'rxjs';
+import {map, mergeMap} from 'rxjs/operators';
+import {LayerMetadata, VectorData, VectorLayerMetadata} from '@geoengine/common';
+import {ProjectService, FeatureSelection} from '@geoengine/core';
+import {DataSelectionService} from '../data-selection.service';
 
 @Component({
     selector: 'geoengine-data-point',

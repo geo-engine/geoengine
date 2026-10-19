@@ -1,8 +1,8 @@
-import GeoJSON from 'ol/format/GeoJSON';
-import Polygon from 'ol/geom/Polygon';
-import MultiPolygon from 'ol/geom/MultiPolygon';
 import {equals, squaredDistance} from 'ol/coordinate';
 import {containsExtent} from 'ol/extent';
+import GeoJSON from 'ol/format/GeoJSON';
+import MultiPolygon from 'ol/geom/MultiPolygon';
+import Polygon from 'ol/geom/Polygon';
 import {toLonLat} from 'ol/proj';
 
 export interface GeographicCenter {

@@ -1,10 +1,12 @@
-import {ChangeDetectionStrategy, Component, computed, effect, inject, input, signal} from '@angular/core';
 import {Clipboard} from '@angular/cdk/clipboard';
-import {PlotDataDict} from '../../backend/backend.model';
-import {LoadingState} from '../../project/loading-state.model';
-import {ProjectService} from '../../project/project.service';
-import {PlotDetailViewComponent} from '../plot-detail-view/plot-detail-view.component';
+import {JsonPipe} from '@angular/common';
+import {ChangeDetectionStrategy, Component, computed, effect, inject, input, signal} from '@angular/core';
+import {MatIconButton} from '@angular/material/button';
+import {MatCard, MatCardHeader, MatCardAvatar, MatCardTitle, MatCardSubtitle, MatCardContent, MatCardActions} from '@angular/material/card';
 import {MatDialog} from '@angular/material/dialog';
+import {MatIcon} from '@angular/material/icon';
+import {MatMenu, MatMenuItem, MatMenuTrigger} from '@angular/material/menu';
+import {MatProgressSpinner} from '@angular/material/progress-spinner';
 import {
     createIconDataUrl,
     GeoEngineError,
@@ -21,12 +23,10 @@ import {
     vegaDataValues,
     VegaChartData,
 } from '@geoengine/common';
-import {MatCard, MatCardHeader, MatCardAvatar, MatCardTitle, MatCardSubtitle, MatCardContent, MatCardActions} from '@angular/material/card';
-import {MatProgressSpinner} from '@angular/material/progress-spinner';
-import {MatIconButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
-import {MatMenu, MatMenuItem, MatMenuTrigger} from '@angular/material/menu';
-import {JsonPipe} from '@angular/common';
+import {PlotDataDict} from '../../backend/backend.model';
+import {LoadingState} from '../../project/loading-state.model';
+import {ProjectService} from '../../project/project.service';
+import {PlotDetailViewComponent} from '../plot-detail-view/plot-detail-view.component';
 
 @Component({
     selector: 'geoengine-plot-list-entry',

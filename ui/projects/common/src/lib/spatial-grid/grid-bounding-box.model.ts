@@ -1,6 +1,6 @@
 import {GridBoundingBox2D as GridBoundingBox2DDict} from '@geoengine/api-client';
-import {ToDict} from '../time/time.model';
 import {GridIdx2D} from './grid-idx.model';
+import {ToDict} from '../time/time.model';
 
 export class GridBoundingBox2D implements ToDict<GridBoundingBox2DDict> {
     topLeftIdx: GridIdx2D;

@@ -1,5 +1,6 @@
-import {BLACK, ColorBreakpoint, LinearGradient, MultiBandRasterColorizer, SingleBandRasterColorizer, WHITE} from '@geoengine/common';
+import {describe, expect, it} from 'vitest';
 import {Measurement, RasterBandDescriptor} from '@geoengine/api-client';
+import {BLACK, ColorBreakpoint, LinearGradient, MultiBandRasterColorizer, SingleBandRasterColorizer, WHITE} from '@geoengine/common';
 import {
     calculateNumberPipeParameters,
     CastMeasurementToClassificationPipe,
@@ -9,7 +10,6 @@ import {
     selectRgbChannels,
     unifyDecimals,
 } from './raster-legend-view.component';
-import {describe, expect, it} from 'vitest';
 
 describe('RasterLegend', () => {
     it('calculateNumberPipeParameters', () => {

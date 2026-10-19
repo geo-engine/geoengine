@@ -1,6 +1,6 @@
 import {Component, ChangeDetectionStrategy, input} from '@angular/core';
-import {IconStyle} from '../../symbology/symbology.model';
 import {BLACK, Color, WHITE} from '../../colors/color';
+import {IconStyle} from '../../symbology/symbology.model';
 
 /**
  * A simple interface to specify the style of a point icon

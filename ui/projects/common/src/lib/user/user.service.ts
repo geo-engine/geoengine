@@ -1,4 +1,10 @@
+import {Location} from '@angular/common';
+import {HttpErrorResponse} from '@angular/common/http';
 import {Injectable, computed, inject, resource, signal} from '@angular/core';
+import {toObservable, toSignal} from '@angular/core/rxjs-interop';
+import {ActivatedRoute, Router} from '@angular/router';
+import {utc} from 'moment';
+import {BehaviorSubject, Observable, ReplaySubject, filter, first, firstValueFrom, from, map, mergeMap} from 'rxjs';
 import {
     ComputationQuota,
     AuthCodeRequestURL,
@@ -13,18 +19,12 @@ import {
     UserSession,
     ProcessingGraphsApi,
 } from '@geoengine/api-client';
-import {BehaviorSubject, Observable, ReplaySubject, filter, first, firstValueFrom, from, map, mergeMap} from 'rxjs';
-import {Location} from '@angular/common';
 import {UUID} from '../datasets/dataset.model';
-import {isDefined} from '../util/conversions';
-import {ActivatedRoute, Router} from '@angular/router';
-import {HttpErrorResponse} from '@angular/common/http';
+import {NotificationService} from '../notification.service';
 import {Session} from './session.model';
 import {BackendStatus, Quota, User} from './user.model';
-import {utc} from 'moment';
 import {CommonConfig} from '../config.service';
-import {NotificationService} from '../notification.service';
-import {toObservable, toSignal} from '@angular/core/rxjs-interop';
+import {isDefined} from '../util/conversions';
 
 /**
  * A service that is responsible for retrieving user information and modifying the current user.

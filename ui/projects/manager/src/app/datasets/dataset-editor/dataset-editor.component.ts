@@ -1,3 +1,4 @@
+import {AsyncPipe} from '@angular/common';
 import {ChangeDetectorRef, Component, effect, inject, input, linkedSignal, output, viewChild, ChangeDetectionStrategy} from '@angular/core';
 import {
     AbstractControl,
@@ -9,9 +10,15 @@ import {
     FormsModule,
     ReactiveFormsModule,
 } from '@angular/forms';
+import {MatButton} from '@angular/material/button';
+import {MatCard, MatCardHeader, MatCardTitle, MatCardContent} from '@angular/material/card';
 import {MatChipInput, MatChipGrid, MatChipRow, MatChipRemove} from '@angular/material/chips';
 import {MatDialog} from '@angular/material/dialog';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput, MatError} from '@angular/material/input';
 import {MatSnackBar} from '@angular/material/snack-bar';
+import {BehaviorSubject, firstValueFrom} from 'rxjs';
+import {Dataset, DatasetListing, GdalMetaDataList, MetaDataDefinition, OgrMetaData, TypedResultDescriptor} from '@geoengine/api-client';
 import {
     ConfirmationComponent,
     DatasetsService,
@@ -28,20 +35,13 @@ import {
     AsyncValueDefault,
     CodeEditorComponent,
 } from '@geoengine/common';
-import {Dataset, DatasetListing, GdalMetaDataList, MetaDataDefinition, OgrMetaData, TypedResultDescriptor} from '@geoengine/api-client';
-import {BehaviorSubject, firstValueFrom} from 'rxjs';
-import {ProvenanceComponent} from '../../provenance/provenance.component';
 import {AppConfig} from '../../app-config.service';
-import {GdalMetadataListComponent} from '../loading-info/gdal-metadata-list/gdal-metadata-list.component';
-import {MatCard, MatCardHeader, MatCardTitle, MatCardContent} from '@angular/material/card';
-import {MatFormField, MatLabel, MatInput, MatError} from '@angular/material/input';
-import {MatIcon} from '@angular/material/icon';
-import {MatButton} from '@angular/material/button';
-import {SymbologyEditorComponent} from '../../symbology/symbology-editor/symbology-editor.component';
+import {PermissionsComponent} from '../../permissions/permissions.component';
+import {ProvenanceComponent} from '../../provenance/provenance.component';
 import {RasterResultDescriptorComponent} from '../../result-descriptors/raster-result-descriptor/raster-result-descriptor.component';
 import {VectorResultDescriptorComponent} from '../../result-descriptors/vector-result-descriptor/vector-result-descriptor.component';
-import {PermissionsComponent} from '../../permissions/permissions.component';
-import {AsyncPipe} from '@angular/common';
+import {SymbologyEditorComponent} from '../../symbology/symbology-editor/symbology-editor.component';
+import {GdalMetadataListComponent} from '../loading-info/gdal-metadata-list/gdal-metadata-list.component';
 
 export interface DatasetForm {
     layerType: FormControl<'plot' | 'raster' | 'vector'>;

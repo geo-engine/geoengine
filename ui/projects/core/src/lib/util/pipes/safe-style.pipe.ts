@@ -1,5 +1,5 @@
-import {DomSanitizer, SafeHtml} from '@angular/platform-browser';
 import {Pipe, PipeTransform, inject} from '@angular/core';
+import {DomSanitizer, SafeHtml} from '@angular/platform-browser';
 
 /**
  * This pipe is a workaround for to strict css sanitazion:

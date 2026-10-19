@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, Component, output} from '@angular/core';
 import {MatIconButton} from '@angular/material/button';
-import {MatTooltip} from '@angular/material/tooltip';
 import {MatIcon} from '@angular/material/icon';
+import {MatTooltip} from '@angular/material/tooltip';
 
 @Component({
     selector: 'geoengine-zoom-handles',

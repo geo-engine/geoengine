@@ -1,9 +1,11 @@
 import {Component, ChangeDetectionStrategy, inject} from '@angular/core';
 import {UntypedFormGroup, UntypedFormBuilder, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-
-import {ProjectService} from '../../../project/project.service';
+import {MatIconButton, MatButton} from '@angular/material/button';
+import {MatIcon} from '@angular/material/icon';
+import {MatHint} from '@angular/material/input';
 import {from} from 'rxjs';
 import {mergeMap} from 'rxjs/operators';
+import {ProcessingGraph} from '@geoengine/api-client';
 import {
     ClusteredPointSymbology,
     Layer,
@@ -17,14 +19,11 @@ import {
     FxLayoutDirective,
     errorMessage,
 } from '@geoengine/common';
-import {ProcessingGraph} from '@geoengine/api-client';
+import {ProjectService} from '../../../project/project.service';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
-import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
-import {MatIconButton, MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
 import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
+import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
-import {MatHint} from '@angular/material/input';
 
 /**
  * This component allows creating the point in polygon filter operator.

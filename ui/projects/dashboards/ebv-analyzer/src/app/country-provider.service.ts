@@ -1,11 +1,11 @@
 import {Injectable, inject} from '@angular/core';
 import {BehaviorSubject, from, mergeMap, Observable} from 'rxjs';
-import {COUNTRY_LIST} from './country-selector/country-selector-data.model';
-import {ProjectService} from '@geoengine/core';
-import {DataSelectionService} from './data-selection.service';
-import {countryDatasetName} from './country-selector/country-data.model';
 import {ProcessingGraph} from '@geoengine/api-client';
 import {PolygonSymbology, VectorLayer} from '@geoengine/common';
+import {ProjectService} from '@geoengine/core';
+import {countryDatasetName} from './country-selector/country-data.model';
+import {COUNTRY_LIST} from './country-selector/country-selector-data.model';
+import {DataSelectionService} from './data-selection.service';
 
 export interface Country {
     name: string;

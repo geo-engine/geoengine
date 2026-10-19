@@ -1,5 +1,5 @@
-import {describe, expect, it} from 'vitest';
 import {HttpHeaders} from '@angular/common/http';
+import {describe, expect, it} from 'vitest';
 import {filenameFromHttpHeaders} from './http';
 
 describe('Http Utils', () => {

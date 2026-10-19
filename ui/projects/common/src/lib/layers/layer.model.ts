@@ -1,7 +1,7 @@
+import {ProjectLayer as ProjectLayerDict} from '@geoengine/api-client';
 import {UUID} from '../datasets/dataset.model';
 import {RasterSymbology, Symbology, VectorSymbology} from '../symbology/symbology.model';
 import {ToDict} from '../time/time.model';
-import {ProjectLayer as ProjectLayerDict} from '@geoengine/api-client';
 
 export type LayerType = 'raster' | 'vector';
 
