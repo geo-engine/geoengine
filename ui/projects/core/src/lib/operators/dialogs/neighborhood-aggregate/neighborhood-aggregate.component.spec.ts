@@ -1,3 +1,4 @@
+import {describe, expect, it} from 'vitest';
 import {increaseMatrix, decreaseMatrix, rotateMatrixClockwise} from './neighborhood-aggregate.component';
 
 describe('RasterKernel', () => {

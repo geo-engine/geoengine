@@ -13,7 +13,7 @@ import {Observable, Subject} from 'rxjs';
 import {olExtentToTuple} from '@geoengine/common';
 
 import {AbortableTileLayer} from './abortable-tile-layer';
-import {TileFrame, TileInView, TileLoadState, TileLoader, currentViewport, tileExtentInViewProjection} from './tile-loader';
+import {TileDiagnostic, TileFrame, TileInView, TileLoadState, TileLoader, currentViewport, tileExtentInViewProjection} from './tile-loader';
 
 /** Exposes the renderer's protected tile lookup so tests can exercise its real caches without drawing a map. */
 interface TileRendererAccess {
@@ -126,7 +126,10 @@ describe('TileLoader', () => {
 
         await vi.waitFor(() => expect(image.src).toContain('blob:tile'));
 
-        expect(fetchMock).toHaveBeenCalledWith('https://example.com/tile', {headers: authHeaders, signal: expect.anything()});
+        expect(fetchMock).toHaveBeenCalledWith('https://example.com/tile', {
+            headers: authHeaders,
+            signal: expect.any(AbortSignal) as AbortSignal,
+        });
         expect(setState).not.toHaveBeenCalled();
 
         image.dispatchEvent(new Event('load'));
@@ -896,7 +899,7 @@ describe('TileLoader', () => {
             const signals: AbortSignal[] = [];
             stubHangingFetch(signals);
 
-            const onDiagnostic = vi.fn();
+            const onDiagnostic = vi.fn<(diagnostic: TileDiagnostic) => void>();
             const loader = new TileLoader({
                 authHeaders: (): Record<string, string> => authHeaders,
                 // the tile at x=0 is still in the viewport, the one at x=1 left it

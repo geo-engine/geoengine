@@ -1,4 +1,4 @@
-import {vi, type Mock} from 'vitest';
+import {beforeEach, describe, expect, it, vi, type Mock} from 'vitest';
 import {Project} from './project.model';
 import {ProjectService} from './project.service';
 import moment from 'moment';
@@ -6,11 +6,11 @@ import {Session} from '../users/session.model';
 import {User} from '../users/user.model';
 import {firstValueFrom, NEVER, of, BehaviorSubject} from 'rxjs';
 import {CoreConfig, DEFAULT_CORE_CONFIG} from '../config.service';
-import {CreateProjectResponseDict, TimeStepDict, UUID} from '../backend/backend.model';
+import {CreateProjectResponseDict, UUID} from '../backend/backend.model';
 import {MapService, ViewportSize} from '../map/map.service';
 import {BackendService} from '../backend/backend.service';
 import {SpatialReferenceService, WGS_84} from '../spatial-references/spatial-reference.service';
-import {first, mergeMap, tap} from 'rxjs/operators';
+import {first, map, mergeMap, tap} from 'rxjs/operators';
 import {Configuration, DefaultConfig} from '@geoengine/api-client';
 import {
     LayersService,
@@ -161,7 +161,7 @@ describe('test project methods in projectService', () => {
 
     it('#createDefaultProject should create a default project', async () => {
         const project = await firstValueFrom(projectService.createDefaultProject());
-        await expect(project.toDict()).toEqual(
+        expect(project.toDict()).toEqual(
             new Project({
                 id: 'dddddddd-dddd-4ddd-addd-dddddddddddd',
                 name: 'Default',
@@ -181,7 +181,7 @@ describe('test project methods in projectService', () => {
                 },
             }).toDict(),
         );
-        await expect(backendSpy.createProject).toHaveBeenCalledTimes(1);
+        expect(backendSpy.createProject).toHaveBeenCalledTimes(1);
         expect(backendSpy.createProject).toHaveBeenCalledWith(
             {
                 name: 'Default',
@@ -203,7 +203,7 @@ describe('test project methods in projectService', () => {
                 timeStep: {
                     step: 1,
                     granularity: 'months',
-                } as TimeStepDict,
+                },
             },
             'ffffffff-ffff-4fff-afff-ffffffffffff',
         );
@@ -223,7 +223,7 @@ describe('test project methods in projectService', () => {
                 },
             }),
         );
-        await expect(project.toDict()).toEqual(
+        expect(project.toDict()).toEqual(
             new Project({
                 id: 'dddddddd-dddd-4ddd-addd-dddddddddddd',
                 name: 'testProject',
@@ -253,7 +253,7 @@ describe('test project methods in projectService', () => {
 
         // clone the current project and test
         const project = await firstValueFrom(projectService.cloneProject('newTestName'));
-        await expect(project.toDict()).toEqual(
+        expect(project.toDict()).toEqual(
             new Project({
                 id: 'dddddddd-dddd-4ddd-addd-dddddddddddd',
                 name: 'newTestName',
@@ -280,8 +280,8 @@ describe('test project methods in projectService', () => {
             projectService.createDefaultProject().pipe(
                 tap((theProject) => projectService.setProject(theProject)),
                 mergeMap(() => projectService.getProjectStream().pipe(first())),
-                mergeMap(async (theProject) => {
-                    await expect(theProject.toDict()).toEqual(
+                map((theProject) => {
+                    expect(theProject.toDict()).toEqual(
                         new Project({
                             id: 'dddddddd-dddd-4ddd-addd-dddddddddddd',
                             name: 'Default',
@@ -321,7 +321,7 @@ describe('test project methods in projectService', () => {
                 mergeMap(() => projectService.getProjectOnce()),
             ),
         );
-        await expect(project.toDict()).toEqual(
+        expect(project.toDict()).toEqual(
             new Project({
                 id: 'dddddddd-dddd-4ddd-addd-dddddddddddd',
                 name: 'testProject',
@@ -348,8 +348,8 @@ describe('test project methods in projectService', () => {
             projectService.createDefaultProject().pipe(
                 tap((theProject) => projectService.setProject(theProject)),
                 mergeMap(() => projectService.getProjectOnce()),
-                mergeMap(async (theProject) => {
-                    await expect(theProject.toDict()).toEqual(
+                map((theProject) => {
+                    expect(theProject.toDict()).toEqual(
                         new Project({
                             id: 'dddddddd-dddd-4ddd-addd-dddddddddddd',
                             name: 'Default',
@@ -389,7 +389,7 @@ describe('test project methods in projectService', () => {
                 mergeMap(() => projectService.getProjectOnce()),
             ),
         );
-        await expect(project.toDict()).toEqual(
+        expect(project.toDict()).toEqual(
             new Project({
                 id: 'dddddddd-dddd-4ddd-addd-dddddddddddd',
                 name: 'testProject',

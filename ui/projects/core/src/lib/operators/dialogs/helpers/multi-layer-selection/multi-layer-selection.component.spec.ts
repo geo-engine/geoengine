@@ -1,4 +1,4 @@
-import {vi, type Mock} from 'vitest';
+import {beforeEach, describe, expect, it, vi, type Mock} from 'vitest';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {MultiLayerSelectionComponent} from './multi-layer-selection.component';
 import {ProjectService} from '../../../../project/project.service';
@@ -162,16 +162,16 @@ describe('MultiLayerSelectionComponent', () => {
     });
 
     /** create app **/
-    it('should create the app', async () => {
-        await expect(component).toBeTruthy();
+    it('should create the app', () => {
+        expect(component).toBeTruthy();
     });
 
     /** initially no Layers -> 'No Input Available' should be displayed **/
-    it('should display "No Input Available", if no Layer is available', async () => {
+    it('should display "No Input Available", if no Layer is available', () => {
         const html = (fixture.nativeElement as HTMLElement).querySelector('p');
         if (!html) throw new Error('no paragraph element found in DOM');
-        await expect(component.value()).toEqual([]);
-        await expect(html.textContent).toEqual('No Input Available');
+        expect(component.value()).toEqual([]);
+        expect(html.textContent).toEqual('No Input Available');
     });
 
     /** Adding three layers
@@ -186,9 +186,9 @@ describe('MultiLayerSelectionComponent', () => {
 
         const layers = layerNamesFromDom(fixture);
 
-        await expect(layers.length).toEqual(1);
-        await expect(component.value().length).toEqual(1);
-        await expect(layers[0]).toEqual(component.value()[0].name);
+        expect(layers.length).toEqual(1);
+        expect(component.value().length).toEqual(1);
+        expect(layers[0]).toEqual(component.value()[0].name);
     });
 
     /** checking the layer displayed after changing the selected layer **/
@@ -206,9 +206,9 @@ describe('MultiLayerSelectionComponent', () => {
 
             const layers = layerNamesFromDom(fixture);
 
-            await expect(component.value().length).toEqual(1);
-            await expect(layers[0]).toEqual(component.value()[0].name);
-            await expect(layers[0]).toEqual(mockLayers[i - 1].name);
+            expect(component.value().length).toEqual(1);
+            expect(layers[0]).toEqual(component.value()[0].name);
+            expect(layers[0]).toEqual(mockLayers[i - 1].name);
         }
     });
 
@@ -229,11 +229,11 @@ describe('MultiLayerSelectionComponent', () => {
 
         const layers = layerNamesFromDom(fixture);
 
-        await expect(component.value().length).toEqual(3);
-        await expect(layers.length).toEqual(3);
+        expect(component.value().length).toEqual(3);
+        expect(layers.length).toEqual(3);
 
         for (let i = 0; i < mockLayers.length; i++) {
-            await expect(layers[i]).toEqual(component.value()[i].name);
+            expect(layers[i]).toEqual(component.value()[i].name);
         }
     });
 
@@ -246,7 +246,7 @@ describe('MultiLayerSelectionComponent', () => {
                 const layers = layerNamesFromDom(fixture);
 
                 for (let k = 0; k < numLayers; k++) {
-                    await expect(layers[k]).toEqual(component.value()[k].name);
+                    expect(layers[k]).toEqual(component.value()[k].name);
                 }
             }
         }
@@ -261,7 +261,7 @@ describe('MultiLayerSelectionComponent', () => {
         component.add();
 
         const numLayers = component.value().length;
-        await expect(numLayers).toEqual(mockLayers.length);
+        expect(numLayers).toEqual(mockLayers.length);
         await testInputs(numLayers);
 
         for (let i = 0; i < numLayers; i++) {
