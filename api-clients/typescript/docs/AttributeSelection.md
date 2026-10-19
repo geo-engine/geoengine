@@ -1,23 +1,25 @@
 
-# MultipleRasterOrSingleVectorSource
+# AttributeSelection
 
-Either one or more raster operators or a single vector operator as source for this operator.
+Selects all attributes, i.e., raster bands or vector columns, or the ones with the given names.
 
 ## Properties
 
 Name | Type
 ------------ | -------------
-`source` | [MultipleRasterOrSingleVectorOperator](MultipleRasterOrSingleVectorOperator.md)
+`type` | string
+`values` | Set&lt;string&gt;
 
 ## Example
 
 ```typescript
-import type { MultipleRasterOrSingleVectorSource } from '@geoengine/api-client'
+import type { AttributeSelection } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "source": null,
-} satisfies MultipleRasterOrSingleVectorSource
+  "type": null,
+  "values": null,
+} satisfies AttributeSelection
 
 console.log(example)
 
@@ -26,7 +28,7 @@ const exampleJSON: string = JSON.stringify(example)
 console.log(exampleJSON)
 
 // Parse the JSON string back to an object
-const exampleParsed = JSON.parse(exampleJSON) as MultipleRasterOrSingleVectorSource
+const exampleParsed = JSON.parse(exampleJSON) as AttributeSelection
 console.log(exampleParsed)
 ```
 

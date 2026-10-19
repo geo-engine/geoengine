@@ -22,6 +22,9 @@ docs/ArunaDataProviderDefinition.md
 docs/AttributeAggregateDef.md
 docs/AttributeAggregateType.md
 docs/AttributeFilter.md
+docs/AttributeSelection.md
+docs/AttributeSelectionAll.md
+docs/AttributeSelectionNames.md
 docs/AuthCodeRequestURL.md
 docs/AuthCodeResponse.md
 docs/AutoCreateDataset.md
@@ -191,8 +194,6 @@ docs/MultiBandRasterColorizer.md
 docs/MultiLineString.md
 docs/MultiPoint.md
 docs/MultiPolygon.md
-docs/MultipleRasterOrSingleVectorOperator.md
-docs/MultipleRasterOrSingleVectorSource.md
 docs/MultipleRasterSources.md
 docs/Names.md
 docs/NeighborhoodAggregate.md
@@ -500,6 +501,9 @@ geoengine_api_client/models/aruna_data_provider_definition.py
 geoengine_api_client/models/attribute_aggregate_def.py
 geoengine_api_client/models/attribute_aggregate_type.py
 geoengine_api_client/models/attribute_filter.py
+geoengine_api_client/models/attribute_selection.py
+geoengine_api_client/models/attribute_selection_all.py
+geoengine_api_client/models/attribute_selection_names.py
 geoengine_api_client/models/auth_code_request_url.py
 geoengine_api_client/models/auth_code_response.py
 geoengine_api_client/models/auto_create_dataset.py
@@ -665,8 +669,6 @@ geoengine_api_client/models/multi_band_raster_colorizer.py
 geoengine_api_client/models/multi_line_string.py
 geoengine_api_client/models/multi_point.py
 geoengine_api_client/models/multi_polygon.py
-geoengine_api_client/models/multiple_raster_or_single_vector_operator.py
-geoengine_api_client/models/multiple_raster_or_single_vector_source.py
 geoengine_api_client/models/multiple_raster_sources.py
 geoengine_api_client/models/names.py
 geoengine_api_client/models/neighborhood_aggregate.py
@@ -946,6 +948,9 @@ test/test_aruna_data_provider_definition.py
 test/test_attribute_aggregate_def.py
 test/test_attribute_aggregate_type.py
 test/test_attribute_filter.py
+test/test_attribute_selection.py
+test/test_attribute_selection_all.py
+test/test_attribute_selection_names.py
 test/test_auth_code_request_url.py
 test/test_auth_code_response.py
 test/test_auto_create_dataset.py
@@ -1115,8 +1120,6 @@ test/test_multi_band_raster_colorizer.py
 test/test_multi_line_string.py
 test/test_multi_point.py
 test/test_multi_polygon.py
-test/test_multiple_raster_or_single_vector_operator.py
-test/test_multiple_raster_or_single_vector_source.py
 test/test_multiple_raster_sources.py
 test/test_names.py
 test/test_neighborhood_aggregate.py

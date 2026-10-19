@@ -9,6 +9,7 @@ import {
     linkedSignal,
     resource,
     signal,
+    untracked,
 } from '@angular/core';
 import {ControlValueAccessor, FormsModule, NG_VALUE_ACCESSOR} from '@angular/forms';
 import {firstValueFrom} from 'rxjs';
@@ -93,7 +94,8 @@ export class LayerSelectionComponent implements ControlValueAccessor {
     );
 
     onTouched?: () => void;
-    onChange?: (_: Layer | undefined) => void = undefined;
+    // a signal, so that the effect also emits the current layer once the callback is registered
+    private readonly onChange = signal<((_: Layer | null) => void) | undefined>(undefined);
 
     readonly hasLayers = computed<boolean>(() => this.layers.value().length > 0);
     readonly selectedLayer = linkedSignal<Array<Layer>, Layer | undefined>({
@@ -129,8 +131,10 @@ export class LayerSelectionComponent implements ControlValueAccessor {
     constructor() {
         effect(() => {
             const selectedLayer = this.selectedLayer();
-            if (this.onChange) {
-                this.onChange(selectedLayer);
+            const onChange = this.onChange();
+            if (onChange) {
+                // emit `null` instead of `undefined`, since signal forms cannot handle `undefined` values
+                untracked(() => onChange(selectedLayer ?? null));
             }
         });
     }
@@ -147,10 +151,9 @@ export class LayerSelectionComponent implements ControlValueAccessor {
         }
     }
 
-    registerOnChange(fn: (_: Layer | undefined) => void): void {
-        this.onChange = fn;
-
-        this.onChange(this.selectedLayer());
+    registerOnChange(fn: (_: Layer | null) => void): void {
+        // don't call `fn` synchronously: signal forms' `FormField` registers it before its inputs are set
+        this.onChange.set(fn);
     }
 
     registerOnTouched(fn: () => void): void {

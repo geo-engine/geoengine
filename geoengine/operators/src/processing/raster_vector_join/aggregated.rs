@@ -113,15 +113,19 @@ where
 
             // TODO: optimize geo access (only specific tiles, etc.)
 
-            let mut feature_band_aggregators = (0..column_names.len())
-                .map(|_| {
-                    create_feature_aggregator::<P>(
-                        collection.len(),
-                        feature_aggreation,
-                        feature_aggregation_ignore_no_data,
-                    )
-                })
-                .collect::<Vec<_>>();
+            let create_feature_band_aggregators = || {
+                (0..column_names.len())
+                    .map(|_| {
+                        create_feature_aggregator::<P>(
+                            collection.len(),
+                            feature_aggreation,
+                            feature_aggregation_ignore_no_data,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            };
+
+            let mut feature_band_aggregators = create_feature_band_aggregators();
 
             let mut time_end = None;
 
@@ -132,23 +136,23 @@ where
                 if let Some(end) = time_end
                     && end != raster.time.end()
                 {
-                    // new time slice => consume old aggregator and create new one
+                    // new time slice => consume old aggregators of all bands and create new ones
 
-                    let new_feature_agg = create_feature_aggregator::<P>(
-                        collection.len(),
-                        feature_aggreation,
-                        feature_aggregation_ignore_no_data,
+                    let old_feature_band_aggregators = std::mem::replace(
+                        &mut feature_band_aggregators,
+                        create_feature_band_aggregators(),
                     );
 
-                    let olg_feature_agg =
-                        std::mem::replace(&mut feature_band_aggregators[band], new_feature_agg);
-
-                    temporal_band_aggregators[band].add_feature_data(
-                        olg_feature_agg.into_data(),
+                    Self::add_to_temporal_aggregators(
+                        &mut temporal_band_aggregators,
+                        old_feature_band_aggregators,
                         time_span.time_interval.duration_ms(), // TODO: use individual feature duration?
                     )?;
 
-                    if temporal_band_aggregators[band].is_satisfied() {
+                    if temporal_band_aggregators
+                        .iter()
+                        .all(TypedAggregator::is_satisfied)
+                    {
                         break;
                     }
                 }
@@ -182,14 +186,16 @@ where
 
                 cache_hint.merge_with(&raster.cache_hint);
             }
-            for (band, feature_aggregator) in feature_band_aggregators.into_iter().enumerate() {
-                temporal_band_aggregators[band].add_feature_data(
-                    feature_aggregator.into_data(),
-                    time_span.time_interval.duration_ms(), // TODO: use individual feature duration?
-                )?;
-            }
+            Self::add_to_temporal_aggregators(
+                &mut temporal_band_aggregators,
+                feature_band_aggregators,
+                time_span.time_interval.duration_ms(), // TODO: use individual feature duration?
+            )?;
 
-            if (0..column_names.len()).all(|band| temporal_band_aggregators[band].is_satisfied()) {
+            if temporal_band_aggregators
+                .iter()
+                .all(TypedAggregator::is_satisfied)
+            {
                 break;
             }
         }
@@ -211,6 +217,22 @@ where
         new_collection.cache_hint = cache_hint;
 
         Ok(new_collection)
+    }
+
+    /// Consumes the feature aggregators of one time slice and adds their data to the temporal aggregators of the respective bands
+    fn add_to_temporal_aggregators(
+        temporal_band_aggregators: &mut [TypedAggregator],
+        feature_band_aggregators: Vec<TypedAggregator>,
+        weight: u64,
+    ) -> Result<()> {
+        for (temporal_aggregator, feature_aggregator) in temporal_band_aggregators
+            .iter_mut()
+            .zip(feature_band_aggregators)
+        {
+            temporal_aggregator.add_feature_data(feature_aggregator.into_data(), weight)?;
+        }
+
+        Ok(())
     }
 
     fn create_aggregator<P: Pixel>(
@@ -500,6 +522,112 @@ mod tests {
 
         if let FeatureDataRef::Float(extracted_data) = result.data("foo").unwrap() {
             assert_eq!(extracted_data.as_ref(), &[3.5, 3.5, 3.5, 3.5, 3.5, 3.5]);
+        } else {
+            unreachable!();
+        }
+    }
+
+    #[tokio::test]
+    #[allow(clippy::float_cmp, clippy::too_many_lines)]
+    async fn extract_raster_values_multi_band_two_raster_timesteps() {
+        let tile = |time: TimeInterval, band: u32, data: Vec<u8>| {
+            RasterTile2D::<u8>::new_with_tile_info(
+                time,
+                TileInformation {
+                    global_geo_transform: TestDefault::test_default(),
+                    global_tile_position: [0, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                },
+                band,
+                Grid2D::new([3, 2].into(), data).unwrap().into(),
+                CacheHint::no_cache(),
+            )
+        };
+
+        let t0 = TimeInterval::new(0, 10).unwrap();
+        let t1 = TimeInterval::new(10, 20).unwrap();
+
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 20)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([0, 0], [2, 1]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new(vec![
+                RasterBandDescriptor::new_unitless("band_0".into()),
+                RasterBandDescriptor::new_unitless("band_1".into()),
+            ])
+            .unwrap(),
+        };
+
+        let raster_source = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: vec![
+                    tile(t0, 0, vec![6, 5, 4, 3, 2, 1]),
+                    tile(t0, 1, vec![10, 20, 30, 40, 50, 60]),
+                    tile(t1, 0, vec![1, 2, 3, 4, 5, 6]),
+                    tile(t1, 1, vec![30, 40, 50, 60, 70, 80]),
+                ],
+                result_descriptor,
+            },
+        }
+        .boxed();
+
+        let execution_context =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+
+        let raster_source = raster_source
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await
+            .unwrap();
+
+        let points = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                (0.0, 0.0),
+                (1.0, 0.0),
+                (0.0, -1.0),
+                (1.0, -1.0),
+                (0.0, -2.0),
+                (1.0, -2.0),
+            ])
+            .unwrap(),
+            vec![TimeInterval::new(0, 20).unwrap(); 6],
+            Default::default(),
+            CacheHint::no_cache(),
+        )
+        .unwrap();
+
+        let result = RasterVectorAggregateJoinProcessor::extract_raster_values(
+            &points,
+            &raster_source.query_processor().unwrap().get_u8().unwrap(),
+            &["foo".to_string(), "bar".to_string()],
+            FeatureAggregationMethod::First,
+            false,
+            TemporalAggregationMethod::Mean,
+            false,
+            VectorQueryRectangle::new(
+                BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
+                TimeInterval::new(0, 20).unwrap(),
+                ColumnSelection::all(),
+            ),
+            &execution_context.mock_query_context(ChunkByteSize::MIN),
+        )
+        .await
+        .unwrap();
+
+        if let FeatureDataRef::Float(extracted_data) = result.data("foo").unwrap() {
+            assert_eq!(extracted_data.as_ref(), &[3.5, 3.5, 3.5, 3.5, 3.5, 3.5]);
+        } else {
+            unreachable!();
+        }
+
+        if let FeatureDataRef::Float(extracted_data) = result.data("bar").unwrap() {
+            assert_eq!(extracted_data.as_ref(), &[20., 30., 40., 50., 60., 70.]);
         } else {
             unreachable!();
         }

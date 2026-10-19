@@ -34,6 +34,16 @@
             <button mat-icon-button (click)="showFullscreen()">
                 <mat-icon>fullscreen</mat-icon>
             </button>
+            @if (canExportData()) {
+                <button mat-icon-button [matMenuTriggerFor]="copyMenu" title="Copy data to clipboard" aria-label="Copy data to clipboard">
+                    <mat-icon>content_copy</mat-icon>
+                </button>
+                <mat-menu #copyMenu="matMenu">
+                    <button mat-menu-item (click)="copyData('csv')">Copy as CSV</button>
+                    <button mat-menu-item (click)="copyData('tsv')">Copy as TSV</button>
+                    <button mat-menu-item (click)="copyData('json')">Copy as JSON</button>
+                </mat-menu>
+            }
             <span fxFlex></span>
             <button mat-icon-button (click)="removePlot()">
                 <mat-icon>delete</mat-icon>

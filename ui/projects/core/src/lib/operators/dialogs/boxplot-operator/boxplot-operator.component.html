@@ -8,19 +8,6 @@
 
         <ng-container operatorInput>
             <geoengine-layer-selection [types]="inputTypes" formControlName="layer"></geoengine-layer-selection>
-            @if (isRasterLayer$ | async) {
-                <div>
-                    <geoengine-multi-layer-selection
-                        [types]="RASTER_TYPE"
-                        [inputNaming]="rasterInputNaming"
-                        title="Additional Rasters"
-                        subtitle=""
-                        formControlName="additionalRasterLayers"
-                        [minLength]="0"
-                        [maxLength]="7"
-                    ></geoengine-multi-layer-selection>
-                </div>
-            }
         </ng-container>
 
         <a mat-icon-button operatorParametersIcon href="https://docs.geoengine.io/plots/boxplot.html" target="_blank">

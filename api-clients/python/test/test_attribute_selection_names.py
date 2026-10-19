@@ -14,10 +14,10 @@
 
 import unittest
 
-from geoengine_api_client.models.multiple_raster_or_single_vector_source import MultipleRasterOrSingleVectorSource
+from geoengine_api_client.models.attribute_selection_names import AttributeSelectionNames
 
-class TestMultipleRasterOrSingleVectorSource(unittest.TestCase):
-    """MultipleRasterOrSingleVectorSource unit test stubs"""
+class TestAttributeSelectionNames(unittest.TestCase):
+    """AttributeSelectionNames unit test stubs"""
 
     def setUp(self):
         pass
@@ -25,26 +25,32 @@ class TestMultipleRasterOrSingleVectorSource(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def make_instance(self, include_optional) -> MultipleRasterOrSingleVectorSource:
-        """Test MultipleRasterOrSingleVectorSource
+    def make_instance(self, include_optional) -> AttributeSelectionNames:
+        """Test AttributeSelectionNames
             include_optional is a boolean, when False only required
             params are included, when True both required and
             optional params are included """
-        # uncomment below to create an instance of `MultipleRasterOrSingleVectorSource`
+        # uncomment below to create an instance of `AttributeSelectionNames`
         """
-        model = MultipleRasterOrSingleVectorSource()
+        model = AttributeSelectionNames()
         if include_optional:
-            return MultipleRasterOrSingleVectorSource(
-                source = None
+            return AttributeSelectionNames(
+                type = 'names',
+                values = [
+                    ''
+                    ]
             )
         else:
-            return MultipleRasterOrSingleVectorSource(
-                source = None,
+            return AttributeSelectionNames(
+                type = 'names',
+                values = [
+                    ''
+                    ],
         )
         """
 
-    def testMultipleRasterOrSingleVectorSource(self):
-        """Test MultipleRasterOrSingleVectorSource"""
+    def testAttributeSelectionNames(self):
+        """Test AttributeSelectionNames"""
         # inst_req_only = self.make_instance(include_optional=False)
         # inst_req_and_optional = self.make_instance(include_optional=True)
 

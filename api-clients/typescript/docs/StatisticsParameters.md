@@ -7,7 +7,7 @@ The parameter spec for `Statistics`
 
 Name | Type
 ------------ | -------------
-`columnNames` | Array&lt;string&gt;
+`attributes` | [AttributeSelection](AttributeSelection.md)
 `percentiles` | Array&lt;number&gt;
 
 ## Example
@@ -17,7 +17,7 @@ import type { StatisticsParameters } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "columnNames": null,
+  "attributes": null,
   "percentiles": null,
 } satisfies StatisticsParameters
 

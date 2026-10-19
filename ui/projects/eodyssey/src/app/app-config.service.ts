@@ -1,10 +1,6 @@
 import {Injectable} from '@angular/core';
 import {mergeDeepOverrideLists} from '@geoengine/common';
-import {CoreConfig, CoreConfigStructure, DEFAULT_CORE_CONFIG} from '@geoengine/core';
-
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-interface AppConfigStructure extends CoreConfigStructure {}
-
+import {CoreConfig, DEFAULT_CORE_CONFIG} from '@geoengine/core';
 const APP_CONFIG_DEFAULTS = mergeDeepOverrideLists(DEFAULT_CORE_CONFIG, {
     BRANDING: {
         LOGO_URL: 'assets/eodyssey-logo.svg',
@@ -45,8 +41,6 @@ const APP_CONFIG_DEFAULTS = mergeDeepOverrideLists(DEFAULT_CORE_CONFIG, {
 
 @Injectable()
 export class AppConfig extends CoreConfig {
-    protected override config!: AppConfigStructure;
-
     override load(): Promise<void> {
         return super.load(APP_CONFIG_DEFAULTS);
     }

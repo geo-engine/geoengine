@@ -63,6 +63,9 @@ __all__ = [
     "AttributeAggregateDef",
     "AttributeAggregateType",
     "AttributeFilter",
+    "AttributeSelection",
+    "AttributeSelectionAll",
+    "AttributeSelectionNames",
     "AuthCodeRequestURL",
     "AuthCodeResponse",
     "AutoCreateDataset",
@@ -228,8 +231,6 @@ __all__ = [
     "MultiLineString",
     "MultiPoint",
     "MultiPolygon",
-    "MultipleRasterOrSingleVectorOperator",
-    "MultipleRasterOrSingleVectorSource",
     "MultipleRasterSources",
     "Names",
     "NeighborhoodAggregate",
@@ -533,6 +534,9 @@ from geoengine_api_client.models.aruna_data_provider_definition import ArunaData
 from geoengine_api_client.models.attribute_aggregate_def import AttributeAggregateDef as AttributeAggregateDef
 from geoengine_api_client.models.attribute_aggregate_type import AttributeAggregateType as AttributeAggregateType
 from geoengine_api_client.models.attribute_filter import AttributeFilter as AttributeFilter
+from geoengine_api_client.models.attribute_selection import AttributeSelection as AttributeSelection
+from geoengine_api_client.models.attribute_selection_all import AttributeSelectionAll as AttributeSelectionAll
+from geoengine_api_client.models.attribute_selection_names import AttributeSelectionNames as AttributeSelectionNames
 from geoengine_api_client.models.auth_code_request_url import AuthCodeRequestURL as AuthCodeRequestURL
 from geoengine_api_client.models.auth_code_response import AuthCodeResponse as AuthCodeResponse
 from geoengine_api_client.models.auto_create_dataset import AutoCreateDataset as AutoCreateDataset
@@ -698,8 +702,6 @@ from geoengine_api_client.models.multi_band_raster_colorizer import MultiBandRas
 from geoengine_api_client.models.multi_line_string import MultiLineString as MultiLineString
 from geoengine_api_client.models.multi_point import MultiPoint as MultiPoint
 from geoengine_api_client.models.multi_polygon import MultiPolygon as MultiPolygon
-from geoengine_api_client.models.multiple_raster_or_single_vector_operator import MultipleRasterOrSingleVectorOperator as MultipleRasterOrSingleVectorOperator
-from geoengine_api_client.models.multiple_raster_or_single_vector_source import MultipleRasterOrSingleVectorSource as MultipleRasterOrSingleVectorSource
 from geoengine_api_client.models.multiple_raster_sources import MultipleRasterSources as MultipleRasterSources
 from geoengine_api_client.models.names import Names as Names
 from geoengine_api_client.models.neighborhood_aggregate import NeighborhoodAggregate as NeighborhoodAggregate

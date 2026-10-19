@@ -7,7 +7,6 @@ A processing graph representation and methods on processing graphs
 from __future__ import annotations
 
 import asyncio
-import json
 from collections import defaultdict
 from collections.abc import AsyncIterator
 from io import BytesIO
@@ -400,7 +399,7 @@ class ProcessingGraph:
         """
 
         response = self.plot_json(bbox, spatial_resolution, timeout)
-        vega_spec: VegaSpec = json.loads(response.data["vegaString"])
+        vega_spec: VegaSpec = response.data["vegaSpec"]
 
         return VegaLite(vega_spec)
 

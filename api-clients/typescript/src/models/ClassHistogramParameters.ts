@@ -19,8 +19,8 @@ import { mapValues } from '../runtime';
  */
 export interface ClassHistogramParameters {
     /**
-     * The name of the attribute making up the x-axis of the histogram.
-     * Must be set for a vector sources, must not be set for rasters.
+     * The name of the attribute or raster band making up the x-axis of the histogram.
+     * Must be set for vector sources. For raster sources, it defaults to the first band.
      * @type {string}
      * @memberof ClassHistogramParameters
      */

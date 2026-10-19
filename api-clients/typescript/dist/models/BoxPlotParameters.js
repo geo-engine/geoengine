@@ -17,6 +17,7 @@ exports.BoxPlotParametersFromJSON = BoxPlotParametersFromJSON;
 exports.BoxPlotParametersFromJSONTyped = BoxPlotParametersFromJSONTyped;
 exports.BoxPlotParametersToJSON = BoxPlotParametersToJSON;
 exports.BoxPlotParametersToJSONTyped = BoxPlotParametersToJSONTyped;
+const AttributeSelection_1 = require("./AttributeSelection");
 /**
  * Check if a given object implements the BoxPlotParameters interface.
  */
@@ -31,7 +32,7 @@ function BoxPlotParametersFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'columnNames': json['columnNames'] == null ? undefined : json['columnNames'],
+        'attributes': json['attributes'] == null ? undefined : (0, AttributeSelection_1.AttributeSelectionFromJSON)(json['attributes']),
     };
 }
 function BoxPlotParametersToJSON(json) {
@@ -42,6 +43,6 @@ function BoxPlotParametersToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'columnNames': value['columnNames'],
+        'attributes': (0, AttributeSelection_1.AttributeSelectionToJSON)(value['attributes']),
     };
 }
