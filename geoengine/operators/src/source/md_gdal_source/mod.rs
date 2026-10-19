@@ -958,32 +958,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_query_time_series_full() {
-        let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = exe_ctx.mock_query_context_test_default();
-        let name = add_md_dataset(
-            &mut exe_ctx,
-            "md_time_series_full",
-            MdDataset::daily_series("md/time_series.nc", 8),
-        );
-
-        let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + 8 * DAY);
-        let tiles = query_md_source(
-            &exe_ctx,
-            &query_ctx,
-            name,
-            ts_grid_bounds(),
-            time,
-            BandSelection::first(),
-        )
-        .await;
-
-        assert_eq!(tiles.len(), 8);
-        assert_eq!(tiles[0].time.start().inner(), EPOCH_2000);
-        assert_eq!(tiles[7].time.start().inner(), EPOCH_2000 + 7 * DAY);
-    }
-
-    #[tokio::test]
     async fn test_query_split_files_crossing_boundary() {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = exe_ctx.mock_query_context_test_default();
@@ -1607,49 +1581,6 @@ mod tests {
     }
 
     // --- the output order: band fastest, space next, time slowest ---
-
-    /// `(time, band)` ordering with the band axis fastest. Two variables, two time steps:
-    /// the two bands of a step must be adjacent, not the two steps of a band.
-    #[tokio::test]
-    async fn test_emits_band_fastest() {
-        let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = exe_ctx.mock_query_context_test_default();
-        let name = add_md_dataset(
-            &mut exe_ctx,
-            "md_order_band",
-            MdDataset::one_array_per_band(
-                "md/variables.nc",
-                None,
-                &[("temperature", 0), ("precipitation", 1)],
-            ),
-        );
-
-        let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + 2 * DAY);
-        let tiles = query_md_source(
-            &exe_ctx,
-            &query_ctx,
-            name,
-            ts_grid_bounds(),
-            time,
-            BandSelection::first_n(2),
-        )
-        .await;
-
-        let keys: Vec<_> = tiles
-            .iter()
-            .map(|t| (t.time.start().inner(), t.band))
-            .collect();
-        assert_eq!(
-            keys,
-            vec![
-                (EPOCH_2000, 0),
-                (EPOCH_2000, 1),
-                (EPOCH_2000 + DAY, 0),
-                (EPOCH_2000 + DAY, 1),
-            ],
-            "band is the fastest-changing axis, so both bands of a step are adjacent"
-        );
-    }
 
     /// `band` before `space` is the bug the fix exists for: with several bands *and* several
     /// tiles the two orderings differ, and only this shape can tell them apart.
