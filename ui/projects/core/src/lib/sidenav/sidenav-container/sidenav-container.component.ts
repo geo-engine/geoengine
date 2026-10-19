@@ -1,4 +1,4 @@
-import {Subscription, combineLatest, Observable} from 'rxjs';
+import {Subscription, combineLatest} from 'rxjs';
 import {
     Component,
     OnInit,
@@ -7,14 +7,14 @@ import {
     ComponentRef,
     OnDestroy,
     ElementRef,
-    ViewChildren,
-    QueryList,
     AfterViewInit,
     Renderer2,
     Injector,
     inject,
     viewChild,
+    viewChildren,
 } from '@angular/core';
+import {toObservable} from '@angular/core/rxjs-interop';
 import {SidenavRef} from '../sidenav-ref.service';
 import {LayoutService, SidenavConfig} from '../../layout.service';
 import {map} from 'rxjs/operators';
@@ -62,8 +62,8 @@ export class SidenavContainerComponent implements OnInit, AfterViewInit, OnDestr
 
     readonly target = viewChild.required('target', {read: ViewContainerRef});
 
-    @ViewChildren('searchElements', {read: ViewContainerRef})
-    searchElements!: QueryList<ViewContainerRef>;
+    readonly searchElements = viewChildren('searchElements', {read: ViewContainerRef});
+    private readonly searchElements$ = toObservable(this.searchElements);
 
     searchTerm = '';
 
@@ -93,23 +93,20 @@ export class SidenavContainerComponent implements OnInit, AfterViewInit, OnDestr
 
     ngAfterViewInit(): void {
         this.subscriptions.push(
-            combineLatest([
-                this.sidenavRef.getSearchComponentStream(),
-                this.searchElements.changes as Observable<QueryList<ViewContainerRef>>,
-            ])
+            combineLatest([this.sidenavRef.getSearchComponentStream(), this.searchElements$])
                 .pipe(
-                    map(([elements, searchElementsQuery]): [readonly ElementRef[] | undefined, ViewContainerRef] => [
+                    map(([elements, searchElementsQuery]): [readonly ElementRef[] | undefined, ViewContainerRef | undefined] => [
                         elements,
-                        searchElementsQuery.first,
+                        searchElementsQuery.at(0),
                     ]),
                 )
-                .subscribe(([elements, searchElements]: [readonly ElementRef[] | undefined, ViewContainerRef]) => {
+                .subscribe(([elements, searchElements]: [readonly ElementRef[] | undefined, ViewContainerRef | undefined]) => {
                     if (searchElements) {
                         searchElements.clear();
                     }
                     if (elements && searchElements) {
-                        const parent = searchElements.element.nativeElement;
-                        const nodes = elements.map((e) => e.nativeElement);
+                        const parent = searchElements.element.nativeElement as HTMLElement;
+                        const nodes = elements.map((e) => e.nativeElement as HTMLElement);
 
                         for (const node of nodes) {
                             this.renderer.appendChild(parent, node);

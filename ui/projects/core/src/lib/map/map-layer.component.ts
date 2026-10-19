@@ -176,7 +176,7 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
             return undefined;
         }
 
-        return change.currentValue;
+        return change.currentValue as T;
     }
 }
 

@@ -1320,8 +1320,7 @@ export class ProjectService implements OnDestroy {
             )
             .subscribe({
                 next: (data) => data$.next(data),
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-                error: (error) => error, // ignore error
+                error: () => undefined, // ignore error
             });
     }
 
@@ -1346,7 +1345,7 @@ export class ProjectService implements OnDestroy {
             )
             .subscribe({
                 next: (metadata) => metadata$.next(metadata),
-                error: (error) => error, // ignore error
+                error: () => undefined, // ignore error
             });
     }
 

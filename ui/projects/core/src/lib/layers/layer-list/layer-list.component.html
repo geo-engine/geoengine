@@ -3,7 +3,7 @@
         <div cdkDropList class="layer-list" [style.max-height.px]="maxHeight" (cdkDropListDropped)="drop($event)">
             @if ((projectService.getLayerStream() | async)?.length === 0) {
                 <div class="layer-list-box">
-                    @if (addAFirstLayerSidenavConfig) {
+                    @if (addAFirstLayerSidenavConfig(); as addAFirstLayerSidenavConfig) {
                         <button
                             mat-button
                             class="no-layer"
@@ -16,7 +16,7 @@
                             add a first layer
                         </button>
                     }
-                    @if (addAFirstLayerSidenavConfig === undefined) {
+                    @if (addAFirstLayerSidenavConfig() === undefined) {
                         <mat-spinner class="add-first-layer-spinner" diameter="24"></mat-spinner>
                     }
                 </div>
