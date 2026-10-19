@@ -832,18 +832,6 @@ impl Drop for LeaderCleanupGuard {
     }
 }
 
-/// Wraps a pool error into the `IpcProcessError` a caller sees, keeping its cause chain.
-///
-/// `GdalProcessPoolError`'s `Display` is just the variant name (`IpcProcessError`), so
-/// `e.to_string()` here used to throw the real cause away and leave "Unhandled worker
-/// exception: `IpcProcessError`" with no way to tell a GDAL failure from a broken channel.
-/// `Debug` walks the whole chain.
-fn pool_error_as_ipc_other(error: &GdalProcessPoolError) -> IpcProcessError {
-    IpcProcessError::IpcOther {
-        msg: format!("{error:?}"),
-    }
-}
-
 impl GdalPoolDispatcher {
     pub fn new(pool: Arc<GdalProcessPool>) -> Self {
         Self { pool }
@@ -866,7 +854,12 @@ impl GdalPoolDispatcher {
     ) -> Result<GdalIpcPayload<P>, GdalProcessPoolError> {
         let shared_res = self.dispatch_dedup(request).await?;
 
-        let result_ref = shared_res.0.as_ref().map_err(pool_error_as_ipc_other)?;
+        let result_ref = shared_res
+            .0
+            .as_ref()
+            .map_err(|error| IpcProcessError::IpcOther {
+                msg: format!("{error:?}"),
+            })?;
 
         let IpcChannelResult::Raster(byte_payload) = result_ref else {
             return Err(GdalProcessPoolError::IpcProcessError {
@@ -903,7 +896,12 @@ impl GdalPoolDispatcher {
     ) -> Result<GdalIpcMdPayload<P>, GdalProcessPoolError> {
         let shared_res = self.dispatch_dedup(request).await?;
 
-        let result_ref = shared_res.0.as_ref().map_err(pool_error_as_ipc_other)?;
+        let result_ref = shared_res
+            .0
+            .as_ref()
+            .map_err(|error| IpcProcessError::IpcOther {
+                msg: format!("{error:?}"),
+            })?;
 
         let IpcChannelResult::MdSlice(byte_payload) = result_ref else {
             return Err(GdalProcessPoolError::IpcProcessError {
