@@ -41,6 +41,7 @@ use geoengine_datatypes::{
     collections::VectorDataType,
     error::BoxedResultExt,
     primitives::{FeatureDataType, Measurement, TimeInterval, VectorQueryRectangle},
+    raster::GridSize,
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
 use geoengine_operators::util::GdalConfigOptions;
@@ -794,8 +795,18 @@ fn validate_md_tile(
     );
 
     // the dataset declares the raw grid: the file's own transform (south-up y and 0..360
-    // longitudes are only normalised to north-up, never shifted) has to match it exactly
-    let expected = dataset_descriptor.spatial_grid.geo_transform();
+    // longitudes are only normalised to north-up, never shifted) has to match it exactly.
+    // The descriptor may be declared in the file's own orientation, so it is normalised the
+    // same way before the comparison.
+    let raw_grid = dataset_descriptor.spatial_grid.geo_transform();
+    let expected = MdPresentation::Raw.presented_geo_transform(
+        geoengine_operators::source::GdalDatasetGeoTransform {
+            origin_coordinate: raw_grid.origin_coordinate(),
+            x_pixel_size: raw_grid.x_pixel_size(),
+            y_pixel_size: raw_grid.y_pixel_size(),
+        },
+        dataset_descriptor.spatial_grid.grid_shape().axis_size_y(),
+    );
     let file_transform = MdPresentation::Raw.presented_geo_transform(
         geoengine_operators::source::GdalDatasetGeoTransform::from(tile.params.geo_transform),
         tile.params.height,
@@ -2154,7 +2165,7 @@ mod tests {
             responses::{IdResponse, datasets::DatasetNameResponse},
             services::{DatasetDefinition, Provenance},
         },
-        contexts::{PostgresContext, PostgresSessionContext, Session, SessionId},
+        contexts::{PostgresContext, PostgresDb, PostgresSessionContext, Session, SessionId},
         datasets::{
             DatasetIdAndName,
             storage::DatasetStore,
@@ -2197,8 +2208,8 @@ mod tests {
             VectorResultDescriptor, WorkflowOperatorPath,
         },
         source::{
-            MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, OgrSource,
-            OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
+            MdLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
+            OgrSource, OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
         },
         util::{
             gdal::{create_ndvi_meta_data, create_ndvi_result_descriptor},
@@ -6463,11 +6474,77 @@ mod tests {
         )
     }
 
+    /// The MD provider of a stored dataset, as the operator asks for it.
+    type MdProvider = Box<
+        dyn MetaData<
+                MdLoadingInfo,
+                geoengine_operators::engine::RasterResultDescriptor,
+                RasterQueryRectangle,
+            >,
+    >;
+
+    /// The MD provider of a stored dataset.
+    async fn md_provider(
+        db: &PostgresDb<NoTls>,
+        dataset_id: geoengine_datatypes::dataset::DatasetId,
+    ) -> Result<MdProvider> {
+        let provider = db
+            .meta_data(
+                &DataId::Internal(InternalDataId {
+                    dataset_id: dataset_id.into(),
+                    r#type:
+                        crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
+                })
+                .into(),
+            )
+            .await?;
+        Ok(provider)
+    }
+
+    /// Stores `meta_data` as an MD dataset plus its rows and returns the id. `tiles` come from
+    /// `md_dataset_meta`, whose paths are absolute; a volume row stores them relative to the
+    /// volume root.
+    async fn add_md_dataset(
+        db: &PostgresDb<NoTls>,
+        display_name: &str,
+        meta_data: crate::datasets::storage::MetaDataDefinition,
+        tiles: Vec<AddDatasetMdTile>,
+    ) -> Result<DatasetIdAndName> {
+        let id_and_name = db
+            .add_dataset(
+                AddDataset {
+                    name: None,
+                    display_name: display_name.to_owned(),
+                    description: display_name.to_owned(),
+                    source_operator: "MdGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: None,
+                }
+                .into(),
+                meta_data,
+                Some(DataPath::Volume(VolumeName("test_data".to_string()))),
+            )
+            .await?;
+
+        let tiles = tiles
+            .into_iter()
+            .map(|mut tile| {
+                tile.params.file_path =
+                    Path::new("md").join(tile.params.file_path.file_name().unwrap_or_default());
+                tile
+            })
+            .collect();
+        db.add_md_dataset_tiles(id_and_name.id, tiles).await?;
+
+        Ok(id_and_name)
+    }
+
     /// The MD loading info's time axis must come from the files' *per-slice* intervals, not
     /// from one interval per stored row. A stored row spans a whole file (365 daily slices
     /// for a year of CMIP6), so deriving the axis from row times collapses it to one step
-    /// per file and every query then reads the wrong slice. The gap fixtures make it
-    /// observable: `gap_a` covers t 0..4, `gap_b` covers t 8..12, t 4..8 is absent.
+    /// per file and every query then reads the wrong slice. The gap rows make it
+    /// observable: `split_a` covers t 0..4, `gap_b` covers t 8..12, t 4..8 is absent.
     /// Fixture values are exact integers in f32
     #[allow(clippy::float_cmp)]
     #[ge_context::test]
@@ -6477,21 +6554,7 @@ mod tests {
     ) -> Result<()> {
         let volume = VolumeName("test_data".to_string());
 
-        // gap_a covers global z 0..4 and gap_b covers 8..12, so z 4..8 is a hole the read
-        // path has to gap-fill
-        let (meta_data, tiles) = md_dataset_meta(
-            &[
-                MdRow {
-                    z_index: 0,
-                    ..MdRow::of("md/time_series_gap_a.nc", "temperature", 0, 4)
-                },
-                MdRow {
-                    z_index: 1,
-                    ..MdRow::of("md/time_series_gap_b.nc", "temperature", 8, 4)
-                },
-            ],
-            vec![api_band("temperature")],
-        );
+        let (meta_data, tiles) = md_dataset_meta(&gap_rows(), vec![api_band("temperature")]);
 
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
@@ -6642,6 +6705,21 @@ mod tests {
         Ok(())
     }
 
+    /// `gap_a` (== `time_series_split_a.nc`) covers z 0..4 and `gap_b` covers 8..12, so z 4..8
+    /// is a hole the read path and the time axis have to gap-fill.
+    fn gap_rows() -> Vec<MdRow> {
+        vec![
+            MdRow {
+                z_index: 0,
+                ..MdRow::of("md/time_series_split_a.nc", "temperature", 0, 4)
+            },
+            MdRow {
+                z_index: 1,
+                ..MdRow::of("md/time_series_gap_b.nc", "temperature", 8, 4)
+            },
+        ]
+    }
+
     /// `MetaData::time_axis` must answer the same gap-filled axis that `loading_info` does,
     /// without the file rows: a plain time query never asks for a bbox, and an axis derived
     /// from stored *row* times would collapse to one step per file.
@@ -6649,72 +6727,16 @@ mod tests {
     async fn it_answers_the_md_time_axis_without_a_bbox(
         app_ctx: PostgresContext<NoTls>,
     ) -> Result<()> {
-        let volume = VolumeName("test_data".to_string());
-
-        // gap_a covers global z 0..4 and gap_b covers 8..12, so z 4..8 is a hole the read
-        // path has to gap-fill
-        let (meta_data, tiles) = md_dataset_meta(
-            &[
-                MdRow {
-                    z_index: 0,
-                    ..MdRow::of("md/time_series_gap_a.nc", "temperature", 0, 4)
-                },
-                MdRow {
-                    z_index: 1,
-                    ..MdRow::of("md/time_series_gap_b.nc", "temperature", 8, 4)
-                },
-            ],
-            vec![api_band("temperature")],
-        );
-
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session);
         let db = ctx.db();
 
-        let id_and_name = db
-            .add_dataset(
-                AddDataset {
-                    name: None,
-                    display_name: "md time axis".to_string(),
-                    description: "md time axis".to_string(),
-                    source_operator: "MdGdalSource".to_string(),
-                    symbology: None,
-                    provenance: None,
-                    tags: None,
-                }
-                .into(),
-                meta_data,
-                Some(DataPath::Volume(volume)),
-            )
-            .await?;
-
-        let rel = |f: &AddDatasetMdTile| {
-            let mut f = f.clone();
-            f.params.file_path = Path::new("md").join(f.params.file_path.file_name().unwrap());
-            f
-        };
-        db.add_md_dataset_tiles(id_and_name.id, tiles.iter().map(rel).collect())
-            .await?;
-
-        let meta_data: Box<
-            dyn MetaData<
-                    geoengine_operators::source::MdLoadingInfo,
-                    geoengine_operators::engine::RasterResultDescriptor,
-                    RasterQueryRectangle,
-                >,
-        > = db
-            .meta_data(
-                &DataId::Internal(InternalDataId {
-                    dataset_id: id_and_name.id.into(),
-                    r#type:
-                        crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
-                })
-                .into(),
-            )
-            .await?;
+        let (meta_data, tiles) = md_dataset_meta(&gap_rows(), vec![api_band("temperature")]);
+        let id_and_name = add_md_dataset(&db, "md time axis", meta_data, tiles).await?;
+        let provider = md_provider(&db, id_and_name.id).await?;
 
         // 2000-01-01 .. 2000-01-13 spans t 0..12: 4 covered + 1 gap + 4 covered = 9 steps
-        let axis = meta_data
+        let axis = provider
             .time_axis(TimeInterval::new_unchecked(
                 TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
                 TimeInstance::from_str("2000-01-13T00:00:00Z").unwrap(),
@@ -6741,18 +6763,10 @@ mod tests {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session);
         let db = ctx.db();
-        let volume = VolumeName("test_data".to_string());
-
-        // `ProbedGdalMdMetaData` is not `Clone`, so probe per case rather than sharing one
-        let rel = |f: &AddDatasetMdTile| {
-            let mut f = f.clone();
-            f.params.file_path = Path::new("md").join(f.params.file_path.file_name().unwrap());
-            f
-        };
 
         for (label, cache_ttl) in [("with ttl", Some(1234_u32)), ("without ttl", None)] {
             let (meta_data, tiles) = md_dataset_meta(
-                &[MdRow::of("md/time_series_gap_a.nc", "temperature", 0, 4)],
+                &[MdRow::of("md/time_series_split_a.nc", "temperature", 0, 4)],
                 vec![api_band("temperature")],
             );
             let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(mut md) = meta_data
@@ -6762,41 +6776,9 @@ mod tests {
             md.cache_ttl = cache_ttl.map(geoengine_datatypes::primitives::CacheTtlSeconds::new);
             let meta_data = crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md);
 
-            let id_and_name = db
-                .add_dataset(
-                    AddDataset {
-                        name: None,
-                        display_name: format!("md ttl {label}"),
-                        description: format!("md ttl {label}"),
-                        source_operator: "MdGdalSource".to_string(),
-                        symbology: None,
-                        provenance: None,
-                        tags: None,
-                    }
-                    .into(),
-                    meta_data,
-                    Some(DataPath::Volume(volume.clone())),
-                )
-                .await?;
-            db.add_md_dataset_tiles(id_and_name.id, tiles.iter().map(rel).collect())
-                .await?;
-
-            let provider: Box<
-                dyn MetaData<
-                        geoengine_operators::source::MdLoadingInfo,
-                        geoengine_operators::engine::RasterResultDescriptor,
-                        RasterQueryRectangle,
-                    >,
-            > = db
-                .meta_data(
-                    &DataId::Internal(InternalDataId {
-                        dataset_id: id_and_name.id.into(),
-                        r#type:
-                            crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
-                    })
-                    .into(),
-                )
-                .await?;
+            let id_and_name =
+                add_md_dataset(&db, &format!("md ttl {label}"), meta_data, tiles).await?;
+            let provider = md_provider(&db, id_and_name.id).await?;
 
             let loading_info = provider
                 .loading_info(RasterQueryRectangle::new(
@@ -6841,7 +6823,6 @@ mod tests {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session);
         let db = ctx.db();
-        let volume = VolumeName("test_data".to_string());
 
         let mut row = MdRow::of("md/time_depth_4d.nc", "temperature", 0, 6);
         row.axis_mapping = vec![
@@ -6851,47 +6832,8 @@ mod tests {
             MdAxisMapping::X,
         ];
         let (meta_data, tiles) = md_dataset_meta(&[row], vec![api_band("temperature")]);
-
-        let id_and_name = db
-            .add_dataset(
-                AddDataset {
-                    name: None,
-                    display_name: "md axis mapping".to_string(),
-                    description: "md axis mapping".to_string(),
-                    source_operator: "MdGdalSource".to_string(),
-                    symbology: None,
-                    provenance: None,
-                    tags: None,
-                }
-                .into(),
-                meta_data,
-                Some(DataPath::Volume(volume)),
-            )
-            .await?;
-        let rel = |f: &AddDatasetMdTile| {
-            let mut f = f.clone();
-            f.params.file_path = Path::new("md").join(f.params.file_path.file_name().unwrap());
-            f
-        };
-        db.add_md_dataset_tiles(id_and_name.id, tiles.iter().map(rel).collect())
-            .await?;
-
-        let provider: Box<
-            dyn MetaData<
-                    geoengine_operators::source::MdLoadingInfo,
-                    geoengine_operators::engine::RasterResultDescriptor,
-                    RasterQueryRectangle,
-                >,
-        > = db
-            .meta_data(
-                &DataId::Internal(InternalDataId {
-                    dataset_id: id_and_name.id.into(),
-                    r#type:
-                        crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
-                })
-                .into(),
-            )
-            .await?;
+        let id_and_name = add_md_dataset(&db, "md axis mapping", meta_data, tiles).await?;
+        let provider = md_provider(&db, id_and_name.id).await?;
         let loading_info = provider
             .loading_info(RasterQueryRectangle::new(
                 geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]),
@@ -6926,8 +6868,6 @@ mod tests {
     async fn it_builds_one_md_time_axis_per_variable_not_one_per_band(
         app_ctx: PostgresContext<NoTls>,
     ) -> Result<()> {
-        let volume = VolumeName("test_data".to_string());
-
         let (meta_data, tiles) = md_dataset_meta(
             &[
                 MdRow {
@@ -6949,51 +6889,12 @@ mod tests {
         let ctx = app_ctx.session_context(session);
         let db = ctx.db();
 
-        let id_and_name = db
-            .add_dataset(
-                AddDataset {
-                    name: None,
-                    display_name: "md variables".to_string(),
-                    description: "md variables".to_string(),
-                    source_operator: "MdGdalSource".to_string(),
-                    symbology: None,
-                    provenance: None,
-                    tags: None,
-                }
-                .into(),
-                meta_data,
-                Some(DataPath::Volume(volume)),
-            )
-            .await?;
-
-        let rel = |f: &AddDatasetMdTile| {
-            let mut f = f.clone();
-            f.params.file_path = Path::new("md").join(f.params.file_path.file_name().unwrap());
-            f
-        };
-        db.add_md_dataset_tiles(id_and_name.id, tiles.iter().map(rel).collect())
-            .await?;
-
-        let meta_data: Box<
-            dyn MetaData<
-                    geoengine_operators::source::MdLoadingInfo,
-                    geoengine_operators::engine::RasterResultDescriptor,
-                    RasterQueryRectangle,
-                >,
-        > = db
-            .meta_data(
-                &DataId::Internal(InternalDataId {
-                    dataset_id: id_and_name.id.into(),
-                    r#type:
-                        crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
-                })
-                .into(),
-            )
-            .await?;
+        let id_and_name = add_md_dataset(&db, "md variables", meta_data, tiles).await?;
+        let provider = md_provider(&db, id_and_name.id).await?;
 
         // `variables.nc` is a single 8-step daily series with 2 data variables, so the
         // dataset has 8 time steps. Concatenating every row's intervals would give 16.
-        let axis = meta_data
+        let axis = provider
             .time_axis(TimeInterval::new_unchecked(
                 TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
                 TimeInstance::from_str("2000-01-09T00:00:00Z").unwrap(),
@@ -7009,7 +6910,7 @@ mod tests {
 
         // a narrow window clips: `try_time_irregular_range_fill` extends coverage to the
         // query but never trims it, so without a filter this returns all 8 slices
-        let window = meta_data
+        let window = provider
             .time_axis(TimeInterval::new_unchecked(
                 TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
                 TimeInstance::from_str("2000-01-02T00:00:00Z").unwrap(),
@@ -7029,8 +6930,6 @@ mod tests {
     async fn it_reads_md_fixed_axis_rows_for_the_requested_band(
         app_ctx: PostgresContext<NoTls>,
     ) -> Result<()> {
-        let volume = VolumeName("test_data".to_string());
-
         // `bands.nc` holds one `(band, y, x)` array; each variable pins one index of the band
         // dimension, so every variable is a single-slice file on its own output band
         let rows: Vec<MdRow> = (0..4)
@@ -7056,49 +6955,10 @@ mod tests {
         let ctx = app_ctx.session_context(session);
         let db = ctx.db();
 
-        let id_and_name = db
-            .add_dataset(
-                AddDataset {
-                    name: None,
-                    display_name: "md bands".to_string(),
-                    description: "md bands".to_string(),
-                    source_operator: "MdGdalSource".to_string(),
-                    symbology: None,
-                    provenance: None,
-                    tags: None,
-                }
-                .into(),
-                meta_data,
-                Some(DataPath::Volume(volume)),
-            )
-            .await?;
+        let id_and_name = add_md_dataset(&db, "md bands", meta_data, tiles).await?;
+        let provider = md_provider(&db, id_and_name.id).await?;
 
-        let rel = |f: &AddDatasetMdTile| {
-            let mut f = f.clone();
-            f.params.file_path = Path::new("md").join(f.params.file_path.file_name().unwrap());
-            f
-        };
-        db.add_md_dataset_tiles(id_and_name.id, tiles.iter().map(rel).collect())
-            .await?;
-
-        let meta_data: Box<
-            dyn MetaData<
-                    geoengine_operators::source::MdLoadingInfo,
-                    geoengine_operators::engine::RasterResultDescriptor,
-                    RasterQueryRectangle,
-                >,
-        > = db
-            .meta_data(
-                &DataId::Internal(InternalDataId {
-                    dataset_id: id_and_name.id.into(),
-                    r#type:
-                        crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
-                })
-                .into(),
-            )
-            .await?;
-
-        let loading_info = meta_data
+        let loading_info = provider
             .loading_info(RasterQueryRectangle::new(
                 geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]),
                 TimeInterval::new_unchecked(
@@ -7443,6 +7303,44 @@ mod tests {
         );
     }
 
+    /// A south-up declaration (origin at the bottom, positive y pixel size) is the same grid
+    /// as its north-up normalisation, so both the descriptor and the file must be accepted.
+    #[test]
+    fn it_accepts_a_south_up_md_grid_declaration() {
+        let (meta_data, tiles) = md_dataset_meta(
+            &[MdRow::of("md/variables.nc", "temperature", 0, 8)],
+            vec![api_band("temperature")],
+        );
+        let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(mut md) = meta_data else {
+            panic!("md_dataset_meta returns MD metadata")
+        };
+        md.result_descriptor.spatial_grid =
+            geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
+                geoengine_datatypes::raster::GeoTransform::new((0.0, -8.0).into(), 30.0, 1.0),
+                geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]),
+            );
+        let mut tile = tiles[0].clone();
+        tile.params.file_path = "/vsicurl/https://example.invalid/variables.nc".into();
+        tile.params.geo_transform = GeoTransform {
+            origin_coordinate: Coordinate2D { x: 0.0, y: -8.0 },
+            x_pixel_size: 30.0,
+            y_pixel_size: 1.0,
+        };
+
+        assert!(
+            validate_md_tile(
+                &tile,
+                false,
+                &md.variables,
+                &DataPath::External,
+                Path::new(""),
+                &md.result_descriptor,
+                false,
+            )
+            .is_ok()
+        );
+    }
+
     /// Stored MD metadata stays raw: `dataset_md_tiles.bbox` and the descriptor keep the file's
     /// own 0..360° grid and transform, and only the API and the operator present −180..180.
     #[allow(clippy::float_cmp)]
@@ -7540,23 +7438,7 @@ mod tests {
             None,
         );
 
-        let id_and_name = db
-            .add_dataset(
-                AddDataset {
-                    name: None,
-                    display_name: "md wrapped".to_owned(),
-                    description: "md wrapped".to_owned(),
-                    source_operator: "MdGdalSource".to_string(),
-                    symbology: None,
-                    provenance: None,
-                    tags: None,
-                }
-                .into(),
-                meta_data.into(),
-                Some(DataPath::Volume(VolumeName("test_data".to_string()))),
-            )
-            .await?;
-        db.add_md_dataset_tiles(id_and_name.id, vec![tile]).await?;
+        let id_and_name = add_md_dataset(&db, "md wrapped", meta_data.into(), vec![tile]).await?;
 
         // the row is stored raw: 0..360 longitudes and the file's own transform
         let conn = db.conn_pool.get().await?;
@@ -7595,22 +7477,7 @@ mod tests {
         );
 
         // and so does the operator's metadata provider
-        let provider: Box<
-            dyn MetaData<
-                    geoengine_operators::source::MdLoadingInfo,
-                    geoengine_operators::engine::RasterResultDescriptor,
-                    RasterQueryRectangle,
-                >,
-        > = db
-            .meta_data(
-                &DataId::Internal(InternalDataId {
-                    dataset_id: id_and_name.id.into(),
-                    r#type:
-                        crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
-                })
-                .into(),
-            )
-            .await?;
+        let provider = md_provider(&db, id_and_name.id).await?;
         assert_eq!(
             provider
                 .result_descriptor()
@@ -7638,6 +7505,40 @@ mod tests {
         );
         // the file params round trip unchanged
         assert_eq!(loading_info.files()[0].params.width, 360);
+
+        Ok(())
+    }
+
+    /// Two rows of one band over the same file slices (a mosaic split, or a second `z_index`
+    /// over the same times) must give one axis step per time. Only adjacent duplicates were
+    /// collapsed before the axis was sorted, so shared steps spread over several rows
+    /// duplicated.
+    #[ge_context::test]
+    async fn it_collapses_shared_md_time_steps_across_rows(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session);
+        let db = ctx.db();
+
+        let rows = [0, 1].map(|z_index| MdRow {
+            z_index,
+            ..MdRow::of("md/time_series_split_a.nc", "temperature", 0, 2)
+        });
+        let (meta_data, tiles) = md_dataset_meta(&rows, vec![api_band("temperature")]);
+        let id_and_name = add_md_dataset(&db, "md mosaic", meta_data, tiles).await?;
+        let provider = md_provider(&db, id_and_name.id).await?;
+
+        let axis = provider
+            .time_axis(TimeInterval::new_unchecked(
+                TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
+                TimeInstance::from_str("2000-01-03T00:00:00Z").unwrap(),
+            ))
+            .await?
+            .expect("a Time-role dataset has an axis");
+
+        assert_eq!(axis.len(), 2);
+        assert!(axis.windows(2).all(|w| w[0].start() < w[1].start()));
 
         Ok(())
     }
