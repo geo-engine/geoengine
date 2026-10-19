@@ -50,8 +50,9 @@ use geoengine_operators::{
         VectorColumnInfo, VectorResultDescriptor,
     },
     source::{
-        MultiBandGdalSource as OperatorsMultiBandGdalSource, OgrSourceColumnSpec, OgrSourceDataset,
-        OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
+        MdPresentation, MultiBandGdalSource as OperatorsMultiBandGdalSource, OgrSourceColumnSpec,
+        OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
+        OgrSourceTimeFormat,
     },
     util::gdal::{
         gdal_open_dataset, gdal_open_dataset_ex, gdal_parameters_from_dataset,
@@ -426,7 +427,7 @@ pub struct AddDatasetTile {
 /// One MD array file of an `MdGdalSource` dataset, covering all of that file's z slices.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema)]
 pub struct AddDatasetMdTile {
-    /// the presented footprint (wrap-around aware)
+    /// the raw footprint, in the file's own longitudes (0..360 is not shifted)
     pub spatial_partition: SpatialPartition2D,
     pub band: u32,
     /// position of this file in the concatenated z axis of `band`
@@ -754,7 +755,7 @@ fn check_md_tile_against_array(
 
 /// Validates one MD tile at the trust boundary: the file must exist, the named array must
 /// open with a z dimension matching the declared time steps, the band must exist, and the
-/// file's grid must match the dataset's (with the wrap-around shift applied).
+/// file's raw grid must match the dataset's raw grid, and the grid must be presentable with `wrap`.
 fn validate_md_tile(
     tile: &AddDatasetMdTile,
     wrap: bool,
@@ -792,13 +793,12 @@ fn validate_md_tile(
         }
     );
 
-    // the file's raw transform (possibly south-up and/or 0..360) has to land on the
-    // dataset's presented transform
+    // the dataset declares the raw grid: the file's own transform (south-up y and 0..360
+    // longitudes are only normalised to north-up, never shifted) has to match it exactly
     let expected = dataset_descriptor.spatial_grid.geo_transform();
-    let file_transform = geoengine_operators::source::presented_geo_transform(
+    let file_transform = MdPresentation::Raw.presented_geo_transform(
         geoengine_operators::source::GdalDatasetGeoTransform::from(tile.params.geo_transform),
         tile.params.height,
-        wrap,
     );
     ensure!(
         expected.is_compatible_grid(file_transform),
@@ -808,6 +808,12 @@ fn validate_md_tile(
             file_path: file_path.clone(),
         }
     );
+    MdPresentation::from_wrap(wrap)
+        .validate(&tile.params.clone().into())
+        .map_err(|e| AddDatasetMdTilesError::MdTileUnpresentable {
+            message: e.to_string(),
+            file_path: file_path.clone(),
+        })?;
 
     // both columns come from outside, and a row whose descriptor disagrees with its steps
     // would be read with `steps` while advertised with `descriptor`. Checked before anything
@@ -840,13 +846,22 @@ fn validate_md_tile(
         }
     );
 
+    let variable = variables.get(tile.band as usize).ok_or_else(|| {
+        AddDatasetMdTilesError::MdTileAxisMappingInvalid {
+            details: format!("dataset has no variable for band {}", tile.band),
+            file_path: file_path.clone(),
+        }
+    })?;
+    // roles need no array, so they are checked even for external rows, whose file is never
+    // opened here. A wrong role would otherwise only fail at query time.
+    geoengine_operators::source::validate_md_axis_roles(&variable.axis_mapping).map_err(
+        |details| AddDatasetMdTilesError::MdTileAxisMappingInvalid {
+            details,
+            file_path: file_path.clone(),
+        },
+    )?;
+
     if check_against_array {
-        let variable = variables.get(tile.band as usize).ok_or_else(|| {
-            AddDatasetMdTilesError::MdTileAxisMappingInvalid {
-                details: format!("dataset has no variable for band {}", tile.band),
-                file_path: file_path.clone(),
-            }
-        })?;
         check_md_tile_against_array(
             tile,
             &variable.axis_mapping,
@@ -7384,5 +7399,246 @@ mod tests {
             ),
             Err(AddDatasetMdTilesError::MdTileTimeAxisHoles { .. }),
         ));
+    }
+
+    /// A wrapped dataset is rejected at registration unless its grid can actually be shown at
+    /// −180..180. The 8x8 fixture at 30° spans 240°, not 360°, so it is not wrappable - while
+    /// the same row as a raw dataset is fine.
+    #[test]
+    fn it_rejects_a_wrapped_md_row_whose_grid_cannot_be_presented() {
+        let (meta_data, tiles) = md_dataset_meta(
+            &[MdRow::of("md/variables.nc", "temperature", 0, 8)],
+            vec![api_band("temperature")],
+        );
+        let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md) = meta_data else {
+            panic!("md_dataset_meta returns MD metadata")
+        };
+        // a bare URL is external data; the fixture's local path is not
+        let mut tile = tiles[0].clone();
+        tile.params.file_path = "/vsicurl/https://example.invalid/variables.nc".into();
+
+        assert!(matches!(
+            validate_md_tile(
+                &tile,
+                true,
+                &md.variables,
+                &DataPath::External,
+                Path::new(""),
+                &md.result_descriptor,
+                false,
+            ),
+            Err(AddDatasetMdTilesError::MdTileUnpresentable { .. })
+        ));
+        assert!(
+            validate_md_tile(
+                &tile,
+                false,
+                &md.variables,
+                &DataPath::External,
+                Path::new(""),
+                &md.result_descriptor,
+                false,
+            )
+            .is_ok()
+        );
+    }
+
+    /// Stored MD metadata stays raw: `dataset_md_tiles.bbox` and the descriptor keep the file's
+    /// own 0..360° grid and transform, and only the API and the operator present −180..180.
+    #[allow(clippy::float_cmp)]
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
+    async fn it_stores_a_wrapped_md_dataset_raw_and_presents_it(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session);
+        let db = ctx.db();
+
+        let time_steps: Vec<TimeInterval> = (0..4)
+            .map(|i| {
+                TimeInterval::new_unchecked(
+                    MD_EPOCH_2000 + i * MD_DAY,
+                    MD_EPOCH_2000 + (i + 1) * MD_DAY,
+                )
+            })
+            .collect();
+
+        // the file's own grid: 360 one-degree columns from 0° to 360°, ten rows from 45° down
+        let raw_geo_transform = GeoTransform {
+            origin_coordinate: Coordinate2D { x: 0.0, y: 45.0 },
+            x_pixel_size: 1.0,
+            y_pixel_size: -1.0,
+        };
+        let raw_bounds = SpatialPartition2D::new_unchecked((0., 45.).into(), (360., 35.).into());
+
+        let tile = AddDatasetMdTile {
+            spatial_partition: raw_bounds.into(),
+            band: 0,
+            z_index: 0,
+            array_name: "temperature".to_owned(),
+            array_group: None,
+            time_descriptor: daily_descriptor(&time_steps),
+            time_steps: time_steps
+                .iter()
+                .map(|iv| crate::api::model::datatypes::TimeInterval {
+                    start: iv.start().into(),
+                    end: iv.end().into(),
+                })
+                .collect(),
+            params: GdalDatasetParameters {
+                // a volume row stores the path relative to the volume root
+                file_path: Path::new("md").join("wrap_0_360.nc"),
+                rasterband_channel: 1,
+                geo_transform: raw_geo_transform,
+                width: 360,
+                height: 10,
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value: Some(-9999.0),
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: None,
+                allow_alphaband_as_mask: false,
+            },
+        };
+
+        let result_descriptor = geoengine_operators::engine::RasterResultDescriptor::new(
+            geoengine_datatypes::raster::RasterDataType::F32,
+            geoengine_datatypes::spatial_reference::SpatialReference::epsg_4326().into(),
+            geoengine_operators::engine::TimeDescriptor::new_regular(
+                Some(TimeInterval::new_unchecked(
+                    time_steps[0].start(),
+                    time_steps[3].end(),
+                )),
+                time_steps[0].start(),
+                geoengine_datatypes::primitives::TimeStep::days(1)
+                    .expect("one day is a valid step"),
+            ),
+            geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
+                geoengine_datatypes::raster::GeoTransform::new((0.0, 45.0).into(), 1.0, -1.0),
+                geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [9, 359]),
+            ),
+            geoengine_operators::engine::RasterBandDescriptors::new(vec![
+                geoengine_operators::engine::RasterBandDescriptor::new(
+                    "temperature".to_owned(),
+                    geoengine_datatypes::primitives::Measurement::Unitless,
+                ),
+            ])
+            .unwrap(),
+        );
+
+        let meta_data = geoengine_operators::source::GdalMdMetaData::new(
+            result_descriptor,
+            vec![geoengine_operators::source::MdVariable {
+                name: "temperature".to_owned(),
+                axis_mapping: vec![MdAxisMapping::Time, MdAxisMapping::Y, MdAxisMapping::X]
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+            }],
+            true,
+            None,
+        );
+
+        let id_and_name = db
+            .add_dataset(
+                AddDataset {
+                    name: None,
+                    display_name: "md wrapped".to_owned(),
+                    description: "md wrapped".to_owned(),
+                    source_operator: "MdGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: None,
+                }
+                .into(),
+                meta_data.into(),
+                Some(DataPath::Volume(VolumeName("test_data".to_string()))),
+            )
+            .await?;
+        db.add_md_dataset_tiles(id_and_name.id, vec![tile]).await?;
+
+        // the row is stored raw: 0..360 longitudes and the file's own transform
+        let conn = db.conn_pool.get().await?;
+        let row = conn
+            .query_one(
+                "
+            SELECT
+                (bbox).upper_left_coordinate.x,
+                (bbox).lower_right_coordinate.x,
+                ((gdal_params).geo_transform).origin_coordinate.x
+            FROM
+                dataset_md_tiles
+            WHERE
+                dataset_id = $1",
+                &[&id_and_name.id],
+            )
+            .await?;
+        assert_eq!(row.get::<_, f64>(0), 0.0, "stored bbox must be raw");
+        assert_eq!(row.get::<_, f64>(1), 360.0, "stored bbox must be raw");
+        assert_eq!(row.get::<_, f64>(2), 0.0, "stored transform must be raw");
+
+        // the API presents the stored grid: −180..180 over the same 360 pixels
+        let dataset = db.load_dataset(&id_and_name.id).await?;
+        let geoengine_operators::engine::TypedResultDescriptor::Raster(raster) =
+            &dataset.result_descriptor
+        else {
+            panic!("an MD dataset is a raster");
+        };
+        assert_eq!(
+            raster
+                .spatial_grid_descriptor()
+                .geo_transform()
+                .origin_coordinate()
+                .x,
+            -180.0
+        );
+
+        // and so does the operator's metadata provider
+        let provider: Box<
+            dyn MetaData<
+                    geoengine_operators::source::MdLoadingInfo,
+                    geoengine_operators::engine::RasterResultDescriptor,
+                    RasterQueryRectangle,
+                >,
+        > = db
+            .meta_data(
+                &DataId::Internal(InternalDataId {
+                    dataset_id: id_and_name.id.into(),
+                    r#type:
+                        crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
+                })
+                .into(),
+            )
+            .await?;
+        assert_eq!(
+            provider
+                .result_descriptor()
+                .await?
+                .spatial_grid_descriptor()
+                .geo_transform()
+                .origin_coordinate()
+                .x,
+            -180.0
+        );
+
+        // a presented query across the seam maps onto the raw stored rows
+        let loading_info = provider
+            .loading_info(RasterQueryRectangle::new(
+                // presented grid indices: −180 is index 0, so lon −10..10 is indices 170..190
+                geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 170], [9, 190]),
+                TimeInterval::new_unchecked(MD_EPOCH_2000, MD_EPOCH_2000 + MD_DAY),
+                BandSelection::first(),
+            ))
+            .await?;
+        assert_eq!(
+            loading_info.files().len(),
+            1,
+            "the seam query must find the raw row"
+        );
+        // the file params round trip unchanged
+        assert_eq!(loading_info.files()[0].params.width, 360);
+
+        Ok(())
     }
 }

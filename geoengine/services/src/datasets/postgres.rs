@@ -37,8 +37,8 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     GdalDatasetParameters, GdalLoadingInfo, GdalMdMetaData, MdDatasetFile, MdFileTimes,
-    MdLoadingInfo, MdVariable, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-    OgrSourceDataset, TileFile,
+    MdLoadingInfo, MdPresentation, MdVariable, MultiBandGdalLoadingInfo,
+    MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
 };
 use postgres_types::{FromSql, ToSql};
 use tokio_postgres::{GenericClient, Transaction};
@@ -233,7 +233,8 @@ where
                 d.tags,
                 d.source_operator,
                 d.result_descriptor,
-                d.symbology
+                d.symbology,
+                ((d.meta_data).gdal_md_meta_data).wrap
             FROM 
                 user_permitted_datasets p JOIN datasets d 
                     ON (p.dataset_id = d.id)
@@ -303,7 +304,10 @@ where
             .iter()
             .map(|row| {
                 // get the real TypedResultDescriptor and convert it to the API one
-                let result_desc: TypedResultDescriptor = row.get(6);
+                let result_desc: TypedResultDescriptor = presented_descriptor(
+                    row.get(6),
+                    row.get::<_, Option<bool>>(8).unwrap_or_default(),
+                );
                 let result_desc = result_desc.into();
 
                 Result::<DatasetListing>::Ok(DatasetListing {
@@ -336,7 +340,8 @@ where
                 d.symbology,
                 d.provenance,
                 d.tags,
-                d.data_path
+                d.data_path,
+                ((d.meta_data).gdal_md_meta_data).wrap
             FROM 
                 user_permitted_datasets p JOIN datasets d 
                     ON (p.dataset_id = d.id)
@@ -358,7 +363,10 @@ where
             name: row.get(1),
             display_name: row.get(2),
             description: row.get(3),
-            result_descriptor: row.get(4),
+            result_descriptor: presented_descriptor(
+                row.get(4),
+                row.get::<_, Option<bool>>(10).unwrap_or_default(),
+            ),
             source_operator: row.get(5),
             symbology: row.get(6),
             provenance: row.get(7),
@@ -1227,16 +1235,20 @@ where
             }
         })?;
 
-        // `dataset_md_tiles.bbox` is stored in spatial coordinates, while a
-        // `RasterQueryRectangle` carries grid coordinates, so the query box goes through the
-        // dataset's own geo transform before it can be compared.
-        let query_partition = SpatialGridDefinition::new(
+        // `dataset_md_tiles.bbox` is stored raw, while a `RasterQueryRectangle` carries grid
+        // coordinates of the presented grid. The query box goes through the presented transform,
+        // then is split into the raw windows that hold it (one, or two across the seam).
+        let presentation = MdPresentation::from_wrap(self.wrap);
+        let raw_grid = SpatialGridDefinition::new(
             self.result_descriptor
                 .spatial_grid_descriptor()
                 .geo_transform(),
             query.spatial_bounds(),
-        )
-        .spatial_partition();
+        );
+        let query_partition = presentation.presented_grid(&raw_grid).spatial_partition();
+        let windows = presentation.raw_partitions(&raw_grid, query_partition);
+        let first = windows.first().copied().unwrap_or(query_partition);
+        let second = windows.last().copied().unwrap_or(query_partition);
 
         // The rows are needed for the time axis even when the files themselves are not, so
         // they are always queried.
@@ -1252,16 +1264,17 @@ where
                 dataset_md_tiles
             WHERE
                 dataset_id = $1 AND
-                spatial_partition2d_intersects(bbox, $2) AND
+                (spatial_partition2d_intersects(bbox, $2) OR spatial_partition2d_intersects(bbox, $5)) AND
                 time_interval_intersects(time, $3) AND
                 band = ANY($4)
             ORDER BY
                 band, (time).start, z_index",
                 &[
                     &self.dataset_id,
-                    &query_partition,
+                    &first,
                     &query.time_interval(),
                     &query.attributes().as_slice(),
+                    &second,
                 ],
             )
             .await
@@ -1351,7 +1364,11 @@ where
     async fn result_descriptor(
         &self,
     ) -> Result<RasterResultDescriptor, geoengine_operators::error::Error> {
-        Ok(self.result_descriptor.clone())
+        // the stored descriptor holds the raw grid, so a wrapped dataset is presented here
+        Ok(presented_raster_descriptor(
+            self.result_descriptor.clone(),
+            self.wrap,
+        ))
     }
 
     fn box_clone(
@@ -1902,10 +1919,29 @@ async fn batch_insert_md_tiles(
     Ok(())
 }
 
+/// The grid an MD dataset is shown with: its stored grid is raw, so it is presented here.
+fn presented_raster_descriptor(raw: RasterResultDescriptor, wrap: bool) -> RasterResultDescriptor {
+    let presentation = MdPresentation::from_wrap(wrap);
+    RasterResultDescriptor {
+        spatial_grid: raw.spatial_grid.map(|g| presentation.presented_grid(g)),
+        ..raw
+    }
+}
+
+/// [`presented_raster_descriptor`] for the typed descriptor a dataset row carries.
+fn presented_descriptor(raw: TypedResultDescriptor, wrap: bool) -> TypedResultDescriptor {
+    match raw {
+        TypedResultDescriptor::Raster(raster) => {
+            TypedResultDescriptor::Raster(presented_raster_descriptor(raster, wrap))
+        }
+        other => other,
+    }
+}
+
 /// Grows the dataset's spatial and temporal extents to cover the newly added files.
 ///
-/// The spatial bounds come from each tile's (wrap-aware) footprint, not from the file's geo
-/// transform, so 0..360 degree datasets stay correct. `meta_path` is the meta data composite
+/// The spatial bounds come from each tile's raw footprint, not from the file's geo transform.
+/// `meta_path` is the meta data composite
 /// attribute whose result descriptor is mirrored, e.g. `gdal_multi_band` or
 /// `gdal_md_meta_data`.
 async fn update_dataset_extents_of(

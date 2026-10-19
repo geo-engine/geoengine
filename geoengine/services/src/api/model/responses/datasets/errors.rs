@@ -211,6 +211,8 @@ pub enum AddDatasetMdTilesError {
         found: geoengine_datatypes::raster::GeoTransform,
         file_path: String,
     },
+    /// the file's grid cannot be presented with the dataset's `wrap` setting
+    MdTileUnpresentable { message: String, file_path: String },
     /// the array's z size disagrees with the declared time axis
     MdTileSliceCountMismatch {
         expected: usize,

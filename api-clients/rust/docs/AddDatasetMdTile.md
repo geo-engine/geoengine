@@ -4,7 +4,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**spatial_partition** | [**models::SpatialPartition2D**](SpatialPartition2D.md) | the presented footprint (wrap-around aware) | 
+**spatial_partition** | [**models::SpatialPartition2D**](SpatialPartition2D.md) | the raw footprint, in the file's own longitudes (0..360 is not shifted) | 
 **band** | **i32** |  | 
 **z_index** | **i64** | position of this file in the concatenated z axis of `band` | 
 **array_name** | **String** |  | 

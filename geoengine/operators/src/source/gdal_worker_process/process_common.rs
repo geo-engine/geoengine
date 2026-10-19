@@ -69,6 +69,29 @@ impl MdAxisMapping {
     }
 }
 
+/// Validates the roles of an axis mapping: exactly one X, exactly one Y, at most one Time.
+///
+/// Needs no axis sizes, so it also runs where the array is not opened (e.g. external MD rows).
+pub fn validate_md_axis_roles(mapping: &[MdAxisMapping]) -> Result<(), String> {
+    let (mut x_count, mut y_count, mut z_count) = (0, 0, 0);
+    for role in mapping {
+        match role {
+            MdAxisMapping::X => x_count += 1,
+            MdAxisMapping::Y => y_count += 1,
+            MdAxisMapping::Time => z_count += 1,
+            MdAxisMapping::Fixed { .. } => {}
+        }
+    }
+
+    if (x_count, y_count) != (1, 1) || z_count > 1 {
+        return Err(format!(
+            "axis mapping must contain exactly one X and one Y, and at most one Time axis; found {x_count} X, {y_count} Y and {z_count} Time"
+        ));
+    }
+
+    Ok(())
+}
+
 /// Validates one mapping entry per source dimension and checks fixed indices against sizes.
 pub fn validate_md_axis_mapping(
     mapping: &[MdAxisMapping],
@@ -82,32 +105,20 @@ pub fn validate_md_axis_mapping(
         ));
     }
 
-    let (mut x_count, mut y_count, mut z_count) = (0, 0, 0);
     for (axis, (&role, &size)) in mapping.iter().zip(axis_sizes).enumerate() {
-        match role {
-            MdAxisMapping::X => x_count += 1,
-            MdAxisMapping::Y => y_count += 1,
-            MdAxisMapping::Time => z_count += 1,
-            MdAxisMapping::Fixed { index } => {
-                let index = usize::try_from(index).map_err(|_| {
-                    format!("fixed index {index} for dimension {axis} must be non-negative")
-                })?;
-                if index >= size {
-                    return Err(format!(
-                        "fixed index {index} for dimension {axis} is outside its size {size}"
-                    ));
-                }
+        if let MdAxisMapping::Fixed { index } = role {
+            let index = usize::try_from(index).map_err(|_| {
+                format!("fixed index {index} for dimension {axis} must be non-negative")
+            })?;
+            if index >= size {
+                return Err(format!(
+                    "fixed index {index} for dimension {axis} is outside its size {size}"
+                ));
             }
         }
     }
 
-    if (x_count, y_count) != (1, 1) || z_count > 1 {
-        return Err(format!(
-            "axis mapping must contain exactly one X and one Y, and at most one Time axis; found {x_count} X, {y_count} Y and {z_count} Time"
-        ));
-    }
-
-    Ok(())
+    validate_md_axis_roles(mapping)
 }
 
 impl GdalReadWindow {
@@ -726,5 +737,17 @@ mod tests {
         assert!(validate_md_axis_mapping(&[Y, X, X], &[10, 20, 20]).is_err());
         assert!(validate_md_axis_mapping(&[Fixed { index: 2 }, Y, X], &[2, 10, 20]).is_err());
         assert!(validate_md_axis_mapping(&[Y, X], &[10]).is_err());
+    }
+
+    #[test]
+    fn validate_md_axis_roles_needs_no_sizes() {
+        use MdAxisMapping::{Fixed, Time, X, Y};
+
+        assert!(validate_md_axis_roles(&[Y, X]).is_ok());
+        assert!(validate_md_axis_roles(&[Fixed { index: 7 }, Time, Y, X]).is_ok());
+
+        assert!(validate_md_axis_roles(&[Time, Time, Y, X]).is_err());
+        assert!(validate_md_axis_roles(&[Y]).is_err());
+        assert!(validate_md_axis_roles(&[Y, X, X]).is_err());
     }
 }

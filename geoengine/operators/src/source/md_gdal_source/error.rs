@@ -37,4 +37,7 @@ pub enum MdGdalSourceError {
         "MD dataset mixes variables with and without a time axis; all variables must share one time axis"
     ))]
     MixedZAxisKinds,
+
+    #[snafu(display("MD grid cannot be presented as wrapped: {message}"))]
+    UnpresentableGrid { message: String },
 }

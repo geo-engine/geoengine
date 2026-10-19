@@ -45,7 +45,7 @@ CREATE TABLE dataset_md_tiles (
     id uuid NOT NULL PRIMARY KEY,
     dataset_id uuid NOT NULL,
     time "TimeInterval" NOT NULL, -- noqa: references.keywords
-    -- the *presented* footprint (wrap-around aware), like every other bbox here
+    -- the raw footprint in the file's own grid; wrap is applied at read time
     bbox "SpatialPartition2D" NOT NULL,
     band oid NOT NULL,
     -- position in the concatenated z axis of its band

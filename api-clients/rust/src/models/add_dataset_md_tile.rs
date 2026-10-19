@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 /// AddDatasetMdTile : One MD array file of an `MdGdalSource` dataset, covering all of that file's z slices.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AddDatasetMdTile {
-    /// the presented footprint (wrap-around aware)
+    /// the raw footprint, in the file's own longitudes (0..360 is not shifted)
     #[serde(rename = "spatial_partition")]
     pub spatial_partition: Box<models::SpatialPartition2D>,
     #[serde(rename = "band")]

@@ -31,7 +31,7 @@ class AddDatasetMdTile(BaseModel):
     """
     One MD array file of an `MdGdalSource` dataset, covering all of that file's z slices.
     """ # noqa: E501
-    spatial_partition: SpatialPartition2D = Field(description="the presented footprint (wrap-around aware)")
+    spatial_partition: SpatialPartition2D = Field(description="the raw footprint, in the file's own longitudes (0..360 is not shifted)")
     band: Annotated[int, Field(strict=True, ge=0)]
     z_index: StrictInt = Field(description="position of this file in the concatenated z axis of `band`")
     array_name: StrictStr

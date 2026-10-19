@@ -2,44 +2,12 @@ use geoengine_datatypes::primitives::{
     CacheHint, CacheTtlSeconds, RegularTimeDimension, TimeDimension, TimeGranularity, TimeInstance,
     TimeInterval, TimeStep,
 };
-use geoengine_datatypes::raster::GeoTransform;
 use serde::{Deserialize, Serialize};
 
 use super::error::MdGdalSourceError;
 use super::reader::MdTileRequest;
 use crate::engine::{RasterResultDescriptor, TimeDescriptor};
-use crate::source::gdal_worker_process::{
-    GdalDatasetGeoTransform, GdalDatasetParameters, MdAxisMapping,
-};
-
-/// The transform a tile's stored grid is *presented* as.
-///
-/// A stored MD array can be south-up (ascending `lat`) and/or store longitudes as 0..360,
-/// while a Geo Engine raster is always north-up and presents -180..180. The read advise
-/// compensates the y direction via `flip_y`; the longitude shift is this function.
-///
-/// It lives here rather than next to the probe because dataset registration needs it to
-/// check a declared transform against the dataset's, which has nothing to do with probing.
-pub fn presented_geo_transform(
-    raw: GdalDatasetGeoTransform,
-    height: usize,
-    wrap: bool,
-) -> GeoTransform {
-    let abs_y = raw.y_pixel_size.abs();
-    let origin_x = if wrap {
-        raw.origin_coordinate.x - 180.0
-    } else {
-        raw.origin_coordinate.x
-    };
-    // the north edge is the stored origin for a descending y axis, the south edge otherwise
-    let origin_y = if raw.y_pixel_size < 0.0 {
-        raw.origin_coordinate.y
-    } else {
-        raw.origin_coordinate.y + height as f64 * abs_y
-    };
-
-    GeoTransform::new((origin_x, origin_y).into(), raw.x_pixel_size, -abs_y)
-}
+use crate::source::gdal_worker_process::{GdalDatasetParameters, MdAxisMapping};
 
 /// The dataset-level metadata of an `MdGdalSource`, mirroring `GdalMultiBand`: everything
 /// per-file lives in `dataset_md_tiles`, so this only carries the result descriptor and the
@@ -289,7 +257,9 @@ pub struct MdLoadingInfo {
     /// Fallback TTL used when the dataset does not provide its own.
     #[serde(default)]
     cache_ttl: Option<CacheTtlSeconds>,
-    /// re-apply the stored 0..360° coverage onto -180..180° (one-way wrap-around)
+    /// show the stored 0..360° coverage as −180..180° (see [`MdPresentation`])
+    ///
+    /// [`MdPresentation`]: crate::source::MdPresentation
     wrap: bool,
 }
 

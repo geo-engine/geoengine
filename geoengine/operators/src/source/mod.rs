@@ -17,11 +17,11 @@ pub use self::gdal_worker_process::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetadataMapping,
     GdalProcessPool, GdalProcessPoolAccess, GdalProcessPoolError, GdalRetryOptions,
     GdalSourceTimePlaceholder, MdAxisMapping, TimeReference, validate_md_axis_mapping,
+    validate_md_axis_roles,
 };
 pub use self::md_gdal_source::{
     GdalMdMetaData, MdDatasetFile, MdFileTimes, MdGdalSource, MdGdalSourceError,
-    MdGdalSourceParameters, MdGdalSourceProcessor, MdLoadingInfo, MdVariable,
-    presented_geo_transform,
+    MdGdalSourceParameters, MdGdalSourceProcessor, MdLoadingInfo, MdPresentation, MdVariable,
 };
 pub use self::multi_band_gdal_source::{
     GdalMultiBand, GdalSourceError as MultiBandGdalSourceError,

@@ -32,12 +32,12 @@ use std::sync::Arc;
 mod db_types;
 mod error;
 mod loading_info;
+mod presentation;
 mod reader;
 
 pub use error::MdGdalSourceError;
-pub use loading_info::{
-    GdalMdMetaData, MdDatasetFile, MdFileTimes, MdLoadingInfo, MdVariable, presented_geo_transform,
-};
+pub use loading_info::{GdalMdMetaData, MdDatasetFile, MdFileTimes, MdLoadingInfo, MdVariable};
+pub use presentation::MdPresentation;
 
 /// Parameters for the MD GDAL Source Operator.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -793,14 +793,13 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let presented = presented_geo_transform(
+        let presented = MdPresentation::from_wrap(wrap).presented_geo_transform(
             crate::source::gdal_worker_process::GdalDatasetGeoTransform {
                 origin_coordinate: (grid.0, grid.1).into(),
                 x_pixel_size: grid.2,
                 y_pixel_size: grid.3,
             },
             height,
-            wrap,
         );
         let result_descriptor = RasterResultDescriptor::new(
             geoengine_datatypes::raster::RasterDataType::F32,

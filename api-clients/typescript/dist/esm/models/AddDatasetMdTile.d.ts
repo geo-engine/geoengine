@@ -19,7 +19,7 @@ import type { SpatialPartition2D } from './SpatialPartition2D';
  */
 export interface AddDatasetMdTile {
     /**
-     * the presented footprint (wrap-around aware)
+     * the raw footprint, in the file's own longitudes (0..360 is not shifted)
      * @type {SpatialPartition2D}
      * @memberof AddDatasetMdTile
      */

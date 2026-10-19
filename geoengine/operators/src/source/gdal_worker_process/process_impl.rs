@@ -417,7 +417,7 @@ impl GdalHandling {
     fn open_with_retry<R>(
         cache: &mut GdalDatasetHolder,
         dataset_params: &GdalDatasetParameters,
-        mut read: impl FnMut(&mut GdalDataset, &GdalDatasetParameters) -> Result<R, IpcProcessError>,
+        read: impl Fn(&mut GdalDataset, &GdalDatasetParameters) -> Result<R, IpcProcessError>,
     ) -> Result<R, IpcProcessError> {
         let is_remote = dataset_params.is_remote();
         let max_retries = dataset_params.max_retries().unwrap_or(0);

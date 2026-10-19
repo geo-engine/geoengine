@@ -60,11 +60,12 @@ is one of four:
 | `Time`          | `{"role":"time"}`            | the z axis: a read takes the slice at the requested time step |
 | `Fixed {index}` | `{"role":"fixed","index":0}` | a dimension that is **not** sliced; every read takes `index`  |
 
-Rules (`validate_md_axis_mapping`):
+Rules:
 
-- the mapping has exactly as many entries as the array has dimensions,
-- **exactly one `X`, exactly one `Y`, at most one `Time`**,
-- every other dimension **must** be `Fixed`, and its index must be within that dimension's size.
+- `validate_md_axis_roles`: **exactly one `X`, exactly one `Y`, at most one `Time`** — no sizes
+  needed, so it also runs where the array is not opened (external rows);
+- `validate_md_axis_mapping`: the mapping has exactly as many entries as the array has dimensions,
+  and every `Fixed` index must be within that dimension's size.
 
 `Time` and `Fixed` split the "not spatial" dimensions between _sliced_ (time) and _pinned_
 (band, level, ensemble member, …). Examples:
@@ -81,19 +82,47 @@ dimension to the file-local slice index and `count` to 1. A `Fixed` dimension se
 index and `count` to 1. X and Y set `start`/`count` from the read window. `md_read_window` builds
 this per-dimension `start`/`count` pair; nothing is inferred from the dimension's position.
 
+## Time steps from a CF calendar
+
+The server does not read the file's `time` coordinate: `time_steps` is stated by hand, one
+`TimeInterval` per slice. Convert the coordinate with the file's own calendar and epoch, not with a
+fixed one — CORDEX EUR-11 uses `360_day`, CMIP6 `standard`/`gregorian`, and both count from
+different epochs. `xarray` + `cftime` does this correctly:
+
+```python
+import cftime, numpy as np, xarray as xr
+
+ds = xr.open_dataset(path, decode_times=False)
+time = ds["time"]
+dates = cftime.num2date(
+    time.values,
+    time.attrs["units"],                      # "days since 1949-12-01 00:00:00"
+    time.attrs.get("calendar", "standard"),   # "360_day", "standard", ...
+)
+
+# one interval per slice; the end is the next step (or +1 day for the last one)
+starts = np.array([d.isoformat() for d in dates], dtype="datetime64[ns]")
+ends = starts[1:] + [starts[-1] + np.timedelta64(1, "D")]
+```
+
+The engine's time axis is UTC nanoseconds; `datetime64[...]` converts directly. A `fixed` time step
+(a monthly mean, a decade) is stated the same way — nothing is inferred from the coordinate.
+
 ## Dataset shape
 
 `GdalMdMetaData` is the dataset-level metadata:
 
-- `result_descriptor` — data type, spatial reference, time descriptor, band descriptors.
+- `result_descriptor` — data type, spatial reference, time descriptor, band descriptors. Its
+  spatial grid is the **raw** grid (the file's own transform, south-up and 0..360° included); a
+  wrapped dataset is shown shifted only when the descriptor is read back (see `MdPresentation`).
 - `variables: Vec<MdVariable>` — `{ name, axis_mapping }`. **The index of a variable is its Geo
   Engine output band.**
-- `wrap` — whether longitudes are stored 0..360 and presented −180..180.
+- `wrap` — whether stored 0..360° longitudes are presented as −180..180 (see `MdPresentation`).
 - `cache_ttl` — dataset-level fallback.
 
 One `AddDatasetMdTile` **per file**:
 
-- `spatial_partition` — the file's presented footprint (wrap-aware).
+- `spatial_partition` — the file's **raw** footprint (the stored grid, no wrap shift).
 - `band` — which variable this file belongs to.
 - `z_index` — the file's position in that band's concatenated z axis. Files of a band must be
   ordered and non-overlapping; a gap **between** files is fine (the dataset axis fills it with an
@@ -121,9 +150,12 @@ A row is rejected unless:
 - its **X/Y sizes equal `params.width`/`params.height`**;
 - `time_steps` are non-empty, ordered, consistent with `time_descriptor`, and **contiguous within
   the file** (`MdTileTimeAxisHoles`);
-- the file's transform is compatible with the dataset's after the south-up flip and the 0..360
-  shift (`MdTileGeoTransformMismatch`), and a CRS the file declares is not a _different_ one than
-  the dataset's (`MdTileCrsMismatch`) — a file that declares no CRS is allowed.
+- the file's transform is compatible with the dataset's raw grid after the south-up flip only — no
+  longitude shift (`MdTileGeoTransformMismatch`), so the stored footprint is the file's own; and a
+  CRS the file declares is not a _different_ one than the dataset's (`MdTileCrsMismatch`) — a file
+  that declares no CRS is allowed.
+- a wrapped dataset needs an **even** width, a span of exactly 360°, and an origin on the pixel
+  lattice of −180° (`MdTileUnpresentable`); otherwise the shift has no whole-pixel answer.
 
 ## Reading
 

@@ -5950,7 +5950,7 @@
         "properties": {
           "spatial_partition": {
             "$ref": "#/components/schemas/SpatialPartition2D",
-            "description": "the presented footprint (wrap-around aware)"
+            "description": "the raw footprint, in the file's own longitudes (0..360 is not shifted)"
           },
           "band": {
             "type": "integer",
