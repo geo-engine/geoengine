@@ -94,7 +94,7 @@ export class AccordionVectorEntryComponent implements OnInit {
                         throw new Error('Layer has no timeSteps');
                     }
 
-                    const timeSteps: Array<Time> = JSON.parse(layer.metadata['timeSteps']).map((t: string | number) => {
+                    const timeSteps: Array<Time> = (JSON.parse(layer.metadata['timeSteps']) as Array<string | number>).map((t) => {
                         if (typeof t === 'string') {
                             // we try to parse it as an ISO timestamp string
                             return new Time(moment(t));

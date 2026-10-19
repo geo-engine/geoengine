@@ -1,5 +1,5 @@
 import {Component, OnInit, ChangeDetectionStrategy, AfterViewInit, OnDestroy, inject, viewChild} from '@angular/core';
-import {UntypedFormControl, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {FormControl, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {ReplaySubject, Subject} from 'rxjs';
 import {MatSelect} from '@angular/material/select';
 import {takeUntil, take} from 'rxjs/operators';
@@ -21,9 +21,9 @@ export class CountrySelectorComponent implements OnInit, AfterViewInit, OnDestro
 
     public readonly countryDataList: Array<Country>;
 
-    public countryCtrl: UntypedFormControl = new UntypedFormControl();
+    public countryCtrl = new FormControl<Country | undefined>(undefined, {nonNullable: true});
 
-    public countryFilterCtrl: UntypedFormControl = new UntypedFormControl();
+    public countryFilterCtrl = new FormControl<string>('', {nonNullable: true});
 
     public filteredCountries: ReplaySubject<Array<Country>> = new ReplaySubject<Array<Country>>(1);
 
@@ -37,7 +37,9 @@ export class CountrySelectorComponent implements OnInit, AfterViewInit, OnDestro
 
     ngOnInit(): void {
         this.countryCtrl.valueChanges.pipe(takeUntil(this._onDestroy)).subscribe((value) => {
-            this.countryProviderService.setSelectedCountry(value);
+            if (value) {
+                this.countryProviderService.setSelectedCountry(value);
+            }
         });
 
         this.countryProviderService

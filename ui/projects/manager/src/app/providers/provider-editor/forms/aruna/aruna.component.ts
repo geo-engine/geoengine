@@ -143,9 +143,7 @@ export class ArunaComponent {
 
     private integerValidator(): ValidatorFn {
         return (control: AbstractControl): ValidationErrors | null => {
-            const value = control.value;
-
-            const num = Number(value);
+            const num = Number(control.value);
             return Number.isInteger(num) ? null : {notInteger: true};
         };
     }

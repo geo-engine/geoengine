@@ -129,7 +129,7 @@ export class DatasetListComponent implements AfterContentInit {
     }
 
     async addDataset(): Promise<void> {
-        const dialogRef = this.dialog.open(AddDatasetComponent, {
+        const dialogRef = this.dialog.open<AddDatasetComponent, unknown, string>(AddDatasetComponent, {
             width: '60%',
             height: 'calc(90%)',
             autoFocus: false,

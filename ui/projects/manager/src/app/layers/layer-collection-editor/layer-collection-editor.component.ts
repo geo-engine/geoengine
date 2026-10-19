@@ -169,7 +169,7 @@ export class LayerCollectionEditorComponent implements OnChanges {
     }
 
     async deleteCollection(): Promise<void> {
-        const dialogRef = this.dialog.open(ConfirmationComponent, {
+        const dialogRef = this.dialog.open<ConfirmationComponent, {message: string}, boolean>(ConfirmationComponent, {
             data: {message: 'Confirm the deletion of the collection. It will be removed from ALL collections. This cannot be undone.'},
         });
 
@@ -190,7 +190,7 @@ export class LayerCollectionEditorComponent implements OnChanges {
     }
 
     async deleteCollectionFromParent(): Promise<void> {
-        const dialogRef = this.dialog.open(ConfirmationComponent, {
+        const dialogRef = this.dialog.open<ConfirmationComponent, {message: string}, boolean>(ConfirmationComponent, {
             data: {message: 'Confirm the removal of the collection from the parent collection.'},
         });
 

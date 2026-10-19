@@ -100,7 +100,7 @@ export class ProviderListComponent implements AfterContentInit {
     }
 
     async addProvider(): Promise<void> {
-        const dialogRef = this.dialog.open(AddProviderComponent, {
+        const dialogRef = this.dialog.open<AddProviderComponent, unknown, string>(AddProviderComponent, {
             width: '60%',
             height: 'calc(90%)',
             autoFocus: false,

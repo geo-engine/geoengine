@@ -52,7 +52,8 @@ export class DataPointComponent {
                 const filteredData0 = filteredData[0];
 
                 for (const column of vectorMetadata.dataTypes.keys()) {
-                    const row = {key: column, value: filteredData0['values_'][column]};
+                    const value: unknown = filteredData0.get(column);
+                    const row = {key: column, value};
                     table.push(row);
                 }
 

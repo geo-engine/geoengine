@@ -112,11 +112,11 @@ export class ProviderEditorComponent {
     }
 
     async delete(): Promise<void> {
-        const dialogRef = this.dialog.open(ConfirmationComponent, {
+        const dialogRef = this.dialog.open<ConfirmationComponent, {message: string}, boolean>(ConfirmationComponent, {
             data: {message: 'Confirm the deletion of the provider. This cannot be undone.'},
         });
 
-        const confirm = (await firstValueFrom(dialogRef.afterClosed())) as boolean;
+        const confirm = await firstValueFrom(dialogRef.afterClosed());
 
         if (!confirm) {
             return;

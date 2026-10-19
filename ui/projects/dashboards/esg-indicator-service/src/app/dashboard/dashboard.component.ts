@@ -132,7 +132,7 @@ export class DashboardComponent implements AfterViewInit, AfterContentInit {
             if (featureSelection.feature) {
                 const actualFeature = features.find((f) => f.getId() === featureSelection.feature);
                 const props = actualFeature?.getProperties();
-                const id = props?.[PROPERTY_IDENTIFIER_COLUMN_NAME];
+                const id = props?.[PROPERTY_IDENTIFIER_COLUMN_NAME] as number | undefined;
                 const bbox = actualFeature?.getGeometry()?.getExtent();
 
                 if (!id || !bbox) {
@@ -265,7 +265,7 @@ export class DashboardComponent implements AfterViewInit, AfterContentInit {
 
         const wfsResponse = await firstValueFrom(this.backend.wfsGetFeature(wfsParams, sessionId));
 
-        const features = wfsResponse?.features;
+        const features = wfsResponse?.features as Array<{properties?: {score?: number}}> | undefined;
         if (!Array.isArray(features) || features.length === 0) {
             // TODO: show error
             return;

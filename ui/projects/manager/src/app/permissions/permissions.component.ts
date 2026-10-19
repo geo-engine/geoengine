@@ -100,7 +100,7 @@ export class PermissionsComponent implements AfterViewInit, OnChanges {
     }
 
     async removePermission(permission: PermissionListing): Promise<void> {
-        const dialogRef = this.dialog.open(ConfirmationComponent, {
+        const dialogRef = this.dialog.open<ConfirmationComponent, {message: string}, boolean>(ConfirmationComponent, {
             data: {message: 'Confirm the deletion of the permission. This cannot be undone.'},
         });
 

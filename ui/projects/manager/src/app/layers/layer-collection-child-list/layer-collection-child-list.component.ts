@@ -37,7 +37,7 @@ export class LayerCollectionChildListComponent {
     selectedCollection?: LayerCollectionListing;
 
     async removeChild(): Promise<void> {
-        const dialogRef = this.dialog.open(ConfirmationComponent, {
+        const dialogRef = this.dialog.open<ConfirmationComponent, {message: string}, boolean>(ConfirmationComponent, {
             data: {message: 'Confirm the deletion of the child from this collection.'},
         });
 
@@ -71,7 +71,7 @@ export class LayerCollectionChildListComponent {
     }
 
     async createChild(): Promise<void> {
-        const dialogRef = this.dialog.open(AddLayerItemComponent, {
+        const dialogRef = this.dialog.open<AddLayerItemComponent, unknown, ItemId>(AddLayerItemComponent, {
             width: '50%',
             height: 'calc(60%)',
             autoFocus: false,
@@ -81,7 +81,7 @@ export class LayerCollectionChildListComponent {
             },
         });
 
-        const itemId: ItemId = await firstValueFrom(dialogRef.afterClosed());
+        const itemId = await firstValueFrom(dialogRef.afterClosed());
 
         if (!itemId) {
             return;

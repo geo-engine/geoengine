@@ -74,7 +74,7 @@ export class AccordionEntryComponent implements OnInit {
                 col.sort((a, b) => a.name.localeCompare(b.name));
 
                 this.collections$.next(col);
-                this.selectedLayers$.next(new Array(col.length).fill(undefined));
+                this.selectedLayers$.next(new Array<ProviderLayerId | undefined>(col.length).fill(undefined));
             });
         });
     }
@@ -111,9 +111,9 @@ export class AccordionEntryComponent implements OnInit {
                         throw new Error('Layer has no dataRange');
                     }
 
-                    const timeSteps: Array<Time> = JSON.parse(layer.metadata['timeSteps']).map((t: number) => new Time(t));
+                    const timeSteps: Array<Time> = (JSON.parse(layer.metadata['timeSteps']) as Array<number>).map((t) => new Time(t));
 
-                    const range: [number, number] = JSON.parse(layer.metadata['dataRange']);
+                    const range = JSON.parse(layer.metadata['dataRange']) as [number, number];
                     const dataRange: DataRange = {
                         min: range[0],
                         max: range[1],
