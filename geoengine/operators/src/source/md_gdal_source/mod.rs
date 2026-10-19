@@ -460,6 +460,7 @@ mod tests {
     };
     use crate::source::MdAxisMapping;
     use crate::test_data;
+    use futures::TryStreamExt;
     use geoengine_datatypes::{
         dataset::{DataId, DatasetId, NamedData},
         primitives::{BandSelection, Measurement, TimeInterval},
@@ -582,19 +583,6 @@ mod tests {
             slices: usize,
             arrays: &[(&'static str, u32)],
         ) -> Self {
-            let mut dataset = Self::wrapped_arrays_flat(path, width, height, grid, slices, arrays);
-            dataset.wrap = true;
-            dataset
-        }
-
-        fn wrapped_arrays_flat(
-            path: &'static str,
-            width: usize,
-            height: usize,
-            grid: (f64, f64, f64, f64),
-            slices: usize,
-            arrays: &[(&'static str, u32)],
-        ) -> Self {
             Self {
                 files: arrays
                     .iter()
@@ -611,7 +599,7 @@ mod tests {
                 grid,
                 width,
                 height,
-                wrap: false,
+                wrap: true,
                 time: Some((EPOCH_2000, DAY)),
                 bands: arrays.iter().map(|(n, _)| *n).collect(),
             }
@@ -848,7 +836,7 @@ mod tests {
         spatial_query: GridBoundingBox2D,
         time_interval: TimeInterval,
         attributes: BandSelection,
-    ) -> Vec<Result<RasterTile2D<f32>>> {
+    ) -> Vec<RasterTile2D<f32>> {
         let op: MdGdalSource = SourceOperator {
             params: MdGdalSourceParameters::new(name.clone()),
         };
@@ -868,8 +856,9 @@ mod tests {
             )
             .await
             .unwrap()
-            .collect()
+            .try_collect::<Vec<_>>()
             .await
+            .unwrap()
     }
 
     fn grid_value(tile: &RasterTile2D<f32>, row: usize, col: usize) -> f32 {
@@ -908,10 +897,7 @@ mod tests {
             time,
             BandSelection::first(),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         assert_eq!(tiles.len(), 4);
         for (k, tile) in tiles.iter().enumerate() {
@@ -950,10 +936,7 @@ mod tests {
             time,
             BandSelection::first(),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         assert_eq!(tiles.len(), 2);
         for (k, tile) in tiles.iter().enumerate() {
@@ -993,10 +976,7 @@ mod tests {
             time,
             BandSelection::first(),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         assert_eq!(tiles.len(), 8);
         assert_eq!(tiles[0].time.start().inner(), EPOCH_2000);
@@ -1019,10 +999,7 @@ mod tests {
             time,
             BandSelection::first(),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         assert_eq!(tiles.len(), 3);
         let times = tiles
@@ -1062,10 +1039,7 @@ mod tests {
             time,
             BandSelection::first(),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         assert_eq!(tiles.len(), 4);
         for (k, tile) in tiles.iter().enumerate() {
@@ -1112,10 +1086,7 @@ mod tests {
             time,
             BandSelection::first(),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         assert!(
             tiles.is_empty(),
@@ -1160,10 +1131,7 @@ mod tests {
             time,
             BandSelection::first(),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         // 1440 presented columns span the seam at world lon 0, so they need four 512 px tile
         // columns: -2 and -1 for lon -180..-0.25, 0 and 1 for lon 0..180
@@ -1236,10 +1204,7 @@ mod tests {
             time,
             BandSelection::first(),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         assert_eq!(
             tiles.len(),
@@ -1287,10 +1252,7 @@ mod tests {
             time,
             BandSelection::first(),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         // 512 px tiles anchored at world 0° yield one tile per hemisphere (y tile -1)
         assert_eq!(tiles.len(), 2);
@@ -1346,10 +1308,7 @@ mod tests {
             time,
             BandSelection::first(),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         assert_eq!(tiles.len(), 1);
         let tile = &tiles[0];
@@ -1378,10 +1337,7 @@ mod tests {
             time,
             BandSelection::new(vec![0, 1, 2, 3]).unwrap(),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         assert_eq!(tiles.len(), 4);
         for tile in &tiles {
@@ -1401,10 +1357,7 @@ mod tests {
             time,
             BandSelection::new_single(2),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         assert_eq!(tiles.len(), 1);
         let tile = &tiles[0];
@@ -1427,10 +1380,7 @@ mod tests {
             TimeInterval::new_instant(EPOCH_2000).unwrap(),
             BandSelection::first(),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         // value = row * 10 + col; both halves are present, so no nodata (-9999) is left
         assert_eq!(value_at(&tiles, 0, 0), 0.0);
@@ -1506,10 +1456,7 @@ mod tests {
             TimeInterval::new_instant(EPOCH_2000 + 2 * DAY).unwrap(),
             BandSelection::new_single(1),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         assert_eq!(tiles.len(), 4);
         // value = t * 10_000 + p * 1000 + stored row * 10 + stored col; global (-4, -8) is
@@ -1542,10 +1489,7 @@ mod tests {
             TimeInterval::new_instant(EPOCH_2000 + DAY).unwrap(),
             BandSelection::first(),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         assert_eq!(tiles.len(), 4);
         // value = t * 1000 + stored row * 10 + stored col
@@ -1589,10 +1533,7 @@ mod tests {
             time,
             BandSelection::first_n(2),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         assert_eq!(tiles.len(), 4);
         let mut tiles = tiles;
@@ -1644,10 +1585,7 @@ mod tests {
             time,
             BandSelection::first_n(2),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         // 1 time step x bands [0, 1] x one spatial tile = 2 tiles read from the subgroup
         assert_eq!(tiles.len(), 2);
@@ -1669,57 +1607,6 @@ mod tests {
     }
 
     // --- the output order: band fastest, space next, time slowest ---
-
-    /// `(time, space)` ordering. Three tile columns and two time steps: every tile of the
-    /// first step must precede every tile of the second.
-    #[tokio::test]
-    async fn test_emits_time_before_space() {
-        let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = exe_ctx.mock_query_context_test_default();
-        let spec = MdDataset::wrapped(
-            "md/wrap_0_360_multitile.nc",
-            1440,
-            4,
-            (0.0, 1.0, 0.25, -0.25),
-            2,
-        );
-        let name = add_md_dataset(&mut exe_ctx, "md_order_time_space", spec);
-
-        let spatial = GridBoundingBox2D::new_unchecked([-4, -720], [-1, 719]);
-        let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + 2 * DAY);
-        let tiles = query_md_source(
-            &exe_ctx,
-            &query_ctx,
-            name,
-            spatial,
-            time,
-            BandSelection::first(),
-        )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-
-        assert!(
-            tiles.len() > 2,
-            "the fixture must span more than one tile, got {}",
-            tiles.len()
-        );
-        let keys: Vec<_> = tiles
-            .iter()
-            .map(|t| {
-                let idx = t.tile_information().global_pixel_bounds().min_index();
-                (t.time.start().inner(), idx.y(), idx.x())
-            })
-            .collect();
-        let mut sorted = keys.clone();
-        sorted.sort_unstable();
-        assert_eq!(
-            keys, sorted,
-            "tiles must come out as (time, space): time slowest, spatial tile row by row"
-        );
-        assert_ne!(keys[0].0, keys[keys.len() - 1].0, "need two time steps");
-    }
 
     /// `(time, band)` ordering with the band axis fastest. Two variables, two time steps:
     /// the two bands of a step must be adjacent, not the two steps of a band.
@@ -1746,10 +1633,7 @@ mod tests {
             time,
             BandSelection::first_n(2),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         let keys: Vec<_> = tiles
             .iter()
@@ -1794,10 +1678,7 @@ mod tests {
             time,
             BandSelection::first_n(2),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         assert!(tiles.len() >= 6, "need several tiles, got {}", tiles.len());
         // group the emitted tiles into runs of identical (time, space); a correct stream has
@@ -1823,6 +1704,11 @@ mod tests {
         let mut sorted = keys.clone();
         sorted.sort_unstable();
         assert_eq!(keys, sorted, "(time, space) must be non-decreasing");
+        assert_ne!(
+            keys[0].0,
+            keys[keys.len() - 1].0,
+            "the fixture must span two time steps"
+        );
     }
 
     /// Band order must follow the global z, not each file's local z (which restarts at every
@@ -1855,10 +1741,7 @@ mod tests {
             time,
             BandSelection::first_n(2),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         let keys: Vec<_> = tiles
             .iter()
@@ -1894,10 +1777,7 @@ mod tests {
             time,
             BandSelection::first(),
         )
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .await;
 
         let keys: Vec<_> = tiles
             .iter()

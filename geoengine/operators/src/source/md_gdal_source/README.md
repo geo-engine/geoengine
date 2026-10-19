@@ -124,9 +124,11 @@ One `AddDatasetMdTile` **per file**:
 
 - `spatial_partition` — the file's **raw** footprint (the stored grid, no wrap shift).
 - `band` — which variable this file belongs to.
-- `z_index` — the file's position in that band's concatenated z axis. Files of a band must be
-  ordered and non-overlapping; a gap **between** files is fine (the dataset axis fills it with an
-  empty step), a gap **inside** one file is rejected.
+- `z_index` — tiebreak for the read order of rows of one band. A file's position in the dataset's
+  z axis is derived from its slices' starts, not from this value. Rows may therefore share steps
+  (spatial pieces of one image, a mosaic, overlapping files); a gap **between** files is fine (the
+  dataset axis fills it with an empty step), a gap **inside** one file is rejected. All files of a
+  band must slice time the same way, because the axis is the union of their steps.
 - `array_name`, `array_group` — the GDAL MD array to open (`/pr`, `/tasmin`, …) and the group
   below the root (`null` = root).
 - `time_descriptor` + `time_steps` — the file's time span, both always present. `time_steps` is
@@ -150,12 +152,13 @@ A row is rejected unless:
 - its **X/Y sizes equal `params.width`/`params.height`**;
 - `time_steps` are non-empty, ordered, consistent with `time_descriptor`, and **contiguous within
   the file** (`MdTileTimeAxisHoles`);
-- the file's transform is compatible with the dataset's raw grid after the south-up flip only — no
-  longitude shift (`MdTileGeoTransformMismatch`), so the stored footprint is the file's own; and a
-  CRS the file declares is not a _different_ one than the dataset's (`MdTileCrsMismatch`) — a file
-  that declares no CRS is allowed.
+- the file's transform is compatible with the dataset's raw grid after the south-up flip on both
+  sides only — no longitude shift (`MdTileGeoTransformMismatch`), so the stored footprint is the
+  file's own; and a CRS the file declares is not a _different_ one than the dataset's
+  (`MdTileCrsMismatch`) — a file that declares no CRS is allowed.
 - a wrapped dataset needs an **even** width, a span of exactly 360°, and an origin on the pixel
-  lattice of −180° (`MdTileUnpresentable`); otherwise the shift has no whole-pixel answer.
+  lattice of −180° (`MdTileUnpresentable`); otherwise the shift has no whole-pixel answer. A 0.25°
+  product whose longitudes are pixel _centres_ (0, 0.25, …) is half a pixel off that lattice.
 
 ## Reading
 

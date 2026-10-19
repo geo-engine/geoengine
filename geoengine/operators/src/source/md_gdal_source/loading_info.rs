@@ -508,16 +508,6 @@ mod tests {
     }
 
     #[test]
-    fn irregular_axis_keeps_its_explicit_intervals() {
-        let intervals = vec![interval(0, 7), interval(9, 20), interval(100, 130)];
-        let times = MdFileTimes::from_intervals(intervals.clone());
-
-        assert_eq!(times.descriptor.dimension, TimeDimension::Irregular);
-        assert_eq!(times.intervals(), intervals);
-        assert_eq!(times.bounds(), interval(0, 130));
-    }
-
-    #[test]
     fn unequal_spacing_stays_irregular() {
         // the first gap is 10 ms, so a regular axis built from it would tile the whole
         // [0, 100) bounds with 10 slices instead of the 3 given here
@@ -526,6 +516,14 @@ mod tests {
 
         assert_eq!(times.descriptor.dimension, TimeDimension::Irregular);
         assert_eq!(times.intervals(), intervals);
+
+        // gaps of any size keep their explicit intervals and span the bounds
+        let gapped = vec![interval(0, 7), interval(9, 20), interval(100, 130)];
+        let times = MdFileTimes::from_intervals(gapped.clone());
+
+        assert_eq!(times.descriptor.dimension, TimeDimension::Irregular);
+        assert_eq!(times.intervals(), gapped);
+        assert_eq!(times.bounds(), interval(0, 130));
     }
 
     fn file(band: u32, z_start: usize, z_end: usize, slices: usize) -> MdDatasetFile {

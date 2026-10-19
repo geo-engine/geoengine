@@ -361,13 +361,22 @@ mod tests {
     }
 
     #[test]
-    fn wrap_presents_the_full_world_from_minus_180() {
+    fn wrap_presents_the_grid_from_minus_180_whatever_the_stored_origin() {
         // south-up, lat −5..5: the presented north edge is 5°, the origin is at −180°
         let p = params((0., -5.), (1., 1.), 360, 10);
         let presented = MdPresentation::Wrap180.presented_geo_transform(p.geo_transform, p.height);
         assert_eq!(presented.origin_coordinate(), (-180., 5.).into());
         assert!((presented.x_pixel_size() - 1.).abs() < f64::EPSILON);
         assert!((presented.y_pixel_size() + 1.).abs() < f64::EPSILON);
+
+        // a grid stored a whole column ahead is presented from the same −180, same bounds
+        let raw = SpatialGridDefinition::new(
+            GeoTransform::new((10., 45.).into(), 1., -1.),
+            GridBoundingBox2D::new_unchecked([0, 0], [9, 359]),
+        );
+        let presented = MdPresentation::Wrap180.presented_grid(&raw);
+        assert!((presented.geo_transform().origin_coordinate().x + 180.).abs() < f64::EPSILON);
+        assert_eq!(presented.grid_bounds(), raw.grid_bounds());
     }
 
     #[test]
@@ -391,23 +400,15 @@ mod tests {
     }
 
     #[test]
-    fn wrap_presented_grid_starts_at_minus_180_for_any_stored_origin() {
-        let raw = SpatialGridDefinition::new(
-            GeoTransform::new((10., 45.).into(), 1., -1.),
-            GridBoundingBox2D::new_unchecked([0, 0], [9, 359]),
-        );
-        let presented = MdPresentation::Wrap180.presented_grid(&raw);
-        assert!((presented.geo_transform().origin_coordinate().x + 180.).abs() < f64::EPSILON);
-        assert_eq!(presented.grid_bounds(), raw.grid_bounds());
-    }
-
-    #[test]
     fn wrap_validation_rejects_what_it_cannot_show() {
         let validate = |p: &GdalDatasetParameters| MdPresentation::Wrap180.validate(p);
         assert!(validate(&wrap_params()).is_ok());
         assert!(validate(&params((0., 45.), (1., -1.), 361, 10)).is_err());
         assert!(validate(&params((0., 45.), (1., -1.), 180, 10)).is_err());
         assert!(validate(&params((0.5, 45.), (1., -1.), 360, 10)).is_err());
+        // ERA5's 0.25° grid: origin −0.125 (0° is a pixel centre), half a pixel off the −180
+        // lattice, so its 1440 columns have no whole-pixel wrap
+        assert!(validate(&params((-0.125, 90.125), (0.25, -0.25), 1440, 721)).is_err());
         assert!(
             MdPresentation::Raw
                 .validate(&params((0., 45.), (1., -1.), 361, 10))
