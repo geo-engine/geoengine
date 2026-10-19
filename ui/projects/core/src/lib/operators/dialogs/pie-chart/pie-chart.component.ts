@@ -11,6 +11,7 @@ import {
     VectorLayerMetadata,
     geoengineValidators,
     FxLayoutDirective,
+    errorMessage,
 } from '@geoengine/common';
 import {ProcessingGraph, VectorOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
@@ -185,7 +186,7 @@ export class PieChartComponent implements AfterViewInit, OnDestroy {
                 () => {
                     // success
                 },
-                (error) => this.notificationService.error(error),
+                (error) => this.notificationService.error(errorMessage(error)),
             );
     }
 }

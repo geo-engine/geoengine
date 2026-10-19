@@ -3,7 +3,15 @@ import {FormBuilder, FormControl, FormGroup, Validators, FormsModule, ReactiveFo
 import {ProjectService} from '../../../project/project.service';
 import {mergeMap} from 'rxjs/operators';
 import {BehaviorSubject, from} from 'rxjs';
-import {Layer, NotificationService, ResultTypes, VectorLayer, geoengineValidators, AsyncValueDefault} from '@geoengine/common';
+import {
+    Layer,
+    NotificationService,
+    ResultTypes,
+    VectorLayer,
+    geoengineValidators,
+    AsyncValueDefault,
+    errorMessage,
+} from '@geoengine/common';
 import {ProcessingGraph, VectorOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
@@ -138,7 +146,7 @@ export class LineSimplificationComponent implements OnInit {
                     this.loading$.next(false);
                 },
                 error: (error) => {
-                    this.notificationService.error(error);
+                    this.notificationService.error(errorMessage(error));
                     this.loading$.next(false);
                 },
             });

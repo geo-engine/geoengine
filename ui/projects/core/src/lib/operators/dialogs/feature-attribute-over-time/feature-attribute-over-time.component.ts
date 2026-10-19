@@ -14,6 +14,7 @@ import {
     VectorColumnDataTypes,
     VectorLayer,
     VectorLayerMetadata,
+    errorMessage,
 } from '@geoengine/common';
 import {ProcessingGraph} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
@@ -159,7 +160,7 @@ export class FeatureAttributeOvertimeComponent implements AfterViewInit, OnDestr
                 () => {
                     // success
                 },
-                (error) => this.notificationService.error(error),
+                (error) => this.notificationService.error(errorMessage(error)),
             );
     }
 

@@ -13,6 +13,7 @@ import {
     VectorLayer,
     VectorLayerMetadata,
     geoengineValidators,
+    errorMessage,
 } from '@geoengine/common';
 import {ProcessingGraph} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
@@ -159,7 +160,7 @@ export class ScatterplotOperatorComponent implements AfterViewInit, OnDestroy {
                 () => {
                     // success
                 },
-                (error) => this.notificationService.error(error),
+                (error) => this.notificationService.error(errorMessage(error)),
             );
     }
 }

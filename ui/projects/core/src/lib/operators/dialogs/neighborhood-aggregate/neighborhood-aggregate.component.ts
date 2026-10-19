@@ -27,6 +27,7 @@ import {
     FxFlexDirective,
     AsyncValueDefault,
     errorToText,
+    errorMessage,
 } from '@geoengine/common';
 import {NeighborhoodAggregate, NeighborhoodKernel, ProcessingGraph, RasterOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
@@ -293,7 +294,7 @@ export class NeighborhoodAggregateComponent implements AfterViewInit, OnDestroy 
                     this.loading$.next(false);
                 },
                 error: (error) => {
-                    void errorToText(error, error.error?.message ?? error.message).then((errorMsg) => {
+                    void errorToText(error, errorMessage(error)).then((errorMsg) => {
                         this.lastError$.next(errorMsg);
                         this.loading$.next(false);
                     });

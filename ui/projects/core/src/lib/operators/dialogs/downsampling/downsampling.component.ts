@@ -17,6 +17,7 @@ import {
     FxLayoutDirective,
     AsyncValueDefault,
     errorToText,
+    errorMessage,
 } from '@geoengine/common';
 import {ProcessingGraph, RasterOperator, DownsamplingResolution} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
@@ -169,7 +170,7 @@ export class DownsamplingComponent implements AfterViewInit, OnDestroy {
             .subscribe({
                 next: () => this.loading$.next(false),
                 error: (error) => {
-                    void errorToText(error, error.error?.message ?? error.message).then((errorMsg) => {
+                    void errorToText(error, errorMessage(error)).then((errorMsg) => {
                         this.notificationService.error(errorMsg);
                         this.loading$.next(false);
                     });

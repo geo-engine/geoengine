@@ -553,7 +553,7 @@ export class TileLoader {
                     tile: tile.getKey(),
                     naturalWidth: image.naturalWidth,
                     naturalHeight: image.naturalHeight,
-                    state: tile.getState(),
+                    state: tile.getState() as number,
                 });
             image.addEventListener('load', decoded, {once: true});
             image.addEventListener('error', decoded, {once: true});

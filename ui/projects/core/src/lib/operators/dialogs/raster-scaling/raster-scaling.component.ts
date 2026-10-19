@@ -27,6 +27,7 @@ import {
     FxLayoutGapDirective,
     FxFlexDirective,
     AsyncValueDefault,
+    errorMessage,
 } from '@geoengine/common';
 import {ProcessingGraph, RasterOperator, SlopeOffsetSelection} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
@@ -194,11 +195,11 @@ export class RasterScalingComponent implements AfterViewInit {
         if (fg.get('slopeOffsetSelection')?.value === 'auto') {
             return {type: 'auto'};
         } else if (fg.get('slopeOffsetSelection')?.value === 'metadataKey') {
-            const key = fg.get('key')?.value;
-            const domain = fg.get('domain')?.value;
+            const key = fg.get('key')?.value as string;
+            const domain = fg.get('domain')?.value as string;
             return {type: 'metadataKey', domain, key};
         } else {
-            return {type: 'constant', value: fg.get('constant')?.value};
+            return {type: 'constant', value: fg.get('constant')?.value as number};
         }
     }
 
@@ -265,7 +266,7 @@ export class RasterScalingComponent implements AfterViewInit {
                     this.loading$.next(false);
                 },
                 error: (error) => {
-                    this.notificationService.error(error);
+                    this.notificationService.error(errorMessage(error));
 
                     this.loading$.next(false);
                 },

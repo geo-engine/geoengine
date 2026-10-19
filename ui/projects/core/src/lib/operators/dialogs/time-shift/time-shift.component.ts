@@ -18,6 +18,7 @@ import {
     timeStepGranularityOptions,
     CommonModule,
     AsyncValueDefault,
+    errorMessage,
 } from '@geoengine/common';
 import {ProcessingGraph, RasterOperator, VectorOperator, TimeShiftParameters} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
@@ -272,7 +273,7 @@ export class TimeShiftComponent implements AfterViewInit {
                     this.loading$.next(false);
                 },
                 error: (error) => {
-                    this.notificationService.error(error);
+                    this.notificationService.error(errorMessage(error));
                     this.loading$.next(false);
                 },
             });

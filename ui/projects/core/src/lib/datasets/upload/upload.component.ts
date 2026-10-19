@@ -13,6 +13,7 @@ import {
     UploadsService,
     UserService,
     timeStepGranularityOptions,
+    errorMessage,
 } from '@geoengine/common';
 import {DatasetService} from '../dataset.service';
 import {AddDataset, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion, TimeGranularity} from '@geoengine/api-client';
@@ -162,7 +163,7 @@ export class UploadComponent implements OnDestroy {
                 }
             },
             (err) => {
-                this.notificationService.error('File upload failed: ' + err.message);
+                this.notificationService.error('File upload failed: ' + errorMessage(err));
             },
         );
     }
@@ -221,18 +222,18 @@ export class UploadComponent implements OnDestroy {
 
             stepper.next();
         } catch (err) {
-            let errorMessage;
+            let message;
             if (err instanceof Error) {
-                errorMessage = err.message;
+                message = err.message;
             } else if (typeof err === 'string') {
-                errorMessage = err;
+                message = err;
             } else if (err && typeof err === 'object' && 'message' in err) {
-                errorMessage = (err as {message: string}).message;
+                message = (err as {message: string}).message;
             } else {
                 throw new Error('Unknown error occurred while creating dataset', {cause: err});
             }
 
-            this.notificationService.error('Create dataset failed: ' + errorMessage);
+            this.notificationService.error('Create dataset failed: ' + message);
             return;
         }
     }

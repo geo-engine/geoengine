@@ -4,7 +4,7 @@ import {ProjectService} from '../../../project/project.service';
 
 import {map, mergeMap} from 'rxjs/operators';
 import {from, Observable} from 'rxjs';
-import {NotificationService, Plot, RasterLayer, ResultTypes, geoengineValidators} from '@geoengine/common';
+import {NotificationService, Plot, RasterLayer, ResultTypes, geoengineValidators, errorMessage} from '@geoengine/common';
 import {ProcessingGraph, MeanRasterPixelValuesOverTimeParameters} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
@@ -143,7 +143,7 @@ export class MeanRasterPixelValuesOverTimeDialogComponent implements AfterViewIn
                 () => {
                     // success
                 },
-                (error) => this.notificationService.error(error),
+                (error) => this.notificationService.error(errorMessage(error)),
             );
     }
 }

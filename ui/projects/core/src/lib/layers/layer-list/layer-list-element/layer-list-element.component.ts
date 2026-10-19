@@ -140,7 +140,7 @@ export class LayerListElementComponent {
             name,
             component: ProvenanceTableComponent,
             inputs: {layer},
-            equals: (a, b): boolean => a.layer.id === b.layer.id,
+            equals: (a, b): boolean => (a.layer as Layer).id === (b.layer as Layer).id,
             removeTrigger,
         });
     }
@@ -155,7 +155,7 @@ export class LayerListElementComponent {
             name,
             component: DataTableComponent,
             inputs: {layer},
-            equals: (a, b): boolean => a.layer.id === b.layer.id,
+            equals: (a, b): boolean => (a.layer as Layer).id === (b.layer as Layer).id,
             removeTrigger,
         });
     }

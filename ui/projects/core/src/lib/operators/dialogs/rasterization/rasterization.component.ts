@@ -12,6 +12,7 @@ import {
     ResultTypes,
     geoengineValidators,
     AsyncValueDefault,
+    errorMessage,
 } from '@geoengine/common';
 import {SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
 import {ProcessingGraph, RasterizationParameters} from '@geoengine/api-client';
@@ -201,7 +202,7 @@ export class RasterizationComponent implements OnDestroy {
                     this.loading$.next(false);
                 },
                 error: (error) => {
-                    this.notificationService.error(error);
+                    this.notificationService.error(errorMessage(error));
                     this.loading$.next(false);
                 },
             });

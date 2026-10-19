@@ -18,6 +18,7 @@ import {
     timeStepGranularityOptions,
     CommonModule,
     AsyncValueDefault,
+    errorMessage,
 } from '@geoengine/common';
 import {ProcessingGraph, RasterDataType as ApiRasterDataType, Aggregation} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
@@ -227,7 +228,7 @@ export class TemporalRasterAggregationComponent implements AfterViewInit {
                     this.loading$.next(false);
                 },
                 error: (error) => {
-                    this.notificationService.error(error);
+                    this.notificationService.error(errorMessage(error));
                     this.loading$.next(false);
                 },
             });

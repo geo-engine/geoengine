@@ -21,6 +21,7 @@ import {
     CommonModule,
     AsyncValueDefault,
     errorToText,
+    errorMessage,
 } from '@geoengine/common';
 import {SymbologyCreationType, SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
 import {ProcessingGraph, RasterDataType as ApiRasterDataType} from '@geoengine/api-client';
@@ -263,7 +264,7 @@ export class BandwiseExpressionOperatorComponent implements AfterViewInit {
                     this.loading$.next(false);
                 },
                 error: (error) => {
-                    void errorToText(error, error.error?.message ?? error.message).then((errorMsg) => {
+                    void errorToText(error, errorMessage(error)).then((errorMsg) => {
                         this.lastError$.next(errorMsg);
                         this.loading$.next(false);
                     });

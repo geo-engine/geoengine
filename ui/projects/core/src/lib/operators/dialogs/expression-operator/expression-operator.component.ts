@@ -23,6 +23,7 @@ import {
     AsyncStringSanitizer,
     AsyncValueDefault,
     errorToText,
+    errorMessage,
 } from '@geoengine/common';
 import {SymbologyCreationType, SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
 import {Measurement, ProcessingGraph, RasterDataType as ApiRasterDataType} from '@geoengine/api-client';
@@ -315,7 +316,7 @@ export class ExpressionOperatorComponent implements AfterViewInit {
                     this.loading$.next(false);
                 },
                 error: (error) => {
-                    void errorToText(error, error.error?.message ?? error.message).then((errorMsg) => {
+                    void errorToText(error, errorMessage(error)).then((errorMsg) => {
                         this.lastError$.next(errorMsg);
                         this.loading$.next(false);
                     });

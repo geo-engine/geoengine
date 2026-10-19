@@ -15,6 +15,7 @@ import {
     colorToDict,
     geoengineValidators,
     FxLayoutDirective,
+    errorMessage,
 } from '@geoengine/common';
 import {ProcessingGraph} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
@@ -130,7 +131,7 @@ export class PointInPolygonFilterOperatorComponent {
                 }),
             )
             .subscribe({
-                error: (error) => this.notificationService.error(error),
+                error: (error) => this.notificationService.error(errorMessage(error)),
             });
     }
 }

@@ -23,6 +23,7 @@ import {
     FxFlexDirective,
     FxLayoutGapDirective,
     CommonModule,
+    errorMessage,
 } from '@geoengine/common';
 import {TypedResultDescriptor} from '@geoengine/api-client';
 import {CoreConfig} from '../config.service';
@@ -254,7 +255,7 @@ export class DownloadLayerComponent implements OnInit {
                     anchor.click();
                 },
                 error: (error) => {
-                    this.notificationService.error(`File download failed: ${error.message}`);
+                    this.notificationService.error(`File download failed: ${errorMessage(error)}`);
                 },
             });
     }
@@ -284,7 +285,7 @@ export class DownloadLayerComponent implements OnInit {
                     anchor.click();
                 },
                 error: (error) => {
-                    this.notificationService.error(`File download failed: ${error.message}`);
+                    this.notificationService.error(`File download failed: ${errorMessage(error)}`);
                 },
             });
     }
