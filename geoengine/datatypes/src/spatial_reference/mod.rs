@@ -1,7 +1,7 @@
 use crate::{
     error::{self},
     operations::reproject::Reproject,
-    primitives::AxisAlignedRectangle,
+    primitives::{AxisAlignedRectangle, BoundingBox2D},
     util::Result,
 };
 use gdal::spatial_ref::SpatialRef;
@@ -124,6 +124,26 @@ impl SpatialReference {
         }
         let provider = DefaultMetadataProvider::new_known_crs(self)?;
         provider.area_of_use_projected()
+    }
+
+    /// Native coordinate bounds for WGS 84 UTM raster grids, including tile margins.
+    /// Northern CRS codes also allow negative northings, as used by southern Landsat
+    /// scenes. These data bounds are distinct from the CRS's nominal area of use.
+    pub fn utm_coordinate_bounds(self) -> Option<BoundingBox2D> {
+        if self.authority != SpatialReferenceAuthority::Epsg {
+            return None;
+        }
+        let minimum_northing = if (32601..=32660).contains(&self.code) {
+            -10_000_000.
+        } else if (32701..=32760).contains(&self.code) {
+            0.
+        } else {
+            return None;
+        };
+        Some(BoundingBox2D::new_unchecked(
+            (0., minimum_northing).into(),
+            (1_000_000., 10_000_000.).into(),
+        ))
     }
 
     /// Return the srs-string "authority:code"
@@ -420,6 +440,36 @@ mod tests {
     use super::*;
     use core::f64;
     use std::convert::TryInto;
+
+    #[test]
+    fn it_distinguishes_utm_coordinate_bounds_from_nominal_area_of_use() {
+        let northern = SpatialReference::new(SpatialReferenceAuthority::Epsg, 32655);
+        let southern = SpatialReference::new(SpatialReferenceAuthority::Epsg, 32755);
+        let native_bounds = northern.utm_coordinate_bounds().unwrap();
+        assert_eq!(native_bounds.lower_left(), (0., -10_000_000.).into());
+        assert_eq!(
+            native_bounds.upper_right(),
+            (1_000_000., 10_000_000.).into()
+        );
+        assert_eq!(
+            southern.utm_coordinate_bounds().unwrap().lower_left(),
+            (0., 0.).into(),
+        );
+        let nominal: BoundingBox2D = northern.area_of_use().unwrap();
+        float_cmp::assert_approx_eq!(f64, nominal.lower_left().y, 0.);
+        for code in [32600, 32661, 32700, 32761, 4326] {
+            assert!(
+                SpatialReference::new(SpatialReferenceAuthority::Epsg, code)
+                    .utm_coordinate_bounds()
+                    .is_none()
+            );
+        }
+        assert!(
+            SpatialReference::new(SpatialReferenceAuthority::Esri, 32655)
+                .utm_coordinate_bounds()
+                .is_none()
+        );
+    }
 
     #[test]
     fn display() {
