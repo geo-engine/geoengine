@@ -1380,9 +1380,9 @@ where
 
 /// Turns `dataset_md_tiles` rows into the `(time axis, files)` pair of a loading info.
 ///
-/// The rows arrive ordered by `(band, z_index)`, so each band's files are already in
-/// concatenation order. The time axis is the concatenation of every file's per-slice
-/// intervals, gap-filled to cover `query_time`: a file that is absent leaves one
+/// The rows arrive ordered by `(band, (time).start, z_index)`. The time axis is the union of
+/// every file's per-slice intervals (`md_time_axis`), gap-filled to cover `query_time`: a file
+/// that is absent leaves one
 /// gap-filling interval, which `MdLoadingInfo::z_batches` reports as a missing z index and
 /// the operator turns into an empty tile. This mirrors what the probe produces, and is
 /// *not* `create_gap_free_time_steps`, which assumes one row per time step (true for
@@ -1475,19 +1475,23 @@ fn md_loading_info_from_rows(
     Ok((time_steps, files))
 }
 
-/// The dataset's time axis: every file's per-slice intervals concatenated, gap-filled to
-/// cover `query_time`.
+/// The dataset's time axis: the union of every file's per-slice intervals, gap-filled to cover
+/// `query_time`.
 ///
-/// Rows are read in `(band, time, z_index)` order, so the concatenation is non-decreasing and
-/// equal neighbours are the same step stored once per spatial piece (or per overlapping file).
-/// Collapsing them keeps one step instead of N, which would otherwise leave every file but the
-/// first realigned onto one index and the rest of the axis as gap tiles.
+/// Rows are read in `(band, (time).start, z_index)` order, i.e. by each file's *first* slice, so
+/// the concatenation is only monotonic while no two rows of a band overlap. Sorting gives the
+/// union regardless - and `md_loading_info_from_rows` needs a sorted axis for its
+/// `partition_point`. Equal neighbours are the same step stored once per spatial piece (or per
+/// overlapping file), so collapsing them keeps one step instead of N, which would otherwise
+/// leave every file but the first realigned onto one index and the rest of the axis as gap
+/// tiles.
 fn md_time_axis(times: &[MdFileTimes], query_time: TimeInterval) -> Result<Vec<TimeInterval>> {
     let mut intervals: Vec<TimeInterval> = times
         .iter()
         .flat_map(MdFileTimes::intervals)
         .copied()
         .collect();
+    intervals.sort_by_key(TimeInterval::start);
     intervals.dedup();
 
     intervals
@@ -2297,6 +2301,31 @@ mod tests {
         let axis = md_time_axis(&overlap, interval(0, 5)).unwrap();
         assert_eq!(axis.len(), 5);
         assert_eq!(axis[2], interval(2, 3));
+
+        // the case `dedup` alone cannot fix: two spatial pieces that share *all* their steps.
+        // Concatenated this is 0,1,2,0,1,2, and no two neighbours are equal, so the axis used
+        // to hold six steps and both files realigned onto z 0..2
+        let mosaic = vec![
+            MdFileTimes::from_intervals(vec![interval(0, 1), interval(1, 2), interval(2, 3)]),
+            MdFileTimes::from_intervals(vec![interval(0, 1), interval(1, 2), interval(2, 3)]),
+        ];
+        let axis = md_time_axis(&mosaic, interval(0, 3)).unwrap();
+        assert_eq!(axis.len(), 3, "shared multi-slice ranges give one copy");
+        assert!(
+            axis.windows(2).all(|w| w[0].start() < w[1].start()),
+            "the axis must be monotonic for `partition_point` to realign the files"
+        );
+
+        // overlapping and shifted: A covers 0..3, B covers 1..4
+        let shifted = vec![
+            MdFileTimes::from_intervals(vec![interval(0, 1), interval(1, 2), interval(2, 3)]),
+            MdFileTimes::from_intervals(vec![interval(1, 2), interval(2, 3), interval(3, 4)]),
+        ];
+        let axis = md_time_axis(&shifted, interval(0, 4)).unwrap();
+        assert_eq!(
+            axis.iter().map(|iv| iv.start().inner()).collect::<Vec<_>>(),
+            vec![0, 1, 2, 3]
+        );
     }
 
     #[test]
