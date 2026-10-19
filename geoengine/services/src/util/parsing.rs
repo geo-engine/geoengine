@@ -24,6 +24,19 @@ where
     }
 }
 
+/// Parse an optional `SpatialResolution` of a request, see [`parse_spatial_resolution`].
+pub fn parse_spatial_resolution_option<'de, D>(
+    deserializer: D,
+) -> Result<Option<SpatialResolution>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    struct Wrapper(#[serde(deserialize_with = "parse_spatial_resolution")] SpatialResolution);
+
+    Option::<Wrapper>::deserialize(deserializer).map(|wrapper| wrapper.map(|Wrapper(res)| res))
+}
+
 /// Parse spatial partition, format is: "x1,y1,x2,y2"
 pub fn parse_spatial_partition<'de, D>(deserializer: D) -> Result<SpatialPartition2D, D::Error>
 where

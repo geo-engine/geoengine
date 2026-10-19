@@ -39,9 +39,6 @@ class PlotsApi extends runtime.BaseAPI {
             if (requestParameters['time'] == null) {
                 throw new runtime.RequiredError('time', 'Required parameter "time" was null or undefined when calling getPlotHandler().');
             }
-            if (requestParameters['spatialResolution'] == null) {
-                throw new runtime.RequiredError('spatialResolution', 'Required parameter "spatialResolution" was null or undefined when calling getPlotHandler().');
-            }
             if (requestParameters['id'] == null) {
                 throw new runtime.RequiredError('id', 'Required parameter "id" was null or undefined when calling getPlotHandler().');
             }

@@ -6,7 +6,9 @@ use crate::engine::{
 };
 use crate::error::Error;
 use crate::optimization::OptimizationError;
-use crate::plot::util::{SelectedBand, masked_pixels_in_query, select_bands};
+use crate::plot::util::{
+    SelectedBand, masked_pixels_in_query, optimize_raster_plot_source, select_bands,
+};
 use crate::util::Result;
 use crate::util::math::average_floor;
 use async_trait::async_trait;
@@ -137,7 +139,7 @@ impl InitializedPlotOperator for InitializedMeanRasterPixelValuesOverTime {
         Ok(MeanRasterPixelValuesOverTime {
             params: self.state.clone(),
             sources: SingleRasterSource {
-                raster: self.raster.optimize(target_resolution)?,
+                raster: optimize_raster_plot_source(self.raster.as_ref(), target_resolution)?,
             },
         }
         .boxed())

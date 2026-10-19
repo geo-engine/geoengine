@@ -1,6 +1,5 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit, inject} from '@angular/core';
 import {
-    BackendService,
     DatasetService,
     MapService,
     ProjectService,
@@ -17,11 +16,11 @@ import {
     ClusteredPointSymbology,
     Dataset,
     Layer,
+    PlotsService,
     PointSymbology,
     RasterLayer,
     RasterSymbology,
     Time,
-    UserService,
     VectorLayer,
     extentToBboxDict,
     CommonModule,
@@ -391,8 +390,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
     readonly dataSelectionService = inject(DataSelectionService);
     private readonly projectService = inject(ProjectService);
     private readonly datasetService = inject(DatasetService);
-    private readonly userService = inject(UserService);
-    private readonly backend = inject(BackendService);
+    private readonly plotsService = inject(PlotsService);
     private readonly mapService = inject(MapService);
     private readonly changeDetectorRef = inject(ChangeDetectorRef);
     private readonly spatialReferenceService = inject(SpatialReferenceService);
@@ -942,25 +940,20 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                 mergeMap((workflowId) =>
                     combineLatest([
                         of(workflowId),
-                        this.userService.getSessionTokenForRequest(),
                         this.projectService.getTimeOnce(),
                         this.mapService.getViewportSizeStream(),
                         this.projectService.getSpatialReferenceStream(),
                     ]),
                 ),
-                mergeMap(([workflowId, sessionToken, time, viewport, crs]) =>
-                    this.backend.getPlot(
+                mergeMap(([workflowId, time, viewport, crs]) =>
+                    this.plotsService.getPlot(
                         workflowId,
-                        {
-                            time: time.toDict(),
-                            bbox: extentToBboxDict(
-                                this.spatialReferenceService.reprojectExtent(viewport.extent, crs, computationCrs.spatialReference),
-                            ),
-                            crs: computationCrs.spatialReference.srsString,
-                            // TODO: set reasonable size
-                            spatialResolution: [0.1, 0.1],
-                        },
-                        sessionToken,
+                        extentToBboxDict(
+                            this.spatialReferenceService.reprojectExtent(viewport.extent, crs, computationCrs.spatialReference),
+                        ),
+                        time,
+                        undefined,
+                        computationCrs.spatialReference,
                     ),
                 ),
                 first(),
@@ -1125,25 +1118,20 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                 mergeMap((workflowId) =>
                     combineLatest([
                         of(workflowId),
-                        this.userService.getSessionTokenForRequest(),
                         this.projectService.getTimeOnce(),
                         this.mapService.getViewportSizeStream(),
                         this.projectService.getSpatialReferenceStream(),
                     ]),
                 ),
-                mergeMap(([workflowId, sessionToken, time, viewport, crs]) =>
-                    this.backend.getPlot(
+                mergeMap(([workflowId, time, viewport, crs]) =>
+                    this.plotsService.getPlot(
                         workflowId,
-                        {
-                            time: time.toDict(),
-                            bbox: extentToBboxDict(
-                                this.spatialReferenceService.reprojectExtent(viewport.extent, crs, computationCrs.spatialReference),
-                            ),
-                            crs: computationCrs.spatialReference.srsString,
-                            // TODO: set reasonable size
-                            spatialResolution: [0.1, 0.1],
-                        },
-                        sessionToken,
+                        extentToBboxDict(
+                            this.spatialReferenceService.reprojectExtent(viewport.extent, crs, computationCrs.spatialReference),
+                        ),
+                        time,
+                        undefined,
+                        computationCrs.spatialReference,
                     ),
                 ),
                 first(),

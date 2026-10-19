@@ -4,14 +4,13 @@ import {combineLatest, from, Observable, of, ReplaySubject, Subscription} from '
 import {ProjectService} from '../../../project/project.service';
 import {map, mergeMap} from 'rxjs/operators';
 import {UUID} from '../../../backend/backend.model';
-import {BackendService} from '../../../backend/backend.service';
 import {MapService} from '../../../map/map.service';
 
 import {
     Layer,
+    PlotsService,
     RandomColorService,
     ResultTypes,
-    UserService,
     VectorColumnDataType,
     VectorColumnDataTypes,
     VectorDataType,
@@ -93,8 +92,7 @@ export class ColumnRangeFilterComponent implements OnDestroy {
     private readonly projectService = inject(ProjectService);
     private readonly formBuilder = inject(FormBuilder);
     private randomColorService = inject(RandomColorService);
-    protected readonly backend = inject(BackendService);
-    protected readonly userService = inject(UserService);
+    protected readonly plotsService = inject(PlotsService);
     protected readonly mapService = inject(MapService);
 
     readonly inputTypes = ResultTypes.VECTOR_TYPES;
@@ -361,22 +359,19 @@ export class ColumnRangeFilterComponent implements OnDestroy {
             histogramWorkflowId,
             this.projectService.getTimeStream(),
             this.mapService.getViewportSizeStream(),
-            this.userService.getSessionTokenForRequest(),
             this.projectService.getSpatialReferenceStream(),
         ]).pipe(
-            mergeMap(([workflowId, time, viewport, sessionToken, sref]) =>
-                this.backend.getPlot(
+            mergeMap(([workflowId, time, viewport, sref]) =>
+                // the histogram only guides the range selection, so a fast approximation suffices
+                this.plotsService.getPlot(
                     workflowId,
-                    {
-                        bbox: extentToBboxDict(viewport.extent),
-                        crs: sref.srsString,
-                        spatialResolution: [viewport.resolution, viewport.resolution],
-                        time: time.toDict(),
-                    },
-                    sessionToken,
+                    extentToBboxDict(viewport.extent),
+                    time,
+                    {x: viewport.resolution, y: viewport.resolution},
+                    sref,
                 ),
             ),
-            map((plotData) => plotData.data),
+            map((plotData) => plotData.data as VegaChartData),
         );
     }
 

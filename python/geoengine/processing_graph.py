@@ -373,6 +373,9 @@ class ProcessingGraph:
     ) -> geoc.WrappedPlotOutput:
         """
         Query a processing graph and return the plot chart result as WrappedPlotOutput
+
+        If `spatial_resolution` is set, raster inputs are read at the coarsest overview level that is not
+        coarser than it, which is faster but less exact. Otherwise, they are read at their native resolution.
         """
 
         if not self.__result_descriptor.is_plot_result():
@@ -383,11 +386,11 @@ class ProcessingGraph:
         with geoc.ApiClient(session.configuration) as api_client:
             plots_api = geoc.PlotsApi(api_client)
             return plots_api.get_plot_handler(
-                bbox.bbox_str,
-                bbox.time_str,
-                str(spatial_resolution),
-                self.__processing_graph_id.to_dict(),
-                bbox.srs,
+                bbox=bbox.bbox_str,
+                time=bbox.time_str,
+                id=self.__processing_graph_id.to_dict(),
+                crs=bbox.srs,
+                spatial_resolution=str(spatial_resolution) if spatial_resolution is not None else None,
                 _request_timeout=timeout,
             )
 
