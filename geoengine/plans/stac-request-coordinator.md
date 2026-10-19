@@ -17,24 +17,33 @@ OAuth token endpoints and GDAL asset reads remain outside STAC coordination.
 Add a private `coordinator` module with a process-wide registry, secret-safe
 identity, and shared scheduler state. Retain registry entries while a client or
 attempt holds them, and for at least the longest learned window after activity;
-prune unused expired entries on registry lookup. This preserves quota history
+prune unused expired entries on registry lookup. Retention also covers every
+active server reset and cooldown deadline. This preserves quota history
 across provider reconstruction. Serialize enqueue/admission with FIFO tickets and Tokio notifications,
-but allow HTTP attempts to overlap after reserving quota. Learn
-headers from one bootstrap response before opening concurrent admission. Reserve
-quota before dispatch; release outstanding bookkeeping even on cancellation or
+but allow HTTP attempts to overlap after reserving quota: a fresh twenty-request
+window admits twenty attempts without waiting for any of their responses. Wake
+only the front FIFO waiter; only that waiter runs an admission timer. Learn
+server policies as response headers arrive, using the fallback rate immediately
+instead of serializing a bootstrap request. Reserve quota before dispatch;
+release outstanding bookkeeping even on cancellation or
 network failure. Do not hold cache locks during queue waits or HTTP calls.
 
-Track all advertised quota windows using bounded timestamp histories. Parse
+Track all advertised quota windows using one shared rolling timestamp history. Parse
 `x-ratelimit-limit: 10, 10;w=1, 60;w=60`, `remaining: 9`, and `reset: 1`.
 Reset is a relative duration in seconds. Locally enforce both windows; observed
 remaining/reset additionally accounts for other clients. Concurrent responses
 must not replenish quota using stale observations or omit outstanding requests.
-Use monotonic deadlines. Missing or malformed headers must not panic or stall
-forever. Avoid uncontrolled bursts when quota information is missing.
+Policies may appear as repeated header triples or alternate between responses as
+the binding policy changes. Deduplicate windows by duration and retain policies
+that are absent from an individual response. Track remaining/reset independently
+for each identifiable policy. Every known window must permit admission, so the
+latest blocking deadline determines the next dispatch. Use monotonic deadlines.
+Missing or malformed headers must not panic or stall forever. Avoid uncontrolled
+bursts when quota information is missing.
 
 A 429 updates a shared cooldown, honoring Retry-After (seconds and HTTP date)
 and reset, with a one-second fixed fallback when neither is usable. Missing quota headers
-use a conservative fallback of ten requests per second after initial discovery. Retry the rejected
+use a conservative fallback of ten requests per second from the first request. Retry the rejected
 attempt through FIFO admission; bounded retries retain the existing failure
 contract. Do not feed exhausted 429 retries into generic exponential retry.
 Keep existing retry behavior for other transient HTTP, transport and JSON errors.
@@ -68,24 +77,35 @@ Run formatting, the STAC service tests, and applicable clippy checks. Review
 throughput, retry bounds, deadlocks, secret handling, cancellation and stale
 header races; correct findings and rerun affected checks.
 
-## Implementation handoff
+## Implementation details
 
-Implementation is delegated to the requested GPT-6 Luna subagent. The primary
-agent reviews its changes and owns any final fixes and validation.
+Short synchronous mutex sections protect scheduler state; no guard spans an
+await. Cancellation removes queued waiters or releases in-flight bookkeeping
+synchronously, including during runtime shutdown. One guard follows each attempt
+through `Queued`, `InFlight`, and `Finished`; admission results are a separate
+enum. There is no discovery phase. Request counts represent actual counts.
 
-## Review adjustments
+Normal completion (including transport errors) explicitly releases the attempt
+and applies response feedback with one scheduler lock. The guard's `Drop` only
+locks for cancellation/unwinding. Lock sections contain no awaits, and recover
+poisoned mutexes so cleanup cannot panic again because a mutex was poisoned.
+Enqueueing and the first admission check also share a single lock acquisition.
+The registry mutex is independent and is used only for lookup/reclamation;
+only lookup acquires both locks, in registry-to-state order.
 
-Use synchronous mutexes for short scheduler bookkeeping so cancellation cleanup
-runs immediately even when an async runtime shuts down. No guard spans an await.
-Authorization and transport timeouts are applied when dispatch begins. Existing
-grid geometry and Moka cache matching stay unchanged. Trailing commas in existing STAC
-mapping test fixtures are repaired so the full STAC suite can validate the feature.
+All server feedback can lower capacity, irrespective of dispatch order. It cannot
+refill capacity until reset, because dispatch order need not match server
+processing order. Authorization and transport timeouts are applied at dispatch.
+Existing grid geometry and Moka cache matching stay unchanged.
 
-Implementation bounds parsed window histories to 10,000 requests per window,
-window durations to one day, and individual 429 cooldowns to five minutes; the
-CODE-DE one-second/minute policy is within those bounds. Registry entries remain
-for at least five minutes after activity. Initial attempts are queued in arrival
-order; a rejected 429 attempt rejoins the FIFO queue for its retry.
+Only the one-second fallback delay and five-minute minimum idle retention are
+fixed constants. Advertised request counts, window durations and cooldowns are
+not capped. Unrepresentable deadlines are ignored. Every window uses the same
+request history, retained for the longest known window or five minutes, whichever
+is longer. The limit-th most recent timestamp determines local capacity in O(1)
+per policy. Header policies and feedback are parsed together once, outside the
+scheduler lock, using the same `Window` type as scheduler state. Normal request
+processing never locks the process-wide registry.
 
 ## Validation commands
 

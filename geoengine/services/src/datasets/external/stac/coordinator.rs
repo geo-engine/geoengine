@@ -1,4 +1,5 @@
-//! Process-wide FIFO admission and shared rate-limit feedback for STAC requests.
+//! FIFO admission shared by STAC origin and credentials. Requests reserve capacity
+//! in every known window before dispatch, then perform HTTP without holding locks.
 use super::auth::StacAuthentication;
 use crate::util::retry::{RetryPolicy, retry_http};
 use chrono::{DateTime, Utc};
@@ -7,30 +8,17 @@ use serde::de::DeserializeOwned;
 use std::{
     collections::{HashMap, VecDeque},
     fmt,
-    hash::{Hash, Hasher},
-    sync::{
-        Arc, Mutex, OnceLock,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::{Arc, Mutex, MutexGuard, OnceLock},
     time::{Duration, Instant, SystemTime},
 };
 use tokio::sync::Notify;
 use url::Url;
 
-const FALLBACK_429: Duration = Duration::from_secs(1);
-const MAX_RETRY_AFTER: Duration = Duration::from_mins(5);
-const MAX_RETRIES_429: usize = crate::util::retry::DEFAULT_MAX_RETRIES as usize - 1;
-const MAX_WINDOW: Duration = Duration::from_hours(24);
-const MAX_WINDOW_LIMIT: usize = 10_000;
-const DEFAULT_WINDOW: Window = Window {
-    limit: 10,
-    duration: Duration::from_secs(1),
-    starts: VecDeque::new(),
-};
+const FALLBACK_DELAY: Duration = Duration::from_secs(1);
 const MIN_RETENTION: Duration = Duration::from_mins(5);
 
-#[derive(Clone, Eq)]
-pub(super) struct Identity {
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct Identity {
     scheme: String,
     host: String,
     port: u16,
@@ -38,30 +26,6 @@ pub(super) struct Identity {
     client_id: Option<String>,
     username: Option<String>,
     password: Option<String>,
-}
-
-impl PartialEq for Identity {
-    fn eq(&self, other: &Self) -> bool {
-        self.scheme == other.scheme
-            && self.host == other.host
-            && self.port == other.port
-            && self.token_endpoint == other.token_endpoint
-            && self.client_id == other.client_id
-            && self.username == other.username
-            && self.password == other.password
-    }
-}
-
-impl Hash for Identity {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.scheme.hash(state);
-        self.host.hash(state);
-        self.port.hash(state);
-        self.token_endpoint.hash(state);
-        self.client_id.hash(state);
-        self.username.hash(state);
-        self.password.hash(state);
-    }
 }
 
 impl fmt::Debug for Identity {
@@ -75,48 +39,245 @@ impl fmt::Debug for Identity {
     }
 }
 
-#[derive(Clone, Debug)]
+/// Remote feedback only reduces capacity until reset, including when responses
+/// arrive out of order. Request counts here are actual quotas, not lifecycle states.
+#[derive(Debug)]
+struct RemoteQuota {
+    remaining: usize,
+    reset: Instant,
+}
+
+impl RemoteQuota {
+    fn merge(current: &mut Option<Self>, mut observed: Self, outstanding: usize) {
+        observed.remaining = observed.remaining.saturating_sub(outstanding);
+        if let Some(current) = current {
+            current.remaining = current.remaining.min(observed.remaining);
+            current.reset = current.reset.max(observed.reset);
+        } else {
+            *current = Some(observed);
+        }
+    }
+
+    fn blocked_until(&self) -> Option<Instant> {
+        (self.remaining == 0).then_some(self.reset)
+    }
+}
+
+/// One advertised policy, used both when parsing headers and tracking capacity.
+/// All policies share `State::starts` instead of keeping duplicate request histories.
+#[derive(Debug)]
 struct Window {
     limit: usize,
     duration: Duration,
-    starts: VecDeque<Instant>,
+    remote: Option<RemoteQuota>,
+}
+
+impl Window {
+    fn new(limit: usize, duration: Duration) -> Self {
+        Self {
+            limit,
+            duration,
+            remote: None,
+        }
+    }
+
+    fn blocked_until(&self, starts: &VecDeque<Instant>, now: Instant) -> Option<Instant> {
+        // The limit-th most recent start determines when capacity returns. This
+        // is O(1), even with a long shared history or a newly lowered limit.
+        starts
+            .len()
+            .checked_sub(self.limit)
+            .and_then(|index| starts.get(index))
+            .and_then(|at| at.checked_add(self.duration))
+            .filter(|deadline| *deadline > now)
+            .into_iter()
+            .chain(self.remote.as_ref().and_then(RemoteQuota::blocked_until))
+            .max()
+    }
+}
+
+#[derive(Debug)]
+enum Admission {
+    Admitted,
+    WaitForChange,
+    WaitUntil(Instant),
 }
 
 #[derive(Debug)]
 struct State {
-    queue: VecDeque<u64>,
-    next_ticket: u64,
-    next_dispatch: u64,
+    queue: VecDeque<Arc<Notify>>,
     in_flight: usize,
     windows: Vec<Window>,
-    bootstrap_starts: VecDeque<Instant>,
-    outstanding: std::collections::HashSet<u64>,
-    bootstrap_complete: bool,
+    starts: VecDeque<Instant>,
+    unscoped_quota: Option<RemoteQuota>,
     cooldown_until: Option<Instant>,
-    remote_remaining: Option<usize>,
-    remote_reset: Option<Instant>,
-    remote_observation: u64,
+    last_activity: Instant,
+}
+
+impl State {
+    fn wake_front(&self) {
+        if let Some(waiter) = self.queue.front() {
+            waiter.notify_one();
+        }
+    }
+
+    fn history_duration(&self) -> Duration {
+        self.windows
+            .iter()
+            .map(|window| window.duration)
+            .max()
+            .unwrap_or_default()
+            .max(MIN_RETENTION)
+    }
+
+    fn retain_until(&self) -> Instant {
+        self.last_activity
+            .checked_add(self.history_duration())
+            .into_iter()
+            .chain(self.cooldown_until)
+            .chain(self.unscoped_quota.as_ref().map(|quota| quota.reset))
+            .chain(
+                self.windows
+                    .iter()
+                    .filter_map(|window| window.remote.as_ref().map(|quota| quota.reset)),
+            )
+            .max()
+            .unwrap_or(self.last_activity)
+    }
+
+    fn admit(&mut self, waiter: &Arc<Notify>, now: Instant) -> Admission {
+        if !self
+            .queue
+            .front()
+            .is_some_and(|front| Arc::ptr_eq(front, waiter))
+        {
+            return Admission::WaitForChange;
+        }
+        self.prune(now);
+        // Before learning policies, use the fallback immediately. There is no
+        // special bootstrap request or wait for its headers.
+        let local = if self.windows.is_empty() {
+            Window::new(10, FALLBACK_DELAY).blocked_until(&self.starts, now)
+        } else {
+            self.windows
+                .iter()
+                .filter_map(|window| window.blocked_until(&self.starts, now))
+                .max()
+        };
+        let deadline = local
+            .into_iter()
+            .chain(
+                self.unscoped_quota
+                    .as_ref()
+                    .and_then(RemoteQuota::blocked_until),
+            )
+            .chain(self.cooldown_until)
+            .max();
+        if let Some(deadline) = deadline {
+            return Admission::WaitUntil(deadline);
+        }
+        self.queue.pop_front();
+        self.in_flight += 1;
+        self.starts.push_back(now);
+        self.last_activity = now;
+        for quota in self
+            .windows
+            .iter_mut()
+            .filter_map(|window| window.remote.as_mut())
+            .chain(self.unscoped_quota.as_mut())
+        {
+            quota.remaining = quota.remaining.saturating_sub(1);
+        }
+        self.wake_front();
+        Admission::Admitted
+    }
+
+    fn prune(&mut self, now: Instant) {
+        let history_duration = self.history_duration();
+        while self
+            .starts
+            .front()
+            .is_some_and(|at| now.duration_since(*at) >= history_duration)
+        {
+            self.starts.pop_front();
+        }
+        for quota in self
+            .windows
+            .iter_mut()
+            .map(|window| &mut window.remote)
+            .chain(std::iter::once(&mut self.unscoped_quota))
+        {
+            if quota.as_ref().is_some_and(|quota| quota.reset <= now) {
+                *quota = None;
+            }
+        }
+        if self.cooldown_until.is_some_and(|until| until <= now) {
+            self.cooldown_until = None;
+        }
+    }
+
+    fn observe(&mut self, feedback: ResponseFeedback, now: Instant) {
+        self.prune(now);
+        for mut observed in feedback.windows {
+            let remote = observed.remote.take();
+            let window = if let Some(index) = self
+                .windows
+                .iter()
+                .position(|window| window.duration == observed.duration)
+            {
+                self.windows[index].limit = observed.limit;
+                &mut self.windows[index]
+            } else {
+                self.windows.push(observed);
+                self.windows
+                    .last_mut()
+                    .expect("the observed window was just inserted")
+            };
+            if let Some(remote) = remote {
+                RemoteQuota::merge(&mut window.remote, remote, self.in_flight);
+            }
+        }
+        if let Some(quota) = feedback.unscoped_quota {
+            RemoteQuota::merge(&mut self.unscoped_quota, quota, self.in_flight);
+        }
+        if let Some(deadline) = feedback.cooldown_until {
+            self.cooldown_until = Some(
+                self.cooldown_until
+                    .map_or(deadline, |current| current.max(deadline)),
+            );
+        }
+    }
+
+    fn release(&mut self, phase: &RequestPhase) {
+        match phase {
+            RequestPhase::Queued(waiter) => {
+                if let Some(index) = self
+                    .queue
+                    .iter()
+                    .position(|entry| Arc::ptr_eq(entry, waiter))
+                {
+                    self.queue.remove(index);
+                }
+            }
+            RequestPhase::InFlight => {
+                self.in_flight = self.in_flight.saturating_sub(1);
+                self.last_activity = Instant::now();
+            }
+            RequestPhase::Finished => return,
+        }
+        self.wake_front();
+    }
 }
 
 #[derive(Debug)]
 pub(super) struct StacRequestCoordinator {
-    identity: Identity,
     state: Mutex<State>,
-    changed: Notify,
-    retention_secs: AtomicU64,
 }
 
-struct RegistryEntry {
-    coordinator: Arc<StacRequestCoordinator>,
-    retain_until: Instant,
-}
-
-static REGISTRY: OnceLock<Mutex<HashMap<Identity, RegistryEntry>>> = OnceLock::new();
+static REGISTRY: OnceLock<Mutex<HashMap<Identity, Arc<StacRequestCoordinator>>>> = OnceLock::new();
 
 impl StacRequestCoordinator {
-    /// Each server has one anonymous bucket and one bucket for each configured
-    /// authentication identity. Provider/collection ids and access tokens do not
-    /// create additional buckets.
+    /// Provider ids, collection ids and refreshed access tokens do not split quotas.
     pub(super) fn shared(
         origin: &Url,
         authentication: Option<&super::StacProviderAuthentication>,
@@ -133,44 +294,36 @@ impl StacRequestCoordinator {
         let mut registry = REGISTRY
             .get_or_init(|| Mutex::new(HashMap::new()))
             .lock()
-            .expect("STAC coordinator registry poisoned");
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let now = Instant::now();
-        registry.retain(|_, entry| {
-            entry.retain_until > now || Arc::strong_count(&entry.coordinator) > 1
+        // Only lookup locks both structures, always registry -> state. Dispatch
+        // and cancellation never acquire the registry lock.
+        registry.retain(|_, coordinator| {
+            Arc::strong_count(coordinator) > 1 || coordinator.lock_state().retain_until() > now
         });
-        if let Some(entry) = registry.get_mut(&identity) {
-            entry.retain_until =
-                now + Duration::from_secs(entry.coordinator.retention_secs.load(Ordering::Relaxed));
-            let coordinator = entry.coordinator.clone();
-            return coordinator;
-        }
-        let coordinator = Arc::new(Self {
-            identity: identity.clone(),
-            state: Mutex::new(State {
-                queue: VecDeque::new(),
-                next_ticket: 0,
-                next_dispatch: 0,
-                in_flight: 0,
-                windows: Vec::new(),
-                bootstrap_starts: VecDeque::new(),
-                outstanding: std::collections::HashSet::new(),
-                bootstrap_complete: false,
-                cooldown_until: None,
-                remote_remaining: None,
-                remote_reset: None,
-                remote_observation: 0,
-            }),
-            changed: Notify::new(),
-            retention_secs: AtomicU64::new(MIN_RETENTION.as_secs()),
-        });
-        registry.insert(
-            identity,
-            RegistryEntry {
-                coordinator: coordinator.clone(),
-                retain_until: now + MIN_RETENTION,
-            },
-        );
-        coordinator
+        registry
+            .entry(identity)
+            .or_insert_with(|| {
+                Arc::new(Self {
+                    state: Mutex::new(State {
+                        queue: VecDeque::new(),
+                        in_flight: 0,
+                        windows: Vec::new(),
+                        starts: VecDeque::new(),
+                        unscoped_quota: None,
+                        cooldown_until: None,
+                        last_activity: now,
+                    }),
+                })
+            })
+            .clone()
+    }
+
+    fn lock_state(&self) -> MutexGuard<'_, State> {
+        // Cancellation cleanup must not panic again while unwinding a panic.
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Executes and decodes a STAC request, owning admission, header feedback and
@@ -187,7 +340,7 @@ impl StacRequestCoordinator {
         let policy = policy.clone().stop_on_status(&[429]);
         retry_http(
             || async {
-                self.execute_rate_limited(client, &request, authentication)
+                self.execute_rate_limited(client, &request, authentication, policy.max_retries)
                     .await?
                     .error_for_status()?
                     .json::<T>()
@@ -205,9 +358,10 @@ impl StacRequestCoordinator {
         client: &reqwest::Client,
         request: &reqwest::Request,
         authentication: Option<&StacAuthentication>,
+        attempts: u32,
     ) -> reqwest::Result<reqwest::Response> {
-        for attempt in 0..=MAX_RETRIES_429 {
-            let permit = self.acquire().await;
+        for attempt in 1..=attempts.max(1) {
+            let request_guard = self.acquire().await;
             let request_copy = request
                 .try_clone()
                 .expect("STAC API searches are replayable GET requests");
@@ -217,296 +371,94 @@ impl StacRequestCoordinator {
                 let token = authentication.access_token().await;
                 request_builder = request_builder.bearer_auth(token);
             }
-            let response = request_builder.send().await?;
+            let response = request_builder.send().await;
+            request_guard.finish(
+                response
+                    .as_ref()
+                    .ok()
+                    .map(|response| (response.headers(), response.status().as_u16())),
+            );
+            let response = response?;
             let status = response.status().as_u16();
-            permit.observe(response.headers(), status);
-            if status != 429 || attempt == MAX_RETRIES_429 {
+            if status != 429 || attempt == attempts.max(1) {
                 return Ok(response);
             }
         }
         unreachable!("bounded STAC 429 retry loop always returns")
     }
 
-    async fn acquire(self: &Arc<Self>) -> Permit {
-        let ticket = {
-            let mut state = self.state.lock().expect("STAC coordinator state poisoned");
-            let ticket = state.next_ticket;
-            state.next_ticket = state.next_ticket.wrapping_add(1);
-            state.queue.push_back(ticket);
-            ticket
-        };
-        let mut queued = QueuedTicket {
+    async fn acquire(self: &Arc<Self>) -> RequestGuard {
+        let waiter = Arc::new(Notify::new());
+        let mut request = RequestGuard {
             coordinator: self.clone(),
-            ticket,
-            active: true,
+            phase: RequestPhase::Queued(waiter.clone()),
+        };
+        // Enqueue and the first admission check share one lock acquisition.
+        let mut admission = {
+            let mut state = self.lock_state();
+            state.queue.push_back(waiter.clone());
+            state.admit(&waiter, Instant::now())
         };
         loop {
-            let notified = self.changed.notified();
-            tokio::pin!(notified);
-            notified.as_mut().enable();
-            let wait = {
-                let mut state = self.state.lock().expect("STAC coordinator state poisoned");
-                let now = Instant::now();
-                prune_history(&mut state, now);
-                let at_front = state.queue.front() == Some(&ticket);
-                let cooldown = state.cooldown_until.filter(|until| *until > now);
-                let bootstrap_wait = !state.bootstrap_complete && state.in_flight > 0;
-                let next_window = state
-                    .windows
-                    .iter()
-                    .filter_map(|window| {
-                        (window.starts.len() >= window.limit)
-                            .then(|| {
-                                window
-                                    .starts
-                                    .front()
-                                    .and_then(|at| at.checked_add(window.duration))
-                            })
-                            .flatten()
-                    })
-                    .min();
-                let remote_wait = match (state.remote_remaining, state.remote_reset) {
-                    (Some(0), Some(reset)) if reset > now => Some(reset),
-                    _ => None,
-                };
-                if at_front
-                    && cooldown.is_none()
-                    && !bootstrap_wait
-                    && next_window.is_none()
-                    && remote_wait.is_none()
-                {
-                    state.queue.pop_front();
-                    queued.active = false;
-                    state.next_dispatch = state.next_dispatch.wrapping_add(1);
-                    let dispatch = state.next_dispatch;
-                    state.in_flight += 1;
-                    state.outstanding.insert(dispatch);
-                    if !state.bootstrap_complete {
-                        state.bootstrap_starts.push_back(now);
-                    }
-                    for window in &mut state.windows {
-                        window.starts.push_back(now);
-                    }
-                    if let Some(remaining) = &mut state.remote_remaining {
-                        *remaining = remaining.saturating_sub(1);
-                    }
-                    if state.remote_remaining == Some(0)
-                        && state.remote_reset.is_none_or(|deadline| deadline <= now)
-                    {
-                        state.remote_reset = now.checked_add(FALLBACK_429);
-                    }
-                    (dispatch, None)
-                } else {
-                    let deadline = [cooldown, next_window, remote_wait]
-                        .into_iter()
-                        .flatten()
-                        .min();
-                    (0, deadline)
+            match admission {
+                Admission::Admitted => {
+                    request.phase = RequestPhase::InFlight;
+                    return request;
                 }
-            };
-            let (dispatch, deadline) = wait;
-            if dispatch != 0 {
-                self.notify();
-                refresh_registry(self);
-                return Permit {
-                    coordinator: self.clone(),
-                    dispatch,
-                    completed: false,
-                };
+                Admission::WaitForChange => waiter.notified().await,
+                Admission::WaitUntil(deadline) => tokio::select! {
+                    () = waiter.notified() => {},
+                    () = tokio::time::sleep_until(deadline.into()) => {},
+                },
             }
-            tokio::select! {
-                () = notified => {},
-                () = async { if let Some(deadline) = deadline { tokio::time::sleep_until(deadline.into()).await } else { std::future::pending::<()>().await } } => {},
-            }
+            admission = self.lock_state().admit(&waiter, Instant::now());
         }
     }
 
+    #[cfg(test)]
     fn notify(&self) {
-        self.changed.notify_waiters();
+        self.lock_state().wake_front();
     }
 }
 
-struct QueuedTicket {
+enum RequestPhase {
+    Queued(Arc<Notify>),
+    InFlight,
+    Finished,
+}
+
+/// A single guard follows an attempt from queueing through response headers.
+/// Normal completion is explicit; Drop only handles cancellation/unwinding.
+struct RequestGuard {
     coordinator: Arc<StacRequestCoordinator>,
-    ticket: u64,
-    active: bool,
+    phase: RequestPhase,
 }
 
-impl Drop for QueuedTicket {
+impl RequestGuard {
+    fn finish(mut self, response: Option<(&HeaderMap, u16)>) {
+        let feedback = response
+            .map(|(headers, status)| ResponseFeedback::parse(headers, status, Instant::now()));
+        let mut state = self.coordinator.lock_state();
+        state.release(&self.phase);
+        self.phase = RequestPhase::Finished;
+        if let Some(feedback) = feedback {
+            state.observe(feedback, Instant::now());
+        }
+    }
+
+    #[cfg(test)]
+    fn observe(self, headers: &HeaderMap, status: u16) {
+        self.finish(Some((headers, status)));
+    }
+}
+
+impl Drop for RequestGuard {
     fn drop(&mut self) {
-        if !self.active {
-            return;
-        }
-        let coordinator = self.coordinator.clone();
-        let ticket = self.ticket;
-        let mut state = coordinator
-            .state
-            .lock()
-            .expect("STAC coordinator state poisoned");
-        if let Some(index) = state.queue.iter().position(|queued| *queued == ticket) {
-            state.queue.remove(index);
-        }
-        drop(state);
-        coordinator.notify();
-    }
-}
-
-struct Permit {
-    coordinator: Arc<StacRequestCoordinator>,
-    dispatch: u64,
-    completed: bool,
-}
-
-impl Permit {
-    fn observe(mut self, headers: &HeaderMap, status: u16) {
-        let retry_after = retry_after(headers);
-        let reset = header_seconds(headers, "x-ratelimit-reset");
-        let limits = parse_limits(headers);
-        let remaining = headers
-            .get("x-ratelimit-remaining")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.trim().parse::<usize>().ok());
-        let mut state = self
-            .coordinator
-            .state
-            .lock()
-            .expect("STAC coordinator state poisoned");
-        let now = Instant::now();
-        prune_history(&mut state, now);
-        update_windows(&mut state, limits, now);
-        state.outstanding.remove(&self.dispatch);
-        if let Some(remaining) = remaining.filter(|_| self.dispatch >= state.remote_observation) {
-            state.remote_observation = self.dispatch;
-            let observed_available = remaining.saturating_sub(state.outstanding.len());
-            state.remote_remaining = Some(
-                state
-                    .remote_remaining
-                    .map_or(observed_available, |current| {
-                        current.min(observed_available)
-                    }),
-            );
-            if let Some(reset) = reset {
-                state.remote_reset = now.checked_add(reset);
-            } else if observed_available == 0
-                && state.remote_reset.is_none_or(|deadline| deadline <= now)
-            {
-                state.remote_reset = now.checked_add(FALLBACK_429);
-            }
-        }
-        if status == 429 {
-            let advertised_delay = retry_after
-                .into_iter()
-                .chain(reset)
-                .max()
-                .unwrap_or_default();
-            let delay = if advertised_delay.is_zero() {
-                FALLBACK_429
-            } else {
-                advertised_delay.min(MAX_RETRY_AFTER)
-            };
-            state.cooldown_until = Some(
-                state
-                    .cooldown_until
-                    .unwrap_or_else(Instant::now)
-                    .max(now.checked_add(delay).unwrap_or(now + MAX_RETRY_AFTER)),
-            );
-            if state.remote_remaining.is_none() {
-                state.bootstrap_complete = true;
-            }
-        }
-        let retention = state
-            .windows
-            .iter()
-            .map(|window| window.duration.as_secs())
-            .max()
-            .unwrap_or(0)
-            .max(MIN_RETENTION.as_secs());
-        self.coordinator
-            .retention_secs
-            .fetch_max(retention, Ordering::Relaxed);
-        state.in_flight = state.in_flight.saturating_sub(1);
-        self.completed = true;
-        drop(state);
-        refresh_registry(&self.coordinator);
-        self.coordinator.notify();
-    }
-}
-
-fn update_windows(state: &mut State, limits: Vec<Window>, now: Instant) {
-    if !limits.is_empty() {
-        // Keep every pre-discovery attempt, including attempts whose
-        // transport failed before headers arrived. Newly advertised windows
-        // inherit the longest retained local history.
-        let history = state
-            .windows
-            .iter()
-            .max_by_key(|window| window.duration)
-            .map_or_else(
-                || state.bootstrap_starts.clone(),
-                |window| window.starts.clone(),
-            );
-        let mut updated = limits;
-        for window in &mut updated {
-            if let Some(previous) = state
-                .windows
-                .iter_mut()
-                .find(|previous| previous.duration == window.duration)
-            {
-                window.starts = std::mem::take(&mut previous.starts);
-            } else {
-                window.starts = history
-                    .iter()
-                    .copied()
-                    .filter(|started| now.duration_since(*started) < window.duration)
-                    .collect();
-            }
-        }
-        state.windows = updated;
-    }
-    if !state.bootstrap_complete && state.windows.is_empty() {
-        // Headers can be absent on otherwise healthy STAC servers. Keep
-        // useful concurrency while limiting an uninformed burst.
-        let mut window = DEFAULT_WINDOW;
-        window.starts = state
-            .bootstrap_starts
-            .iter()
-            .copied()
-            .filter(|started| now.duration_since(*started) < window.duration)
-            .collect();
-        state.windows.push(window);
-    }
-    state.bootstrap_starts.clear();
-    state.bootstrap_complete = true;
-}
-
-fn refresh_registry(coordinator: &StacRequestCoordinator) {
-    if let Some(registry) = REGISTRY.get()
-        && let Ok(mut registry) = registry.lock()
-    {
-        let retain_until = Instant::now()
-            + Duration::from_secs(coordinator.retention_secs.load(Ordering::Relaxed));
-        if let Some(entry) = registry.get_mut(&coordinator.identity) {
-            entry.retain_until = retain_until;
-        }
-    }
-}
-
-impl Drop for Permit {
-    fn drop(&mut self) {
-        if !self.completed {
-            let coordinator = self.coordinator.clone();
-            let dispatch = self.dispatch;
-            // Request cancellation must release an admitted slot synchronously,
-            // including when a runtime is shutting down.
-            let mut state = coordinator
-                .state
-                .lock()
-                .expect("STAC coordinator state poisoned");
-            state.in_flight = state.in_flight.saturating_sub(1);
-            state.outstanding.remove(&dispatch);
-            drop(state);
-            refresh_registry(&coordinator);
-            coordinator.notify();
+        if !matches!(self.phase, RequestPhase::Finished) {
+            // A short synchronous lock is necessary to atomically remove the
+            // cancelled waiter/reservation. No caller holds this lock across an
+            // await, and poison recovery keeps cleanup from double-panicking.
+            self.coordinator.lock_state().release(&self.phase);
         }
     }
 }
@@ -515,81 +467,152 @@ fn normalize_endpoint(endpoint: &str) -> String {
     Url::parse(endpoint).map_or_else(|_| endpoint.to_owned(), |url| url.to_string())
 }
 
-fn prune_history(state: &mut State, now: Instant) {
-    for window in &mut state.windows {
-        while window
-            .starts
-            .front()
-            .is_some_and(|at| now.duration_since(*at) >= window.duration)
-        {
-            window.starts.pop_front();
+/// Parsed once outside the scheduler lock. Window carries its own quota, so
+/// there is no second window identifier or duplicate header parsing pass.
+struct ResponseFeedback {
+    windows: Vec<Window>,
+    unscoped_quota: Option<RemoteQuota>,
+    cooldown_until: Option<Instant>,
+}
+
+impl ResponseFeedback {
+    fn parse(headers: &HeaderMap, status: u16, now: Instant) -> Self {
+        let limits: Vec<_> = headers.get_all("x-ratelimit-limit").iter().collect();
+        let remaining: Vec<_> = headers.get_all("x-ratelimit-remaining").iter().collect();
+        let resets: Vec<_> = headers.get_all("x-ratelimit-reset").iter().collect();
+        let mut feedback = Self {
+            windows: Vec::new(),
+            unscoped_quota: None,
+            cooldown_until: None,
+        };
+        for index in 0..limits.len().max(remaining.len()) {
+            let value = limits.get(index).and_then(|value| value.to_str().ok());
+            let policies = value.map(parse_limit_field).unwrap_or_default();
+            // A bare leading count identifies the binding policy only when it
+            // matches one duration. Preserve malformed field positions, and do
+            // not guess associations when repeated field counts differ.
+            let active = value.and_then(|value| {
+                value
+                    .split(',')
+                    .next()?
+                    .split(';')
+                    .next()?
+                    .trim()
+                    .parse::<usize>()
+                    .ok()
+            });
+            let mut matching = policies
+                .iter()
+                .filter(|window| Some(window.limit) == active)
+                .map(|window| window.duration);
+            let scope = matching
+                .next()
+                .filter(|first| matching.all(|duration| duration == *first))
+                .filter(|_| limits.len() == remaining.len());
+            for policy in policies {
+                if let Some(previous) = feedback
+                    .windows
+                    .iter_mut()
+                    .find(|window| window.duration == policy.duration)
+                {
+                    previous.limit = previous.limit.min(policy.limit);
+                } else {
+                    feedback.windows.push(policy);
+                }
+            }
+            let Some(available) = remaining
+                .get(index)
+                .and_then(|value| value.to_str().ok()?.trim().parse().ok())
+            else {
+                continue;
+            };
+            let reset = if resets.len() == remaining.len() {
+                resets[index].to_str().ok().and_then(parse_seconds)
+            } else {
+                header_values(headers, "x-ratelimit-reset")
+                    .filter_map(parse_seconds)
+                    .max()
+            }
+            .unwrap_or(FALLBACK_DELAY);
+            let quota = RemoteQuota {
+                remaining: available,
+                reset: now.checked_add(reset).unwrap_or(now + FALLBACK_DELAY),
+            };
+            let destination = if let Some(window) = scope.and_then(|duration| {
+                feedback
+                    .windows
+                    .iter_mut()
+                    .find(|window| window.duration == duration)
+            }) {
+                &mut window.remote
+            } else {
+                &mut feedback.unscoped_quota
+            };
+            RemoteQuota::merge(destination, quota, 0);
         }
-    }
-    if state.cooldown_until.is_some_and(|until| until <= now) {
-        state.cooldown_until = None;
-    }
-    if state.remote_reset.is_some_and(|reset| reset <= now) {
-        state.remote_remaining = None;
-        state.remote_reset = None;
+        if status == 429 {
+            let delay = retry_after(headers)
+                .into_iter()
+                .chain(header_values(headers, "x-ratelimit-reset").filter_map(parse_seconds))
+                .max()
+                .filter(|delay| !delay.is_zero())
+                .unwrap_or(FALLBACK_DELAY);
+            feedback.cooldown_until = Some(now.checked_add(delay).unwrap_or(now + FALLBACK_DELAY));
+        }
+        feedback
     }
 }
 
-fn parse_limits(headers: &HeaderMap) -> Vec<Window> {
-    let Some(value) = headers
-        .get("x-ratelimit-limit")
-        .and_then(|v| v.to_str().ok())
-    else {
-        return Vec::new();
-    };
+fn parse_limit_field(value: &str) -> Vec<Window> {
     value
         .split(',')
         .filter_map(|item| {
             let mut fields = item.trim().split(';');
-            let limit = fields.next()?.trim().parse::<usize>().ok()?;
-            let duration = fields.find_map(|field| {
-                field
-                    .trim()
-                    .strip_prefix("w=")
-                    .and_then(|w| w.parse::<u64>().ok())
-            })?;
-            (limit > 0 && duration > 0).then_some(Window {
-                limit: limit.min(MAX_WINDOW_LIMIT),
-                duration: Duration::from_secs(duration).min(MAX_WINDOW),
-                starts: VecDeque::new(),
-            })
+            let limit = fields
+                .next()?
+                .trim()
+                .parse::<usize>()
+                .ok()
+                .filter(|limit| *limit > 0)?;
+            let duration =
+                fields.find_map(|field| field.trim().strip_prefix("w=").and_then(parse_seconds))?;
+            (!duration.is_zero()).then(|| Window::new(limit, duration))
         })
         .collect()
 }
 
-fn header_seconds(headers: &HeaderMap, name: &str) -> Option<Duration> {
+fn header_values<'a>(headers: &'a HeaderMap, name: &str) -> impl Iterator<Item = &'a str> {
     headers
-        .get(name)?
-        .to_str()
-        .ok()?
-        .trim()
-        .parse::<u64>()
-        .ok()
-        .map(|seconds| Duration::from_secs(seconds).min(MAX_WINDOW))
+        .get_all(name)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+}
+
+fn parse_seconds(value: &str) -> Option<Duration> {
+    let duration = Duration::from_secs(value.trim().parse().ok()?);
+    Instant::now().checked_add(duration).map(|_| duration)
 }
 
 fn retry_after(headers: &HeaderMap) -> Option<Duration> {
     let value = headers.get(RETRY_AFTER)?.to_str().ok()?.trim();
-    if let Ok(seconds) = value.parse::<u64>() {
-        return Some(Duration::from_secs(seconds).min(MAX_RETRY_AFTER));
+    if let Some(duration) = parse_seconds(value) {
+        return Some(duration);
     }
     let date = DateTime::parse_from_rfc2822(value)
         .ok()?
         .with_timezone(&Utc);
-    let now = DateTime::<Utc>::from(SystemTime::now());
-    (date > now)
-        .then(|| (date - now).to_std().ok())
-        .flatten()
-        .map(|duration| duration.min(MAX_RETRY_AFTER))
+    (date - DateTime::<Utc>::from(SystemTime::now()))
+        .to_std()
+        .ok()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn parse_limits(headers: &HeaderMap) -> Vec<Window> {
+        ResponseFeedback::parse(headers, 200, Instant::now()).windows
+    }
 
     #[tokio::test]
     async fn it_execute_json_owns_http_and_decode_retries() {
@@ -617,9 +640,7 @@ mod tests {
             .expect("the coordinator retries HTTP and decode failures internally");
         assert_eq!(result, json!({"complete": true}));
         let state = coordinator.state.lock().unwrap();
-        assert_eq!(state.next_dispatch, 3);
         assert_eq!(state.in_flight, 0);
-        assert!(state.outstanding.is_empty());
     }
 
     #[tokio::test]
@@ -657,7 +678,9 @@ mod tests {
         assert_eq!(windows[0].duration, Duration::from_secs(1));
         assert_eq!(windows[1].limit, 60);
         assert_eq!(
-            header_seconds(&headers, "x-ratelimit-reset"),
+            header_values(&headers, "x-ratelimit-reset")
+                .next()
+                .and_then(parse_seconds),
             Some(Duration::from_secs(1))
         );
     }
@@ -723,44 +746,50 @@ mod tests {
         let coordinator = isolated_coordinator("fifo");
         {
             let mut state = coordinator.state.lock().unwrap();
-            state.bootstrap_complete = true;
-            state.windows.push(Window {
-                limit: 1,
-                duration: Duration::from_mins(1),
-                starts: VecDeque::from([Instant::now()]),
-            });
+            state.windows.push(Window::new(1, Duration::from_mins(1)));
+            state.starts.push_back(Instant::now());
         }
 
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let first_order = order.clone();
         let first_coordinator = coordinator.clone();
-        let mut first = tokio::spawn(async move { first_coordinator.acquire().await.dispatch });
+        let mut first = tokio::spawn(async move {
+            let _permit = first_coordinator.acquire().await;
+            first_order.lock().unwrap().push(1);
+        });
         wait_for_queue(&coordinator, 1).await;
+        let second_order = order.clone();
         let second_coordinator = coordinator.clone();
-        let mut second = tokio::spawn(async move { second_coordinator.acquire().await.dispatch });
+        let mut second = tokio::spawn(async move {
+            let _permit = second_coordinator.acquire().await;
+            second_order.lock().unwrap().push(2);
+        });
         wait_for_queue(&coordinator, 2).await;
         assert!(!first.is_finished());
 
-        coordinator.state.lock().unwrap().windows[0].starts.clear();
+        coordinator.state.lock().unwrap().starts.clear();
         coordinator.notify();
-        let first_dispatch = tokio::time::timeout(Duration::from_millis(200), &mut first)
+        tokio::time::timeout(Duration::from_millis(200), &mut first)
             .await
             .expect("first queued request should be admitted")
             .unwrap();
 
         // The first admission fills the one request window again. Open it
         // explicitly to let the second waiter proceed without a one minute test.
-        coordinator.state.lock().unwrap().windows[0].starts.clear();
+        coordinator.state.lock().unwrap().starts.clear();
         coordinator.notify();
-        let second_dispatch = tokio::time::timeout(Duration::from_millis(200), &mut second)
+        tokio::time::timeout(Duration::from_millis(200), &mut second)
             .await
             .expect("second queued request should be admitted")
             .unwrap();
-        assert!(first_dispatch < second_dispatch);
+        assert_eq!(*order.lock().unwrap(), [1, 2]);
     }
 
     #[tokio::test]
     async fn it_cancelling_a_queued_attempt_does_not_block_later_requests() {
         let coordinator = isolated_coordinator("cancel");
         let first = coordinator.acquire().await;
+        coordinator.lock_state().cooldown_until = Some(Instant::now() + Duration::from_mins(1));
         let queued_coordinator = coordinator.clone();
         let queued = tokio::spawn(async move { queued_coordinator.acquire().await });
         wait_for_queue(&coordinator, 1).await;
@@ -777,6 +806,7 @@ mod tests {
         .expect("cancelled queue entry should be removed");
 
         first.observe(&HeaderMap::new(), 200);
+        coordinator.lock_state().cooldown_until = None;
         let later = tokio::time::timeout(Duration::from_millis(200), coordinator.acquire())
             .await
             .expect("later request should not be blocked by cancellation");
@@ -788,19 +818,12 @@ mod tests {
         let coordinator = isolated_coordinator("long-window");
         {
             let mut state = coordinator.state.lock().unwrap();
-            state.bootstrap_complete = true;
             let now = Instant::now();
-            state.windows.push(Window {
-                limit: 10,
-                duration: Duration::from_secs(1),
-                starts: VecDeque::from([now.checked_sub(Duration::from_secs(2)).unwrap()]),
-            });
-            state.windows.push(Window {
-                limit: 60,
-                duration: Duration::from_mins(1),
-                starts: std::iter::repeat_n(now.checked_sub(Duration::from_secs(30)).unwrap(), 60)
-                    .collect(),
-            });
+            state.windows.push(Window::new(10, Duration::from_secs(1)));
+            state.windows.push(Window::new(60, Duration::from_mins(1)));
+            state.starts =
+                std::iter::repeat_n(now.checked_sub(Duration::from_secs(30)).unwrap(), 60)
+                    .collect();
         }
 
         let mut waiting = Box::pin(coordinator.acquire());
@@ -809,7 +832,7 @@ mod tests {
                 .await
                 .is_err()
         );
-        coordinator.state.lock().unwrap().windows[1].starts.clear();
+        coordinator.state.lock().unwrap().starts.clear();
         coordinator.notify();
         let permit = tokio::time::timeout(Duration::from_millis(200), &mut waiting)
             .await
@@ -831,20 +854,34 @@ mod tests {
         let older = coordinator.acquire().await;
         let newer = coordinator.acquire().await;
         let mut newer_headers = HeaderMap::new();
+        newer_headers.insert("x-ratelimit-limit", "10;w=60".parse().unwrap());
         newer_headers.insert("x-ratelimit-remaining", "8".parse().unwrap());
         newer_headers.insert("x-ratelimit-reset", "60".parse().unwrap());
         newer.observe(&newer_headers, 200);
-        assert_eq!(coordinator.state.lock().unwrap().remote_remaining, Some(7));
+        assert_eq!(
+            coordinator.state.lock().unwrap().windows[0]
+                .remote
+                .as_ref()
+                .map(|quota| quota.remaining),
+            Some(7)
+        );
 
         let mut stale_headers = HeaderMap::new();
+        stale_headers.insert("x-ratelimit-limit", "10;w=60".parse().unwrap());
         stale_headers.insert("x-ratelimit-remaining", "9".parse().unwrap());
         stale_headers.insert("x-ratelimit-reset", "60".parse().unwrap());
         older.observe(&stale_headers, 200);
-        assert_eq!(coordinator.state.lock().unwrap().remote_remaining, Some(7));
+        assert_eq!(
+            coordinator.state.lock().unwrap().windows[0]
+                .remote
+                .as_ref()
+                .map(|quota| quota.remaining),
+            Some(7)
+        );
     }
 
     #[tokio::test]
-    async fn it_counts_bootstrap_attempts_after_transport_failure() {
+    async fn it_keeps_attempt_history_after_transport_failure() {
         let coordinator = isolated_coordinator("bootstrap-failure");
         drop(coordinator.acquire().await);
         let response = coordinator.acquire().await;
@@ -855,7 +892,7 @@ mod tests {
             tokio::time::timeout(Duration::from_millis(10), coordinator.acquire())
                 .await
                 .is_err(),
-            "both bootstrap attempts reserve window capacity"
+            "both attempts reserve window capacity"
         );
     }
 
@@ -897,15 +934,376 @@ mod tests {
         first.observe(&headers, 200);
 
         let second = coordinator.acquire().await;
-        assert_eq!(coordinator.state.lock().unwrap().remote_remaining, Some(0));
+        assert_eq!(
+            coordinator.state.lock().unwrap().windows[0]
+                .remote
+                .as_ref()
+                .map(|quota| quota.remaining),
+            Some(0)
+        );
         assert!(
-            coordinator
-                .state
-                .lock()
-                .unwrap()
-                .remote_reset
-                .is_some_and(|deadline| deadline > Instant::now())
+            coordinator.state.lock().unwrap().windows[0]
+                .remote
+                .as_ref()
+                .is_some_and(|quota| quota.reset > Instant::now())
         );
         drop(second);
+    }
+
+    fn quota_headers(policies: &[(&str, &str, &str)]) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        for (limit, remaining, reset) in policies {
+            headers.append("x-ratelimit-limit", limit.parse().unwrap());
+            headers.append("x-ratelimit-remaining", remaining.parse().unwrap());
+            headers.append("x-ratelimit-reset", reset.parse().unwrap());
+        }
+        headers
+    }
+
+    #[tokio::test]
+    async fn it_preserves_both_repeated_and_alternating_server_policies() {
+        let coordinator = isolated_coordinator("multiple-policies");
+        let minute = ("1800, 1800;w=60, 1800;w=60", "1799", "50");
+        let second = ("20, 20;w=1, 20;w=1", "19", "1");
+        coordinator
+            .acquire()
+            .await
+            .observe(&quota_headers(&[minute, second]), 200);
+        {
+            let state = coordinator.state.lock().unwrap();
+            assert_eq!(state.windows.len(), 2, "duplicates are one policy");
+            for (duration, limit, remaining) in [(60, 1800, 1799), (1, 20, 19)] {
+                let window = state
+                    .windows
+                    .iter()
+                    .find(|window| window.duration == Duration::from_secs(duration))
+                    .unwrap();
+                assert_eq!(window.limit, limit);
+                assert_eq!(state.starts.len(), 1);
+                assert_eq!(window.remote.as_ref().unwrap().remaining, remaining);
+            }
+        }
+        coordinator
+            .acquire()
+            .await
+            .observe(&quota_headers(&[second]), 200);
+        coordinator
+            .acquire()
+            .await
+            .observe(&quota_headers(&[minute]), 200);
+        let state = coordinator.state.lock().unwrap();
+        assert_eq!(
+            state.windows.len(),
+            2,
+            "reporting the binding policy preserves the other policy"
+        );
+        assert_eq!(state.starts.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn it_admits_twenty_parallel_requests_and_blocks_the_twenty_first() {
+        let coordinator = isolated_coordinator("parallel-twenty");
+        coordinator
+            .acquire()
+            .await
+            .observe(&quota_headers(&[("20, 20;w=1, 20;w=1", "19", "1")]), 200);
+        // Move into a fresh window without a real one-second test delay.
+        {
+            let mut state = coordinator.state.lock().unwrap();
+            state.starts.clear();
+            state.windows[0].remote = None;
+        }
+        let mut requests = tokio::task::JoinSet::new();
+        for _ in 0..20 {
+            let coordinator = coordinator.clone();
+            requests.spawn(async move { coordinator.acquire().await });
+        }
+        let mut permits = Vec::new();
+        tokio::time::timeout(Duration::from_millis(500), async {
+            while let Some(permit) = requests.join_next().await {
+                permits.push(permit.unwrap());
+            }
+        })
+        .await
+        .expect("all twenty attempts must overlap without waiting for responses");
+        assert_eq!(coordinator.state.lock().unwrap().in_flight, 20);
+        let mut next = Box::pin(coordinator.acquire());
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), &mut next)
+                .await
+                .is_err()
+        );
+        drop(permits);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), &mut next)
+                .await
+                .is_err(),
+            "completion does not refund rate-limit reservations"
+        );
+        coordinator.state.lock().unwrap().starts.clear();
+        coordinator.notify();
+        tokio::time::timeout(Duration::from_millis(200), next)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn it_older_responses_can_reduce_but_never_refill_capacity() {
+        let coordinator = isolated_coordinator("older-exhaustion");
+        let headers = quota_headers(&[("20;w=60", "19", "60")]);
+        coordinator.acquire().await.observe(&headers, 200);
+        let older = coordinator.acquire().await;
+        let newer = coordinator.acquire().await;
+        newer.observe(&quota_headers(&[("20;w=60", "18", "60")]), 200);
+        // Other clients can consume the server quota before the older request
+        // is processed; dispatch order does not determine server ordering.
+        older.observe(&quota_headers(&[("20;w=60", "0", "60")]), 200);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), coordinator.acquire())
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            coordinator.state.lock().unwrap().windows[0]
+                .remote
+                .as_ref()
+                .unwrap()
+                .remaining,
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn it_retains_long_reset_deadlines_across_provider_reconstruction() {
+        let origin = Url::parse("https://retained-reset.stac-coordinator.test").unwrap();
+        let coordinator = StacRequestCoordinator::shared(&origin, None);
+        let mut headers = HeaderMap::new();
+        headers.insert("x-ratelimit-remaining", "0".parse().unwrap());
+        headers.insert("x-ratelimit-reset", "3600".parse().unwrap());
+        coordinator.acquire().await.observe(&headers, 200);
+        {
+            let mut state = coordinator.state.lock().unwrap();
+            state.last_activity = Instant::now().checked_sub(Duration::from_mins(10)).unwrap();
+            assert!(state.retain_until() >= state.unscoped_quota.as_ref().unwrap().reset);
+        }
+        let previous = Arc::downgrade(&coordinator);
+        drop(coordinator);
+        let reconstructed = StacRequestCoordinator::shared(&origin, None);
+        assert!(previous.ptr_eq(&Arc::downgrade(&reconstructed)));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), reconstructed.acquire())
+                .await
+                .is_err()
+        );
+        // Once both history and feedback expire the registry can reclaim it.
+        {
+            let mut state = reconstructed.state.lock().unwrap();
+            state.unscoped_quota.as_mut().unwrap().reset = Instant::now();
+        }
+        drop(reconstructed);
+        let replacement = StacRequestCoordinator::shared(&origin, None);
+        assert!(!previous.ptr_eq(&Arc::downgrade(&replacement)));
+    }
+
+    #[tokio::test]
+    async fn it_waits_for_the_binding_constraint_across_arbitrary_windows() {
+        let coordinator = isolated_coordinator("binding-window");
+        coordinator.acquire().await.observe(
+            &quota_headers(&[
+                ("2;w=1", "1", "1"),
+                ("7;w=37", "6", "37"),
+                ("90;w=3600", "89", "3600"),
+            ]),
+            200,
+        );
+        let mut state = coordinator.state.lock().unwrap();
+        let now = Instant::now();
+        state.windows[0].remote = Some(RemoteQuota {
+            remaining: 0,
+            reset: now + Duration::from_secs(1),
+        });
+        state.windows[1].remote = Some(RemoteQuota {
+            remaining: 0,
+            reset: now + Duration::from_secs(37),
+        });
+        let waiter = Arc::new(Notify::new());
+        state.queue.push_back(waiter.clone());
+        assert!(
+            matches!(state.admit(&waiter, now), Admission::WaitUntil(deadline) if deadline == now + Duration::from_secs(37))
+        );
+        // At 37s both exhausted policies reset; the hourly policy still has
+        // capacity, so it must not serialize dispatch or delay it for an hour.
+        assert!(matches!(
+            state.admit(&waiter, now + Duration::from_secs(37)),
+            Admission::Admitted
+        ));
+    }
+
+    #[test]
+    fn it_deduplicates_windows_and_keeps_the_stricter_duplicate() {
+        let headers = quota_headers(&[
+            ("20, 20;w=1, 20;w=1", "19", "1"),
+            ("1800, 1800;w=60, 1800;w=60", "1799", "50"),
+            ("15;w=1, 100000;w=172800", "14", "1"),
+        ]);
+        let windows = parse_limits(&headers);
+        assert_eq!(windows.len(), 3);
+        assert_eq!(windows[0].limit, 15);
+        assert_eq!(
+            windows[2].limit, 100_000,
+            "do not impose an artificial request cap"
+        );
+        assert_eq!(windows[2].duration, Duration::from_hours(48));
+        let mut malformed = HeaderMap::new();
+        malformed.insert(
+            "x-ratelimit-limit",
+            "0;w=1, 2;w=0, invalid, 10;w=18446744073709551615"
+                .parse()
+                .unwrap(),
+        );
+        assert!(parse_limits(&malformed).is_empty());
+    }
+
+    #[tokio::test]
+    async fn it_replaces_the_fallback_with_the_advertised_capacity() {
+        let coordinator = isolated_coordinator("fallback-upgrade");
+        coordinator.acquire().await.observe(&HeaderMap::new(), 200);
+        coordinator
+            .acquire()
+            .await
+            .observe(&quota_headers(&[("20;w=1", "18", "1")]), 200);
+        let state = coordinator.state.lock().unwrap();
+        assert_eq!(state.windows.len(), 1);
+        assert_eq!(state.windows[0].limit, 20);
+        assert_eq!(state.starts.len(), 2);
+    }
+
+    #[test]
+    fn it_does_not_assign_ambiguous_feedback_to_the_wrong_window() {
+        let mut headers = quota_headers(&[("20;w=1", "19", "1"), ("1800;w=60", "1799", "50")]);
+        headers.insert("x-ratelimit-remaining", "0".parse().unwrap());
+        let now = Instant::now();
+        let feedback = ResponseFeedback::parse(&headers, 200, now);
+        let quota = feedback.unscoped_quota.unwrap();
+        assert_eq!(quota.remaining, 0);
+        assert_eq!(quota.reset, now + Duration::from_secs(50));
+        assert!(
+            feedback
+                .windows
+                .iter()
+                .all(|window| window.remote.is_none())
+        );
+        headers.remove("x-ratelimit-limit");
+        headers.append(
+            "x-ratelimit-limit",
+            reqwest::header::HeaderValue::from_bytes(&[255]).unwrap(),
+        );
+        headers.append("x-ratelimit-limit", "1800;w=60".parse().unwrap());
+        headers.remove("x-ratelimit-remaining");
+        headers.append("x-ratelimit-remaining", "0".parse().unwrap());
+        headers.append("x-ratelimit-remaining", "1799".parse().unwrap());
+        let feedback = ResponseFeedback::parse(&headers, 200, now);
+        assert_eq!(feedback.unscoped_quota.unwrap().remaining, 0);
+        assert_eq!(feedback.windows.len(), 1);
+        assert_eq!(feedback.windows[0].duration, Duration::from_mins(1));
+        assert_eq!(feedback.windows[0].remote.as_ref().unwrap().remaining, 1799);
+    }
+
+    #[tokio::test]
+    async fn it_uses_the_callers_attempt_limit_for_rate_limit_retries() {
+        use httptest::{Expectation, Server, matchers::request, responders};
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/limited"))
+                .times(2)
+                .respond_with(responders::status_code(429)),
+        );
+        let client = reqwest::Client::new();
+        let coordinator =
+            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
+        let error = coordinator
+            .execute::<serde_json::Value>(
+                &client,
+                client.get(server.url_str("/limited")).build().unwrap(),
+                None,
+                &RetryPolicy::new().max_retries(2),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(error.status(), Some(reqwest::StatusCode::TOO_MANY_REQUESTS));
+    }
+
+    #[tokio::test]
+    async fn it_uses_fallback_capacity_without_waiting_for_headers() {
+        let coordinator = isolated_coordinator("cold-concurrency");
+        let mut requests = Vec::new();
+        for _ in 0..10 {
+            requests.push(
+                tokio::time::timeout(Duration::from_millis(200), coordinator.acquire())
+                    .await
+                    .expect("cold requests must not serialize on the first response"),
+            );
+        }
+        assert_eq!(coordinator.lock_state().in_flight, 10);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), coordinator.acquire())
+                .await
+                .is_err()
+        );
+        for request in requests {
+            request.finish(None);
+        }
+        assert_eq!(coordinator.lock_state().in_flight, 0);
+        assert_eq!(
+            coordinator.lock_state().starts.len(),
+            10,
+            "completion does not refund starts"
+        );
+    }
+
+    #[tokio::test]
+    async fn it_learns_a_longer_window_from_the_shared_history() {
+        let coordinator = isolated_coordinator("shared-history");
+        coordinator
+            .acquire()
+            .await
+            .observe(&quota_headers(&[("20;w=1", "19", "1")]), 200);
+        {
+            let mut state = coordinator.lock_state();
+            state.starts[0] = Instant::now().checked_sub(Duration::from_secs(2)).unwrap();
+        }
+        coordinator
+            .acquire()
+            .await
+            .observe(&quota_headers(&[("2;w=60", "0", "60")]), 200);
+        assert_eq!(
+            coordinator.lock_state().starts.len(),
+            2,
+            "short-window expiration preserves history for newly learned policies"
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), coordinator.acquire())
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn it_cleans_up_cancelled_requests_even_after_mutex_poisoning() {
+        let coordinator = isolated_coordinator("poison-cleanup");
+        let request = coordinator.acquire().await;
+        let poisoner = coordinator.clone();
+        assert!(
+            std::thread::spawn(move || {
+                let _state = poisoner.state.lock().unwrap();
+                panic!("simulate an unrelated panic while holding scheduler state");
+            })
+            .join()
+            .is_err()
+        );
+        drop(request);
+        assert_eq!(coordinator.lock_state().in_flight, 0);
+        coordinator.acquire().await.finish(None);
+        assert_eq!(coordinator.lock_state().in_flight, 0);
     }
 }
