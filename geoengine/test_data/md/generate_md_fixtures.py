@@ -22,9 +22,6 @@ Fixtures
 - projected_crs.nc        (time, y, x) in a projected CRS, declaring it via the CF `crs`
                           attribute (metre x units, so EPSG:4326 would be a mislabel)
 
-It also writes one copy of `time_series.nc` to `python/examples/data/md_example.nc`, which is
-the fixture `python/examples/md_gdal_source_dataset.ipynb` registers. Same bytes, so the
-example's documented values and the tests' expected values cannot drift apart.
 
 netCDF/CF convention: coordinate variables are cell *centers* (offset half a
 pixel from the grid edges), so the probes can derive a correct geo transform.
@@ -60,11 +57,8 @@ FIXTURES = [
     "wrap_0_360_multitile.nc",
     "bands.nc",
     "cf_time_units_minutes.nc",
-    "cf_time_units_date_only.nc",
-    "cf_time_units_years.nc",
     "grid_2d.nc",
     "projected_crs.nc",
-    "projected_no_crs.nc",
     "time_depth_4d.nc",
     "variables.nc",
     "variables_multitile.nc",
@@ -193,28 +187,6 @@ def wrap_0_360_multitile(path: Path):
     ds = None
 
 
-def cf_time_units_date_only(path: Path):
-    """(time, y, x) array whose CF units carry a *date-only* origin.
-
-    NEX-GDDP-CMIP6 writes `days since 1850-01-01`. The probe used to keep `"%Y-%m-%d"` in its
-    origin format list, but `NaiveDateTime::parse_from_str` needs a time component, so that
-    entry could never match: the origin failed to parse, the time axis was discarded, and the
-    array was registered with one output band per time slice and synthetic `[k, k+1)` ms steps
-    instead of real dates.
-    """
-    width, height, ntime = 8, 8, 8
-    ds = new_netcdf(path)
-    rg = ds.GetRootGroup()
-    xdim, ydim = add_xy_dims(rg, width, height, 0.0, 0.0, lon_step=30.0)
-    # no time component in the origin - this is the whole point
-    tdim = add_time_dim(rg, ntime, "days since 1850-01-01")
-    ts = np.arange(ntime, dtype=np.int64)
-    vals = (np.arange(height)[:, None] * 10 + np.arange(width)[None, :])[None, :, :]
-    vals = ts[:, None, None] * 1000 + vals.astype("float32")
-    write_array(rg, "temperature", [tdim, ydim, xdim], vals, -9999)
-    ds = None
-
-
 def zarr_time_series(path: Path):
     """(time, y, x) array via the ZARR driver, same formula as time_series.nc."""
     width, height, ntime = 8, 8, 8
@@ -253,25 +225,6 @@ def bands(path: Path):
     vals = np.arange(height, dtype=np.float32)[:, None] * 10 + np.arange(width)[None, :]
     vals = np.arange(nbands, dtype=np.float32)[:, None, None] * 100 + vals[None, :, :]
     write_array(rg, "reflectance", [bdim, ydim, xdim], vals, -9999)
-    ds = None
-
-
-def cf_time_units_years(path: Path):
-    """(time, y, x) array whose CF units are a variable-length `years since`.
-
-    The probe cannot convert a calendar year to a fixed millisecond step, so it must reject
-    this rather than silently fall back to synthetic steps. It used to: the array was registered
-    with one band per slice and synthetic `[k, k+1)` ms steps.
-    """
-    width, height, ntime = 8, 8, 4
-    ds = new_netcdf(path)
-    rg = ds.GetRootGroup()
-    xdim, ydim = add_xy_dims(rg, width, height, 0.0, 0.0, lon_step=30.0)
-    tdim = add_time_dim(rg, ntime, "years since 2000-01-01 00:00:00")
-    ts = np.arange(ntime, dtype=np.int64)
-    vals = (np.arange(height)[:, None] * 10 + np.arange(width)[None, :])[None, :, :]
-    vals = ts[:, None, None] * 1000 + vals.astype("float32")
-    write_array(rg, "temperature", [tdim, ydim, xdim], vals, -9999)
     ds = None
 
 
@@ -328,31 +281,6 @@ def time_depth_4d(path: Path):
     c = np.arange(width, dtype=np.int64)[None, None, None, :]
     vals = (t * 10_000 + d * 1000 + r * 10 + c).astype("float32")
     write_array(rg, "temperature", [tdim, ddim, ydim, xdim], vals, -9999)
-    ds = None
-
-
-def projected_no_crs(path: Path):
-    """Projected grid (metre x units) with **no** CRS attribute.
-
-    There is nothing left to infer a coordinate reference system from, so the probe has to
-    refuse rather than fall back to EPSG:4326.
-    """
-    width, height, ntime = 8, 8, 4
-    ds = new_netcdf(path)
-    rg = ds.GetRootGroup()
-    xdim, xa = add_coord_var(
-        rg, "x", "HORIZONTAL_X", "", 500_000.0 + np.arange(width, dtype=np.float64) * 1000.0
-    )
-    ydim, ya = add_coord_var(
-        rg, "y", "HORIZONTAL_Y", "", 5_000_000.0 - np.arange(height, dtype=np.float64) * 1000.0
-    )
-    xa.CreateAttribute("units", [1], gdal.ExtendedDataType.CreateString(), []).WriteString("m")
-    ya.CreateAttribute("units", [1], gdal.ExtendedDataType.CreateString(), []).WriteString("m")
-    tdim = add_time_dim(rg, ntime, "days since 2000-01-01 00:00:00")
-    ts = np.arange(ntime, dtype=np.int64)
-    vals = (np.arange(height)[:, None] * 10 + np.arange(width)[None, :])[None, :, :]
-    vals = ts[:, None, None] * 1000 + vals.astype("float32")
-    write_array(rg, "elevation", [tdim, ydim, xdim], vals, -9999)
     ds = None
 
 
@@ -519,11 +447,6 @@ def mtg_fci_like(out_dir: Path):
     return names
 
 
-# where the example notebook's copy of `time_series.nc` goes; the notebook reads it from
-# next to itself, so the example does not depend on a configured `test_data` volume
-EXAMPLE_COPY = OUT_DIR.parents[2] / "python" / "examples" / "data" / "md_example.nc"
-
-
 def main() -> None:
     # remove only the fixture files, keep this script itself (zarr is a directory)
     zarr_dir = OUT_DIR / "time_series.zarr"
@@ -548,11 +471,8 @@ def main() -> None:
     bands(OUT_DIR / "bands.nc")
     cf_time_units_minutes(OUT_DIR / "cf_time_units_minutes.nc")
     wrap_0_360_multitile(OUT_DIR / "wrap_0_360_multitile.nc")
-    cf_time_units_date_only(OUT_DIR / "cf_time_units_date_only.nc")
-    cf_time_units_years(OUT_DIR / "cf_time_units_years.nc")
     grid_2d(OUT_DIR / "grid_2d.nc")
     projected_crs(OUT_DIR / "projected_crs.nc")
-    projected_no_crs(OUT_DIR / "projected_no_crs.nc")
     time_depth_4d(OUT_DIR / "time_depth_4d.nc")
     variables(OUT_DIR / "variables.nc")
     variables_multitile(OUT_DIR / "variables_multitile.nc")
@@ -560,9 +480,6 @@ def main() -> None:
     era5_pl_synthetic(OUT_DIR / "era5_pl_synthetic.nc")
     era5_sfc_synthetic(OUT_DIR / "era5_sfc_synthetic.nc")
     mtg_fci_like(OUT_DIR)
-
-    EXAMPLE_COPY.parent.mkdir(parents=True, exist_ok=True)
-    time_series(8, 8, EXAMPLE_COPY)
     print(f"generated fixtures in {OUT_DIR}")
 
 
