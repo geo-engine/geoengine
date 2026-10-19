@@ -566,9 +566,26 @@ CREATE TYPE "GdalMultiBand" AS (
     cache_ttl int
 );
 
+CREATE TYPE "MdAxisMappingDiscriminator" AS ENUM (
+    'X',
+    'Y',
+    'Time',
+    'Fixed'
+);
+
+CREATE TYPE "MdAxisMapping" AS (
+    discriminant "MdAxisMappingDiscriminator",
+    fixed_index bigint
+);
+
+CREATE TYPE "MdVariable" AS (
+    name text,
+    axis_mapping "MdAxisMapping" []
+);
+
 CREATE TYPE "GdalMdMetaData" AS (
     result_descriptor "RasterResultDescriptor",
-    variables jsonb,
+    variables "MdVariable" [],
     wrap boolean,
     cache_ttl int
 );

@@ -10,12 +10,29 @@
 -- `time` holds the file's overall bounds so that row filtering can keep using
 -- `time_interval_intersects`.
 
--- Dataset level description of an MD dataset: the result descriptor, the variables
--- (one per output band, with the axis roles of each variable) and the properties that are
--- constant across all of its files.
+CREATE TYPE "MdAxisMappingDiscriminator" AS ENUM (
+    'X',
+    'Y',
+    'Time',
+    'Fixed'
+);
+
+CREATE TYPE "MdAxisMapping" AS (
+    discriminant "MdAxisMappingDiscriminator",
+    fixed_index bigint
+);
+
+CREATE TYPE "MdVariable" AS (
+    name text,
+    axis_mapping "MdAxisMapping" []
+);
+
+-- Dataset level description of an MD dataset: the result descriptor, the
+-- variables (one per output band, with the axis roles of each variable)
+-- and the properties that are constant across all of its files.
 CREATE TYPE "GdalMdMetaData" AS (
     result_descriptor "RasterResultDescriptor",
-    variables jsonb,
+    variables "MdVariable" [],
     wrap boolean,
     -- dataset-level TTL fallback, mirroring `GdalMultiBand.cache_ttl`
     cache_ttl int
